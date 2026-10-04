@@ -35,6 +35,42 @@ const ROOT = process.cwd();
 
 type AnyRecord = Record<string, unknown>;
 
+/**
+ * ADR-0129 (Issue #896): the `Idempotency-Key` header parameter moved from 93
+ * inline declarations to the shared `components.parameters.IdempotencyKey`, and
+ * gained the runtime bound (`minLength`/`maxLength`/`pattern`). That is the ONE
+ * reviewed change to the frozen pre-migration contract, so the equivalence
+ * checks below set that single parameter aside on BOTH sides (the inline
+ * declaration in the snapshot, the `$ref` in the bundle) instead of editing the
+ * snapshot. The component itself is pinned in
+ * `tests/openapi-idempotency-key-component.test.ts`.
+ */
+const IDEMPOTENCY_KEY_REF = "#/components/parameters/IdempotencyKey";
+
+function withoutIdempotencyKeyParameter(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry) => {
+        const e = entry as AnyRecord | null;
+        return !(
+          e &&
+          typeof e === "object" &&
+          (e.$ref === IDEMPOTENCY_KEY_REF ||
+            (e.in === "header" && e.name === "Idempotency-Key"))
+        );
+      })
+      .map(withoutIdempotencyKeyParameter);
+  }
+  if (value && typeof value === "object") {
+    const out: AnyRecord = {};
+    for (const [k, v] of Object.entries(value as AnyRecord)) {
+      out[k] = withoutIdempotencyKeyParameter(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 function sortDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortDeep);
   if (value && typeof value === "object") {
@@ -274,11 +310,21 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     for (const key of ["security", "info", "servers"] as const) {
       expect(sortDeep(after[key])).toEqual(sortDeep(before[key]));
     }
-    for (const key of ["securitySchemes", "parameters", "responses"] as const) {
+    for (const key of ["securitySchemes", "responses"] as const) {
       expect(sortDeep((after.components as AnyRecord)[key])).toEqual(
         sortDeep((before.components as AnyRecord)[key])
       );
     }
+    // Root parameters: frozen, EXCEPT the deliberately admitted shared
+    // `IdempotencyKey` component (ADR-0129) — the only addition allowed.
+    const afterParameters = {
+      ...((after.components as AnyRecord).parameters as AnyRecord)
+    };
+    expect(afterParameters.IdempotencyKey).toBeDefined();
+    delete afterParameters.IdempotencyKey;
+    expect(sortDeep(afterParameters)).toEqual(
+      sortDeep((before.components as AnyRecord).parameters)
+    );
 
     // Documented, reviewed BACKWARD-COMPATIBLE evolutions of a pre-migration
     // endpoint (like the tags test's single allowed `Domain Event Runtime`
@@ -317,11 +363,16 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       if (pathKey in INTENTIONALLY_EVOLVED_PATHS) {
         // Additive-only: the frozen contract must still be fully contained.
         expect(
-          isAdditiveSuperset(beforePaths[pathKey], afterPaths[pathKey])
+          isAdditiveSuperset(
+            withoutIdempotencyKeyParameter(beforePaths[pathKey]),
+            withoutIdempotencyKeyParameter(afterPaths[pathKey])
+          )
         ).toBe(true);
       } else {
-        expect(sortDeep(afterPaths[pathKey])).toEqual(
-          sortDeep(beforePaths[pathKey])
+        expect(
+          sortDeep(withoutIdempotencyKeyParameter(afterPaths[pathKey]))
+        ).toEqual(
+          sortDeep(withoutIdempotencyKeyParameter(beforePaths[pathKey]))
         );
       }
     }

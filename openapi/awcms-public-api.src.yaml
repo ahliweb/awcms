@@ -111,6 +111,16 @@ components:
       required: false
       schema:
         type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: "Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129)."
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: "^[!-~]{1,255}$"
     SyncNodeId:
       name: X-AWCMS-Node-ID
       in: header

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](05_openapi_asyncapi_detail.md)
 
-<!-- i18n-source-hash: sha256:47a1604f113ce6aa9bb8b88f38204dcf853e2e5f434b91b280c4a5be17b3663b -->
+<!-- i18n-source-hash: sha256:4425ddf136182f0aefb30cf14ddac91fe010d41e911816dc011e7e5b68f58da2 -->
 
 # Bagian 5 — OpenAPI dan AsyncAPI Detail
 
@@ -53,18 +53,18 @@ Response error:
 
 ## Header standard
 
-| Header                      |                       Wajib | Fungsi                                                        |
-| --------------------------- | --------------------------: | ------------------------------------------------------------- |
-| `Authorization`             |           Ya kecuali public | Bearer token                                                  |
-| `X-AWCMS-Tenant-ID`         |  Ya untuk tenant-scoped API | Tenant aktif                                                  |
-| `Idempotency-Key`           | Ya untuk mutation high-risk | Anti duplicate mutation                                       |
-| `X-Correlation-ID`          |                    Opsional | Trace request                                                 |
-| `X-Request-ID`              |                    Opsional | Trace client request                                          |
-| `Accept-Language`           |                    Opsional | Locale                                                        |
-| `X-AWCMS-Node-ID`           |               Ya untuk sync | Sync node                                                     |
-| `X-AWCMS-Timestamp`         |        Ya untuk signed sync | Anti replay                                                   |
-| `X-AWCMS-Signature`         |               Ya untuk sync | HMAC signature                                                |
-| `X-AWCMS-Signature-Version` |  Disarankan untuk sync (v2) | Versi skema signature; `"2"` mengikat tenant+node (GHSA-c972) |
+| Header                      |                       Wajib | Fungsi                                                                              |
+| --------------------------- | --------------------------: | ----------------------------------------------------------------------------------- |
+| `Authorization`             |           Ya kecuali public | Bearer token                                                                        |
+| `X-AWCMS-Tenant-ID`         |  Ya untuk tenant-scoped API | Tenant aktif                                                                        |
+| `Idempotency-Key`           | Ya untuk mutation high-risk | Anti duplicate mutation; 1-255 ASCII terlihat (komponen `IdempotencyKey`, ADR-0129) |
+| `X-Correlation-ID`          |                    Opsional | Trace request                                                                       |
+| `X-Request-ID`              |                    Opsional | Trace client request                                                                |
+| `Accept-Language`           |                    Opsional | Locale                                                                              |
+| `X-AWCMS-Node-ID`           |               Ya untuk sync | Sync node                                                                           |
+| `X-AWCMS-Timestamp`         |        Ya untuk signed sync | Anti replay                                                                         |
+| `X-AWCMS-Signature`         |               Ya untuk sync | HMAC signature                                                                      |
+| `X-AWCMS-Signature-Version` |  Disarankan untuk sync (v2) | Versi skema signature; `"2"` mengikat tenant+node (GHSA-c972)                       |
 
 ## Soft delete API standard
 

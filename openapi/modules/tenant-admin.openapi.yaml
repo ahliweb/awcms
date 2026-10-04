@@ -647,11 +647,7 @@ paths:
       summary: Provision a new tenant with its owner account (PLATFORM-scoped).
       description: "Gated by tenant_admin.tenant_provisioning.create, which is scope: platform. Creates the tenant, its head office, the owner profile/identity/tenant-user, the system `owner` role, and that role's grants — the SAME code path the setup wizard uses, so the `WHERE scope = 'tenant'` filter on those grants cannot drift between the two. A provisioned tenant NEVER receives platform-scoped permissions. `Idempotency-Key` required; audited in the platform tenant's log. Returns 409 when the tenant_code is taken."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true

@@ -226,13 +226,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -312,13 +306,7 @@ paths:
         Gated by `inventory.policy.configure`. Requires an Idempotency-Key;
         audited at warning severity with the before/after value.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -480,13 +468,7 @@ paths:
         `balances.read`. Two concurrent attempts on the last unit cannot
         both succeed. There is no field by which a client can state a balance.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -581,13 +563,7 @@ paths:
         WITHOUT `movementType`; naming one is a 400. Requires an
         Idempotency-Key and a `source` identity; audited at warning severity.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -648,13 +624,7 @@ paths:
         warning severity. Undo it with the reversal endpoint, never by editing a
         row (the ledger is append-only).
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -718,13 +688,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -787,13 +751,7 @@ paths:
         source identity returns the ORIGINAL pair. Requires an Idempotency-Key;
         audited at warning severity.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -915,13 +873,7 @@ paths:
         transaction and a downward crossing is published as
         `awcms.inventory.stock.low`. Requires an Idempotency-Key; audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -1016,13 +968,7 @@ paths:
         Requires an Idempotency-Key; audited at CRITICAL severity with the
         before/after of every repaired key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: false

@@ -81,12 +81,13 @@ echoed back in every response's `meta` object
 
 ### Standard parameters
 
-| Name            | Header/query                 | Required | Type   | Description                                                                          |
-| --------------- | ---------------------------- | -------- | ------ | ------------------------------------------------------------------------------------ |
-| `CorrelationId` | `X-Correlation-ID` (header)  | no       | string |                                                                                      |
-| `SyncNodeId`    | `X-AWCMS-Node-ID` (header)   | yes      | string | Node code identifying the calling sync node (auto-registers on first contact).       |
-| `SyncTimestamp` | `X-AWCMS-Timestamp` (header) | yes      | string | ISO-8601 timestamp of the request, validated against the allowed skew (anti-replay). |
-| `SyncSignature` | `X-AWCMS-Signature` (header) | yes      | string | HMAC-SHA256 signature over "<timestamp>.<body>".                                     |
+| Name             | Header/query                 | Required | Type   | Description                                                                                                                                                                                                     |
+| ---------------- | ---------------------------- | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CorrelationId`  | `X-Correlation-ID` (header)  | no       | string |                                                                                                                                                                                                                 |
+| `IdempotencyKey` | `Idempotency-Key` (header)   | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `SyncNodeId`     | `X-AWCMS-Node-ID` (header)   | yes      | string | Node code identifying the calling sync node (auto-registers on first contact).                                                                                                                                  |
+| `SyncTimestamp`  | `X-AWCMS-Timestamp` (header) | yes      | string | ISO-8601 timestamp of the request, validated against the allowed skew (anti-replay).                                                                                                                            |
+| `SyncSignature`  | `X-AWCMS-Signature` (header) | yes      | string | HMAC-SHA256 signature over "<timestamp>.<body>".                                                                                                                                                                |
 
 ### Standard success envelope
 
@@ -394,10 +395,10 @@ Gated by tenant_admin.tenant_provisioning.create, which is scope: platform. Crea
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -601,11 +602,11 @@ Gated by tenant_domain.domains.set_primary. Requires Idempotency-Key. Atomically
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -627,11 +628,11 @@ Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Resolves the TX
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -2044,9 +2045,9 @@ Grants a subject a role/permission context restricted to one business scope. The
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -2070,10 +2071,10 @@ Revokes an active business-scope assignment (transitions it to `revoked`; append
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -2145,9 +2146,9 @@ Requests a bounded-lifetime, scope-bound exception to a registered SoD rule (`st
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -2174,10 +2175,10 @@ Requires `Idempotency-Key`; audited at `critical` severity.
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (optional): object
 
@@ -2201,10 +2202,10 @@ Rejects a pending exception — the safe outcome (the conflict stays denied). Ga
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (optional): object
 
@@ -2228,10 +2229,10 @@ Revokes a previously approved exception, ending the override early (immediately 
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -2282,10 +2283,10 @@ Inviting and GRANTING A ROLE are two authorities: a body naming `roleIds` additi
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `X-Correlation-ID` | header | no       | string |             |
-| `Idempotency-Key`  | header | yes      | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): [`CreateInvitationInput`](#schema-createinvitationinput)
 
@@ -3050,10 +3051,10 @@ Counterpart of `DELETE /api/v1/profiles/{id}` (ADR-0058 §A). Clears `deleted_at
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Responses**
 
@@ -3854,11 +3855,11 @@ High-risk — requires Idempotency-Key. 409 for any non-draft (published/retired
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (optional): object
 
@@ -3902,11 +3903,11 @@ Transitions draft to active, retiring any previously-active version of the same 
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -3926,11 +3927,11 @@ Transitions draft to active, retiring any previously-active version of the same 
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -3996,10 +3997,10 @@ A tenant user can only delegate their OWN standing. High-risk — requires Idemp
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4020,11 +4021,11 @@ A tenant user can only delegate their OWN standing. High-risk — requires Idemp
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (optional): object
 
@@ -4066,11 +4067,11 @@ A tenant user can only delegate their OWN standing. High-risk — requires Idemp
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4119,11 +4120,11 @@ The task completes only once its quorum rule is satisfied; the instance advances
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4145,11 +4146,11 @@ The task completes only once its quorum rule is satisfied; the instance advances
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4171,11 +4172,11 @@ The task completes only once its quorum rule is satisfied; the instance advances
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4203,10 +4204,10 @@ Requires Idempotency-Key. email.notification.create for every request; email.ann
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4646,10 +4647,10 @@ Module-contributed read-model projection extension to Management Reporting — l
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4671,11 +4672,11 @@ Module-contributed read-model projection extension to Management Reporting — l
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4741,10 +4742,10 @@ Module-contributed read-model projection extension to Management Reporting — l
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4808,11 +4809,11 @@ Module-contributed read-model projection extension to Management Reporting — l
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `key`              | path   | yes      | string |             |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key`              | path   | yes      | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -4834,11 +4835,11 @@ Module-contributed read-model projection extension to Management Reporting — l
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `key`              | path   | yes      | string |             |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key`              | path   | yes      | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -4984,10 +4985,10 @@ Transactional, versioned domain-event outbox and dispatcher admin API — read-o
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -5081,10 +5082,10 @@ Save the single draft config for a chosen theme (bounded, validated design token
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`ThemeConfigRequest`](#schema-themeconfigrequest)
 
@@ -5131,10 +5132,10 @@ Publish the current draft as a new IMMUTABLE version and make it the live look (
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -5155,10 +5156,10 @@ Clear the active theme pointer so the site falls back to the default theme; publ
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -5179,10 +5180,10 @@ Move the active pointer to an earlier published version of this tenant (never mu
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -5256,10 +5257,10 @@ Gated by media_library.enforcement.enable. High-risk, requires Idempotency-Key. 
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -5330,11 +5331,11 @@ Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifi
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (optional): [`FinalizeNewsMediaUploadSessionRequest`](#schema-finalizenewsmediauploadsessionrequest)
 
@@ -5399,11 +5400,11 @@ A soft-deleted object and an unknown id both answer 404.
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`MediaRightsUpdateRequest`](#schema-mediarightsupdaterequest)
 
@@ -5433,11 +5434,11 @@ An already-deleted object and an unknown id both answer 404 — a distinct "alre
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`SoftDeleteMediaObjectRequest`](#schema-softdeletemediaobjectrequest)
 
@@ -5465,11 +5466,11 @@ The object must ALREADY be soft-deleted — purging a live object answers 404 ra
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -5495,11 +5496,11 @@ Restoring an object that is NOT soft-deleted answers 404 rather than succeeding 
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6107,10 +6108,10 @@ Gated by blog_content.pages.archive (ADR-0057). High-risk, requires Idempotency-
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6132,10 +6133,10 @@ Gated by blog_content.pages.publish (ADR-0057). High-risk, requires Idempotency-
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6158,10 +6159,10 @@ Gated by blog_content.pages.purge (ADR-0057). High-risk, irreversible, requires 
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6206,10 +6207,10 @@ Gated by blog_content.pages.restore (ADR-0057). High-risk, requires Idempotency-
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6411,10 +6412,10 @@ Gated by blog_content.posts.archive. High-risk, requires Idempotency-Key.
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6459,10 +6460,10 @@ Gated by blog_content.posts.publish (no ownership carve-out). High-risk, require
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6485,10 +6486,10 @@ Gated by blog_content.posts.purge. High-risk, irreversible, requires Idempotency
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6533,10 +6534,10 @@ Gated by blog_content.posts.restore. High-risk, requires Idempotency-Key.
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6604,10 +6605,10 @@ Gated by blog_content.revisions.restore. High-risk, requires Idempotency-Key. Re
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -6630,10 +6631,10 @@ Gated by blog_content.posts.schedule. High-risk, requires Idempotency-Key. Same 
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -7491,10 +7492,10 @@ Gated by visitor_analytics.retention.purge. Destructive, high-risk: requires Ide
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -7659,11 +7660,11 @@ Gated by idn_admin_regions.dataset.configure. High-risk, `Idempotency-Key` requi
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description   |
-| ------------------ | ------ | -------- | ------------- | ------------- |
-| `id`               | path   | yes      | string (uuid) | Dataset UUID. |
-| `Idempotency-Key`  | header | yes      | string        |               |
-| `X-Correlation-ID` | header | no       | string        |               |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) | Dataset UUID.                                                                                                                                                                                                   |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -7685,10 +7686,10 @@ Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` require
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -7815,10 +7816,10 @@ Gated by data_lifecycle.legal_hold.create. High-risk mutation: requires Idempote
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`DataLifecycleCreateLegalHoldRequest`](#schema-datalifecyclecreatelegalholdrequest)
 
@@ -7841,11 +7842,11 @@ Gated by data_lifecycle.legal_hold.release — a DISTINCT permission from create
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`DataLifecycleReleaseLegalHoldRequest`](#schema-datalifecyclereleaselegalholdrequest)
 
@@ -7939,11 +7940,11 @@ ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.approve — a DIFFE
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`DataLifecycleSubjectDecisionInput`](#schema-datalifecyclesubjectdecisioninput)
 
@@ -7967,10 +7968,10 @@ ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.create and it ERASE
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`DataLifecycleSubjectRequestInput`](#schema-datalifecyclesubjectrequestinput)
 
@@ -7994,10 +7995,10 @@ ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission,
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`DataLifecycleSubjectRequestInput`](#schema-datalifecyclesubjectrequestinput)
 
@@ -8047,10 +8048,10 @@ Gated by seo_distribution.config.update. High-risk mutation — rewrites the pub
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`SeoConfigUpdateRequest`](#schema-seoconfigupdaterequest)
 
@@ -8172,10 +8173,10 @@ High-risk: requires an Idempotency-Key, audited. The target is validated through
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`SeoRedirectCreateRequest`](#schema-seoredirectcreaterequest)
 
@@ -8273,11 +8274,11 @@ activate | deactivate | archive | restore | purge. Idempotency-keyed, audited. p
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -8301,10 +8302,10 @@ Turn an old→new public path change into an audited redirect PROPOSAL (inactive
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -8327,10 +8328,10 @@ Validate + safety-check up to 200 rules. dryRun: true returns a per-item report 
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -8375,10 +8376,10 @@ High-risk (the legacy-blog toggle changes public routing intent): requires an Id
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`SeoRedirectSettings`](#schema-seoredirectsettings)
 
@@ -8540,10 +8541,10 @@ High-risk: hands the payload to a domain action, so an Idempotency-Key is requir
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Responses**
 
@@ -8591,10 +8592,10 @@ Gated by `site_search.index.rebuild` — a HIGH-RISK action: it deletes every on
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -8615,10 +8616,10 @@ Gated by `site_search.index.reconcile`. Upserts the tenant's currently public do
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -8710,10 +8711,10 @@ Gated by `site_search.settings.update`. Changes what the PUBLIC search surface r
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`SiteSearchSettingsUpdateRequest`](#schema-sitesearchsettingsupdaterequest)
 
@@ -8932,10 +8933,10 @@ Gated by `tax.rules.configure` (high-risk). Creates a DRAFT — it is not resolv
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`TaxRuleVersionInput`](#schema-taxruleversioninput)
 
@@ -8983,11 +8984,11 @@ Gated by `tax.rules.publish` (high-risk), separately grantable from authoring: t
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -9035,10 +9036,10 @@ Gated by `tax.snapshots.create`. The server computes the tax exactly as `/quote`
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`TaxSnapshotRequest`](#schema-taxsnapshotrequest)
 
@@ -9087,11 +9088,11 @@ Gated by `tax.snapshots.reverse` (HIGH-RISK). Computed from the ORIGINAL snapsho
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`TaxReversalRequest`](#schema-taxreversalrequest)
 
@@ -9143,10 +9144,10 @@ Gated by `site_profile.profile.update`, separately grantable from `.read` becaus
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`SiteProfileWriteInput`](#schema-siteprofilewriteinput)
 
@@ -9220,9 +9221,9 @@ RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, a
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): [`SubmitCommentRequest`](#schema-submitcommentrequest)
 
@@ -9335,10 +9336,10 @@ Requires `comments.moderation.archive`. Only an APPROVED comment can be archived
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Responses**
 
@@ -9361,10 +9362,10 @@ This is the only moderator transition with no way back through the API: `deleted
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Responses**
 
@@ -9385,10 +9386,10 @@ This is the only moderator transition with no way back through the API: `deleted
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -9412,10 +9413,10 @@ Requires `comments.moderation.restore`. Moves the comment back to `pending` for 
 
 **Parameters**
 
-| Name              | In     | Required | Type          | Description |
-| ----------------- | ------ | -------- | ------------- | ----------- |
-| `id`              | path   | yes      | string (uuid) |             |
-| `Idempotency-Key` | header | yes      | string        |             |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Responses**
 
@@ -9436,9 +9437,9 @@ Guarded by the same permission the single-comment action requires. Each comment 
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -9501,9 +9502,9 @@ Requires `comments.settings.update`. A partial body is merged over the current s
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): [`CommentSettings`](#schema-commentsettings)
 
@@ -9671,10 +9672,10 @@ Gated by omes_control.ai_privacy.approve. A RESTRICTED classification resolving 
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -9784,11 +9785,11 @@ Gated by omes_control.backups.restore. Always-destructive: routes through the ca
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -9962,11 +9963,11 @@ Gated by omes_control.jobs.approve. Only a failed job may be requeued — refuse
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -9988,11 +9989,11 @@ Gated by omes_control.jobs.cancel. Only a queued job may be cancelled — a leas
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -10107,10 +10108,10 @@ Guarded per-operation: status/preflight require deployments.read; start/stop/res
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -10201,9 +10202,9 @@ Gated by omes_control.repository_progress.configure (a NEW permission — see sq
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
@@ -10226,9 +10227,9 @@ Gated by omes_control.repository_progress.configure. Also clears any existing pr
 
 **Parameters**
 
-| Name              | In     | Required | Type   | Description |
-| ----------------- | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key` | header | yes      | string |             |
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Responses**
 
@@ -10271,10 +10272,10 @@ Gated by omes_control.servers.register. Records registration INTENT only (status
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -10320,11 +10321,11 @@ Gated by omes_control.servers.delete. Soft delete — flips status to decommissi
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -10346,11 +10347,11 @@ Gated by omes_control.enrollments.manage. The raw challenge is returned exactly 
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -10373,12 +10374,12 @@ Gated by omes_control.enrollments.manage. Requires Idempotency-Key, audited.
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description |
-| ------------------ | ------ | -------- | ------------- | ----------- |
-| `id`               | path   | yes      | string (uuid) |             |
-| `workerId`         | path   | yes      | string        |             |
-| `Idempotency-Key`  | header | yes      | string        |             |
-| `X-Correlation-ID` | header | no       | string        |             |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `workerId`         | path   | yes      | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Responses**
 
@@ -10522,10 +10523,10 @@ Gated by `inventory.movements.adjust` (HIGH-RISK). The one movement type that ca
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`InventoryAdjustmentInput`](#schema-inventoryadjustmentinput)
 
@@ -10550,11 +10551,11 @@ Gated by `inventory.movements.adjust` (HIGH-RISK). Posts an equal and opposite a
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description                                                  |
-| ------------------ | ------ | -------- | ------------- | ------------------------------------------------------------ |
-| `id`               | path   | yes      | string (uuid) |                                                              |
-| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string        |                                                              |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -10606,10 +10607,10 @@ Gated by `inventory.balances.rebuild` (HIGH-RISK). Recomputes each drifted balan
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (optional): object
 
@@ -10655,10 +10656,10 @@ Gated by `inventory.policy.configure`. Touches `lowStockThreshold` and NOTHING e
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`InventoryThresholdInput`](#schema-inventorythresholdinput)
 
@@ -10784,11 +10785,11 @@ Gated by `inventory.policy.configure` — it decides whether `movements.create` 
 
 **Parameters**
 
-| Name               | In     | Required | Type          | Description                                                  |
-| ------------------ | ------ | -------- | ------------- | ------------------------------------------------------------ |
-| `id`               | path   | yes      | string (uuid) |                                                              |
-| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string        |                                                              |
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -10850,10 +10851,10 @@ Refusals write nothing: `409 INSUFFICIENT_STOCK` (the negative-stock policy forb
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`InventoryMovementPostInput`](#schema-inventorymovementpostinput)
 
@@ -10902,10 +10903,10 @@ Gated by `inventory.movements.adjust` (HIGH-RISK) — NOT `create`. An opening s
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`InventoryOpeningInput`](#schema-inventoryopeninginput)
 
@@ -10952,10 +10953,10 @@ Gated by `inventory.policy.configure`. Requires an Idempotency-Key; audited at w
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): object
 
@@ -10978,10 +10979,10 @@ Gated by `inventory.movements.transfer` (HIGH-RISK). Posts a BALANCED out/in pai
 
 **Parameters**
 
-| Name               | In     | Required | Type   | Description                                                  |
-| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------ |
-| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request; at most 255 characters. |
-| `X-Correlation-ID` | header | no       | string |                                                              |
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
 
 **Request body** (required): [`InventoryTransferInput`](#schema-inventorytransferinput)
 

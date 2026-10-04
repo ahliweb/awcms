@@ -173,7 +173,8 @@ The flow:
      exceeded — `54000`, e.g. an index row size over the btree maximum caused by
      an oversized caller-supplied value) — a property of the input, not of
      database health. `Idempotency-Key` is bounded at the middleware
-     (1 to 255 visible ASCII characters); this exclusion is the defence in
+     (1 to 255 visible ASCII characters, documented in the contract as the shared
+     `components.parameters.IdempotencyKey`, ADR-0129); this exclusion is the defence in
      depth for any other unbounded value.
    - `Bun.SQL.PostgresError` with a SQLSTATE of class `22` (data exception —
      `22P02` invalid_text_representation, `22003` numeric_value_out_of_range,

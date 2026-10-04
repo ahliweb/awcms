@@ -55,11 +55,7 @@ paths:
       description: "Gated by seo_distribution.config.update. High-risk mutation — rewrites the public metadata/indexability surface (including the tenant-wide noindex switch): requires Idempotency-Key and is audited. Full replace of the mutable fields (PUT semantics); unknown keys are ignored. Tenant-scoped (withTenant + RLS FORCE)."
       operationId: seoConfigUpdate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -160,11 +156,7 @@ paths:
       description: "High-risk: requires an Idempotency-Key, audited. The target is validated through the frozen open-redirect guard and the rule is rejected if it conflicts with an existing source/scope, self-redirects, or would create a loop / over-long chain. Gated by seo_distribution.redirect.create. Tenant-scoped (withTenant + RLS FORCE)."
       operationId: seoRedirectsCreate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -339,11 +331,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -425,11 +413,7 @@ paths:
       description: "Validate + safety-check up to 200 rules. dryRun: true returns a per-item report writing nothing; a real import is all-or-nothing (idempotency-keyed, audited). Gated by seo_distribution.redirect.create."
       operationId: seoRedirectsImport
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -480,11 +464,7 @@ paths:
       description: Turn an old→new public path change into an audited redirect PROPOSAL (inactive) or active rule per the tenant's url_change_auto_policy (overridable). Idempotency-keyed. Gated by seo_distribution.redirect.create.
       operationId: seoRedirectsCaptureUrlChange
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -573,11 +553,7 @@ paths:
       description: "High-risk (the legacy-blog toggle changes public routing intent): requires an Idempotency-Key, audited. Gated by seo_distribution.redirect.update."
       operationId: seoRedirectSettingsUpdate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true

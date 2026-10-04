@@ -277,11 +277,7 @@ paths:
         audited. Merge semantics: omitted fields keep their current value; unknown
         keys are ignored.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -373,11 +369,7 @@ paths:
         fully regenerable projection sync), but still Idempotency-Key'd and
         audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -416,11 +408,7 @@ paths:
         re-extracts them. Idempotent (the end state is identical regardless of
         prior state), Idempotency-Key'd, and audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":

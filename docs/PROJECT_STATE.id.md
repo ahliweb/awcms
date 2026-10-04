@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6a7082845c22646cd83d7fb529aa510d4b8ba40ceb46885484c81a6076e29a5b -->
+<!-- i18n-source-hash: sha256:51bfd1bad7da9e1173b636d91fe5273f19514a1fbf9286e1d7cdadf4156c39c8 -->
 
 # AWCMS — Project State & Continuation
 
@@ -121,7 +121,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                         | `git rev-list --count v10.4.0..HEAD`                                                    |
 | Modul base                         | **27** (lihat daftar di ARCHITECTURE.md)                                                                   | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **173** (`sql/001`–`173`)                                                                                  | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0127** (`0000` = template; status ADR tertinggi: **Accepted**)                                  | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0129** (`0000` = template; status ADR tertinggi: **Accepted**)                                  | `ls docs/adr/`                                                                          |
 | Layar admin                        | **64** berkas `.astro` di `src/pages/admin/`; **2 dari 27** modul tanpa `navigation:` (`inventory`, `tax`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **81** (43.960 baris) — soal typecheck lihat §6                                                            | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **61** di rantai `bun run check`                                                                           | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
