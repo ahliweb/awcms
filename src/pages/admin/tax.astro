@@ -27,15 +27,18 @@
  * why the endpoint, not this page, enforces "not in the past" and "after the
  * latest published version".
  *
- * ## Authoring the definition is JSON, on purpose
+ * ## Authoring the definition: rows over a JSON source of truth (Issue #901)
  *
  * The scalar fields are real inputs. The definition (categories, rules, stacked
- * components) is a JSON document the SERVER validates field by field: this page
- * does not try to second-guess it, and the server's message is surfaced as a
- * generic "check the definition" rather than echoed, because an internal field
- * path is not something to paint on a page (Issue #540). A structured editor is
- * a recorded follow-up; until then the draft is inspectable read-only below
- * before anyone publishes it.
+ * components) is edited as rows by a progressively-enhanced editor
+ * (`tax-definition-editor-client.ts`) that serialises into the SAME JSON
+ * textarea the form has always submitted; with scripts off the textarea is the
+ * whole form. Rates stay exact decimal strings end to end. The SERVER validates
+ * the document field by field and stays authoritative: this page does not
+ * second-guess it, and the server's message is surfaced as a generic "check the
+ * definition" rather than echoed, because an internal field path is not
+ * something to paint on a page (Issue #540). The draft is inspectable read-only
+ * below before anyone publishes it.
  *
  * ## Not on this screen, and why
  *
@@ -165,6 +168,40 @@ function treatmentLabel(value: string): string {
     ? TREATMENT_LABEL[value as Treatment]
     : value;
 }
+const BASIS_LABEL: Record<(typeof COMPONENT_BASES)[number], string> = {
+  net: t("Net amount"),
+  cumulative: t("Net plus earlier components (stacked)")
+};
+/** Everything the structured definition editor shows, translated here (Issue #901). */
+const EDITOR_LABELS = {
+  categories: t("Categories"),
+  category: t("Category"),
+  rules: t("Rules"),
+  rule: t("Rule"),
+  components: t("Tax components"),
+  component: t("Component"),
+  code: t("Code"),
+  name: t("Name"),
+  description: t("Description (optional)"),
+  appliesTo: t("Applies to category"),
+  fallbackCategory: t("Fallback (any other category)"),
+  undeclaredCategory: t("{code} (not declared above)"),
+  treatment: t("Treatment"),
+  rate: t("Rate (percent, exact decimal)"),
+  rateHint: t("e.g. 7.5"),
+  basis: t("Basis"),
+  addCategory: t("Add category"),
+  addRule: t("Add rule"),
+  addComponent: t("Add component"),
+  remove: t("Remove"),
+  treatments: TREATMENT_LABEL,
+  bases: BASIS_LABEL,
+  notShown: t(
+    "The JSON cannot be shown as rows. Edit it below; the server validates it."
+  ),
+  resetEditor: t("Discard the JSON and start the structured editor"),
+  noComponents: t("A taxable rule needs at least one component.")
+};
 const VERSION_STATUS_LABEL: Record<"draft" | "published", string> = {
   draft: t("Draft"),
   published: t("Published")
@@ -803,17 +840,26 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                     maxlength="1000"
                   />
                 </label>
-                <label for="draft-definition">
-                  {t("Definition (JSON)")}
-                  <textarea
-                    id="draft-definition"
-                    name="definition"
-                    rows="10"
-                    required
-                    spellcheck="false"
-                    placeholder={`{\n  "categories": [{ "code": "general", "name": "General" }],\n  "rules": [\n    {\n      "categoryCode": "general",\n      "treatment": "taxable",\n      "components": [\n        { "code": "tax-1", "name": "Tax", "rate": "0.00", "basis": "net" }\n      ]\n    }\n  ]\n}`}
-                  />
-                </label>
+                <div
+                  id="tax-definition-editor"
+                  class="tax-editor"
+                  hidden
+                  data-labels={JSON.stringify(EDITOR_LABELS)}
+                ></div>
+                <details id="tax-definition-advanced" open>
+                  <summary>{t("Definition (JSON), advanced")}</summary>
+                  <label for="draft-definition">
+                    {t("Definition (JSON)")}
+                    <textarea
+                      id="draft-definition"
+                      name="definition"
+                      rows="10"
+                      required
+                      spellcheck="false"
+                      placeholder={`{\n  "categories": [{ "code": "general", "name": "General" }],\n  "rules": [\n    {\n      "categoryCode": "general",\n      "treatment": "taxable",\n      "components": [\n        { "code": "tax-1", "name": "Tax", "rate": "0.00", "basis": "net" }\n      ]\n    }\n  ]\n}`}
+                    />
+                  </label>
+                </details>
                 <p class="page-description">
                   {t(
                     "Treatment is one of {treatments}; a component basis is one of {bases}. The server validates every field and refuses an unknown one.",
@@ -1358,6 +1404,7 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
     sendJson
   } from "../../lib/ui/admin-form-client";
   import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { initTaxDefinitionEditor } from "../../lib/ui/tax-definition-editor-client";
   import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
 
   const errorBox = messageBox("tax-action-error");
@@ -1392,6 +1439,10 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
         return generic;
     }
   }
+
+  // Reveals the structured editor over the JSON textarea; without it (or
+  // without JavaScript) the textarea below is the whole form, as before.
+  initTaxDefinitionEditor();
 
   onSubmit("rule-version-form", async ({ data, submit }) => {
     let definition: unknown;

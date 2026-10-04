@@ -40,7 +40,8 @@ const INVENTORY_KEYS = [
   "inventory.policy.configure",
   "inventory.movements.adjust",
   "inventory.movements.transfer",
-  "inventory.balances.reconcile"
+  "inventory.balances.reconcile",
+  "inventory.balances.rebuild"
 ];
 const TAX_KEYS = [
   "tax.rules.read",
@@ -98,7 +99,8 @@ describe("the controls call endpoints that exist, with an Idempotency-Key where 
       ["/api/v1/inventory/balances/threshold", "balances/threshold.ts", true],
       ['/api/v1/inventory/adjustments"', "adjustments/index.ts", true],
       ["/api/v1/inventory/transfers", "transfers/index.ts", true],
-      ["/reversal", "adjustments/[id]/reversal.ts", true]
+      ["/reversal", "adjustments/[id]/reversal.ts", true],
+      ["/api/v1/inventory/balances/rebuild", "balances/rebuild.ts", true]
     ] as const) {
       expect(page).toContain(url);
       const source = await readFile(
@@ -134,7 +136,13 @@ describe("what neither screen may do", () => {
     const tax = await readFile(TAX, "utf8");
 
     expect(inventory).not.toMatch(/name="(onHand|on_hand|balance)"/);
-    expect(inventory).not.toContain("/balances/rebuild");
+    // The rebuild control carries no quantity: its body is at most a location.
+    const rebuildHandler = inventory.slice(
+      inventory.indexOf('onSubmit("rebuild-form"'),
+      inventory.indexOf("// --- Movements")
+    );
+    expect(rebuildHandler.length).toBeGreaterThan(0);
+    expect(rebuildHandler).not.toMatch(/quantity|onHand|on_hand/i);
     expect(inventory).not.toContain('/api/v1/inventory/movements"');
     expect(tax).not.toMatch(/name="(taxAmount|taxTotal|tax_total)"/);
     expect(tax).not.toContain("/api/v1/tax/quote");
@@ -163,6 +171,44 @@ describe("what neither screen may do", () => {
 
   test("the publish confirmation goes through confirmAction", async () => {
     expect(await readFile(TAX, "utf8")).toContain("confirmAction(");
+  });
+});
+
+describe("the rebuild and location-edit controls (Issue #901)", () => {
+  test("rebuild is confirmed before it is sent", async () => {
+    const page = await readFile(INVENTORY, "utf8");
+    const handler = page.slice(page.indexOf('onSubmit("rebuild-form"'));
+
+    expect(handler.indexOf("confirmAction(")).toBeGreaterThan(-1);
+    expect(handler.indexOf("confirmAction(")).toBeLessThan(
+      handler.indexOf("/api/v1/inventory/balances/rebuild")
+    );
+  });
+
+  test("the location PATCH the details control calls is guarded by locations.update", async () => {
+    const page = await readFile(INVENTORY, "utf8");
+    const route = await readFile(
+      "src/pages/api/v1/inventory/locations/[id].ts",
+      "utf8"
+    );
+
+    expect(page).toContain("js-save-location-details");
+    expect(route).toContain("INVENTORY_GUARDS.locations.update");
+  });
+
+  test("the tax editor serialises into the submitted textarea and never uses innerHTML", async () => {
+    // Comments describe what the file refuses to do; assert on the code.
+    const client = (
+      await readFile("src/lib/ui/tax-definition-editor-client.ts", "utf8")
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const page = await readFile(TAX, "utf8");
+
+    expect(client).not.toMatch(/innerHTML|insertAdjacentHTML|\.style\b/);
+    expect(client).toContain("textarea.value = serializeModel(model)");
+    expect(page).toContain('id="draft-definition"');
+    expect(page).toContain("initTaxDefinitionEditor()");
   });
 });
 

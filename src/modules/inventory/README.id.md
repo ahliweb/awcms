@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:3deb6e8a927a0dfb2c5d6f70c0663b349d28b720a5a7046b7f79c2c8ddb4d177 -->
+<!-- i18n-source-hash: sha256:cdf231468e02b2cdbbc80f11be27279f4b0ee5783635492f18e2edcc8e94f62a -->
 
 # `inventory`
 
@@ -72,8 +72,8 @@ adalah sebuah pergerakan.
 
 ## Yang TIDAK ada di sini
 
-Layar untuk `inventory.balances.rebuild` dan `inventory.movements.create`
-(langkah runbook dan aksi konsumen); reservasi/hold; konversi satuan;
+Layar untuk `inventory.movements.create` (aksi konsumen; `balances.rebuild`
+punya aksi layar berpagar sejak Issue #901); reservasi/hold; konversi satuan;
 costing/valuasi; posting atomik multi-baris; archive-lalu-purge dan partisi
 (tidak ada yang mem-purge buku besar, dan deskriptor menyatakannya —
 ADR-0126 §7).

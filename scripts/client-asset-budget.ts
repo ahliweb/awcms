@@ -933,8 +933,28 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 301,273 is the measured value with no added margin.
+ *
+ * **Raised for Issue #901** (the structured tax-definition editor, the
+ * location rename / office-link control and the balance-rebuild action). The
+ * editor is the bulk of it and is genuinely new client behaviour, not a copy of
+ * a shared lifecycle: it builds a categories / rules / components row editor
+ * with `createElement` (no `innerHTML`, so no CSP exposure and no markup
+ * strings to carry), keeps focus and accessible names across add / remove, and
+ * round-trips the JSON textarea. The pure model (`tax-definition-model.ts`) is
+ * split out so it is unit-tested rather than trimmed. Measured actual total:
+ *
+ * ```
+ * before (301,273 ceiling)   301,273 B
+ * + tax script (editor)       6,664 B
+ * + inventory script          1,029 B
+ * + admin-screens.css rules     413 B
+ * + editor guard + reset       247 B
+ * after                      309,626 B (measured actual total)
+ * ```
+ *
+ * 309,626 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 301_273;
+export const APP_BUDGET_BYTES = 309_626;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

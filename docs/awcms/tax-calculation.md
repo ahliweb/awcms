@@ -395,7 +395,7 @@ authoritative, and the receipt must not claim otherwise until it exists.
 
 ## 12. Limits and known gaps
 
-- Operator surface: `/admin/tax` (Issue #894, ADR-0127 follow-up 1) — rule profiles and versions (draft, publish with confirmation), snapshot list and detail, and the reconciliation report. Rule definitions are authored as JSON the server validates; a structured editor is open. Quote, finalise, reverse and backdate stay consumer actions with no screen.
+- Operator surface: `/admin/tax` (Issue #894, ADR-0127 follow-up 1) — rule profiles and versions (draft, publish with confirmation), snapshot list and detail, and the reconciliation report. Rule definitions are authored in a structured row editor (Issue #901: categories, rules, stacked components, rates as exact decimal strings) that serialises into the JSON textarea the form submits — the textarea stays as the advanced/no-script fallback and the server stays authoritative. Quote, finalise, reverse and backdate stay consumer actions with no screen.
 - No country profile (follow-up 2). No Coretax/e-invoice export (follow-up 6).
 - No draft deletion; abandoned drafts remain (never resolved).
 - Versions append in time order; there is no publishing into the past.

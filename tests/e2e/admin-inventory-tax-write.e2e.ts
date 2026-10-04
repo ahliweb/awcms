@@ -172,6 +172,65 @@ test.describe("inventory and tax screens (owner, writes)", () => {
     ).toHaveCount(1);
   });
 
+  test("renames a location through the details control", async ({ page }) => {
+    await page.goto("/admin/inventory?view=locations");
+    const row = page.locator(`tr:has-text("${codeA}")`);
+    await row.locator(".js-location-name").fill(`E2E renamed ${run}`);
+    await row.locator(".js-save-location-details").click();
+    await expect(
+      page.locator(`tr:has-text("${codeA}") .js-location-name`)
+    ).toHaveValue(`E2E renamed ${run}`);
+  });
+
+  test("rebuilds balances behind a confirmation and reports the result", async ({
+    page
+  }) => {
+    await page.goto("/admin/inventory?view=balances");
+    await page.locator("#rebuild-submit").click();
+    await page.locator("#confirm-dialog-confirm").click();
+    await expect(page.locator("#inventory-rebuild-result")).toBeVisible();
+    await expect(page.locator("#inventory-action-error")).toBeHidden();
+  });
+
+  test("builds a tax draft with the structured editor", async ({ page }) => {
+    const profile = `e2e-ed-${run}`;
+    const later = new Date(Date.now() + 3 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    await page.goto("/admin/tax?view=rules");
+    await page.locator("#draft-profile").fill(profile);
+    await page.locator("#draft-name").fill("E2E structured");
+    await page.locator("#draft-jurisdiction").fill("e2e-jurisdiction");
+    await page.locator("#draft-currency").fill("USD");
+    await page.locator("#draft-effective").fill(later);
+
+    const editor = page.locator("#tax-definition-editor");
+    await expect(editor).toBeVisible();
+
+    // Locale-independent hooks: the visible labels are translated.
+    await editor.locator('[data-editor-action="add-category"]').click();
+    const category = editor.locator("fieldset.tax-editor-row").first();
+    await category.locator('[data-editor-field="code"]').fill("general");
+    await category.locator('[data-editor-field="name"]').fill("General");
+
+    // The initial rule is a taxable fallback with one blank component.
+    // The last row is the component (the rule row that contains it comes first).
+    const component = editor.locator("fieldset.tax-editor-row").last();
+    await component.locator('[data-editor-field="code"]').fill("tax-1");
+    await component.locator('[data-editor-field="name"]').fill("Tax");
+    await component.locator('[data-editor-field="rate"]').fill("7.50");
+
+    await expect(page.locator("#draft-definition")).toHaveValue(
+      /"rate": "7\.50"/
+    );
+
+    await page.locator("#draft-submit").click();
+    await expect(
+      page.locator(`#tax-versions-table tr:has-text("${profile}")`)
+    ).toHaveCount(1);
+  });
+
   test("authors a tax draft and publishes it after confirmation", async ({
     page
   }) => {
@@ -186,6 +245,8 @@ test.describe("inventory and tax screens (owner, writes)", () => {
     await page.locator("#draft-jurisdiction").fill("e2e-jurisdiction");
     await page.locator("#draft-currency").fill("USD");
     await page.locator("#draft-effective").fill(tomorrow);
+    // The raw JSON lives in a disclosure once the structured editor is up.
+    await page.locator("#tax-definition-advanced summary").click();
     await page.locator("#draft-definition").fill(
       JSON.stringify({
         categories: [{ code: "general", name: "General" }],
@@ -225,6 +286,7 @@ test.describe("inventory and tax screens (owner, writes)", () => {
     await page.locator("#draft-jurisdiction").fill("e2e-jurisdiction");
     await page.locator("#draft-currency").fill("USD");
     await page.locator("#draft-effective").fill("2099-01-01");
+    await page.locator("#tax-definition-advanced summary").click();
     await page
       .locator("#draft-definition")
       .fill('{"categories":[],"rules":[]}');

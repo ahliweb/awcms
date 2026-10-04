@@ -6543,9 +6543,6 @@ msgstr ""
 msgid "Document type"
 msgstr ""
 
-msgid "Drift found in {count} balance rows. Repair is an operator runbook step, not a button."
-msgstr ""
-
 msgid "Effective"
 msgstr ""
 
@@ -6994,4 +6991,97 @@ msgid "You do not have permission to view tax."
 msgstr ""
 
 msgid "Zero-rated"
+msgstr ""
+
+msgid "Add category"
+msgstr ""
+
+msgid "Add component"
+msgstr ""
+
+msgid "Add rule"
+msgstr ""
+
+msgid "Applies to category"
+msgstr ""
+
+msgid "A taxable rule needs at least one component."
+msgstr ""
+
+msgid "Basis"
+msgstr ""
+
+msgid "{code} (not declared above)"
+msgstr ""
+
+msgid "{count} balance rows were repaired. Reload the page to see them."
+msgstr ""
+
+msgid "Definition (JSON), advanced"
+msgstr ""
+
+msgid "Drift found in {count} balance rows. Repair them with a balance rebuild."
+msgstr ""
+
+msgid "e.g. 7.5"
+msgstr ""
+
+msgid "Fallback (any other category)"
+msgstr ""
+
+msgid "Location id (optional)"
+msgstr ""
+
+msgid "More drifted balances remain than one run repairs. Run the rebuild again."
+msgstr ""
+
+msgid "Name of {code}"
+msgstr ""
+
+msgid "Net amount"
+msgstr ""
+
+msgid "Net plus earlier components (stacked)"
+msgstr ""
+
+msgid "No office"
+msgstr ""
+
+msgid "Nothing to repair: no balance had drifted."
+msgstr ""
+
+msgid "Office"
+msgstr ""
+
+msgid "Office id"
+msgstr ""
+
+msgid "Office of {code}"
+msgstr ""
+
+msgid "Rate (percent, exact decimal)"
+msgstr ""
+
+msgid "Rebuild balances"
+msgstr ""
+
+msgid "Rebuild the stored balances from the ledger? Every drifted balance is overwritten with the ledger sum. This is audited and cannot be undone, but the ledger itself is never changed."
+msgstr ""
+
+msgid "Repairs drifted balances from the movement ledger: each stored balance is reset to the sum of its movements. It never accepts a quantity, so it cannot assert a balance. Run the reconciliation first; the repair is audited."
+msgstr ""
+
+msgid "Save details"
+msgstr ""
+
+msgid "Tax components"
+msgstr ""
+
+msgid "That office does not exist in this organisation. Pick another."
+msgstr ""
+
+msgid "The JSON cannot be shown as rows. Edit it below; the server validates it."
+msgstr ""
+
+msgid "Discard the JSON and start the structured editor"
 msgstr ""

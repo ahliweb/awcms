@@ -29,13 +29,30 @@
  * a shortened id instead, and the forms ask for the id rather than offering a
  * picker.
  *
+ * ## Rebuild is a guarded action, not a balance editor (Issue #901)
+ *
+ * `inventory.balances.rebuild` repairs drifted balances FROM THE LEDGER: the
+ * new on-hand is always the ledger sum and the request carries no quantity, so
+ * the control cannot assert a balance. It sits under the reconciliation result,
+ * behind `inventory.balances.rebuild` (a different power from `reconcile`),
+ * asks for confirmation, sends an `Idempotency-Key`, and reports how many keys
+ * were repaired (the endpoint audits it at critical severity).
+ *
+ * ## Location details (Issue #901)
+ *
+ * Renaming a location and attaching it to an office is the existing
+ * `PATCH /api/v1/inventory/locations/{id}` under `inventory.locations.update`;
+ * the office id is existence-checked inside the tenant transaction by the
+ * endpoint (422 for an id that is not this tenant's). The office picker lists
+ * offices only when the operator may read offices; otherwise the field takes an
+ * id, like the other pickers here.
+ *
  * ## Not on this screen, and why
  *
- * `inventory.balances.rebuild` (rewrites balances, critical severity) and
  * `inventory.movements.create` (caller-attested sale/receive/return postings —
  * "verifying the document is the consumer duty", per the permission's own
- * description) are consumer and operator-runbook surfaces, not a form an
- * operator should drive by hand. They stay on the shrink-only coverage ledger.
+ * description) is a consumer surface, not a form an operator should drive by
+ * hand. It stays on the shrink-only coverage ledger.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import ReasonPanel from "../../components/ReasonPanel.astro";
@@ -50,6 +67,11 @@ import {
   type BalanceCursor,
   type ReconciliationReport
 } from "../../modules/inventory/application/inventory-balance-directory";
+import {
+  decodeKeysetCursor,
+  type KeysetCursor
+} from "../../modules/_shared/keyset-pagination";
+import { listOffices } from "../../modules/tenant-admin/application/office-directory";
 import {
   getTenantPolicy,
   listLocations,
@@ -200,6 +222,50 @@ const screen = await loadAdminScreen({
       action: "reconcile"
     });
 
+    const canRebuild = await can({
+      moduleKey: "inventory",
+      activityCode: "balances",
+      action: "rebuild"
+    });
+    const canReadOffices = canUpdateLocation
+      ? await can({
+          moduleKey: "tenant_admin",
+          activityCode: "office_management",
+          action: "read"
+        })
+      : false;
+    // The picker follows the office cursor, bounded: a tenant with more than
+    // OFFICE_PICKER_MAX_PAGES pages of offices falls back to the id text input
+    // rather than offering a silently truncated list (older offices could not
+    // be linked from a truncated picker).
+    const OFFICE_PICKER_MAX_PAGES = 10;
+    const offices: { id: string; label: string }[] = [];
+    let officesComplete = true;
+
+    if (view === "locations" && canReadOffices) {
+      let officeCursor: string | null = null;
+
+      for (let page = 0; page < OFFICE_PICKER_MAX_PAGES; page += 1) {
+        const decoded: KeysetCursor | null = officeCursor
+          ? decodeKeysetCursor(officeCursor)
+          : null;
+        const result = await listOffices(tx, ssr.tenantId, decoded);
+
+        for (const office of result.items) {
+          offices.push({
+            id: office.id,
+            label: `${office.officeName} (${office.officeCode})`
+          });
+        }
+
+        officeCursor = result.nextCursor;
+
+        if (!officeCursor) break;
+      }
+
+      officesComplete = officeCursor === null;
+    }
+
     let balances: StockBalance[] = [];
     let balancesNext: string | null = null;
     let reconciliation: ReconciliationReport | null = null;
@@ -271,7 +337,10 @@ const screen = await loadAdminScreen({
       canUpdateLocation,
       canAdjust,
       canTransfer,
-      canReconcile
+      canReconcile,
+      canRebuild,
+      canReadOffices: canReadOffices && officesComplete,
+      offices
     };
   },
   onError: (error) => {
@@ -379,6 +448,9 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
           "That movement cannot be reversed. It may already have been."
         )}
         data-msg-not-found={t("Not found. Reload the page.")}
+        data-msg-office={t(
+          "That office does not exist in this organisation. Pick another."
+        )}
         data-msg-generic={t("Could not save that. Please try again.")}
       />
 
@@ -647,7 +719,7 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                           { count: data.reconciliation.checkedKeys }
                         )
                       : t(
-                          "Drift found in {count} balance rows. Repair is an operator runbook step, not a button.",
+                          "Drift found in {count} balance rows. Repair them with a balance rebuild.",
                           { count: data.reconciliation.drift.length }
                         )}
                   </p>
@@ -696,6 +768,64 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                   )}
                 </div>
               )}
+            </section>
+          )}
+
+          {data.canRebuild && (
+            <section aria-labelledby="inventory-rebuild-heading">
+              <h3 id="inventory-rebuild-heading">{t("Rebuild balances")}</h3>
+              <form id="rebuild-form" class="admin-create-form">
+                <p class="page-description">
+                  {t(
+                    "Repairs drifted balances from the movement ledger: each stored balance is reset to the sum of its movements. It never accepts a quantity, so it cannot assert a balance. Run the reconciliation first; the repair is audited."
+                  )}
+                </p>
+                {mayLocations ? (
+                  <label for="rebuild-location">
+                    {t("Location")}
+                    <select id="rebuild-location" name="locationId">
+                      <option value="">{t("All locations")}</option>
+                      {locations.map((location) => (
+                        <option value={location.id}>
+                          {location.name} ({location.code})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label for="rebuild-location">
+                    {t("Location id (optional)")}
+                    <input
+                      id="rebuild-location"
+                      name="locationId"
+                      type="text"
+                      autocomplete="off"
+                    />
+                  </label>
+                )}
+                <button
+                  id="rebuild-submit"
+                  type="submit"
+                  data-confirm={t(
+                    "Rebuild the stored balances from the ledger? Every drifted balance is overwritten with the ledger sum. This is audited and cannot be undone, but the ledger itself is never changed."
+                  )}
+                >
+                  {t("Rebuild balances")}
+                </button>
+                <p
+                  id="inventory-rebuild-result"
+                  role="status"
+                  data-msg-done={t(
+                    "{count} balance rows were repaired. Reload the page to see them."
+                  )}
+                  data-msg-none={t(
+                    "Nothing to repair: no balance had drifted."
+                  )}
+                  data-msg-truncated={t(
+                    "More drifted balances remain than one run repairs. Run the rebuild again."
+                  )}
+                />
+              </form>
             </section>
           )}
         </section>
@@ -1221,6 +1351,9 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                     <th scope="col">{t("Code")}</th>
                     <th scope="col">{t("Name")}</th>
                     <th scope="col">{t("Status")}</th>
+                    {data.canUpdateLocation && (
+                      <th scope="col">{t("Office")}</th>
+                    )}
                     <th scope="col">{t("Negative-stock policy")}</th>
                     {(data.canUpdateLocation || data.canConfigurePolicy) && (
                       <th scope="col">{t("Actions")}</th>
@@ -1233,7 +1366,25 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                       <th scope="row" data-label={t("Code")}>
                         {location.code}
                       </th>
-                      <td data-label={t("Name")}>{location.name}</td>
+                      <td data-label={t("Name")}>
+                        {data.canUpdateLocation ? (
+                          <>
+                            <label class="sr-only" for={`name-${location.id}`}>
+                              {t("Name of {code}", { code: location.code })}
+                            </label>
+                            <input
+                              id={`name-${location.id}`}
+                              class="js-location-name"
+                              type="text"
+                              required
+                              maxlength="200"
+                              value={location.name}
+                            />
+                          </>
+                        ) : (
+                          location.name
+                        )}
+                      </td>
                       <td
                         data-label={t("Status")}
                         data-status={location.status}
@@ -1249,6 +1400,47 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                           {LOCATION_STATUS_LABEL[location.status]}
                         </span>
                       </td>
+                      {data.canUpdateLocation && (
+                        <td data-label={t("Office")}>
+                          <label class="sr-only" for={`office-${location.id}`}>
+                            {t("Office of {code}", { code: location.code })}
+                          </label>
+                          {data.canReadOffices ? (
+                            <select
+                              id={`office-${location.id}`}
+                              class="js-location-office"
+                            >
+                              <option value="">{t("No office")}</option>
+                              {data.offices.map((office) => (
+                                <option
+                                  value={office.id}
+                                  selected={office.id === location.officeId}
+                                >
+                                  {office.label}
+                                </option>
+                              ))}
+                              {location.officeId &&
+                                !data.offices.some(
+                                  (office) => office.id === location.officeId
+                                ) && (
+                                  <option value={location.officeId} selected>
+                                    {location.officeId.slice(0, 8)}
+                                  </option>
+                                )}
+                            </select>
+                          ) : (
+                            <input
+                              id={`office-${location.id}`}
+                              class="js-location-office"
+                              type="text"
+                              autocomplete="off"
+                              maxlength="36"
+                              placeholder={t("Office id")}
+                              value={location.officeId ?? ""}
+                            />
+                          )}
+                        </td>
+                      )}
                       <td data-label={t("Negative-stock policy")}>
                         {data.canConfigurePolicy ? (
                           <>
@@ -1297,6 +1489,15 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                       </td>
                       {(data.canUpdateLocation || data.canConfigurePolicy) && (
                         <td data-label={t("Actions")}>
+                          {data.canUpdateLocation && (
+                            <button
+                              type="button"
+                              class="module-toggle js-save-location-details"
+                              data-location-id={location.id}
+                            >
+                              {t("Save details")}
+                            </button>
+                          )}
                           {data.canUpdateLocation &&
                             location.status === "active" && (
                               <button
@@ -1359,6 +1560,8 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
     onSubmit,
     onSubmitAll,
     sendJson,
+    sendJsonForData,
+    lockElement,
     mutateAndReload
   } from "../../lib/ui/admin-form-client";
   import { confirmAction } from "../../lib/ui/confirm-dialog-client";
@@ -1389,6 +1592,8 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
         return data.msgUnit ?? generic;
       case "NOT_REVERSIBLE":
         return data.msgNotReversible ?? generic;
+      case "OFFICE_NOT_FOUND":
+        return data.msgOffice ?? generic;
       case "RESOURCE_NOT_FOUND":
       case "LOCATION_NOT_FOUND":
         return data.msgNotFound ?? generic;
@@ -1441,6 +1646,41 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
           {
             status
           }
+        ),
+      messageFor
+    );
+  });
+
+  onAction(".js-save-location-details", async (button) => {
+    const id = button.dataset.locationId;
+    if (!id) return;
+    const name = document.getElementById(`name-${id}`);
+    const office = document.getElementById(`office-${id}`);
+    if (
+      !(name instanceof HTMLInputElement) ||
+      !(
+        office instanceof HTMLSelectElement ||
+        office instanceof HTMLInputElement
+      )
+    ) {
+      return;
+    }
+
+    // The endpoint is the authority on the name and on whether the office is
+    // this tenant's; an empty office value detaches the location.
+    const body = {
+      name: name.value.trim(),
+      officeId: blankToNull(office.value)
+    };
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson(
+          "PATCH",
+          `/api/v1/inventory/locations/${encodeURIComponent(id)}`,
+          body
         ),
       messageFor
     );
@@ -1504,6 +1744,51 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
         }),
       messageFor
     );
+  });
+
+  onSubmit("rebuild-form", async ({ data, submit }) => {
+    // The server-rendered, translated `data-confirm` is always present; with no
+    // text there is nothing translated to ask, so do not act.
+    const message = submit?.dataset.confirm;
+    if (!message || !(await confirmAction(message))) return;
+
+    const locationId = blankToNull(field(data, "locationId"));
+    const body = locationId ? { locationId } : undefined;
+    const result = document.getElementById("inventory-rebuild-result");
+
+    errorBox.clear();
+    // Clear the previous report so a new run is announced afresh. The element
+    // stays un-hidden (empty) so the role="status" live region is reliable.
+    if (result) result.textContent = "";
+    const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
+    const outcome = await sendJsonForData<{
+      repaired?: unknown[];
+      truncated?: boolean;
+    }>("POST", "/api/v1/inventory/balances/rebuild", body, {
+      // A fresh key per CONFIRMED click is deliberate. A rebuild recomputes
+      // from the ledger, so re-running it is harmless (the second run finds
+      // nothing), whereas a content-derived/replayed key would return the FIRST
+      // run's stored report and hide drift that has arisen since. The key still
+      // protects against a network-level retry of the same request.
+      "Idempotency-Key": crypto.randomUUID()
+    });
+    unlock();
+
+    if (!outcome.ok) {
+      errorBox.show(messageFor(outcome.errorCode));
+      return;
+    }
+
+    if (result) {
+      const count = outcome.data?.repaired?.length ?? 0;
+      const text =
+        count === 0
+          ? (result.dataset.msgNone ?? "")
+          : (result.dataset.msgDone ?? "").replace("{count}", String(count));
+      result.textContent = outcome.data?.truncated
+        ? `${text} ${result.dataset.msgTruncated ?? ""}`.trim()
+        : text;
+    }
   });
 
   // --- Movements ------------------------------------------------------------

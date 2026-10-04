@@ -6531,9 +6531,6 @@ msgstr "ID dokumen"
 msgid "Document type"
 msgstr "Tipe dokumen"
 
-msgid "Drift found in {count} balance rows. Repair is an operator runbook step, not a button."
-msgstr "Ditemukan penyimpangan pada {count} baris saldo. Perbaikan adalah langkah runbook operator, bukan tombol."
-
 msgid "Effective"
 msgstr "Berlaku"
 
@@ -6983,3 +6980,96 @@ msgstr "Anda tidak memiliki izin untuk melihat pajak."
 
 msgid "Zero-rated"
 msgstr "Tarif nol"
+
+msgid "Add category"
+msgstr "Tambah kategori"
+
+msgid "Add component"
+msgstr "Tambah komponen"
+
+msgid "Add rule"
+msgstr "Tambah aturan"
+
+msgid "Applies to category"
+msgstr "Berlaku untuk kategori"
+
+msgid "A taxable rule needs at least one component."
+msgstr "Aturan kena pajak membutuhkan setidaknya satu komponen."
+
+msgid "Basis"
+msgstr "Dasar"
+
+msgid "{code} (not declared above)"
+msgstr "{code} (belum dideklarasikan di atas)"
+
+msgid "{count} balance rows were repaired. Reload the page to see them."
+msgstr "{count} baris saldo diperbaiki. Muat ulang halaman untuk melihatnya."
+
+msgid "Definition (JSON), advanced"
+msgstr "Definisi (JSON), lanjutan"
+
+msgid "Drift found in {count} balance rows. Repair them with a balance rebuild."
+msgstr "Ditemukan penyimpangan pada {count} baris saldo. Perbaiki dengan membangun ulang saldo."
+
+msgid "e.g. 7.5"
+msgstr "mis. 7,5"
+
+msgid "Fallback (any other category)"
+msgstr "Cadangan (kategori lainnya)"
+
+msgid "Location id (optional)"
+msgstr "ID lokasi (opsional)"
+
+msgid "More drifted balances remain than one run repairs. Run the rebuild again."
+msgstr "Masih ada saldo menyimpang melebihi yang diperbaiki satu kali jalan. Jalankan pembangunan ulang lagi."
+
+msgid "Name of {code}"
+msgstr "Nama {code}"
+
+msgid "Net amount"
+msgstr "Jumlah neto"
+
+msgid "Net plus earlier components (stacked)"
+msgstr "Neto ditambah komponen sebelumnya (bertumpuk)"
+
+msgid "No office"
+msgstr "Tanpa kantor"
+
+msgid "Nothing to repair: no balance had drifted."
+msgstr "Tidak ada yang perlu diperbaiki: tidak ada saldo yang menyimpang."
+
+msgid "Office"
+msgstr "Kantor"
+
+msgid "Office id"
+msgstr "ID kantor"
+
+msgid "Office of {code}"
+msgstr "Kantor untuk {code}"
+
+msgid "Rate (percent, exact decimal)"
+msgstr "Tarif (persen, desimal eksak)"
+
+msgid "Rebuild balances"
+msgstr "Bangun ulang saldo"
+
+msgid "Rebuild the stored balances from the ledger? Every drifted balance is overwritten with the ledger sum. This is audited and cannot be undone, but the ledger itself is never changed."
+msgstr "Bangun ulang saldo tersimpan dari buku besar? Setiap saldo yang menyimpang ditimpa dengan jumlah buku besar. Ini diaudit dan tidak dapat dibatalkan, tetapi buku besar itu sendiri tidak pernah berubah."
+
+msgid "Repairs drifted balances from the movement ledger: each stored balance is reset to the sum of its movements. It never accepts a quantity, so it cannot assert a balance. Run the reconciliation first; the repair is audited."
+msgstr "Memperbaiki saldo yang menyimpang dari buku besar pergerakan: setiap saldo tersimpan diatur ulang ke jumlah pergerakannya. Ia tidak pernah menerima kuantitas, sehingga tidak dapat menetapkan saldo. Jalankan rekonsiliasi lebih dulu; perbaikan ini diaudit."
+
+msgid "Save details"
+msgstr "Simpan rincian"
+
+msgid "Tax components"
+msgstr "Komponen pajak"
+
+msgid "That office does not exist in this organisation. Pick another."
+msgstr "Kantor itu tidak ada di organisasi ini. Pilih yang lain."
+
+msgid "The JSON cannot be shown as rows. Edit it below; the server validates it."
+msgstr "JSON tidak dapat ditampilkan sebagai baris. Sunting di bawah; server yang memvalidasinya."
+
+msgid "Discard the JSON and start the structured editor"
+msgstr "Buang JSON dan mulai editor terstruktur"
