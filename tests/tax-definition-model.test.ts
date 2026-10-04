@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   initialModel,
+  loadEditableModel,
   parseModel,
   serializeModel
 } from "../src/lib/ui/tax-definition-model";
@@ -90,5 +91,20 @@ describe("serializeModel / parseModel", () => {
     ]) {
       expect(parseModel(text)).toBeNull();
     }
+  });
+});
+
+describe("loadEditableModel (the editor's overwrite guard)", () => {
+  test("blank text starts a fresh model", () => {
+    expect(loadEditableModel("  \n")).toEqual(initialModel());
+  });
+
+  test("a showable document loads", () => {
+    expect(loadEditableModel(JSON.stringify(DOC))).not.toBeNull();
+  });
+
+  test("unparseable or unshowable JSON is null, so the rows stay hidden", () => {
+    expect(loadEditableModel("{ not json")).toBeNull();
+    expect(loadEditableModel('{"categories":[],"rules":[],"x":1}')).toBeNull();
   });
 });

@@ -948,12 +948,13 @@ export const READER_BUDGET_BYTES = 24_000;
  * + tax script (editor)       6,664 B
  * + inventory script          1,029 B
  * + admin-screens.css rules     413 B
- * after                      309,379 B (measured actual total)
+ * + editor guard + reset       247 B
+ * after                      309,626 B (measured actual total)
  * ```
  *
- * 309,379 is the measured value with no added margin.
+ * 309,626 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 309_379;
+export const APP_BUDGET_BYTES = 309_626;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -7070,3 +7070,6 @@ msgstr "Kantor itu tidak ada di organisasi ini. Pilih yang lain."
 
 msgid "The JSON cannot be shown as rows. Edit it below; the server validates it."
 msgstr "JSON tidak dapat ditampilkan sebagai baris. Sunting di bawah; server yang memvalidasinya."
+
+msgid "Discard the JSON and start the structured editor"
+msgstr "Buang JSON dan mulai editor terstruktur"

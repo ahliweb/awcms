@@ -7082,3 +7082,6 @@ msgstr ""
 
 msgid "The JSON cannot be shown as rows. Edit it below; the server validates it."
 msgstr ""
+
+msgid "Discard the JSON and start the structured editor"
+msgstr ""

@@ -30,7 +30,7 @@ import {
   emptyComponent,
   emptyRule,
   initialModel,
-  parseModel,
+  loadEditableModel,
   serializeModel,
   type EditorModel
 } from "./tax-definition-model";
@@ -59,6 +59,7 @@ type Labels = {
   treatments: Record<string, string>;
   bases: Record<string, string>;
   notShown: string;
+  resetEditor: string;
   noComponents: string;
 };
 
@@ -102,7 +103,11 @@ export function initTaxDefinitionEditor(): void {
 
   const treatmentValues = Object.keys(labels.treatments);
   const basisValues = Object.keys(labels.bases);
-  let model: EditorModel = parseModel(textarea.value) ?? initialModel();
+  // `editable` is false while the textarea holds JSON the rows cannot show:
+  // the rows are then hidden and never written back (sync() would clobber it).
+  const initial = loadEditableModel(textarea.value);
+  let model: EditorModel = initial ?? initialModel();
+  let editable = initial !== null;
 
   const notice = el("p", {
     className: "page-description",
@@ -111,9 +116,24 @@ export function initTaxDefinitionEditor(): void {
   });
   notice.setAttribute("role", "status");
   const body = el("div", { className: "tax-editor-body" });
-  mount.append(notice, body);
+  const resetButton = el("button", {
+    type: "button",
+    className: "btn-inline",
+    textContent: labels.resetEditor,
+    hidden: true
+  });
+  resetButton.dataset.editorAction = "reset";
+  mount.append(notice, resetButton, body);
+
+  function setEditable(next: boolean): void {
+    editable = next;
+    body.hidden = !next;
+    resetButton.hidden = next;
+    notice.hidden = next;
+  }
 
   function sync(): void {
+    if (!editable) return;
     textarea.value = serializeModel(model);
     notice.hidden = true;
   }
@@ -447,26 +467,29 @@ export function initTaxDefinitionEditor(): void {
 
   // Textarea -> rows, when it parses into something the rows can show.
   textarea.addEventListener("input", () => {
-    const parsed = parseModel(textarea.value);
+    const parsed = loadEditableModel(textarea.value);
     if (parsed === null) {
-      notice.hidden = false;
+      setEditable(false);
       return;
     }
-    notice.hidden = true;
     model = parsed;
+    setEditable(true);
     render();
   });
 
-  const prefilledUnshowable =
-    textarea.value.trim() !== "" && parseModel(textarea.value) === null;
+  // Explicit, operator-chosen: replace the unshowable JSON with a blank model.
+  resetButton.addEventListener("click", () => {
+    model = initialModel();
+    setEditable(true);
+    sync();
+    render();
+  });
 
-  if (prefilledUnshowable) {
-    // Pre-filled JSON the editor cannot show: leave it, say so, keep it open.
-    notice.hidden = false;
-  } else {
+  if (editable) {
     sync();
     advanced.open = false;
   }
+  setEditable(editable);
   render();
   mount.hidden = false;
 }

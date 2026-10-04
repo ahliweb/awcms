@@ -537,6 +537,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Disable module \"{name}\"?": ["Nonaktifkan modul \"{name}\"?"],
   "Disabled": ["Nonaktif"],
   "Disabled devices": ["Perangkat nonaktif"],
+  "Discard the JSON and start the structured editor": ["Buang JSON dan mulai editor terstruktur"],
   "Disclosed": ["Diungkapkan"],
   "Disconnect": ["Putuskan"],
   "Discovery": ["Penemuan"],

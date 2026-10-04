@@ -190,3 +190,13 @@ export function parseModel(text: string): EditorModel | null {
 
   return { categories, rules };
 }
+
+/**
+ * What the row editor may do with the textarea's current text. A blank textarea
+ * starts a fresh model; text the rows can show loads; anything else is `null` —
+ * the editor must then stay out of the way (hidden, never writing back), because
+ * a stray edit on blank rows would overwrite the operator's JSON.
+ */
+export function loadEditableModel(text: string): EditorModel | null {
+  return text.trim() === "" ? initialModel() : parseModel(text);
+}
