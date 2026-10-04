@@ -23,6 +23,7 @@ flowchart TD
 ## Rules
 
 1. The `Idempotency-Key` header is **mandatory**; if empty → `400 IDEMPOTENCY_REQUIRED`.
+   The header is bounded once in `src/middleware.ts` (`src/lib/security/idempotency-key-bound.ts`) for every `/api/**` request, before authentication and routing: 1 to 255 visible ASCII characters (`^[\x21-\x7E]{1,255}$`), otherwise `400 IDEMPOTENCY_KEY_INVALID`. Routes must NOT re-implement this check; generate keys as UUIDs. Do not use keys longer than 255 characters (e.g. a concatenation of resource ids and payload) — hash them first.
 2. Stable request hash from a normalized body (consistent field ordering).
 3. Same key + same hash → replay the stored response (safe).
 4. Same key + different hash → `409 IDEMPOTENCY_CONFLICT`.

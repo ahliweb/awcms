@@ -17,6 +17,10 @@ import {
 } from "./lib/i18n/request-locale";
 import { log } from "./lib/logging/logger";
 import { resolvePublicTenantByCode } from "./lib/tenant/public-tenant-resolver";
+import {
+  invalidIdempotencyKeyResponse,
+  isIdempotencyKeyHeaderAcceptable
+} from "./lib/security/idempotency-key-bound";
 import { requiresAuthenticatedCallerBeforeBody } from "./lib/security/api-body-auth-boundary";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
 import { isTurnstileRequired } from "./lib/security/turnstile";
@@ -251,6 +255,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
     !checkContentLengthCeiling(context.request)
   ) {
     return finalize(bodyTooLargeResponse(BODY_SIZE_HARD_CEILING_BYTES));
+  }
+
+  /**
+   * The `Idempotency-Key` header is bounded (1..255 visible ASCII) here, once,
+   * before authentication and before any route reaches the database: the value
+   * is stored in an indexed column, so an oversized one must be refused as
+   * input rather than discovered as a database error. Ordering is pinned by
+   * `tests/idempotency-key-bound.test.ts`.
+   */
+  if (
+    context.url.pathname.startsWith(API_PREFIX) &&
+    !isIdempotencyKeyHeaderAcceptable(context.request)
+  ) {
+    return finalize(invalidIdempotencyKeyResponse());
   }
 
   /**

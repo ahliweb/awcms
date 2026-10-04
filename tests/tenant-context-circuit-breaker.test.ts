@@ -104,6 +104,27 @@ describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601
     expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
   });
 
+  test("a program limit error (54000 index row size exceeds btree maximum) does not trip the breaker", async () => {
+    const sql = fakeSql();
+    const violation = new Bun.SQL.PostgresError(
+      "index row size exceeds btree version 4 maximum",
+      {
+        code: "54000",
+        errno: "54000"
+      }
+    );
+
+    for (let i = 0; i < 10; i++) {
+      await expect(
+        withTenantOrThrow(sql, TENANT_ID, async () => {
+          throw violation;
+        })
+      ).rejects.toBe(violation);
+    }
+
+    expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
+  });
+
   test("a numeric data exception (22003 numeric_value_out_of_range) does not trip the breaker", async () => {
     const sql = fakeSql();
     const violation = new Bun.SQL.PostgresError("numeric field overflow", {

@@ -37,14 +37,18 @@ const WORK_CLASS_BUSY_RETRY_AFTER_SECONDS = 2;
  * - `22` — data exception (22P02 invalid_text_representation, 22003
  *   numeric_value_out_of_range, 22007 invalid_datetime_format, ...) — e.g. a
  *   non-UUID-shaped string compared/cast against a `uuid` column.
+ * - `54` — program limit exceeded (54000, e.g. "index row size exceeds btree
+ *   maximum" from an oversized caller-supplied value) — a property of the
+ *   input, not of database health. `Idempotency-Key` is also bounded at the
+ *   middleware; this is the defence in depth for any other unbounded value.
  * - `23` — integrity constraint violation (23503 foreign_key_violation,
  *   23505 unique_violation, 23514 check_violation, ...) — e.g. a
  *   caller-supplied reference doesn't exist, or a concurrent request won a
  *   uniqueness race.
  * Every other class (08 connection exception, 53 insufficient resources, 57
  * operator intervention, ...) still trips the breaker exactly as before —
- * only these two classes are excluded. */
-const POSTGRES_CLIENT_INPUT_ERROR_CLASSES = ["22", "23"];
+ * only these three classes are excluded. */
+const POSTGRES_CLIENT_INPUT_ERROR_CLASSES = ["22", "23", "54"];
 
 function isPostgresClientInputError(error: unknown): boolean {
   if (!(error instanceof Bun.SQL.PostgresError)) {
