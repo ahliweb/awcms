@@ -1639,6 +1639,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Target type": ["Tipe target"],
   "Tasks": ["Tugas"],
   "Tasks awaiting a decision, the history behind them, and the delegations that let someone else decide on your behalf. Overdue tasks are escalated by": ["Tugas yang menunggu keputusan, riwayat di belakangnya, dan delegasi yang membuat orang lain bisa memutuskan atas nama Anda. Tugas yang terlambat dieskalasi oleh"],
+  "Tax": ["Pajak"],
   "Template key": ["Kunci templat"],
   "Templates": ["Templat"],
   "Templates could not be loaded right now. Please try again later.": ["Templat tidak dapat dimuat saat ini. Silakan coba lagi nanti."],

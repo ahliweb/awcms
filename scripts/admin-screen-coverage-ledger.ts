@@ -139,5 +139,22 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "inventory.movements.read",
   "inventory.movements.transfer",
   "inventory.policy.configure",
-  "inventory.policy.read"
+  "inventory.policy.read",
+
+  // tax (9) — ADR-0127 / Issue #889. The module ships API-first: the rule
+  // authoring, publication and reconciliation screens (`/admin/tax`) are the
+  // first recorded follow-up, and the `navigation` entry lands in the SAME change
+  // as the page (a descriptor entry without a page is a permanent 404). The
+  // endpoints are for consumers — a storefront, a POS — not for an operator's
+  // browser, which is why this is a ledger line and not a deliberate exemption
+  // for all nine: the rule and report keys WILL get a screen.
+  "tax.calculations.analyze",
+  "tax.reports.read",
+  "tax.rules.configure",
+  "tax.rules.publish",
+  "tax.rules.read",
+  "tax.snapshots.backdate",
+  "tax.snapshots.create",
+  "tax.snapshots.read",
+  "tax.snapshots.reverse"
 ];

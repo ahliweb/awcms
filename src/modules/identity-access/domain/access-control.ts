@@ -177,7 +177,17 @@ export type AccessAction =
   // below. (`read`/`create`/`update`/`configure`/`reconcile`/`rebuild` for
   // inventory reuse existing union members.)
   | "adjust"
-  | "transfer";
+  | "transfer"
+  // Tax (ADR-0127): `reverse` refunds/returns a finalised document's tax from its
+  // original snapshot — a negative financial posting, so HIGH-RISK like
+  // `cancel`. Separate from `snapshots.create` because finalising a sale and
+  // refunding it are different powers. (`publish`/`configure`/`analyze` reuse
+  // existing members.)
+  | "reverse"
+  // Tax (ADR-0127): `backdate` posts a snapshot or reversal with a tax date
+  // outside the server-date window — into a period that may already be reported.
+  // HIGH-RISK, and a different power from `snapshots.create`.
+  | "backdate";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -333,7 +343,11 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   // them makes the action-time SoD check available the moment a tenant authors a
   // rule (e.g. "whoever posts adjustments may not also run balance rebuilds").
   "adjust",
-  "transfer"
+  "transfer",
+  // Tax (ADR-0127): a reversal posts a negative tax document; a back-dated
+  // post lands in a period that may already be reported.
+  "reverse",
+  "backdate"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

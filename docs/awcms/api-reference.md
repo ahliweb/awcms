@@ -8844,6 +8844,270 @@ The row is KEPT. "This person asked to stop, on this date" is what answers a lat
 | 400    | Validation error.                                    | [`ApiError`](#standard-error-envelope)                       |
 | 429    | Too many requests from this source (`RATE_LIMITED`). | [`ApiError`](#standard-error-envelope)                       |
 
+## Tax
+
+Generic, jurisdiction-neutral tax calculation (tax module, Issue #889, ADR-0127). Versioned rule profiles with half-open effective windows (published windows never overlap per profile — enforced in the database), categories, a jurisdiction/scope reference, inclusive and exclusive pricing, multiple stacked or compound components, an explicit rounding mode/scale/level, and exempt vs zero-rated kept distinct. ONE pure calculator on exact bigint-rational arithmetic (no floating point; every amount, quantity and rate is a decimal STRING) behind a stateless quote and an idempotent finalise. SERVER-AUTHORITATIVE: no request accepts a tax amount, and a payload that names one is refused with 400 TAX_AMOUNT_NOT_ACCEPTED rather than ignored. A finalised document's tax is an APPEND-ONLY snapshot carrying a copy of the rule version it was computed under, so updating a rule never changes a historical document, and a refund or return is computed from the original snapshot alone, never from today's rule. Publishing a rule version and reversing a snapshot are high-risk, idempotency-keyed and audited; both, and finalising, emit domain events through the outbox. Ships no country profile: that needs a verified regulatory mapping first.
+
+### `POST /api/v1/tax/quote` — Compute tax for a set of lines (stateless)
+
+- **operationId**: `taxQuote`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.calculations.analyze` (read-only, not high-risk). The ONE calculator every quote, POS and storefront caller uses. SERVER- AUTHORITATIVE: the body carries quantities, unit prices, discounts and a category per line — never a tax amount; a field that names one is refused with `400 TAX_AMOUNT_NOT_ACCEPTED`. The rule version is the published one in force on `taxDate` (a calendar date supplied by the caller, never the server's clock). Records nothing — no snapshot, event or audit row — so no `Idempotency-Key`. `422 TAX_RULE_VERSION_NOT_FOUND` when no published version covers the date, `422 TAX_RULE_NOT_FOUND` when a line's category has no rule and there is no fallback, `422 TAX_INPUT_INVALID` for a bad amount or one too large to store (a line or document figure of 10^18 or more — the same refusal `/snapshots` gives). The pricing mode is the RULE VERSION's: a `pricingMode` in the body is refused as an unrecognised field. Exact arithmetic throughout; see docs/awcms/tax-calculation.md.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`TaxQuoteRequest`](#schema-taxquoterequest)
+
+**Responses**
+
+| Status | Description                                                                | Schema                                 |
+| ------ | -------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The computed tax.                                                          | object                                 |
+| 400    | Validation error.                                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                | [`ApiError`](#standard-error-envelope) |
+| 422    | `TAX_RULE_VERSION_NOT_FOUND`, `TAX_RULE_NOT_FOUND` or `TAX_INPUT_INVALID`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/tax/reports/reconciliation` — Tax reconciliation for a period
+
+- **operationId**: `taxReconciliationReport`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.reports.read`. What was finalised and reversed between two TAX DATES (inclusive calendar dates, at most 366 days), by rule version, component and treatment, netted per currency, plus an `integrity` block that checks every snapshot in the period against its own lines (line sums vs document totals, component sums vs tax total). Aggregated in SQL, so the response grows with the number of profiles and components, never with the number of documents. The counting projection `tax.snapshot_activity` on the reporting engine is the freshness-tracked companion; this is its drill-down.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `from`             | query  | yes      | string (date) |             |
+| `to`               | query  | yes      | string (date) |             |
+| `profileCode`      | query  | no       | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The reconciliation report.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/tax/rule-versions` — List this tenant's tax rule versions
+
+- **operationId**: `taxRuleVersionList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.rules.read`. Newest first, keyset-paginated (`data.nextCursor`). Optional filters: `profileCode`, `status` (`draft` | `published`). Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                       | Description |
+| ------------------ | ------ | -------- | -------------------------- | ----------- |
+| `profileCode`      | query  | no       | string                     |             |
+| `status`           | query  | no       | enum(`draft`, `published`) |             |
+| `cursor`           | query  | no       | string                     |             |
+| `X-Correlation-ID` | header | no       | string                     |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of rule versions.    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tax/rule-versions` — Author a draft tax rule version
+
+- **operationId**: `taxRuleVersionCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.rules.configure` (high-risk). Creates a DRAFT — it is not resolved by any quote or snapshot until published. The version number is assigned by the server (next for the profile). Requires an `Idempotency-Key` (a retry must not mint a second draft) and is audited. The definition is validated strictly: a taxable rule needs at least one component, exempt and zero-rated rules must have none, every category a rule names must be declared, a category has one rule, and there is at most one fallback rule (`categoryCode: null`).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`TaxRuleVersionInput`](#schema-taxruleversioninput)
+
+**Responses**
+
+| Status | Description                                                | Schema                                                     |
+| ------ | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| 200    | Idempotent replay of an earlier create.                    | [`TaxRuleVersionEnvelope`](#schema-taxruleversionenvelope) |
+| 201    | Draft created.                                             | [`TaxRuleVersionEnvelope`](#schema-taxruleversionenvelope) |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope)                     |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope)                     |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope)                     |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope)                     |
+
+### `GET /api/v1/tax/rule-versions/{id}` — Read one tax rule version with its full definition
+
+- **operationId**: `taxRuleVersionRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.rules.read`. The definition plus the version's pricing, rounding mode, scale and level are everything the pure calculator needs, so this is also the document an offline client caches. A malformed `id` answers 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                     |
+| ------ | --------------------------- | ---------------------------------------------------------- |
+| 200    | The rule version.           | [`TaxRuleVersionEnvelope`](#schema-taxruleversionenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                     |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                     |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                     |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                     |
+
+### `POST /api/v1/tax/rule-versions/{id}/publish` — Publish a draft tax rule version
+
+- **operationId**: `taxRuleVersionPublish`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.rules.publish` (high-risk), separately grantable from authoring: this is the act that changes what every sale on or after `effectiveFrom` is taxed at. Requires an `Idempotency-Key`; audited at `critical`; emits `awcms.tax.rule_version.published` through the outbox. A version must take effect STRICTLY AFTER the latest published version of its profile, which it ends (409 `TAX_VERSION_OUT_OF_ORDER` otherwise) — there is no publishing into the past: besides that ordering rule, a version may not take effect before the SERVER's date (`now()` from the database, UTC) nor on or before a tax date already finalised under its profile (`409 TAX_VERSION_BACKDATED`). A published version is immutable: it never changes a document already finalised, and a rule edit is a new version. Concurrent publishes for one profile serialise on a database lock; published windows can never overlap (enforced by a trigger).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                     | Schema                                                     |
+| ------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 200    | Published (or an idempotent replay).                                                                            | [`TaxRuleVersionEnvelope`](#schema-taxruleversionenvelope) |
+| 400    | Validation error.                                                                                               | [`ApiError`](#standard-error-envelope)                     |
+| 401    | Missing or invalid session.                                                                                     | [`ApiError`](#standard-error-envelope)                     |
+| 403    | Access denied by RBAC/ABAC.                                                                                     | [`ApiError`](#standard-error-envelope)                     |
+| 404    | Resource not found.                                                                                             | [`ApiError`](#standard-error-envelope)                     |
+| 409    | `IDEMPOTENCY_CONFLICT`, `TAX_VERSION_ALREADY_PUBLISHED`, `TAX_VERSION_OUT_OF_ORDER` or `TAX_VERSION_BACKDATED`. | [`ApiError`](#standard-error-envelope)                     |
+
+### `GET /api/v1/tax/snapshots` — List tax snapshots
+
+- **operationId**: `taxSnapshotList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.snapshots.read`. Newest first, keyset-paginated (`data.nextCursor`). Filters: `documentType`, `documentId`, `kind`.
+
+**Parameters**
+
+| Name               | In     | Required | Type                     | Description |
+| ------------------ | ------ | -------- | ------------------------ | ----------- |
+| `documentType`     | query  | no       | string                   |             |
+| `documentId`       | query  | no       | string                   |             |
+| `kind`             | query  | no       | enum(`sale`, `reversal`) |             |
+| `cursor`           | query  | no       | string                   |             |
+| `X-Correlation-ID` | header | no       | string                   |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of snapshots.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tax/snapshots` — Finalise a document's tax into an immutable snapshot
+
+- **operationId**: `taxSnapshotFinalise`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.snapshots.create`. The server computes the tax exactly as `/quote` does and writes it, with a copy of the rule version it used, into an APPEND-ONLY row (enforced by a database trigger): nothing about the rules can change that document afterwards, and a refund is computed from this row alone. Idempotent two ways — the required `Idempotency-Key` replays the stored response, and the natural key `(documentType, documentId)` returns the existing snapshot (200) when the SAME request is repeated even under a new key, and `409 TAX_DOCUMENT_ALREADY_FINALISED` when a DIFFERENT request names an already-finalised document. Audited; emits `awcms.tax.snapshot.finalised` through the outbox. Like `/quote`, a body that names a tax amount is refused with `400 TAX_AMOUNT_NOT_ACCEPTED`, a `pricingMode` is refused as an unrecognised field, and an oversized figure is `422 TAX_INPUT_INVALID`. A `taxDate` outside the server-date window (default 7 days back, 1 forward) additionally needs `tax.snapshots.backdate` (high-risk) and is otherwise `403 TAX_BACKDATE_PERMISSION_REQUIRED` — never accepted silently.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`TaxSnapshotRequest`](#schema-taxsnapshotrequest)
+
+**Responses**
+
+| Status | Description                                                                | Schema                                               |
+| ------ | -------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 200    | Replay of an earlier finalise (same key, or same document and request).    | [`TaxSnapshotEnvelope`](#schema-taxsnapshotenvelope) |
+| 201    | Snapshot created.                                                          | [`TaxSnapshotEnvelope`](#schema-taxsnapshotenvelope) |
+| 400    | Validation error.                                                          | [`ApiError`](#standard-error-envelope)               |
+| 401    | Missing or invalid session.                                                | [`ApiError`](#standard-error-envelope)               |
+| 403    | Access denied by RBAC/ABAC.                                                | [`ApiError`](#standard-error-envelope)               |
+| 409    | `IDEMPOTENCY_CONFLICT` or `TAX_DOCUMENT_ALREADY_FINALISED`.                | [`ApiError`](#standard-error-envelope)               |
+| 422    | `TAX_RULE_VERSION_NOT_FOUND`, `TAX_RULE_NOT_FOUND` or `TAX_INPUT_INVALID`. | [`ApiError`](#standard-error-envelope)               |
+
+### `GET /api/v1/tax/snapshots/{id}` — Read one tax snapshot with its lines
+
+- **operationId**: `taxSnapshotRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.snapshots.read`. Returns the document's lines and totals and names the rule version it was computed under (`ruleVersionId`, `versionNo`) but does NOT embed the rule definition: reading rules is `tax.rules.read`, a different power from reading a document. The definition is `GET /api/v1/tax/rule-versions/{id}` away for a caller entitled to it, and is the same content because a published version is immutable. A malformed `id` answers 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                               |
+| ------ | --------------------------- | ---------------------------------------------------- |
+| 200    | The snapshot.               | [`TaxSnapshotEnvelope`](#schema-taxsnapshotenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)               |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)               |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)               |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)               |
+
+### `POST /api/v1/tax/snapshots/{id}/reverse` — Reverse (refund / return) all or part of a finalised document's tax
+
+- **operationId**: `taxSnapshotReverse`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `tax.snapshots.reverse` (HIGH-RISK). Computed from the ORIGINAL snapshot — its recorded quantities and amounts and nothing else; no rule table is consulted, so a refund of last year's sale reverses the tax that was CHARGED whatever the rate is now. The body names lines and quantities returned (omit `lines` to reverse everything not yet returned) — never an amount. Partial reversals cap at what has not yet been reversed; the one that completes a line takes the exact remainder; concurrent reversals of one sale serialise on a row lock with a database trigger as backstop, so the total refunded can never exceed the total charged. Amounts in the result are NEGATIVE. Requires an `Idempotency-Key`; `documentId` is the reversal's own document (a refund id) and is unique per tenant, so a retry under a fresh key replays. `taxDate` is the period the reversal is reported in: the SERVER's date when omitted (never the original's), and a stated date outside the server-date window needs `tax.snapshots.backdate` (`403 TAX_BACKDATE_PERMISSION_REQUIRED` otherwise). A malformed `id` answers 404. Audited at `critical`; emits `awcms.tax.snapshot.reversed` through the outbox.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`TaxReversalRequest`](#schema-taxreversalrequest)
+
+**Responses**
+
+| Status | Description                                                                                                              | Schema                                               |
+| ------ | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 200    | Replay of an earlier reversal.                                                                                           | [`TaxSnapshotEnvelope`](#schema-taxsnapshotenvelope) |
+| 201    | Reversal recorded.                                                                                                       | [`TaxSnapshotEnvelope`](#schema-taxsnapshotenvelope) |
+| 400    | Validation error.                                                                                                        | [`ApiError`](#standard-error-envelope)               |
+| 401    | Missing or invalid session.                                                                                              | [`ApiError`](#standard-error-envelope)               |
+| 403    | Access denied by RBAC/ABAC.                                                                                              | [`ApiError`](#standard-error-envelope)               |
+| 404    | Resource not found.                                                                                                      | [`ApiError`](#standard-error-envelope)               |
+| 409    | `IDEMPOTENCY_CONFLICT` or `TAX_DOCUMENT_ALREADY_FINALISED` (the reversal document id was used with a different request). | [`ApiError`](#standard-error-envelope)               |
+| 422    | `TAX_REVERSAL_INVALID` — an unknown line, more than was sold and not yet returned, or nothing left to reverse.           | [`ApiError`](#standard-error-envelope)               |
+
 ## Site Profile
 
 Per-tenant SITE CHROME (site_profile module, Issue #596, ADR-0102) — the masthead tagline, footer copyright line, logo and favicon, editorial address, contact email/phone/WhatsApp, and social profile links that every public page renders. Before it, a footer, masthead, contact page and Organization JSON-LD node all had to hard-code the publisher's identity in frontend source, which made a second tenant impossible without a fork. The boundary against seo_distribution is deliberate: awcms_seo_tenant_settings keeps what CRAWLERS see (og:site_name, the JSON-LD Organization node, the default og:image) because each is an SEO output consumed by a meta-tag renderer, while this module owns what PEOPLE read. Nothing is duplicated across the two, so no value can drift, and consumers are never asked to know the split — GET /api/v1/site-profile/composed merges both halves for build clients. Social link URLs are REFUSED rather than sanitized unless absolute http(s), because they are rendered as <a href> on every public page. read and update are separately grantable: changing what every page's contact block says is a different power from reading it. Nothing here is anonymous — 'public read' means the public site's BUILDER can read it, not that anyone can.
@@ -12494,6 +12758,697 @@ Every field is optional — an omitted field keeps its current value.
 }
 ```
 
+### Schema: TaxComponentResult
+
+| Field         | Type                               | Required | Nullable | Description |
+| ------------- | ---------------------------------- | -------- | -------- | ----------- |
+| `code`        | string                             | no       | no       |             |
+| `name`        | string                             | no       | no       |             |
+| `rate`        | string                             | no       | no       |             |
+| `basis`       | enum(`net`, `cumulative`)          | no       | no       |             |
+| `taxableBase` | [`TaxDecimal`](#schema-taxdecimal) | no       | no       |             |
+| `taxAmount`   | [`TaxDecimal`](#schema-taxdecimal) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "rate": "string",
+  "basis": "net",
+  "taxableBase": "10.50",
+  "taxAmount": "10.50"
+}
+```
+
+### Schema: TaxComponentRule
+
+| Field   | Type                      | Required | Nullable | Description                                                                                                                                                            |
+| ------- | ------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `code`  | string                    | yes      | no       |                                                                                                                                                                        |
+| `name`  | string                    | yes      | no       |                                                                                                                                                                        |
+| `rate`  | string                    | yes      | no       | Percent as a decimal string, at most six decimals, 0 to 1000.                                                                                                          |
+| `basis` | enum(`net`, `cumulative`) | no       | no       | `net` applies the rate to the line's net amount. `cumulative` applies it to net PLUS every earlier component's tax in declaration order — the stacked / compound case. |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "rate": "11",
+  "basis": "net"
+}
+```
+
+### Schema: TaxComponentTotal
+
+| Field       | Type                               | Required | Nullable | Description |
+| ----------- | ---------------------------------- | -------- | -------- | ----------- |
+| `code`      | string                             | no       | no       |             |
+| `name`      | string                             | no       | no       |             |
+| `taxAmount` | [`TaxDecimal`](#schema-taxdecimal) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "taxAmount": "10.50"
+}
+```
+
+### Schema: TaxDecimal
+
+A plain decimal STRING — never a JSON number. No exponent, no sign prefix other than `-`, no separators.
+
+A plain decimal STRING — never a JSON number. No exponent, no sign prefix other than `-`, no separators.
+
+**Example**
+
+```json
+"10.50"
+```
+
+### Schema: TaxLineInput
+
+| Field          | Type                               | Required | Nullable | Description                                                                                                    |
+| -------------- | ---------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `lineRef`      | string                             | yes      | no       | The caller's own reference for the line, unique within the request. Echoed back, and the key a reversal names. |
+| `categoryCode` | string                             | no       | yes      |                                                                                                                |
+| `quantity`     | [`TaxDecimal`](#schema-taxdecimal) | yes      | no       | Greater than zero, at most six decimals.                                                                       |
+| `unitPrice`    | [`TaxDecimal`](#schema-taxdecimal) | yes      | no       | Net per unit under exclusive pricing, gross per unit under inclusive. At most six decimals.                    |
+| `discount`     | [`TaxDecimal`](#schema-taxdecimal) | no       | no       | Total discount on the line, in currency. Defaults to "0".                                                      |
+
+**Example**
+
+```json
+{
+  "lineRef": "string",
+  "categoryCode": "string",
+  "quantity": "10.50",
+  "unitPrice": "10.50",
+  "discount": "10.50"
+}
+```
+
+### Schema: TaxLineResult
+
+| Field             | Type                                                        | Required | Nullable | Description                    |
+| ----------------- | ----------------------------------------------------------- | -------- | -------- | ------------------------------ |
+| `lineNo`          | integer                                                     | no       | no       |                                |
+| `lineRef`         | string                                                      | no       | no       |                                |
+| `originalLineRef` | string                                                      | no       | no       | Present on a reversal's lines. |
+| `categoryCode`    | string                                                      | no       | yes      |                                |
+| `treatment`       | enum(`taxable`, `exempt`, `zero_rated`)                     | no       | no       |                                |
+| `quantity`        | string                                                      | no       | no       |                                |
+| `unitPrice`       | string                                                      | no       | no       |                                |
+| `discount`        | string                                                      | no       | no       |                                |
+| `netAmount`       | [`TaxDecimal`](#schema-taxdecimal)                          | no       | no       |                                |
+| `taxAmount`       | [`TaxDecimal`](#schema-taxdecimal)                          | no       | no       |                                |
+| `grossAmount`     | [`TaxDecimal`](#schema-taxdecimal)                          | no       | no       |                                |
+| `components`      | array of [`TaxComponentResult`](#schema-taxcomponentresult) | no       | no       |                                |
+
+**Example**
+
+```json
+{
+  "lineNo": 0,
+  "lineRef": "string",
+  "originalLineRef": "string",
+  "categoryCode": "string",
+  "treatment": "taxable",
+  "quantity": "string",
+  "unitPrice": "string",
+  "discount": "string",
+  "netAmount": "10.50",
+  "taxAmount": "10.50",
+  "grossAmount": "10.50",
+  "components": [
+    {
+      "code": "string",
+      "name": "string",
+      "rate": "string",
+      "basis": "net",
+      "taxableBase": "10.50",
+      "taxAmount": "10.50"
+    }
+  ]
+}
+```
+
+### Schema: TaxQuoteRequest
+
+| Field         | Type                                            | Required | Nullable | Description                                                                                                                          |
+| ------------- | ----------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `profileCode` | string                                          | yes      | no       |                                                                                                                                      |
+| `taxDate`     | string (date)                                   | yes      | no       | The calendar date the supply happened — the caller's to state, never the server's clock. Selects the rule version in force that day. |
+| `lines`       | array of [`TaxLineInput`](#schema-taxlineinput) | yes      | no       |                                                                                                                                      |
+
+**Example**
+
+```json
+{
+  "profileCode": "string",
+  "taxDate": "2026-01-01",
+  "lines": [
+    {
+      "lineRef": "string",
+      "categoryCode": "string",
+      "quantity": "10.50",
+      "unitPrice": "10.50",
+      "discount": "10.50"
+    }
+  ]
+}
+```
+
+### Schema: TaxReversalRequest
+
+| Field        | Type            | Required | Nullable | Description                                                                                                                                                                 |
+| ------------ | --------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `documentId` | string          | yes      | no       | The reversal's own document reference (a refund id); same opaque charset as a snapshot's `documentId`.                                                                      |
+| `taxDate`    | string (date)   | no       | no       | The period the reversal is reported in. The SERVER's date when omitted (never the original's). A stated date outside the server-date window needs `tax.snapshots.backdate`. |
+| `reason`     | string          | no       | no       |                                                                                                                                                                             |
+| `lines`      | array of object | no       | no       | Omit to reverse everything not yet returned.                                                                                                                                |
+
+**Example**
+
+```json
+{
+  "documentId": "string",
+  "taxDate": "2026-01-01",
+  "reason": "string",
+  "lines": [
+    {
+      "lineRef": "string",
+      "quantity": "10.50"
+    }
+  ]
+}
+```
+
+### Schema: TaxRule
+
+| Field          | Type                                                    | Required | Nullable | Description                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `categoryCode` | string                                                  | no       | yes      | Null is the FALLBACK rule for lines whose category has no rule of its own (at most one).                                                                                             |
+| `treatment`    | enum(`taxable`, `exempt`, `zero_rated`)                 | yes      | no       | `taxable` needs at least one component. `exempt` and `zero_rated` must have none and are kept distinct because they are different lines on a return, not because the amount differs. |
+| `components`   | array of [`TaxComponentRule`](#schema-taxcomponentrule) | no       | no       |                                                                                                                                                                                      |
+
+**Example**
+
+```json
+{
+  "categoryCode": "string",
+  "treatment": "taxable",
+  "components": [
+    {
+      "code": "string",
+      "name": "string",
+      "rate": "11",
+      "basis": "net"
+    }
+  ]
+}
+```
+
+### Schema: TaxRuleDefinition
+
+| Field        | Type                                  | Required | Nullable | Description |
+| ------------ | ------------------------------------- | -------- | -------- | ----------- |
+| `categories` | array of object                       | yes      | no       |             |
+| `rules`      | array of [`TaxRule`](#schema-taxrule) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "categories": [
+    {
+      "code": "string",
+      "name": "string",
+      "description": "string"
+    }
+  ],
+  "rules": [
+    {
+      "categoryCode": "string",
+      "treatment": "taxable",
+      "components": []
+    }
+  ]
+}
+```
+
+### Schema: TaxRuleVersion
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "profileCode": "string",
+  "versionNo": 0,
+  "status": "draft",
+  "name": "string",
+  "jurisdictionCode": "string",
+  "countryCode": "string",
+  "regionCode": "string",
+  "currencyCode": "string",
+  "pricingMode": "exclusive",
+  "roundingMode": "string",
+  "roundingScale": 0,
+  "roundingLevel": "line",
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2026-01-01",
+  "notes": "string",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "createdBy": "00000000-0000-0000-0000-000000000000",
+  "publishedAt": "2026-01-01T00:00:00.000Z",
+  "publishedBy": "00000000-0000-0000-0000-000000000000",
+  "definition": {
+    "categories": [
+      {
+        "code": "string",
+        "name": "string",
+        "description": "string"
+      }
+    ],
+    "rules": [
+      {
+        "categoryCode": "string",
+        "treatment": "taxable",
+        "components": []
+      }
+    ]
+  }
+}
+```
+
+### Schema: TaxRuleVersionEnvelope
+
+| Field     | Type                                       | Required | Nullable | Description |
+| --------- | ------------------------------------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`)                               | no       | no       |             |
+| `data`    | [`TaxRuleVersion`](#schema-taxruleversion) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "profileCode": "string",
+    "versionNo": 0,
+    "status": "draft",
+    "name": "string",
+    "jurisdictionCode": "string",
+    "countryCode": "string",
+    "regionCode": "string",
+    "currencyCode": "string",
+    "pricingMode": "exclusive",
+    "roundingMode": "string",
+    "roundingScale": 0,
+    "roundingLevel": "line",
+    "effectiveFrom": "2026-01-01",
+    "effectiveTo": "2026-01-01",
+    "notes": "string",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "createdBy": "00000000-0000-0000-0000-000000000000",
+    "publishedAt": "2026-01-01T00:00:00.000Z",
+    "publishedBy": "00000000-0000-0000-0000-000000000000",
+    "definition": {
+      "categories": [],
+      "rules": []
+    }
+  }
+}
+```
+
+### Schema: TaxRuleVersionInput
+
+| Field              | Type                                                                        | Required | Nullable | Description                                                                                                                                                                 |
+| ------------------ | --------------------------------------------------------------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profileCode`      | string                                                                      | yes      | no       | The profile this is a version OF. Tenant-named.                                                                                                                             |
+| `name`             | string                                                                      | yes      | no       |                                                                                                                                                                             |
+| `jurisdictionCode` | string                                                                      | yes      | no       | Opaque, tenant-defined jurisdiction/scope code. The core ships no country list and no country's law.                                                                        |
+| `countryCode`      | string                                                                      | no       | no       |                                                                                                                                                                             |
+| `regionCode`       | string                                                                      | no       | no       |                                                                                                                                                                             |
+| `currencyCode`     | string                                                                      | yes      | no       |                                                                                                                                                                             |
+| `pricingMode`      | enum(`exclusive`, `inclusive`)                                              | yes      | no       |                                                                                                                                                                             |
+| `roundingMode`     | enum(`half_up`, `half_down`, `half_even`, `up`, `down`, `ceiling`, `floor`) | yes      | no       | `half_up` / `half_down` are symmetric about zero. `half_even` is banker's rounding. `up` / `down` are away from / toward zero; `ceiling` / `floor` are toward +/- infinity. |
+| `roundingScale`    | integer                                                                     | yes      | no       | Decimal places amounts are rounded to.                                                                                                                                      |
+| `roundingLevel`    | enum(`line`, `document`)                                                    | yes      | no       | `line` rounds each line's tax alone and sums. `document` sums the exact tax per component, rounds ONCE, and apportions back to the lines by largest remainder.              |
+| `effectiveFrom`    | string (date)                                                               | yes      | no       | Inclusive calendar date.                                                                                                                                                    |
+| `notes`            | string                                                                      | no       | no       |                                                                                                                                                                             |
+| `definition`       | [`TaxRuleDefinition`](#schema-taxruledefinition)                            | yes      | no       |                                                                                                                                                                             |
+
+**Example**
+
+```json
+{
+  "profileCode": "string",
+  "name": "string",
+  "jurisdictionCode": "string",
+  "countryCode": "string",
+  "regionCode": "string",
+  "currencyCode": "string",
+  "pricingMode": "exclusive",
+  "roundingMode": "half_up",
+  "roundingScale": 0,
+  "roundingLevel": "line",
+  "effectiveFrom": "2026-01-01",
+  "notes": "string",
+  "definition": {
+    "categories": [
+      {
+        "code": "string",
+        "name": "string",
+        "description": "string"
+      }
+    ],
+    "rules": [
+      {
+        "categoryCode": "string",
+        "treatment": "taxable",
+        "components": []
+      }
+    ]
+  }
+}
+```
+
+### Schema: TaxRuleVersionSummary
+
+A rule version without its `definition` (up to 256 KiB). What a list returns; the body comes from the detail endpoint.
+
+| Field              | Type                           | Required | Nullable | Description                                         |
+| ------------------ | ------------------------------ | -------- | -------- | --------------------------------------------------- |
+| `id`               | string (uuid)                  | no       | no       |                                                     |
+| `profileCode`      | string                         | no       | no       |                                                     |
+| `versionNo`        | integer                        | no       | no       |                                                     |
+| `status`           | enum(`draft`, `published`)     | no       | no       |                                                     |
+| `name`             | string                         | no       | no       |                                                     |
+| `jurisdictionCode` | string                         | no       | no       |                                                     |
+| `countryCode`      | string                         | no       | yes      |                                                     |
+| `regionCode`       | string                         | no       | yes      |                                                     |
+| `currencyCode`     | string                         | no       | no       |                                                     |
+| `pricingMode`      | enum(`exclusive`, `inclusive`) | no       | no       |                                                     |
+| `roundingMode`     | string                         | no       | no       |                                                     |
+| `roundingScale`    | integer                        | no       | no       |                                                     |
+| `roundingLevel`    | enum(`line`, `document`)       | no       | no       |                                                     |
+| `effectiveFrom`    | string (date)                  | no       | no       |                                                     |
+| `effectiveTo`      | string (date)                  | no       | yes      | EXCLUSIVE end of the window; null while open-ended. |
+| `notes`            | string                         | no       | yes      |                                                     |
+| `createdAt`        | string (date-time)             | no       | no       |                                                     |
+| `createdBy`        | string (uuid)                  | no       | yes      |                                                     |
+| `publishedAt`      | string (date-time)             | no       | yes      |                                                     |
+| `publishedBy`      | string (uuid)                  | no       | yes      |                                                     |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "profileCode": "string",
+  "versionNo": 0,
+  "status": "draft",
+  "name": "string",
+  "jurisdictionCode": "string",
+  "countryCode": "string",
+  "regionCode": "string",
+  "currencyCode": "string",
+  "pricingMode": "exclusive",
+  "roundingMode": "string",
+  "roundingScale": 0,
+  "roundingLevel": "line",
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2026-01-01",
+  "notes": "string",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "createdBy": "00000000-0000-0000-0000-000000000000",
+  "publishedAt": "2026-01-01T00:00:00.000Z",
+  "publishedBy": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: TaxSnapshot
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "kind": "sale",
+  "documentType": "string",
+  "documentId": "string",
+  "originalSnapshotId": "00000000-0000-0000-0000-000000000000",
+  "ruleVersionId": "00000000-0000-0000-0000-000000000000",
+  "profileCode": "string",
+  "versionNo": 0,
+  "taxDate": "2026-01-01",
+  "currencyCode": "string",
+  "pricingMode": "exclusive",
+  "roundingMode": "string",
+  "roundingScale": 0,
+  "roundingLevel": "line",
+  "netTotal": "10.50",
+  "taxTotal": "10.50",
+  "grossTotal": "10.50",
+  "componentTotals": [
+    {
+      "code": "string",
+      "name": "string",
+      "taxAmount": "10.50"
+    }
+  ],
+  "treatmentTotals": [
+    {
+      "treatment": "taxable",
+      "netAmount": "10.50",
+      "taxAmount": "10.50",
+      "grossAmount": "10.50"
+    }
+  ],
+  "reason": "string",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "createdBy": "00000000-0000-0000-0000-000000000000",
+  "lines": [
+    {
+      "lineNo": 0,
+      "lineRef": "string",
+      "originalLineRef": "string",
+      "categoryCode": "string",
+      "treatment": "taxable",
+      "quantity": "string",
+      "unitPrice": "string",
+      "discount": "string",
+      "netAmount": "10.50",
+      "taxAmount": "10.50",
+      "grossAmount": "10.50",
+      "components": []
+    }
+  ]
+}
+```
+
+### Schema: TaxSnapshotEnvelope
+
+| Field     | Type                                 | Required | Nullable | Description |
+| --------- | ------------------------------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`)                         | no       | no       |             |
+| `data`    | [`TaxSnapshot`](#schema-taxsnapshot) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "kind": "sale",
+    "documentType": "string",
+    "documentId": "string",
+    "originalSnapshotId": "00000000-0000-0000-0000-000000000000",
+    "ruleVersionId": "00000000-0000-0000-0000-000000000000",
+    "profileCode": "string",
+    "versionNo": 0,
+    "taxDate": "2026-01-01",
+    "currencyCode": "string",
+    "pricingMode": "exclusive",
+    "roundingMode": "string",
+    "roundingScale": 0,
+    "roundingLevel": "line",
+    "netTotal": "10.50",
+    "taxTotal": "10.50",
+    "grossTotal": "10.50",
+    "componentTotals": [
+      {
+        "code": "string",
+        "name": "string",
+        "taxAmount": null
+      }
+    ],
+    "treatmentTotals": [
+      {
+        "treatment": "taxable",
+        "netAmount": null,
+        "taxAmount": null,
+        "grossAmount": null
+      }
+    ],
+    "reason": "string",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "createdBy": "00000000-0000-0000-0000-000000000000",
+    "lines": [
+      {
+        "lineNo": 0,
+        "lineRef": "string",
+        "originalLineRef": "string",
+        "categoryCode": "string",
+        "treatment": "taxable",
+        "quantity": "string",
+        "unitPrice": "string",
+        "discount": "string",
+        "netAmount": null,
+        "taxAmount": null,
+        "grossAmount": null,
+        "components": []
+      }
+    ]
+  }
+}
+```
+
+### Schema: TaxSnapshotRequest
+
+| Field          | Type                                            | Required | Nullable | Description                                                                                                                                                                                                                                                      |
+| -------------- | ----------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profileCode`  | string                                          | yes      | no       |                                                                                                                                                                                                                                                                  |
+| `taxDate`      | string (date)                                   | yes      | no       | The calendar date the supply happened. Bounded against the SERVER's date (default 7 days back, 1 day forward, configurable): outside that window the caller must also hold `tax.snapshots.backdate`, and gets `403 TAX_BACKDATE_PERMISSION_REQUIRED` without it. |
+| `documentType` | string                                          | yes      | no       | The consumer's document kind (order, invoice, receipt...). Opaque.                                                                                                                                                                                               |
+| `documentId`   | string                                          | yes      | no       | The consumer's document reference: an opaque handle of letters, digits and `. _ : / -` (no spaces, markup or control characters, never trimmed). No customer data is stored. Finalised once per (documentType, documentId).                                      |
+| `lines`        | array of [`TaxLineInput`](#schema-taxlineinput) | yes      | no       |                                                                                                                                                                                                                                                                  |
+
+**Example**
+
+```json
+{
+  "profileCode": "string",
+  "taxDate": "2026-01-01",
+  "documentType": "string",
+  "documentId": "string",
+  "lines": [
+    {
+      "lineRef": "string",
+      "categoryCode": "string",
+      "quantity": "10.50",
+      "unitPrice": "10.50",
+      "discount": "10.50"
+    }
+  ]
+}
+```
+
+### Schema: TaxSnapshotSummary
+
+A snapshot without its `lines` (up to 500 per document). What a list returns; the lines come from the detail endpoint. The rule definition the snapshot was computed under is never returned here — read the version (`ruleVersionId`) with `tax.rules.read`.
+
+| Field                | Type                                                      | Required | Nullable | Description                                                                                                         |
+| -------------------- | --------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`                 | string (uuid)                                             | no       | no       |                                                                                                                     |
+| `kind`               | enum(`sale`, `reversal`)                                  | no       | no       | `sale` is a finalised document (non-negative amounts). `reversal` is a refund/return of one (non-positive amounts). |
+| `documentType`       | string                                                    | no       | no       |                                                                                                                     |
+| `documentId`         | string                                                    | no       | no       |                                                                                                                     |
+| `originalSnapshotId` | string (uuid)                                             | no       | yes      |                                                                                                                     |
+| `ruleVersionId`      | string (uuid)                                             | no       | no       |                                                                                                                     |
+| `profileCode`        | string                                                    | no       | no       |                                                                                                                     |
+| `versionNo`          | integer                                                   | no       | no       |                                                                                                                     |
+| `taxDate`            | string (date)                                             | no       | no       |                                                                                                                     |
+| `currencyCode`       | string                                                    | no       | no       |                                                                                                                     |
+| `pricingMode`        | enum(`exclusive`, `inclusive`)                            | no       | no       |                                                                                                                     |
+| `roundingMode`       | string                                                    | no       | no       |                                                                                                                     |
+| `roundingScale`      | integer                                                   | no       | no       |                                                                                                                     |
+| `roundingLevel`      | enum(`line`, `document`)                                  | no       | no       |                                                                                                                     |
+| `netTotal`           | [`TaxDecimal`](#schema-taxdecimal)                        | no       | no       |                                                                                                                     |
+| `taxTotal`           | [`TaxDecimal`](#schema-taxdecimal)                        | no       | no       |                                                                                                                     |
+| `grossTotal`         | [`TaxDecimal`](#schema-taxdecimal)                        | no       | no       |                                                                                                                     |
+| `componentTotals`    | array of [`TaxComponentTotal`](#schema-taxcomponenttotal) | no       | no       |                                                                                                                     |
+| `treatmentTotals`    | array of [`TaxTreatmentTotal`](#schema-taxtreatmenttotal) | no       | no       |                                                                                                                     |
+| `reason`             | string                                                    | no       | yes      |                                                                                                                     |
+| `createdAt`          | string (date-time)                                        | no       | no       |                                                                                                                     |
+| `createdBy`          | string (uuid)                                             | no       | yes      |                                                                                                                     |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "kind": "sale",
+  "documentType": "string",
+  "documentId": "string",
+  "originalSnapshotId": "00000000-0000-0000-0000-000000000000",
+  "ruleVersionId": "00000000-0000-0000-0000-000000000000",
+  "profileCode": "string",
+  "versionNo": 0,
+  "taxDate": "2026-01-01",
+  "currencyCode": "string",
+  "pricingMode": "exclusive",
+  "roundingMode": "string",
+  "roundingScale": 0,
+  "roundingLevel": "line",
+  "netTotal": "10.50",
+  "taxTotal": "10.50",
+  "grossTotal": "10.50",
+  "componentTotals": [
+    {
+      "code": "string",
+      "name": "string",
+      "taxAmount": "10.50"
+    }
+  ],
+  "treatmentTotals": [
+    {
+      "treatment": "taxable",
+      "netAmount": "10.50",
+      "taxAmount": "10.50",
+      "grossAmount": "10.50"
+    }
+  ],
+  "reason": "string",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "createdBy": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: TaxTreatmentTotal
+
+| Field         | Type                                    | Required | Nullable | Description |
+| ------------- | --------------------------------------- | -------- | -------- | ----------- |
+| `treatment`   | enum(`taxable`, `exempt`, `zero_rated`) | no       | no       |             |
+| `netAmount`   | [`TaxDecimal`](#schema-taxdecimal)      | no       | no       |             |
+| `taxAmount`   | [`TaxDecimal`](#schema-taxdecimal)      | no       | no       |             |
+| `grossAmount` | [`TaxDecimal`](#schema-taxdecimal)      | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "treatment": "taxable",
+  "netAmount": "10.50",
+  "taxAmount": "10.50",
+  "grossAmount": "10.50"
+}
+```
+
 ### Schema: ThemeConfigRequest
 
 A tenant's DATA-only theme configuration. Every key/value is validated against the chosen theme descriptor; unknown tokens/slots/assets/sections are rejected, and token values are validated by rejection against strict CSS grammars (no url()/expression()/@import/javascript:/comment-breakout).
@@ -12612,7 +13567,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (46)
+### Channels (49)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -12652,6 +13607,9 @@ consumer/subscriber contract in this file).
 - `awcms.email.message.suppressed` — The email dispatcher found a claimed message's recipient newly present on `awcms_email_suppression_list` (added after enqueue, before dispatch) and skipped the provider call entirely. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.suppressed` log line).
 - `awcms.inventory.movement.posted` — A stock movement was posted to the append-only inventory ledger and its balance updated, in ONE transaction (ADR-0126, Issue #887). Producer: `inventory/application/inventory-ledger.ts`'s posting core, shared by `postMovement`, `postAdjustment`, `reverseAdjustment` and `postTransfer` (a transfer publishes one event per leg). Published in the same commit as the movement, so a rolled-back posting publishes nothing; a REPLAY of an already-posted source identity publishes nothing either. Ordered per balance (`order_key` = location + item). The payload carries opaque item and source references and decimal-string quantities only — `movementId`, `locationId`, `itemType`, `itemRef`, `unitCode`, `movementType`, `operation`, `quantityDelta`, `balanceAfter`, `sourceType`, `sourceId`, `sourceLine`, `transferId`, `reversesMovementId`. Never the free-text note and never anything identifying a person.
 - `awcms.inventory.stock.low` — A stock balance crossed to or below its low-stock threshold (ADR-0126, Issue #887) — by a movement or by a threshold change. Producer: `inventory/application/inventory-ledger.ts`'s `recordLowStockTransition`. Published ONCE per downward crossing, not on every movement while the balance stays low, and never for the recovery (that is recorded in the signals table the reporting projection reads). Payload: `locationId`, `itemType`, `itemRef`, `onHand`, `threshold`, `movementId` (null when a threshold change caused it).
+- `awcms.tax.rule_version.published` — A tax rule version was published and became the rule in force from its effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishRuleVersionPublishedEvent`, called by `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The payload carries identifiers, codes and dates only — `ruleVersionId`, `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and `closedVersionId` (the predecessor whose window this ended, or null).
+- `awcms.tax.snapshot.finalised` — A document's tax was finalised into an immutable snapshot (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written — an idempotent replay publishes nothing. The payload carries the opaque document reference, the rule version used, the tax date and decimal-string totals; no customer data of any kind.
+- `awcms.tax.snapshot.reversed` — A finalised document's tax was reversed from its original snapshot (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is written. Same payload shape as `snapshot.finalised`; the totals are negative decimal strings and `originalSnapshotId` is set.
 - `awcms.workflow.delegation.created` — A workflow delegation/substitute assignment was created. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `createWorkflowDelegation`.
 - `awcms.workflow.delegation.revoked` — A workflow delegation/substitute assignment was revoked. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `revokeWorkflowDelegation`.
 - `awcms.workflow.instance.advanced` — A workflow instance's active task was decided (or force-decided) and the instance advanced to its next node(s), without yet reaching a terminal outcome. Producer: `workflow-approval/application/workflow-instance-decision.ts`'s `completeApprovalTaskAndAdvance`.

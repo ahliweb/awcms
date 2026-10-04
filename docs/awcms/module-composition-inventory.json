@@ -1,5 +1,5 @@
 {
-  "moduleCount": 26,
+  "moduleCount": 27,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -402,6 +402,29 @@
       "permissionCount": 6,
       "navigationCount": 1,
       "jobCount": 2,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "tax",
+      "name": "Tax",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "module_management",
+        "domain_event_runtime",
+        "reporting",
+        "logging"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 9,
+      "navigationCount": 0,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

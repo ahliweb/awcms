@@ -424,6 +424,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // composed read a build client uses. Nothing here is anonymous.
       "Site Profile",
       "Site Search",
+      // "Tax" (tax, ADR-0127, Issue #889) — genuinely new surface: the
+      // jurisdiction-neutral calculator (quote, snapshot, reversal), rule-version
+      // authoring and the reconciliation report. Nothing here is anonymous.
+      "Tax",
       "Tenant Domains",
       "Theming",
       "Visitor Analytics"

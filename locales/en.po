@@ -6409,3 +6409,8 @@ msgstr ""
 
 msgid "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
 msgstr ""
+
+# ADR-0127 — the `tax` module display name (module registry; the admin screens are a follow-up).
+
+msgid "Tax"
+msgstr ""

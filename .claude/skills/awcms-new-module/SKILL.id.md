@@ -5,7 +5,7 @@ description: Scaffold modul baru pada modular monolith AWCMS. Gunakan saat membu
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:1cd1d1e52c97f50478a0c1517dd0bc0552ed207c9967a7be12800e2e11010b2f -->
+<!-- i18n-source-hash: sha256:d4e417c112e2f7e02848f2e252fb07a59574583a94d1872ce44980f718769b25 -->
 
 # AWCMS — New Module Scaffold
 
@@ -86,7 +86,7 @@ export const <camelCase>Module = defineModule({
 
 Domain retail/POS contoh (aspirational, belum tentu ada di base generik ini): `tenant-admin`, `identity-access`, `profile-identity`, `catalog-inventory`, `sales-pos`, `shared-stock-routing`, `warehouse-management`, `accounting-tax`, `crm-communication`, `sync-storage`, `ai-analyst`, `localization-ui`, `observability-logging`, `database-connectivity`, `workflow-approval`, `management-reporting`, `ui-experience`, `production-security-readiness`.
 
-Modul yang **sudah nyata terdaftar** di repo ini — urutan `src/modules/index.ts`, **26 modul**, verifikasi dengan `listModules()` dan jangan mengutip angka dari dokumen mana pun: `logging`, `tenant-admin`, `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`, `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`, `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`, `idn-admin-regions` (ADR-0046), `push-delivery` (ADR-0074, status `experimental` — antrean + worker sudah jalan, permukaan admin belum), `omes-control` (ADR-0122, ahliweb/omes#196), `inventory` (ADR-0126, #887, status `experimental` — API dan port sudah lengkap, permukaan admin belum ada).
+Modul yang **sudah nyata terdaftar** di repo ini — urutan `src/modules/index.ts`, **26 modul**, verifikasi dengan `listModules()` dan jangan mengutip angka dari dokumen mana pun: `logging`, `tenant-admin`, `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`, `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`, `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`, `idn-admin-regions` (ADR-0046), `push-delivery` (ADR-0074, status `experimental` — antrean + worker sudah jalan, permukaan admin belum), `omes-control` (ADR-0122, ahliweb/omes#196), `inventory` (ADR-0126, #887, status `experimental` — API dan port sudah lengkap, permukaan admin belum ada), `tax` (ADR-0127, #889, status `experimental` — kalkulator netral yurisdiksi; API-first, belum ada layar admin).
 
 **Yang TIDAK ada di registry** meski ADR-nya `Accepted` atau skill-nya ada: `data-exchange`, `document-infrastructure`, `integration-hub`, `organization-structure`, `reference-data`, `social-publishing` (belum dibangun di sini), dan `news-portal` (**dilebur** ke `blog_content` — ADR-0044/#300).
 
