@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:51bfd1bad7da9e1173b636d91fe5273f19514a1fbf9286e1d7cdadf4156c39c8 -->
+<!-- i18n-source-hash: sha256:ceb02c514eabb8db4cdb34069008cb32dfcefd2b01b9828b1fb5e5ead728fb83 -->
 
 # AWCMS — Project State & Continuation
 
@@ -114,18 +114,18 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 <!-- Dihasilkan `bun run project-state:inventory:generate`. JANGAN diedit tangan; gerbangnya `bun run project-state:inventory:check`. -->
 
-| Aspek                              | Nilai (ter-generate)                                                                                       | Sumber kebenaran                                                                        |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi                              | **10.4.0**                                                                                                 | `package.json`                                                                          |
-| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                         | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                         | `git rev-list --count v10.4.0..HEAD`                                                    |
-| Modul base                         | **27** (lihat daftar di ARCHITECTURE.md)                                                                   | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **173** (`sql/001`–`173`)                                                                                  | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0129** (`0000` = template; status ADR tertinggi: **Accepted**)                                  | `ls docs/adr/`                                                                          |
-| Layar admin                        | **64** berkas `.astro` di `src/pages/admin/`; **2 dari 27** modul tanpa `navigation:` (`inventory`, `tax`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **81** (43.960 baris) — soal typecheck lihat §6                                                            | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **61** di rantai `bun run check`                                                                           | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**                                  | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Aspek                              | Nilai (ter-generate)                                                                  | Sumber kebenaran                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Versi                              | **10.4.0**                                                                            | `package.json`                                                                          |
+| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
+| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.4.0..HEAD`                                                    |
+| Modul base                         | **27** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
+| Migrasi                            | **173** (`sql/001`–`173`)                                                             | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0129** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| Layar admin                        | **66** berkas `.astro` di `src/pages/admin/`; **0 dari 27** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **83** (47.014 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Gerbang                            | **61** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 

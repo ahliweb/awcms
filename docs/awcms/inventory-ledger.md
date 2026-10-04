@@ -384,8 +384,9 @@ touched) and stop calling the port. The ledger tables stay, inert.
 
 ## 9. Follow-ups
 
-Admin screens (locations, balances + low-stock list, movement history,
-adjustments/transfers with the reason panel, reconciliation/rebuild);
-reservations/holds; multi-line atomic posting; unit conversion; costing and
+Admin screens landed in Issue #894 (`/admin/inventory`: locations, balances +
+low-stock list, movement history, adjustments with reversal through the reason
+panel, transfers, policy and thresholds, read-only reconciliation); a screen for
+rebuild is still open — it is a runbook step. Reservations/holds; multi-line atomic posting; unit conversion; costing and
 valuation; partitioning and archive-then-purge; the procurement/receiving module
 and component-aware bundles that depend on this one.

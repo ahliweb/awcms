@@ -1,0 +1,1595 @@
+---
+/**
+ * Inventory — ADR-0126, Issue #894. TENANT-scoped, over the stock ledger the
+ * `inventory` module shipped API-first (Issue #887).
+ *
+ * ## Three views, one entry decision per view
+ *
+ * Stock balances, the movement history and the locations are independently
+ * readable (`inventory.balances.read`, `.movements.read`, `.locations.read`), so
+ * the page is refused only when EVERY panel is refused, and each view answers
+ * for itself from `entry` — the same any-of shape `/admin/reporting` uses. A
+ * view the operator may not read is not rendered, and the view switcher does not
+ * offer it.
+ *
+ * ## This screen never asserts a balance
+ *
+ * No control here writes `on_hand`. The ledger is append-only and the balance is
+ * always the sum of it, so every way to change stock on this page is a MOVEMENT
+ * (an adjustment or a transfer) and every correction is a COMPENSATING movement
+ * (the Reverse action). The two things that are written outright are settings —
+ * a low-stock threshold and the negative-stock policy — which is why they need
+ * `inventory.policy.configure` rather than the movement permissions.
+ *
+ * ## Location names are only joined when the operator may read locations
+ *
+ * `inventory.balances.read` is not `inventory.locations.read`. A balance row
+ * carries a location id; resolving it to a name would hand a locations read to
+ * someone who only holds a balances read. Without `locations.read` the page shows
+ * a shortened id instead, and the forms ask for the id rather than offering a
+ * picker.
+ *
+ * ## Not on this screen, and why
+ *
+ * `inventory.balances.rebuild` (rewrites balances, critical severity) and
+ * `inventory.movements.create` (caller-attested sale/receive/return postings —
+ * "verifying the document is the consumer duty", per the permission's own
+ * description) are consumer and operator-runbook surfaces, not a form an
+ * operator should drive by hand. They stay on the shrink-only coverage ledger.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import ReasonPanel from "../../components/ReasonPanel.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../lib/i18n";
+import {
+  decodeBalanceCursor,
+  listBalances,
+  reconcileBalances,
+  type BalanceCursor,
+  type ReconciliationReport
+} from "../../modules/inventory/application/inventory-balance-directory";
+import {
+  getTenantPolicy,
+  listLocations,
+  type NegativeStockPolicyView
+} from "../../modules/inventory/application/inventory-location-directory";
+import {
+  listMovements,
+  parseMovementCursor
+} from "../../modules/inventory/application/inventory-movement-directory";
+import type {
+  Movement,
+  StockBalance,
+  StockLocation
+} from "../../modules/inventory/application/inventory-rows";
+import {
+  isMovementType,
+  MOVEMENT_TYPES,
+  NEGATIVE_STOCK_POLICIES,
+  type LocationStatus,
+  type MovementOperation,
+  type MovementType,
+  type NegativeStockPolicy
+} from "../../modules/inventory/domain/inventory-types";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t } = getTranslatorFor(locale);
+
+type View = "balances" | "movements" | "locations";
+const VIEWS: readonly View[] = ["balances", "movements", "locations"];
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_FILTER_TEXT = 200;
+
+function queryText(name: string): string {
+  const value = Astro.url.searchParams.get(name)?.trim() ?? "";
+  return value.length > MAX_FILTER_TEXT ? "" : value;
+}
+
+const requestedView = Astro.url.searchParams.get("view");
+const locationFilter = (() => {
+  const value = queryText("locationId");
+  return UUID_PATTERN.test(value) ? value.toLowerCase() : "";
+})();
+const lowStockOnly = Astro.url.searchParams.get("lowStockOnly") === "1";
+const itemTypeFilter = queryText("itemType");
+const itemRefFilter = queryText("itemRef");
+const movementTypeFilter = (() => {
+  const value = queryText("movementType");
+  return isMovementType(value) ? value : "";
+})();
+const cursorParam = queryText("cursor");
+const wantsReconcile = Astro.url.searchParams.get("reconcile") === "1";
+
+/** `MovementType`/`MovementOperation` — shared by the history filter and the table. */
+const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
+  opening: t("Opening balance"),
+  receive: t("Receive"),
+  sale: t("Sale"),
+  sale_return: t("Sale return"),
+  supplier_return: t("Supplier return"),
+  transfer_out: t("Transfer out"),
+  transfer_in: t("Transfer in"),
+  adjustment: t("Adjustment")
+};
+function movementTypeLabel(value: string): string {
+  return isMovementType(value) ? MOVEMENT_TYPE_LABEL[value] : value;
+}
+const OPERATION_LABEL: Record<MovementOperation, string> = {
+  ...MOVEMENT_TYPE_LABEL,
+  reversal: t("Reversal")
+};
+
+const LOCATION_STATUS_LABEL: Record<LocationStatus, string> = {
+  active: t("Active"),
+  inactive: t("Inactive")
+};
+const LOCATION_STATUS_TONE: Record<LocationStatus, string> = {
+  active: "success",
+  inactive: "neutral"
+};
+
+const POLICY_LABEL: Record<NegativeStockPolicy, string> = {
+  forbid: t("Forbid negative stock"),
+  allow: t("Allow negative stock")
+};
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "inventory", activityCode: "balances", action: "read" },
+    { moduleKey: "inventory", activityCode: "movements", action: "read" },
+    { moduleKey: "inventory", activityCode: "locations", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [mayBalances, mayMovements, mayLocations] = entry;
+    const view: View = (() => {
+      const allowed: Record<View, boolean> = {
+        balances: Boolean(mayBalances),
+        movements: Boolean(mayMovements),
+        locations: Boolean(mayLocations)
+      };
+      const wanted = VIEWS.find((candidate) => candidate === requestedView);
+      if (wanted && allowed[wanted]) return wanted;
+      return VIEWS.find((candidate) => allowed[candidate]) ?? "balances";
+    })();
+
+    // Sequential on purpose: `tx` is one reserved connection.
+    const locations: StockLocation[] = mayLocations
+      ? (await listLocations(tx, ssr.tenantId, { limit: 200 })).items
+      : [];
+
+    const canConfigurePolicy = await can({
+      moduleKey: "inventory",
+      activityCode: "policy",
+      action: "configure"
+    });
+    const canReadPolicy = await can({
+      moduleKey: "inventory",
+      activityCode: "policy",
+      action: "read"
+    });
+    const canCreateLocation = await can({
+      moduleKey: "inventory",
+      activityCode: "locations",
+      action: "create"
+    });
+    const canUpdateLocation = await can({
+      moduleKey: "inventory",
+      activityCode: "locations",
+      action: "update"
+    });
+    const canAdjust = await can({
+      moduleKey: "inventory",
+      activityCode: "movements",
+      action: "adjust"
+    });
+    const canTransfer = await can({
+      moduleKey: "inventory",
+      activityCode: "movements",
+      action: "transfer"
+    });
+    const canReconcile = await can({
+      moduleKey: "inventory",
+      activityCode: "balances",
+      action: "reconcile"
+    });
+
+    let balances: StockBalance[] = [];
+    let balancesNext: string | null = null;
+    let reconciliation: ReconciliationReport | null = null;
+    let movements: Movement[] = [];
+    let movementsNext: string | null = null;
+    let policy: NegativeStockPolicyView | null = null;
+
+    if (view === "balances") {
+      const cursor: BalanceCursor | undefined =
+        (cursorParam ? decodeBalanceCursor(cursorParam) : null) ?? undefined;
+      const page = await listBalances(
+        tx,
+        ssr.tenantId,
+        {
+          ...(locationFilter ? { locationId: locationFilter } : {}),
+          ...(itemTypeFilter ? { itemType: itemTypeFilter } : {}),
+          ...(itemRefFilter ? { itemRef: itemRefFilter } : {}),
+          lowStockOnly
+        },
+        cursor
+      );
+      balances = page.balances;
+      balancesNext = page.nextCursor;
+
+      if (wantsReconcile && canReconcile) {
+        reconciliation = await reconcileBalances(
+          tx,
+          ssr.tenantId,
+          locationFilter || null
+        );
+      }
+    }
+
+    if (view === "movements") {
+      const cursor = cursorParam ? parseMovementCursor(cursorParam) : null;
+      const page = await listMovements(
+        tx,
+        ssr.tenantId,
+        {
+          ...(locationFilter ? { locationId: locationFilter } : {}),
+          ...(itemTypeFilter ? { itemType: itemTypeFilter } : {}),
+          ...(itemRefFilter ? { itemRef: itemRefFilter } : {}),
+          ...(movementTypeFilter ? { movementType: movementTypeFilter } : {})
+        },
+        cursor ?? undefined
+      );
+      movements = page.movements;
+      movementsNext = page.nextCursor;
+    }
+
+    if (view === "locations" && canReadPolicy) {
+      policy = await getTenantPolicy(tx, ssr.tenantId);
+    }
+
+    return {
+      view,
+      mayBalances: Boolean(mayBalances),
+      mayMovements: Boolean(mayMovements),
+      mayLocations: Boolean(mayLocations),
+      locations,
+      balances,
+      balancesNext,
+      reconciliation,
+      movements,
+      movementsNext,
+      policy,
+      canConfigurePolicy,
+      canCreateLocation,
+      canUpdateLocation,
+      canAdjust,
+      canTransfer,
+      canReconcile
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/inventory.astro: failed to load the inventory screen",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+
+const view: View = data?.view ?? "balances";
+const locations: StockLocation[] = data?.locations ?? [];
+const locationById = new Map(
+  locations.map((location) => [location.id, location])
+);
+const mayLocations = data?.mayLocations ?? false;
+
+function locationLabel(id: string): string {
+  const location = locationById.get(id);
+  return location ? `${location.name} (${location.code})` : id.slice(0, 8);
+}
+
+const VIEW_LABEL: Record<View, string> = {
+  balances: t("Balances"),
+  movements: t("Movements"),
+  locations: t("Locations")
+};
+const viewAllowed: Record<View, boolean> = {
+  balances: data?.mayBalances ?? false,
+  movements: data?.mayMovements ?? false,
+  locations: data?.mayLocations ?? false
+};
+
+/** A same-page link that keeps the active filters, so paging does not drop them. */
+function pageUrl(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams();
+  const base: Record<string, string> = {
+    view,
+    ...(locationFilter ? { locationId: locationFilter } : {}),
+    ...(lowStockOnly ? { lowStockOnly: "1" } : {}),
+    ...(itemTypeFilter ? { itemType: itemTypeFilter } : {}),
+    ...(itemRefFilter ? { itemRef: itemRefFilter } : {}),
+    ...(movementTypeFilter ? { movementType: movementTypeFilter } : {})
+  };
+  for (const [key, value] of Object.entries({ ...base, ...overrides })) {
+    if (value !== null && value !== "") params.set(key, value);
+  }
+  return `/admin/inventory?${params.toString()}`;
+}
+
+const REASON_CODES: readonly { value: string; label: string }[] = [
+  { value: "count_correction", label: t("Stock count correction") },
+  { value: "damage", label: t("Damaged goods") },
+  { value: "loss", label: t("Loss or theft") },
+  { value: "found", label: t("Stock found") },
+  { value: "other", label: t("Other") }
+];
+---
+
+<AdminLayout
+  title={t("Inventory")}
+  description={t(
+    "Stock locations, balances and the append-only movement ledger. A balance is always the sum of its movements, so nothing here edits one: stock changes by posting an adjustment or a transfer, and a mistake is corrected by a compensating movement."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="inventory-denied">
+      {t("You do not have permission to view inventory.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="inventory-load-error">
+      {t("Could not load inventory. Please try again.")}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <>
+      <p
+        id="inventory-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+        data-msg-forbidden={t("You do not have permission to do that.")}
+        data-msg-validation={t("Check the values you entered and try again.")}
+        data-msg-conflict={t(
+          "That conflicts with the current state. Reload the page and try again."
+        )}
+        data-msg-insufficient={t(
+          "Not enough stock, and the negative-stock policy forbids going below zero."
+        )}
+        data-msg-inactive={t(
+          "That location is inactive. Reactivate it before posting."
+        )}
+        data-msg-unit={t(
+          "That item is stocked in a different unit at this location."
+        )}
+        data-msg-not-reversible={t(
+          "That movement cannot be reversed. It may already have been."
+        )}
+        data-msg-not-found={t("Not found. Reload the page.")}
+        data-msg-generic={t("Could not save that. Please try again.")}
+      />
+
+      <nav class="admin-segmented" aria-label={t("Inventory sections")}>
+        {VIEWS.filter((candidate) => viewAllowed[candidate]).map(
+          (candidate) => (
+            <a
+              class="admin-segmented-option"
+              aria-current={candidate === view ? "page" : undefined}
+              href={`/admin/inventory?view=${candidate}`}
+            >
+              {VIEW_LABEL[candidate]}
+            </a>
+          )
+        )}
+      </nav>
+
+      {view === "balances" && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="inventory-balances-heading"
+        >
+          <h2 id="inventory-balances-heading">{t("Stock balances")}</h2>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="balances" />
+            <p class="form-legend">{t("Filter")}</p>
+            {mayLocations && (
+              <label for="balances-location">
+                {t("Location")}
+                <select id="balances-location" name="locationId">
+                  <option value="">{t("All locations")}</option>
+                  {locations.map((location) => (
+                    <option
+                      value={location.id}
+                      selected={location.id === locationFilter}
+                    >
+                      {location.name} ({location.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label for="balances-item-type">
+              {t("Item type")}
+              <input
+                id="balances-item-type"
+                name="itemType"
+                type="text"
+                value={itemTypeFilter}
+                maxlength="64"
+              />
+            </label>
+            <label for="balances-item-ref">
+              {t("Item reference")}
+              <input
+                id="balances-item-ref"
+                name="itemRef"
+                type="text"
+                value={itemRefFilter}
+                maxlength="200"
+              />
+            </label>
+            <label for="balances-low-only" class="checkbox-label">
+              <input
+                id="balances-low-only"
+                name="lowStockOnly"
+                type="checkbox"
+                value="1"
+                checked={lowStockOnly}
+              />
+              {t("Low stock only")}
+            </label>
+            <button type="submit" class="module-toggle">
+              {t("Apply filter")}
+            </button>
+            <a class="btn-inline" href="/admin/inventory?view=balances">
+              {t("Clear filter")}
+            </a>
+          </form>
+
+          {data.balances.length === 0 ? (
+            <div class="empty-state">
+              <p id="inventory-balances-empty">
+                {lowStockOnly
+                  ? t("No balance is at or below its low-stock threshold.")
+                  : t(
+                      "No stock has been posted yet. Post an opening balance or an adjustment to start the ledger."
+                    )}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="inventory-balances-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Location")}</th>
+                    <th scope="col">{t("Item")}</th>
+                    <th scope="col">{t("On hand")}</th>
+                    <th scope="col">{t("Low-stock threshold")}</th>
+                    <th scope="col">{t("Signal")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.balances.map((balance) => (
+                    <tr>
+                      <td data-label={t("Location")}>
+                        {locationLabel(balance.locationId)}
+                      </td>
+                      <th scope="row" data-label={t("Item")}>
+                        {balance.itemType}: {balance.itemRef}
+                      </th>
+                      <td data-label={t("On hand")}>
+                        {balance.onHand} {balance.unitCode}
+                      </td>
+                      <td data-label={t("Low-stock threshold")}>
+                        {balance.lowStockThreshold ?? "—"}
+                      </td>
+                      <td
+                        data-label={t("Signal")}
+                        data-low={balance.isLow ? "true" : "false"}
+                      >
+                        <span
+                          class="admin-status-pill"
+                          data-tone={balance.isLow ? "warning" : "success"}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {balance.isLow ? t("Low stock") : t("In stock")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.balancesNext && (
+            <p>
+              <a
+                class="btn-inline"
+                href={pageUrl({ cursor: data.balancesNext })}
+              >
+                {t("Next page")}
+              </a>
+            </p>
+          )}
+
+          {data.canConfigurePolicy && (
+            <section aria-labelledby="inventory-threshold-heading">
+              <h3 id="inventory-threshold-heading">
+                {t("Set a low-stock threshold")}
+              </h3>
+              <form id="threshold-form" class="admin-create-form">
+                <p class="page-description">
+                  {t(
+                    "A balance at or below its threshold is flagged and published as a low-stock signal. Leave the threshold empty to remove it."
+                  )}
+                </p>
+                {mayLocations ? (
+                  <label for="threshold-location">
+                    {t("Location")}
+                    <select id="threshold-location" name="locationId" required>
+                      {locations.map((location) => (
+                        <option value={location.id}>
+                          {location.name} ({location.code})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label for="threshold-location">
+                    {t("Location id")}
+                    <input
+                      id="threshold-location"
+                      name="locationId"
+                      type="text"
+                      required
+                      autocomplete="off"
+                    />
+                  </label>
+                )}
+                <label for="threshold-item-type">
+                  {t("Item type")}
+                  <input
+                    id="threshold-item-type"
+                    name="itemType"
+                    type="text"
+                    required
+                    maxlength="64"
+                  />
+                </label>
+                <label for="threshold-item-ref">
+                  {t("Item reference")}
+                  <input
+                    id="threshold-item-ref"
+                    name="itemRef"
+                    type="text"
+                    required
+                    maxlength="200"
+                  />
+                </label>
+                <label for="threshold-unit">
+                  {t("Unit")}
+                  <input
+                    id="threshold-unit"
+                    name="unitCode"
+                    type="text"
+                    value="unit"
+                    required
+                    maxlength="32"
+                  />
+                </label>
+                <label for="threshold-value">
+                  {t("Low-stock threshold")}
+                  <input
+                    id="threshold-value"
+                    name="lowStockThreshold"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                  />
+                </label>
+                <button id="threshold-submit" type="submit">
+                  {t("Save threshold")}
+                </button>
+              </form>
+            </section>
+          )}
+
+          {data.canReconcile && (
+            <section aria-labelledby="inventory-reconcile-heading">
+              <h3 id="inventory-reconcile-heading">{t("Reconciliation")}</h3>
+              <p class="page-description">
+                {t(
+                  "Read-only proof that every stored balance equals the sum of its movements. It changes nothing."
+                )}
+              </p>
+              <p>
+                <a
+                  class="btn-inline"
+                  id="inventory-reconcile-link"
+                  href={pageUrl({ reconcile: "1", cursor: null })}
+                >
+                  {t("Run reconciliation")}
+                </a>
+              </p>
+              {data.reconciliation && (
+                <div
+                  id="inventory-reconcile-result"
+                  role="status"
+                  data-consistent={
+                    data.reconciliation.consistent ? "true" : "false"
+                  }
+                >
+                  <p>
+                    {data.reconciliation.consistent
+                      ? t(
+                          "Consistent: {count} balance rows were checked and none drifted.",
+                          { count: data.reconciliation.checkedKeys }
+                        )
+                      : t(
+                          "Drift found in {count} balance rows. Repair is an operator runbook step, not a button.",
+                          { count: data.reconciliation.drift.length }
+                        )}
+                  </p>
+                  {data.reconciliation.negativeUnderForbid > 0 && (
+                    <p>
+                      {t(
+                        "{count} balances are negative although their policy forbids it.",
+                        { count: data.reconciliation.negativeUnderForbid }
+                      )}
+                    </p>
+                  )}
+                  {data.reconciliation.truncated && (
+                    <p>{t("The list is truncated; more drift may exist.")}</p>
+                  )}
+                  {data.reconciliation.drift.length > 0 && (
+                    <div class="data-table-scroll">
+                      <table class="data-table data-table--stack">
+                        <thead>
+                          <tr>
+                            <th scope="col">{t("Location")}</th>
+                            <th scope="col">{t("Item")}</th>
+                            <th scope="col">{t("Ledger sum")}</th>
+                            <th scope="col">{t("Stored balance")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.reconciliation.drift.map((row) => (
+                            <tr>
+                              <td data-label={t("Location")}>
+                                {locationLabel(row.locationId)}
+                              </td>
+                              <th scope="row" data-label={t("Item")}>
+                                {row.itemType}: {row.itemRef}
+                              </th>
+                              <td data-label={t("Ledger sum")}>
+                                {row.ledgerOnHand}
+                              </td>
+                              <td data-label={t("Stored balance")}>
+                                {row.balanceOnHand ?? "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+        </section>
+      )}
+
+      {view === "movements" && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="inventory-movements-heading"
+        >
+          <h2 id="inventory-movements-heading">{t("Movement history")}</h2>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="movements" />
+            <p class="form-legend">{t("Filter")}</p>
+            {mayLocations && (
+              <label for="movements-location">
+                {t("Location")}
+                <select id="movements-location" name="locationId">
+                  <option value="">{t("All locations")}</option>
+                  {locations.map((location) => (
+                    <option
+                      value={location.id}
+                      selected={location.id === locationFilter}
+                    >
+                      {location.name} ({location.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label for="movements-type">
+              {t("Movement type")}
+              <select id="movements-type" name="movementType">
+                <option value="">{t("All types")}</option>
+                {MOVEMENT_TYPES.map((type) => (
+                  <option value={type} selected={type === movementTypeFilter}>
+                    {MOVEMENT_TYPE_LABEL[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label for="movements-item-type">
+              {t("Item type")}
+              <input
+                id="movements-item-type"
+                name="itemType"
+                type="text"
+                value={itemTypeFilter}
+                maxlength="64"
+              />
+            </label>
+            <label for="movements-item-ref">
+              {t("Item reference")}
+              <input
+                id="movements-item-ref"
+                name="itemRef"
+                type="text"
+                value={itemRefFilter}
+                maxlength="200"
+              />
+            </label>
+            <button type="submit" class="module-toggle">
+              {t("Apply filter")}
+            </button>
+            <a class="btn-inline" href="/admin/inventory?view=movements">
+              {t("Clear filter")}
+            </a>
+          </form>
+
+          {data.movements.length === 0 ? (
+            <div class="empty-state">
+              <p id="inventory-movements-empty">
+                {t(
+                  "No movements match. The ledger is empty or the filter excludes everything."
+                )}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="inventory-movements-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Recorded")}</th>
+                    <th scope="col">{t("Type")}</th>
+                    <th scope="col">{t("Location")}</th>
+                    <th scope="col">{t("Item")}</th>
+                    <th scope="col">{t("Change")}</th>
+                    <th scope="col">{t("Balance after")}</th>
+                    <th scope="col">{t("Reason")}</th>
+                    {data.canAdjust && <th scope="col">{t("Actions")}</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.movements.map((movement) => (
+                    <tr data-movement-id={movement.id}>
+                      <td data-label={t("Recorded")}>
+                        <time datetime={movement.createdAt}>
+                          {formatDateTime(locale, movement.createdAt, "UTC")}
+                        </time>
+                      </td>
+                      <td
+                        data-label={t("Type")}
+                        data-operation={movement.operation}
+                      >
+                        {OPERATION_LABEL[movement.operation] ??
+                          movement.operation}
+                        {movement.reversesMovementId && (
+                          <span class="page-description">
+                            {" "}
+                            {t("(reverses {id})", {
+                              id: movement.reversesMovementId.slice(0, 8)
+                            })}
+                          </span>
+                        )}
+                      </td>
+                      <td data-label={t("Location")}>
+                        {locationLabel(movement.locationId)}
+                      </td>
+                      <th scope="row" data-label={t("Item")}>
+                        {movement.itemType}: {movement.itemRef}
+                      </th>
+                      <td data-label={t("Change")}>
+                        {movement.quantityDelta} {movement.unitCode}
+                      </td>
+                      <td data-label={t("Balance after")}>
+                        {movement.balanceAfter}
+                      </td>
+                      <td data-label={t("Reason")}>
+                        {movement.reasonCode ?? "—"}
+                        {movement.note && (
+                          <span class="page-description"> {movement.note}</span>
+                        )}
+                      </td>
+                      {data.canAdjust && (
+                        <td data-label={t("Actions")}>
+                          {movement.operation === "adjustment" &&
+                            movement.reversesMovementId === null && (
+                              <>
+                                <form
+                                  id={`reverse-form-${movement.id}`}
+                                  class="js-reversal-form"
+                                  data-movement-id={movement.id}
+                                  hidden
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="reasonCode"
+                                    value="correction"
+                                  />
+                                </form>
+                                <button
+                                  type="button"
+                                  class="btn-inline btn-inline--danger js-reverse-adjustment"
+                                  data-reason-title={t(
+                                    "Reverse this adjustment"
+                                  )}
+                                  data-reason-description={t(
+                                    "Posts an equal and opposite adjustment. The original row stays in the ledger, and an adjustment can be reversed only once."
+                                  )}
+                                  data-reason-form={`reverse-form-${movement.id}`}
+                                  data-reason-field="note"
+                                  data-reason-max-length="500"
+                                  data-reason-label={t("Reverse adjustment")}
+                                  data-reason-danger
+                                >
+                                  {t("Reverse")}
+                                </button>
+                              </>
+                            )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.movementsNext && (
+            <p>
+              <a
+                class="btn-inline"
+                href={pageUrl({ cursor: data.movementsNext })}
+              >
+                {t("Older movements")}
+              </a>
+            </p>
+          )}
+
+          {data.canAdjust && (
+            <section aria-labelledby="inventory-adjust-heading">
+              <h3 id="inventory-adjust-heading">{t("Post an adjustment")}</h3>
+              <form id="adjust-form" class="admin-create-form">
+                <p class="page-description">
+                  {t(
+                    "An adjustment changes stock without a business document behind it, so its reason is the audit trail. Use a negative quantity to remove stock."
+                  )}
+                </p>
+                {mayLocations ? (
+                  <label for="adjust-location">
+                    {t("Location")}
+                    <select id="adjust-location" name="locationId" required>
+                      {locations
+                        .filter((location) => location.status === "active")
+                        .map((location) => (
+                          <option value={location.id}>
+                            {location.name} ({location.code})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label for="adjust-location">
+                    {t("Location id")}
+                    <input
+                      id="adjust-location"
+                      name="locationId"
+                      type="text"
+                      required
+                      autocomplete="off"
+                    />
+                  </label>
+                )}
+                <label for="adjust-item-type">
+                  {t("Item type")}
+                  <input
+                    id="adjust-item-type"
+                    name="itemType"
+                    type="text"
+                    required
+                    maxlength="64"
+                  />
+                </label>
+                <label for="adjust-item-ref">
+                  {t("Item reference")}
+                  <input
+                    id="adjust-item-ref"
+                    name="itemRef"
+                    type="text"
+                    required
+                    maxlength="200"
+                  />
+                </label>
+                <label for="adjust-unit">
+                  {t("Unit")}
+                  <input
+                    id="adjust-unit"
+                    name="unitCode"
+                    type="text"
+                    value="unit"
+                    required
+                    maxlength="32"
+                  />
+                </label>
+                <label for="adjust-quantity">
+                  {t("Quantity change")}
+                  <input
+                    id="adjust-quantity"
+                    name="quantityDelta"
+                    type="text"
+                    inputmode="decimal"
+                    required
+                    autocomplete="off"
+                    placeholder="-3"
+                  />
+                </label>
+                <label for="adjust-reason">
+                  {t("Reason")}
+                  <select id="adjust-reason" name="reasonCode" required>
+                    {REASON_CODES.map((reason) => (
+                      <option value={reason.value}>{reason.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label for="adjust-note">
+                  {t("Note")}
+                  <input
+                    id="adjust-note"
+                    name="note"
+                    type="text"
+                    maxlength="500"
+                  />
+                </label>
+                <button id="adjust-submit" type="submit">
+                  {t("Post adjustment")}
+                </button>
+              </form>
+            </section>
+          )}
+
+          {data.canTransfer && (
+            <section aria-labelledby="inventory-transfer-heading">
+              <h3 id="inventory-transfer-heading">{t("Transfer stock")}</h3>
+              <form id="transfer-form" class="admin-create-form">
+                <p class="page-description">
+                  {t(
+                    "Moves stock between two locations as a balanced pair: one movement out and one in, posted together or not at all."
+                  )}
+                </p>
+                {mayLocations ? (
+                  <>
+                    <label for="transfer-from">
+                      {t("From location")}
+                      <select id="transfer-from" name="fromLocationId" required>
+                        {locations
+                          .filter((location) => location.status === "active")
+                          .map((location) => (
+                            <option value={location.id}>
+                              {location.name} ({location.code})
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label for="transfer-to">
+                      {t("To location")}
+                      <select id="transfer-to" name="toLocationId" required>
+                        {locations
+                          .filter((location) => location.status === "active")
+                          .map((location) => (
+                            <option value={location.id}>
+                              {location.name} ({location.code})
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label for="transfer-from">
+                      {t("From location id")}
+                      <input
+                        id="transfer-from"
+                        name="fromLocationId"
+                        type="text"
+                        required
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label for="transfer-to">
+                      {t("To location id")}
+                      <input
+                        id="transfer-to"
+                        name="toLocationId"
+                        type="text"
+                        required
+                        autocomplete="off"
+                      />
+                    </label>
+                  </>
+                )}
+                <label for="transfer-item-type">
+                  {t("Item type")}
+                  <input
+                    id="transfer-item-type"
+                    name="itemType"
+                    type="text"
+                    required
+                    maxlength="64"
+                  />
+                </label>
+                <label for="transfer-item-ref">
+                  {t("Item reference")}
+                  <input
+                    id="transfer-item-ref"
+                    name="itemRef"
+                    type="text"
+                    required
+                    maxlength="200"
+                  />
+                </label>
+                <label for="transfer-unit">
+                  {t("Unit")}
+                  <input
+                    id="transfer-unit"
+                    name="unitCode"
+                    type="text"
+                    value="unit"
+                    required
+                    maxlength="32"
+                  />
+                </label>
+                <label for="transfer-quantity">
+                  {t("Quantity")}
+                  <input
+                    id="transfer-quantity"
+                    name="quantity"
+                    type="text"
+                    inputmode="decimal"
+                    required
+                    autocomplete="off"
+                  />
+                </label>
+                <label for="transfer-note">
+                  {t("Note")}
+                  <input
+                    id="transfer-note"
+                    name="note"
+                    type="text"
+                    maxlength="500"
+                  />
+                </label>
+                <button id="transfer-submit" type="submit">
+                  {t("Transfer stock")}
+                </button>
+              </form>
+            </section>
+          )}
+        </section>
+      )}
+
+      {view === "locations" && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="inventory-locations-heading"
+        >
+          <h2 id="inventory-locations-heading">{t("Stock locations")}</h2>
+
+          {data.policy && (
+            <section aria-labelledby="inventory-policy-heading">
+              <h3 id="inventory-policy-heading">
+                {t("Tenant default negative-stock policy")}
+              </h3>
+              <p class="page-description">
+                {t(
+                  "Whether stock may silently go below zero. A location can override this; one that does not follows the default below."
+                )}
+                {data.policy.isImplicitDefault &&
+                  " " +
+                    t(
+                      "No default has been set, so the safe default (forbid) applies."
+                    )}
+              </p>
+              {data.canConfigurePolicy ? (
+                <form id="tenant-policy-form" class="admin-create-form">
+                  <label for="tenant-policy">
+                    {t("Default policy")}
+                    <select
+                      id="tenant-policy"
+                      name="defaultNegativeStockPolicy"
+                    >
+                      {NEGATIVE_STOCK_POLICIES.map((policy) => (
+                        <option
+                          value={policy}
+                          selected={
+                            policy === data.policy?.defaultNegativeStockPolicy
+                          }
+                        >
+                          {POLICY_LABEL[policy]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button id="tenant-policy-submit" type="submit">
+                    {t("Save default")}
+                  </button>
+                </form>
+              ) : (
+                <p id="inventory-policy-readout">
+                  {POLICY_LABEL[data.policy.defaultNegativeStockPolicy]}
+                </p>
+              )}
+            </section>
+          )}
+
+          {data.canCreateLocation && (
+            <section aria-labelledby="inventory-location-add-heading">
+              <h3 id="inventory-location-add-heading">
+                {t("Register a location")}
+              </h3>
+              <form id="location-form" class="admin-create-form">
+                <label for="location-code">
+                  {t("Code")}
+                  <input
+                    id="location-code"
+                    name="code"
+                    type="text"
+                    required
+                    maxlength="64"
+                    pattern="[a-z0-9][a-z0-9_.\-]*"
+                  />
+                </label>
+                <p class="page-description">
+                  {t(
+                    "Lower-case letters, digits, dots, underscores and hyphens. The code is unique per tenant and cannot be changed."
+                  )}
+                </p>
+                <label for="location-name">
+                  {t("Name")}
+                  <input
+                    id="location-name"
+                    name="name"
+                    type="text"
+                    required
+                    maxlength="200"
+                  />
+                </label>
+                <button id="location-submit" type="submit">
+                  {t("Register location")}
+                </button>
+              </form>
+            </section>
+          )}
+
+          {locations.length === 0 ? (
+            <div class="empty-state">
+              <p id="inventory-locations-empty">
+                {t("No stock location is registered yet.")}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="inventory-locations-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Code")}</th>
+                    <th scope="col">{t("Name")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Negative-stock policy")}</th>
+                    {(data.canUpdateLocation || data.canConfigurePolicy) && (
+                      <th scope="col">{t("Actions")}</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {locations.map((location) => (
+                    <tr data-location-id={location.id}>
+                      <th scope="row" data-label={t("Code")}>
+                        {location.code}
+                      </th>
+                      <td data-label={t("Name")}>{location.name}</td>
+                      <td
+                        data-label={t("Status")}
+                        data-status={location.status}
+                      >
+                        <span
+                          class="admin-status-pill"
+                          data-tone={LOCATION_STATUS_TONE[location.status]}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {LOCATION_STATUS_LABEL[location.status]}
+                        </span>
+                      </td>
+                      <td data-label={t("Negative-stock policy")}>
+                        {data.canConfigurePolicy ? (
+                          <>
+                            <label
+                              class="sr-only"
+                              for={`policy-${location.id}`}
+                            >
+                              {t("Negative-stock policy")}
+                            </label>
+                            <select
+                              id={`policy-${location.id}`}
+                              class="js-location-policy"
+                              data-location-id={location.id}
+                              data-current={location.negativeStockPolicy ?? ""}
+                            >
+                              <option
+                                value=""
+                                selected={location.negativeStockPolicy === null}
+                              >
+                                {t("Inherit the tenant default")}
+                              </option>
+                              {NEGATIVE_STOCK_POLICIES.map((policy) => (
+                                <option
+                                  value={policy}
+                                  selected={
+                                    location.negativeStockPolicy === policy
+                                  }
+                                >
+                                  {POLICY_LABEL[policy]}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              class="btn-inline js-save-location-policy"
+                              data-location-id={location.id}
+                            >
+                              {t("Save")}
+                            </button>
+                          </>
+                        ) : location.negativeStockPolicy ? (
+                          POLICY_LABEL[location.negativeStockPolicy]
+                        ) : (
+                          t("Inherit the tenant default")
+                        )}
+                      </td>
+                      {(data.canUpdateLocation || data.canConfigurePolicy) && (
+                        <td data-label={t("Actions")}>
+                          {data.canUpdateLocation &&
+                            location.status === "active" && (
+                              <button
+                                type="button"
+                                class="btn-inline btn-inline--danger js-location-status"
+                                data-location-id={location.id}
+                                data-confirm={t(
+                                  "Deactivate {code}? Nothing can be posted to it until it is reactivated. Its history and balances stay.",
+                                  { code: location.code }
+                                )}
+                                data-next-status="inactive"
+                              >
+                                {t("Deactivate")}
+                              </button>
+                            )}
+                          {data.canUpdateLocation &&
+                            location.status === "inactive" && (
+                              <button
+                                type="button"
+                                class="module-toggle js-location-status"
+                                data-location-id={location.id}
+                                data-next-status="active"
+                              >
+                                {t("Reactivate")}
+                              </button>
+                            )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      <ReasonPanel
+        cancelLabel={t("Cancel")}
+        reasonLabel={t("Reason")}
+        reasonHint={t(
+          "Recorded on the compensating movement and the audit log."
+        )}
+        defaultSubmitLabel={t("Confirm")}
+        defaultFailureMessage={t("Could not save that. Please try again.")}
+      />
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    field,
+    messageBox,
+    onAction,
+    onSubmit,
+    onSubmitAll,
+    sendJson,
+    mutateAndReload
+  } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { initReasonPanel } from "../../lib/ui/reason-panel-client";
+  import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
+
+  const errorBox = messageBox("inventory-action-error");
+  const errorElement = document.getElementById("inventory-action-error");
+  const nextKey = createIdempotencyKeySource();
+
+  /** The message the server rendered (translated) for an error code. */
+  function messageFor(errorCode: string | null): string {
+    const data = errorElement?.dataset ?? {};
+    const generic = data.msgGeneric ?? "";
+
+    switch (errorCode) {
+      case "FORBIDDEN":
+      case "ACCESS_DENIED":
+        return data.msgForbidden ?? generic;
+      case "VALIDATION_ERROR":
+      case "VALIDATION_FAILED":
+        return data.msgValidation ?? generic;
+      case "INSUFFICIENT_STOCK":
+        return data.msgInsufficient ?? generic;
+      case "LOCATION_INACTIVE":
+        return data.msgInactive ?? generic;
+      case "UNIT_MISMATCH":
+        return data.msgUnit ?? generic;
+      case "NOT_REVERSIBLE":
+        return data.msgNotReversible ?? generic;
+      case "RESOURCE_NOT_FOUND":
+      case "LOCATION_NOT_FOUND":
+        return data.msgNotFound ?? generic;
+      case "CONFLICT":
+      case "SOURCE_CONFLICT":
+      case "LOCATION_CODE_CONFLICT":
+      case "IDEMPOTENCY_KEY_CONFLICT":
+        return data.msgConflict ?? generic;
+      default:
+        return generic;
+    }
+  }
+
+  function blank(value: string): string | null {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+
+  initReasonPanel();
+
+  // --- Locations ------------------------------------------------------------
+
+  onSubmit("location-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("POST", "/api/v1/inventory/locations", {
+          code: field(data, "code").trim(),
+          name: field(data, "name").trim()
+        }),
+      messageFor
+    );
+  });
+
+  onAction(".js-location-status", async (button) => {
+    const id = button.dataset.locationId;
+    const status = button.dataset.nextStatus;
+    if (!id || (status !== "active" && status !== "inactive")) return;
+
+    if (status === "inactive") {
+      const confirmed = await confirmAction(
+        button.dataset.confirm ?? "Deactivate this location?"
+      );
+      if (!confirmed) return;
+    }
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson(
+          "PATCH",
+          `/api/v1/inventory/locations/${encodeURIComponent(id)}`,
+          {
+            status
+          }
+        ),
+      messageFor
+    );
+  });
+
+  onAction(".js-save-location-policy", async (button) => {
+    const id = button.dataset.locationId;
+    if (!id) return;
+    const select = document.getElementById(`policy-${id}`);
+    if (!(select instanceof HTMLSelectElement)) return;
+
+    const body = { negativeStockPolicy: blank(select.value) };
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson(
+          "PUT",
+          `/api/v1/inventory/locations/${encodeURIComponent(id)}/negative-stock-policy`,
+          body,
+          { "Idempotency-Key": nextKey({ id, body }) }
+        ),
+      messageFor
+    );
+  });
+
+  onSubmit("tenant-policy-form", async ({ data, submit }) => {
+    const body = {
+      defaultNegativeStockPolicy: field(data, "defaultNegativeStockPolicy")
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("PUT", "/api/v1/inventory/policy", body, {
+          "Idempotency-Key": nextKey({ policy: body })
+        }),
+      messageFor
+    );
+  });
+
+  // --- Balances -------------------------------------------------------------
+
+  onSubmit("threshold-form", async ({ data, submit }) => {
+    const body = {
+      locationId: field(data, "locationId").trim(),
+      itemType: field(data, "itemType").trim(),
+      itemRef: field(data, "itemRef").trim(),
+      unitCode: field(data, "unitCode").trim(),
+      lowStockThreshold: blank(field(data, "lowStockThreshold"))
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("PUT", "/api/v1/inventory/balances/threshold", body, {
+          "Idempotency-Key": nextKey({ threshold: body })
+        }),
+      messageFor
+    );
+  });
+
+  // --- Movements ------------------------------------------------------------
+  //
+  // The idempotency key doubles as the movement's SOURCE id, so a retry of the
+  // same request replays the original movement instead of posting a second one.
+
+  onSubmit("adjust-form", async ({ data, submit }) => {
+    const shape = {
+      locationId: field(data, "locationId").trim(),
+      itemType: field(data, "itemType").trim(),
+      itemRef: field(data, "itemRef").trim(),
+      unitCode: field(data, "unitCode").trim(),
+      quantityDelta: field(data, "quantityDelta").trim(),
+      reasonCode: field(data, "reasonCode"),
+      note: blank(field(data, "note"))
+    };
+    const key = nextKey({ adjust: shape });
+    const body = {
+      ...shape,
+      source: { type: "admin_adjustment", id: key }
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("POST", "/api/v1/inventory/adjustments", body, {
+          "Idempotency-Key": key
+        }),
+      messageFor
+    );
+  });
+
+  onSubmit("transfer-form", async ({ data, submit }) => {
+    const shape = {
+      fromLocationId: field(data, "fromLocationId").trim(),
+      toLocationId: field(data, "toLocationId").trim(),
+      itemType: field(data, "itemType").trim(),
+      itemRef: field(data, "itemRef").trim(),
+      unitCode: field(data, "unitCode").trim(),
+      quantity: field(data, "quantity").trim(),
+      note: blank(field(data, "note"))
+    };
+    const key = nextKey({ transfer: shape });
+    const body = {
+      ...shape,
+      source: { type: "admin_transfer", id: key }
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("POST", "/api/v1/inventory/transfers", body, {
+          "Idempotency-Key": key
+        }),
+      messageFor
+    );
+  });
+
+  // The reason panel writes the typed reason into this form's `note` and
+  // submits it; the reason CODE is fixed (`correction`) because the free text
+  // is what the operator is asked for.
+  onSubmitAll(".js-reversal-form", async ({ form, data }) => {
+    const id = form.dataset.movementId;
+    if (!id) return;
+    const body = {
+      reasonCode: field(data, "reasonCode"),
+      note: blank(field(data, "note"))
+    };
+
+    await mutateAndReload(
+      null,
+      errorBox,
+      () =>
+        sendJson(
+          "POST",
+          `/api/v1/inventory/adjustments/${encodeURIComponent(id)}/reversal`,
+          body,
+          { "Idempotency-Key": nextKey({ id, body }) }
+        ),
+      messageFor
+    );
+  });
+</script>

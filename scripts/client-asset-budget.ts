@@ -912,8 +912,29 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 295,259 is the measured value with no added margin.
+ *
+ * **Raised for Issue #894** (the `/admin/inventory` and `/admin/tax` screens
+ * that flipped both modules to `active`). Two new admin screens each ship the
+ * one client script a screen with mutations needs, and they are not per-screen
+ * duplication of the shared lifecycle: both import `admin-form-client.ts`
+ * (already in the shared chunk), `confirm-dialog-client.ts` and
+ * `reason-panel-client.ts`, and add only the screen's own request bodies and
+ * error mapping. The new shared file is `admin-idempotency-key.ts` (143 B, one
+ * `Idempotency-Key` per same-body retry), which exists so those two screens
+ * and the next one do not each carry a copy. Measured actual total:
+ *
+ * ```
+ * before (295,259 ceiling)   295,259 B
+ * + inventory script          3,493 B
+ * + tax script                1,788 B
+ * + idempotency helper          143 B
+ * + admin-screens.css rules    ~590 B (detail list, code block, checkbox label)
+ * after                      301,273 B (measured actual total)
+ * ```
+ *
+ * 301,273 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 295_259;
+export const APP_BUDGET_BYTES = 301_273;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

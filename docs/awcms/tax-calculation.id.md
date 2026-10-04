@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](tax-calculation.md)
 
-<!-- i18n-source-hash: sha256:44adf8f13905dfe789e1b3114b88a0d6a5241463bfc81b12cf7c8ea57c37fe31 -->
+<!-- i18n-source-hash: sha256:c35c1d46e05e71e21e99931e349d768ea17730e21b8d67dcaab9b0cc46086151 -->
 
 # Kalkulasi pajak — spesifikasi algoritma, kamus data, dan kontrak adapter
 
@@ -405,7 +405,7 @@ boleh mengklaim sebaliknya sampai ia ada.
 
 ## 12. Batas dan celah yang diketahui
 
-- Hanya API: tanpa layar admin, tanpa entri `navigation` (tindak lanjut 1 ADR-0127).
+- Permukaan operator: `/admin/tax` (Issue #894, tindak lanjut 1 ADR-0127) — profil dan versi aturan (draf, terbitkan dengan konfirmasi), daftar dan detail snapshot, serta laporan rekonsiliasi. Definisi aturan ditulis sebagai JSON yang divalidasi server; editor terstruktur masih terbuka. Quote, finalise, reverse, dan backdate tetap aksi konsumen tanpa layar.
 - Tanpa profil negara (tindak lanjut 2). Tanpa ekspor Coretax/e-faktur (tindak lanjut 6).
 - Tanpa penghapusan draf; draf terbengkalai tetap ada (tak pernah di-resolve).
 - Versi ditambahkan berurutan waktu; tak ada penerbitan ke masa lalu.

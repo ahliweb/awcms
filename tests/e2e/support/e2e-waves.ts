@@ -79,6 +79,10 @@ export const READ_WAVE: readonly string[] = [
   // contract; it sends no non-GET request of its own beyond the shared
   // `setup` project's login.
   "admin-sidebar-long-content.e2e.ts",
+  // Issue #894 — loads `/admin/inventory` and `/admin/tax` and every view of
+  // each, and asserts the sidebar entry, the forms the owner is owed and the
+  // empty states. GETs only.
+  "admin-inventory-tax-read.e2e.ts",
   "admin-offices.e2e.ts",
   "admin-read-only-access.e2e.ts",
   "admin-screens-render.e2e.ts",
@@ -111,6 +115,10 @@ export const WRITE_WAVE: readonly string[] = [
   "api-authorization-first.e2e.ts",
   "api-body-auth-boundary.e2e.ts",
   "admin-email-templates-create.e2e.ts",
+  // Issue #894 — posts an adjustment, reverses it, authors and publishes a tax
+  // rule version. It writes only inventory and tax rows, which no other spec's
+  // screen counts, but it mutates through the app, so it is a write.
+  "admin-inventory-tax-write.e2e.ts",
   "admin-modules-toggle.e2e.ts",
   "admin-offices-create.e2e.ts",
   "admin-offices-edit.e2e.ts",

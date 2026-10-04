@@ -56,17 +56,21 @@ validated strictly, and a body naming `onHand`/`balanceAfter` is a `400`.
 | `balance == SUM(movements)`                  | `GET …/balances/reconciliation` proves it; `POST …/balances/rebuild` repairs it from the ledger                     |
 | One opening per key; a reversal at most once | Partial unique indexes                                                                                              |
 
-## Status: `experimental`
+## Status: `active`
 
-Registered `experimental`, like `push_delivery` (ADR-0074), because the HTTP
-surface and the port are complete and enforced but there is no admin screen yet,
-and ADR-0021 criterion 1 holds every `active` module to having one. The PR that
-lands the first screen flips it to `active`.
+Registered `experimental` while it was API-only (like `push_delivery`,
+ADR-0074), because ADR-0021 criterion 1 holds every `active` module to having
+an admin screen. `/admin/inventory` (Issue #894) is that screen — balances with
+low-stock signals, the movement history, adjustments with reversal (reason
+panel), transfers, locations, the negative-stock policy and thresholds, and a
+read-only reconciliation — and landed with its `navigation` entry, so the module
+is `active`. The screen never asserts a balance: every change on it is a
+movement.
 
 ## What is NOT here
 
-Admin screens and a `navigation` entry (the registry requires a real page —
-recorded follow-up, ADR-0126 §9); reservations/holds; unit conversion;
+Screens for `inventory.balances.rebuild` and `inventory.movements.create` (a
+runbook step and a consumer action respectively); reservations/holds; unit conversion;
 costing/valuation; multi-line atomic posting; archive-then-purge and
 partitioning (nothing purges the ledger, and the descriptors say so —
 ADR-0126 §7).

@@ -1,0 +1,1459 @@
+---
+/**
+ * Tax — ADR-0127, Issue #894. TENANT-scoped, over the jurisdiction-neutral tax
+ * module that shipped API-first (Issue #889).
+ *
+ * ## Three views, one entry decision per view
+ *
+ * Rule profiles and versions (`tax.rules.read`), finalised snapshots
+ * (`tax.snapshots.read`) and the reconciliation report (`tax.reports.read`) are
+ * independently readable, so the page is refused only when EVERY panel is
+ * refused and each view answers for itself from `entry`.
+ *
+ * ## A profile is not a table
+ *
+ * The module has versions, and a "profile" is the `profile_code` they share. The
+ * profile table below is therefore a summary DERIVED from the version list, not a
+ * second source of truth, and there is no "create profile" control: a profile
+ * comes into being with its first draft version.
+ *
+ * ## Draft, then publish — and publish is the one-way door
+ *
+ * A draft carries the whole rule definition and affects nothing. Publishing makes
+ * it the rule that finalised documents are computed under, closes the previous
+ * version's window at the new start date, and can never be undone: a published
+ * version is immutable by trigger, and a snapshot keeps its own copy of the
+ * version it was computed under. That is why Publish asks for confirmation and
+ * why the endpoint, not this page, enforces "not in the past" and "after the
+ * latest published version".
+ *
+ * ## Authoring the definition is JSON, on purpose
+ *
+ * The scalar fields are real inputs. The definition (categories, rules, stacked
+ * components) is a JSON document the SERVER validates field by field: this page
+ * does not try to second-guess it, and the server's message is surfaced as a
+ * generic "check the definition" rather than echoed, because an internal field
+ * path is not something to paint on a page (Issue #540). A structured editor is
+ * a recorded follow-up; until then the draft is inspectable read-only below
+ * before anyone publishes it.
+ *
+ * ## Not on this screen, and why
+ *
+ * `tax.calculations.analyze`, `tax.snapshots.create`, `tax.snapshots.reverse`
+ * and `tax.snapshots.backdate` are consumer actions — a storefront or POS
+ * finalises a document and refunds it; no operator composes a document here.
+ * They stay on the shrink-only coverage ledger rather than being declared a
+ * decision.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../lib/i18n";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import {
+  getRuleVersion,
+  listRuleVersions,
+  type RuleVersionSummary,
+  type RuleVersionView
+} from "../../modules/tax/application/tax-rule-version-directory";
+import {
+  fetchReconciliationReport,
+  TAX_REPORT_MAX_DAYS,
+  type ReconciliationReport
+} from "../../modules/tax/application/tax-reconciliation-report";
+import {
+  getSnapshot,
+  listSnapshots,
+  type SnapshotKind,
+  type SnapshotSummary,
+  type SnapshotView
+} from "../../modules/tax/application/tax-snapshot-directory";
+import { ROUNDING_MODES } from "../../modules/tax/domain/decimal";
+import {
+  COMPONENT_BASES,
+  PRICING_MODES,
+  ROUNDING_LEVELS,
+  TREATMENTS,
+  type PricingMode,
+  type RoundingLevel,
+  type Treatment
+} from "../../modules/tax/domain/tax-types";
+import { isValidIsoDate } from "../../modules/tax/domain/tax-version-resolution";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t } = getTranslatorFor(locale);
+
+type View = "rules" | "snapshots" | "report";
+const VIEWS: readonly View[] = ["rules", "snapshots", "report"];
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function queryText(name: string, max = 200): string {
+  const value = Astro.url.searchParams.get(name)?.trim() ?? "";
+  return value.length > max ? "" : value;
+}
+function queryUuid(name: string): string {
+  const value = queryText(name, 36);
+  return UUID_PATTERN.test(value) ? value.toLowerCase() : "";
+}
+
+const requestedView = Astro.url.searchParams.get("view");
+const versionParam = queryUuid("version");
+const snapshotParam = queryUuid("snapshot");
+const profileFilter = queryText("profileCode", 63);
+const statusFilter = (() => {
+  const value = queryText("status", 16);
+  return value === "draft" || value === "published" ? value : "";
+})();
+const kindFilter: SnapshotKind | "" = (() => {
+  const value = queryText("kind", 16);
+  return value === "sale" || value === "reversal" ? value : "";
+})();
+const documentTypeFilter = queryText("documentType", 100);
+const documentIdFilter = queryText("documentId", 200);
+const cursorParam = queryText("cursor", 400);
+const reportFrom = (() => {
+  const value = queryText("from", 10);
+  return isValidIsoDate(value) ? value : "";
+})();
+const reportTo = (() => {
+  const value = queryText("to", 10);
+  return isValidIsoDate(value) ? value : "";
+})();
+const DAY_MS = 86_400_000;
+const reportSpanDays =
+  reportFrom && reportTo
+    ? (Date.parse(`${reportTo}T00:00:00Z`) -
+        Date.parse(`${reportFrom}T00:00:00Z`)) /
+        DAY_MS +
+      1
+    : 0;
+const reportRequested = reportFrom !== "" && reportTo !== "";
+const reportPeriodValid =
+  reportRequested &&
+  reportSpanDays >= 1 &&
+  reportSpanDays <= TAX_REPORT_MAX_DAYS;
+const reportProfile = queryText("reportProfile", 63);
+
+const PRICING_MODE_LABEL: Record<PricingMode, string> = {
+  exclusive: t("Tax added on top (exclusive)"),
+  inclusive: t("Tax included in price (inclusive)")
+};
+const ROUNDING_LEVEL_LABEL: Record<RoundingLevel, string> = {
+  line: t("Per line"),
+  document: t("Per document")
+};
+const ROUNDING_MODE_LABEL: Record<(typeof ROUNDING_MODES)[number], string> = {
+  half_up: t("Half up"),
+  half_down: t("Half down"),
+  half_even: t("Half even (banker's)"),
+  up: t("Away from zero"),
+  down: t("Toward zero"),
+  ceiling: t("Ceiling"),
+  floor: t("Floor")
+};
+const TREATMENT_LABEL: Record<Treatment, string> = {
+  taxable: t("Taxable"),
+  exempt: t("Exempt"),
+  zero_rated: t("Zero-rated")
+};
+function treatmentLabel(value: string): string {
+  return (TREATMENTS as readonly string[]).includes(value)
+    ? TREATMENT_LABEL[value as Treatment]
+    : value;
+}
+const VERSION_STATUS_LABEL: Record<"draft" | "published", string> = {
+  draft: t("Draft"),
+  published: t("Published")
+};
+const VERSION_STATUS_TONE: Record<"draft" | "published", string> = {
+  draft: "warning",
+  published: "success"
+};
+const SNAPSHOT_KIND_LABEL: Record<SnapshotKind, string> = {
+  sale: t("Sale"),
+  reversal: t("Reversal")
+};
+
+const screen = await loadAdminScreen({
+  ssr,
+  // The report aggregates snapshots over a period; it queues with the other
+  // reports rather than ahead of interactive traffic.
+  workClass: requestedView === "report" ? "reporting" : "interactive",
+  authorize: [
+    { moduleKey: "tax", activityCode: "rules", action: "read" },
+    { moduleKey: "tax", activityCode: "snapshots", action: "read" },
+    { moduleKey: "tax", activityCode: "reports", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [mayRules, maySnapshots, mayReports] = entry;
+    const allowed: Record<View, boolean> = {
+      rules: Boolean(mayRules),
+      snapshots: Boolean(maySnapshots),
+      report: Boolean(mayReports)
+    };
+    const view: View =
+      VIEWS.find(
+        (candidate) => candidate === requestedView && allowed[candidate]
+      ) ??
+      VIEWS.find((candidate) => allowed[candidate]) ??
+      "rules";
+
+    const canConfigure = await can({
+      moduleKey: "tax",
+      activityCode: "rules",
+      action: "configure"
+    });
+    const canPublish = await can({
+      moduleKey: "tax",
+      activityCode: "rules",
+      action: "publish"
+    });
+
+    let versions: RuleVersionSummary[] = [];
+    let versionsNext: string | null = null;
+    let versionDetail: RuleVersionView | null = null;
+    let snapshots: SnapshotSummary[] = [];
+    let snapshotsNext: string | null = null;
+    let snapshotDetail: SnapshotView | null = null;
+    let report: ReconciliationReport | null = null;
+
+    if (view === "rules") {
+      const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+      const page = await listRuleVersions(
+        tx,
+        ssr.tenantId,
+        {
+          ...(profileFilter ? { profileCode: profileFilter } : {}),
+          ...(statusFilter ? { status: statusFilter } : {})
+        },
+        cursor ?? undefined
+      );
+      versions = page.versions;
+      versionsNext = page.nextCursor;
+
+      if (versionParam) {
+        versionDetail = await getRuleVersion(tx, ssr.tenantId, versionParam);
+      }
+    }
+
+    if (view === "snapshots") {
+      if (snapshotParam) {
+        snapshotDetail = await getSnapshot(tx, ssr.tenantId, snapshotParam);
+      } else {
+        const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+        const page = await listSnapshots(
+          tx,
+          ssr.tenantId,
+          {
+            ...(kindFilter ? { kind: kindFilter } : {}),
+            ...(documentTypeFilter ? { documentType: documentTypeFilter } : {}),
+            ...(documentIdFilter ? { documentId: documentIdFilter } : {})
+          },
+          cursor ?? undefined
+        );
+        snapshots = page.snapshots;
+        snapshotsNext = page.nextCursor;
+      }
+    }
+
+    if (view === "report" && reportPeriodValid) {
+      report = await fetchReconciliationReport(
+        tx,
+        ssr.tenantId,
+        reportFrom,
+        reportTo,
+        reportProfile || null
+      );
+    }
+
+    return {
+      view,
+      allowed,
+      canConfigure,
+      canPublish,
+      versions,
+      versionsNext,
+      versionDetail,
+      snapshots,
+      snapshotsNext,
+      snapshotDetail,
+      report
+    };
+  },
+  onError: (error) => {
+    logAdminPageError("admin/tax.astro: failed to load the tax screen", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const view: View = data?.view ?? "rules";
+
+const VIEW_LABEL: Record<View, string> = {
+  rules: t("Rules"),
+  snapshots: t("Snapshots"),
+  report: t("Reconciliation")
+};
+
+/** A summary per profile, derived from the version list (see the docblock). */
+type ProfileSummary = {
+  profileCode: string;
+  versions: number;
+  latest: RuleVersionSummary;
+  publishedVersion: RuleVersionSummary | null;
+};
+const profiles: ProfileSummary[] = (() => {
+  const byCode = new Map<string, ProfileSummary>();
+  for (const version of data?.versions ?? []) {
+    const existing = byCode.get(version.profileCode);
+    if (!existing) {
+      byCode.set(version.profileCode, {
+        profileCode: version.profileCode,
+        versions: 1,
+        latest: version,
+        publishedVersion: version.status === "published" ? version : null
+      });
+      continue;
+    }
+    existing.versions += 1;
+    if (version.versionNo > existing.latest.versionNo)
+      existing.latest = version;
+    if (
+      version.status === "published" &&
+      (!existing.publishedVersion ||
+        version.versionNo > existing.publishedVersion.versionNo)
+    ) {
+      existing.publishedVersion = version;
+    }
+  }
+  return [...byCode.values()].sort((a, b) =>
+    a.profileCode.localeCompare(b.profileCode)
+  );
+})();
+
+function pageUrl(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams({ view });
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== null && value !== "") params.set(key, value);
+  }
+  return `/admin/tax?${params.toString()}`;
+}
+
+const todayIso = new Date().toISOString().slice(0, 10);
+const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
+  .toISOString()
+  .slice(0, 10);
+---
+
+<AdminLayout
+  title={t("Tax")}
+  description={t(
+    "Versioned tax rule profiles, the finalised tax snapshots they produced, and a reconciliation of the two. Tax is always computed by the server from a published rule version; nothing here lets anyone type an amount."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="tax-denied">
+      {t("You do not have permission to view tax.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="tax-load-error">
+      {t("Could not load tax. Please try again.")}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <>
+      <p
+        id="tax-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+        data-msg-forbidden={t("You do not have permission to do that.")}
+        data-msg-validation={t(
+          "Check the fields and the definition. The server rejected something in them."
+        )}
+        data-msg-json={t("The definition is not valid JSON.")}
+        data-msg-already-published={t("That version is already published.")}
+        data-msg-out-of-order={t(
+          "A new version must take effect after the latest published version of its profile."
+        )}
+        data-msg-backdated={t(
+          "A version cannot take effect in the past, or on a day that already has finalised documents."
+        )}
+        data-msg-conflict={t(
+          "That conflicts with the current state. Reload the page and try again."
+        )}
+        data-msg-not-found={t("Not found. Reload the page.")}
+        data-msg-generic={t("Could not save that. Please try again.")}
+      />
+
+      <nav class="admin-segmented" aria-label={t("Tax sections")}>
+        {VIEWS.filter((candidate) => data.allowed[candidate]).map(
+          (candidate) => (
+            <a
+              class="admin-segmented-option"
+              aria-current={candidate === view ? "page" : undefined}
+              href={`/admin/tax?view=${candidate}`}
+            >
+              {VIEW_LABEL[candidate]}
+            </a>
+          )
+        )}
+      </nav>
+
+      {view === "rules" && (
+        <section class="fade-in-up" aria-labelledby="tax-profiles-heading">
+          <h2 id="tax-profiles-heading">{t("Rule profiles")}</h2>
+
+          {profiles.length === 0 ? (
+            <div class="empty-state">
+              <p id="tax-profiles-empty">
+                {t(
+                  "No rule profile exists yet. A profile comes into being with its first draft version."
+                )}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="tax-profiles-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Profile")}</th>
+                    <th scope="col">{t("Versions")}</th>
+                    <th scope="col">{t("Current published version")}</th>
+                    <th scope="col">{t("Latest version")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((profile) => (
+                    <tr>
+                      <th scope="row" data-label={t("Profile")}>
+                        <a href={pageUrl({ profileCode: profile.profileCode })}>
+                          {profile.profileCode}
+                        </a>
+                      </th>
+                      <td data-label={t("Versions")}>{profile.versions}</td>
+                      <td data-label={t("Current published version")}>
+                        {profile.publishedVersion
+                          ? `v${profile.publishedVersion.versionNo} · ${profile.publishedVersion.effectiveFrom}`
+                          : "—"}
+                      </td>
+                      <td data-label={t("Latest version")}>
+                        v{profile.latest.versionNo} (
+                        {VERSION_STATUS_LABEL[profile.latest.status]})
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2 id="tax-versions-heading">{t("Rule versions")}</h2>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="rules" />
+            <p class="form-legend">{t("Filter")}</p>
+            <label for="versions-profile">
+              {t("Profile")}
+              <input
+                id="versions-profile"
+                name="profileCode"
+                type="text"
+                value={profileFilter}
+                maxlength="63"
+              />
+            </label>
+            <label for="versions-status">
+              {t("Status")}
+              <select id="versions-status" name="status">
+                <option value="">{t("All statuses")}</option>
+                <option value="draft" selected={statusFilter === "draft"}>
+                  {VERSION_STATUS_LABEL.draft}
+                </option>
+                <option
+                  value="published"
+                  selected={statusFilter === "published"}
+                >
+                  {VERSION_STATUS_LABEL.published}
+                </option>
+              </select>
+            </label>
+            <button type="submit" class="module-toggle">
+              {t("Apply filter")}
+            </button>
+            <a class="btn-inline" href="/admin/tax?view=rules">
+              {t("Clear filter")}
+            </a>
+          </form>
+
+          {data.versions.length === 0 ? (
+            <div class="empty-state">
+              <p id="tax-versions-empty">{t("No rule version matches.")}</p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="tax-versions-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Profile")}</th>
+                    <th scope="col">{t("Version")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Jurisdiction")}</th>
+                    <th scope="col">{t("Currency")}</th>
+                    <th scope="col">{t("Pricing")}</th>
+                    <th scope="col">{t("Effective")}</th>
+                    <th scope="col">{t("Actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.versions.map((version) => (
+                    <tr data-version-id={version.id}>
+                      <th scope="row" data-label={t("Profile")}>
+                        {version.profileCode}
+                      </th>
+                      <td data-label={t("Version")}>v{version.versionNo}</td>
+                      <td data-label={t("Status")} data-status={version.status}>
+                        <span
+                          class="admin-status-pill"
+                          data-tone={VERSION_STATUS_TONE[version.status]}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {VERSION_STATUS_LABEL[version.status]}
+                        </span>
+                      </td>
+                      <td data-label={t("Jurisdiction")}>
+                        {version.jurisdictionCode}
+                      </td>
+                      <td data-label={t("Currency")}>{version.currencyCode}</td>
+                      <td data-label={t("Pricing")}>
+                        {PRICING_MODE_LABEL[version.pricingMode]}
+                      </td>
+                      <td data-label={t("Effective")}>
+                        {version.effectiveFrom}
+                        {" → "}
+                        {version.effectiveTo ?? t("open-ended")}
+                      </td>
+                      <td data-label={t("Actions")}>
+                        <a
+                          class="btn-inline"
+                          href={pageUrl({
+                            profileCode: profileFilter,
+                            status: statusFilter,
+                            version: version.id
+                          })}
+                        >
+                          {t("View")}
+                        </a>
+                        {data.canPublish && version.status === "draft" && (
+                          <button
+                            type="button"
+                            class="module-toggle js-publish-version"
+                            data-version-id={version.id}
+                            data-confirm={t(
+                              "Publish {profile} v{version}? It becomes the rule that documents are computed under from {date}, closes the previous version at that date, and can never be edited or unpublished.",
+                              {
+                                profile: version.profileCode,
+                                version: version.versionNo,
+                                date: version.effectiveFrom
+                              }
+                            )}
+                          >
+                            {t("Publish")}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.versionsNext && (
+            <p>
+              <a
+                class="btn-inline"
+                href={pageUrl({
+                  profileCode: profileFilter,
+                  status: statusFilter,
+                  cursor: data.versionsNext
+                })}
+              >
+                {t("Older versions")}
+              </a>
+            </p>
+          )}
+
+          {versionParam && !data.versionDetail && (
+            <p class="state-notice" id="tax-version-missing">
+              {t("That rule version was not found.")}
+            </p>
+          )}
+
+          {data.versionDetail && (
+            <section
+              id="tax-version-detail"
+              aria-labelledby="tax-version-detail-heading"
+            >
+              <h3 id="tax-version-detail-heading">
+                {t("{profile} v{version}", {
+                  profile: data.versionDetail.profileCode,
+                  version: data.versionDetail.versionNo
+                })}
+              </h3>
+              <dl class="admin-detail-list">
+                <dt>{t("Name")}</dt>
+                <dd>{data.versionDetail.name}</dd>
+                <dt>{t("Status")}</dt>
+                <dd>{VERSION_STATUS_LABEL[data.versionDetail.status]}</dd>
+                <dt>{t("Jurisdiction")}</dt>
+                <dd>
+                  {data.versionDetail.jurisdictionCode}
+                  {data.versionDetail.countryCode &&
+                    ` · ${data.versionDetail.countryCode}`}
+                  {data.versionDetail.regionCode &&
+                    ` · ${data.versionDetail.regionCode}`}
+                </dd>
+                <dt>{t("Currency")}</dt>
+                <dd>{data.versionDetail.currencyCode}</dd>
+                <dt>{t("Pricing")}</dt>
+                <dd>{PRICING_MODE_LABEL[data.versionDetail.pricingMode]}</dd>
+                <dt>{t("Rounding")}</dt>
+                <dd>
+                  {ROUNDING_MODE_LABEL[data.versionDetail.roundingMode]}
+                  {" · "}
+                  {t("{scale} decimal places", {
+                    scale: data.versionDetail.roundingScale
+                  })}
+                  {" · "}
+                  {ROUNDING_LEVEL_LABEL[data.versionDetail.roundingLevel]}
+                </dd>
+                <dt>{t("Effective")}</dt>
+                <dd>
+                  {data.versionDetail.effectiveFrom}
+                  {" → "}
+                  {data.versionDetail.effectiveTo ?? t("open-ended")}
+                </dd>
+                {data.versionDetail.notes && (
+                  <>
+                    <dt>{t("Notes")}</dt>
+                    <dd>{data.versionDetail.notes}</dd>
+                  </>
+                )}
+              </dl>
+              <h4>{t("Definition")}</h4>
+              <pre
+                class="admin-code-block"
+                id="tax-version-definition"
+              >{JSON.stringify(
+                data.versionDetail.definition,
+                null,
+                2
+              )}</pre>
+            </section>
+          )}
+
+          {data.canConfigure && (
+            <section aria-labelledby="tax-draft-heading">
+              <h3 id="tax-draft-heading">{t("Create a draft version")}</h3>
+              <form id="rule-version-form" class="admin-create-form">
+                <p class="page-description">
+                  {t(
+                    "A draft changes nothing until it is published. Using an existing profile code adds the next version of that profile; a new code starts a new profile. This product ships no country profile: the rates and categories are yours to supply and verify."
+                  )}
+                </p>
+                <label for="draft-profile">
+                  {t("Profile code")}
+                  <input
+                    id="draft-profile"
+                    name="profileCode"
+                    type="text"
+                    required
+                    maxlength="63"
+                    pattern="[a-z0-9][a-z0-9_.\-]*"
+                  />
+                </label>
+                <label for="draft-name">
+                  {t("Name")}
+                  <input
+                    id="draft-name"
+                    name="name"
+                    type="text"
+                    required
+                    maxlength="200"
+                  />
+                </label>
+                <label for="draft-jurisdiction">
+                  {t("Jurisdiction code")}
+                  <input
+                    id="draft-jurisdiction"
+                    name="jurisdictionCode"
+                    type="text"
+                    required
+                    maxlength="63"
+                  />
+                </label>
+                <label for="draft-country">
+                  {t("Country (ISO 3166-1 alpha-2, optional)")}
+                  <input
+                    id="draft-country"
+                    name="countryCode"
+                    type="text"
+                    maxlength="2"
+                    pattern="[A-Z]{2}"
+                  />
+                </label>
+                <label for="draft-region">
+                  {t("Region (optional)")}
+                  <input
+                    id="draft-region"
+                    name="regionCode"
+                    type="text"
+                    maxlength="32"
+                  />
+                </label>
+                <label for="draft-currency">
+                  {t("Currency (ISO 4217)")}
+                  <input
+                    id="draft-currency"
+                    name="currencyCode"
+                    type="text"
+                    required
+                    maxlength="3"
+                    pattern="[A-Z]{3}"
+                  />
+                </label>
+                <label for="draft-pricing">
+                  {t("Pricing")}
+                  <select id="draft-pricing" name="pricingMode" required>
+                    {PRICING_MODES.map((mode) => (
+                      <option value={mode}>{PRICING_MODE_LABEL[mode]}</option>
+                    ))}
+                  </select>
+                </label>
+                <label for="draft-rounding-mode">
+                  {t("Rounding mode")}
+                  <select id="draft-rounding-mode" name="roundingMode" required>
+                    {ROUNDING_MODES.map((mode) => (
+                      <option value={mode}>{ROUNDING_MODE_LABEL[mode]}</option>
+                    ))}
+                  </select>
+                </label>
+                <label for="draft-rounding-scale">
+                  {t("Rounding decimal places (0 to 6)")}
+                  <input
+                    id="draft-rounding-scale"
+                    name="roundingScale"
+                    type="number"
+                    min="0"
+                    max="6"
+                    step="1"
+                    value="2"
+                    required
+                  />
+                </label>
+                <label for="draft-rounding-level">
+                  {t("Rounding level")}
+                  <select
+                    id="draft-rounding-level"
+                    name="roundingLevel"
+                    required
+                  >
+                    {ROUNDING_LEVELS.map((level) => (
+                      <option value={level}>
+                        {ROUNDING_LEVEL_LABEL[level]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label for="draft-effective">
+                  {t("Effective from")}
+                  <input
+                    id="draft-effective"
+                    name="effectiveFrom"
+                    type="date"
+                    required
+                  />
+                </label>
+                <label for="draft-notes">
+                  {t("Notes (optional)")}
+                  <input
+                    id="draft-notes"
+                    name="notes"
+                    type="text"
+                    maxlength="1000"
+                  />
+                </label>
+                <label for="draft-definition">
+                  {t("Definition (JSON)")}
+                  <textarea
+                    id="draft-definition"
+                    name="definition"
+                    rows="10"
+                    required
+                    spellcheck="false"
+                    placeholder={`{\n  "categories": [{ "code": "general", "name": "General" }],\n  "rules": [\n    {\n      "categoryCode": "general",\n      "treatment": "taxable",\n      "components": [\n        { "code": "tax-1", "name": "Tax", "rate": "0.00", "basis": "net" }\n      ]\n    }\n  ]\n}`}
+                  />
+                </label>
+                <p class="page-description">
+                  {t(
+                    "Treatment is one of {treatments}; a component basis is one of {bases}. The server validates every field and refuses an unknown one.",
+                    {
+                      treatments: TREATMENTS.join(", "),
+                      bases: COMPONENT_BASES.join(", ")
+                    }
+                  )}
+                </p>
+                <button id="draft-submit" type="submit">
+                  {t("Create draft")}
+                </button>
+              </form>
+            </section>
+          )}
+        </section>
+      )}
+
+      {view === "snapshots" && (
+        <section class="fade-in-up" aria-labelledby="tax-snapshots-heading">
+          <h2 id="tax-snapshots-heading">{t("Tax snapshots")}</h2>
+
+          {snapshotParam && !data.snapshotDetail && (
+            <p class="state-notice" id="tax-snapshot-missing">
+              {t("That snapshot was not found.")}
+            </p>
+          )}
+
+          {data.snapshotDetail && (
+            <section
+              id="tax-snapshot-detail"
+              aria-labelledby="tax-snapshot-detail-heading"
+            >
+              <p>
+                <a class="btn-inline" href="/admin/tax?view=snapshots">
+                  {t("Back to the snapshot list")}
+                </a>
+              </p>
+              <h3 id="tax-snapshot-detail-heading">
+                {SNAPSHOT_KIND_LABEL[data.snapshotDetail.kind]}
+                {" · "}
+                {data.snapshotDetail.documentType}
+                {" / "}
+                {data.snapshotDetail.documentId}
+              </h3>
+              <dl class="admin-detail-list">
+                <dt>{t("Tax date")}</dt>
+                <dd>{data.snapshotDetail.taxDate}</dd>
+                <dt>{t("Rule version")}</dt>
+                <dd>
+                  <a
+                    href={`/admin/tax?view=rules&version=${data.snapshotDetail.ruleVersionId}`}
+                  >
+                    {data.snapshotDetail.profileCode} v
+                    {data.snapshotDetail.versionNo}
+                  </a>
+                </dd>
+                <dt>{t("Currency")}</dt>
+                <dd>{data.snapshotDetail.currencyCode}</dd>
+                <dt>{t("Pricing")}</dt>
+                <dd>{PRICING_MODE_LABEL[data.snapshotDetail.pricingMode]}</dd>
+                <dt>{t("Net total")}</dt>
+                <dd>{data.snapshotDetail.netTotal}</dd>
+                <dt>{t("Tax total")}</dt>
+                <dd>{data.snapshotDetail.taxTotal}</dd>
+                <dt>{t("Gross total")}</dt>
+                <dd>{data.snapshotDetail.grossTotal}</dd>
+                <dt>{t("Recorded")}</dt>
+                <dd>
+                  <time datetime={data.snapshotDetail.createdAt}>
+                    {formatDateTime(
+                      locale,
+                      data.snapshotDetail.createdAt,
+                      "UTC"
+                    )}
+                  </time>
+                </dd>
+                {data.snapshotDetail.originalSnapshotId && (
+                  <>
+                    <dt>{t("Reverses")}</dt>
+                    <dd>
+                      <a
+                        href={`/admin/tax?view=snapshots&snapshot=${data.snapshotDetail.originalSnapshotId}`}
+                      >
+                        {data.snapshotDetail.originalSnapshotId.slice(0, 8)}
+                      </a>
+                    </dd>
+                  </>
+                )}
+                {data.snapshotDetail.reason && (
+                  <>
+                    <dt>{t("Reason")}</dt>
+                    <dd>{data.snapshotDetail.reason}</dd>
+                  </>
+                )}
+              </dl>
+
+              <h4>{t("Lines")}</h4>
+              <div class="data-table-scroll">
+                <table
+                  class="data-table data-table--stack"
+                  id="tax-snapshot-lines"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Line")}</th>
+                      <th scope="col">{t("Treatment")}</th>
+                      <th scope="col">{t("Quantity")}</th>
+                      <th scope="col">{t("Unit price")}</th>
+                      <th scope="col">{t("Net")}</th>
+                      <th scope="col">{t("Tax")}</th>
+                      <th scope="col">{t("Gross")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.snapshotDetail.lines.map((line) => (
+                      <tr>
+                        <th scope="row" data-label={t("Line")}>
+                          {line.lineRef}
+                        </th>
+                        <td data-label={t("Treatment")}>
+                          {treatmentLabel(line.treatment)}
+                        </td>
+                        <td data-label={t("Quantity")}>{line.quantity}</td>
+                        <td data-label={t("Unit price")}>{line.unitPrice}</td>
+                        <td data-label={t("Net")}>{line.netAmount}</td>
+                        <td data-label={t("Tax")}>{line.taxAmount}</td>
+                        <td data-label={t("Gross")}>{line.grossAmount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {data.snapshotDetail.componentTotals.length > 0 && (
+                <>
+                  <h4>{t("Tax by component")}</h4>
+                  <div class="data-table-scroll">
+                    <table class="data-table data-table--stack">
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("Component")}</th>
+                          <th scope="col">{t("Tax")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.snapshotDetail.componentTotals.map((total) => (
+                          <tr>
+                            <th scope="row" data-label={t("Component")}>
+                              {total.name} ({total.code})
+                            </th>
+                            <td data-label={t("Tax")}>{total.taxAmount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
+          {!snapshotParam && (
+            <>
+              <form class="admin-create-form" method="get" role="search">
+                <input type="hidden" name="view" value="snapshots" />
+                <p class="form-legend">{t("Filter")}</p>
+                <label for="snapshots-kind">
+                  {t("Kind")}
+                  <select id="snapshots-kind" name="kind">
+                    <option value="">{t("All kinds")}</option>
+                    <option value="sale" selected={kindFilter === "sale"}>
+                      {SNAPSHOT_KIND_LABEL.sale}
+                    </option>
+                    <option
+                      value="reversal"
+                      selected={kindFilter === "reversal"}
+                    >
+                      {SNAPSHOT_KIND_LABEL.reversal}
+                    </option>
+                  </select>
+                </label>
+                <label for="snapshots-document-type">
+                  {t("Document type")}
+                  <input
+                    id="snapshots-document-type"
+                    name="documentType"
+                    type="text"
+                    value={documentTypeFilter}
+                    maxlength="100"
+                  />
+                </label>
+                <label for="snapshots-document-id">
+                  {t("Document id")}
+                  <input
+                    id="snapshots-document-id"
+                    name="documentId"
+                    type="text"
+                    value={documentIdFilter}
+                    maxlength="200"
+                  />
+                </label>
+                <button type="submit" class="module-toggle">
+                  {t("Apply filter")}
+                </button>
+                <a class="btn-inline" href="/admin/tax?view=snapshots">
+                  {t("Clear filter")}
+                </a>
+              </form>
+
+              {data.snapshots.length === 0 ? (
+                <div class="empty-state">
+                  <p id="tax-snapshots-empty">
+                    {t(
+                      "No snapshot matches. A snapshot is written when a consumer finalises a document."
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div class="data-table-scroll">
+                  <table
+                    class="data-table data-table--stack"
+                    id="tax-snapshots-table"
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Document")}</th>
+                        <th scope="col">{t("Kind")}</th>
+                        <th scope="col">{t("Tax date")}</th>
+                        <th scope="col">{t("Rule version")}</th>
+                        <th scope="col">{t("Net total")}</th>
+                        <th scope="col">{t("Tax total")}</th>
+                        <th scope="col">{t("Gross total")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.snapshots.map((snapshot) => (
+                        <tr data-snapshot-id={snapshot.id}>
+                          <th scope="row" data-label={t("Document")}>
+                            <a
+                              href={`/admin/tax?view=snapshots&snapshot=${snapshot.id}`}
+                            >
+                              {snapshot.documentType} / {snapshot.documentId}
+                            </a>
+                          </th>
+                          <td data-label={t("Kind")} data-kind={snapshot.kind}>
+                            {SNAPSHOT_KIND_LABEL[snapshot.kind]}
+                          </td>
+                          <td data-label={t("Tax date")}>{snapshot.taxDate}</td>
+                          <td data-label={t("Rule version")}>
+                            {snapshot.profileCode} v{snapshot.versionNo}
+                          </td>
+                          <td data-label={t("Net total")}>
+                            {snapshot.netTotal} {snapshot.currencyCode}
+                          </td>
+                          <td data-label={t("Tax total")}>
+                            {snapshot.taxTotal} {snapshot.currencyCode}
+                          </td>
+                          <td data-label={t("Gross total")}>
+                            {snapshot.grossTotal} {snapshot.currencyCode}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {data.snapshotsNext && (
+                <p>
+                  <a
+                    class="btn-inline"
+                    href={pageUrl({
+                      kind: kindFilter,
+                      documentType: documentTypeFilter,
+                      documentId: documentIdFilter,
+                      cursor: data.snapshotsNext
+                    })}
+                  >
+                    {t("Older snapshots")}
+                  </a>
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {view === "report" && (
+        <section class="fade-in-up" aria-labelledby="tax-report-heading">
+          <h2 id="tax-report-heading">{t("Reconciliation report")}</h2>
+          <p class="page-description">
+            {t(
+              "Totals of the finalised snapshots for a tax-date period, by rule version, component and treatment, net of reversals. The integrity block re-adds every stored document from its own lines and reports any that disagree. The period may span at most {days} days.",
+              { days: TAX_REPORT_MAX_DAYS }
+            )}
+          </p>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="report" />
+            <label for="report-from">
+              {t("From")}
+              <input
+                id="report-from"
+                name="from"
+                type="date"
+                value={reportFrom || monthAgoIso}
+                required
+              />
+            </label>
+            <label for="report-to">
+              {t("To")}
+              <input
+                id="report-to"
+                name="to"
+                type="date"
+                value={reportTo || todayIso}
+                required
+              />
+            </label>
+            <label for="report-profile">
+              {t("Profile (optional)")}
+              <input
+                id="report-profile"
+                name="reportProfile"
+                type="text"
+                value={reportProfile}
+                maxlength="63"
+              />
+            </label>
+            <button type="submit" class="module-toggle">
+              {t("Run report")}
+            </button>
+          </form>
+
+          {reportRequested && !reportPeriodValid && (
+            <p class="state-notice" id="tax-report-period-invalid" role="alert">
+              {t(
+                "The period is not valid. The end must not be before the start, and it may span at most {days} days.",
+                { days: TAX_REPORT_MAX_DAYS }
+              )}
+            </p>
+          )}
+
+          {!reportRequested && (
+            <div class="empty-state">
+              <p id="tax-report-prompt">
+                {t("Choose a period and run the report.")}
+              </p>
+            </div>
+          )}
+
+          {data.report && (
+            <div id="tax-report-result">
+              <p
+                id="tax-report-integrity"
+                role="status"
+                data-consistent={
+                  data.report.integrity.lineSumMismatches === 0 &&
+                  data.report.integrity.componentSumMismatches === 0
+                    ? "true"
+                    : "false"
+                }
+              >
+                {data.report.integrity.lineSumMismatches === 0 &&
+                data.report.integrity.componentSumMismatches === 0
+                  ? t(
+                      "Integrity: {count} documents were re-added and all agree.",
+                      { count: data.report.integrity.documentsChecked }
+                    )
+                  : t(
+                      "Integrity: {lines} documents disagree on their line sums and {components} on their component sums, out of {count} checked.",
+                      {
+                        lines: data.report.integrity.lineSumMismatches,
+                        components:
+                          data.report.integrity.componentSumMismatches,
+                        count: data.report.integrity.documentsChecked
+                      }
+                    )}
+              </p>
+
+              <h3>{t("Net of reversals")}</h3>
+              {data.report.netOfReversals.length === 0 ? (
+                <p>{t("No snapshot falls in this period.")}</p>
+              ) : (
+                <div class="data-table-scroll">
+                  <table class="data-table data-table--stack">
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Currency")}</th>
+                        <th scope="col">{t("Sales")}</th>
+                        <th scope="col">{t("Reversals")}</th>
+                        <th scope="col">{t("Net total")}</th>
+                        <th scope="col">{t("Tax total")}</th>
+                        <th scope="col">{t("Gross total")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.report.netOfReversals.map((row) => (
+                        <tr>
+                          <th scope="row" data-label={t("Currency")}>
+                            {row.currencyCode}
+                          </th>
+                          <td data-label={t("Sales")}>{row.sales}</td>
+                          <td data-label={t("Reversals")}>{row.reversals}</td>
+                          <td data-label={t("Net total")}>{row.netTotal}</td>
+                          <td data-label={t("Tax total")}>{row.taxTotal}</td>
+                          <td data-label={t("Gross total")}>
+                            {row.grossTotal}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <h3>{t("By rule version")}</h3>
+              <div class="data-table-scroll">
+                <table class="data-table data-table--stack">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Profile")}</th>
+                      <th scope="col">{t("Version")}</th>
+                      <th scope="col">{t("Kind")}</th>
+                      <th scope="col">{t("Documents")}</th>
+                      <th scope="col">{t("Net total")}</th>
+                      <th scope="col">{t("Tax total")}</th>
+                      <th scope="col">{t("Gross total")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.report.byVersion.map((row) => (
+                      <tr>
+                        <th scope="row" data-label={t("Profile")}>
+                          {row.profileCode}
+                        </th>
+                        <td data-label={t("Version")}>v{row.versionNo}</td>
+                        <td data-label={t("Kind")}>
+                          {SNAPSHOT_KIND_LABEL[row.kind]}
+                        </td>
+                        <td data-label={t("Documents")}>{row.documents}</td>
+                        <td data-label={t("Net total")}>
+                          {row.netTotal} {row.currencyCode}
+                        </td>
+                        <td data-label={t("Tax total")}>
+                          {row.taxTotal} {row.currencyCode}
+                        </td>
+                        <td data-label={t("Gross total")}>
+                          {row.grossTotal} {row.currencyCode}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <h3>{t("By component")}</h3>
+              <div class="data-table-scroll">
+                <table class="data-table data-table--stack">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Profile")}</th>
+                      <th scope="col">{t("Component")}</th>
+                      <th scope="col">{t("Kind")}</th>
+                      <th scope="col">{t("Tax")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.report.byComponent.map((row) => (
+                      <tr>
+                        <th scope="row" data-label={t("Profile")}>
+                          {row.profileCode}
+                        </th>
+                        <td data-label={t("Component")}>{row.componentCode}</td>
+                        <td data-label={t("Kind")}>
+                          {SNAPSHOT_KIND_LABEL[row.kind]}
+                        </td>
+                        <td data-label={t("Tax")}>
+                          {row.taxAmount} {row.currencyCode}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <h3>{t("By treatment")}</h3>
+              <div class="data-table-scroll">
+                <table class="data-table data-table--stack">
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Profile")}</th>
+                      <th scope="col">{t("Treatment")}</th>
+                      <th scope="col">{t("Kind")}</th>
+                      <th scope="col">{t("Net")}</th>
+                      <th scope="col">{t("Tax")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.report.byTreatment.map((row) => (
+                      <tr>
+                        <th scope="row" data-label={t("Profile")}>
+                          {row.profileCode}
+                        </th>
+                        <td data-label={t("Treatment")}>
+                          {treatmentLabel(row.treatment)}
+                        </td>
+                        <td data-label={t("Kind")}>
+                          {SNAPSHOT_KIND_LABEL[row.kind]}
+                        </td>
+                        <td data-label={t("Net")}>
+                          {row.netAmount} {row.currencyCode}
+                        </td>
+                        <td data-label={t("Tax")}>
+                          {row.taxAmount} {row.currencyCode}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
+
+  const errorBox = messageBox("tax-action-error");
+  const errorElement = document.getElementById("tax-action-error");
+  const nextKey = createIdempotencyKeySource();
+
+  /** The message the server rendered (translated) for an error code. */
+  function messageFor(errorCode: string | null): string {
+    const data = errorElement?.dataset ?? {};
+    const generic = data.msgGeneric ?? "";
+
+    switch (errorCode) {
+      case "FORBIDDEN":
+      case "ACCESS_DENIED":
+        return data.msgForbidden ?? generic;
+      case "VALIDATION_ERROR":
+      case "VALIDATION_FAILED":
+      case "TAX_AMOUNT_NOT_ACCEPTED":
+        return data.msgValidation ?? generic;
+      case "TAX_VERSION_ALREADY_PUBLISHED":
+        return data.msgAlreadyPublished ?? generic;
+      case "TAX_VERSION_OUT_OF_ORDER":
+        return data.msgOutOfOrder ?? generic;
+      case "TAX_VERSION_BACKDATED":
+        return data.msgBackdated ?? generic;
+      case "RESOURCE_NOT_FOUND":
+        return data.msgNotFound ?? generic;
+      case "CONFLICT":
+      case "IDEMPOTENCY_KEY_CONFLICT":
+        return data.msgConflict ?? generic;
+      default:
+        return generic;
+    }
+  }
+
+  function blank(value: string): string | null {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+
+  onSubmit("rule-version-form", async ({ data, submit }) => {
+    let definition: unknown;
+
+    try {
+      definition = JSON.parse(field(data, "definition"));
+    } catch {
+      errorBox.show(errorElement?.dataset.msgJson ?? "");
+      return;
+    }
+
+    const body = {
+      profileCode: field(data, "profileCode").trim(),
+      name: field(data, "name").trim(),
+      jurisdictionCode: field(data, "jurisdictionCode").trim(),
+      countryCode: blank(field(data, "countryCode")),
+      regionCode: blank(field(data, "regionCode")),
+      currencyCode: field(data, "currencyCode").trim(),
+      pricingMode: field(data, "pricingMode"),
+      roundingMode: field(data, "roundingMode"),
+      roundingScale: Number(field(data, "roundingScale")),
+      roundingLevel: field(data, "roundingLevel"),
+      effectiveFrom: field(data, "effectiveFrom"),
+      notes: blank(field(data, "notes")),
+      definition
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("POST", "/api/v1/tax/rule-versions", body, {
+          "Idempotency-Key": nextKey({ create: body })
+        }),
+      messageFor
+    );
+  });
+
+  onAction(".js-publish-version", async (button) => {
+    const id = button.dataset.versionId;
+    if (!id) return;
+
+    const confirmed = await confirmAction(
+      button.dataset.confirm ?? "Publish this version?"
+    );
+    if (!confirmed) return;
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson(
+          "POST",
+          `/api/v1/tax/rule-versions/${encodeURIComponent(id)}/publish`,
+          undefined,
+          { "Idempotency-Key": nextKey({ publish: id }) }
+        ),
+      messageFor
+    );
+  });
+</script>

@@ -373,8 +373,14 @@ describe("module descriptor", () => {
     expect([...declared].sort()).toEqual(Object.values(TAX_PERMISSIONS).sort());
   });
 
-  test("it declares no navigation: the rule screens are a recorded follow-up, and an entry without a page is a permanent 404", () => {
-    expect(taxModule.navigation ?? []).toEqual([]);
+  test("it declares exactly one navigation entry, gated on a seeded read permission, and the page it points at exists", async () => {
+    const entries = taxModule.navigation ?? [];
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.path).toBe("/admin/tax");
+    expect(entries[0]!.requiredPermission).toBe(TAX_PERMISSIONS.rulesRead);
+    expect(await Bun.file("src/pages/admin/tax.astro").exists()).toBe(true);
+    expect(taxModule.status).toBe("active");
   });
 
   test("its retention floor matches the database's immutability floor (sql/172)", () => {

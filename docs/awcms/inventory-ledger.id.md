@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](inventory-ledger.md)
 
-<!-- i18n-source-hash: sha256:c4b9b28ba81990e008627adcc3de7b240dd1163a6906e772029ab500ec98dfa2 -->
+<!-- i18n-source-hash: sha256:007ca065f4d74dff9ef8b86fa592450310e47d0f0a7a6e6259be41bfc4b1e85b -->
 
 # Inventory — buku besar stok multi-lokasi (paket dokumen modul)
 
@@ -400,8 +400,9 @@ tetap ada, inert.
 
 ## 9. Tindak lanjut
 
-Layar admin (lokasi, saldo + daftar stok rendah, riwayat movement,
-penyesuaian/transfer dengan panel alasan, rekonsiliasi/rebuild);
-reservasi/hold; posting atomik multi-baris; konversi satuan; costing dan
+Layar admin sudah hadir di Issue #894 (`/admin/inventory`: lokasi, saldo +
+daftar stok rendah, riwayat movement, penyesuaian dengan pembalikan lewat panel
+alasan, transfer, kebijakan dan ambang, rekonsiliasi baca-saja); layar untuk
+rebuild masih terbuka — itu langkah runbook. Reservasi/hold; posting atomik multi-baris; konversi satuan; costing dan
 valuasi; partisi dan archive-lalu-purge; modul procurement/receiving dan bundle
 sadar-komponen yang bergantung pada modul ini.

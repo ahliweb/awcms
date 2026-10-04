@@ -605,3 +605,43 @@
   align-items: center;
   padding: 0.125rem 0;
 }
+
+/* Detail readout and a read-only JSON block (Issue #894 — /admin/tax). Both use
+   the same surface/text pairing every other card does, so neither adds a new
+   foreground/background combination. `min-width: 0` plus the wrapping rules are
+   what keep a long profile code or a wide definition from forcing the page to
+   scroll sideways at 360px. */
+.admin-detail-list {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr);
+  gap: var(--sp-1, 0.25rem) var(--sp-4, 1rem);
+  margin: 0 0 var(--sp-4, 1rem);
+}
+
+.admin-detail-list dt {
+  font-weight: 600;
+}
+
+.admin-detail-list dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-code-block {
+  margin: 0 0 var(--sp-4, 1rem);
+  padding: var(--sp-3, 0.75rem);
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 6px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--fs-sm);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 0.5rem);
+}
