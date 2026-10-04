@@ -532,8 +532,16 @@ describe("module descriptor", () => {
     expect(isHighRiskAction("create")).toBe(false);
   });
 
-  test("ships no navigation entry — the registry requires a real page and this module has none", () => {
-    expect(inventoryModule.navigation).toBeUndefined();
+  test("declares one navigation entry, gated on balances.read, and the page it points at exists", async () => {
+    expect(inventoryModule.navigation).toHaveLength(1);
+    expect(inventoryModule.navigation![0]!.path).toBe("/admin/inventory");
+    expect(inventoryModule.navigation![0]!.requiredPermission).toBe(
+      "inventory.balances.read"
+    );
+    expect(await Bun.file("src/pages/admin/inventory.astro").exists()).toBe(
+      true
+    );
+    expect(inventoryModule.status).toBe("active");
   });
 
   test("its low-stock projection passes the reporting registry validation", () => {

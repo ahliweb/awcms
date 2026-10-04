@@ -38,24 +38,21 @@ export const TAX_SNAPSHOT_ACTIVITY_PROJECTION_KEY = "tax.snapshot_activity";
  * No endpoint accepts a tax amount: a payload that names one is refused with its
  * own error code rather than ignored.
  *
- * ## API-first
+ * ## Surfaces
  *
- * This change ships the API only. The admin screens for authoring rules are a
- * recorded follow-up (ADR-0127), so this descriptor declares no `navigation` —
- * an entry without a real page is a permanent 404 in the sidebar.
+ * The HTTP contract is the machine surface; the operator surface is
+ * `/admin/tax` (Issue #894, ADR-0127): rule profiles and versions (draft, then
+ * publish with confirmation), the snapshot list and detail, and the
+ * reconciliation report. Finalising and reversing a document stay consumer
+ * actions.
  */
 export const taxModule = defineModule({
   key: TAX_MODULE_KEY,
   name: "Tax",
   version: "0.1.0",
-  // `experimental`, honestly: the API is complete and enforced, but there is no
-  // operator surface yet, and ADR-0021 criterion 1 (measured by
-  // `tests/admin-media-page-contract.test.ts`, ZERO exceptions) requires every
-  // ACTIVE module to declare an admin screen. `push_delivery` shipped the same way
-  // for three PRs. This becomes `active` in the change that adds `/admin/tax` —
-  // which is also the change that adds the `navigation` entry, never before.
-  // Behaviourally identical to `active`: only `disabled` changes what runs.
-  status: "experimental",
+  // `active` since `/admin/tax` landed with its `navigation` entry (Issue #894):
+  // ADR-0021 criterion 1 requires every ACTIVE module to declare a screen.
+  status: "active",
   description:
     "Generic, jurisdiction-neutral tax calculation (Issue #889, ADR-0127). Versioned rule profiles with effective windows (half-open, non-overlapping per profile, enforced in the database), tax categories, a jurisdiction/scope reference, inclusive and exclusive pricing, multiple components including compound/stacked ones, an explicit rounding mode, scale and level, and exempt vs zero-rated treatment kept distinct. One pure, deterministic calculator on exact bigint-rational arithmetic — no floating point — behind a stateless quote endpoint and an idempotent snapshot/finalise endpoint. A finalised document's tax is an APPEND-ONLY snapshot carrying a copy of the rule version it was computed under, and a refund or return is computed from that snapshot alone, so updating a rule can never change a historical document. Server-authoritative: a client can never submit a tax amount. Ships no country profile — that needs a verified regulatory mapping first (ADR-0127 §Regulatory applicability). Reconciliation: a counting projection on the reporting engine plus a live monetary reconciliation report with an integrity block. Domain events through the outbox; rule publication and reversal are high-risk, idempotency-keyed and audited.",
   dependencies: [
@@ -85,6 +82,14 @@ export const taxModule = defineModule({
       TAX_SNAPSHOT_REVERSED_EVENT_TYPE
     ]
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_tax",
+      path: "/admin/tax",
+      order: 20,
+      requiredPermission: "tax.rules.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "rules",

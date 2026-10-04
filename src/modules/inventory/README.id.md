@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:71f30f7d900f0d061b6757297925b3d070e38fcfd7d168ef3ba490d75f67fe85 -->
+<!-- i18n-source-hash: sha256:3deb6e8a927a0dfb2c5d6f70c0663b349d28b720a5a7046b7f79c2c8ddb4d177 -->
 
 # `inventory`
 
@@ -59,17 +59,21 @@ yang menerimanya, setiap body request divalidasi ketat, dan body yang menyebut
 | `balance == SUM(movements)`                             | `GET …/balances/reconciliation` membuktikannya; `POST …/balances/rebuild` memperbaikinya dari buku besar       |
 | Satu opening per kunci; pembalikan paling banyak sekali | Partial unique index                                                                                           |
 
-## Status: `experimental`
+## Status: `active`
 
-Didaftarkan `experimental`, seperti `push_delivery` (ADR-0074), karena
-permukaan HTTP dan port sudah lengkap dan ditegakkan tetapi belum ada layar
-admin, dan ADR-0021 kriteria 1 mewajibkan setiap modul `active` punya layar. PR
-yang menghadirkan layar pertama mengubahnya menjadi `active`.
+Didaftarkan `experimental` selama masih hanya-API (seperti `push_delivery`,
+ADR-0074), karena ADR-0021 kriteria 1 mewajibkan setiap modul `active` punya
+layar admin. `/admin/inventory` (Issue #894) adalah layar itu — saldo dengan
+sinyal stok rendah, riwayat pergerakan, penyesuaian dengan pembalikan (panel
+alasan), transfer, lokasi, kebijakan stok negatif dan ambang, serta rekonsiliasi
+baca-saja — dan hadir bersama entri `navigation`-nya, sehingga modul ini
+`active`. Layar tidak pernah menegaskan saldo: setiap perubahan di dalamnya
+adalah sebuah pergerakan.
 
 ## Yang TIDAK ada di sini
 
-Layar admin dan entri `navigation` (registri mewajibkan halaman nyata —
-tindak lanjut tercatat, ADR-0126 §9); reservasi/hold; konversi satuan;
+Layar untuk `inventory.balances.rebuild` dan `inventory.movements.create`
+(langkah runbook dan aksi konsumen); reservasi/hold; konversi satuan;
 costing/valuasi; posting atomik multi-baris; archive-lalu-purge dan partisi
 (tidak ada yang mem-purge buku besar, dan deskriptor menyatakannya —
 ADR-0126 §7).

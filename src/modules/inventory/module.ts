@@ -25,12 +25,13 @@
  * are published through its outbox in the SAME transaction as the change, and
  * `reporting` because the low-stock projection is registered on its engine.
  *
- * ## API-first
+ * ## Surfaces
  *
- * No admin screen and no `navigation` entry ship with this module — the
- * navigation registry requires a real page, and "admin screens for inventory"
- * is a recorded follow-up (ADR-0126 §9). The HTTP contract and the in-process
- * port are the surface.
+ * The HTTP contract and the in-process port are the machine surfaces; the
+ * operator surface is `/admin/inventory` (Issue #894, ADR-0126 §9) — balances
+ * with low-stock signals, the movement history, adjustments with reversal,
+ * transfers, locations and the negative-stock policy. It never asserts a
+ * balance: every change is a movement.
  */
 import {
   defineModule,
@@ -135,15 +136,12 @@ export const inventoryModule = defineModule({
   key: INVENTORY_MODULE_KEY,
   name: "Inventory",
   version: "0.1.0",
-  // `experimental`, not `active`, for the same reason as `push_delivery`
-  // (ADR-0074): the HTTP surface and the in-process port are complete and
-  // enforced, but the module has no admin screen yet, and the registry's
-  // "no ACTIVE module is left without a screen" gate (ADR-0021 criterion 1)
-  // rightly holds an active module to having one. Flip to `active` in the PR
-  // that lands the first screen and a `navigation` entry (ADR-0126 §9).
-  status: "experimental",
+  // `active` since the first admin screen (`/admin/inventory`, Issue #894)
+  // landed with its `navigation` entry: ADR-0021 criterion 1 requires every
+  // ACTIVE module to declare a screen, and this one now does.
+  status: "active",
   description:
-    "A generic, auditable multi-location STOCK LEDGER (Issue #887, ADR-0126) for any domain module — commerce, POS, storefront — that today keeps its own single stock counter on a product or variant row. Stock locations (scoped to the tenant and, optionally, a business location); IMMUTABLE finalised movements (opening, receive, sale, sale_return, supplier_return, transfer_out/transfer_in, adjustment) that are append-only by trigger AND by privileges, corrected only by compensating movements; a per-(location,item) balance that is a read model always equal to the sum of its movements, with a reconciliation that proves it and a rebuild that repairs a drifted row FROM the ledger; a negative-stock policy per tenant and location; a low-stock threshold with a projection on the reporting engine. Item references are an OPAQUE (item_type, item_ref) supplied by the consumer — never a foreign key to any catalogue — and a consumer adopts the ledger through `_shared/ports/inventory-ledger-port.ts` instead of writing a counter. Every posting carries an idempotent source identity (source type, id, line, operation); replaying it returns the ORIGINAL movement. A transfer is always a balanced out/in pair posted in one transaction and enforced at COMMIT by a deferred constraint trigger. Two concurrent attempts on the last unit cannot both succeed: balance rows are locked before the check and the update itself is guarded. A client can NEVER assert a balance — no endpoint accepts one, and every body is validated strictly. API-first: no admin screen ships with this module (recorded follow-up).",
+    "A generic, auditable multi-location STOCK LEDGER (Issue #887, ADR-0126) for any domain module — commerce, POS, storefront — that today keeps its own single stock counter on a product or variant row. Stock locations (scoped to the tenant and, optionally, a business location); IMMUTABLE finalised movements (opening, receive, sale, sale_return, supplier_return, transfer_out/transfer_in, adjustment) that are append-only by trigger AND by privileges, corrected only by compensating movements; a per-(location,item) balance that is a read model always equal to the sum of its movements, with a reconciliation that proves it and a rebuild that repairs a drifted row FROM the ledger; a negative-stock policy per tenant and location; a low-stock threshold with a projection on the reporting engine. Item references are an OPAQUE (item_type, item_ref) supplied by the consumer — never a foreign key to any catalogue — and a consumer adopts the ledger through `_shared/ports/inventory-ledger-port.ts` instead of writing a counter. Every posting carries an idempotent source identity (source type, id, line, operation); replaying it returns the ORIGINAL movement. A transfer is always a balanced out/in pair posted in one transaction and enforced at COMMIT by a deferred constraint trigger. Two concurrent attempts on the last unit cannot both succeed: balance rows are locked before the check and the update itself is guarded. A client can NEVER assert a balance — no endpoint accepts one, and every body is validated strictly. Operator surface: /admin/inventory.",
   dependencies: [
     "tenant_admin",
     "identity_access",
@@ -164,6 +162,14 @@ export const inventoryModule = defineModule({
     ],
     subscribes: []
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_inventory",
+      path: "/admin/inventory",
+      order: 10,
+      requiredPermission: "inventory.balances.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "locations",

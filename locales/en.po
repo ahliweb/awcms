@@ -6414,3 +6414,584 @@ msgstr ""
 
 msgid "Tax"
 msgstr ""
+
+# Issue #894 — the /admin/inventory and /admin/tax screens.
+
+msgid "A balance at or below its threshold is flagged and published as a low-stock signal. Leave the threshold empty to remove it."
+msgstr ""
+
+msgid "Adjustment"
+msgstr ""
+
+msgid "A draft changes nothing until it is published. Using an existing profile code adds the next version of that profile; a new code starts a new profile. This product ships no country profile: the rates and categories are yours to supply and verify."
+msgstr ""
+
+msgid "All kinds"
+msgstr ""
+
+msgid "All locations"
+msgstr ""
+
+msgid "Allow negative stock"
+msgstr ""
+
+msgid "All statuses"
+msgstr ""
+
+msgid "All types"
+msgstr ""
+
+msgid "An adjustment changes stock without a business document behind it, so its reason is the audit trail. Use a negative quantity to remove stock."
+msgstr ""
+
+msgid "A new version must take effect after the latest published version of its profile."
+msgstr ""
+
+msgid "A version cannot take effect in the past, or on a day that already has finalised documents."
+msgstr ""
+
+msgid "Away from zero"
+msgstr ""
+
+msgid "Back to the snapshot list"
+msgstr ""
+
+msgid "Balance after"
+msgstr ""
+
+msgid "Balances"
+msgstr ""
+
+msgid "By component"
+msgstr ""
+
+msgid "By rule version"
+msgstr ""
+
+msgid "By treatment"
+msgstr ""
+
+msgid "Ceiling"
+msgstr ""
+
+msgid "Change"
+msgstr ""
+
+msgid "Check the fields and the definition. The server rejected something in them."
+msgstr ""
+
+msgid "Check the values you entered and try again."
+msgstr ""
+
+msgid "Choose a period and run the report."
+msgstr ""
+
+msgid "Component"
+msgstr ""
+
+msgid "Consistent: {count} balance rows were checked and none drifted."
+msgstr ""
+
+msgid "Could not load inventory. Please try again."
+msgstr ""
+
+msgid "Could not load tax. Please try again."
+msgstr ""
+
+msgid "Could not save that. Please try again."
+msgstr ""
+
+msgid "{count} balances are negative although their policy forbids it."
+msgstr ""
+
+msgid "Country (ISO 3166-1 alpha-2, optional)"
+msgstr ""
+
+msgid "Create a draft version"
+msgstr ""
+
+msgid "Currency"
+msgstr ""
+
+msgid "Currency (ISO 4217)"
+msgstr ""
+
+msgid "Current published version"
+msgstr ""
+
+msgid "Damaged goods"
+msgstr ""
+
+msgid "Deactivate {code}? Nothing can be posted to it until it is reactivated. Its history and balances stay."
+msgstr ""
+
+msgid "Default policy"
+msgstr ""
+
+msgid "Definition"
+msgstr ""
+
+msgid "Definition (JSON)"
+msgstr ""
+
+msgid "Document"
+msgstr ""
+
+msgid "Document id"
+msgstr ""
+
+msgid "Document type"
+msgstr ""
+
+msgid "Drift found in {count} balance rows. Repair is an operator runbook step, not a button."
+msgstr ""
+
+msgid "Effective"
+msgstr ""
+
+msgid "Effective from"
+msgstr ""
+
+msgid "Exempt"
+msgstr ""
+
+msgid "Floor"
+msgstr ""
+
+msgid "Forbid negative stock"
+msgstr ""
+
+msgid "From location"
+msgstr ""
+
+msgid "From location id"
+msgstr ""
+
+msgid "Gross"
+msgstr ""
+
+msgid "Gross total"
+msgstr ""
+
+msgid "Half down"
+msgstr ""
+
+msgid "Half even (banker's)"
+msgstr ""
+
+msgid "Half up"
+msgstr ""
+
+msgid "Inherit the tenant default"
+msgstr ""
+
+msgid "In stock"
+msgstr ""
+
+msgid "Integrity: {count} documents were re-added and all agree."
+msgstr ""
+
+msgid "Integrity: {lines} documents disagree on their line sums and {components} on their component sums, out of {count} checked."
+msgstr ""
+
+msgid "Inventory sections"
+msgstr ""
+
+msgid "Item"
+msgstr ""
+
+msgid "Item reference"
+msgstr ""
+
+msgid "Item type"
+msgstr ""
+
+msgid "Jurisdiction"
+msgstr ""
+
+msgid "Jurisdiction code"
+msgstr ""
+
+msgid "Latest version"
+msgstr ""
+
+msgid "Ledger sum"
+msgstr ""
+
+msgid "Line"
+msgstr ""
+
+msgid "Lines"
+msgstr ""
+
+msgid "Location"
+msgstr ""
+
+msgid "Location id"
+msgstr ""
+
+msgid "Locations"
+msgstr ""
+
+msgid "Loss or theft"
+msgstr ""
+
+msgid "Lower-case letters, digits, dots, underscores and hyphens. The code is unique per tenant and cannot be changed."
+msgstr ""
+
+msgid "Low stock"
+msgstr ""
+
+msgid "Low stock only"
+msgstr ""
+
+msgid "Low-stock threshold"
+msgstr ""
+
+msgid "Movement history"
+msgstr ""
+
+msgid "Movements"
+msgstr ""
+
+msgid "Movement type"
+msgstr ""
+
+msgid "Moves stock between two locations as a balanced pair: one movement out and one in, posted together or not at all."
+msgstr ""
+
+msgid "Negative-stock policy"
+msgstr ""
+
+msgid "Net"
+msgstr ""
+
+msgid "Net of reversals"
+msgstr ""
+
+msgid "Net total"
+msgstr ""
+
+msgid "No balance is at or below its low-stock threshold."
+msgstr ""
+
+msgid "No default has been set, so the safe default (forbid) applies."
+msgstr ""
+
+msgid "No movements match. The ledger is empty or the filter excludes everything."
+msgstr ""
+
+msgid "No rule profile exists yet. A profile comes into being with its first draft version."
+msgstr ""
+
+msgid "No rule version matches."
+msgstr ""
+
+msgid "No snapshot falls in this period."
+msgstr ""
+
+msgid "No snapshot matches. A snapshot is written when a consumer finalises a document."
+msgstr ""
+
+msgid "No stock has been posted yet. Post an opening balance or an adjustment to start the ledger."
+msgstr ""
+
+msgid "No stock location is registered yet."
+msgstr ""
+
+msgid "Not enough stock, and the negative-stock policy forbids going below zero."
+msgstr ""
+
+msgid "Notes"
+msgstr ""
+
+msgid "Notes (optional)"
+msgstr ""
+
+msgid "Not found. Reload the page."
+msgstr ""
+
+msgid "Older movements"
+msgstr ""
+
+msgid "Older snapshots"
+msgstr ""
+
+msgid "Older versions"
+msgstr ""
+
+msgid "On hand"
+msgstr ""
+
+msgid "Opening balance"
+msgstr ""
+
+msgid "Per document"
+msgstr ""
+
+msgid "Per line"
+msgstr ""
+
+msgid "Post adjustment"
+msgstr ""
+
+msgid "Post an adjustment"
+msgstr ""
+
+msgid "Posts an equal and opposite adjustment. The original row stays in the ledger, and an adjustment can be reversed only once."
+msgstr ""
+
+msgid "Pricing"
+msgstr ""
+
+msgid "Profile code"
+msgstr ""
+
+msgid "Profile (optional)"
+msgstr ""
+
+msgid "{profile} v{version}"
+msgstr ""
+
+msgid "Publish {profile} v{version}? It becomes the rule that documents are computed under from {date}, closes the previous version at that date, and can never be edited or unpublished."
+msgstr ""
+
+msgid "Quantity"
+msgstr ""
+
+msgid "Quantity change"
+msgstr ""
+
+msgid "Reactivate"
+msgstr ""
+
+msgid "Read-only proof that every stored balance equals the sum of its movements. It changes nothing."
+msgstr ""
+
+msgid "Receive"
+msgstr ""
+
+msgid "Reconciliation report"
+msgstr ""
+
+msgid "Recorded on the compensating movement and the audit log."
+msgstr ""
+
+msgid "Region (optional)"
+msgstr ""
+
+msgid "Register a location"
+msgstr ""
+
+msgid "Register location"
+msgstr ""
+
+msgid "Reversal"
+msgstr ""
+
+msgid "Reversals"
+msgstr ""
+
+msgid "Reverse"
+msgstr ""
+
+msgid "Reverse adjustment"
+msgstr ""
+
+msgid "Reverses"
+msgstr ""
+
+msgid "(reverses {id})"
+msgstr ""
+
+msgid "Reverse this adjustment"
+msgstr ""
+
+msgid "Rounding"
+msgstr ""
+
+msgid "Rounding decimal places (0 to 6)"
+msgstr ""
+
+msgid "Rounding level"
+msgstr ""
+
+msgid "Rounding mode"
+msgstr ""
+
+msgid "Rule profiles"
+msgstr ""
+
+msgid "Rules"
+msgstr ""
+
+msgid "Rule version"
+msgstr ""
+
+msgid "Rule versions"
+msgstr ""
+
+msgid "Run reconciliation"
+msgstr ""
+
+msgid "Run report"
+msgstr ""
+
+msgid "Sale"
+msgstr ""
+
+msgid "Sale return"
+msgstr ""
+
+msgid "Sales"
+msgstr ""
+
+msgid "Save default"
+msgstr ""
+
+msgid "Save threshold"
+msgstr ""
+
+msgid "{scale} decimal places"
+msgstr ""
+
+msgid "Set a low-stock threshold"
+msgstr ""
+
+msgid "Signal"
+msgstr ""
+
+msgid "Snapshots"
+msgstr ""
+
+msgid "Stock balances"
+msgstr ""
+
+msgid "Stock count correction"
+msgstr ""
+
+msgid "Stock found"
+msgstr ""
+
+msgid "Stock locations"
+msgstr ""
+
+msgid "Stock locations, balances and the append-only movement ledger. A balance is always the sum of its movements, so nothing here edits one: stock changes by posting an adjustment or a transfer, and a mistake is corrected by a compensating movement."
+msgstr ""
+
+msgid "Stored balance"
+msgstr ""
+
+msgid "Supplier return"
+msgstr ""
+
+msgid "Taxable"
+msgstr ""
+
+msgid "Tax added on top (exclusive)"
+msgstr ""
+
+msgid "Tax by component"
+msgstr ""
+
+msgid "Tax date"
+msgstr ""
+
+msgid "Tax included in price (inclusive)"
+msgstr ""
+
+msgid "Tax sections"
+msgstr ""
+
+msgid "Tax snapshots"
+msgstr ""
+
+msgid "Tax total"
+msgstr ""
+
+msgid "Tenant default negative-stock policy"
+msgstr ""
+
+msgid "That conflicts with the current state. Reload the page and try again."
+msgstr ""
+
+msgid "That item is stocked in a different unit at this location."
+msgstr ""
+
+msgid "That location is inactive. Reactivate it before posting."
+msgstr ""
+
+msgid "That movement cannot be reversed. It may already have been."
+msgstr ""
+
+msgid "That rule version was not found."
+msgstr ""
+
+msgid "That snapshot was not found."
+msgstr ""
+
+msgid "That version is already published."
+msgstr ""
+
+msgid "The definition is not valid JSON."
+msgstr ""
+
+msgid "The list is truncated; more drift may exist."
+msgstr ""
+
+msgid "The period is not valid. The end must not be before the start, and it may span at most {days} days."
+msgstr ""
+
+msgid "To location"
+msgstr ""
+
+msgid "To location id"
+msgstr ""
+
+msgid "Totals of the finalised snapshots for a tax-date period, by rule version, component and treatment, net of reversals. The integrity block re-adds every stored document from its own lines and reports any that disagree. The period may span at most {days} days."
+msgstr ""
+
+msgid "Toward zero"
+msgstr ""
+
+msgid "Transfer in"
+msgstr ""
+
+msgid "Transfer out"
+msgstr ""
+
+msgid "Transfer stock"
+msgstr ""
+
+msgid "Treatment"
+msgstr ""
+
+msgid "Treatment is one of {treatments}; a component basis is one of {bases}. The server validates every field and refuses an unknown one."
+msgstr ""
+
+msgid "Unit"
+msgstr ""
+
+msgid "Unit price"
+msgstr ""
+
+msgid "Versioned tax rule profiles, the finalised tax snapshots they produced, and a reconciliation of the two. Tax is always computed by the server from a published rule version; nothing here lets anyone type an amount."
+msgstr ""
+
+msgid "Versions"
+msgstr ""
+
+msgid "Whether stock may silently go below zero. A location can override this; one that does not follows the default below."
+msgstr ""
+
+msgid "You do not have permission to do that."
+msgstr ""
+
+msgid "You do not have permission to view inventory."
+msgstr ""
+
+msgid "You do not have permission to view tax."
+msgstr ""
+
+msgid "Zero-rated"
+msgstr ""

@@ -85,7 +85,17 @@ const ROUTES = [
   { path: "/admin/media", label: "media" },
   { path: "/admin/omes", label: "OMES control centre index" },
   { path: "/admin/omes/jobs", label: "OMES jobs (detail screen)" },
-  { path: "/admin/site-profile", label: "site profile (SettingsSaveBar)" }
+  { path: "/admin/site-profile", label: "site profile (SettingsSaveBar)" },
+  // Issue #894 — the two screens that flipped `inventory` and `tax` to `active`.
+  // Both are multi-form and table-heavy, which is where contrast and label
+  // defects have collected before.
+  { path: "/admin/inventory", label: "inventory (balances view)" },
+  {
+    path: "/admin/inventory?view=movements",
+    label: "inventory (movements + adjust/transfer forms)"
+  },
+  { path: "/admin/tax", label: "tax (rule profiles + draft form)" },
+  { path: "/admin/tax?view=report", label: "tax (reconciliation form)" }
 ] as const;
 
 const tenantId = process.env.E2E_TENANT_ID;

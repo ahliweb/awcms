@@ -124,37 +124,21 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "omes_control.servers.delete",
   "omes_control.servers.register",
 
-  // inventory (12) — ADR-0126 / Issue #887. The stock ledger ships API-first;
-  // "admin screens for inventory" (locations, balances + low-stock list,
-  // movement history, adjustments/transfers, reconciliation) is a recorded
-  // follow-up, so each permission is listed here until a screen claims it.
+  // inventory (2) — ADR-0126 / Issue #887. `/admin/inventory` (Issue #894)
+  // claimed the other ten. What remains is not a form an operator should drive by
+  // hand: `balances.rebuild` rewrites balances from the ledger at critical
+  // severity (a runbook step), and `movements.create` posts caller-attested
+  // sale/receive/return movements, where "verifying the document is the consumer
+  // duty". Neither is a decision yet, so both stay on the shrink-only list.
   "inventory.balances.rebuild",
-  "inventory.balances.read",
-  "inventory.balances.reconcile",
-  "inventory.locations.create",
-  "inventory.locations.read",
-  "inventory.locations.update",
-  "inventory.movements.adjust",
   "inventory.movements.create",
-  "inventory.movements.read",
-  "inventory.movements.transfer",
-  "inventory.policy.configure",
-  "inventory.policy.read",
 
-  // tax (9) — ADR-0127 / Issue #889. The module ships API-first: the rule
-  // authoring, publication and reconciliation screens (`/admin/tax`) are the
-  // first recorded follow-up, and the `navigation` entry lands in the SAME change
-  // as the page (a descriptor entry without a page is a permanent 404). The
-  // endpoints are for consumers — a storefront, a POS — not for an operator's
-  // browser, which is why this is a ledger line and not a deliberate exemption
-  // for all nine: the rule and report keys WILL get a screen.
+  // tax (4) — ADR-0127 / Issue #889. `/admin/tax` (Issue #894) claimed the rule,
+  // snapshot-read and report keys. The four left are consumer actions — a
+  // storefront or POS quotes, finalises, refunds and (with a second permission)
+  // backdates a document; no operator composes one in a browser.
   "tax.calculations.analyze",
-  "tax.reports.read",
-  "tax.rules.configure",
-  "tax.rules.publish",
-  "tax.rules.read",
   "tax.snapshots.backdate",
   "tax.snapshots.create",
-  "tax.snapshots.read",
   "tax.snapshots.reverse"
 ];
