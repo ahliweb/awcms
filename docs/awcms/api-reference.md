@@ -11888,25 +11888,26 @@ _No properties declared._
 
 ### Schema: InventoryMovement
 
-| Field                | Type                                                     | Required | Nullable | Description                                                            |
-| -------------------- | -------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------- |
-| `id`                 | string (uuid)                                            | no       | no       |                                                                        |
-| `locationId`         | string (uuid)                                            | no       | no       |                                                                        |
-| `itemType`           | string                                                   | no       | no       |                                                                        |
-| `itemRef`            | string                                                   | no       | no       |                                                                        |
-| `unitCode`           | string                                                   | no       | no       |                                                                        |
-| `movementType`       | [`InventoryMovementType`](#schema-inventorymovementtype) | no       | no       |                                                                        |
-| `operation`          | string                                                   | no       | no       | Server-derived half of the source identity; `reversal` for a reversal. |
-| `quantityDelta`      | [`InventoryQuantity`](#schema-inventoryquantity)         | no       | no       |                                                                        |
-| `source`             | object                                                   | no       | no       |                                                                        |
-| `transferId`         | string (uuid)                                            | no       | yes      |                                                                        |
-| `reversesMovementId` | string (uuid)                                            | no       | yes      |                                                                        |
-| `reasonCode`         | string                                                   | no       | yes      |                                                                        |
-| `note`               | string                                                   | no       | yes      |                                                                        |
-| `occurredAt`         | string (date-time)                                       | no       | no       |                                                                        |
-| `createdAt`          | string (date-time)                                       | no       | no       |                                                                        |
-| `actorTenantUserId`  | string (uuid)                                            | no       | yes      |                                                                        |
-| `correlationId`      | string                                                   | no       | yes      |                                                                        |
+| Field                  | Type                                                     | Required | Nullable | Description                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                   | string (uuid)                                            | no       | no       |                                                                                                                                                                                                   |
+| `locationId`           | string (uuid)                                            | no       | no       |                                                                                                                                                                                                   |
+| `itemType`             | string                                                   | no       | no       |                                                                                                                                                                                                   |
+| `itemRef`              | string                                                   | no       | no       |                                                                                                                                                                                                   |
+| `unitCode`             | string                                                   | no       | no       |                                                                                                                                                                                                   |
+| `movementType`         | [`InventoryMovementType`](#schema-inventorymovementtype) | no       | no       |                                                                                                                                                                                                   |
+| `operation`            | string                                                   | no       | no       | Server-derived half of the source identity; `reversal` for a reversal.                                                                                                                            |
+| `quantityDelta`        | [`InventoryQuantity`](#schema-inventoryquantity)         | no       | no       |                                                                                                                                                                                                   |
+| `source`               | object                                                   | no       | no       |                                                                                                                                                                                                   |
+| `transferId`           | string (uuid)                                            | no       | yes      |                                                                                                                                                                                                   |
+| `reversesMovementId`   | string (uuid)                                            | no       | yes      |                                                                                                                                                                                                   |
+| `reversedByMovementId` | string (uuid)                                            | no       | yes      | The reversal that compensated this adjustment, or null when it has not been reversed. Populated by the movement listing and detail reads; a movement returned by a posting response carries null. |
+| `reasonCode`           | string                                                   | no       | yes      |                                                                                                                                                                                                   |
+| `note`                 | string                                                   | no       | yes      |                                                                                                                                                                                                   |
+| `occurredAt`           | string (date-time)                                       | no       | no       |                                                                                                                                                                                                   |
+| `createdAt`            | string (date-time)                                       | no       | no       |                                                                                                                                                                                                   |
+| `actorTenantUserId`    | string (uuid)                                            | no       | yes      |                                                                                                                                                                                                   |
+| `correlationId`        | string                                                   | no       | yes      |                                                                                                                                                                                                   |
 
 **Example**
 
@@ -11927,6 +11928,7 @@ _No properties declared._
   },
   "transferId": "00000000-0000-0000-0000-000000000000",
   "reversesMovementId": "00000000-0000-0000-0000-000000000000",
+  "reversedByMovementId": "00000000-0000-0000-0000-000000000000",
   "reasonCode": "string",
   "note": "string",
   "occurredAt": "2026-01-01T00:00:00.000Z",
@@ -12026,6 +12028,7 @@ _No properties declared._
         },
         "transferId": "00000000-0000-0000-0000-000000000000",
         "reversesMovementId": "00000000-0000-0000-0000-000000000000",
+        "reversedByMovementId": "00000000-0000-0000-0000-000000000000",
         "reasonCode": "string",
         "note": "string",
         "occurredAt": "2026-01-01T00:00:00.000Z",

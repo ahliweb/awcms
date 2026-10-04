@@ -112,13 +112,16 @@ test.describe("inventory and tax screens (owner, writes)", () => {
     await panel.locator("[data-reason-panel-submit]").click();
 
     // The page reloads; the compensating row is a `reversal` operation, and the
-    // original no longer offers a Reverse button of its own once reversed is
-    // not knowable from the list — what is observable is the new row.
+    // original no longer offers a Reverse button (Issue #900) — the listing now
+    // says it has been reversed.
     await expect(
       table.locator(
         `tr:has-text("${itemReversed}") [data-operation="reversal"]`
       )
     ).toHaveCount(1);
+    await expect(
+      table.locator(`tr:has-text("${itemReversed}") .js-reverse-adjustment`)
+    ).toHaveCount(0);
   });
 
   test("sets a low-stock threshold and sees the signal", async ({ page }) => {

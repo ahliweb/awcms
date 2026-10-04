@@ -43,6 +43,8 @@ export type MovementRow = {
   operation: MovementOperation;
   transfer_id: string | null;
   reverses_movement_id: string | null;
+  /** Only the movement read paths select it; absent elsewhere. */
+  reversed_by_movement_id?: string | null;
   reason_code: string | null;
   note: string | null;
   request_fingerprint: string;
@@ -66,6 +68,12 @@ export type Movement = {
   source: { type: string; id: string; line: string };
   transferId: string | null;
   reversesMovementId: string | null;
+  /**
+   * The reversal that compensated this adjustment, or null. Only the movement
+   * listing/get populate it; rows returned by a posting carry null because they
+   * were just written (Issue #900).
+   */
+  reversedByMovementId: string | null;
   reasonCode: string | null;
   note: string | null;
   occurredAt: string;
@@ -92,6 +100,7 @@ export function mapMovement(row: MovementRow): Movement {
     },
     transferId: row.transfer_id,
     reversesMovementId: row.reverses_movement_id,
+    reversedByMovementId: row.reversed_by_movement_id ?? null,
     reasonCode: row.reason_code,
     note: row.note,
     occurredAt: new Date(row.occurred_at).toISOString(),

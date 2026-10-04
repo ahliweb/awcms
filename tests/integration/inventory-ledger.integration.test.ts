@@ -594,6 +594,43 @@ suite("inventory ledger (Issue #887, ADR-0126)", () => {
       expect(await onHand(TENANT_A, locA1)).toBe("10");
     });
 
+    test("the movement listing says which adjustment has been reversed (#900)", async () => {
+      await post(TENANT_A, movement(locA1, "receive", "10"));
+      const reversedTarget = expectPosted(
+        await inTenant(TENANT_A, (tx) =>
+          postAdjustment(tx, TENANT_A, adjustment(locA1, "-2"), ACTOR)
+        )
+      )[0]!;
+      const untouched = expectPosted(
+        await inTenant(TENANT_A, (tx) =>
+          postAdjustment(tx, TENANT_A, adjustment(locA1, "-1"), ACTOR)
+        )
+      )[0]!;
+      const reversal = expectPosted(
+        await inTenant(TENANT_A, (tx) =>
+          reverseAdjustment(
+            tx,
+            TENANT_A,
+            reversedTarget.id,
+            { reasonCode: "undo", note: null },
+            ACTOR
+          )
+        )
+      )[0]!;
+
+      const { movements } = await inTenant(TENANT_A, (tx) =>
+        listMovements(tx, TENANT_A, { locationId: locA1 })
+      );
+      const byId = new Map(movements.map((m) => [m.id, m]));
+
+      expect(byId.get(reversedTarget.id)!.reversedByMovementId).toBe(
+        reversal.id
+      );
+      expect(byId.get(untouched.id)!.reversedByMovementId).toBeNull();
+      expect(byId.get(reversal.id)!.reversedByMovementId).toBeNull();
+      expect(byId.get(reversal.id)!.reversesMovementId).toBe(reversedTarget.id);
+    });
+
     test("only an adjustment is reversible; a reversal is not", async () => {
       const received = expectPosted(
         await post(TENANT_A, movement(locA1, "receive", "10"))
