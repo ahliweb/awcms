@@ -1,0 +1,102 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0126-generic-multi-location-stock-ledger-module-admission.id.md)
+
+# ADR-0126 — Admission of the generic multi-location stock ledger (`inventory`)
+
+- **Status:** Accepted
+- **Date:** 2026-10-04
+- **Decision maker:** ahliweb
+- **Extends:** [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md) (consumers depend on a neutral port, never on this module's code), [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (an ERP domain module is built directly in `src/modules/`), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md) (every handler authorizes through the chokepoint), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md) (every table answers the data-subject question)
+- **Related:** Issue #887 (this module); downstream `ahliweb/awcms-one#282` (consumes this through the subtree sync) and `ahliweb/awcms-one#290` (component-aware bundles, depends on it); [`docs/awcms/inventory-ledger.md`](../awcms/inventory-ledger.md) (PRD-lite, ERD, data dictionary, permissions/RLS matrix, consumer adapter contract, migration path, rollback); `sql/169_awcms_inventory_schema.sql`; `sql/170_awcms_inventory_permissions.sql`; `src/modules/inventory/`
+
+## Context
+
+Today a domain module that sells things — a commerce, POS or storefront module — keeps its own stock as one counter on a product or variant row. A counter answers "how many are there now". It cannot answer where, why, who changed it, or whether the number is still the sum of what happened, and two concurrent sales of the last unit are a read-modify-write race on that one cell. The downstream template `awcms-one` embeds AWCMS through a subtree and named this repository as the implementation owner of a generic ledger, so that it consumes the result through the normal subtree sync rather than building a local divergence (ADR-0055: capabilities are built here, with their own admission ADR).
+
+Per `docs/awcms/21_module_admission_governance.md` §3 this is an **ERP Domain Module** (§4.3): generic across every industry that holds stock (trading, manufacturing, services with consumables), disableable per tenant, `type: "domain"`. It is not Core or System — nothing boots without it — and it is not vertical: it knows nothing about products, prices or orders.
+
+## Decision
+
+### 1. One module, `inventory`, an append-only ledger with a derived balance
+
+`src/modules/inventory/`, key `inventory`, registered after `omes_control`. The **truth** is `awcms_inventory_movements`; `awcms_inventory_balances` is a **read model** that is always `SUM(quantity_delta)` of its key. Nothing else writes `on_hand`: every posting — sale, receipt, adjustment, reversal, transfer — goes through ONE function, `postLegs`, so each invariant below lives in one place and cannot be bypassed by a second code path.
+
+### 2. Movements are immutable, enforced by the database
+
+Finalised movements are append-only by a `BEFORE UPDATE OR DELETE` row trigger **and** by `REVOKE UPDATE, DELETE, TRUNCATE … FROM awcms_app`. Either alone reads as a control and is not one (a role granted later bypasses privileges; an application-level check bypasses neither). A mistake is corrected by a **compensating** movement, never an edit.
+
+Types: `opening`, `receive`, `sale`, `sale_return`, `supplier_return`, `transfer_out`/`transfer_in`, `adjustment`. The type owns the sign — a `sale` that adds stock is refused by a `CHECK`, not trusted to the caller. `reservation`/`hold` (named by the issue as "later") are **not** in this ADR and, when added, will be a separate table: a hold that can be released is exactly the mutability this table must not have.
+
+**Openings need `movements.adjust`, not `movements.create`.** An `opening` states a starting quantity out of a stated number — no business document a consumer could point at and none the ledger could cross-check — which is the same kind of power as an adjustment. It is therefore NOT postable through `POST /movements`; it has its own endpoint, `POST /openings`, guarded by `movements.adjust` (high-risk, separately grantable) and audited at `warning`. A POS service account that holds `create` to ring up sales can not conjure inventory. (A dedicated `movements.open` permission was considered and rejected: it would be a thirteenth permission guarding the same blast radius as `adjust`, which tenants already know how to grant narrowly.) The generic endpoint accepts only the caller-attested kinds `receive`, `sale`, `sale_return`, `supplier_return`, and `source.type` `reversal` is reserved for the server on every entry point so a caller cannot pre-claim the identity a reversal is derived under.
+
+**The ledger trusts the caller's source identity.** It can prove a source was not posted twice; it cannot prove the document exists or that the quantity matches it. `movements.create` is therefore _caller-attested_, and verifying the source — that the order, receipt or return is real and belongs to the tenant and the actor — is the consumer's duty, stated in the permission descriptions, the OpenAPI text and the port contract rather than implied.
+
+**Reversal** is deliberately narrow: only an `adjustment` is reversible, once (partial unique index), and a reversal is not reversible. Every other type already has its natural counterpart (`sale_return` for `sale`, `supplier_return` for `receive`, a transfer back). An unbounded reversal graph with no business document behind any link of it is how a ledger becomes unauditable.
+
+### 3. Item references are opaque — no foreign key to any catalogue
+
+`(item_type, item_ref)` is supplied by the consumer and is **not** a foreign key. A hard FK would make this module depend on every consumer's schema, the exact coupling ADR-0011 forbids, and would duplicate catalogue master data. The cost is stated: the ledger cannot know that an `item_ref` names a deleted product. That duty belongs to the consumer, written down in the adapter contract. The alphabet of `item_ref` and the source identity is bounded (`A-Za-z0-9_.:-`) and run through the same secret-shape detector the event outbox uses, because they travel in event payloads and `appendDomainEvent` hard-rejects a credential-shaped value — an unlucky opaque id must be a 400 at the edge, not a 500 from inside the transaction.
+
+**Unit of measure.** Quantities are `numeric(20,6)` and decimal **strings** on the wire (never floats). One `(item, location)` has exactly one stock unit, recorded on the balance when its first movement lands; a movement carrying a different `unit_code` is refused (`409 UNIT_MISMATCH`), not summed and not converted. Conversion ("box of 12" to "each") is a catalogue concern; summing two units silently is how a ledger stays true to the digit and wrong in meaning.
+
+### 4. Idempotent source identity, and replay returns the original
+
+Every movement carries `(tenant, source_type, source_id, source_line, operation)` under a unique key; `operation` is server-derived from the type (`reversal` for a reversal) so a caller cannot dodge detection by renaming it. Posting an existing identity with the same canonical request returns the **original** movement(s) (`replayed: true`); with a different payload it is `409 SOURCE_CONFLICT`. A transaction-scoped advisory lock on the identity serialises concurrent requests for it, so the loser sees the winner's committed row and replays instead of posting and then failing a constraint after it has already moved a balance.
+
+This is **separate from** the `Idempotency-Key` header, which the API also requires: the header deduplicates a retried HTTP request, the source identity deduplicates the business document — one order line posted under two different keys must still post once.
+
+### 5. Concurrency: the last unit
+
+Each balance row is locked `FOR UPDATE` (in a fixed order, so opposing transfers cannot deadlock) before the check, and the `UPDATE` is itself guarded (`WHERE … on_hand + delta >= 0`), so two concurrent attempts serialise on the row and the second re-evaluates against the first's result. A cheap non-locking pre-read refuses an obviously impossible withdrawal **before any row is created** — otherwise every refused sale of a never-stocked item would commit an empty balance row (a 4xx `Response` returned from a handler still COMMITS), letting an authorized caller grow the table with arbitrary references. All legs of a transfer are validated before any is written, for the same reason.
+
+**Negative-stock policy** resolves as location override → tenant default → `forbid`. `forbid` refuses a movement that would take a balance below zero; it never blocks a movement that only improves a balance (a receipt into an already-negative balance). `reconciliation` reports, separately from drift, balances that are negative under a `forbid` policy: ledger and balance can agree perfectly and still describe a state the policy rules out (it was tightened after the stock went negative).
+
+### 6. Transfers are balanced pairs; locations are never deleted
+
+A transfer is an out leg and an in leg sharing a `transfer_id`, posted in one transaction. A **deferred constraint trigger** independently refuses to COMMIT anything that is not exactly one out leg and one in leg, same item and unit, two different locations, netting to zero — the database does not trust the application to have built the pair.
+
+Locations are scoped to the tenant and optionally to a business location (`awcms_offices`, composite FK). A location with movements can never be deleted without orphaning ledger rows, so the lifecycle is `active` ↔ `inactive` (no new postings, history stays readable). This honours the soft-delete rule by not needing delete at all.
+
+### 7. Retention: there is none, and it says so
+
+The ledger is an accounting-grade record and an immutable trigger would reject any purge, so **nothing purges `awcms_inventory_movements` or `awcms_inventory_low_stock_signals`**. Both are registered with `data_lifecycle` as `delegated` descriptors whose adopter reads `none — retained indefinitely`, so the table answers the retention question on the record rather than by silence. The three non-ledger tables (locations, settings, balances) are registered the same way rather than argued into `BOUNDED_BY_DESIGN`, whose bar is "a net shrink, not an argument" — what they need is the same honest statement: no age-based purge would be correct for them (it would delete a live location, a live balance, or the tenant's policy for being old).
+
+**Known limitation, stated rather than hidden:** the movement table grows with every sale and is a monthly range-partition candidate (the descriptor says so). Partitioning an existing table is a destructive migration and archive-then-purge needs a deliberately privileged job; both are follow-ups needing their own ADR. Until then growth is bounded only by traffic. The `TRUNCATE` privilege is revoked from `awcms_app`; a `BEFORE TRUNCATE` trigger was tried and removed because the integration harness and any operator's reset tooling legitimately truncate every `awcms_` table as a privileged role.
+
+### 8. Reconciliation, rebuild, and the personal-data boundary
+
+`GET …/balances/reconciliation` proves `balance == SUM(movements)` or lists every key where it does not (including movements with no balance row). `POST …/balances/rebuild` repairs a drifted balance **from the ledger** — locking the row first and recomputing in a fresh statement, because a single `UPDATE … FROM (SELECT SUM …)` would take its sum in the statement's snapshot and then overwrite a row a waiting poster had since changed. The request carries no quantity, so rebuild cannot be used to assert a balance. It is high-risk and audited at `critical`.
+
+A client can **never** assert a balance: no operation accepts one, every body is validated strictly, and a body naming `onHand`/`balanceAfter`/`balance` is a `400` that names the field. An `opening` is a movement like any other once posted (once per key, first only), and is guarded as described in §2. No response carries a running balance either: `balanceAfter` is not returned by any endpoint and `INSUFFICIENT_STOCK` does not report the on-hand quantity — a caller holding `movements.create` but not `balances.read` must not be able to read stock out of a refusal. The ledger row keeps `balance_after` (the second witness for reconciliation), and the in-process port and the event payload carry it because those callers are composition roots that have already authorized.
+
+Personal data: ledger rows record what happened to goods. A person appears only as `actor_tenant_user_id` (answered `severed_with_subject_row` — the row cannot be rewritten anyway). `note` is bounded free text and **must not carry personal data** — the audit row deliberately omits it. `item_ref` **must be an opaque catalogue key**, never a person's name or an identifier of one; the validators bound its alphabet but cannot read its meaning.
+
+**Hardening recorded after the security review of PR #891.** (a) A posting whose resulting balance would pass `numeric(20,6)` is a `422 QUANTITY_OUT_OF_RANGE` decided before anything is written, not a 500 from inside the transaction. (b) The location row is read `FOR SHARE` in the posting path, so a concurrent deactivation or policy flip serialises with in-flight postings instead of racing them. (c) The replay fingerprint now includes `reasonCode` and `note`: a retry with a different reason is a `SOURCE_CONFLICT`, not a silent replay that tells the caller their new reason was recorded. (d) `occurredAt` may not be in the future beyond a few minutes of skew, and may not be older than `INVENTORY_BACKDATE_WINDOW_DAYS` (default 7) unless the caller also holds `movements.adjust`; the extra check goes through the chokepoint and writes its own decision-log row. (e) A database trigger refuses a row that claims `reverses_movement_id` unless it is an exact opposite of an adjustment at the same location, item and unit. (f) `awcms_worker` is granted `SELECT` on `awcms_inventory_low_stock_signals`, because the reporting engine's incremental worker reads the projection source as that role; `tests/reporting-projection-worker-grants.test.ts` now asks the question for every registered projection source.
+
+**Accepted residual risk — raw SQL.** The invariants above hold against the application and, for immutability, transfer balance and reversal matching, against any role holding INSERT. They do not hold against a role that can bypass them, and these gaps are accepted rather than hidden: the table OWNER or a superuser can disable a trigger, `TRUNCATE`, or `UPDATE awcms_inventory_balances` directly (the reconciliation exists to detect precisely that, and rebuild to repair it); a privileged session can INSERT a movement whose `balance_after` is wrong or that has no matching balance update (reconciliation reports it as drift); a privileged session can forge `request_fingerprint`, `actor_tenant_user_id` within its own tenant, or `correlation_id`; and `awcms_app` itself can INSERT a non-transfer movement directly, bypassing the posting core's policy checks, because the runtime role must be able to INSERT through the posting core. The mitigation is the one this repository applies everywhere: the runtime role holds no DDL or trigger privilege, only the posting core writes these tables, and every drift is detectable by a read-only endpoint.
+
+### 9. API-first; admin screens are a recorded follow-up
+
+14 route files, no admin screen and **no `navigation` entry** (the navigation registry requires a real page and this PR adds none). The module is registered `experimental`, exactly as `push_delivery` was for the same reason (ADR-0074): ADR-0021 criterion 1 holds every `active` module to having a screen, and flipping the status to `active` belongs in the PR that lands the first one. The twelve permissions are recorded in `NOT_YET_SCREENED`, which is the ledger's own mechanism for "declared, enforced, not yet screened". **Follow-up:** admin screens for inventory — locations, balances + low-stock list, movement history, adjustments/transfers with the reason panel, reconciliation/rebuild.
+
+### 10. Security, events and reporting
+
+- **Authorization:** every handler is a `defineTenantRoute` and authorizes through `authorizeInTransaction` (ADR-0063); default-deny. Twelve permissions seeded by `sql/170`, split by weight: `movements.create` (everyday), `movements.adjust` and `movements.transfer` (new high-risk `AccessAction` members — no business document behind an adjustment, two balances change in a transfer), `policy.configure` (decides whether `create` may go negative), `balances.rebuild` (writes balances). Nothing is granted to any role by the migration; existing tenants use `identity-access:permissions:backfill` like every earlier seed.
+- **Tenancy:** every table has `tenant_id`, `ENABLE`+`FORCE` RLS with `USING` and `WITH CHECK`, and every reference is a composite `(tenant_id, id)` FK, so RLS is not the only thing between a movement and another tenant's location.
+- **Audit:** every post, reversal, transfer, policy/threshold/location change and rebuild is audited with the correlation id, the note omitted; a replay audits nothing (a retry is not a second event).
+- **Events:** `awcms.inventory.movement.posted` (one per leg, ordered per balance) and `awcms.inventory.stock.low` (once per downward crossing) go through the domain-event outbox **in the same transaction**; a refused or replayed posting publishes nothing. AsyncAPI channels added; payloads are opaque references and decimal strings.
+- **Reporting:** the `inventory.low_stock` projection is registered on the existing engine as **two monotonic counters** (`below_signals`, `recovered_signals`) over the append-only `awcms_inventory_low_stock_signals` transition log; their difference is the number of balances currently low. One gauge with `+1`/`-1` under a single key is forbidden by the engine's own stream validation and, split across two streams, unsafe: the engine clamps a decrement at zero, so a recovery applied before its own crossing would be silently lost. The live detail is `GET …/balances?lowStockOnly=true`. Posting uses the `critical_transaction` work class.
+
+## Consequences
+
+- **Consumer adoption** is expand → backfill → reconcile → contract, documented in `docs/awcms/inventory-ledger.md` together with the `InventoryLedgerPort` adapter contract (`_shared/ports/inventory-ledger-port.ts`). The consumer must stop writing its own counter; a second writable counter is two sources of truth and reconciliation will say so.
+- **Rollback** is forward-only like every migration here: stop calling the ledger, keep the tables (they are inert), and — because the ledger never touched the consumer's counter during _expand_ — the consumer can fall back to it. Dropping the tables is a restore-class decision documented in the doc pack, not a `down` migration.
+- **Cost:** two new `AccessAction` members, 5 tables, 12 permissions, 14 routes, and a posting path that locks rows. Measured under the harness: 480 postings by 8 concurrent workers in ≈0.2 s with zero oversell; the guarded balance update, per-item history, newest-first listing and idempotency probe all plan as index scans with no `Sort` over 24,000 movement rows.
+- **Deferred, not forgotten:** reservations/holds; multi-line atomic posting (one sale with N lines is N calls today — each atomic and idempotent, so a partial failure is compensated by `sale_return`); unit conversion; costing/valuation; archive-then-purge and partitioning; admin screens.
+
+## Alternatives rejected
+
+- **A counter column with `UPDATE … WHERE qty >= n`** (no ledger): safe for the last unit but answers none of where/why/who and cannot be reconciled against anything.
+- **A foreign key to a product table:** couples this module to every consumer (ADR-0011) and duplicates catalogue data.
+- **Event sourcing with balances computed on read:** pure but makes every "in stock?" check an aggregate over a table that grows with every sale. The balance is a read model; reconciliation is what keeps it honest.
+- **A `BEFORE TRUNCATE` trigger:** broke every integration suite for a protection the `REVOKE` already gives the only role that serves requests.
+- **Putting these tables in `BOUNDED_BY_DESIGN`:** the list's own bar is a net shrink; descriptors that state "nothing purges this" answer the same question without raising it.

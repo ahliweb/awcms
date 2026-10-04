@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](13_final_master_index_traceability.md)
 
-<!-- i18n-source-hash: sha256:c633fff257ca5426856e830940f70ff5e7aed29ca337cc00becbb2e27c3defdf -->
+<!-- i18n-source-hash: sha256:947bb299c01ac5ef65468c3a8f5a5a5b0aabf90594f09cdf5c380e753726f5c3 -->
 
 # Bagian 13 — Final Master Index dan Traceability Matrix
 
@@ -144,13 +144,13 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 diproduksi `bun run repo:inventory:generate` (`scripts/repo-inventory.ts`) dari
 registry modul, `sql/`, `tests/`, `src/pages/`, dan `docs/adr/`, dan
 `bun run repo:inventory:check` ada di rantai `bun run check`. **79 file migration nyata** di
-`sql/` (`001`..`081`), dipetakan ke **25 modul terdaftar** (urutan
+`sql/` (`001`..`081`), dipetakan ke **26 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
 `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`,
 `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`,
-`comments`, `idn-admin-regions`, `push-delivery`, `omes-control` — **25 modul**; `news-portal` dilebur ke `blog-content` oleh
+`comments`, `idn-admin-regions`, `push-delivery`, `omes-control`, `inventory` — **26 modul**; `news-portal` dilebur ke `blog-content` oleh
 [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md)). Tabel ini
 menggantikan versi sebelumnya yang mengutip nama file fiktif (mis.
 `003_awcms_catalog_inventory_schema.sql`,

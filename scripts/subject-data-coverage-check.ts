@@ -71,6 +71,16 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0102. One row per TENANT holding the PUBLISHER's own published identity — masthead tagline, footer copyright, editorial address, and the contact channels the newsroom prints on its own contact page. It records nothing the tenant holds ABOUT a third party, which is what a subject-access request asks for; a reader exercising their rights against this site is not asking for the site's own address. The honest edge case, stated rather than skipped: a small newsroom may type a person's address into `contact_email` or `whatsapp_number`. That value is still the publisher's own, published deliberately by the person who typed it, and erasing it is editing the field on `/admin/site-profile` — not a subject-rights workflow, which would have no way to distinguish it from the masthead it sits beside. It is also why the audit row for a change records WHICH FIELDS are set and never their values: the values do not need a second copy in a store more people read."
   },
   {
+    table: "awcms_inventory_balances",
+    reason:
+      "ADR-0126 / Issue #887. A derived read model of stock quantities: tenant, location, an OPAQUE consumer item reference, a unit, a decimal and a threshold. No column can be traced to a person — there is no actor stamp on the row at all (the actor is on the immutable movement that changed it, which is answered by its own descriptor). The one residual risk is the consumer's choice of `item_ref`: ADR-0126 §8 requires it to be an opaque catalogue key, never a person's name or an identifier of one, and the validators bound its alphabet but cannot read its meaning."
+  },
+  {
+    table: "awcms_inventory_low_stock_signals",
+    reason:
+      "ADR-0126 / Issue #887. An append-only log of a balance crossing its low-stock line: tenant, location, opaque item reference, a kind and two decimals. No actor, no free text, nothing about a person — it records what happened to goods. Immutable by trigger, so there is also nothing an erasure could rewrite."
+  },
+  {
     table: "awcms_permissions",
     reason:
       "The global catalogue of permission NAMES, written only by migrations. Every row is a string an author chose; no column can be traced to a person, and none is scoped to a tenant."

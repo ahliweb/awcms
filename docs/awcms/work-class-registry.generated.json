@@ -672,6 +672,76 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/inventory/adjustments/[id]/reversal.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/adjustments/index.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/balances/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/balances/rebuild.ts",
+      "workClass": "reporting",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/balances/reconciliation.ts",
+      "workClass": "reporting",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/balances/threshold.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/locations/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/locations/[id]/negative-stock-policy.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/locations/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/movements/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/movements/index.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/openings/index.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/policy.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/inventory/transfers/index.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/invitations/[id]/resend.ts",
       "workClass": "interactive",
       "source": "factory"

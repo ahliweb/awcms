@@ -147,6 +147,39 @@ channels:
       without re-reading the row. The recipient address is resolved from
       encrypted storage by the dispatcher at send time and is never carried
       here.
+  awcms.inventory.movement.posted:
+    address: awcms.inventory.movement.posted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A stock movement was posted to the append-only inventory ledger and its
+      balance updated, in ONE transaction (ADR-0126, Issue #887). Producer:
+      `inventory/application/inventory-ledger.ts`'s posting core, shared by
+      `postMovement`, `postAdjustment`, `reverseAdjustment` and `postTransfer`
+      (a transfer publishes one event per leg). Published in the same commit as
+      the movement, so a rolled-back posting publishes nothing; a REPLAY of an
+      already-posted source identity publishes nothing either. Ordered per
+      balance (`order_key` = location + item). The payload carries opaque item
+      and source references and decimal-string quantities only — `movementId`,
+      `locationId`, `itemType`, `itemRef`, `unitCode`, `movementType`,
+      `operation`, `quantityDelta`, `balanceAfter`, `sourceType`, `sourceId`,
+      `sourceLine`, `transferId`, `reversesMovementId`. Never the free-text note
+      and never anything identifying a person.
+  awcms.inventory.stock.low:
+    address: awcms.inventory.stock.low
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A stock balance crossed to or below its low-stock threshold (ADR-0126,
+      Issue #887) — by a movement or by a threshold change. Producer:
+      `inventory/application/inventory-ledger.ts`'s
+      `recordLowStockTransition`. Published ONCE per downward crossing, not on
+      every movement while the balance stays low, and never for the recovery
+      (that is recorded in the signals table the reporting projection reads).
+      Payload: `locationId`, `itemType`, `itemRef`, `onHand`, `threshold`,
+      `movementId` (null when a threshold change caused it).
   awcms.email.message.queued:
     address: awcms.email.message.queued
     messages:
@@ -529,6 +562,18 @@ operations:
       $ref: "#/channels/awcms.comments.reply.created"
     messages:
       - $ref: "#/channels/awcms.comments.reply.created/messages/DomainEvent"
+  publishInventoryMovementPosted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.inventory.movement.posted"
+    messages:
+      - $ref: "#/channels/awcms.inventory.movement.posted/messages/DomainEvent"
+  publishInventoryStockLow:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.inventory.stock.low"
+    messages:
+      - $ref: "#/channels/awcms.inventory.stock.low/messages/DomainEvent"
   publishEmailMessageQueued:
     action: send
     channel:

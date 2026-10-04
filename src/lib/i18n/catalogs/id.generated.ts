@@ -741,6 +741,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Interrupted": ["Terhenti"],
   "Interval": ["Interval"],
   "Interval (minutes)": ["Interval (menit)"],
+  "Inventory": ["Inventori"],
   "Invitations": ["Undangan"],
   "Invite somebody": ["Undang seseorang"],
   "Issue a credential": ["Terbitkan kredensial"],

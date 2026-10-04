@@ -1,5 +1,5 @@
 {
-  "moduleCount": 25,
+  "moduleCount": 26,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -160,6 +160,28 @@
       "permissionCount": 4,
       "navigationCount": 1,
       "jobCount": 3,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "inventory",
+      "name": "Inventory",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "domain_event_runtime",
+        "reporting"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 12,
+      "navigationCount": 0,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

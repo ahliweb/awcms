@@ -24,6 +24,7 @@ import { commentsModule } from "./comments/module";
 import { idnAdminRegionsModule } from "./idn-admin-regions/module";
 import { pushDeliveryModule } from "./push-delivery/module";
 import { omesControlModule } from "./omes-control/module";
+import { inventoryModule } from "./inventory/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -166,7 +167,16 @@ const baseModules: ModuleDescriptor[] = [
   // backup verification, and host execution audit projections.
   // Depends only on tenant_admin/identity_access (both above), so the DAG stays acyclic.
   // See src/modules/omes-control/module.ts's `description`.
-  omesControlModule
+  omesControlModule,
+  // Admitted by ADR-0126 (Issue #887): a generic multi-location stock ledger —
+  // append-only movements, derived balances, reconciliation, a negative-stock
+  // policy and a low-stock projection — that a commerce/POS/storefront module
+  // adopts through `_shared/ports/inventory-ledger-port.ts` instead of keeping
+  // its own counter. Depends on tenant_admin/identity_access/logging/
+  // domain_event_runtime/reporting (all above), so the DAG stays acyclic; nothing
+  // depends on it. API-first: no admin screen yet. See
+  // src/modules/inventory/module.ts's `description`.
+  inventoryModule
 ];
 
 /**
