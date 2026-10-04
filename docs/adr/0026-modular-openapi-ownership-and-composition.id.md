@@ -1,12 +1,13 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0026-modular-openapi-ownership-and-composition.md)
 
-<!-- i18n-source-hash: sha256:b5709dfd8075b949d4c5e8fd80c9f7bf8a30b7f40c511b99886592e531c5a2bf -->
+<!-- i18n-source-hash: sha256:f8cfabc746804ae6ea4a3e8b26613c1b77ae59f1b23cde76a40e8c5baa66a781 -->
 
 # ADR-0026 — Kontrak OpenAPI modular: kepemilikan per modul, bundle deterministik, dan kontribusi fragment dari aplikasi turunan
 
 - **Status:** Accepted
 - **Tanggal:** 2026-07-19
 - **Pengambil keputusan:** @ahliweb
+- **Diubah oleh:** [ADR-0129](0129-idempotency-key-is-a-shared-openapi-parameter-component.id.md) (fragmen root memperoleh komponen parameter bersama `IdempotencyKey`)
 - **Terkait:** Issue #182 (epic #177 "Kesiapan fondasi ERP turunan", Wave 1), ADR-0008 (versioning kontrak independen), ADR-0025/ADR-0014 (composition seam #178), ADR-0013 (extension boundary), ADR-0022 (modul ERP di repo ekstensi), ADR-0023 (bilingual docs), `openapi/awcms-public-api.src.yaml`, `openapi/modules/*.openapi.yaml`, `scripts/openapi-bundle.ts`, `scripts/api-spec-check.ts`, `scripts/api-docs-generate.ts`, `openapi/README.md`, `docs/awcms/api-contribution-guide.md`
 
 ## Konteks

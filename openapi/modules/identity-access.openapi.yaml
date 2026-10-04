@@ -1977,11 +1977,7 @@ paths:
         `identity_access.business_scope_assignments.create`. Requires
         `Idempotency-Key`.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2068,11 +2064,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2249,11 +2241,7 @@ paths:
         `identity_access.business_scope_exceptions.create`. Requires
         `Idempotency-Key`.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -2426,11 +2414,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: false
         content:
@@ -2489,11 +2473,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: false
         content:
@@ -2553,11 +2533,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -4716,11 +4692,7 @@ paths:
         mailbox.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:

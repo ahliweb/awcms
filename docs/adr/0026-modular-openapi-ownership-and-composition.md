@@ -5,6 +5,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-19
 - **Decision maker:** @ahliweb
+- **Amended by:** [ADR-0129](0129-idempotency-key-is-a-shared-openapi-parameter-component.md) (the root fragment gains the shared `IdempotencyKey` parameter component)
 - **Related:** Issue #182 (epic #177 "Derived ERP foundation readiness", Wave 1), ADR-0008 (independent contract versioning), ADR-0025/ADR-0014 (composition seam #178), ADR-0013 (extension boundary), ADR-0022 (ERP modules live in the extension repo), ADR-0023 (bilingual docs), `openapi/awcms-public-api.src.yaml`, `openapi/modules/*.openapi.yaml`, `scripts/openapi-bundle.ts`, `scripts/api-spec-check.ts`, `scripts/api-docs-generate.ts`, `openapi/README.md`, `docs/awcms/api-contribution-guide.md`
 
 ## Context

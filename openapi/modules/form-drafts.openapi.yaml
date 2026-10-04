@@ -250,11 +250,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Submitted form draft.

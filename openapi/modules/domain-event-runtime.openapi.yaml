@@ -231,11 +231,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:

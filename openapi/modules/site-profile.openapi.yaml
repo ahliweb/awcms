@@ -62,11 +62,7 @@ paths:
         number are contact data and the audit log is read more widely than the
         screen.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true

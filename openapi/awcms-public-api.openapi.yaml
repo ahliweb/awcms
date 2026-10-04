@@ -1341,11 +1341,7 @@ paths:
       description: "Gated by visitor_analytics.retention.purge. Destructive, high-risk: requires Idempotency-Key, audited `critical`. Deletes events past eventRetentionDays, clears session raw detail past rawDetailRetentionDays, deletes orphaned sessions, and deletes rollups past rollupRetentionDays."
       operationId: analyticsRetentionPurge
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -4761,11 +4757,7 @@ paths:
       summary: Archive a blog page
       description: Gated by blog_content.pages.archive (ADR-0057). High-risk, requires Idempotency-Key. Removes the page from the public site without destroying it; published_at is retained so a later re-publish keeps the original go-live date.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -4810,11 +4802,7 @@ paths:
       summary: Publish a blog page
       description: Gated by blog_content.pages.publish (ADR-0057). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. Pages have a narrower lifecycle than posts - no review, no scheduled - so the only sources for this transition are draft and archived. No social-publishing hook is invoked - that port's trigger is post_published and a page is not an article.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -4865,11 +4853,7 @@ paths:
       summary: Permanently purge an archived or soft-deleted blog page
       description: Gated by blog_content.pages.purge (ADR-0057). High-risk, irreversible, requires Idempotency-Key. Only an archived or previously soft-deleted page may be purged. Advertisement placements targeting this page neither block the purge nor are deleted with it - they simply go inert, exactly as they already do for a soft-deleted page, because the render query matches target_id against the page being rendered. Their count is returned as adPlacementsNowInert so the change is visible rather than silent.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -4970,11 +4954,7 @@ paths:
       summary: Restore a soft-deleted blog page
       description: Gated by blog_content.pages.restore (ADR-0057). High-risk, requires Idempotency-Key. Undoes a soft delete, not an archive - lifecycle status is left untouched, so a page soft-deleted while published comes back published. A page that is not soft-deleted answers 404, the same shape as an unknown id, so restore cannot be used to probe which ids exist.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -5338,11 +5318,7 @@ paths:
       summary: Archive a blog post
       description: Gated by blog_content.posts.archive. High-risk, requires Idempotency-Key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -5471,11 +5447,7 @@ paths:
       summary: Publish a blog post
       description: Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing outbox hook (a documented no-op in this base — social_publishing is not ported).
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -5526,11 +5498,7 @@ paths:
       summary: Permanently purge a soft-deleted blog post
       description: Gated by blog_content.posts.purge. High-risk, irreversible, requires Idempotency-Key. Only a previously soft-deleted post may be purged.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -5619,11 +5587,7 @@ paths:
       summary: Restore a soft-deleted blog post
       description: Gated by blog_content.posts.restore. High-risk, requires Idempotency-Key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -5761,11 +5725,7 @@ paths:
       summary: Restore a post to an earlier revision
       description: Gated by blog_content.revisions.restore. High-risk, requires Idempotency-Key. Restoring APPENDS a new revision snapshot of the restored content — it never overwrites or removes the revision being restored from.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -5816,11 +5776,7 @@ paths:
       summary: Schedule a blog post for future publishing
       description: Gated by blog_content.posts.schedule. High-risk, requires Idempotency-Key. Same content quality checklist gate as publish. The blog:publish:scheduled job later performs the actual publish once scheduledAt <= now().
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -6748,11 +6704,7 @@ paths:
         RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, an anti-abuse block, and an accepted-but-held-for-moderation comment ALL return `{"status":"received"}`. Only a comment that is immediately publicly visible returns its id and status. A caller therefore cannot use this endpoint to enumerate blocked terms, probe the timing floor, or discover unpublished resources.
       security: []
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -6991,11 +6943,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: The comment was archived.
@@ -7039,11 +6987,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: The comment was soft-deleted.
@@ -7084,11 +7028,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -7154,11 +7094,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: The comment was returned to pending.
@@ -7193,11 +7129,7 @@ paths:
       summary: Apply one moderation action to many comments.
       description: "Guarded by the same permission the single-comment action requires. Each comment is evaluated independently: the response reports which ids were applied and which were skipped, with the reason. A partial result is a 200, not an error — the applied decisions are real and must not be implied to have rolled back."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -7341,11 +7273,7 @@ paths:
       summary: Update this tenant's comment configuration.
       description: Requires `comments.settings.update`. A partial body is merged over the current settings. High-risk (it changes the public comment surface), idempotency-keyed, and audited with before/after values. Every bound mirrors a database CHECK constraint, so an out-of-range value is a 400 rather than a constraint violation.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -7472,11 +7400,7 @@ paths:
       description: "Gated by data_lifecycle.legal_hold.create. High-risk mutation: requires Idempotency-Key, reason-required (min 10 chars), audited critical. Creating a hold does NOT grant the ability to release one (default-deny release)."
       operationId: dataLifecycleLegalHoldsCreate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -7527,11 +7451,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -7722,11 +7642,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -7782,11 +7698,7 @@ paths:
       description: "ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.create and it ERASES NOTHING — it records a request for somebody else to decide. Execution lives behind POST /{id}/decide under a different permission, and the row's own CHECK constraint refuses a decision by its own requester, so a caller holding both keys still cannot approve their own request. High-risk: requires Idempotency-Key, a stated ground, audited critical. The response previews what approving it would actually WRITE (`wouldWrite`) — far fewer tables than the subject appears in, because most are severed by anonymising the identity row and need no write of their own."
       operationId: dataLifecycleSubjectEraseRequest
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -7846,11 +7758,7 @@ paths:
       description: "ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export."
       operationId: dataLifecycleSubjectExport
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -8185,11 +8093,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -8330,11 +8234,7 @@ paths:
       summary: Enqueue a notification/announcement (idempotent, two-tier ABAC, audited).
       description: Requires Idempotency-Key. email.notification.create for every request; email.announcement.create additionally for role/tenant targets.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -9151,11 +9051,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Submitted form draft.
@@ -9277,11 +9173,7 @@ paths:
       summary: Create a business-scope assignment (high-risk, audited, idempotent).
       description: Grants a subject a role/permission context restricted to one business scope. The `(scopeType, scopeId)` reference is validated server-side through the `BusinessScopeHierarchyPort` capability (never trusted from the request alone); an unresolved scope is denied `SCOPE_UNRESOLVED`. Self-grant is denied. Gated on `identity_access.business_scope_assignments.create`. Requires `Idempotency-Key`.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -9363,11 +9255,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -9528,11 +9416,7 @@ paths:
       summary: Request a SoD conflict exception (high-risk, audited, idempotent).
       description: 'Requests a bounded-lifetime, scope-bound exception to a registered SoD rule (`status: "pending"`, requires separate approval by a different user holding the rule''s approval permission). The rule must exist in the code registry and permit exceptions; the exception must have an end date (no indefinite override). Gated on `identity_access.business_scope_exceptions.create`. Requires `Idempotency-Key`.'
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -9615,11 +9499,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: false
         content:
@@ -9675,11 +9555,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: false
         content:
@@ -9735,11 +9611,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -9836,11 +9708,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -9884,11 +9752,7 @@ paths:
       description: Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` required, audited. The target is resolved from `activated_at` history, never supplied by the caller — letting the client name the destination would make this an activation wearing a safer-sounding name. Returns 409 when there is no previously activated version.
       operationId: idnRegionsDatasetRollback
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -10064,13 +9928,7 @@ paths:
       summary: Post a stock adjustment
       description: Gated by `inventory.movements.adjust` (HIGH-RISK). The one movement type that carries its own sign (`quantityDelta`) and the only way to change stock without a business document behind it, so `reasonCode` is REQUIRED — the reason is the audit trail. Requires an Idempotency-Key; audited at warning severity. Undo it with the reversal endpoint, never by editing a row (the ledger is append-only).
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10123,13 +9981,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10246,13 +10098,7 @@ paths:
       summary: Repair drifted balances from the ledger
       description: "Gated by `inventory.balances.rebuild` (HIGH-RISK). Recomputes each drifted balance FROM the movement ledger — the request carries no quantity, so this cannot be used to assert a balance, and a body naming anything but `locationId` is a 400. Idempotent: a second call finds nothing to repair. Bounded per call (`truncated: true` means call again). Requires an Idempotency-Key; audited at CRITICAL severity with the before/after of every repaired key."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: false
@@ -10335,13 +10181,7 @@ paths:
       summary: Set or clear a low-stock threshold
       description: Gated by `inventory.policy.configure`. Touches `lowStockThreshold` and NOTHING else — the on-hand quantity is not a field of this request and a body that names one is a 400. A threshold change can move a balance across the low-stock line; that transition is recorded in the same transaction and a downward crossing is published as `awcms.inventory.stock.low`. Requires an Idempotency-Key; audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10583,13 +10423,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10730,13 +10564,7 @@ paths:
 
         Refusals write nothing: `409 INSUFFICIENT_STOCK` (the negative-stock policy forbids going below zero), `409 UNIT_MISMATCH` (the ledger never converts units), `409 LOCATION_INACTIVE`, `404 LOCATION_NOT_FOUND`, `422 QUANTITY_OUT_OF_RANGE` (the balance would exceed numeric(20,6)). `INSUFFICIENT_STOCK` carries the requested quantity but NOT the on-hand balance, and no response carries a running balance: that is `balances.read`. Two concurrent attempts on the last unit cannot both succeed. There is no field by which a client can state a balance.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10820,13 +10648,7 @@ paths:
       summary: Post an opening balance
       description: Gated by `inventory.movements.adjust` (HIGH-RISK) — NOT `create`. An opening states the STARTING quantity of an item at a location out of a stated number, with no business document to cross-check, which is the same kind of power as an adjustment. Once per (location, item) and only as its first movement (`409 OPENING_NOT_FIRST`). The body is a movement WITHOUT `movementType`; naming one is a 400. Requires an Idempotency-Key and a `source` identity; audited at warning severity.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10905,13 +10727,7 @@ paths:
       summary: Set the tenant default negative-stock policy
       description: Gated by `inventory.policy.configure`. Requires an Idempotency-Key; audited at warning severity with the before/after value.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -10962,13 +10778,7 @@ paths:
       summary: Transfer stock between two locations
       description: Gated by `inventory.movements.transfer` (HIGH-RISK). Posts a BALANCED out/in pair in ONE transaction (out leg first in the response), both legs validated against locked state before either is written, so a refused transfer leaves nothing behind. A deferred constraint trigger in the database independently refuses to commit anything that is not exactly one out leg and one in leg netting to zero. Replaying the same source identity returns the ORIGINAL pair. Requires an Idempotency-Key; audited at warning severity.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          description: Deduplicates a retried HTTP request; at most 255 characters.
-          schema:
-            type: string
-            maxLength: 255
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -11073,11 +10883,7 @@ paths:
         `skipEmailConfirmation` requires the PLATFORM-scoped `identity_access.invitations.configure`, unless the address already holds an active identity in this tenant — which is the same proof, already given. It removes the only evidence that the recipient controls that mailbox.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -11306,11 +11112,7 @@ paths:
       description: "Gated by media_library.enforcement.enable. High-risk, requires Idempotency-Key. Enables managed-media enforcement: from then on, content media references must resolve to verified, same-tenant registry objects rather than raw URLs (ADR-0036 step 5a). This is the switch a brochure-site tenant (`blog_content` + `tenant_domain`, no news portal) previously did not have. This operation is one-way and there is deliberately no counterpart that disables enforcement — a tenant able to switch its own media validation off is a confirmed exploit this design exists to prevent (see migration `sql/043`'s header). A deployment that must roll back does so by changing its `NEWS_MEDIA_R2_*` configuration. Idempotent: re-enabling an already-enforcing tenant succeeds, refreshes the timestamp, and returns `alreadyEnforced: true`; only a successful enable is recorded under the Idempotency-Key, so a rejected (not-ready) attempt may retry the same key after the R2 config is fixed."
       operationId: mediaEnforcementEnable
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -11436,11 +11238,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: false
@@ -11562,11 +11360,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -11626,11 +11420,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -11685,11 +11475,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -11738,11 +11524,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -13102,11 +12884,7 @@ paths:
       description: Gated by omes_control.ai_privacy.approve. A RESTRICTED classification resolving to a cloud_sanitized destination is structurally refused — unconditionally, independent of the submitted reason_code — before the canonical workflow-approval engine is ever touched, and is also blocked by a database CHECK constraint. Refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED if the tenant has not published an active approval workflow. Requires Idempotency-Key, audited critical.
       operationId: omesSubmitAiEgressApproval
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -13384,11 +13162,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "201":
@@ -13734,11 +13508,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -13785,11 +13555,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -14087,11 +13853,7 @@ paths:
       description: 'Guarded per-operation: status/preflight require deployments.read; start/stop/restart/update/backup require deployments.operate; rollback requires backups.rollback. operation is a closed enum copied verbatim from the OMES contract operation-request.schema.json. Destructive operations (stop, rollback) route through the canonical workflow-approval engine — refused with 409 APPROVAL_WORKFLOW_NOT_CONFIGURED if the tenant has not published an active workflow under key "omes_control.destructive_operation". Rate-limited per actor, requires Idempotency-Key, audited.'
       operationId: omesSubmitOperation
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -14288,11 +14050,7 @@ paths:
       description: Gated by omes_control.repository_progress.configure (a NEW permission — see sql/167). owner/name are re-validated server-side against the GitHub identifier charset regardless of client input. Reconfiguring to a different repository clears any existing projection for the old one. Requires Idempotency-Key, audited.
       operationId: omesSetRepositoryProgressConfig
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -14348,11 +14106,7 @@ paths:
       description: Gated by omes_control.repository_progress.configure. Also clears any existing projection row. Requires Idempotency-Key, audited.
       operationId: omesClearRepositoryProgressConfig
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Configuration cleared.
@@ -14426,11 +14180,7 @@ paths:
       description: Gated by omes_control.servers.register. Records registration INTENT only (status=offline, no heartbeat) — never talks to a host. Rate-limited per actor. Requires Idempotency-Key.
       operationId: omesRegisterServer
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -14553,11 +14303,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -14604,11 +14350,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "201":
@@ -14671,11 +14413,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -15474,11 +15212,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "200":
           description: Profile restored.
@@ -16075,11 +15809,7 @@ paths:
       operationId: reportsCreateScheduledExport
       summary: Create a scheduled export config. High-risk — requires Idempotency-Key, audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -16144,11 +15874,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -16266,11 +15992,7 @@ paths:
       operationId: reportsTriggerExport
       summary: Manually generate an export of a projection's current snapshot. High-risk — requires Idempotency-Key, audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -16420,11 +16142,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -16477,11 +16195,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -16971,11 +16685,7 @@ paths:
       description: "Gated by seo_distribution.config.update. High-risk mutation — rewrites the public metadata/indexability surface (including the tenant-wide noindex switch): requires Idempotency-Key and is audited. Full replace of the mutable fields (PUT semantics); unknown keys are ignored. Tenant-scoped (withTenant + RLS FORCE)."
       operationId: seoConfigUpdate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -17210,11 +16920,7 @@ paths:
       description: "High-risk: requires an Idempotency-Key, audited. The target is validated through the frozen open-redirect guard and the rule is rejected if it conflicts with an existing source/scope, self-redirects, or would create a loop / over-long chain. Gated by seo_distribution.redirect.create. Tenant-scoped (withTenant + RLS FORCE)."
       operationId: seoRedirectsCreate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -17394,11 +17100,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -17453,11 +17155,7 @@ paths:
       description: Turn an old→new public path change into an audited redirect PROPOSAL (inactive) or active rule per the tenant's url_change_auto_policy (overridable). Idempotency-keyed. Gated by seo_distribution.redirect.create.
       operationId: seoRedirectsCaptureUrlChange
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -17529,11 +17227,7 @@ paths:
       description: "Validate + safety-check up to 200 rules. dryRun: true returns a per-item report writing nothing; a real import is all-or-nothing (idempotency-keyed, audited). Gated by seo_distribution.redirect.create."
       operationId: seoRedirectsImport
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -17614,11 +17308,7 @@ paths:
       description: "High-risk (the legacy-blog toggle changes public routing intent): requires an Idempotency-Key, audited. Gated by seo_distribution.redirect.update."
       operationId: seoRedirectSettingsUpdate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -17929,11 +17619,7 @@ paths:
       summary: Replace this tenant's site chrome
       description: 'Gated by `site_profile.profile.update`, separately grantable from `.read` because changing what every public page''s contact block says is a different power from reading it. FULL REPLACE, not a patch: an omitted or empty field is stored as null. That is deliberate — a form that submits its whole state cannot express "leave this one alone", and pretending it could would make clearing a wrong phone number impossible. Requires an Idempotency-Key and is audited; the audit row records WHICH FIELDS are set, never their values, because an address and a phone number are contact data and the audit log is read more widely than the screen.'
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -18038,11 +17724,7 @@ paths:
       summary: Force a full search index rebuild
       description: "Gated by `site_search.index.rebuild` — a HIGH-RISK action: it deletes every one of the tenant's index documents for the registered sources and re-extracts them. Idempotent (the end state is identical regardless of prior state), Idempotency-Key'd, and audited."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -18078,11 +17760,7 @@ paths:
       summary: Run an idempotent search index reconciliation
       description: Gated by `site_search.index.reconcile`. Upserts the tenant's currently public documents (skipping any whose checksum already matches) and deletes index documents whose source row is gone or no longer public, so an archive/delete/unpublish never leaves a stale public result. Running it while already in sync is a no-op. Deliberately NOT classified high-risk (a fully regenerable projection sync), but still Idempotency-Key'd and audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -18281,11 +17959,7 @@ paths:
       summary: Replace this tenant's search configuration
       description: "Gated by `site_search.settings.update`. Changes what the PUBLIC search surface returns (including the tenant-wide search on/off switch and the opt-in query-analytics switch), so it requires an Idempotency-Key and is audited. Merge semantics: omitted fields keep their current value; unknown keys are ignored."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -19072,11 +18746,7 @@ paths:
       summary: Author a draft tax rule version
       description: "Gated by `tax.rules.configure` (high-risk). Creates a DRAFT — it is not resolved by any quote or snapshot until published. The version number is assigned by the server (next for the profile). Requires an `Idempotency-Key` (a retry must not mint a second draft) and is audited. The definition is validated strictly: a taxable rule needs at least one component, exempt and zero-rated rules must have none, every category a rule names must be declared, a category has one rule, and there is at most one fallback rule (`categoryCode: null`)."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -19153,11 +18823,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -19248,11 +18914,7 @@ paths:
       summary: Finalise a document's tax into an immutable snapshot
       description: "Gated by `tax.snapshots.create`. The server computes the tax exactly as `/quote` does and writes it, with a copy of the rule version it used, into an APPEND-ONLY row (enforced by a database trigger): nothing about the rules can change that document afterwards, and a refund is computed from this row alone. Idempotent two ways — the required `Idempotency-Key` replays the stored response, and the natural key `(documentType, documentId)` returns the existing snapshot (200) when the SAME request is repeated even under a new key, and `409 TAX_DOCUMENT_ALREADY_FINALISED` when a DIFFERENT request names an already-finalised document. Audited; emits `awcms.tax.snapshot.finalised` through the outbox. Like `/quote`, a body that names a tax amount is refused with `400 TAX_AMOUNT_NOT_ACCEPTED`, a `pricingMode` is refused as an unrecognised field, and an oversized figure is `422 TAX_INPUT_INVALID`. A `taxDate` outside the server-date window (default 7 days back, 1 forward) additionally needs `tax.snapshots.backdate` (high-risk) and is otherwise `403 TAX_BACKDATE_PERMISSION_REQUIRED` — never accepted silently."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -19335,11 +18997,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -19606,11 +19264,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -19654,11 +19308,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -20401,11 +20051,7 @@ paths:
       summary: Provision a new tenant with its owner account (PLATFORM-scoped).
       description: "Gated by tenant_admin.tenant_provisioning.create, which is scope: platform. Creates the tenant, its head office, the owner profile/identity/tenant-user, the system `owner` role, and that role's grants — the SAME code path the setup wizard uses, so the `WHERE scope = 'tenant'` filter on those grants cannot drift between the two. A provisioned tenant NEVER receives platform-scoped permissions. `Idempotency-Key` required; audited in the platform tenant's log. Returns 409 when the tenant_code is taken."
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -20620,11 +20266,7 @@ paths:
       description: "Save the single draft config for a chosen theme (bounded, validated design tokens, slot variants, media asset ids, section order, nav placement). The body is validated against the theme descriptor (the CSS-injection spine + declared-surface bounding) before any DB work. High-risk (the draft is what publish promotes): requires an `Idempotency-Key`, audited. Gated by `theming.config.update`."
       operationId: themingDraftUpdate
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -20716,11 +20358,7 @@ paths:
       description: "Publish the current draft as a new IMMUTABLE version and make it the live look (INSERT-only; published versions are immutable). High-risk: requires an `Idempotency-Key`, audited. Gated by `theming.version.publish`."
       operationId: themingPublish
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -20756,11 +20394,7 @@ paths:
       description: "Clear the active theme pointer so the site falls back to the default theme; published versions stay intact (history/rollback). High-risk: requires an `Idempotency-Key`, audited. Gated by `theming.version.archive`."
       operationId: themingRetire
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -20802,11 +20436,7 @@ paths:
       description: "Move the active pointer to an earlier published version of this tenant (never mutates a version row). High-risk: requires an `Idempotency-Key`, audited. Gated by `theming.version.restore`."
       operationId: themingRollback
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -21548,11 +21178,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         content:
@@ -21637,11 +21263,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -21684,11 +21306,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -21798,11 +21416,7 @@ paths:
       summary: Create a workflow delegation from the calling tenant user (idempotent, audited).
       description: A tenant user can only delegate their OWN standing. High-risk — requires Idempotency-Key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -21868,11 +21482,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         content:
@@ -21956,11 +21566,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -22071,11 +21677,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -22138,11 +21740,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -22202,11 +21800,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -22274,6 +21868,16 @@ components:
       required: false
       schema:
         type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129).
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: ^[!-~]{1,255}$
     SyncNodeId:
       name: X-AWCMS-Node-ID
       in: header

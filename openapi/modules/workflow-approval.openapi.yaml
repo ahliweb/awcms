@@ -206,11 +206,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         content:
@@ -295,11 +291,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -342,11 +334,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -456,11 +444,7 @@ paths:
       summary: Create a workflow delegation from the calling tenant user (idempotent, audited).
       description: A tenant user can only delegate their OWN standing. High-risk — requires Idempotency-Key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -526,11 +510,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         content:
@@ -614,11 +594,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -729,11 +705,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -796,11 +768,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -860,11 +828,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true

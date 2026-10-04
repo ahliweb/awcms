@@ -322,11 +322,7 @@ paths:
       summary: Publish a blog post
       description: Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing outbox hook (a documented no-op in this base — social_publishing is not ported).
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -376,11 +372,7 @@ paths:
       summary: Schedule a blog post for future publishing
       description: Gated by blog_content.posts.schedule. High-risk, requires Idempotency-Key. Same content quality checklist gate as publish. The blog:publish:scheduled job later performs the actual publish once scheduledAt <= now().
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -452,11 +444,7 @@ paths:
       summary: Archive a blog post
       description: Gated by blog_content.posts.archive. High-risk, requires Idempotency-Key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -500,11 +488,7 @@ paths:
       summary: Restore a soft-deleted blog post
       description: Gated by blog_content.posts.restore. High-risk, requires Idempotency-Key.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -548,11 +532,7 @@ paths:
       summary: Permanently purge a soft-deleted blog post
       description: Gated by blog_content.posts.purge. High-risk, irreversible, requires Idempotency-Key. Only a previously soft-deleted post may be purged.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -812,11 +792,7 @@ paths:
       summary: Restore a post to an earlier revision
       description: Gated by blog_content.revisions.restore. High-risk, requires Idempotency-Key. Restoring APPENDS a new revision snapshot of the restored content — it never overwrites or removes the revision being restored from.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -1189,11 +1165,7 @@ paths:
       summary: Publish a blog page
       description: Gated by blog_content.pages.publish (ADR-0057). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. Pages have a narrower lifecycle than posts - no review, no scheduled - so the only sources for this transition are draft and archived. No social-publishing hook is invoked - that port's trigger is post_published and a page is not an article.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -1243,11 +1215,7 @@ paths:
       summary: Archive a blog page
       description: Gated by blog_content.pages.archive (ADR-0057). High-risk, requires Idempotency-Key. Removes the page from the public site without destroying it; published_at is retained so a later re-publish keeps the original go-live date.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -1291,11 +1259,7 @@ paths:
       summary: Restore a soft-deleted blog page
       description: Gated by blog_content.pages.restore (ADR-0057). High-risk, requires Idempotency-Key. Undoes a soft delete, not an archive - lifecycle status is left untouched, so a page soft-deleted while published comes back published. A page that is not soft-deleted answers 404, the same shape as an unknown id, so restore cannot be used to probe which ids exist.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -1339,11 +1303,7 @@ paths:
       summary: Permanently purge an archived or soft-deleted blog page
       description: Gated by blog_content.pages.purge (ADR-0057). High-risk, irreversible, requires Idempotency-Key. Only an archived or previously soft-deleted page may be purged. Advertisement placements targeting this page neither block the purge nor are deleted with it - they simply go inert, exactly as they already do for a soft-deleted page, because the render query matches target_id against the page being rendered. Their count is returned as adPlacementsNowInert so the change is visible rather than silent.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":

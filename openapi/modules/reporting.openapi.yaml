@@ -106,11 +106,7 @@ paths:
       operationId: reportsCreateScheduledExport
       summary: Create a scheduled export config. High-risk — requires Idempotency-Key, audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -175,11 +171,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -297,11 +289,7 @@ paths:
       operationId: reportsTriggerExport
       summary: Manually generate an export of a projection's current snapshot. High-risk — requires Idempotency-Key, audited.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -451,11 +439,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true
@@ -508,11 +492,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":

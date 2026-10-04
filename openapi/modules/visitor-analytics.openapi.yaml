@@ -455,11 +455,7 @@ paths:
       description: "Gated by visitor_analytics.retention.purge. Destructive, high-risk: requires Idempotency-Key, audited `critical`. Deletes events past eventRetentionDays, clears session raw detail past rawDetailRetentionDays, deletes orphaned sessions, and deletes rollups past rollupRetentionDays."
       operationId: analyticsRetentionPurge
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":

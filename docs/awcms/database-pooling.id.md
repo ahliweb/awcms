@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-pooling.md)
 
-<!-- i18n-source-hash: sha256:2f967e2413557a71e6379af672355affcd407bc217280b3c40639e3ff1b48c24 -->
+<!-- i18n-source-hash: sha256:6d39f1c891810406cb7753c9ace4fef0640c3d23d0ddafda32fafa0f768c9e36 -->
 
 # Database Connection Pooling and Backpressure
 
@@ -174,7 +174,8 @@ Alur:
      exceeded — `54000`, mis. ukuran baris indeks melebihi batas btree akibat
      nilai caller-supplied yang terlalu panjang) — properti input, bukan
      kesehatan database. `Idempotency-Key` dibatasi di middleware (1 sampai 255
-     karakter ASCII yang terlihat); pengecualian ini adalah pertahanan berlapis
+     karakter ASCII yang terlihat, terdokumentasi di kontrak sebagai komponen
+     bersama `components.parameters.IdempotencyKey`, ADR-0129); pengecualian ini adalah pertahanan berlapis
      untuk nilai tanpa batas lainnya.
    - `Bun.SQL.PostgresError` dengan SQLSTATE kelas `22` (data exception —
      `22P02` invalid_text_representation, `22003` numeric_value_out_of_range,

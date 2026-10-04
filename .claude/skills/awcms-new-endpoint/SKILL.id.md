@@ -5,7 +5,7 @@ description: Tambah atau ubah endpoint REST AWCMS di /api/v1 dengan benar. Gunak
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:7e79bf1b4b5d3b00f33b633a92a162beb375e7e35d60150091d914d97bff810f -->
+<!-- i18n-source-hash: sha256:595fdc2531e659ea5f3e388aecbc771fd6907cea146f825567b91b79fb0f7abd -->
 
 # AWCMS — New / Changed API Endpoint
 
@@ -85,7 +85,7 @@ export const GET = defineTenantRoute({
    diasersikannya: tidak ada test yang memaku nilai
    `BODY_SIZE_HARD_CEILING_BYTES` itu sendiri, jadi mengubahnya tidak
    menggagalkan apa pun.
-6. Mutation high-risk → `awcms-idempotency` (`Idempotency-Key`).
+6. Mutation high-risk → `awcms-idempotency` (`Idempotency-Key`). Di fragmen OpenAPI deklarasikan header dengan `- $ref: "#/components/parameters/IdempotencyKey"` (bersama, berbatas, mendokumentasikan `400 IDEMPOTENCY_KEY_INVALID`, ADR-0129) — jangan pernah parameter inline `name: Idempotency-Key`; sebuah gate gagal bila ada.
 7. Data sensitif keluar lewat mapper (`awcms-sensitive-data`); jangan return row mentah.
 8. DELETE resource deletable berarti soft delete; restore/purge butuh ABAC, audit, OpenAPI, dan idempotency bila high-risk.
 9. **Update OpenAPI** — sejak Issue #182 (epic #177, ADR-0026) `openapi/awcms-public-api.openapi.yaml` adalah artefak GENERATED, jangan diedit langsung. Edit fragment sumbernya: `openapi/modules/<module-key>.openapi.yaml` (path/operation/schema milik modul itu — satu berkas = satu modul) atau `openapi/awcms-public-api.src.yaml` (info/servers/tags/security/securitySchemes/parameters/responses/schema yang genuinely dipakai 2+ modul). **Tag operasi WAJIB ada di katalog `tags:` root** — generator referensi mengelompokkan menurut tag yang DIDEKLARASIKAN, jadi tag tak-terdeklarasi membuat endpoint Anda hilang dari `docs/awcms/api-reference.md` tanpa error apa pun (pernah terjadi pada 55 operasi milik empat modul; PR #308). Lalu jalankan `bun run openapi:bundle` (regenerate bundle) dan `bun run api:docs:generate` (regenerate `docs/awcms/api-reference.md`), lalu validasi dengan `bun run api:spec:check` (route parity, operationId unik, path parameter, standard error schema `ApiError`, security metadata + allow-list `security: []`, bundle freshness, **katalog tag dua arah**, **kepemilikan fragment dua arah** — `openApiPath` menunjuk fragment modul sendiri yang benar-benar ada, bukan bundel) dan `bun run api:docs:check`. Commit fragment sumber, bundle, DAN referensi Markdown hasil regenerate dalam PR yang sama — lihat `openapi/README.md`. Modul turunan menyumbang fragment lewat seam `buildBundledDocument({ extraFragmentFiles })` tanpa mengedit fragment base (`docs/awcms/api-contribution-guide.md`).

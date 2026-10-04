@@ -51,18 +51,18 @@ Error response:
 
 ## Standard headers
 
-| Header                      |                    Required | Function                                                      |
-| --------------------------- | --------------------------: | ------------------------------------------------------------- |
-| `Authorization`             |       Yes except for public | Bearer token                                                  |
-| `X-AWCMS-Tenant-ID`         |  Yes for tenant-scoped APIs | Active tenant                                                 |
-| `Idempotency-Key`           | Yes for high-risk mutations | Anti duplicate mutation                                       |
-| `X-Correlation-ID`          |                    Optional | Trace request                                                 |
-| `X-Request-ID`              |                    Optional | Trace client request                                          |
-| `Accept-Language`           |                    Optional | Locale                                                        |
-| `X-AWCMS-Node-ID`           |                Yes for sync | Sync node                                                     |
-| `X-AWCMS-Timestamp`         |         Yes for signed sync | Anti replay                                                   |
-| `X-AWCMS-Signature`         |                Yes for sync | HMAC signature                                                |
-| `X-AWCMS-Signature-Version` |   Recommended for sync (v2) | Signature schema version; `"2"` binds tenant+node (GHSA-c972) |
+| Header                      |                    Required | Function                                                                            |
+| --------------------------- | --------------------------: | ----------------------------------------------------------------------------------- |
+| `Authorization`             |       Yes except for public | Bearer token                                                                        |
+| `X-AWCMS-Tenant-ID`         |  Yes for tenant-scoped APIs | Active tenant                                                                       |
+| `Idempotency-Key`           | Yes for high-risk mutations | Anti duplicate mutation; 1-255 visible ASCII (`IdempotencyKey` component, ADR-0129) |
+| `X-Correlation-ID`          |                    Optional | Trace request                                                                       |
+| `X-Request-ID`              |                    Optional | Trace client request                                                                |
+| `Accept-Language`           |                    Optional | Locale                                                                              |
+| `X-AWCMS-Node-ID`           |                Yes for sync | Sync node                                                                           |
+| `X-AWCMS-Timestamp`         |         Yes for signed sync | Anti replay                                                                         |
+| `X-AWCMS-Signature`         |                Yes for sync | HMAC signature                                                                      |
+| `X-AWCMS-Signature-Version` |   Recommended for sync (v2) | Signature schema version; `"2"` binds tenant+node (GHSA-c972)                       |
 
 ## Soft delete API standard
 

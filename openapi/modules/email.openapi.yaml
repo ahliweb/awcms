@@ -20,11 +20,7 @@ paths:
       summary: Enqueue a notification/announcement (idempotent, two-tier ABAC, audited).
       description: Requires Idempotency-Key. email.notification.create for every request; email.announcement.create additionally for role/tenant targets.
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       requestBody:
         required: true

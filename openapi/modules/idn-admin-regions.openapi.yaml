@@ -197,11 +197,7 @@ paths:
       description: "Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` required, audited. The target is resolved from `activated_at` history, never supplied by the caller — letting the client name the destination would make this an activation wearing a safer-sounding name. Returns 409 when there is no previously activated version."
       operationId: idnRegionsDatasetRollback
       parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -246,11 +242,7 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
