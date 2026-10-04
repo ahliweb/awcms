@@ -394,22 +394,22 @@ handlerSuite("tax — through the real route handlers (ADR-0127)", () => {
 
       TODAY = rows[0]!.today;
     }
-  });
+  }, 120000);
 
   afterAll(async () => {
     if (handlerReady) await teardownHandlerDatabase();
-  });
+  }, 60000);
 
   beforeEach(async () => {
     if (!handlerReady) return;
     await resetHandlerDatabase();
     tokens.clear();
     await seed();
-  });
+  }, 30000);
 
   afterEach(async () => {
     if (handlerReady) await resetHandlerDatabase();
-  });
+  }, 30000);
 
   describe("authoring, publication and effective dates", () => {
     test("a draft is not resolved until it is published", async () => {
@@ -1842,11 +1842,11 @@ const dbSuite = integrationEnabled ? describe : describe.skip;
 dbSuite("tax — what the database itself enforces (ADR-0127)", () => {
   beforeAll(async () => {
     await setupIntegrationDatabase();
-  });
+  }, 120000);
 
   afterAll(async () => {
     await teardownIntegrationDatabase();
-  });
+  }, 60000);
 
   beforeEach(async () => {
     await resetDatabase();
@@ -1854,7 +1854,7 @@ dbSuite("tax — what the database itself enforces (ADR-0127)", () => {
       INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
       VALUES (${T1}, 'tax-db-1', 'Tax DB 1'), (${T2}, 'tax-db-2', 'Tax DB 2')
     `;
-  });
+  }, 30000);
 
   describe("rule versions", () => {
     test("a published version cannot be edited, re-opened or deleted — even by its owner", async () => {
