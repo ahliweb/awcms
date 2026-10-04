@@ -180,6 +180,43 @@ channels:
       (that is recorded in the signals table the reporting projection reads).
       Payload: `locationId`, `itemType`, `itemRef`, `onHand`, `threshold`,
       `movementId` (null when a threshold change caused it).
+  awcms.tax.rule_version.published:
+    address: awcms.tax.rule_version.published
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A tax rule version was published and became the rule in force from its
+      effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s
+      `publishRuleVersionPublishedEvent`, called by
+      `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as
+      the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The
+      payload carries identifiers, codes and dates only — `ruleVersionId`,
+      `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and
+      `closedVersionId` (the predecessor whose window this ended, or null).
+  awcms.tax.snapshot.finalised:
+    address: awcms.tax.snapshot.finalised
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A document's tax was finalised into an immutable snapshot (ADR-0127).
+      Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`,
+      called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written —
+      an idempotent replay publishes nothing. The payload carries the opaque
+      document reference, the rule version used, the tax date and decimal-string
+      totals; no customer data of any kind.
+  awcms.tax.snapshot.reversed:
+    address: awcms.tax.snapshot.reversed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A finalised document's tax was reversed from its original snapshot
+      (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by
+      `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is
+      written. Same payload shape as `snapshot.finalised`; the totals are
+      negative decimal strings and `originalSnapshotId` is set.
   awcms.email.message.queued:
     address: awcms.email.message.queued
     messages:
@@ -574,6 +611,24 @@ operations:
       $ref: "#/channels/awcms.inventory.stock.low"
     messages:
       - $ref: "#/channels/awcms.inventory.stock.low/messages/DomainEvent"
+  publishTaxRuleVersionPublished:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.tax.rule_version.published"
+    messages:
+      - $ref: "#/channels/awcms.tax.rule_version.published/messages/DomainEvent"
+  publishTaxSnapshotFinalised:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.tax.snapshot.finalised"
+    messages:
+      - $ref: "#/channels/awcms.tax.snapshot.finalised/messages/DomainEvent"
+  publishTaxSnapshotReversed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.tax.snapshot.reversed"
+    messages:
+      - $ref: "#/channels/awcms.tax.snapshot.reversed/messages/DomainEvent"
   publishEmailMessageQueued:
     action: send
     channel:

@@ -110,6 +110,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // Issue #598 — a subscriber list is audience engagement, not content: it is
   // about who is reached, not about what is published.
   newsletter: "engagement",
+  // ADR-0127. Placed even though the module declares NO navigation yet (the
+  // rule-authoring screens are a recorded follow-up): this map must cover every
+  // registered module, so its first screen lands in `commerce` rather than
+  // silently in `general`.
+  tax: "commerce",
   // Operations / observability. `workflow` (the `workflow-approval` directory)
   // has no counterpart in awcms-micro, so it is absent from the map this was
   // ported from — the completeness assertion in

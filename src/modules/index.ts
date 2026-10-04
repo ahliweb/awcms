@@ -20,6 +20,7 @@ import { formDraftsModule } from "./form-drafts/module";
 import { siteSearchModule } from "./site-search/module";
 import { newsletterModule } from "./newsletter/module";
 import { siteProfileModule } from "./site-profile/module";
+import { taxModule } from "./tax/module";
 import { commentsModule } from "./comments/module";
 import { idnAdminRegionsModule } from "./idn-admin-regions/module";
 import { pushDeliveryModule } from "./push-delivery/module";
@@ -129,6 +130,9 @@ const baseModules: ModuleDescriptor[] = [
   // that ordering rather than trusting this comment.
   newsletterModule,
   siteProfileModule,
+  // ADR-0127 (Issue #889): jurisdiction-neutral tax calculation. Listed after
+  // `reporting`/`domain_event_runtime`/`logging`, which it depends on.
+  taxModule,
   // Ported from awcms-micro (Issue #271, ADR-0041), Gelombang-1 of
   // docs/awcms/absorb-awcms-micro-roadmap.md: moderation-first commenting over
   // PUBLISHED, PUBLIC resources. Depends only on tenant_admin/identity_access

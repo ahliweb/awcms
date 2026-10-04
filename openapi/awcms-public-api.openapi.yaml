@@ -69,6 +69,8 @@ tags:
     description: "Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns."
   - name: Newsletter
     description: "Per-tenant newsletter subscriber list (newsletter module, Issue #598, ADR-0103, PRD §22/§30). The email module could already SEND mail; there was no list a reader could JOIN. All three operations are anonymous — a reader has no account, and PRD §30 forbids making them get one to stop receiving mail — with the tenant resolved from the request HOST rather than a header, so a caller cannot choose whose list they are writing to. Every one answers the SAME neutral body for every outcome, because a distinguishing response turns a public endpoint into a way to ask whether a named person subscribes to a particular newsroom. Double opt-in: consent is recorded when the confirmation link is FOLLOWED, never at submission. Both tokens are stored hashed because both are bearer credentials, and the unsubscribe token is stable for the row's lifetime because it appears in the footer of every message the subscriber receives."
+  - name: Tax
+    description: "Generic, jurisdiction-neutral tax calculation (tax module, Issue #889, ADR-0127). Versioned rule profiles with half-open effective windows (published windows never overlap per profile — enforced in the database), categories, a jurisdiction/scope reference, inclusive and exclusive pricing, multiple stacked or compound components, an explicit rounding mode/scale/level, and exempt vs zero-rated kept distinct. ONE pure calculator on exact bigint-rational arithmetic (no floating point; every amount, quantity and rate is a decimal STRING) behind a stateless quote and an idempotent finalise. SERVER-AUTHORITATIVE: no request accepts a tax amount, and a payload that names one is refused with 400 TAX_AMOUNT_NOT_ACCEPTED rather than ignored. A finalised document's tax is an APPEND-ONLY snapshot carrying a copy of the rule version it was computed under, so updating a rule never changes a historical document, and a refund or return is computed from the original snapshot alone, never from today's rule. Publishing a rule version and reversing a snapshot are high-risk, idempotency-keyed and audited; both, and finalising, emit domain events through the outbox. Ships no country profile: that needs a verified regulatory mapping first."
   - name: Site Profile
     description: "Per-tenant SITE CHROME (site_profile module, Issue #596, ADR-0102) — the masthead tagline, footer copyright line, logo and favicon, editorial address, contact email/phone/WhatsApp, and social profile links that every public page renders. Before it, a footer, masthead, contact page and Organization JSON-LD node all had to hard-code the publisher's identity in frontend source, which made a second tenant impossible without a fork. The boundary against seo_distribution is deliberate: awcms_seo_tenant_settings keeps what CRAWLERS see (og:site_name, the JSON-LD Organization node, the default og:image) because each is an SEO output consumed by a meta-tag renderer, while this module owns what PEOPLE read. Nothing is duplicated across the two, so no value can drift, and consumers are never asked to know the split — GET /api/v1/site-profile/composed merges both halves for build clients. Social link URLs are REFUSED rather than sanitized unless absolute http(s), because they are rendered as <a href> on every public page. read and update are separately grantable: changing what every page's contact block says is a different power from reading it. Nothing here is anonymous — 'public read' means the public site's BUILDER can read it, not that anyone can."
   - name: Comments
@@ -18920,6 +18922,464 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/tax/quote:
+    post:
+      operationId: taxQuote
+      tags:
+        - Tax
+      summary: Compute tax for a set of lines (stateless)
+      description: "Gated by `tax.calculations.analyze` (read-only, not high-risk). The ONE calculator every quote, POS and storefront caller uses. SERVER- AUTHORITATIVE: the body carries quantities, unit prices, discounts and a category per line — never a tax amount; a field that names one is refused with `400 TAX_AMOUNT_NOT_ACCEPTED`. The rule version is the published one in force on `taxDate` (a calendar date supplied by the caller, never the server's clock). Records nothing — no snapshot, event or audit row — so no `Idempotency-Key`. `422 TAX_RULE_VERSION_NOT_FOUND` when no published version covers the date, `422 TAX_RULE_NOT_FOUND` when a line's category has no rule and there is no fallback, `422 TAX_INPUT_INVALID` for a bad amount or one too large to store (a line or document figure of 10^18 or more — the same refusal `/snapshots` gives). The pricing mode is the RULE VERSION's: a `pricingMode` in the body is refused as an unrecognised field. Exact arithmetic throughout; see docs/awcms/tax-calculation.md."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxQuoteRequest"
+      responses:
+        "200":
+          description: The computed tax.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TaxQuoteResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: "`TAX_RULE_VERSION_NOT_FOUND`, `TAX_RULE_NOT_FOUND` or `TAX_INPUT_INVALID`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/tax/reports/reconciliation:
+    get:
+      operationId: taxReconciliationReport
+      tags:
+        - Tax
+      summary: Tax reconciliation for a period
+      description: Gated by `tax.reports.read`. What was finalised and reversed between two TAX DATES (inclusive calendar dates, at most 366 days), by rule version, component and treatment, netted per currency, plus an `integrity` block that checks every snapshot in the period against its own lines (line sums vs document totals, component sums vs tax total). Aggregated in SQL, so the response grows with the number of profiles and components, never with the number of documents. The counting projection `tax.snapshot_activity` on the reporting engine is the freshness-tracked companion; this is its drill-down.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: profileCode
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The reconciliation report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TaxReconciliationReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/tax/rule-versions:
+    get:
+      operationId: taxRuleVersionList
+      tags:
+        - Tax
+      summary: List this tenant's tax rule versions
+      description: "Gated by `tax.rules.read`. Newest first, keyset-paginated (`data.nextCursor`). Optional filters: `profileCode`, `status` (`draft` | `published`). Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: profileCode
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - published
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of rule versions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      versions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TaxRuleVersionSummary"
+                      nextCursor:
+                        description: Pass as `cursor` for the next page; null on the last.
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: taxRuleVersionCreate
+      tags:
+        - Tax
+      summary: Author a draft tax rule version
+      description: "Gated by `tax.rules.configure` (high-risk). Creates a DRAFT — it is not resolved by any quote or snapshot until published. The version number is assigned by the server (next for the profile). Requires an `Idempotency-Key` (a retry must not mint a second draft) and is audited. The definition is validated strictly: a taxable rule needs at least one component, exempt and zero-rated rules must have none, every category a rule names must be declared, a category has one rule, and there is at most one fallback rule (`categoryCode: null`)."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxRuleVersionInput"
+      responses:
+        "200":
+          description: Idempotent replay of an earlier create.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRuleVersionEnvelope"
+        "201":
+          description: Draft created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRuleVersionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/tax/rule-versions/{id}:
+    get:
+      operationId: taxRuleVersionRead
+      tags:
+        - Tax
+      summary: Read one tax rule version with its full definition
+      description: Gated by `tax.rules.read`. The definition plus the version's pricing, rounding mode, scale and level are everything the pure calculator needs, so this is also the document an offline client caches. A malformed `id` answers 404.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The rule version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRuleVersionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/tax/rule-versions/{id}/publish:
+    post:
+      operationId: taxRuleVersionPublish
+      tags:
+        - Tax
+      summary: Publish a draft tax rule version
+      description: "Gated by `tax.rules.publish` (high-risk), separately grantable from authoring: this is the act that changes what every sale on or after `effectiveFrom` is taxed at. Requires an `Idempotency-Key`; audited at `critical`; emits `awcms.tax.rule_version.published` through the outbox. A version must take effect STRICTLY AFTER the latest published version of its profile, which it ends (409 `TAX_VERSION_OUT_OF_ORDER` otherwise) — there is no publishing into the past: besides that ordering rule, a version may not take effect before the SERVER's date (`now()` from the database, UTC) nor on or before a tax date already finalised under its profile (`409 TAX_VERSION_BACKDATED`). A published version is immutable: it never changes a document already finalised, and a rule edit is a new version. Concurrent publishes for one profile serialise on a database lock; published windows can never overlap (enforced by a trigger)."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Published (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRuleVersionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`, `TAX_VERSION_ALREADY_PUBLISHED`, `TAX_VERSION_OUT_OF_ORDER` or `TAX_VERSION_BACKDATED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/tax/snapshots:
+    get:
+      operationId: taxSnapshotList
+      tags:
+        - Tax
+      summary: List tax snapshots
+      description: "Gated by `tax.snapshots.read`. Newest first, keyset-paginated (`data.nextCursor`). Filters: `documentType`, `documentId`, `kind`."
+      parameters:
+        - name: documentType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: documentId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - sale
+              - reversal
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of snapshots.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      snapshots:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TaxSnapshotSummary"
+                      nextCursor:
+                        description: Pass as `cursor` for the next page; null on the last.
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: taxSnapshotFinalise
+      tags:
+        - Tax
+      summary: Finalise a document's tax into an immutable snapshot
+      description: "Gated by `tax.snapshots.create`. The server computes the tax exactly as `/quote` does and writes it, with a copy of the rule version it used, into an APPEND-ONLY row (enforced by a database trigger): nothing about the rules can change that document afterwards, and a refund is computed from this row alone. Idempotent two ways — the required `Idempotency-Key` replays the stored response, and the natural key `(documentType, documentId)` returns the existing snapshot (200) when the SAME request is repeated even under a new key, and `409 TAX_DOCUMENT_ALREADY_FINALISED` when a DIFFERENT request names an already-finalised document. Audited; emits `awcms.tax.snapshot.finalised` through the outbox. Like `/quote`, a body that names a tax amount is refused with `400 TAX_AMOUNT_NOT_ACCEPTED`, a `pricingMode` is refused as an unrecognised field, and an oversized figure is `422 TAX_INPUT_INVALID`. A `taxDate` outside the server-date window (default 7 days back, 1 forward) additionally needs `tax.snapshots.backdate` (high-risk) and is otherwise `403 TAX_BACKDATE_PERMISSION_REQUIRED` — never accepted silently."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxSnapshotRequest"
+      responses:
+        "200":
+          description: Replay of an earlier finalise (same key, or same document and request).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxSnapshotEnvelope"
+        "201":
+          description: Snapshot created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxSnapshotEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT` or `TAX_DOCUMENT_ALREADY_FINALISED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`TAX_RULE_VERSION_NOT_FOUND`, `TAX_RULE_NOT_FOUND` or `TAX_INPUT_INVALID`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/tax/snapshots/{id}:
+    get:
+      operationId: taxSnapshotRead
+      tags:
+        - Tax
+      summary: Read one tax snapshot with its lines
+      description: "Gated by `tax.snapshots.read`. Returns the document's lines and totals and names the rule version it was computed under (`ruleVersionId`, `versionNo`) but does NOT embed the rule definition: reading rules is `tax.rules.read`, a different power from reading a document. The definition is `GET /api/v1/tax/rule-versions/{id}` away for a caller entitled to it, and is the same content because a published version is immutable. A malformed `id` answers 404."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxSnapshotEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/tax/snapshots/{id}/reverse:
+    post:
+      operationId: taxSnapshotReverse
+      tags:
+        - Tax
+      summary: Reverse (refund / return) all or part of a finalised document's tax
+      description: "Gated by `tax.snapshots.reverse` (HIGH-RISK). Computed from the ORIGINAL snapshot — its recorded quantities and amounts and nothing else; no rule table is consulted, so a refund of last year's sale reverses the tax that was CHARGED whatever the rate is now. The body names lines and quantities returned (omit `lines` to reverse everything not yet returned) — never an amount. Partial reversals cap at what has not yet been reversed; the one that completes a line takes the exact remainder; concurrent reversals of one sale serialise on a row lock with a database trigger as backstop, so the total refunded can never exceed the total charged. Amounts in the result are NEGATIVE. Requires an `Idempotency-Key`; `documentId` is the reversal's own document (a refund id) and is unique per tenant, so a retry under a fresh key replays. `taxDate` is the period the reversal is reported in: the SERVER's date when omitted (never the original's), and a stated date outside the server-date window needs `tax.snapshots.backdate` (`403 TAX_BACKDATE_PERMISSION_REQUIRED` otherwise). A malformed `id` answers 404. Audited at `critical`; emits `awcms.tax.snapshot.reversed` through the outbox."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxReversalRequest"
+      responses:
+        "200":
+          description: Replay of an earlier reversal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxSnapshotEnvelope"
+        "201":
+          description: Reversal recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxSnapshotEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT` or `TAX_DOCUMENT_ALREADY_FINALISED` (the reversal document id was used with a different request)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`TAX_REVERSAL_INVALID` — an unknown line, more than was sold and not yet returned, or nothing left to reverse."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/tenant/domains:
     get:
       tags:
@@ -28029,6 +28489,674 @@ components:
         commentId:
           type: string
           format: uuid
+    TaxComponentResult:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        rate:
+          type: string
+        basis:
+          type: string
+          enum:
+            - net
+            - cumulative
+        taxableBase:
+          $ref: "#/components/schemas/TaxDecimal"
+        taxAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+    TaxComponentRule:
+      type: object
+      required:
+        - code
+        - name
+        - rate
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,62}$
+        name:
+          type: string
+          maxLength: 120
+        rate:
+          description: Percent as a decimal string, at most six decimals, 0 to 1000.
+          type: string
+          example: "11"
+        basis:
+          description: "`net` applies the rate to the line's net amount. `cumulative` applies it to net PLUS every earlier component's tax in declaration order — the stacked / compound case."
+          type: string
+          enum:
+            - net
+            - cumulative
+          default: net
+    TaxComponentTotal:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        taxAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+    TaxDecimal:
+      description: A plain decimal STRING — never a JSON number. No exponent, no sign prefix other than `-`, no separators.
+      type: string
+      pattern: ^-?[0-9]+(\.[0-9]+)?$
+      example: "10.50"
+    TaxLineInput:
+      type: object
+      required:
+        - lineRef
+        - quantity
+        - unitPrice
+      additionalProperties: false
+      properties:
+        lineRef:
+          description: The caller's own reference for the line, unique within the request. Echoed back, and the key a reversal names.
+          type: string
+          maxLength: 64
+        categoryCode:
+          type: string
+          nullable: true
+        quantity:
+          description: Greater than zero, at most six decimals.
+          $ref: "#/components/schemas/TaxDecimal"
+        unitPrice:
+          description: Net per unit under exclusive pricing, gross per unit under inclusive. At most six decimals.
+          $ref: "#/components/schemas/TaxDecimal"
+        discount:
+          description: Total discount on the line, in currency. Defaults to "0".
+          $ref: "#/components/schemas/TaxDecimal"
+    TaxLineResult:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+        lineRef:
+          type: string
+        originalLineRef:
+          description: Present on a reversal's lines.
+          type: string
+        categoryCode:
+          type: string
+          nullable: true
+        treatment:
+          type: string
+          enum:
+            - taxable
+            - exempt
+            - zero_rated
+        quantity:
+          type: string
+        unitPrice:
+          type: string
+        discount:
+          type: string
+        netAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+        taxAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+        grossAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxComponentResult"
+    TaxQuoteRequest:
+      type: object
+      required:
+        - profileCode
+        - taxDate
+        - lines
+      additionalProperties: false
+      properties:
+        profileCode:
+          type: string
+        taxDate:
+          description: The calendar date the supply happened — the caller's to state, never the server's clock. Selects the rule version in force that day.
+          type: string
+          format: date
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/TaxLineInput"
+    TaxQuoteResult:
+      type: object
+      properties:
+        ruleVersion:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            profileCode:
+              type: string
+            versionNo:
+              type: integer
+            jurisdictionCode:
+              type: string
+        taxDate:
+          type: string
+          format: date
+        pricingMode:
+          type: string
+          enum:
+            - exclusive
+            - inclusive
+        roundingMode:
+          type: string
+        roundingScale:
+          type: integer
+        roundingLevel:
+          type: string
+          enum:
+            - line
+            - document
+        currencyCode:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxLineResult"
+        netTotal:
+          $ref: "#/components/schemas/TaxDecimal"
+        taxTotal:
+          $ref: "#/components/schemas/TaxDecimal"
+        grossTotal:
+          $ref: "#/components/schemas/TaxDecimal"
+        componentTotals:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxComponentTotal"
+        treatmentTotals:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxTreatmentTotal"
+    TaxReconciliationReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        byVersion:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - sale
+                  - reversal
+              profileCode:
+                type: string
+              versionNo:
+                type: integer
+              currencyCode:
+                type: string
+              documents:
+                type: integer
+              netTotal:
+                $ref: "#/components/schemas/TaxDecimal"
+              taxTotal:
+                $ref: "#/components/schemas/TaxDecimal"
+              grossTotal:
+                $ref: "#/components/schemas/TaxDecimal"
+        byComponent:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - sale
+                  - reversal
+              profileCode:
+                type: string
+              currencyCode:
+                type: string
+              componentCode:
+                type: string
+              taxAmount:
+                $ref: "#/components/schemas/TaxDecimal"
+        byTreatment:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - sale
+                  - reversal
+              profileCode:
+                type: string
+              currencyCode:
+                type: string
+              treatment:
+                type: string
+                enum:
+                  - taxable
+                  - exempt
+                  - zero_rated
+              netAmount:
+                $ref: "#/components/schemas/TaxDecimal"
+              taxAmount:
+                $ref: "#/components/schemas/TaxDecimal"
+        netOfReversals:
+          description: Sales plus (negative) reversals, per currency.
+          type: array
+          items:
+            type: object
+            properties:
+              currencyCode:
+                type: string
+              sales:
+                type: integer
+              reversals:
+                type: integer
+              netTotal:
+                $ref: "#/components/schemas/TaxDecimal"
+              taxTotal:
+                $ref: "#/components/schemas/TaxDecimal"
+              grossTotal:
+                $ref: "#/components/schemas/TaxDecimal"
+        integrity:
+          type: object
+          properties:
+            documentsChecked:
+              type: integer
+            lineSumMismatches:
+              description: Snapshots whose line sums disagree with the document totals. The calculator cannot produce one, so non-zero means a row was written some other way.
+              type: integer
+            componentSumMismatches:
+              type: integer
+    TaxReversalRequest:
+      type: object
+      required:
+        - documentId
+      additionalProperties: false
+      properties:
+        documentId:
+          description: The reversal's own document reference (a refund id); same opaque charset as a snapshot's `documentId`.
+          type: string
+          maxLength: 128
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._:/-]*$
+        taxDate:
+          description: The period the reversal is reported in. The SERVER's date when omitted (never the original's). A stated date outside the server-date window needs `tax.snapshots.backdate`.
+          type: string
+          format: date
+        reason:
+          type: string
+          maxLength: 500
+        lines:
+          description: Omit to reverse everything not yet returned.
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            required:
+              - lineRef
+              - quantity
+            additionalProperties: false
+            properties:
+              lineRef:
+                description: The ORIGINAL line's lineRef.
+                type: string
+              quantity:
+                $ref: "#/components/schemas/TaxDecimal"
+    TaxRule:
+      type: object
+      required:
+        - treatment
+      additionalProperties: false
+      properties:
+        categoryCode:
+          description: Null is the FALLBACK rule for lines whose category has no rule of its own (at most one).
+          type: string
+          nullable: true
+        treatment:
+          description: "`taxable` needs at least one component. `exempt` and `zero_rated` must have none and are kept distinct because they are different lines on a return, not because the amount differs."
+          type: string
+          enum:
+            - taxable
+            - exempt
+            - zero_rated
+        components:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/TaxComponentRule"
+    TaxRuleDefinition:
+      type: object
+      required:
+        - categories
+        - rules
+      additionalProperties: false
+      properties:
+        categories:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required:
+              - code
+              - name
+            additionalProperties: false
+            properties:
+              code:
+                type: string
+                pattern: ^[a-z0-9][a-z0-9_.-]{0,62}$
+              name:
+                type: string
+                maxLength: 120
+              description:
+                type: string
+                maxLength: 500
+        rules:
+          type: array
+          minItems: 1
+          maxItems: 201
+          items:
+            $ref: "#/components/schemas/TaxRule"
+    TaxRuleVersion:
+      allOf:
+        - $ref: "#/components/schemas/TaxRuleVersionSummary"
+        - type: object
+          properties:
+            definition:
+              $ref: "#/components/schemas/TaxRuleDefinition"
+    TaxRuleVersionEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          $ref: "#/components/schemas/TaxRuleVersion"
+    TaxRuleVersionInput:
+      type: object
+      required:
+        - profileCode
+        - name
+        - jurisdictionCode
+        - currencyCode
+        - pricingMode
+        - roundingMode
+        - roundingScale
+        - roundingLevel
+        - effectiveFrom
+        - definition
+      additionalProperties: false
+      properties:
+        profileCode:
+          description: The profile this is a version OF. Tenant-named.
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,62}$
+        name:
+          type: string
+          maxLength: 120
+        jurisdictionCode:
+          description: Opaque, tenant-defined jurisdiction/scope code. The core ships no country list and no country's law.
+          type: string
+        countryCode:
+          type: string
+          pattern: ^[A-Z]{2}$
+        regionCode:
+          type: string
+        currencyCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+        pricingMode:
+          type: string
+          enum:
+            - exclusive
+            - inclusive
+        roundingMode:
+          description: "`half_up` / `half_down` are symmetric about zero. `half_even` is banker's rounding. `up` / `down` are away from / toward zero; `ceiling` / `floor` are toward +/- infinity."
+          type: string
+          enum:
+            - half_up
+            - half_down
+            - half_even
+            - up
+            - down
+            - ceiling
+            - floor
+        roundingScale:
+          description: Decimal places amounts are rounded to.
+          type: integer
+          minimum: 0
+          maximum: 6
+        roundingLevel:
+          description: "`line` rounds each line's tax alone and sums. `document` sums the exact tax per component, rounds ONCE, and apportions back to the lines by largest remainder."
+          type: string
+          enum:
+            - line
+            - document
+        effectiveFrom:
+          description: Inclusive calendar date.
+          type: string
+          format: date
+        notes:
+          type: string
+          maxLength: 1000
+        definition:
+          $ref: "#/components/schemas/TaxRuleDefinition"
+    TaxRuleVersionSummary:
+      description: A rule version without its `definition` (up to 256 KiB). What a list returns; the body comes from the detail endpoint.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        profileCode:
+          type: string
+        versionNo:
+          type: integer
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+        name:
+          type: string
+        jurisdictionCode:
+          type: string
+        countryCode:
+          type: string
+          nullable: true
+        regionCode:
+          type: string
+          nullable: true
+        currencyCode:
+          type: string
+        pricingMode:
+          type: string
+          enum:
+            - exclusive
+            - inclusive
+        roundingMode:
+          type: string
+        roundingScale:
+          type: integer
+        roundingLevel:
+          type: string
+          enum:
+            - line
+            - document
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          description: EXCLUSIVE end of the window; null while open-ended.
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        publishedBy:
+          type: string
+          format: uuid
+          nullable: true
+    TaxSnapshot:
+      allOf:
+        - $ref: "#/components/schemas/TaxSnapshotSummary"
+        - type: object
+          properties:
+            lines:
+              type: array
+              items:
+                $ref: "#/components/schemas/TaxLineResult"
+    TaxSnapshotEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum:
+            - true
+        data:
+          $ref: "#/components/schemas/TaxSnapshot"
+    TaxSnapshotRequest:
+      type: object
+      required:
+        - profileCode
+        - taxDate
+        - lines
+        - documentType
+        - documentId
+      additionalProperties: false
+      properties:
+        profileCode:
+          type: string
+        taxDate:
+          description: "The calendar date the supply happened. Bounded against the SERVER's date (default 7 days back, 1 day forward, configurable): outside that window the caller must also hold `tax.snapshots.backdate`, and gets `403 TAX_BACKDATE_PERMISSION_REQUIRED` without it."
+          type: string
+          format: date
+        documentType:
+          description: The consumer's document kind (order, invoice, receipt...). Opaque.
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_.-]{0,62}$
+        documentId:
+          description: "The consumer's document reference: an opaque handle of letters, digits and `. _ : / -` (no spaces, markup or control characters, never trimmed). No customer data is stored. Finalised once per (documentType, documentId)."
+          type: string
+          maxLength: 128
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._:/-]*$
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/TaxLineInput"
+    TaxSnapshotSummary:
+      description: A snapshot without its `lines` (up to 500 per document). What a list returns; the lines come from the detail endpoint. The rule definition the snapshot was computed under is never returned here — read the version (`ruleVersionId`) with `tax.rules.read`.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          description: "`sale` is a finalised document (non-negative amounts). `reversal` is a refund/return of one (non-positive amounts)."
+          type: string
+          enum:
+            - sale
+            - reversal
+        documentType:
+          type: string
+        documentId:
+          type: string
+        originalSnapshotId:
+          type: string
+          format: uuid
+          nullable: true
+        ruleVersionId:
+          type: string
+          format: uuid
+        profileCode:
+          type: string
+        versionNo:
+          type: integer
+        taxDate:
+          type: string
+          format: date
+        currencyCode:
+          type: string
+        pricingMode:
+          type: string
+          enum:
+            - exclusive
+            - inclusive
+        roundingMode:
+          type: string
+        roundingScale:
+          type: integer
+        roundingLevel:
+          type: string
+          enum:
+            - line
+            - document
+        netTotal:
+          $ref: "#/components/schemas/TaxDecimal"
+        taxTotal:
+          $ref: "#/components/schemas/TaxDecimal"
+        grossTotal:
+          $ref: "#/components/schemas/TaxDecimal"
+        componentTotals:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxComponentTotal"
+        treatmentTotals:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxTreatmentTotal"
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+    TaxTreatmentTotal:
+      type: object
+      properties:
+        treatment:
+          type: string
+          enum:
+            - taxable
+            - exempt
+            - zero_rated
+        netAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+        taxAmount:
+          $ref: "#/components/schemas/TaxDecimal"
+        grossAmount:
+          $ref: "#/components/schemas/TaxDecimal"
     TenantAuthPolicy:
       type: object
       properties:

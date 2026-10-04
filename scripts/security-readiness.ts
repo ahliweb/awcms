@@ -1455,6 +1455,11 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // `active`, `unsubscribed` or `suppressed` row is never touched by it at all —
   // an unsubscribe record is what answers a later complaint.
   awcms_newsletter_subscribers: ["SELECT", "DELETE"],
+  // ADR-0127 — data-lifecycle:archive-purge (sql/172): SELECT to find aged tax
+  // snapshots, DELETE to remove them. No UPDATE — a snapshot is never edited,
+  // and the immutability trigger refuses to delete anything younger than 1826
+  // days no matter what this role is granted.
+  awcms_tax_snapshots: ["SELECT", "DELETE"],
   // ADR-0042 — edge-cache:purge (sql/068): SELECT claimable rows, UPDATE to
   // take the lease and record the outcome, DELETE to prune rows that completed
   // outside the retention window (the job really does prune — this is not a

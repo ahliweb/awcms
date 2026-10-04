@@ -81,6 +81,17 @@ export const INVENTORY_MOVEMENT_POSTED_EVENT_TYPE =
   "awcms.inventory.movement.posted";
 export const INVENTORY_STOCK_LOW_EVENT_TYPE = "awcms.inventory.stock.low";
 
+/**
+ * `tax` (ADR-0127). Declared here — not imported from `tax/domain/tax-events.ts` —
+ * for the same reason as `comments` above: this foundation module must not depend
+ * on a domain module. The AsyncAPI parity gate keeps the literals identical.
+ */
+export const TAX_EVENT_VERSION = "1.0";
+export const TAX_RULE_VERSION_PUBLISHED_EVENT_TYPE =
+  "awcms.tax.rule_version.published";
+export const TAX_SNAPSHOT_FINALISED_EVENT_TYPE = "awcms.tax.snapshot.finalised";
+export const TAX_SNAPSHOT_REVERSED_EVENT_TYPE = "awcms.tax.snapshot.reversed";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
     {
@@ -164,6 +175,24 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
       eventVersion: INVENTORY_EVENT_VERSION,
       description:
         "A stock balance crossed to or below its low-stock threshold — by a movement or by a threshold change. Published once per downward crossing, not on every movement while the balance stays low."
+    },
+    {
+      eventType: TAX_RULE_VERSION_PUBLISHED_EVENT_TYPE,
+      eventVersion: TAX_EVENT_VERSION,
+      description:
+        "A tax rule version was published and became the rule in force from its effective date; carries the id of the predecessor version whose window it closed, if any. Identifiers, codes and dates only."
+    },
+    {
+      eventType: TAX_SNAPSHOT_FINALISED_EVENT_TYPE,
+      eventVersion: TAX_EVENT_VERSION,
+      description:
+        "A document's tax was finalised into an immutable snapshot. Carries the opaque document reference, the rule version it was computed under and decimal-string totals — no customer data."
+    },
+    {
+      eventType: TAX_SNAPSHOT_REVERSED_EVENT_TYPE,
+      eventVersion: TAX_EVENT_VERSION,
+      description:
+        "A finalised document's tax was reversed (refund/return) from its original snapshot. Totals are negative decimal strings; carries the original snapshot id."
     }
   ];
 

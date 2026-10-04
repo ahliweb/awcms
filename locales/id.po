@@ -6397,3 +6397,8 @@ msgstr "Buka kotak masuk persetujuan"
 
 msgid "Availability is advisory: the existing endpoints check permission, approval and state again when you send. Approval decisions are made only in the approval inbox."
 msgstr "Ketersediaan bersifat saran: endpoint yang sudah ada memeriksa izin, persetujuan, dan status lagi saat Anda mengirim. Keputusan persetujuan hanya dibuat di kotak masuk persetujuan."
+
+# ADR-0127 — the `tax` module display name (module registry; the admin screens are a follow-up).
+
+msgid "Tax"
+msgstr "Pajak"
