@@ -551,9 +551,16 @@ const columnCount = canActOnAny ? 9 : 8;
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="media-objects-table-caption"
+      >
         <table class="data-table data-table--stack" id="media-objects-table">
-          <caption class="sr-only">{t("Registered media objects.")}</caption>
+          <caption class="sr-only" id="media-objects-table-caption">
+            {t("Registered media objects.")}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Object")}</th>

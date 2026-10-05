@@ -202,9 +202,14 @@ const showActions = canUpdate || canDelete;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="offices-table-caption"
+    >
       <table class="data-table data-table--stack" id="offices-table">
-        <caption>
+        <caption id="offices-table-caption">
           {tn("{count} office", "{count} offices", offices.length, {
             count: offices.length
           })}
@@ -333,9 +338,14 @@ const showActions = canUpdate || canDelete;
         {t("Deleted offices")}
         <span class="count-pill">{deletedOffices.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="deleted-offices-table-caption"
+      >
         <table class="data-table data-table--stack" id="deleted-offices-table">
-          <caption>
+          <caption id="deleted-offices-table-caption">
             {tn(
               "{count} deleted office",
               "{count} deleted offices",

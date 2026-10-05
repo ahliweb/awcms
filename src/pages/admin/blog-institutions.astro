@@ -232,12 +232,19 @@ const hasFilter = branchFilter !== undefined;
         </p>
       )}
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-institutions-table-caption"
+      >
         <table
           class="data-table data-table--stack"
           id="blog-institutions-table"
         >
-          <caption class="sr-only">{t("Institutions, by name.")}</caption>
+          <caption class="sr-only" id="blog-institutions-table-caption">
+            {t("Institutions, by name.")}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Name")}</th>

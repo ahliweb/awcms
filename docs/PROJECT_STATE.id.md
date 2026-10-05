@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:4ff21f64a0f2ee79109e8ba20bec790ea0e979c137ddee224087c3d688200cb5 -->
+<!-- i18n-source-hash: sha256:74ddaeb964a4e45ede96ca0dabec0cfda7b8cd467e1e2553668ce80cb6bd9971 -->
 
 # AWCMS — Project State & Continuation
 
@@ -123,7 +123,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **175** (`sql/001`–`175`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0129** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **67** berkas `.astro` di `src/pages/admin/`; **0 dari 28** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **84** (49.962 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **84** (50.514 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **61** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -393,14 +393,6 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
-
-- **Layar admin PROCUREMENT (#905) — mendarat.** `/admin/procurement` (lima
-  tampilan, setiap kontrol di balik `can()`-nya sendiri), modul `active`, 16 dari
-  17 izin diklaim dari ledger cakupan; `procurement.documents.update` (sunting
-  draf di tempat) tetap di sana. Sengaja tidak dikerjakan di sini: step-up/rate
-  limit reveal, ambang hanya-biaya, tanpa ABAC berlingkup lokasi / maker-checker
-  bawaan, dan cabang 403 `ACTOR_REQUIRED` yang belum diuji. Tenant yang sudah ada
-  perlu `identity-access:permissions:backfill` untuk sql/175.
 
 - **PROCUREMENT (#888, ADR-0128) — tindak lanjut yang dicatat audit keamanannya.**
   Sengaja belum dikerjakan, masing-masing beralasan: (1) **step-up dan rate limit

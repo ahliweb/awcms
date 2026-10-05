@@ -392,9 +392,14 @@ const selectedTask = selectedInstanceId
         <span class="count-pill">{tasks.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="approval-tasks-table-caption"
+      >
         <table class="data-table data-table--stack" id="approval-tasks-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="approval-tasks-table-caption">
             {t("Workflow tasks, newest first, 100 per page.")}
           </caption>
           <thead>
@@ -667,9 +672,14 @@ const selectedTask = selectedInstanceId
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="approvals-table-2-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="approvals-table-2-caption">
             {t("Workflow delegations for this tenant.")}
           </caption>
           <thead>

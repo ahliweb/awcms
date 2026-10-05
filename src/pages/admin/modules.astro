@@ -124,9 +124,14 @@ const canToggle = canEnable || canDisable;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="modules-table-caption"
+    >
       <table class="data-table data-table--stack" id="modules-table">
-        <caption>
+        <caption id="modules-table-caption">
           {tn("{count} module", "{count} modules", modules.length, {
             count: modules.length
           })}

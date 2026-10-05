@@ -794,7 +794,12 @@ const today = new Date().toISOString().slice(0, 10);
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="procurement-suppliers-heading"
+            >
               <table
                 class="data-table data-table--stack"
                 id="procurement-suppliers-table"
@@ -1006,7 +1011,12 @@ const today = new Date().toISOString().slice(0, 10);
                 </p>
               </div>
             ) : (
-              <div class="data-table-scroll">
+              <div
+                class="data-table-scroll"
+                role="region"
+                tabindex="0"
+                aria-labelledby="procurement-identifiers-heading"
+              >
                 <table
                   class="data-table data-table--stack"
                   id="procurement-identifiers-table"
@@ -1461,7 +1471,12 @@ const today = new Date().toISOString().slice(0, 10);
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="procurement-documents-heading"
+            >
               <table
                 class="data-table data-table--stack"
                 id="procurement-documents-table"
@@ -1651,7 +1666,12 @@ const today = new Date().toISOString().slice(0, 10);
             )}
           </dl>
 
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="procurement-document-heading"
+          >
             <table
               class="data-table data-table--stack"
               id="procurement-document-lines"
@@ -1890,7 +1910,12 @@ const today = new Date().toISOString().slice(0, 10);
                   </p>
                 </div>
               ) : (
-                <div class="data-table-scroll">
+                <div
+                  class="data-table-scroll"
+                  role="region"
+                  tabindex="0"
+                  aria-labelledby="procurement-receiving-heading"
+                >
                   <table
                     class="data-table data-table--stack"
                     id="procurement-receiving-table"
@@ -1931,7 +1956,12 @@ const today = new Date().toISOString().slice(0, 10);
                   </p>
                 </div>
               ) : (
-                <div class="data-table-scroll">
+                <div
+                  class="data-table-scroll"
+                  role="region"
+                  tabindex="0"
+                  aria-labelledby="procurement-supplier-report-heading"
+                >
                   <table
                     class="data-table data-table--stack"
                     id="procurement-supplier-report-table"
@@ -2058,7 +2088,12 @@ const today = new Date().toISOString().slice(0, 10);
                 </p>
               )}
               {data.reconciliation.discrepancies.length > 0 && (
-                <div class="data-table-scroll">
+                <div
+                  class="data-table-scroll"
+                  role="region"
+                  tabindex="0"
+                  aria-labelledby="procurement-reconciliation-heading"
+                >
                   <table class="data-table data-table--stack">
                     <thead>
                       <tr>

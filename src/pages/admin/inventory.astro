@@ -543,7 +543,12 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-label={t("Stock balances")}
+            >
               <table
                 class="data-table data-table--stack"
                 id="inventory-balances-table"
@@ -735,7 +740,12 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
                     <p>{t("The list is truncated; more drift may exist.")}</p>
                   )}
                   {data.reconciliation.drift.length > 0 && (
-                    <div class="data-table-scroll">
+                    <div
+                      class="data-table-scroll"
+                      role="region"
+                      tabindex="0"
+                      aria-labelledby="inventory-reconcile-heading"
+                    >
                       <table class="data-table data-table--stack">
                         <thead>
                           <tr>
@@ -905,7 +915,12 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-label={t("Stock movements")}
+            >
               <table
                 class="data-table data-table--stack"
                 id="inventory-movements-table"
@@ -1341,7 +1356,12 @@ const REASON_CODES: readonly { value: string; label: string }[] = [
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="inventory-location-add-heading"
+            >
               <table
                 class="data-table data-table--stack"
                 id="inventory-locations-table"

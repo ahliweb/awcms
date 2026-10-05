@@ -315,7 +315,12 @@ const sessionCells = sessions.map((s) =>
         <h2 class="admin-section-title" id="pages-title">
           {t("Top pages")}
         </h2>
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="pages-title"
+        >
           <table class="data-table">
             <thead>
               <tr>
@@ -349,7 +354,12 @@ const sessionCells = sessions.map((s) =>
         <h2 class="admin-section-title" id="devices-title">
           {t("Browsers & devices")}
         </h2>
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="devices-title"
+        >
           <table class="data-table">
             <thead>
               <tr>
@@ -375,7 +385,12 @@ const sessionCells = sessions.map((s) =>
             </tbody>
           </table>
         </div>
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="devices-title"
+        >
           <table class="data-table">
             <thead>
               <tr>
@@ -411,7 +426,12 @@ const sessionCells = sessions.map((s) =>
           <h2 class="admin-section-title" id="locations-title">
             {t("Countries")}
           </h2>
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="locations-title"
+          >
             <table class="data-table">
               <thead>
                 <tr>
@@ -454,7 +474,12 @@ const sessionCells = sessions.map((s) =>
               <span class="admin-stat-card-value">{security.botPageviews}</span>
             </div>
           </div>
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="security-title"
+          >
             <table class="data-table">
               <thead>
                 <tr>
@@ -488,11 +513,16 @@ const sessionCells = sessions.map((s) =>
           class="admin-section fade-in-up"
           aria-labelledby="sessions-title"
         >
-          <h2 class="admin-section-title">
+          <h2 class="admin-section-title" id="analytics-table-6-heading">
             <span id="sessions-title">{t("Recent sessions")}</span>
             <span class="count-pill">{sessionCells.length}</span>
           </h2>
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="analytics-table-6-heading"
+          >
             <table class="data-table data-table--stack">
               <thead>
                 <tr>

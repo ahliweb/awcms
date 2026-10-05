@@ -132,9 +132,14 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="email-templates-table-caption"
+    >
       <table class="data-table data-table--stack" id="email-templates-table">
-        <caption>
+        <caption id="email-templates-table-caption">
           {tn("{count} template", "{count} templates", templates.length, {
             count: templates.length
           })}

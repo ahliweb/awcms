@@ -122,7 +122,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **175** (`sql/001`–`175`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0129** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **67** `.astro` files in `src/pages/admin/`; **0 of 28** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **84** (49.962 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **84** (50.514 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **61** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.1.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -390,14 +390,6 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
-
-- **PROCUREMENT admin screens (#905) — landed.** `/admin/procurement` (five
-  views, every control behind its own `can()`), module `active`, 16 of 17
-  permissions claimed off the coverage ledger; `procurement.documents.update`
-  (draft edit in place) stays on it. Open from the issue, deliberately not done
-  here: step-up/rate limit on reveal, cost-only threshold, no location-scoped
-  ABAC / default maker-checker, and the untested `ACTOR_REQUIRED` 403 branch.
-  Existing tenants need `identity-access:permissions:backfill` for sql/175.
 
 - **PROCUREMENT (#888, ADR-0128) — follow-ups recorded by its security audit.**
   Not done, on purpose, each with a reason: (1) **step-up and a rate limit on

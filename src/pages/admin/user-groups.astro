@@ -149,9 +149,14 @@ const colCount = canMutate ? 6 : 5;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="user-groups-table-caption"
+    >
       <table class="data-table data-table--stack" id="user-groups-table">
-        <caption>
+        <caption id="user-groups-table-caption">
           {tn("{count} group", "{count} groups", groups.length, {
             count: groups.length
           })}

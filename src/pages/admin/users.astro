@@ -138,9 +138,14 @@ const showActions =
         role="alert"
         hidden
       />
-      <div class="data-table-scroll fade-in-up">
+      <div
+        class="data-table-scroll fade-in-up"
+        role="region"
+        tabindex="0"
+        aria-labelledby="users-table-caption"
+      >
         <table class="data-table data-table--stack" id="users-table">
-          <caption>
+          <caption id="users-table-caption">
             {tn("{count} user", "{count} users", users.length, {
               count: users.length
             })}

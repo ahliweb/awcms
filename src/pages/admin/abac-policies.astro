@@ -169,9 +169,14 @@ const canUpdate = canConfigure;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="abac-policies-table-caption"
+    >
       <table class="data-table data-table--stack" id="abac-policies-table">
-        <caption>
+        <caption id="abac-policies-table-caption">
           {tn("{count} policy", "{count} policies", policies.length, {
             count: policies.length
           })}

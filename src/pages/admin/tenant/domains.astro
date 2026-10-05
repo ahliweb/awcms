@@ -195,9 +195,14 @@ function domainStatusLabel(value: string): string {
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="tenant-domains-table-caption"
+    >
       <table class="data-table data-table--stack" id="tenant-domains-table">
-        <caption>
+        <caption id="tenant-domains-table-caption">
           {tn("{count} domain", "{count} domains", domains.length, {
             count: domains.length
           })}

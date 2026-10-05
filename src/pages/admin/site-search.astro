@@ -240,9 +240,16 @@ const showIndexActions = canReconcile || canRebuild;
       </div>
 
       {status.byResourceType.length > 0 && (
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="site-search-table-1-caption"
+        >
           <table class="data-table data-table--stack">
-            <caption>{t("Documents by resource type")}</caption>
+            <caption id="site-search-table-1-caption">
+              {t("Documents by resource type")}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Resource type")}</th>
@@ -415,9 +422,14 @@ const showIndexActions = canReconcile || canRebuild;
         {t("Recent index runs")}
         <span class="count-pill">{recentRuns.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="site-search-table-2-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="site-search-table-2-caption">
             {t("The ten most recent index runs")}
           </caption>
           <thead>
@@ -494,9 +506,14 @@ const showIndexActions = canReconcile || canRebuild;
         {t("Failed items")}
         <span class="count-pill">{failures.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="site-search-table-3-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="site-search-table-3-caption">
             {t("Items that could not be indexed, most recent first")}
           </caption>
           <thead>

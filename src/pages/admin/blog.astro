@@ -506,9 +506,14 @@ const selectedPost = selectedPostId
         <span class="count-pill">{total}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-posts-table-caption"
+      >
         <table class="data-table data-table--stack" id="blog-posts-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="blog-posts-table-caption">
             {t("Blog posts, most recently updated first.")}
           </caption>
           <thead>
@@ -765,9 +770,14 @@ const selectedPost = selectedPostId
         <a href={linkWith({ post: null })}>{t("Close")}</a>
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-table-2-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="blog-table-2-caption">
             {t("Revisions for the selected post.")}
           </caption>
           <thead>

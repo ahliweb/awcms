@@ -175,12 +175,20 @@ function severityVariant(severity: string): string {
           </a>
         </p>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-audit-control-plane-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-audit-control-plane-table"
           >
-            <caption class="sr-only">
+            <caption
+              class="sr-only"
+              id="omes-audit-control-plane-table-caption"
+            >
               {t("OMES control-plane actor/action audit events, newest first.")}
             </caption>
             <thead>
@@ -342,12 +350,20 @@ function severityVariant(severity: string): string {
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-audit-reconciliation-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-audit-reconciliation-table"
           >
-            <caption class="sr-only">
+            <caption
+              class="sr-only"
+              id="omes-audit-reconciliation-table-caption"
+            >
               {t(
                 "Remote OMES host execution and reconciliation audit evidence, newest first."
               )}

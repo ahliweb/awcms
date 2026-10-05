@@ -207,9 +207,14 @@ function severityVariant(severity: string): string {
           <span class="count-pill">{events.length}</span>
         </h2>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="audit-trail-table-1-caption"
+        >
           <table class="data-table data-table--stack">
-            <caption class="sr-only">
+            <caption class="sr-only" id="audit-trail-table-1-caption">
               {t("Audit events, newest first")}
               {resourceTypeFilter !== "" &&
                 `, filtered to resource type ${resourceTypeFilter}`}

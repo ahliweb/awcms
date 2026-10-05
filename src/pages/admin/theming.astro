@@ -217,9 +217,14 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   {canRead && !loadError && (
     <section class="admin-section fade-in-up" id="theming-state">
       <h2 class="admin-section-title">{t("Current state")}</h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="theming-table-1-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="theming-table-1-caption">
             {t("The tenant's active theme pointer and saved draft")}
           </caption>
           <thead>
@@ -552,9 +557,14 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
         {t("Published versions")}
         <span class="count-pill">{versions.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="theming-table-2-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="theming-table-2-caption">
             {t("The 50 most recent published theme versions, newest first")}
           </caption>
           <thead>

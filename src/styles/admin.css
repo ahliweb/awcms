@@ -1245,6 +1245,15 @@
   box-shadow: var(--shadow-xs);
 }
 
+/* The wrapper is a keyboard-focusable named region (tabindex="0" role="region"
+ * aria-label[ledby]) so keyboard users can scroll a wide table horizontally —
+ * WCAG 2.1.1, axe `scrollable-region-focusable` (#907). It therefore needs a
+ * visible focus ring (2.4.7). */
+.data-table-scroll:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;

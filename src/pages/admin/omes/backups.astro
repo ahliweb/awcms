@@ -274,9 +274,14 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-backups-table-caption"
+        >
           <table class="data-table data-table--stack" id="omes-backups-table">
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-backups-table-caption">
               {t("OMES backup snapshots, newest first.")}
             </caption>
             <thead>
@@ -416,12 +421,17 @@ const staleCount = backups.filter((backup) => !backup.fresh).length;
           )}
         </p>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-restore-requests-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-restore-requests-table"
           >
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-restore-requests-table-caption">
               {t("OMES backup restore requests, newest first.")}
             </caption>
             <thead>

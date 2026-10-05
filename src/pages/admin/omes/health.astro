@@ -247,9 +247,14 @@ function checkEntries(checks: unknown): [string, unknown][] {
             </span>
           </div>
         ) : mode === "latest" ? (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="omes-health-table-caption"
+          >
             <table class="data-table data-table--stack" id="omes-health-table">
-              <caption class="sr-only">
+              <caption class="sr-only" id="omes-health-table-caption">
                 {t(
                   "OMES health snapshots. Source attributed per row and per check; stale evidence is shown explicitly."
                 )}

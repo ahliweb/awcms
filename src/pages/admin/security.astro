@@ -252,7 +252,12 @@ const mfaContradiction =
             "Decided by this deployment's environment, not by the tenant \u2014 shown because the policies below depend on it. No key or secret value is displayed."
           )}
         </p>
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="security-deployment"
+        >
           <table class="data-table data-table--stack">
             <thead>
               <tr>
@@ -487,7 +492,12 @@ const mfaContradiction =
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="security-providers"
+            >
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
