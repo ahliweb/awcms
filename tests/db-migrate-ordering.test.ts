@@ -10,8 +10,10 @@ import path from "node:path";
 
 import { discoverMigrationFiles } from "../scripts/db-migrate";
 import {
+  assertValidMigrationNames,
   compareMigrationNames,
   listMigrationNames,
+  migrationPrefix,
   MIGRATIONS_DIR
 } from "../scripts/lib/migrations";
 
@@ -45,6 +47,33 @@ describe("compareMigrationNames", () => {
       compareMigrationNames("042_awcms_b.sql", "042_awcms_a.sql")
     ).toBeGreaterThan(0);
     expect(compareMigrationNames("042_awcms_a.sql", "042_awcms_a.sql")).toBe(0);
+  });
+});
+
+describe("assertValidMigrationNames", () => {
+  test("refuses the same number written at two widths", () => {
+    expect(() =>
+      assertValidMigrationNames(["100_awcms_a.sql", "0100_awcms_b.sql"])
+    ).toThrow(/same numeric value/);
+  });
+
+  test("refuses a name the runner would refuse", () => {
+    expect(() => assertValidMigrationNames(["README.sql"])).toThrow(
+      /Invalid migration file name: README\.sql/
+    );
+  });
+
+  test("accepts mixed three- and four-digit prefixes", () => {
+    expect(() =>
+      assertValidMigrationNames(["999_awcms_a.sql", "1000_awcms_b.sql"])
+    ).not.toThrow();
+  });
+});
+
+describe("migrationPrefix", () => {
+  test("returns the whole prefix, not the first three characters", () => {
+    expect(migrationPrefix("046_awcms_x.sql")).toBe("046");
+    expect(migrationPrefix("1000_awcms_x.sql")).toBe("1000");
   });
 });
 

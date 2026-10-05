@@ -16,16 +16,17 @@ The loader that gates use to fold migrations (`listMigrationNames`, used for exa
 ## Decision
 
 1. **The prefix is three or four digits**: `^\d{3,4}_awcms_[a-z0-9_]+\.sql$`. Two-digit and five-digit prefixes are still refused with the existing `Invalid migration file name` error.
-2. **One ordering, `compareMigrationNames`** in `scripts/lib/migrations.ts`: the numeric value of the leading prefix, then the full name as a tie-break. `scripts/db-migrate.ts` applies with it and `listMigrationNames` folds with it, so gate fold order equals runner apply order.
+2. **One ordering, `compareMigrationNames`** in `scripts/lib/migrations.ts`: the numeric value of the leading prefix, then the full name as a tie-break. `scripts/db-migrate.ts` applies with it, and every order-dependent reader of `sql/` folds with it: `listMigrationNames` (and so `deriveTableRlsStates` and the project-state inventory), `db:fk-index:check`, and the cumulative migration tests. Readers that take only the prefix (`check:docs` migration references, `tests/doc-inventory-counts.test.ts`, the inventory's range) read three or four digits, not the first three characters.
 3. **Upstream keeps `001`–`899`.** `1000` and above is for the reserved bands of derived apps. The base adds no four-digit file by this decision.
 4. **Nothing is renamed.** The ledger `awcms_schema_migrations` is keyed by full name and checksum and is untouched.
-5. **A test pins it.** `tests/db-migrate-ordering.test.ts` covers the widened pattern, the refusal of two- and five-digit prefixes, and numeric order across widths.
+5. **One number, one width.** `assertValidMigrationNames` (shared by the runner and `listMigrationNames`) refuses two files whose prefixes have the same numeric value at different widths (`0100_…` and `100_…`): their order would rest on the name tie-break alone.
+6. **A test pins it.** `tests/db-migrate-ordering.test.ts` covers the widened pattern, the refusal of two- and five-digit prefixes and of mixed-width duplicates, numeric order across widths, and runner/loader parity; `tests/docs-checks.test.mjs` covers four-digit references.
 
 ## Consequences
 
 - **Positive:** a derived app can extend a reserved band past `999` and add files that depend on newer tables; the runner and the gates share one order.
 - **Neutral:** every existing name has three digits, and for equal-width names numeric order equals lexical order, so the applied order is unchanged on every database. No migration, endpoint, event or runtime change.
-- **Negative:** mixed widths now sort by value, so `1000_…` follows `999_…`. No legacy-order conflict can exist: an older runner rejected four-digit names, so no database holds one applied under the old order. Authors must still avoid reusing a number across widths (`0100_…` and `100_…` tie on value and fall back to the full name).
+- **Negative:** mixed widths now sort by value, so `1000_…` follows `999_…`. No legacy-order conflict can exist: an older runner rejected four-digit names, so no database holds one applied under the old order. Reusing a number across widths (`0100_…` and `100_…`) is refused rather than left to the tie-break.
 
 ## Alternatives considered
 

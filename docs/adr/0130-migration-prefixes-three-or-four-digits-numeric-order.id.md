@@ -20,16 +20,17 @@ Loader yang dipakai gate untuk melipat migrasi (`listMigrationNames`, dipakai mi
 ## Keputusan
 
 1. **Prefiks tiga atau empat digit**: `^\d{3,4}_awcms_[a-z0-9_]+\.sql$`. Prefiks dua digit dan lima digit tetap ditolak dengan galat `Invalid migration file name` yang sudah ada.
-2. **Satu urutan, `compareMigrationNames`** di `scripts/lib/migrations.ts`: nilai numerik prefiks di depan, lalu nama lengkap sebagai pemutus seri. `scripts/db-migrate.ts` menerapkan dengannya dan `listMigrationNames` melipat dengannya, sehingga urutan lipat gate sama dengan urutan terap runner.
+2. **Satu urutan, `compareMigrationNames`** di `scripts/lib/migrations.ts`: nilai numerik prefiks di depan, lalu nama lengkap sebagai pemutus seri. `scripts/db-migrate.ts` menerapkan dengannya, dan setiap pembaca `sql/` yang bergantung pada urutan melipat dengannya: `listMigrationNames` (dan karenanya `deriveTableRlsStates` serta inventori project-state), `db:fk-index:check`, dan tes migrasi kumulatif. Pembaca yang hanya mengambil prefiks (rujukan migrasi `check:docs`, `tests/doc-inventory-counts.test.ts`, rentang inventori) membaca tiga atau empat digit, bukan tiga karakter pertama.
 3. **Upstream tetap memakai `001`–`899`.** `1000` ke atas untuk pita cadangan aplikasi turunan. Base tidak menambah berkas empat digit berdasarkan keputusan ini.
 4. **Tidak ada yang diganti nama.** Ledger `awcms_schema_migrations` dikunci oleh nama lengkap dan checksum, dan tidak disentuh.
-5. **Sebuah tes mengikatnya.** `tests/db-migrate-ordering.test.ts` mencakup pola yang diperlebar, penolakan prefiks dua dan lima digit, serta urutan numerik lintas lebar.
+5. **Satu nomor, satu lebar.** `assertValidMigrationNames` (dipakai bersama oleh runner dan `listMigrationNames`) menolak dua berkas yang prefiksnya bernilai numerik sama pada lebar berbeda (`0100_…` dan `100_…`): urutan keduanya hanya akan bergantung pada pemutus seri nama.
+6. **Sebuah tes mengikatnya.** `tests/db-migrate-ordering.test.ts` mencakup pola yang diperlebar, penolakan prefiks dua dan lima digit serta duplikat lintas lebar, urutan numerik lintas lebar, dan kesamaan urutan runner/loader; `tests/docs-checks.test.mjs` mencakup rujukan empat digit.
 
 ## Konsekuensi
 
 - **Positif:** aplikasi turunan dapat memperluas pita cadangan melewati `999` dan menambah berkas yang bergantung pada tabel lebih baru; runner dan gate berbagi satu urutan.
 - **Netral:** semua nama yang ada bertiga digit, dan untuk nama berlebar sama urutan numerik sama dengan urutan leksikal, sehingga urutan terap tidak berubah di database mana pun. Tanpa perubahan migrasi, endpoint, event, atau runtime.
-- **Negatif:** lebar campuran kini diurutkan menurut nilai, sehingga `1000_…` mengikuti `999_…`. Tidak mungkin ada konflik urutan lama: runner lama menolak nama empat digit, jadi tidak ada database yang menyimpan satu pun yang diterapkan dengan urutan lama. Penulis tetap harus menghindari memakai ulang satu nomor lintas lebar (`0100_…` dan `100_…` seri pada nilai dan jatuh ke nama lengkap).
+- **Negatif:** lebar campuran kini diurutkan menurut nilai, sehingga `1000_…` mengikuti `999_…`. Tidak mungkin ada konflik urutan lama: runner lama menolak nama empat digit, jadi tidak ada database yang menyimpan satu pun yang diterapkan dengan urutan lama. Memakai ulang satu nomor lintas lebar (`0100_…` dan `100_…`) ditolak, tidak diserahkan ke pemutus seri.
 
 ## Alternatif yang dipertimbangkan
 

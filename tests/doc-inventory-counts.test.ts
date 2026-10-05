@@ -59,7 +59,7 @@ const MODULE_TOTAL =
   /\*\*(\d+)\s+(?:registered\s+|active\s+|base\s+)?modul(?:e)?s?(?:\s+(?:aktif|base|terdaftar|registered|active))?\*\*(?:\s+(?:aktif|terdaftar|yang terdaftar|registered))?/gi;
 
 /** `` `sql/001`-`sql/070` `` or `` `sql/001`–`070` `` — an inclusive range. */
-const MIGRATION_RANGE = /`sql\/001`\s*[–-]\s*`(?:sql\/)?(\d{3})`/g;
+const MIGRATION_RANGE = /`sql\/001`\s*[–-]\s*`(?:sql\/)?(\d{3,4})`/g;
 
 /** See the header: generated or explicitly deprecated files state the past. */
 const FROZEN = /\*\*File ini di-generate\.\*\*|⚠️ DEPRECATED/;
@@ -88,7 +88,7 @@ async function currentStateDocs(): Promise<string[]> {
 async function highestMigration(): Promise<number> {
   const names = (await readdir("sql")).filter((name) => name.endsWith(".sql"));
   const numbers = names
-    .map((name) => Number.parseInt(name.slice(0, 3), 10))
+    .map((name) => Number.parseInt(name, 10))
     .filter((value) => Number.isFinite(value));
 
   return Math.max(...numbers);

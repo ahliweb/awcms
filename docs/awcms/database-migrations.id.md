@@ -71,7 +71,7 @@ DATABASE_URL=postgres://awcms:awcms_password@localhost:5432/awcms bun run db:mig
 - Runtime memakai Bun melalui `bun scripts/db-migrate.ts`.
 - Driver memakai `Bun.SQL`, bukan `pg` atau adapter Node.js.
 - File migrasi dibaca dari `sql/` dan diurutkan berdasarkan nilai numerik awalan mereka, dengan nama file lengkap sebagai tie-break (lihat ADR-0130, Issue #911).
-- Nama file wajib mengikuti `NNN_awcms_<area>_<description>.sql` (norma upstream) atau `NNNN_awcms_<area>_<description>.sql` (aplikasi turunan dengan band terjaga ≥ 1000). Tepat tiga atau empat digit; awalan lima-digit dan dua-digit ditolak.
+- Nama file wajib mengikuti `NNN_awcms_<area>_<description>.sql` (norma upstream) atau `NNNN_awcms_<area>_<description>.sql` (aplikasi turunan dengan band terjaga ≥ 1000). Tepat tiga atau empat digit; awalan lima-digit dan dua-digit ditolak, begitu pula satu nomor yang ditulis dalam dua lebar (`0100_` di samping `100_`).
 - Runner memastikan tabel `awcms_schema_migrations` tersedia.
 - Migration yang sudah tercatat akan di-skip.
 - Checksum SHA-256 disimpan untuk setiap migration yang applied.

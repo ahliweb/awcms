@@ -336,6 +336,27 @@ describe("checkSqlMigrationReferences", () => {
     expect(problems[0]?.message).toContain("sql/020");
   });
 
+  test("mengenali awalan empat digit (ADR-0130): sql/1000 ada, sql/1001 hantu", () => {
+    const withFourDigit = new Set([
+      ...sqlFiles,
+      "1000_awcms_commerce_orders.sql"
+    ]);
+    const known = checkSqlMigrationReferences(
+      "docs/x.md",
+      lines("lihat `sql/1000` dan `sql/1000_awcms_commerce_orders.sql`"),
+      withFourDigit
+    );
+    expect(known).toEqual([]);
+
+    const phantom = checkSqlMigrationReferences(
+      "docs/x.md",
+      lines("lihat `sql/1001`"),
+      withFourDigit
+    );
+    expect(phantom).toHaveLength(1);
+    expect(phantom[0]?.message).toContain("sql/1001");
+  });
+
   test("melaporkan nama berkas penuh hantu (nomor ada, nama beda/mini)", () => {
     // 014 ADA tapi dengan nama email; nama tenant-domain di 014 = hantu.
     const md = "lihat `sql/014_awcms_tenant_domain_permissions.sql`";
