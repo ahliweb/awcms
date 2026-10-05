@@ -7435,6 +7435,7 @@ msgstr "Dicatat pada dokumen dan di log audit."
 
 msgid "Destination location id"
 msgstr "ID lokasi tujuan"
+
 msgid "Stock movements"
 msgstr "Mutasi stok"
 
