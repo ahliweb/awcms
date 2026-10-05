@@ -142,25 +142,10 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "tax.snapshots.create",
   "tax.snapshots.reverse",
 
-  // procurement (17) — ADR-0128 / Issue #888. Procurement ships API-first;
-  // "admin screens for procurement" (suppliers, documents with lines, approval
-  // threshold, reconciliation, supplier reports) is a recorded follow-up, so each
-  // permission is listed here until a screen claims it.
-  "procurement.documents.cancel",
-  "procurement.documents.create",
-  "procurement.documents.finalise",
-  "procurement.documents.read",
-  "procurement.documents.reconcile",
-  "procurement.documents.reverse",
-  "procurement.documents.submit",
-  "procurement.documents.update",
-  "procurement.policy.configure",
-  "procurement.policy.read",
-  "procurement.reports.read",
-  "procurement.suppliers.create",
-  "procurement.suppliers.delete",
-  "procurement.suppliers.read",
-  "procurement.suppliers.restore",
-  "procurement.suppliers.reveal",
-  "procurement.suppliers.update"
+  // procurement (1) — ADR-0128 / Issue #888. `/admin/procurement` (Issue #905)
+  // claimed the other sixteen. What remains is editing a DRAFT in place
+  // (`PUT /documents/{id}`): the screen creates a draft and, for a mistake,
+  // cancels it and enters a new one, so this stays on the shrink-only list until
+  // a draft editor is a decision.
+  "procurement.documents.update"
 ];

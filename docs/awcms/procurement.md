@@ -47,7 +47,7 @@ id), an auditor (reconciliation).
 
 **Non-goals.** A full accounts-payable ledger; any network or provider call in a
 database transaction; purchase orders; partial receipts of one document;
-costing/valuation; supplier portals; admin screens (follow-up).
+costing/valuation; supplier portals. (The admin screen landed in Issue #905; see §9.)
 
 ## 2. The receiving state machine
 
@@ -223,7 +223,15 @@ Recorded follow-ups:
 
 Recorded by the security audit: step-up and a rate limit on reveal; a stricter permission for payment/contact references and soft-delete of identifiers; keyed hashing and at-rest encryption of `normalized_value`; mode/quantity-based approval gating for requisitions and transfers; actor-bound idempotency in `inventory`.
 
-Admin screens (suppliers with masked identifiers and reveal, documents with
-line editing, finalise/reverse with the reason panel, reconciliation, approval
-threshold) — and only then `status: active` and a `navigation` entry; purchase
+Admin screens **landed in Issue #905** (`/admin/procurement`, module `active`,
+navigation gated by `procurement.documents.read`): suppliers (create/edit,
+soft-delete/restore, masked identifiers, add/remove, and an audited reveal shown
+once and never cached), documents of every mode (draft with lines, submit,
+finalise, cancel and reverse with a mandatory reason, each with an
+`Idempotency-Key`), the approval threshold, the receiving and supplier reports and
+the reconciliation. Not on the screen: editing a draft in place
+(`documents.update`; cancel and re-enter instead), and the residual gaps above
+(reveal step-up, cost-only threshold, location-scoped ABAC). Existing tenants
+need `bun run identity-access:permissions:backfill` before their roles see the
+screen. Still open: purchase
 orders and receipt against an order; partial receipts; costing; archive-then-purge.

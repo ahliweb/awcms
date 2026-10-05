@@ -95,7 +95,17 @@ const ROUTES = [
     label: "inventory (movements + adjust/transfer forms)"
   },
   { path: "/admin/tax", label: "tax (rule profiles + draft form)" },
-  { path: "/admin/tax?view=report", label: "tax (reconciliation form)" }
+  { path: "/admin/tax?view=report", label: "tax (reconciliation form)" },
+  // Issue #905 — the screen that flipped `procurement` to `active`.
+  {
+    path: "/admin/procurement",
+    label: "procurement (suppliers + create form)"
+  },
+  {
+    path: "/admin/procurement?view=documents",
+    label: "procurement (documents + line editor)"
+  },
+  { path: "/admin/procurement?view=policy", label: "procurement (policy form)" }
 ] as const;
 
 const tenantId = process.env.E2E_TENANT_ID;

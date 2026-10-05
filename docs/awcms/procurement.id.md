@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](procurement.md)
 
-<!-- i18n-source-hash: sha256:67cd669c38b5d719e0fde899f9960c2f1f026f52f58594a9ec45370c73e889c7 -->
+<!-- i18n-source-hash: sha256:f222233bcd9d00eec4781edd7c2fbb58b18cc6df0b0f25276a9306e1540feb36 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -49,7 +49,7 @@ penyetuju (workflow), pembaca keuangan (laporan, reveal NPWP), auditor (rekonsil
 
 **Non-goal.** Buku besar hutang usaha penuh; panggilan jaringan/provider dalam
 transaksi database; purchase order; penerimaan parsial satu dokumen; costing/valuasi;
-portal pemasok; layar admin (tindak lanjut).
+portal pemasok. (Layar admin mendarat di Issue #905; lihat §9.)
 
 ## 2. State machine penerimaan
 
@@ -207,7 +207,14 @@ Tindak lanjut tercatat:
 
 Dicatat oleh audit keamanan: step-up dan rate limit pada reveal; izin lebih ketat untuk referensi pembayaran/kontak dan soft-delete identifier; hash berkunci dan enkripsi at-rest untuk `normalized_value`; gerbang persetujuan berbasis mode/kuantitas untuk requisition dan transfer; idempotensi terikat aktor di `inventory`.
 
-Layar admin (pemasok dengan identifier ter-mask dan reveal, dokumen dengan
-penyuntingan baris, finalise/reverse dengan panel alasan, rekonsiliasi, ambang
-persetujuan) — baru kemudian `status: active` dan entri `navigation`; purchase
+Layar admin **mendarat di Issue #905** (`/admin/procurement`, modul `active`,
+navigasi dijaga `procurement.documents.read`): pemasok (buat/ubah, soft-delete/
+pulihkan, identifier ter-mask, tambah/hapus, dan reveal ber-audit yang tampil
+sekali dan tak pernah di-cache), dokumen semua mode (draf dengan baris, submit,
+finalise, cancel dan reverse dengan alasan wajib, masing-masing ber-`Idempotency-Key`),
+ambang persetujuan, laporan penerimaan dan pemasok, serta rekonsiliasi. Tidak
+ada di layar: menyunting draf di tempat (`documents.update`; batalkan lalu
+masukkan ulang) dan celah sisa di atas (step-up reveal, ambang hanya-biaya, ABAC
+berlingkup lokasi). Tenant yang sudah ada perlu `bun run identity-access:permissions:backfill`
+sebelum peran mereka melihat layar ini. Masih terbuka: purchase
 order dan penerimaan terhadap order; penerimaan parsial; costing; archive-then-purge.

@@ -276,7 +276,7 @@
       "key": "procurement",
       "name": "Procurement",
       "version": "0.1.0",
-      "status": "experimental",
+      "status": "active",
       "type": "domain",
       "dependencies": [
         "tenant_admin",
@@ -290,7 +290,7 @@
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 17,
-      "navigationCount": 0,
+      "navigationCount": 1,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

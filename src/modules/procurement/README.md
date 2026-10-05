@@ -36,6 +36,11 @@ trigger, so a finalised document is immutable and nothing is ever deleted.
 | `application/procurement-route-support.ts`      | Idempotency, body validation and error mapping shared by the routes                                         |
 | `src/pages/api/v1/procurement/**`               | 16 thin route files; each authorizes through `defineTenantRoute`                                            |
 
-Status is `experimental` until the first admin screen lands (ADR-0128 §10).
+Status is `active`: `/admin/procurement` (Issue #905) is the admin screen ADR-0021
+criterion 1 required, and it landed with its `navigation` entry (gated by
+`procurement.documents.read`). It covers suppliers (masked identifiers, audited
+reveal), documents of every mode with submit/finalise/cancel/reverse, the approval
+threshold, the reports and the reconciliation. Editing a draft in place
+(`documents.update`) is not on the screen: cancel and re-enter.
 
 **Approval threshold:** cost-based; covers `receive` and `supplier_return` only (both require a `unitCost` per line). `requisition` and `transfer` are not cost-gated (mode/quantity gating is a recorded follow-up).

@@ -28,10 +28,14 @@
  * transaction) and `reporting` (two projections). `workflow_approval` is NOT a
  * dependency: approval is optional and soft (tests/module-boundary.test.ts).
  *
- * ## API-first
+ * ## Surfaces
  *
- * No admin screen and no `navigation` entry ship with this module — "admin
- * screens for procurement" is a recorded follow-up (ADR-0128 §9).
+ * The HTTP contract is the machine surface; the operator surface is
+ * `/admin/procurement` (Issue #905, ADR-0128 §9): suppliers with masked
+ * identifiers and an audited reveal, documents with lines for every mode
+ * (draft, submit, finalise, cancel, reverse), the approval threshold, the
+ * receiving and supplier reports, and the reconciliation. It never writes a
+ * balance: stock moves only when the endpoint posts through the ledger.
  */
 import {
   defineModule,
@@ -202,14 +206,12 @@ export const procurementModule = defineModule({
   key: PROCUREMENT_MODULE_KEY,
   name: "Procurement",
   version: "0.1.0",
-  // `experimental`, not `active`, for the same reason as `inventory` and
-  // `push_delivery`: the HTTP surface is complete and enforced, but the module
-  // has no admin screen yet and ADR-0021 criterion 1 holds an ACTIVE module to
-  // having one. Flip to `active` in the PR that lands the first screen and a
-  // `navigation` entry (ADR-0128 §9).
-  status: "experimental",
+  // `active` since the first admin screen (`/admin/procurement`, Issue #905)
+  // landed with its `navigation` entry: ADR-0021 criterion 1 requires every
+  // ACTIVE module to declare a screen, and this one now does.
+  status: "active",
   description:
-    "Suppliers, receiving, supplier returns, stock requisitions and location transfers (Issue #888, ADR-0128) on top of the inventory ledger, for any domain module that buys, receives, returns or moves goods. A supplier is a business role that may reference the canonical profile_identity party, with vendor code, status, categories/tags, and SENSITIVE tax/business identifiers and payment/contact references that are masked in every response, log and event and revealed only by one audited, separately permissioned endpoint. A document (receive, supplier_return, requisition, transfer) carries line snapshots of SKU, name, unit and exact-decimal cost and a lifecycle draft -> submitted -> finalised | cancelled, finalised -> reversed, enforced by a database trigger: finalised documents are immutable and nothing is ever deleted. Finalising posts inventory movements THROUGH THE LEDGER'S PORT (never writing a balance), all lines or none, idempotently — a replay posts nothing twice; reversing posts compensating movements; a requisition or transfer is a paired ledger transfer. Each movement is linked to its document line, and a read-only reconciliation proves finalised documents and ledger agree. Optional threshold approval through workflow_approval (fail-closed when no workflow is published). Receiving and supplier projections ride the reporting engine. No accounts-payable ledger and no provider call inside a transaction. API-first: no admin screen ships (recorded follow-up).",
+    "Suppliers, receiving, supplier returns, stock requisitions and location transfers (Issue #888, ADR-0128) on top of the inventory ledger, for any domain module that buys, receives, returns or moves goods. A supplier is a business role that may reference the canonical profile_identity party, with vendor code, status, categories/tags, and SENSITIVE tax/business identifiers and payment/contact references that are masked in every response, log and event and revealed only by one audited, separately permissioned endpoint. A document (receive, supplier_return, requisition, transfer) carries line snapshots of SKU, name, unit and exact-decimal cost and a lifecycle draft -> submitted -> finalised | cancelled, finalised -> reversed, enforced by a database trigger: finalised documents are immutable and nothing is ever deleted. Finalising posts inventory movements THROUGH THE LEDGER'S PORT (never writing a balance), all lines or none, idempotently — a replay posts nothing twice; reversing posts compensating movements; a requisition or transfer is a paired ledger transfer. Each movement is linked to its document line, and a read-only reconciliation proves finalised documents and ledger agree. Optional threshold approval through workflow_approval (fail-closed when no workflow is published). Receiving and supplier projections ride the reporting engine. No accounts-payable ledger and no provider call inside a transaction. Operator surface: /admin/procurement.",
   dependencies: [
     "tenant_admin",
     "identity_access",
@@ -232,6 +234,14 @@ export const procurementModule = defineModule({
     ],
     subscribes: []
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_procurement",
+      path: "/admin/procurement",
+      order: 15,
+      requiredPermission: "procurement.documents.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "suppliers",
