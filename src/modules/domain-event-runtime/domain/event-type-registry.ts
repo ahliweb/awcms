@@ -92,6 +92,17 @@ export const TAX_RULE_VERSION_PUBLISHED_EVENT_TYPE =
 export const TAX_SNAPSHOT_FINALISED_EVENT_TYPE = "awcms.tax.snapshot.finalised";
 export const TAX_SNAPSHOT_REVERSED_EVENT_TYPE = "awcms.tax.snapshot.reversed";
 
+/**
+ * `procurement` (ADR-0128). Declared here — not imported from
+ * `procurement/domain/procurement-events.ts` — for the same reason as
+ * `inventory` above. The literals are kept identical by the AsyncAPI parity gate.
+ */
+export const PROCUREMENT_EVENT_VERSION = "1.0";
+export const PROCUREMENT_DOCUMENT_FINALISED_EVENT_TYPE =
+  "awcms.procurement.document.finalised";
+export const PROCUREMENT_DOCUMENT_REVERSED_EVENT_TYPE =
+  "awcms.procurement.document.reversed";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
     {
@@ -193,6 +204,18 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
       eventVersion: TAX_EVENT_VERSION,
       description:
         "A finalised document's tax was reversed (refund/return) from its original snapshot. Totals are negative decimal strings; carries the original snapshot id."
+    },
+    {
+      eventType: PROCUREMENT_DOCUMENT_FINALISED_EVENT_TYPE,
+      eventVersion: PROCUREMENT_EVENT_VERSION,
+      description:
+        "A procurement document (receive, supplier return, requisition or transfer) was finalised and its inventory movements posted through the ledger, in one transaction. Carries opaque ids, the document number and decimal-string cost only — never a supplier name, identifier, note or reason."
+    },
+    {
+      eventType: PROCUREMENT_DOCUMENT_REVERSED_EVENT_TYPE,
+      eventVersion: PROCUREMENT_EVENT_VERSION,
+      description:
+        "A finalised procurement document was reversed: compensating inventory movements were posted and the document marked reversed, in one transaction. Same payload shape as document.finalised."
     }
   ];
 

@@ -81,6 +81,8 @@ tags:
     description: Owner/operator API for OMES projections and safe operations (omes_control module, ADR-0122, Issue ahliweb/omes#198) — tenant-scoped fleet overview, server registration/decommission, enrollment-challenge issuance/revocation, desired-vs-observed deployment views, allowlisted safe-operation submission (with destructive operations routed through the canonical workflow-approval engine), worker job listing/cancel/retry-approval, health/backup/audit projections. AWCMS only ever records intent against OMES-owned capability evidence stored server-side — it never executes arbitrary shell/SSH, reads host files directly, or reads Hermes private state. Host/deployment execution is exclusively OMES's own pull worker (ahliweb/omes#199, out of scope here).
   - name: Inventory
     description: "A generic, auditable multi-location STOCK LEDGER (inventory module, Issue #887, ADR-0126) that any domain module — commerce, POS, storefront — adopts as its inventory authority instead of keeping its own stock counter. Stock locations; IMMUTABLE finalised movements (opening, receive, sale, sale_return, supplier_return, transfer_out/transfer_in, adjustment) that are append-only by trigger and by privileges and corrected only by compensating movements; a per-(location,item) balance that is a read model always equal to the sum of its movements, with a reconciliation that proves it and a rebuild that repairs a drifted row FROM the ledger; a negative-stock policy per tenant and location; low-stock thresholds with a projection on the reporting engine. Item references are an OPAQUE (itemType, itemRef) supplied by the consumer — never a foreign key to any catalogue. Every posting carries an idempotent source identity (type, id, line) and an Idempotency-Key; replaying either returns the ORIGINAL movement. A transfer is always a balanced out/in pair posted in one transaction. A client can NEVER assert a balance: no operation accepts one, and a body that names onHand/balanceAfter is a 400. adjust, transfer and rebuild are high-risk, separately grantable, and audited."
+  - name: Procurement
+    description: "Suppliers, receiving, supplier returns, stock requisitions and location transfers (procurement module, Issue #888, ADR-0128) on top of the inventory ledger. A supplier is a business role that may reference the canonical profile_identity party, with vendor code, status, categories/tags and SENSITIVE tax/business identifiers and payment/contact references that are masked in every response and revealed only by one audited, separately permissioned operation. A document (receive, supplier_return, requisition, transfer) has line snapshots of SKU, name, unit and exact-decimal cost and a lifecycle draft -> submitted -> finalised | cancelled, finalised -> reversed enforced by a database trigger; finalised documents are immutable and nothing is deleted. Finalise posts inventory movements THROUGH THE LEDGER'S PORT (never a balance), all lines or none and idempotently; reversal posts compensating movements; a requisition or transfer is a paired ledger transfer. Optional threshold approval through workflow_approval (fail closed). finalise, reverse, cancel and reveal are high-risk, separately grantable, and audited."
 paths:
   /api/v1/abac/policies:
     get:
@@ -14840,6 +14842,1159 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents:
+    get:
+      operationId: procurementDocumentsList
+      tags:
+        - Procurement
+      summary: List procurement documents
+      description: Gated by `procurement.documents.read`. Newest first, keyset paginated. Lines are in the single-document read.
+      parameters:
+        - name: mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - receive
+              - supplier_return
+              - requisition
+              - transfer
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - submitted
+              - finalised
+              - cancelled
+              - reversed
+        - name: supplierId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Matches either the document's location or its source location.
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - &a1
+          $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of documents.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      documents:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ProcurementDocument"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: procurementDocumentCreate
+      tags:
+        - Procurement
+      summary: Create a draft document
+      description: "Gated by `procurement.documents.create`. Nothing a draft says touches stock. Lifecycle state, stamps, supplier snapshots and totals are server-derived: a body naming one is a 400. `receive` and `supplier_return` need `supplierId` and a `unitCost` on every line (the approval threshold is cost-based); `requisition`/`transfer` need `sourceLocationId` and forbid `supplierId`. Requires an Idempotency-Key. A supplier's `externalReference` can be live on one document per mode (`409 DUPLICATE_EXTERNAL_REFERENCE`)."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcurementDocumentInput"
+      responses:
+        "201":
+          description: The draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementDocumentDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, SUPPLIER_UNAVAILABLE or DUPLICATE_EXTERNAL_REFERENCE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: LOCATION_NOT_FOUND or SUPPLIER_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents/{id}:
+    get:
+      operationId: procurementDocumentGet
+      tags:
+        - Procurement
+      summary: Read a document with its lines and ledger movements
+      description: Gated by `procurement.documents.read`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: The document.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementDocumentDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": &a2
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: procurementDocumentReplace
+      tags:
+        - Procurement
+      summary: Replace a draft's header and lines
+      description: Gated by `procurement.documents.update`. Same body as create; `mode` must match the stored mode and cannot change (`409 MODE_IMMUTABLE`). `409 INVALID_STATE` once the document has left draft — the database also refuses it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcurementDocumentInput"
+      responses:
+        "200":
+          description: The draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementDocumentDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: INVALID_STATE, MODE_IMMUTABLE, SUPPLIER_UNAVAILABLE or DUPLICATE_EXTERNAL_REFERENCE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: LOCATION_NOT_FOUND or SUPPLIER_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents/{id}/cancel:
+    post:
+      operationId: procurementDocumentCancel
+      tags:
+        - Procurement
+      summary: Cancel a draft or submitted document
+      description: Gated by `procurement.documents.cancel` (HIGH-RISK). No stock was ever moved, so nothing is compensated; a `finalised` document is reversed instead (`409 INVALID_STATE`). A pending approval is cancelled with it. Requires an Idempotency-Key and a reason. Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &a3
+              $ref: "#/components/schemas/ProcurementReasonRequired"
+      responses:
+        "200":
+          description: The cancelled document.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementDocumentDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: INVALID_STATE or IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents/{id}/finalise:
+    post:
+      operationId: procurementDocumentFinalise
+      tags:
+        - Procurement
+      summary: Finalise a document — post its inventory movements
+      description: "Gated by `procurement.documents.finalise` (HIGH-RISK). Posts the document's movements THROUGH THE LEDGER'S PORT (never writing a balance), all lines or none, each under the identity (source type, document id, line, operation), then marks it `finalised`. Idempotent twice over: the Idempotency-Key is bound to the request hash, and finalising an already `finalised` document answers `200 replayed: true` posting NOTHING (even under a new key). A refusal on any line (`INSUFFICIENT_STOCK`, `LOCATION_INACTIVE`, `UNIT_MISMATCH`…) rolls every line back and leaves the document `submitted`. A document needing approval cannot be finalised until approved (`409 APPROVAL_PENDING` / `APPROVAL_REJECTED`). Audited at warning severity; ledger rows carry the request's correlation id; publishes `awcms.procurement.document.finalised`."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - *a1
+      responses:
+        "200":
+          description: "Replay: already finalised, nothing posted."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementPostingResult"
+                  meta:
+                    type: object
+        "201":
+          description: Finalised.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementPostingResult"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: INVALID_STATE, APPROVAL_PENDING, APPROVAL_REJECTED, SUPPLIER_UNAVAILABLE, INSUFFICIENT_STOCK, LOCATION_INACTIVE, UNIT_MISMATCH, SOURCE_CONFLICT or IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: LOCATION_NOT_FOUND or QUANTITY_OUT_OF_RANGE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents/{id}/reversal:
+    post:
+      operationId: procurementDocumentReverse
+      tags:
+        - Procurement
+      summary: Reverse a finalised document with compensating movements
+      description: "Gated by `procurement.documents.reverse` (HIGH-RISK, separately grantable from `finalise`). Posts the opposite movements through the ledger (a receipt becomes a supplier return, a supplier return a receipt, a transfer a transfer back) under distinct `*_reversal` source identities and marks the document `reversed`. The original movements are never touched. May be refused by the ledger (`INSUFFICIENT_STOCK` when the received stock was since sold and the policy forbids negative stock): nothing is posted and the document stays `finalised`. Reversing a `reversed` document is `200 replayed: true`. Requires an Idempotency-Key and a reason; audited at critical severity; publishes `awcms.procurement.document.reversed`."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *a3
+      responses:
+        "200":
+          description: "Replay: already reversed."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementPostingResult"
+                  meta:
+                    type: object
+        "201":
+          description: Reversed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementPostingResult"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: INVALID_STATE, INSUFFICIENT_STOCK, LOCATION_INACTIVE, UNIT_MISMATCH, SOURCE_CONFLICT or IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: LOCATION_NOT_FOUND or QUANTITY_OUT_OF_RANGE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents/{id}/submit:
+    post:
+      operationId: procurementDocumentSubmit
+      tags:
+        - Procurement
+      summary: Submit a draft
+      description: Gated by `procurement.documents.submit`. Freezes the lines (database trigger), computes the total cost in SQL and, when the tenant's approval threshold is set and reached, starts a `workflow_approval` instance under the workflow key `procurement.document_approval`. With no published definition (or `workflow` disabled) the submit is REFUSED with `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` — fail closed, nothing submitted. Requires an Idempotency-Key.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - *a1
+      responses:
+        "200":
+          description: The submitted document.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementDocumentDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: INVALID_STATE, APPROVAL_WORKFLOW_NOT_CONFIGURED, APPROVAL_WORKFLOW_MISCONFIGURED or SUPPLIER_UNAVAILABLE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/documents/reconciliation:
+    get:
+      operationId: procurementDocumentsReconcile
+      tags:
+        - Procurement
+      summary: Reconcile finalised documents against the inventory ledger
+      description: Gated by `procurement.documents.reconcile`. Read-only. Proves per (document, line, operation) that the ledger recorded exactly the documented movements — number, type, location, quantity and source identity — and that no ledger row carries a procurement source identity without a document line behind it. `?documentId=` scopes it to one document. The scan is the proof and is not bounded; the discrepancy list is (200).
+      parameters:
+        - name: documentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: The reconciliation report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementReconciliation"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/procurement/policy:
+    get:
+      operationId: procurementPolicyGet
+      tags:
+        - Procurement
+      summary: Read the approval threshold
+      description: Gated by `procurement.policy.read`. `approvalThreshold` null means approval is off.
+      parameters:
+        - *a1
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementPolicy"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: procurementPolicySet
+      tags:
+        - Procurement
+      summary: Set the approval threshold
+      description: Gated by `procurement.policy.configure` (HIGH-RISK). A decimal, or null to turn approval off. Affects only documents submitted AFTER the change. Requires an Idempotency-Key; audited at warning severity.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approvalThreshold
+              additionalProperties: false
+              properties:
+                approvalThreshold:
+                  nullable: true
+                  oneOf:
+                    - $ref: "#/components/schemas/ProcurementDecimal"
+                    - type: number
+                      minimum: 0
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementPolicy"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/reports/receiving:
+    get:
+      operationId: procurementReportReceiving
+      tags:
+        - Procurement
+      summary: Documents and cost per mode and status
+      description: Gated by `procurement.reports.read`. At most 20 rows. The live view behind the `procurement.receiving` reporting projection.
+      parameters:
+        - &a4
+          name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Document date, inclusive.
+        - &a5
+          name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Document date, inclusive.
+        - *a1
+      responses:
+        "200":
+          description: Summary rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProcurementReceivingSummaryRow"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/procurement/reports/suppliers:
+    get:
+      operationId: procurementReportSuppliers
+      tags:
+        - Procurement
+      summary: Per-supplier receiving volume and cost
+      description: Gated by `procurement.reports.read`. Finalised receipts, supplier returns, reversals and open documents per supplier, with exact-decimal cost, within optional document dates. Keyset paginated. The live view behind the `procurement.suppliers` reporting projection.
+      parameters:
+        - *a4
+        - *a5
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - *a1
+      responses:
+        "200":
+          description: A page of supplier activity.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      suppliers:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ProcurementSupplierActivity"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/procurement/suppliers:
+    get:
+      operationId: procurementSuppliersList
+      tags:
+        - Procurement
+      summary: List suppliers
+      description: Gated by `procurement.suppliers.read`. Newest first, keyset paginated (`cursor`). Identifiers and payment/contact references are NEVER in this response. Soft-deleted suppliers are hidden unless `includeDeleted=true`, which additionally needs `procurement.suppliers.restore` (403 otherwise). Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - inactive
+              - blocked
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: includeDeleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - *a1
+      responses:
+        "200":
+          description: A page of suppliers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      suppliers:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ProcurementSupplier"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: procurementSupplierCreate
+      tags:
+        - Procurement
+      summary: Register a supplier
+      description: "Gated by `procurement.suppliers.create`. `profileId` optionally references the canonical `profile_identity` party (identity is owned there, not copied). No Idempotency-Key: the case-insensitive (tenant, vendor code) unique key turns a retried create into `409 VENDOR_CODE_CONFLICT`. Audited."
+      parameters:
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcurementSupplierCreate"
+      responses:
+        "201":
+          description: The supplier.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementSupplier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: VENDOR_CODE_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: PROFILE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/suppliers/{id}:
+    get:
+      operationId: procurementSupplierGet
+      tags:
+        - Procurement
+      summary: Read a supplier
+      description: Gated by `procurement.suppliers.read`. A soft-deleted supplier is a 404.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: The supplier.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementSupplier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+    patch:
+      operationId: procurementSupplierUpdate
+      tags:
+        - Procurement
+      summary: Edit a supplier
+      description: "Gated by `procurement.suppliers.update`. Rename, change status, attach/detach the canonical party (`profileId`: null detaches), replace categories/tags. Documents already written keep the supplier name they snapshotted. Audited with the changed field NAMES, never values."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcurementSupplierUpdate"
+      responses:
+        "200":
+          description: The supplier.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementSupplier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: SUPPLIER_DELETED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: PROFILE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: procurementSupplierDelete
+      tags:
+        - Procurement
+      summary: Soft-delete a supplier
+      description: Gated by `procurement.suppliers.delete` (HIGH-RISK). Soft delete with an optional `{reason}` body; refused with `409 SUPPLIER_HAS_OPEN_DOCUMENTS` while a draft or submitted document references it. Documents keep referencing the row. Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcurementReason"
+      responses:
+        "200":
+          description: The deleted supplier.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementSupplier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: SUPPLIER_DELETED or SUPPLIER_HAS_OPEN_DOCUMENTS.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/suppliers/{id}/identifiers:
+    get:
+      operationId: procurementSupplierIdentifiersList
+      tags:
+        - Procurement
+      summary: List a supplier's identifiers (MASKED)
+      description: Gated by `procurement.suppliers.read`. Tax/business identifiers and payment/contact references, with `maskedValue` ONLY — the response type has no field that can carry a value. The value is returned solely by the audited `reveal` operation.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: The identifiers, masked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProcurementSupplierIdentifier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+    post:
+      operationId: procurementSupplierIdentifierAdd
+      tags:
+        - Procurement
+      summary: Add a supplier identifier or reference
+      description: Gated by `procurement.suppliers.update`. Stored normalized with a lookup hash and a masked display value; the response carries the MASKED value only. `classification` is derived (`sensitive` for tax/business identifiers, `confidential` otherwise). The add is IDEMPOTENT, so re-adding a value the supplier already holds returns the same `201` uniform acknowledgement (type, label, maskedValue, classification; no id, no timestamp) as a fresh add (and audits nothing), so a caller without `suppliers.reveal` cannot use this operation as a value-equality oracle. Audited with the identifier type and classification, never the value.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcurementIdentifierCreate"
+      responses:
+        "201":
+          description: Uniform acknowledgement, identical for a fresh and an already-held value.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementIdentifierAcknowledgement"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: SUPPLIER_DELETED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/procurement/suppliers/{id}/identifiers/{identifierId}:
+    delete:
+      operationId: procurementSupplierIdentifierRemove
+      tags:
+        - Procurement
+      summary: Remove a supplier identifier or reference
+      description: Gated by `procurement.suppliers.update`. Audited at warning severity (identifier id, type and classification, never the value).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: identifierId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: Removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      removed:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+  /api/v1/procurement/suppliers/{id}/identifiers/{identifierId}/reveal:
+    post:
+      operationId: procurementSupplierIdentifierReveal
+      tags:
+        - Procurement
+      summary: Reveal ONE supplier identifier in clear text
+      description: "Gated by `procurement.suppliers.reveal` (HIGH-RISK) — NOT implied by `suppliers.read` or `.update`. The ONLY operation that returns an identifier value. Writes a warning-severity audit row naming the identifier (never the value) in the same transaction, and the response is `Cache-Control: no-store`. POST so no cache or proxy treats it as a replayable read."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: identifierId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: The identifier including its value.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementRevealedIdentifier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+  /api/v1/procurement/suppliers/{id}/restore:
+    post:
+      operationId: procurementSupplierRestore
+      tags:
+        - Procurement
+      summary: Restore a soft-deleted supplier
+      description: Gated by `procurement.suppliers.restore` (HIGH-RISK). Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - *a1
+      responses:
+        "200":
+          description: The restored supplier.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProcurementSupplier"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404": *a2
+        "409":
+          description: NOT_DELETED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/profiles:
     get:
       operationId: listProfiles
@@ -26370,6 +27525,476 @@ components:
           items:
             type: string
           description: Decorator names (strong, em, code) and/or the _key of an annotation declared in this block's own markDefs. A mark naming neither is refused at write time as a dangling reference.
+    ProcurementDecimal:
+      description: "An exact decimal as TEXT, never a float: at most 14 integer digits and 6 fractional digits, no exponent notation. A JSON number is accepted on input when it round-trips to a plain decimal; responses carry the canonical string (no trailing zeros)."
+      type: string
+      pattern: ^\d{1,14}(\.\d{1,6})?$
+      example: "12.5"
+    ProcurementDocument:
+      type: object
+      properties:
+        id: &a6
+          type: string
+          format: uuid
+        documentNo:
+          type: string
+        mode: &a9
+          type: string
+          enum:
+            - receive
+            - supplier_return
+            - requisition
+            - transfer
+        status: &a10
+          type: string
+          enum:
+            - draft
+            - submitted
+            - finalised
+            - cancelled
+            - reversed
+        supplier:
+          nullable: true
+          type: object
+          description: Snapshot taken when the document was written; never rewritten.
+          properties:
+            id: *a6
+            code:
+              type: string
+            name:
+              type: string
+        locationId: *a6
+        sourceLocationId:
+          type: string
+          format: uuid
+          nullable: true
+        externalReference:
+          type: string
+          nullable: true
+        documentDate:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+        currencyCode:
+          type: string
+        totalCost:
+          type: string
+          nullable: true
+          description: Computed at submit from the lines, exact decimal.
+        lineCount:
+          type: integer
+        approvalStatus:
+          type: string
+          enum:
+            - not_required
+            - pending
+            - approved
+            - rejected
+        approvalInstanceId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt: &a7
+          type: string
+          format: date-time
+        updatedAt: *a7
+        submittedAt: &a8
+          type: string
+          format: date-time
+          nullable: true
+        finalisedAt: *a8
+        cancelledAt: *a8
+        cancelReason:
+          type: string
+          nullable: true
+        reversedAt: *a8
+        reverseReason:
+          type: string
+          nullable: true
+    ProcurementDocumentDetail:
+      allOf:
+        - $ref: "#/components/schemas/ProcurementDocument"
+        - type: object
+          properties:
+            lines:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProcurementDocumentLine"
+            movements:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProcurementMovementLink"
+    ProcurementDocumentInput:
+      type: object
+      required:
+        - mode
+        - locationId
+        - lines
+      additionalProperties: false
+      properties:
+        mode: *a9
+        supplierId:
+          type: string
+          format: uuid
+          description: Required for receive/supplier_return, forbidden otherwise.
+        locationId:
+          type: string
+          format: uuid
+          description: Where stock arrives (receive/requisition/transfer) or leaves (supplier_return).
+        sourceLocationId:
+          type: string
+          format: uuid
+          description: Required for requisition/transfer (where stock leaves), forbidden otherwise.
+        externalReference:
+          type: string
+          maxLength: 200
+          nullable: true
+        documentDate:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          maxLength: 500
+          nullable: true
+        currencyCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/ProcurementLineInput"
+    ProcurementDocumentLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+        itemType:
+          type: string
+        itemRef:
+          type: string
+        sku:
+          type: string
+        itemName:
+          type: string
+        unitCode:
+          type: string
+        quantity:
+          type: string
+        unitCost:
+          type: string
+          nullable: true
+        lineTotal:
+          type: string
+          nullable: true
+          description: quantity x unitCost, computed by the database.
+    ProcurementIdentifierAcknowledgement:
+      description: "The response of an identifier add, identical for a fresh and an already-held value: no id and no timestamp, so a caller without suppliers.reveal cannot tell the two apart."
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/ProcurementIdentifierType"
+        label:
+          type: string
+          nullable: true
+        maskedValue:
+          type: string
+        classification:
+          type: string
+          enum:
+            - sensitive
+            - confidential
+    ProcurementIdentifierCreate:
+      type: object
+      required:
+        - type
+        - value
+      additionalProperties: false
+      properties:
+        type:
+          $ref: "#/components/schemas/ProcurementIdentifierType"
+        value:
+          type: string
+          minLength: 1
+          maxLength: 200
+        label:
+          type: string
+          maxLength: 100
+          nullable: true
+    ProcurementIdentifierType:
+      type: string
+      enum:
+        - tax_id
+        - business_id
+        - payment_ref
+        - contact_ref
+        - other
+    ProcurementLineInput:
+      type: object
+      required:
+        - itemType
+        - itemRef
+        - sku
+        - itemName
+        - quantity
+      additionalProperties: false
+      properties:
+        itemType:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,63}$
+        itemRef:
+          type: string
+          maxLength: 200
+          description: Opaque ledger reference, `A-Za-z0-9_.:-`, never credential-shaped.
+        sku:
+          type: string
+          maxLength: 120
+          description: Snapshot of the SKU.
+        itemName:
+          type: string
+          maxLength: 200
+          description: Snapshot of the item name.
+        unitCode:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,31}$
+          description: Unit of measure; defaults to `unit`. The ledger refuses a mismatch rather than converting.
+        quantity:
+          oneOf:
+            - $ref: "#/components/schemas/ProcurementDecimal"
+            - type: number
+              exclusiveMinimum: 0
+        unitCost:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/ProcurementDecimal"
+            - type: number
+              minimum: 0
+          description: Required for `receive` and `supplier_return` (the approval threshold is cost-based).
+    ProcurementMovementLink:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+        operation:
+          type: string
+          enum:
+            - post
+            - reversal
+        movementId: *a6
+    ProcurementPolicy:
+      type: object
+      properties:
+        approvalThreshold:
+          type: string
+          nullable: true
+        approvalWorkflowKey:
+          type: string
+          example: procurement.document_approval
+    ProcurementPostingResult:
+      type: object
+      properties:
+        replayed:
+          type: boolean
+        document:
+          $ref: "#/components/schemas/ProcurementDocumentDetail"
+    ProcurementReason:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+    ProcurementReasonRequired:
+      type: object
+      required:
+        - reason
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ProcurementReceivingSummaryRow:
+      type: object
+      properties:
+        mode: *a9
+        status: *a10
+        documents:
+          type: integer
+        totalCost:
+          type: string
+    ProcurementReconciliation:
+      type: object
+      properties:
+        reconciled:
+          type: boolean
+        documentsChecked:
+          type: integer
+        linesChecked:
+          type: integer
+        discrepancies:
+          type: array
+          items:
+            type: object
+            properties:
+              documentId: *a6
+              lineNo:
+                type: integer
+              operation:
+                type: string
+                enum:
+                  - post
+                  - reversal
+              expectedMovements:
+                type: integer
+              linkedMovements:
+                type: integer
+              matchingMovements:
+                type: integer
+        discrepanciesTruncated:
+          type: boolean
+        unlinkedLedgerMovements:
+          type: integer
+    ProcurementRevealedIdentifier:
+      description: The one shape that carries an identifier value — returned only by the audited reveal operation.
+      type: object
+      properties:
+        id: *a6
+        supplierId: *a6
+        type:
+          $ref: "#/components/schemas/ProcurementIdentifierType"
+        label:
+          type: string
+          nullable: true
+        classification:
+          type: string
+          enum:
+            - sensitive
+            - confidential
+        value:
+          type: string
+    ProcurementSupplier:
+      type: object
+      properties:
+        id: *a6
+        vendorCode:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - blocked
+        profileId:
+          type: string
+          format: uuid
+          nullable: true
+        categories: &a11
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_.-]{0,63}$
+        tags: *a11
+        createdAt: *a7
+        updatedAt: *a7
+        deletedAt: *a8
+        restoredAt: *a8
+    ProcurementSupplierActivity:
+      type: object
+      properties:
+        supplierId: *a6
+        vendorCode:
+          type: string
+        status:
+          type: string
+        deleted:
+          type: boolean
+          description: True for a soft-deleted supplier. They remain in the report so it reconciles with the receiving report.
+        receiptsFinalised:
+          type: integer
+        supplierReturnsFinalised:
+          type: integer
+        documentsReversed:
+          type: integer
+        openDocuments:
+          type: integer
+        receivedCost:
+          type: string
+        returnedCost:
+          type: string
+    ProcurementSupplierCreate:
+      type: object
+      required:
+        - vendorCode
+        - name
+      additionalProperties: false
+      properties:
+        vendorCode:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - blocked
+        profileId:
+          type: string
+          format: uuid
+          nullable: true
+        categories: *a11
+        tags: *a11
+    ProcurementSupplierIdentifier:
+      description: "A supplier identifier or reference as every surface shows it: MASKED. There is deliberately no value field."
+      type: object
+      properties:
+        id: *a6
+        supplierId: *a6
+        type:
+          $ref: "#/components/schemas/ProcurementIdentifierType"
+        label:
+          type: string
+          nullable: true
+        maskedValue:
+          type: string
+        classification:
+          type: string
+          enum:
+            - sensitive
+            - confidential
+        createdAt: *a7
+    ProcurementSupplierUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - blocked
+        profileId:
+          type: string
+          format: uuid
+          nullable: true
+        categories: *a11
+        tags: *a11
     ProfileEntityLink:
       type: object
       properties:

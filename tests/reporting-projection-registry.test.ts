@@ -220,8 +220,9 @@ describe("validateProjectionRegistry (Issue #753)", () => {
     expect(result.issues).toEqual([]);
     // Three from `reporting` itself, plus `inventory.low_stock` (ADR-0126) and
     // `tax.snapshot_activity` (ADR-0127) — the first two projections DOMAIN
-    // modules contribute to the engine.
-    expect(result.descriptors.length).toBe(5);
+    // modules contribute to the engine — plus the two `procurement.*` counters
+    // over its document-event log (ADR-0128).
+    expect(result.descriptors.length).toBe(7);
     expect(result.descriptors.map((d) => d.key)).toContain(
       "tax.snapshot_activity"
     );

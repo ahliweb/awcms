@@ -81,6 +81,26 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0126 / Issue #887. An append-only log of a balance crossing its low-stock line: tenant, location, opaque item reference, a kind and two decimals. No actor, no free text, nothing about a person — it records what happened to goods. Immutable by trigger, so there is also nothing an erasure could rewrite."
   },
   {
+    table: "awcms_procurement_settings",
+    reason:
+      "ADR-0128 / Issue #888. One row per tenant holding the document approval threshold — a decimal. The only person-shaped column is the `updated_by` stamp on a configuration row, which is the tenant's own setting, not data it holds about someone."
+  },
+  {
+    table: "awcms_procurement_supplier_labels",
+    reason:
+      "ADR-0128 / Issue #888. A supplier's category and tag labels: tenant, supplier id, a kind and a lower-case label of at most 64 characters. No actor, no free text, nothing that can name a person; it classifies a vendor."
+  },
+  {
+    table: "awcms_procurement_document_lines",
+    reason:
+      "ADR-0128 / Issue #888. Line snapshots of a purchase or stock-movement document: opaque item reference, SKU, item name, unit and exact quantity/cost. No actor stamp and no person column — the actor is on the parent document, which has its own descriptor. Immutable once the document leaves draft, so there is nothing an erasure could rewrite."
+  },
+  {
+    table: "awcms_procurement_document_movements",
+    reason:
+      "ADR-0128 / Issue #888. Append-only links from a document line to inventory ledger movement ids: tenant, document id, line number, an operation and a movement id. No actor and no free text; the person who posted is on the ledger movement and the document, each with its own descriptor."
+  },
+  {
     table: "awcms_permissions",
     reason:
       "The global catalogue of permission NAMES, written only by migrations. Every row is a string an author chose; no column can be traced to a person, and none is scoped to a tenant."

@@ -1047,6 +1047,86 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/procurement/documents/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/documents/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/documents/[id]/finalise.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/documents/[id]/reversal.ts",
+      "workClass": "critical_transaction",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/documents/[id]/submit.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/documents/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/documents/reconciliation.ts",
+      "workClass": "reporting",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/policy.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/reports/receiving.ts",
+      "workClass": "reporting",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/reports/suppliers.ts",
+      "workClass": "reporting",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/suppliers/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/suppliers/[id]/identifiers/[identifierId].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/suppliers/[id]/identifiers/[identifierId]/reveal.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/suppliers/[id]/identifiers/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/suppliers/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/procurement/suppliers/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/profiles/[id].ts",
       "workClass": "interactive",
       "source": "default"

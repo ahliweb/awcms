@@ -26,6 +26,7 @@ import { idnAdminRegionsModule } from "./idn-admin-regions/module";
 import { pushDeliveryModule } from "./push-delivery/module";
 import { omesControlModule } from "./omes-control/module";
 import { inventoryModule } from "./inventory/module";
+import { procurementModule } from "./procurement/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -180,7 +181,15 @@ const baseModules: ModuleDescriptor[] = [
   // domain_event_runtime/reporting (all above), so the DAG stays acyclic; nothing
   // depends on it. API-first: no admin screen yet. See
   // src/modules/inventory/module.ts's `description`.
-  inventoryModule
+  inventoryModule,
+  // Admitted by ADR-0128 (Issue #888): suppliers, receiving, supplier returns,
+  // requisitions and location transfers whose stock effects are posted ONLY
+  // through the inventory ledger's port. Depends on tenant_admin/identity_access/
+  // profile_identity/logging/domain_event_runtime/reporting/inventory (all
+  // above), so the DAG stays acyclic; nothing depends on it. workflow_approval
+  // is an optional soft integration, not a dependency. API-first: no admin
+  // screen yet. See src/modules/procurement/module.ts's `description`.
+  procurementModule
 ];
 
 /**

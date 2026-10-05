@@ -187,7 +187,20 @@ export type AccessAction =
   // Tax (ADR-0127): `backdate` posts a snapshot or reversal with a tax date
   // outside the server-date window — into a period that may already be reported.
   // HIGH-RISK, and a different power from `snapshots.create`.
-  | "backdate";
+  | "backdate"
+  // Procurement (`procurement`, ADR-0128, Issue #888): `submit` freezes a draft
+  // document and starts the optional approval (not high-risk: it moves no stock
+  // and is reversible by cancel). `finalise` POSTS inventory movements through
+  // the ledger; `reveal` returns a supplier tax/business identifier in clear
+  // text. `finalise` and `reveal` are high-risk below, so the action-time SoD
+  // check is available the moment a tenant authors a maker/checker rule over
+  // them. `reverse` (also procurement's compensating-movement action) is the
+  // member Tax added above and is reused, not redeclared.
+  // (`read`/`create`/`update`/`delete`/`restore`/`cancel`/`configure`/
+  // `reconcile` reuse existing members.)
+  | "submit"
+  | "finalise"
+  | "reveal";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -347,7 +360,12 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   // Tax (ADR-0127): a reversal posts a negative tax document; a back-dated
   // post lands in a period that may already be reported.
   "reverse",
-  "backdate"
+  "backdate",
+  // Procurement (ADR-0128): finalising a document moves stock (reversing one
+  // reuses Tax's `reverse` above), and revealing a supplier identifier
+  // discloses sensitive data.
+  "finalise",
+  "reveal"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

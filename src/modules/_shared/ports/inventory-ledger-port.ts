@@ -98,6 +98,23 @@ export type InventoryPostRequest = InventoryItemRef & {
   correlationId?: string;
 };
 
+/**
+ * A location-to-location transfer of ONE item: a balanced out/in pair posted
+ * atomically (ADR-0126 §5). Added for `procurement` (ADR-0128) — requisitions and
+ * transfers are documents a consumer verifies and then posts through here.
+ */
+export type InventoryTransferRequest = InventoryItemRef & {
+  fromLocationId: string;
+  toLocationId: string;
+  /** Strictly positive decimal text. */
+  quantity: string;
+  source: InventorySourceIdentity;
+  occurredAt?: Date;
+  reasonCode?: string;
+  note?: string;
+  correlationId?: string;
+};
+
 export type InventoryPostedMovement = {
   id: string;
   locationId: string;
@@ -137,6 +154,25 @@ export type InventoryLedgerPort = {
     tenantId: string,
     actorTenantUserId: string | null,
     request: InventoryPostRequest
+  ): Promise<InventoryPostOutcome>;
+
+  /** Send stock back to a supplier. Decrements; refused when the policy forbids going below zero. */
+  postSupplierReturn(
+    tx: Bun.SQL,
+    tenantId: string,
+    actorTenantUserId: string | null,
+    request: InventoryPostRequest
+  ): Promise<InventoryPostOutcome>;
+
+  /**
+   * Move stock between two locations as a balanced out/in pair, in the caller's
+   * transaction. `movements` lists the out leg first.
+   */
+  postTransfer(
+    tx: Bun.SQL,
+    tenantId: string,
+    actorTenantUserId: string | null,
+    request: InventoryTransferRequest
   ): Promise<InventoryPostOutcome>;
 
   /**

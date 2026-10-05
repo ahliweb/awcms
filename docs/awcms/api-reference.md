@@ -10998,6 +10998,606 @@ Gated by `inventory.movements.transfer` (HIGH-RISK). Posts a BALANCED out/in pai
 | 404    | A stock location was not found (LOCATION_NOT_FOUND).                                           | [`ApiError`](#standard-error-envelope)                   |
 | 409    | IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, INSUFFICIENT_STOCK, UNIT_MISMATCH or LOCATION_INACTIVE. | [`ApiError`](#standard-error-envelope)                   |
 
+## Procurement
+
+Suppliers, receiving, supplier returns, stock requisitions and location transfers (procurement module, Issue #888, ADR-0128) on top of the inventory ledger. A supplier is a business role that may reference the canonical profile_identity party, with vendor code, status, categories/tags and SENSITIVE tax/business identifiers and payment/contact references that are masked in every response and revealed only by one audited, separately permissioned operation. A document (receive, supplier_return, requisition, transfer) has line snapshots of SKU, name, unit and exact-decimal cost and a lifecycle draft -> submitted -> finalised | cancelled, finalised -> reversed enforced by a database trigger; finalised documents are immutable and nothing is deleted. Finalise posts inventory movements THROUGH THE LEDGER'S PORT (never a balance), all lines or none and idempotently; reversal posts compensating movements; a requisition or transfer is a paired ledger transfer. Optional threshold approval through workflow_approval (fail closed). finalise, reverse, cancel and reveal are high-risk, separately grantable, and audited.
+
+### `GET /api/v1/procurement/documents` — List procurement documents
+
+- **operationId**: `procurementDocumentsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.read`. Newest first, keyset paginated. Lines are in the single-document read.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                             | Description                                                    |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| `mode`             | query  | no       | enum(`receive`, `supplier_return`, `requisition`, `transfer`)    |                                                                |
+| `status`           | query  | no       | enum(`draft`, `submitted`, `finalised`, `cancelled`, `reversed`) |                                                                |
+| `supplierId`       | query  | no       | string (uuid)                                                    |                                                                |
+| `locationId`       | query  | no       | string (uuid)                                                    | Matches either the document's location or its source location. |
+| `cursor`           | query  | no       | string                                                           |                                                                |
+| `X-Correlation-ID` | header | no       | string                                                           |                                                                |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of documents.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/documents` — Create a draft document
+
+- **operationId**: `procurementDocumentCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.create`. Nothing a draft says touches stock. Lifecycle state, stamps, supplier snapshots and totals are server-derived: a body naming one is a 400. `receive` and `supplier_return` need `supplierId` and a `unitCost` on every line (the approval threshold is cost-based); `requisition`/`transfer` need `sourceLocationId` and forbid `supplierId`. Requires an Idempotency-Key. A supplier's `externalReference` can be live on one document per mode (`409 DUPLICATE_EXTERNAL_REFERENCE`).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`ProcurementDocumentInput`](#schema-procurementdocumentinput)
+
+**Responses**
+
+| Status | Description                                                                 | Schema                                 |
+| ------ | --------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The draft.                                                                  | object                                 |
+| 400    | Validation error.                                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, SUPPLIER_UNAVAILABLE or DUPLICATE_EXTERNAL_REFERENCE. | [`ApiError`](#standard-error-envelope) |
+| 422    | LOCATION_NOT_FOUND or SUPPLIER_NOT_FOUND.                                   | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/documents/{id}` — Read a document with its lines and ledger movements
+
+- **operationId**: `procurementDocumentGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The document.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/procurement/documents/{id}` — Replace a draft's header and lines
+
+- **operationId**: `procurementDocumentReplace`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.update`. Same body as create; `mode` must match the stored mode and cannot change (`409 MODE_IMMUTABLE`). `409 INVALID_STATE` once the document has left draft — the database also refuses it.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`ProcurementDocumentInput`](#schema-procurementdocumentinput)
+
+**Responses**
+
+| Status | Description                                                                          | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The draft.                                                                           | object                                 |
+| 400    | Validation error.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE, MODE_IMMUTABLE, SUPPLIER_UNAVAILABLE or DUPLICATE_EXTERNAL_REFERENCE. | [`ApiError`](#standard-error-envelope) |
+| 422    | LOCATION_NOT_FOUND or SUPPLIER_NOT_FOUND.                                            | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/documents/{id}/cancel` — Cancel a draft or submitted document
+
+- **operationId**: `procurementDocumentCancel`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.cancel` (HIGH-RISK). No stock was ever moved, so nothing is compensated; a `finalised` document is reversed instead (`409 INVALID_STATE`). A pending approval is cancelled with it. Requires an Idempotency-Key and a reason. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`ProcurementReasonRequired`](#schema-procurementreasonrequired)
+
+**Responses**
+
+| Status | Description                            | Schema                                 |
+| ------ | -------------------------------------- | -------------------------------------- |
+| 200    | The cancelled document.                | object                                 |
+| 400    | Validation error.                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                    | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/documents/{id}/finalise` — Finalise a document — post its inventory movements
+
+- **operationId**: `procurementDocumentFinalise`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.finalise` (HIGH-RISK). Posts the document's movements THROUGH THE LEDGER'S PORT (never writing a balance), all lines or none, each under the identity (source type, document id, line, operation), then marks it `finalised`. Idempotent twice over: the Idempotency-Key is bound to the request hash, and finalising an already `finalised` document answers `200 replayed: true` posting NOTHING (even under a new key). A refusal on any line (`INSUFFICIENT_STOCK`, `LOCATION_INACTIVE`, `UNIT_MISMATCH`…) rolls every line back and leaves the document `submitted`. A document needing approval cannot be finalised until approved (`409 APPROVAL_PENDING` / `APPROVAL_REJECTED`). Audited at warning severity; ledger rows carry the request's correlation id; publishes `awcms.procurement.document.finalised`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                                                                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Replay: already finalised, nothing posted.                                                                                                                               | object                                 |
+| 201    | Finalised.                                                                                                                                                               | object                                 |
+| 400    | Validation error.                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE, APPROVAL_PENDING, APPROVAL_REJECTED, SUPPLIER_UNAVAILABLE, INSUFFICIENT_STOCK, LOCATION_INACTIVE, UNIT_MISMATCH, SOURCE_CONFLICT or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | LOCATION_NOT_FOUND or QUANTITY_OUT_OF_RANGE.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/documents/{id}/reversal` — Reverse a finalised document with compensating movements
+
+- **operationId**: `procurementDocumentReverse`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.reverse` (HIGH-RISK, separately grantable from `finalise`). Posts the opposite movements through the ledger (a receipt becomes a supplier return, a supplier return a receipt, a transfer a transfer back) under distinct `*_reversal` source identities and marks the document `reversed`. The original movements are never touched. May be refused by the ledger (`INSUFFICIENT_STOCK` when the received stock was since sold and the policy forbids negative stock): nothing is posted and the document stays `finalised`. Reversing a `reversed` document is `200 replayed: true`. Requires an Idempotency-Key and a reason; audited at critical severity; publishes `awcms.procurement.document.reversed`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`ProcurementReasonRequired`](#schema-procurementreasonrequired)
+
+**Responses**
+
+| Status | Description                                                                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Replay: already reversed.                                                                                     | object                                 |
+| 201    | Reversed.                                                                                                     | object                                 |
+| 400    | Validation error.                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE, INSUFFICIENT_STOCK, LOCATION_INACTIVE, UNIT_MISMATCH, SOURCE_CONFLICT or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | LOCATION_NOT_FOUND or QUANTITY_OUT_OF_RANGE.                                                                  | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/documents/{id}/submit` — Submit a draft
+
+- **operationId**: `procurementDocumentSubmit`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.submit`. Freezes the lines (database trigger), computes the total cost in SQL and, when the tenant's approval threshold is set and reached, starts a `workflow_approval` instance under the workflow key `procurement.document_approval`. With no published definition (or `workflow` disabled) the submit is REFUSED with `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` — fail closed, nothing submitted. Requires an Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                                               | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The submitted document.                                                                                   | object                                 |
+| 400    | Validation error.                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE, APPROVAL_WORKFLOW_NOT_CONFIGURED, APPROVAL_WORKFLOW_MISCONFIGURED or SUPPLIER_UNAVAILABLE. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/documents/reconciliation` — Reconcile finalised documents against the inventory ledger
+
+- **operationId**: `procurementDocumentsReconcile`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.documents.reconcile`. Read-only. Proves per (document, line, operation) that the ledger recorded exactly the documented movements — number, type, location, quantity and source identity — and that no ledger row carries a procurement source identity without a document line behind it. `?documentId=` scopes it to one document. The scan is the proof and is not bounded; the discrepancy list is (200).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `documentId`       | query  | no       | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The reconciliation report.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/policy` — Read the approval threshold
+
+- **operationId**: `procurementPolicyGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.policy.read`. `approvalThreshold` null means approval is off.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The policy.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/procurement/policy` — Set the approval threshold
+
+- **operationId**: `procurementPolicySet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.policy.configure` (HIGH-RISK). A decimal, or null to turn approval off. Affects only documents submitted AFTER the change. Requires an Idempotency-Key; audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The policy.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/reports/receiving` — Documents and cost per mode and status
+
+- **operationId**: `procurementReportReceiving`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.reports.read`. At most 20 rows. The live view behind the `procurement.receiving` reporting projection.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description               |
+| ------------------ | ------ | -------- | ------------- | ------------------------- |
+| `from`             | query  | no       | string (date) | Document date, inclusive. |
+| `to`               | query  | no       | string (date) | Document date, inclusive. |
+| `X-Correlation-ID` | header | no       | string        |                           |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Summary rows.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/reports/suppliers` — Per-supplier receiving volume and cost
+
+- **operationId**: `procurementReportSuppliers`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.reports.read`. Finalised receipts, supplier returns, reversals and open documents per supplier, with exact-decimal cost, within optional document dates. Keyset paginated. The live view behind the `procurement.suppliers` reporting projection.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description               |
+| ------------------ | ------ | -------- | ------------- | ------------------------- |
+| `from`             | query  | no       | string (date) | Document date, inclusive. |
+| `to`               | query  | no       | string (date) | Document date, inclusive. |
+| `cursor`           | query  | no       | string        |                           |
+| `X-Correlation-ID` | header | no       | string        |                           |
+
+**Responses**
+
+| Status | Description                  | Schema                                 |
+| ------ | ---------------------------- | -------------------------------------- |
+| 200    | A page of supplier activity. | object                                 |
+| 400    | Validation error.            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.  | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/suppliers` — List suppliers
+
+- **operationId**: `procurementSuppliersList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.read`. Newest first, keyset paginated (`cursor`). Identifiers and payment/contact references are NEVER in this response. Soft-deleted suppliers are hidden unless `includeDeleted=true`, which additionally needs `procurement.suppliers.restore` (403 otherwise). Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                  | Description |
+| ------------------ | ------ | -------- | ------------------------------------- | ----------- |
+| `status`           | query  | no       | enum(`active`, `inactive`, `blocked`) |             |
+| `category`         | query  | no       | string                                |             |
+| `tag`              | query  | no       | string                                |             |
+| `includeDeleted`   | query  | no       | boolean                               |             |
+| `cursor`           | query  | no       | string                                |             |
+| `X-Correlation-ID` | header | no       | string                                |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of suppliers.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/suppliers` — Register a supplier
+
+- **operationId**: `procurementSupplierCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.create`. `profileId` optionally references the canonical `profile_identity` party (identity is owned there, not copied). No Idempotency-Key: the case-insensitive (tenant, vendor code) unique key turns a retried create into `409 VENDOR_CODE_CONFLICT`. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`ProcurementSupplierCreate`](#schema-procurementsuppliercreate)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 201    | The supplier.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 409    | VENDOR_CODE_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+| 422    | PROFILE_NOT_FOUND.          | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/suppliers/{id}` — Read a supplier
+
+- **operationId**: `procurementSupplierGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.read`. A soft-deleted supplier is a 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The supplier.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/procurement/suppliers/{id}` — Edit a supplier
+
+- **operationId**: `procurementSupplierUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.update`. Rename, change status, attach/detach the canonical party (`profileId`: null detaches), replace categories/tags. Documents already written keep the supplier name they snapshotted. Audited with the changed field NAMES, never values.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`ProcurementSupplierUpdate`](#schema-procurementsupplierupdate)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The supplier.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+| 409    | SUPPLIER_DELETED.           | [`ApiError`](#standard-error-envelope) |
+| 422    | PROFILE_NOT_FOUND.          | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/procurement/suppliers/{id}` — Soft-delete a supplier
+
+- **operationId**: `procurementSupplierDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.delete` (HIGH-RISK). Soft delete with an optional `{reason}` body; refused with `409 SUPPLIER_HAS_OPEN_DOCUMENTS` while a draft or submitted document references it. Documents keep referencing the row. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (optional): [`ProcurementReason`](#schema-procurementreason)
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 200    | The deleted supplier.                            | object                                 |
+| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                              | [`ApiError`](#standard-error-envelope) |
+| 409    | SUPPLIER_DELETED or SUPPLIER_HAS_OPEN_DOCUMENTS. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/procurement/suppliers/{id}/identifiers` — List a supplier's identifiers (MASKED)
+
+- **operationId**: `procurementSupplierIdentifiersList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.read`. Tax/business identifiers and payment/contact references, with `maskedValue` ONLY — the response type has no field that can carry a value. The value is returned solely by the audited `reveal` operation.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The identifiers, masked.    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/suppliers/{id}/identifiers` — Add a supplier identifier or reference
+
+- **operationId**: `procurementSupplierIdentifierAdd`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.update`. Stored normalized with a lookup hash and a masked display value; the response carries the MASKED value only. `classification` is derived (`sensitive` for tax/business identifiers, `confidential` otherwise). The add is IDEMPOTENT, so re-adding a value the supplier already holds returns the same `201` uniform acknowledgement (type, label, maskedValue, classification; no id, no timestamp) as a fresh add (and audits nothing), so a caller without `suppliers.reveal` cannot use this operation as a value-equality oracle. Audited with the identifier type and classification, never the value.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`ProcurementIdentifierCreate`](#schema-procurementidentifiercreate)
+
+**Responses**
+
+| Status | Description                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Uniform acknowledgement, identical for a fresh and an already-held value. | object                                 |
+| 400    | Validation error.                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | SUPPLIER_DELETED.                                                         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/procurement/suppliers/{id}/identifiers/{identifierId}` — Remove a supplier identifier or reference
+
+- **operationId**: `procurementSupplierIdentifierRemove`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.update`. Audited at warning severity (identifier id, type and classification, never the value).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `identifierId`     | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Removed.                    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/suppliers/{id}/identifiers/{identifierId}/reveal` — Reveal ONE supplier identifier in clear text
+
+- **operationId**: `procurementSupplierIdentifierReveal`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.reveal` (HIGH-RISK) — NOT implied by `suppliers.read` or `.update`. The ONLY operation that returns an identifier value. Writes a warning-severity audit row naming the identifier (never the value) in the same transaction, and the response is `Cache-Control: no-store`. POST so no cache or proxy treats it as a replayable read.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `identifierId`     | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                         | Schema                                 |
+| ------ | ----------------------------------- | -------------------------------------- |
+| 200    | The identifier including its value. | object                                 |
+| 400    | Validation error.                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                 | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/procurement/suppliers/{id}/restore` — Restore a soft-deleted supplier
+
+- **operationId**: `procurementSupplierRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `procurement.suppliers.restore` (HIGH-RISK). Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The restored supplier.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+| 409    | NOT_DELETED.                | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -12430,6 +13030,186 @@ One node of a CLOSED Portable Text vocabulary (ADR-0100). _type is one of block,
 }
 ```
 
+### Schema: ProcurementDecimal
+
+An exact decimal as TEXT, never a float: at most 14 integer digits and 6 fractional digits, no exponent notation. A JSON number is accepted on input when it round-trips to a plain decimal; responses carry the canonical string (no trailing zeros).
+
+An exact decimal as TEXT, never a float: at most 14 integer digits and 6 fractional digits, no exponent notation. A JSON number is accepted on input when it round-trips to a plain decimal; responses carry the canonical string (no trailing zeros).
+
+**Example**
+
+```json
+"12.5"
+```
+
+### Schema: ProcurementDocumentInput
+
+| Field               | Type                                                            | Required | Nullable | Description                                                                     |
+| ------------------- | --------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------- |
+| `mode`              | enum(`receive`, `supplier_return`, `requisition`, `transfer`)   | yes      | no       |                                                                                 |
+| `supplierId`        | string (uuid)                                                   | no       | no       | Required for receive/supplier_return, forbidden otherwise.                      |
+| `locationId`        | string (uuid)                                                   | yes      | no       | Where stock arrives (receive/requisition/transfer) or leaves (supplier_return). |
+| `sourceLocationId`  | string (uuid)                                                   | no       | no       | Required for requisition/transfer (where stock leaves), forbidden otherwise.    |
+| `externalReference` | string                                                          | no       | yes      |                                                                                 |
+| `documentDate`      | string (date)                                                   | no       | yes      |                                                                                 |
+| `notes`             | string                                                          | no       | yes      |                                                                                 |
+| `currencyCode`      | string                                                          | no       | no       |                                                                                 |
+| `lines`             | array of [`ProcurementLineInput`](#schema-procurementlineinput) | yes      | no       |                                                                                 |
+
+**Example**
+
+```json
+{
+  "mode": "receive",
+  "supplierId": "00000000-0000-0000-0000-000000000000",
+  "locationId": "00000000-0000-0000-0000-000000000000",
+  "sourceLocationId": "00000000-0000-0000-0000-000000000000",
+  "externalReference": "string",
+  "documentDate": "2026-01-01",
+  "notes": "string",
+  "currencyCode": "string",
+  "lines": [
+    {
+      "itemType": "string",
+      "itemRef": "string",
+      "sku": "string",
+      "itemName": "string",
+      "unitCode": "string",
+      "quantity": "12.5",
+      "unitCost": "12.5"
+    }
+  ]
+}
+```
+
+### Schema: ProcurementIdentifierCreate
+
+| Field   | Type                                                             | Required | Nullable | Description |
+| ------- | ---------------------------------------------------------------- | -------- | -------- | ----------- |
+| `type`  | [`ProcurementIdentifierType`](#schema-procurementidentifiertype) | yes      | no       |             |
+| `value` | string                                                           | yes      | no       |             |
+| `label` | string                                                           | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "type": "tax_id",
+  "value": "string",
+  "label": "string"
+}
+```
+
+### Schema: ProcurementIdentifierType
+
+Enum values: `tax_id`, `business_id`, `payment_ref`, `contact_ref`, `other`.
+
+**Example**
+
+```json
+"tax_id"
+```
+
+### Schema: ProcurementLineInput
+
+| Field      | Type                                                           | Required | Nullable | Description                                                                                |
+| ---------- | -------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------ |
+| `itemType` | string                                                         | yes      | no       |                                                                                            |
+| `itemRef`  | string                                                         | yes      | no       | Opaque ledger reference, `A-Za-z0-9_.:-`, never credential-shaped.                         |
+| `sku`      | string                                                         | yes      | no       | Snapshot of the SKU.                                                                       |
+| `itemName` | string                                                         | yes      | no       | Snapshot of the item name.                                                                 |
+| `unitCode` | string                                                         | no       | no       | Unit of measure; defaults to `unit`. The ledger refuses a mismatch rather than converting. |
+| `quantity` | [`ProcurementDecimal`](#schema-procurementdecimal) \\\| number | yes      | no       |                                                                                            |
+| `unitCost` | [`ProcurementDecimal`](#schema-procurementdecimal) \\\| number | no       | yes      | Required for `receive` and `supplier_return` (the approval threshold is cost-based).       |
+
+**Example**
+
+```json
+{
+  "itemType": "string",
+  "itemRef": "string",
+  "sku": "string",
+  "itemName": "string",
+  "unitCode": "string",
+  "quantity": "12.5",
+  "unitCost": "12.5"
+}
+```
+
+### Schema: ProcurementReason
+
+| Field    | Type   | Required | Nullable | Description |
+| -------- | ------ | -------- | -------- | ----------- |
+| `reason` | string | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "reason": "string"
+}
+```
+
+### Schema: ProcurementReasonRequired
+
+| Field    | Type   | Required | Nullable | Description |
+| -------- | ------ | -------- | -------- | ----------- |
+| `reason` | string | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "reason": "string"
+}
+```
+
+### Schema: ProcurementSupplierCreate
+
+| Field        | Type                                  | Required | Nullable | Description |
+| ------------ | ------------------------------------- | -------- | -------- | ----------- |
+| `vendorCode` | string                                | yes      | no       |             |
+| `name`       | string                                | yes      | no       |             |
+| `status`     | enum(`active`, `inactive`, `blocked`) | no       | no       |             |
+| `profileId`  | string (uuid)                         | no       | yes      |             |
+| `categories` | array of string                       | no       | no       |             |
+| `tags`       | array of string                       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "vendorCode": "string",
+  "name": "string",
+  "status": "active",
+  "profileId": "00000000-0000-0000-0000-000000000000",
+  "categories": ["string"],
+  "tags": ["string"]
+}
+```
+
+### Schema: ProcurementSupplierUpdate
+
+| Field        | Type                                  | Required | Nullable | Description |
+| ------------ | ------------------------------------- | -------- | -------- | ----------- |
+| `name`       | string                                | no       | no       |             |
+| `status`     | enum(`active`, `inactive`, `blocked`) | no       | no       |             |
+| `profileId`  | string (uuid)                         | no       | yes      |             |
+| `categories` | array of string                       | no       | no       |             |
+| `tags`       | array of string                       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "status": "active",
+  "profileId": "00000000-0000-0000-0000-000000000000",
+  "categories": ["string"],
+  "tags": ["string"]
+}
+```
+
 ### Schema: PushMessageStatus
 
 Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`.
@@ -13571,7 +14351,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (49)
+### Channels (51)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -13611,6 +14391,8 @@ consumer/subscriber contract in this file).
 - `awcms.email.message.suppressed` — The email dispatcher found a claimed message's recipient newly present on `awcms_email_suppression_list` (added after enqueue, before dispatch) and skipped the provider call entirely. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.suppressed` log line).
 - `awcms.inventory.movement.posted` — A stock movement was posted to the append-only inventory ledger and its balance updated, in ONE transaction (ADR-0126, Issue #887). Producer: `inventory/application/inventory-ledger.ts`'s posting core, shared by `postMovement`, `postAdjustment`, `reverseAdjustment` and `postTransfer` (a transfer publishes one event per leg). Published in the same commit as the movement, so a rolled-back posting publishes nothing; a REPLAY of an already-posted source identity publishes nothing either. Ordered per balance (`order_key` = location + item). The payload carries opaque item and source references and decimal-string quantities only — `movementId`, `locationId`, `itemType`, `itemRef`, `unitCode`, `movementType`, `operation`, `quantityDelta`, `balanceAfter`, `sourceType`, `sourceId`, `sourceLine`, `transferId`, `reversesMovementId`. Never the free-text note and never anything identifying a person.
 - `awcms.inventory.stock.low` — A stock balance crossed to or below its low-stock threshold (ADR-0126, Issue #887) — by a movement or by a threshold change. Producer: `inventory/application/inventory-ledger.ts`'s `recordLowStockTransition`. Published ONCE per downward crossing, not on every movement while the balance stays low, and never for the recovery (that is recorded in the signals table the reporting projection reads). Payload: `locationId`, `itemType`, `itemRef`, `onHand`, `threshold`, `movementId` (null when a threshold change caused it).
+- `awcms.procurement.document.finalised` — A procurement document (receive, supplier_return, requisition or transfer) was finalised and its inventory movements posted through the ledger's port (ADR-0128, Issue #888), in one transaction. Producer: `procurement/application/procurement-posting.ts`'s `finaliseDocument`. Published once per document — a replayed finalise posts and publishes nothing. Payload: `documentId`, `documentNo`, `mode`, `supplierId`, `locationId`, `sourceLocationId`, `currencyCode`, `totalCost` (decimal string), `lineCount`, `movementCount`. Never a supplier name, an identifier, a note or a reason.
+- `awcms.procurement.document.reversed` — A finalised procurement document was reversed: compensating inventory movements were posted and the document marked reversed (ADR-0128, Issue #888), in one transaction. Producer: `procurement/application/procurement-posting.ts`'s `reverseDocument`. Same payload shape as `document.finalised`.
 - `awcms.tax.rule_version.published` — A tax rule version was published and became the rule in force from its effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishRuleVersionPublishedEvent`, called by `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The payload carries identifiers, codes and dates only — `ruleVersionId`, `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and `closedVersionId` (the predecessor whose window this ended, or null).
 - `awcms.tax.snapshot.finalised` — A document's tax was finalised into an immutable snapshot (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written — an idempotent replay publishes nothing. The payload carries the opaque document reference, the rule version used, the tax date and decimal-string totals; no customer data of any kind.
 - `awcms.tax.snapshot.reversed` — A finalised document's tax was reversed from its original snapshot (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is written. Same payload shape as `snapshot.finalised`; the totals are negative decimal strings and `originalSnapshotId` is set.

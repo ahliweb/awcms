@@ -468,6 +468,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // diagnostics, cancel and delivery probe. Genuinely new surface, unlike
       // the four below it whose operations had been in the bundle for releases
       // under tags the root catalog never declared.
+      // "Procurement" (procurement, ADR-0128, Issue #888) — genuinely new
+      // surface: suppliers, receiving/return/requisition/transfer documents,
+      // reconciliation and reports. Nothing here is anonymous.
+      "Procurement",
       "Push Delivery",
       "SEO & Distribution",
       // "Site Profile" (site_profile, ADR-0102, Issue #596) — genuinely new
