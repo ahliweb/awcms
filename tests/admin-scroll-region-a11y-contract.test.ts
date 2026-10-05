@@ -21,7 +21,16 @@ import { stripComments } from "../scripts/lib/source-text";
 
 /** Drop HTML comments, then JS comments through the shared scanner, so a commented-out wrapper cannot satisfy or fail the check. */
 function stripAllComments(source: string): string {
-  return stripComments(source.replace(/<!--[\s\S]*?-->/g, ""));
+  let text = source;
+  let previous: string;
+
+  // Repeat until stable so a comment opener rebuilt by a removal is also removed.
+  do {
+    previous = text;
+    text = text.replace(/<!--[\s\S]*?-->/g, "");
+  } while (text !== previous);
+
+  return stripComments(text.replace(/<!--/g, ""));
 }
 
 /** Opening tags whose class list contains the `data-table-scroll` token. */
