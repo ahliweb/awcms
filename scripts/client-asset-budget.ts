@@ -969,14 +969,14 @@ export const READER_BUDGET_BYTES = 24_000;
  *
  * ```
  * before (309,626 ceiling)   309,626 B
- * + procurement script        8,013 B
+ * + procurement script        8,532 B
  * + admin-screens.css rules      72 B
- * after                      317,711 B (measured actual total)
+ * after                      318,230 B (measured actual total)
  * ```
  *
- * 317,711 is the measured value with no added margin.
+ * 318,230 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 317_711;
+export const APP_BUDGET_BYTES = 318_230;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

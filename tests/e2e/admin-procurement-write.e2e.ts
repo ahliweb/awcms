@@ -114,6 +114,7 @@ test.describe("procurement screen (owner, writes)", () => {
     await expect(page.locator("#identifier-reveal-result")).toHaveText(secret);
 
     await page.locator("#identifier-reveal-hide").click();
+    await expect(page.locator(".js-reveal-identifier").first()).toBeFocused();
     await expect(page.locator("#identifier-reveal-panel")).toBeHidden();
     await expect(page.locator("body")).not.toContainText(secret);
   });
@@ -130,6 +131,8 @@ test.describe("procurement screen (owner, writes)", () => {
       .locator("#document-location")
       .selectOption({ label: `PE warehouse A (${codeA})` });
     await fillLine(page, "10");
+    // A spare, untouched row (template defaults only) must not block the submit.
+    await page.locator("#document-add-line").click();
     await page.locator("#document-submit").click();
 
     await expect(page.locator("#procurement-document-detail")).toHaveAttribute(

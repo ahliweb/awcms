@@ -7444,3 +7444,6 @@ msgstr ""
 
 msgid "Recorded on the document and in the audit log."
 msgstr ""
+
+msgid "Destination location id"
+msgstr ""

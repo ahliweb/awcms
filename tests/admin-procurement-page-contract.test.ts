@@ -222,3 +222,40 @@ describe("the navigation entry points at this page", () => {
     expect(declared().has(entry.requiredPermission!)).toBe(true);
   });
 });
+
+describe("review follow-ups (Issue #905)", () => {
+  test("the reveal live region is persistent and Hide returns focus to the opener", async () => {
+    const page = await readFile(PAGE, "utf8");
+    const region = page.slice(
+      page.indexOf('id="identifier-reveal-result"') - 80,
+      page.indexOf('id="identifier-reveal-panel"')
+    );
+
+    expect(region).toContain('role="status"');
+    expect(region).toContain('aria-live="polite"');
+    // The region sits OUTSIDE the element that is hidden and un-hidden.
+    expect(region).not.toContain("hidden");
+    expect(page).toContain("revealOpener");
+    expect(page).toContain("revealOpener.focus()");
+  });
+
+  test("the line row template has no required inputs and a half-filled row is caught before the request", async () => {
+    const page = await readFile(PAGE, "utf8");
+    const template = page.slice(
+      page.indexOf('<template id="document-line-template">'),
+      page.indexOf("</template>")
+    );
+
+    expect(template).not.toMatch(/\brequired\b/);
+    expect(page).toContain("missingLineFields(");
+  });
+
+  test("a location select is only rendered when complete and non-empty", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page).toContain("LOCATION_PICKER_MAX_PAGES");
+    expect(page).toContain("locationsComplete");
+    expect(page).toMatch(/activeLocations\.length > 0/);
+    expect(page).not.toMatch(/\{mayLocations \? \(\s*<label for="document-/);
+  });
+});

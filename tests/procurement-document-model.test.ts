@@ -8,6 +8,7 @@ import {
   buildLine,
   calendarDateOrEmpty,
   isBlankLine,
+  missingLineFields,
   isSupplierDocumentMode,
   parseLabelList,
   type DocumentFormFields,
@@ -103,8 +104,10 @@ describe("buildLine", () => {
 });
 
 describe("isBlankLine", () => {
-  const empty: LineFields = {
-    itemType: "",
+  // Exactly what the row template renders: the two pre-filled defaults and
+  // nothing the operator typed.
+  const untouched: LineFields = {
+    itemType: "product",
     itemRef: "",
     sku: "",
     itemName: "",
@@ -113,12 +116,39 @@ describe("isBlankLine", () => {
     unitCost: ""
   };
 
-  test("the default unit alone does not make a line", () => {
-    expect(isBlankLine(empty)).toBe(true);
+  test("an untouched row with the template defaults is blank", () => {
+    expect(isBlankLine(untouched)).toBe(true);
+    expect(missingLineFields(untouched)).toEqual([]);
   });
 
-  test("any typed field does", () => {
-    expect(isBlankLine({ ...empty, sku: "x" })).toBe(false);
+  test("any typed field makes it a line", () => {
+    expect(isBlankLine({ ...untouched, sku: "x" })).toBe(false);
+    expect(isBlankLine({ ...untouched, quantity: "1" })).toBe(false);
+    expect(isBlankLine({ ...untouched, unitCost: "5" })).toBe(false);
+  });
+});
+
+describe("missingLineFields", () => {
+  test("a half-filled row names what is missing", () => {
+    expect(
+      missingLineFields({
+        itemType: "product",
+        itemRef: "a",
+        sku: "",
+        itemName: "",
+        unitCode: "unit",
+        quantity: "",
+        unitCost: ""
+      })
+    ).toEqual(["sku", "itemName", "quantity"]);
+  });
+
+  test("a complete row misses nothing", () => {
+    expect(missingLineFields(line)).toEqual([]);
+  });
+
+  test("a cleared item type on a typed row is reported", () => {
+    expect(missingLineFields({ ...line, itemType: " " })).toEqual(["itemType"]);
   });
 });
 

@@ -227,6 +227,7 @@ function identifierTypeLabel(value: string): string {
 // many pages of active suppliers gets the id text input instead of a silently
 // truncated list (an older supplier could not be chosen from it).
 const SUPPLIER_PICKER_MAX_PAGES = 5;
+const LOCATION_PICKER_MAX_PAGES = 5;
 
 const screen = await loadAdminScreen({
   ssr,
@@ -316,9 +317,27 @@ const screen = await loadAdminScreen({
       action: "read"
     });
 
-    const locations: StockLocation[] = mayLocations
-      ? (await listLocations(tx, ssr.tenantId, { limit: 200 })).items
-      : [];
+    // Bounded like the supplier picker: a tenant with more than
+    // LOCATION_PICKER_MAX_PAGES pages of locations gets the id input rather than
+    // a silently truncated select (a later location could not be chosen).
+    const locations: StockLocation[] = [];
+    let locationsComplete = true;
+    if (mayLocations) {
+      let after: string | undefined;
+      for (let n = 0; n < LOCATION_PICKER_MAX_PAGES; n += 1) {
+        const batch = await listLocations(tx, ssr.tenantId, {
+          limit: 200,
+          ...(after ? { after } : {})
+        });
+        locations.push(...batch.items);
+        if (!batch.nextCursor) {
+          locationsComplete = true;
+          break;
+        }
+        locationsComplete = false;
+        after = batch.nextCursor;
+      }
+    }
 
     let suppliers: Supplier[] = [];
     let suppliersNext: string | null = null;
@@ -445,6 +464,7 @@ const screen = await loadAdminScreen({
       mayReconcile: Boolean(mayReconcile),
       mayLocations,
       locations,
+      locationsComplete,
       includeDeleted,
       suppliers,
       suppliersNext,
@@ -534,6 +554,13 @@ function pageUrl(overrides: Record<string, string | null>): string {
 const activeLocations = locations.filter(
   (location) => location.status === "active"
 );
+// A select only when it is complete AND offers something: an empty `required`
+// select could never be submitted, so zero active locations falls back to the id
+// input, as does a truncated list.
+const locationPicker =
+  mayLocations &&
+  (data?.locationsComplete ?? false) &&
+  activeLocations.length > 0;
 const document_ = data?.document ?? null;
 const supplier_ = data?.supplier ?? null;
 const detailMissing =
@@ -1048,29 +1075,39 @@ const today = new Date().toISOString().slice(0, 10);
             )}
 
             {data.canRevealIdentifier && (
-              <div
-                id="identifier-reveal-panel"
-                hidden
-                class="admin-code-block"
-                data-msg-title={t("Revealed value")}
-              >
-                <p id="identifier-reveal-title" class="form-legend"></p>
+              <>
+                {/* The live region is persistent and never hidden: a region that
+                    is inserted or un-hidden at the moment its text changes is not
+                    reliably announced. Only its surroundings come and go. */}
                 <p>
-                  <code id="identifier-reveal-result" role="status"></code>
+                  <code
+                    id="identifier-reveal-result"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  />
                 </p>
-                <p class="page-description">
-                  {t(
-                    "Shown once. It is not stored, and it disappears when you hide it, after a minute, or when you leave the page."
-                  )}
-                </p>
-                <button
-                  id="identifier-reveal-hide"
-                  type="button"
-                  class="btn-inline"
+                <div
+                  id="identifier-reveal-panel"
+                  hidden
+                  class="admin-code-block"
+                  data-msg-title={t("Revealed value")}
                 >
-                  {t("Hide")}
-                </button>
-              </div>
+                  <p id="identifier-reveal-title" class="form-legend"></p>
+                  <p class="page-description">
+                    {t(
+                      "Shown once. It is not stored, and it disappears when you hide it, after a minute, or when you leave the page."
+                    )}
+                  </p>
+                  <button
+                    id="identifier-reveal-hide"
+                    type="button"
+                    class="btn-inline"
+                  >
+                    {t("Hide")}
+                  </button>
+                </div>
+              </>
             )}
 
             {data.canUpdateSupplier && (
@@ -1210,7 +1247,7 @@ const today = new Date().toISOString().slice(0, 10);
                   )}
                 </div>
 
-                {mayLocations ? (
+                {locationPicker ? (
                   <label for="document-location">
                     <span class="js-location-label-default">
                       {t("Location")}
@@ -1228,7 +1265,12 @@ const today = new Date().toISOString().slice(0, 10);
                   </label>
                 ) : (
                   <label for="document-location">
-                    {t("Location id")}
+                    <span class="js-location-label-default">
+                      {t("Location id")}
+                    </span>
+                    <span class="js-location-label-destination" hidden>
+                      {t("Destination location id")}
+                    </span>
                     <input
                       id="document-location"
                       name="locationId"
@@ -1240,7 +1282,7 @@ const today = new Date().toISOString().slice(0, 10);
                 )}
 
                 <div class="js-location-mode-field" hidden>
-                  {mayLocations ? (
+                  {locationPicker ? (
                     <label for="document-source-location">
                       {t("Source location")}
                       <select
@@ -1347,7 +1389,6 @@ const today = new Date().toISOString().slice(0, 10);
                         type="text"
                         maxlength="64"
                         value="product"
-                        required
                         autocomplete="off"
                       />
                     </label>
@@ -1357,7 +1398,6 @@ const today = new Date().toISOString().slice(0, 10);
                         name="itemRef"
                         type="text"
                         maxlength="200"
-                        required
                         autocomplete="off"
                       />
                     </label>
@@ -1367,18 +1407,12 @@ const today = new Date().toISOString().slice(0, 10);
                         name="sku"
                         type="text"
                         maxlength="120"
-                        required
                         autocomplete="off"
                       />
                     </label>
                     <label>
                       {t("Item name")}
-                      <input
-                        name="itemName"
-                        type="text"
-                        maxlength="200"
-                        required
-                      />
+                      <input name="itemName" type="text" maxlength="200" />
                     </label>
                     <label>
                       {t("Unit")}
@@ -1396,7 +1430,6 @@ const today = new Date().toISOString().slice(0, 10);
                         name="quantity"
                         type="text"
                         inputmode="decimal"
-                        required
                         autocomplete="off"
                       />
                     </label>
@@ -2107,6 +2140,7 @@ const today = new Date().toISOString().slice(0, 10);
     buildDocumentBody,
     isBlankLine,
     isSupplierDocumentMode,
+    missingLineFields,
     parseLabelList,
     type LineFields
   } from "../../lib/ui/procurement-document-model";
@@ -2297,18 +2331,22 @@ const today = new Date().toISOString().slice(0, 10);
   const revealTitle = document.getElementById("identifier-reveal-title");
   const revealResult = document.getElementById("identifier-reveal-result");
   let revealTimer: number | undefined;
+  // The Reveal button that opened the panel: Hide returns focus to it, because
+  // the Hide button disappears with the panel and focus would fall to <body>.
+  let revealOpener: HTMLButtonElement | null = null;
 
-  function hideRevealed(): void {
+  function hideRevealed(returnFocus = false): void {
     window.clearTimeout(revealTimer);
     if (revealResult) revealResult.textContent = "";
     if (revealTitle) revealTitle.textContent = "";
     if (revealPanel) revealPanel.hidden = true;
+    if (returnFocus && revealOpener?.isConnected) revealOpener.focus();
   }
 
   document
     .getElementById("identifier-reveal-hide")
-    ?.addEventListener("click", hideRevealed);
-  window.addEventListener("pagehide", hideRevealed);
+    ?.addEventListener("click", () => hideRevealed(true));
+  window.addEventListener("pagehide", () => hideRevealed());
 
   onAction(".js-reveal-identifier", async (button) => {
     const id = button.dataset.supplierId;
@@ -2332,6 +2370,7 @@ const today = new Date().toISOString().slice(0, 10);
       return;
     }
 
+    revealOpener = button;
     if (revealResult) revealResult.textContent = outcome.data.value;
     if (revealTitle) {
       revealTitle.textContent = `${revealPanel?.dataset.msgTitle ?? ""}: ${button.dataset.typeLabel ?? ""}`;
@@ -2457,9 +2496,25 @@ const today = new Date().toISOString().slice(0, 10);
   }
 
   onSubmit("document-form", async ({ data, submit }) => {
-    const lines = lineRows()
-      .map(readLine)
-      .filter((line) => !isBlankLine(line));
+    // Spare untouched rows are ignored. A half-filled row is caught here (the
+    // inputs are not `required`, or a spare row could never be left empty) and
+    // its first missing field is focused.
+    errorBox.clear();
+    const rows = lineRows();
+    for (const row of rows) {
+      const missing = missingLineFields(readLine(row))[0];
+      if (missing) {
+        errorBox.show(messageFor("VALIDATION_ERROR"));
+        row.querySelector<HTMLInputElement>(`[name="${missing}"]`)?.focus();
+        return;
+      }
+    }
+    const lines = rows.map(readLine).filter((line) => !isBlankLine(line));
+    if (lines.length === 0) {
+      errorBox.show(messageFor("VALIDATION_ERROR"));
+      rows[0]?.querySelector<HTMLInputElement>("input")?.focus();
+      return;
+    }
     const body = buildDocumentBody({
       mode: field(data, "mode"),
       supplierId: field(data, "supplierId"),

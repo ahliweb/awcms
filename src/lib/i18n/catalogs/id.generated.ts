@@ -552,6 +552,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Destination": ["Tujuan"],
   "Destination class": ["Kelas tujuan"],
   "Destination location": ["Lokasi tujuan"],
+  "Destination location id": ["ID lokasi tujuan"],
   "Detail": ["Detail"],
   "Device": ["Perangkat"],
   "Device type": ["Tipe perangkat"],

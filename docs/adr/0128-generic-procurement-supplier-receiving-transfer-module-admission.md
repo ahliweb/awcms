@@ -74,6 +74,8 @@ Two projections ride the existing `reporting` engine as **monotonic counters** o
 
 ### 10. API-first; admin screens are a recorded follow-up
 
+> **Superseded in part (Issue #905).** The "API-first / no `navigation` / `experimental`" state below was the state at admission only: `/admin/procurement` (suppliers, documents, policy, reports, reconciliation) landed in #905 together with its `navigation` entry, and the module is now `active`. Sixteen of the seventeen permissions left `NOT_YET_SCREENED`; only `documents.update` (draft edit in place) remains. The text below is kept as the record of the original decision.
+
 Sixteen route files, no admin screen and **no `navigation` entry** (the navigation registry requires a real page and this PR adds none). The module is registered `experimental`, exactly as `inventory` (ADR-0126 §9) and `push_delivery` (ADR-0074) were for the same reason: ADR-0021 criterion 1 holds every `active` module to having a screen, and flipping the status belongs in the PR that lands the first one. The seventeen permissions are recorded in `NOT_YET_SCREENED` in `scripts/admin-screen-coverage-ledger.ts`, the ledger's own mechanism for "declared, enforced, not yet screened". **Follow-up:** admin screens for procurement — suppliers (with masked identifiers and the reveal flow), documents with line editing, finalise/reverse with the reason panel, reconciliation, the approval threshold.
 
 ### 11. Security, events and audit

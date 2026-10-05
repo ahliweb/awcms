@@ -7432,3 +7432,6 @@ msgstr "Posting"
 
 msgid "Recorded on the document and in the audit log."
 msgstr "Dicatat pada dokumen dan di log audit."
+
+msgid "Destination location id"
+msgstr "ID lokasi tujuan"

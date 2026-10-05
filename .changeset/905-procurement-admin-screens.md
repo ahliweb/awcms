@@ -33,4 +33,4 @@ re-enter instead.
 
 No migration: every key was seeded by `sql/175`. A tenant created before it needs
 `bun run identity-access:permissions:backfill` for its roles to see the screen.
-The client asset budget is raised by 8,085 B for the one screen script.
+The client asset budget is raised by 8,604 B for the one screen script.

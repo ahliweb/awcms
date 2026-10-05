@@ -99,18 +99,36 @@ export function buildDocumentBody(
 }
 
 /**
- * A line the operator has not touched: the unit default alone does not make it a
- * line. Lets "Add line" leave a spare empty row without it blocking the submit.
+ * A line the operator has not touched. The row template pre-fills `itemType`
+ * ("product") and `unitCode` ("unit") so a typical line needs fewer keystrokes;
+ * those defaults alone must not make a spare row count as a line, or a spare row
+ * could never be left empty. Only what the operator has to type counts.
  */
 export function isBlankLine(line: LineFields): boolean {
   return (
-    line.itemType.trim() === "" &&
     line.itemRef.trim() === "" &&
     line.sku.trim() === "" &&
     line.itemName.trim() === "" &&
     line.quantity.trim() === "" &&
     line.unitCost.trim() === ""
   );
+}
+
+/**
+ * The fields a NON-blank line is missing. The row inputs are not `required` (a
+ * spare empty row must not block the submit), so this is where an
+ * half-filled row is caught before the request: the server would refuse it with
+ * a 400 anyway, this lets the page say so and focus the field.
+ */
+export function missingLineFields(line: LineFields): string[] {
+  if (isBlankLine(line)) return [];
+  const missing: string[] = [];
+  if (line.itemType.trim() === "") missing.push("itemType");
+  if (line.itemRef.trim() === "") missing.push("itemRef");
+  if (line.sku.trim() === "") missing.push("sku");
+  if (line.itemName.trim() === "") missing.push("itemName");
+  if (line.quantity.trim() === "") missing.push("quantity");
+  return missing;
 }
 
 /** The date filter of the reports: `YYYY-MM-DD` as a real calendar date, else `""`. */

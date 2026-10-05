@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0128-generic-procurement-supplier-receiving-transfer-module-admission.md)
 
-<!-- i18n-source-hash: sha256:2252d6fde68d0d398cb9dd937c6c3cf8ef7ae756da91910485f85d956a6494a8 -->
+<!-- i18n-source-hash: sha256:026533c5f597bf5bcad83587b57f242bf185dabe49c3af6fed7913f5c8fb6b48 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -77,6 +77,8 @@ Dua proyeksi memakai engine `reporting` sebagai **counter monotonik** di atas lo
 `awcms_procurement_settings.approval_threshold` (`NULL` = mati, default) menamai total biaya yang pada atau di atasnya dokumen tak dapat di-finalise sebelum workflow `procurement.document_approval` menyetujuinya. **Ambang ini berbasis biaya dan hanya mencakup `receive` dan `supplier_return`** — dua mode yang membawa pemasok dan `unitCost` pada setiap baris (karena itu `unitCost` kini wajib pada retur pemasok juga: retur tanpa biaya akan berjumlah nol dan melewati persetujuan). **`requisition` dan `transfer` tidak dibatasi biaya**: keduanya tak membawa biaya dan memindahkan stok antar lokasi milik tenant sendiri; tenant yang butuh mata kedua untuk keduanya belum punya gerbangnya. Gerbang berbasis mode atau kuantitas dicatat sebagai tindak lanjut. Submit memulai instance; finalise ditolak dengan `409 APPROVAL_PENDING` atau `APPROVAL_REJECTED` sampai ada putusan. Integrasinya **lunak**: `workflow_approval` _bukan_ dalam `dependencies`, dan bila ambang diset tetapi tak ada workflow terbit atau modulnya nonaktif, submit **fail closed** (`409 APPROVAL_WORKFLOW_NOT_CONFIGURED`) alih-alih meloloskan dokumen di atas ambang. Penolakan final bagi dokumen (batalkan saja); pembatalan menarik permintaan yang menunggu. Mengubah ambang adalah `policy.configure`, high-impact, `Idempotency-Key`, diaudit `warning`.
 
 ### 10. API-first; layar admin adalah tindak lanjut tercatat
+
+> **Digantikan sebagian (Issue #905).** Keadaan "API-first / tanpa `navigation` / `experimental`" di bawah hanyalah keadaan saat admisi: `/admin/procurement` (pemasok, dokumen, kebijakan, laporan, rekonsiliasi) mendarat di #905 bersama entri `navigation`-nya, dan modul kini `active`. Enam belas dari tujuh belas izin keluar dari `NOT_YET_SCREENED`; hanya `documents.update` (sunting draf di tempat) yang tersisa. Teks di bawah dipertahankan sebagai catatan keputusan awal.
 
 Enam belas berkas route, tanpa layar admin dan **tanpa entri `navigation`** (registri navigasi mensyaratkan halaman nyata dan PR ini tidak menambahnya). Modul didaftarkan `experimental`, seperti `inventory` (ADR-0126 §9) dan `push_delivery` (ADR-0074): kriteria 1 ADR-0021 mewajibkan modul `active` punya layar, dan pembalikan status ikut PR yang mendaratkan layar pertama. Tujuh belas izin dicatat di `NOT_YET_SCREENED` pada `scripts/admin-screen-coverage-ledger.ts`. **Tindak lanjut:** layar admin procurement — pemasok (identifier ter-mask dan alur reveal), dokumen dengan penyuntingan baris, finalise/reverse dengan panel alasan, rekonsiliasi, ambang persetujuan.
 
