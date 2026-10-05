@@ -710,9 +710,14 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="reporting-table-1-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="reporting-table-1-caption">
             {t("Scheduled export configurations for this tenant.")}
           </caption>
           <thead>
@@ -892,9 +897,14 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="reporting-table-2-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="reporting-table-2-caption">
             {t("Export runs, newest first, capped at 100 rows.")}
           </caption>
           <thead>

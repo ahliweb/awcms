@@ -7435,3 +7435,9 @@ msgstr "Dicatat pada dokumen dan di log audit."
 
 msgid "Destination location id"
 msgstr "ID lokasi tujuan"
+
+msgid "Stock movements"
+msgstr "Mutasi stok"
+
+msgid "Partner access grants"
+msgstr "Akses yang diberikan kepada mitra"

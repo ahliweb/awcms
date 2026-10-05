@@ -171,9 +171,14 @@ function formatWindow(placement: AdPlacementView): string {
         </span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-ads-table-caption"
+      >
         <table class="data-table data-table--stack" id="blog-ads-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="blog-ads-table-caption">
             {t("Advertisement slots and the creatives booked into them.")}
           </caption>
           <thead>
@@ -575,9 +580,14 @@ function formatWindow(placement: AdPlacementView): string {
         <span class="count-pill">{eligiblePosts.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="ads-eligible-table-caption"
+      >
         <table class="data-table data-table--stack" id="ads-eligible-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="ads-eligible-table-caption">
             {t("Articles eligible for targeting, newest first.")}
           </caption>
           <thead>

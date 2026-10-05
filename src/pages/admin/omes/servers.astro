@@ -271,9 +271,16 @@ const columns = 6 + (canDelete ? 1 : 0);
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-servers-table-caption"
+        >
           <table class="data-table data-table--stack" id="omes-servers-table">
-            <caption class="sr-only">{t("Enrolled OMES servers.")}</caption>
+            <caption class="sr-only" id="omes-servers-table-caption">
+              {t("Enrolled OMES servers.")}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Hostname")}</th>
@@ -405,9 +412,14 @@ const columns = 6 + (canDelete ? 1 : 0);
               <span class="cell-code">{selected.hostname}</span> ·{" "}
               {selected.serverId}
             </p>
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="servers-table-2-caption"
+            >
               <table class="data-table data-table--stack">
-                <caption class="sr-only">
+                <caption class="sr-only" id="servers-table-2-caption">
                   {t("Worker enrollments for this server, newest first.")}
                 </caption>
                 <thead>

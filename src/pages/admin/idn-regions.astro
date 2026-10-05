@@ -595,9 +595,14 @@ const numberFormatter = new Intl.NumberFormat("en-US");
         {t("Imported versions")}
         <span class="count-pill">{datasets.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="idn-regions-table-1-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="idn-regions-table-1-caption">
             {t("Every imported dataset version, newest first")}
           </caption>
           <thead>
@@ -823,9 +828,14 @@ const numberFormatter = new Intl.NumberFormat("en-US");
       )}
 
       {compare && !compare.sameVersion && (
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="idn-regions-compare-tiers-caption"
+        >
           <table class="data-table" id="idn-regions-compare-tiers">
-            <caption class="sr-only">
+            <caption class="sr-only" id="idn-regions-compare-tiers-caption">
               {t("Per-tier region counts, {from} versus {to}", {
                 from: compare.fromCode,
                 to: compare.toCode
@@ -913,9 +923,16 @@ const numberFormatter = new Intl.NumberFormat("en-US");
               {title}
               <span class="count-pill">{page.items.length}</span>
             </h2>
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="idn-regions-table-3-caption"
+            >
               <table class="data-table data-table--stack">
-                <caption class="sr-only">{title}</caption>
+                <caption class="sr-only" id="idn-regions-table-3-caption">
+                  {title}
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">{t("Code")}</th>
@@ -1125,9 +1142,14 @@ const numberFormatter = new Intl.NumberFormat("en-US");
         )}
 
         {regionReason === null && (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="idn-regions-table-4-caption"
+          >
             <table class="data-table data-table--stack">
-              <caption class="sr-only">
+              <caption class="sr-only" id="idn-regions-table-4-caption">
                 {t(
                   "Indonesia administrative regions matching the current filter"
                 )}

@@ -195,12 +195,17 @@ const staleCount = deployments.filter((deployment) => deployment.stale).length;
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-deployments-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-deployments-table"
           >
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-deployments-table-caption">
               {t(
                 "OMES deployments, desired and observed state shown separately."
               )}

@@ -208,12 +208,17 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
         <span class="count-pill">{sections.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="homepage-sections-table-caption"
+      >
         <table
           class="data-table data-table--stack"
           id="homepage-sections-table"
         >
-          <caption class="sr-only">
+          <caption class="sr-only" id="homepage-sections-table-caption">
             {t("Homepage sections, in display order.")}
           </caption>
           <thead>
@@ -615,12 +620,17 @@ const columnCount = 6 + (canConfigure ? 1 : 0);
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="homepage-eligible-table-caption"
+      >
         <table
           class="data-table data-table--stack"
           id="homepage-eligible-table"
         >
-          <caption class="sr-only">
+          <caption class="sr-only" id="homepage-eligible-table-caption">
             {t("Articles eligible for curation, newest first.")}
           </caption>
           <thead>

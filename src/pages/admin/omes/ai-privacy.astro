@@ -217,12 +217,17 @@ function formatTimestamp(value: string | null): string {
           )}
         </p>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-ai-privacy-posture-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-ai-privacy-posture-table"
           >
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-ai-privacy-posture-table-caption">
               {t("AI privacy posture evidence per server, newest first.")}
             </caption>
             <thead>
@@ -369,12 +374,20 @@ function formatTimestamp(value: string | null): string {
           )}
         </p>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-ai-privacy-approvals-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-ai-privacy-approvals-table"
           >
-            <caption class="sr-only">
+            <caption
+              class="sr-only"
+              id="omes-ai-privacy-approvals-table-caption"
+            >
               {t("AI egress owner-approval requests, newest first.")}
             </caption>
             <thead>

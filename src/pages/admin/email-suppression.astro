@@ -190,7 +190,12 @@ const reasons = [...SUPPRESSION_REASONS];
             </p>
           </div>
         ) : (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="email-suppression-list-heading"
+          >
             <table class="data-table data-table--stack">
               <thead>
                 <tr>

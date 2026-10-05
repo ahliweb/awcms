@@ -207,9 +207,14 @@ const columns = 7 + (showActions ? 1 : 0);
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-jobs-table-caption"
+        >
           <table class="data-table data-table--stack" id="omes-jobs-table">
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-jobs-table-caption">
               {t("OMES worker jobs, newest first.")}
             </caption>
             <thead>

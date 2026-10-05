@@ -7447,3 +7447,9 @@ msgstr ""
 
 msgid "Destination location id"
 msgstr ""
+
+msgid "Stock movements"
+msgstr ""
+
+msgid "Partner access grants"
+msgstr ""

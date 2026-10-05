@@ -460,7 +460,12 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
               </p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="tax-profiles-heading"
+            >
               <table
                 class="data-table data-table--stack"
                 id="tax-profiles-table"
@@ -541,7 +546,12 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
               <p id="tax-versions-empty">{t("No rule version matches.")}</p>
             </div>
           ) : (
-            <div class="data-table-scroll">
+            <div
+              class="data-table-scroll"
+              role="region"
+              tabindex="0"
+              aria-labelledby="tax-versions-heading"
+            >
               <table
                 class="data-table data-table--stack"
                 id="tax-versions-table"
@@ -957,8 +967,13 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                 )}
               </dl>
 
-              <h4>{t("Lines")}</h4>
-              <div class="data-table-scroll">
+              <h4 id="tax-table-3-heading">{t("Lines")}</h4>
+              <div
+                class="data-table-scroll"
+                role="region"
+                tabindex="0"
+                aria-labelledby="tax-table-3-heading"
+              >
                 <table
                   class="data-table data-table--stack"
                   id="tax-snapshot-lines"
@@ -996,8 +1011,13 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
 
               {data.snapshotDetail.componentTotals.length > 0 && (
                 <>
-                  <h4>{t("Tax by component")}</h4>
-                  <div class="data-table-scroll">
+                  <h4 id="tax-table-4-heading">{t("Tax by component")}</h4>
+                  <div
+                    class="data-table-scroll"
+                    role="region"
+                    tabindex="0"
+                    aria-labelledby="tax-table-4-heading"
+                  >
                     <table class="data-table data-table--stack">
                       <thead>
                         <tr>
@@ -1079,7 +1099,12 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                   </p>
                 </div>
               ) : (
-                <div class="data-table-scroll">
+                <div
+                  class="data-table-scroll"
+                  role="region"
+                  tabindex="0"
+                  aria-label={t("Tax snapshots")}
+                >
                   <table
                     class="data-table data-table--stack"
                     id="tax-snapshots-table"
@@ -1241,11 +1266,16 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                     )}
               </p>
 
-              <h3>{t("Net of reversals")}</h3>
+              <h3 id="tax-table-6-heading">{t("Net of reversals")}</h3>
               {data.report.netOfReversals.length === 0 ? (
                 <p>{t("No snapshot falls in this period.")}</p>
               ) : (
-                <div class="data-table-scroll">
+                <div
+                  class="data-table-scroll"
+                  role="region"
+                  tabindex="0"
+                  aria-labelledby="tax-table-6-heading"
+                >
                   <table class="data-table data-table--stack">
                     <thead>
                       <tr>
@@ -1277,8 +1307,13 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                 </div>
               )}
 
-              <h3>{t("By rule version")}</h3>
-              <div class="data-table-scroll">
+              <h3 id="tax-table-7-heading">{t("By rule version")}</h3>
+              <div
+                class="data-table-scroll"
+                role="region"
+                tabindex="0"
+                aria-labelledby="tax-table-7-heading"
+              >
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>
@@ -1317,8 +1352,13 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                 </table>
               </div>
 
-              <h3>{t("By component")}</h3>
-              <div class="data-table-scroll">
+              <h3 id="tax-table-8-heading">{t("By component")}</h3>
+              <div
+                class="data-table-scroll"
+                role="region"
+                tabindex="0"
+                aria-labelledby="tax-table-8-heading"
+              >
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>
@@ -1347,8 +1387,13 @@ const monthAgoIso = new Date(Date.now() - 29 * DAY_MS)
                 </table>
               </div>
 
-              <h3>{t("By treatment")}</h3>
-              <div class="data-table-scroll">
+              <h3 id="tax-table-9-heading">{t("By treatment")}</h3>
+              <div
+                class="data-table-scroll"
+                role="region"
+                tabindex="0"
+                aria-labelledby="tax-table-9-heading"
+              >
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>

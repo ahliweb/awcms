@@ -369,7 +369,12 @@ function milestoneCellFor(
             <span class="empty-state-title">{t("No issues yet")}</span>
           </div>
         ) : (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="repo-progress-issues-title"
+          >
             <table
               class="data-table data-table--stack"
               id="repo-progress-issues-table"

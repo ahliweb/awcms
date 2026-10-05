@@ -140,7 +140,12 @@ const columnCount = canApprove || canReject ? 4 : 3;
           </p>
         </div>
       ) : (
-        <div class="data-table-scroll fade-in-up">
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-label={t("Registration requests")}
+        >
           <table class="data-table data-table--stack">
             <thead>
               <tr>

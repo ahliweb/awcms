@@ -201,7 +201,12 @@ const maxExpiry = new Date(
             </p>
           </div>
         ) : (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="partners-engagements-heading"
+          >
             <table class="data-table data-table--stack">
               <thead>
                 <tr>
@@ -310,7 +315,12 @@ const maxExpiry = new Date(
             </p>
           </div>
         ) : (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-label={t("Partner access grants")}
+          >
             <table class="data-table data-table--stack">
               <thead>
                 <tr>
