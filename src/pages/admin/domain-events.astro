@@ -283,9 +283,14 @@ const deliveryColumns = canReplay ? 7 : 6;
         </div>
       </div>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="consumers-table-caption"
+      >
         <table class="data-table data-table--stack" id="consumers-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="consumers-table-caption">
             {t("Registered domain event consumers and their backlog.")}
           </caption>
           <thead>
@@ -454,9 +459,14 @@ const deliveryColumns = canReplay ? 7 : 6;
         <span class="count-pill">{deliveries.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="deliveries-table-caption"
+      >
         <table class="data-table data-table--stack" id="deliveries-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="deliveries-table-caption">
             {t("Delivery attempts, newest first, capped at 100 rows.")}
           </caption>
           <thead>
@@ -588,9 +598,14 @@ const deliveryColumns = canReplay ? 7 : 6;
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="events-table-caption"
+      >
         <table class="data-table data-table--stack" id="events-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="events-table-caption">
             {t("Recorded domain events, newest first, capped at 100 rows.")}
           </caption>
           <thead>

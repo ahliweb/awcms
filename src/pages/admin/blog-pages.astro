@@ -384,9 +384,14 @@ const editingBodyText = editingPage
         <span class="count-pill">{total}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-pages-table-caption"
+      >
         <table class="data-table data-table--stack" id="blog-pages-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="blog-pages-table-caption">
             {t("Blog pages, most recently updated first.")}
           </caption>
           <thead>

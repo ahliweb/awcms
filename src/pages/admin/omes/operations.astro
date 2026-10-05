@@ -251,12 +251,17 @@ function approvalsLink(request: OperationRequestSummary): string {
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-operations-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-operations-table"
           >
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-operations-table-caption">
               {t("OMES operation requests, newest first.")}
             </caption>
             <thead>

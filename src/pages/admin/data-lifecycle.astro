@@ -298,9 +298,14 @@ const hasTenantWideHold = holds.some(
           "infrastructure with no module to declare it \u2014 in the infrastructure registry (ADR-0076). Code, not tenant configuration. Nothing here reveals row contents or live counts."
         )}
       </p>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="data-lifecycle-table-1-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="data-lifecycle-table-1-caption">
             {t("Every registered high-volume table descriptor")}
           </caption>
           <thead>

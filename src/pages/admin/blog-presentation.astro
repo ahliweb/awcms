@@ -330,9 +330,16 @@ const editingWidget =
         <span class="count-pill">{templates.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-templates-table-caption"
+      >
         <table class="data-table data-table--stack" id="blog-templates-table">
-          <caption class="sr-only">{t("Blog page templates.")}</caption>
+          <caption class="sr-only" id="blog-templates-table-caption">
+            {t("Blog page templates.")}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Name")}</th>
@@ -533,9 +540,16 @@ const editingWidget =
         )}
       </p>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-menus-table-caption"
+      >
         <table class="data-table data-table--stack" id="blog-menus-table">
-          <caption class="sr-only">{t("Blog navigation menus.")}</caption>
+          <caption class="sr-only" id="blog-menus-table-caption">
+            {t("Blog navigation menus.")}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Name")}</th>
@@ -676,9 +690,14 @@ const editingWidget =
         <button type="submit">{t("Apply filter")}</button>
       </form>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blog-widgets-table-caption"
+      >
         <table class="data-table data-table--stack" id="blog-widgets-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="blog-widgets-table-caption">
             {t("Blog widgets, in render order within each position.")}
           </caption>
           <thead>

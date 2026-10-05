@@ -306,9 +306,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     )}
 
     {canReadConfig && !loadError && !canUpdateConfig && (
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="seo-config-table-caption"
+      >
         <table class="data-table data-table--stack" id="seo-config-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="seo-config-table-caption">
             {t("Current SEO defaults for this tenant (read-only)")}
           </caption>
           <thead>
@@ -580,9 +585,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     )}
 
     {canReadRedirect && !loadError && !canUpdateRedirect && (
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="redirect-policy-table-caption"
+      >
         <table class="data-table data-table--stack" id="redirect-policy-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="redirect-policy-table-caption">
             {t("Current redirect policy for this tenant (read-only)")}
           </caption>
           <thead>
@@ -837,9 +847,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     )}
 
     {canReadRedirect && !loadError && (
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="redirect-rules-table-caption"
+      >
         <table class="data-table data-table--stack" id="redirect-rules-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="redirect-rules-table-caption">
             {t("Redirect rules for this tenant, newest first")}
           </caption>
           <thead>
@@ -1161,9 +1176,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     )}
 
     {canReadNotFound && !loadError && (
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="not-found-table-caption"
+      >
         <table class="data-table data-table--stack" id="not-found-table">
-          <caption class="sr-only">
+          <caption class="sr-only" id="not-found-table-caption">
             {t("Privacy-minimized 404 observations, most-hit first")}
           </caption>
           <thead>

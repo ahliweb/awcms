@@ -7446,4 +7446,8 @@ msgid "Recorded on the document and in the audit log."
 msgstr ""
 
 msgid "Destination location id"
+msgid "Stock movements"
+msgstr ""
+
+msgid "Partner access grants"
 msgstr ""

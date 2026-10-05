@@ -249,9 +249,14 @@ function linkWith(overrides: Record<string, string | null>): string {
             </span>
           </div>
         ) : (
-          <div class="data-table-scroll">
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="enrollments-table-1-caption"
+          >
             <table class="data-table data-table--stack">
-              <caption class="sr-only">
+              <caption class="sr-only" id="enrollments-table-1-caption">
                 {t("Servers eligible for a new enrollment token.")}
               </caption>
               <thead>
@@ -325,12 +330,17 @@ function linkWith(overrides: Record<string, string | null>): string {
           <button type="submit">{t("Apply")}</button>
         </form>
 
-        <div class="data-table-scroll">
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="omes-enrollments-table-caption"
+        >
           <table
             class="data-table data-table--stack"
             id="omes-enrollments-table"
           >
-            <caption class="sr-only">
+            <caption class="sr-only" id="omes-enrollments-table-caption">
               {t("OMES worker enrollment tokens, newest first.")}
             </caption>
             <thead>

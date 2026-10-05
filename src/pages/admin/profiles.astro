@@ -143,9 +143,14 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="profiles-table-caption"
+    >
       <table class="data-table data-table--stack" id="profiles-table">
-        <caption>
+        <caption id="profiles-table-caption">
           {tn("{count} profile", "{count} profiles", profiles.length, {
             count: profiles.length
           })}

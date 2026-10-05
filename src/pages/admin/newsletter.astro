@@ -231,9 +231,16 @@ const columnCount = canConfigure ? 6 : 5;
         <span class="count-pill">{subscribers.length}</span>
       </h2>
 
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="newsletter-table-1-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">{t("Newsletter subscribers.")}</caption>
+          <caption class="sr-only" id="newsletter-table-1-caption">
+            {t("Newsletter subscribers.")}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Address")}</th>

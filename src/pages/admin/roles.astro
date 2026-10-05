@@ -213,9 +213,14 @@ const colCount = canConfigure ? 5 : 4;
   )}
 
   {canRead && !loadError && (
-    <div class="data-table-scroll fade-in-up">
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="roles-table-caption"
+    >
       <table class="data-table data-table--stack" id="roles-table">
-        <caption>
+        <caption id="roles-table-caption">
           {tn("{count} role", "{count} roles", roles.length, {
             count: roles.length
           })}
@@ -371,9 +376,14 @@ const colCount = canConfigure ? 5 : 4;
         {t("Deleted roles")}
         <span class="count-pill">{deletedRoles.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="deleted-roles-table-caption"
+      >
         <table class="data-table data-table--stack" id="deleted-roles-table">
-          <caption>
+          <caption id="deleted-roles-table-caption">
             {tn(
               "{count} deleted role",
               "{count} deleted roles",

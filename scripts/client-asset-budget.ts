@@ -975,8 +975,14 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 318,230 is the measured value with no added margin.
+ *
+ * **Raised for Issue #907** (keyboard-focusable scroll regions): one shared
+ * `.data-table-scroll:focus-visible` rule in `admin.css`, not per-screen CSS
+ * (the `role`/`tabindex`/`aria-*` attributes live in server-rendered HTML and
+ * weigh nothing here). Measured actual total, no added margin: 318,319 B
+ * (+89 B on 318,230 = 318,319).
  */
-export const APP_BUDGET_BYTES = 318_230;
+export const APP_BUDGET_BYTES = 318_319;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

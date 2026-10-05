@@ -332,9 +332,14 @@ function tenantStatusLabel(value: string): string {
         {t("Directory")}
         <span class="count-pill">{tenants.length}</span>
       </h2>
-      <div class="data-table-scroll">
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="tenants-table-1-caption"
+      >
         <table class="data-table data-table--stack">
-          <caption class="sr-only">
+          <caption class="sr-only" id="tenants-table-1-caption">
             {t("Every tenant on this deployment, newest first")}
           </caption>
           <thead>
