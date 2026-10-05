@@ -1,8 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0130-migration-prefixes-three-or-four-digits-numeric-order.md)
 
-<!-- i18n-source-hash: sha256:6bb5c5378c2c09cfc98d5d6d017a8af5f92c12b1454f31de0f9a70b34d43e2d5 -->
-
-<!-- i18n-source-hash: sha256:pending -->
+<!-- i18n-source-hash: sha256:755d276b5fed9227ada181ba99700aa66e56c078e131cfd97c9defae07eba1d8 -->
 
 # ADR-0130 — Prefiks migrasi tiga atau empat digit, diurutkan secara numerik
 

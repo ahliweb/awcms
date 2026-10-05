@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-migrations.md)
 
-<!-- i18n-source-hash: sha256:79c5c142facc8b5bc52f7403cf3cce30572bf78771f25437279be77ebcb02d15 -->
+<!-- i18n-source-hash: sha256:72592ed57cd3342295c225079280f4ee85de1d255132c7948f80519bf3d5d551 -->
 
 # Database Migration Runner
 
