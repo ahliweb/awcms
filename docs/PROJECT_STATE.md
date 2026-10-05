@@ -115,9 +115,9 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 
 | Aspect                            | Value (generated)                                                                      | Source of truth                                                                         |
 | --------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Version                           | **10.4.0**                                                                             | `package.json`                                                                          |
+| Version                           | **10.5.0**                                                                             | `package.json`                                                                          |
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.4.0..HEAD`                                                    |
+| Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.5.0..HEAD`                                                    |
 | Base modules                      | **28** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **175** (`sql/001`–`175`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0129** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
