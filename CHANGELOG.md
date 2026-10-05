@@ -1,5 +1,268 @@
 # awcms
 
+## 10.5.0
+
+### Minor Changes
+
+- 56fe61e: feat(inventory): admit a generic multi-location stock ledger module
+  
+  A domain module that sells goods had one way to track stock: a single counter on
+  a product or variant row. A counter cannot say where, why, who changed it, or
+  whether it is still the sum of what happened, and two concurrent sales of the
+  last unit are a read-modify-write race on one cell.
+  
+  `inventory` is a new module (ADR-0126, `sql/169` + `sql/170`, Issue #887) that
+  any commerce, POS or storefront module can use as its inventory authority, API
+  first (no admin screen or `navigation` entry yet — a recorded follow-up).
+  
+  ### What it guarantees, and how each is enforced
+  
+  - **Immutable ledger.** Finalised movements are append-only by a row trigger
+    **and** by `REVOKE UPDATE, DELETE, TRUNCATE` from `awcms_app`; a mistake is
+    corrected by a compensating movement. Only an adjustment is reversible, once.
+  - **A balance is never asserted.** `awcms_inventory_balances` is a read model that
+    is always the sum of its movements. No endpoint accepts a quantity on hand, and
+    a body naming `onHand`/`balanceAfter` is a `400`. `GET .../balances/reconciliation`
+    proves `balance == SUM(movements)`; `POST .../balances/rebuild` repairs a drifted
+    row FROM the ledger (lock first, then recompute — never a stale sum).
+  - **The last unit is safe.** Balance rows are locked in a fixed order and the
+    UPDATE is guarded; twelve concurrent sales of one unit sell exactly one. A
+    non-locking pre-read refuses an impossible withdrawal before any row is
+    created, so a refused sale commits nothing.
+  - **A transfer is a balanced pair**, validated whole before either leg is written
+    and independently enforced at COMMIT by a deferred constraint trigger.
+  - **Idempotent source identity** `(type, id, line, operation)`: replaying it
+    returns the ORIGINAL movement; the same identity with a different payload is
+    `409 SOURCE_CONFLICT`. It is separate from the `Idempotency-Key` header, which
+    the API also requires.
+  - **Negative stock** is a per-tenant default with a per-location override
+    (`forbid` unless configured). It never blocks a movement that only improves a
+    balance.
+  - **Opaque item references** `(item_type, item_ref)`, deliberately not a foreign
+    key to any catalogue. Quantities are exact decimal strings (`numeric(20,6)`),
+    and a unit mismatch is refused rather than converted.
+  
+  ### Surface
+  
+  14 route files under `/api/v1/inventory/*`, every one a `defineTenantRoute`
+  authorizing through the ADR-0063 chokepoint; twelve permissions seeded by
+  `sql/170` (nothing is granted to any role — existing tenants use
+  `identity-access:permissions:backfill`). `adjust` and `transfer` are new
+  HIGH-RISK `AccessAction` members. Two domain events
+  (`awcms.inventory.movement.posted`, `awcms.inventory.stock.low`) go through the
+  outbox in the same transaction. The `inventory.low_stock` projection is
+  registered on the reporting engine as two monotonic counters, because the engine
+  clamps a decrement at zero. Consumers adopt the ledger through
+  `InventoryLedgerPort`, documented with the expand, backfill, reconcile, contract
+  migration path in the module doc pack.
+  
+  ### Security-review hardening
+  
+  - **Openings need `movements.adjust`.** `opening` states a starting quantity with
+    no document behind it, so it is no longer postable through `POST /movements`;
+    it has `POST /openings`, guarded by `movements.adjust` and audited at warning.
+    `source.type` `reversal` is reserved for the server.
+  - **The ledger trusts the caller's source identity** — now said plainly in the
+    permission descriptions, the OpenAPI text and the port contract, with the
+    composition-root duty (authorize, audit, pass `correlationId`) spelled out.
+  - `awcms_worker` is granted `SELECT` on the low-stock signals table (the
+    projection refresh failed under `WORKER_DATABASE_URL` without it), and a test
+    now asks the same question of every registered projection source.
+  - A balance past `numeric(20,6)` is a `422`, not a 500. The location row is read
+    `FOR SHARE` in the posting path. The replay fingerprint includes the reason and
+    note. `occurredAt` is bounded (`INVENTORY_BACKDATE_WINDOW_DAYS`, default 7;
+    older needs `adjust`). No response returns `balanceAfter` or the on-hand
+    quantity of an `INSUFFICIENT_STOCK`. A trigger refuses a forged reversal.
+  
+  ### Not done, on the record
+  
+  Nothing purges the ledger (the `data_lifecycle` descriptors say so; partitioning
+  and archive-then-purge need their own ADR), no reservations/holds, no unit
+  conversion, no multi-line atomic posting, no admin screens.
+  
+  ### Operating note
+  
+  Existing tenants must be granted the new permissions
+  (`bun run identity-access:permissions:backfill`, dry-run by default) before they
+  can use the API; until then every route is a 403, which is the default-deny
+  posture rather than a fault.
+- 6184a57: feat(tax): a generic, jurisdiction-neutral tax calculation module (#889, ADR-0127)
+  
+  Consumers of this template carry one flat store-level tax percentage. That is
+  fine until a rate changes (and every document issued before must keep the tax it
+  was issued with), a price list mixes taxable, exempt and zero-rated items, a
+  jurisdiction stacks two levies, or one customer returns one item of three months
+  later — and it is wrong by construction when a storefront, a POS and an invoice
+  each compute the tax their own way. This adds the generic core underneath all of
+  that: one calculator, one rule model, one immutable snapshot, behind an API.
+  
+  API-first. No admin screen and no `navigation` entry ship here (an entry without a
+  page is a permanent 404); rule-authoring screens are a recorded follow-up.
+  
+  ### What it does
+  
+  - `POST /api/v1/tax/quote` — stateless calculation. `POST /api/v1/tax/snapshots` —
+    finalise a document's tax, idempotently. `POST /api/v1/tax/snapshots/{id}/reverse`
+    — refund or return all or part of it. Plus rule-version authoring and
+    publication, snapshot reads, and a reconciliation report.
+  - **Rule versions** carry an effective window (half-open, non-overlapping per
+    profile), a pricing mode (exclusive/inclusive), a rounding mode (seven), scale
+    and level (per line, or round-the-sum-once and apportion), any number of
+    components including stacked/compound ones, and exempt vs zero-rated treatments
+    kept distinct. Country profiles are configuration, authored after a verified
+    regulatory mapping; **none ships**.
+  - **Exact money.** Every amount is a decimal string (a JSON number is refused) and
+    every computation is `bigint` rational arithmetic. No floating point touches an
+    amount. The calculator is pure and deterministic.
+  - **Server-authoritative.** No endpoint accepts a tax amount; a payload that names
+    one is refused with `400 TAX_AMOUNT_NOT_ACCEPTED`, not ignored.
+  - **Historical documents cannot change.** A published version is immutable and
+    published windows cannot overlap (both enforced by database triggers, the second
+    under an advisory lock); a snapshot is append-only and carries a copy of the rule
+    it was computed under; a refund is computed from the original snapshot alone —
+    it has no parameter that could carry a current rate.
+  
+  ### Contract and operations
+  
+  - Migrations `sql/171` (rule versions), `sql/172` (snapshots), `sql/173`
+    (permissions). Two tables, both tenant-scoped with `ENABLE` + `FORCE` RLS.
+  - New permissions `tax.rules.{read,configure,publish}`,
+    `tax.calculations.analyze`, `tax.snapshots.{read,create,reverse,backdate}`,
+    `tax.reports.read`. New high-risk access actions `reverse` and `backdate`. Existing tenants'
+    `owner` roles receive them from the owner-permission backfill job.
+  - Domain events through the outbox, registered in the runtime registry and
+    AsyncAPI: `awcms.tax.rule_version.published`, `awcms.tax.snapshot.finalised`,
+    `awcms.tax.snapshot.reversed`.
+  - Reporting: a counting projection (`tax.snapshot_activity`) on the `reporting`
+    engine, and a live monetary reconciliation report with an integrity block.
+  - `awcms_tax_snapshots` has a `data_lifecycle` descriptor (`financial_tax`, floor
+    1826 days, also enforced by the database trigger) and `awcms_worker` gains
+    `SELECT, DELETE` on it. `BOUNDED_BY_DESIGN` grows by one entry (and its cap by
+    one).
+  - OpenAPI: new `Tax` tag and `openapi/modules/tax.openapi.yaml`.
+  
+  ### Hardening from the security audit
+  
+  - A rule version cannot be published before the server's date or on/before a tax
+    date already finalised under its profile (`409 TAX_VERSION_BACKDATED`); the
+    per-request `pricingMode` override is removed (the version decides); a document's
+    tax date is bounded against the server date (default 7 days back, 1 forward,
+    `TAX_TAXDATE_PAST_DAYS` / `TAX_TAXDATE_FORWARD_DAYS`) and outside that needs the
+    new high-risk permission `tax.snapshots.backdate`; amounts that cannot fit
+    `numeric(24,6)` are `422 TAX_INPUT_INVALID`; lists return summaries; the snapshot
+    detail no longer embeds the rule definition; malformed ids are 404; document ids
+    are opaque handles.
+  
+  ### Operators
+  
+  **Existing tenants need the permission backfill.** `sql/173` extends the catalogue
+  only, so a tenant created before it has an `owner` role without the nine `tax.*`
+  permissions and every tax route answers `403`. After migrating, run
+  `bun run identity-access:permissions:backfill --commit` (without `--commit` first
+  for a dry run). Tenants created afterwards need nothing.
+  
+  
+  A published rule version cannot be edited, back-dated or deleted. Correct a wrong
+  rate by publishing a successor with a later effective date, and a wrong document by
+  reversing it. Spec, worked examples, data dictionary and the migration adapter
+  contract for consumers leaving a flat percentage:
+  `docs/awcms/tax-calculation.md`.
+- e47b9d4: feat(admin): procurement admin screen; flip `procurement` to active
+  
+  `procurement` (ADR-0128) shipped API-first as `experimental` because ADR-0021
+  criterion 1 refuses an `active` module without an admin screen. The screen lands
+  here with its `navigation` entry in the same change, and the module becomes
+  `active`.
+  
+  `/admin/procurement` has five views, each gated on its own read permission and
+  every control on its own action permission:
+  
+  - suppliers: create and edit, soft-delete and restore, categories and tags, and
+    the identifiers and references of a supplier shown masked. Revealing one
+    (`suppliers.reveal`) is audited and the clear value is shown once in a single
+    live region that clears itself; it is never stored or cached. An add answers a
+    minimal acknowledgement, so the page reloads to re-list.
+  - documents: filter by kind and status, create a draft with lines for all four
+    modes, and on the detail page submit, finalise, cancel and reverse. Cancel and
+    reverse need a reason; every confirmed action carries an `Idempotency-Key`
+    that is reused for a retry of the same request.
+  - approval policy: read and change the threshold.
+  - reports: receiving summary and per-supplier activity (deleted suppliers are
+    flagged).
+  - reconciliation: the read-only proof that documents and the ledger agree.
+  
+  The screen never writes a balance: stock moves only when the endpoint posts
+  through the ledger. Editing a draft in place (`procurement.documents.update`)
+  is not on the screen and stays on the shrink-only coverage ledger; cancel and
+  re-enter instead.
+  
+  No migration: every key was seeded by `sql/175`. A tenant created before it needs
+  `bun run identity-access:permissions:backfill` for its roles to see the screen.
+  The client asset budget is raised by 8,604 B for the one screen script.
+- 45c334a: Admit a generic `procurement` module: suppliers, receiving, supplier returns, stock requisitions and location transfers over the inventory ledger (Issue #888, ADR-0128).
+  
+  - **Document layer, no stock.** A document (`receive`, `supplier_return`, `requisition`, `transfer`) moves draft -> submitted -> finalised | cancelled, finalised -> reversed. The state machine is a database trigger, so a finalised document is immutable and nothing is deleted. Finalising posts movements only through `InventoryLedgerPort` (all lines or none, one savepoint; replay posts nothing twice, with or without the same `Idempotency-Key`); reversal posts compensating movements. Requisitions and transfers are paired ledger movements.
+  - **Supplier identity stays in `profile_identity`.** A supplier is a business role with an optional composite-FK `profile_id`, vendor code, status, categories and tags. Tax, business, payment and contact identifiers are classified rows, masked in every response, log, audit row and event, and revealed only by one audited, separately permissioned, `no-store` endpoint.
+  - **Contract additions.** `InventoryLedgerPort` gains `postSupplierReturn` and `postTransfer`. `AccessAction` gains `submit` and the high-risk `finalise` and `reveal` (`reverse` is reused from the tax module). 17 permissions seeded by `sql/175` (granted to no role; run `identity-access:permissions:backfill` for existing tenants), 16 routes, 8 tables with FORCE RLS and composite tenant FKs, two `awcms.procurement.*` events, OpenAPI and AsyncAPI updated.
+  - **Approval and reporting.** Optional threshold approval through `workflow_approval` is soft and fails closed. A read-only reconciliation proves finalised documents and the ledger agree; `procurement.receiving` and `procurement.suppliers` projections ride the `reporting` engine.
+  - **Status.** The module is `experimental` and API-first; admin screens are a recorded follow-up (its permissions are in `NOT_YET_SCREENED`). Migrations are `sql/174` and `sql/175`; numbers 171-173 are reserved.
+  - **Hardening from the security audit.** `unitCost` is required on a supplier return (the approval threshold is cost-based and covers `receive` and `supplier_return`; `requisition` and `transfer` are not cost-gated); the idempotency hash binds the acting user; the lines trigger checks both the old and new parent on a re-pointing UPDATE; `includeDeleted=true` on the supplier list also needs `suppliers.restore`; the identifier hash is documented as unkeyed with `normalized_value` in plaintext under RLS (keyed hashing and at-rest encryption are follow-ups).
+  - **Second-round hardening.** Adding a supplier identifier is idempotent and answers a uniform minimal acknowledgement (type, label, masked value, classification; no id, no timestamp) for a fresh and an already-held value, so it is no equality oracle; the database refuses `finalised`/`reversed` unless approval is `not_required|approved`, fixes the approval instance after submit and requires the finalise/reverse actor and reverse reason; a reversed document frees its external reference; short payment/contact references are masked entirely; a soft-deleted supplier's identifiers are hidden; the supplier report includes soft-deleted suppliers flagged `deleted`; finalise/reverse refuse a principal without a tenant user id with a clean 403.
+- 766447e: feat(admin): inventory and tax admin screens; flip both modules to active
+  
+  `inventory` (ADR-0126) and `tax` (ADR-0127) shipped API-first as `experimental`
+  because ADR-0021 criterion 1 refuses an `active` module without an admin screen.
+  Both screens land here, each with its `navigation` entry in the same change, and
+  both modules become `active`.
+  
+  `/admin/inventory` has three views, each gated on its own read permission:
+  balances with a low-stock signal, filters, per-item thresholds and a read-only
+  reconciliation; the movement history with adjustments, reversal through the
+  reason panel, and transfers; and locations with the negative-stock policy per
+  location and per tenant. It never asserts a balance, so every change is a
+  movement.
+  
+  `/admin/tax` has rule profiles and versions (a draft, then publish with
+  confirmation), the snapshot list and detail, and the reconciliation report. The
+  rule definition is authored as JSON that the server validates.
+  
+  No new permission and no migration: every key the screens use was already seeded
+  by `sql/170` and `sql/173`. `inventory.balances.rebuild`, `inventory.movements.create`
+  and the four consumer-driven `tax.*` keys stay on the shrink-only coverage ledger.
+  The client asset budget is raised by 6,014 B for the two screen scripts.
+
+### Patch Changes
+
+- 62f275f: chore(actions): bump anchore/sbom-action from 0.24.2 to 0.24.3 (#909)
+  
+  Both SBOM steps in `.github/workflows/release.yml` (source tree and built image) move to
+  the same pinned SHA `66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c` together. The workflow
+  only runs on a `v*.*.*` tag, so PR CI cannot exercise this step; the next release run is
+  its first real execution.
+- 5a3dea6: Document the `Idempotency-Key` bound in the OpenAPI contract: the 93 inline header declarations become one shared `components.parameters.IdempotencyKey` (1 to 255 visible ASCII, `400 IDEMPOTENCY_KEY_INVALID`) that matches the middleware bound, with a test pinning it to the runtime constants and a gate against inline redeclaration (ADR-0129, amending ADR-0026). No runtime change.
+- b4c3b83: fix(security): validate the `Idempotency-Key` request header (1 to 255 visible ASCII characters, otherwise `400 IDEMPOTENCY_KEY_INVALID`) once in the middleware, and treat SQLSTATE class 54 as caller input rather than a database failure.
+- 6032ebc: fix(a11y): every admin `.data-table-scroll` table wrapper is now a keyboard-focusable, named region (`tabindex="0"`, `role="region"`, `aria-labelledby`/`aria-label`) with a visible focus ring, so keyboard users can scroll wide tables (WCAG 2.1.1, axe `scrollable-region-focusable`). A new contract test fails CI when a wrapper lacks any of them (#907).
+- 82890d7: test(e2e): the modules-toggle spec now disables `form_drafts`, a module nothing depends on, instead of `reporting`. Modules that register reporting projections declare `reporting` a dependency, so the old target's disable was refused. A new pure guard test fails in `quality` as soon as any module declares a dependency on the spec's target.
+- d978cae: feat(admin): structured tax editor, location rename/office link, balance rebuild screen
+  
+  `/admin/tax` gets a structured definition editor (categories, rules, stacked
+  components, pricing/rounding untouched) that serialises into the same JSON
+  textarea the form already submitted; the textarea remains the no-script
+  fallback and the source of truth, and the server stays authoritative. Rates are
+  exact decimal strings end to end.
+  
+  `/admin/inventory` gets a rename / office-link control per location over the
+  existing `PATCH /api/v1/inventory/locations/{id}` (`inventory.locations.update`;
+  the endpoint existence-checks the office inside the tenant transaction), and a
+  "Rebuild balances" action over `POST /api/v1/inventory/balances/rebuild`
+  (`inventory.balances.rebuild`, confirmed, idempotent, audited at critical
+  severity, no quantity accepted). `inventory.balances.rebuild` leaves the
+  shrink-only admin-screen coverage ledger. No API, schema or permission change.
+- f077f30: fix(tooling): make db:work-class:generate output prettier-stable
+  
+  The generator now uses prettier's API to format the JSON output before writing it, ensuring that both `bun run lint` and `bun run db:work-class:check` pass even when a route file declares multiple work classes. This fixes the issue where arrays of work classes were formatted multi-line by the generator but collapsed to a single line by prettier.
+- e397d5a: The inventory movements listing and detail now expose `reversedByMovementId` (the reversal that compensated an adjustment, or null), answered by one correlated index probe per row rather than a query per row. `/admin/inventory` hides Reverse once an adjustment has been reversed. The inventory and tax screens also share `blankToNull`, drop their English confirm fallbacks, and the idempotency-key helper records its two memory-only limitations.
+
 ## 10.4.0
 
 ### Minor Changes
