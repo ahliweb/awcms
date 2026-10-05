@@ -30,6 +30,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { compareMigrationNames } from "../scripts/lib/migrations";
 import {
   SETUP_ROLE_GRANTS,
   WORKER_ROLE_GRANTS
@@ -65,7 +66,7 @@ const migrationStatements = statementsOnly(migrationSql);
  */
 const allMigrationStatements = readdirSync(path.join(repoRoot, "sql"))
   .filter((name) => /^\d+_.*\.sql$/.test(name))
-  .sort()
+  .sort(compareMigrationNames)
   .map((name) => statementsOnly(readRepoFile(path.join("sql", name))))
   .join("\n");
 

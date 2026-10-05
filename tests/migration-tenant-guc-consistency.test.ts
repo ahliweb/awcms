@@ -31,6 +31,8 @@ import path from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
+import { compareMigrationNames } from "../scripts/lib/migrations";
+
 /** The one GUC `withTenant()` sets. Anything else in a policy is a typo with teeth. */
 const TENANT_GUC = "app.current_tenant_id";
 
@@ -64,7 +66,7 @@ async function readMigrations(): Promise<{ name: string; sql: string }[]> {
   const dir = path.resolve(process.cwd(), "sql");
   const names = (await readdir(dir))
     .filter((name) => name.endsWith(".sql"))
-    .sort();
+    .sort(compareMigrationNames);
 
   return Promise.all(
     names.map(async (name) => ({

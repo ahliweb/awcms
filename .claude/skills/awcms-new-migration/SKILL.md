@@ -13,9 +13,12 @@ Follow the standards in `docs/awcms/04_erd_data_dictionary.md` and `docs/awcms/1
 
 ```text
 sql/NNN_awcms_<area>_<description>.sql
+sql/NNNN_awcms_<area>_<description>.sql  # derived applications only, band ≥ 1000
 ```
 
-- `NNN` is sequential, zero-padded (e.g. `023`).
+- `NNN` (three digits) is the upstream standard, sequential, zero-padded (e.g. `023`). The base reserves `001`–`899`.
+- `NNNN` (four digits, band ≥ 1000) is used by derived applications when their three-digit namespace runs out (ADR-0130, Issue #911).
+- Files are applied in numeric order by prefix, with full name as tie-break; existing three-digit order is unchanged.
 - **Do not** rename a migration that has already shipped; a correction = a new migration.
 - Check the last number in `sql/` before adding one.
 

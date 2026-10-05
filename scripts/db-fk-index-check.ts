@@ -57,6 +57,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { compareMigrationNames } from "./lib/migrations";
+
 const SQL_ROOT = "sql";
 
 /**
@@ -236,7 +238,7 @@ export function findStaleExemptions(
 async function main(): Promise<void> {
   const files = (await readdir(SQL_ROOT))
     .filter((file) => file.endsWith(".sql"))
-    .sort();
+    .sort(compareMigrationNames);
 
   const foreignKeys: FkColumn[] = [];
   const indexes: IndexColumns[] = [];

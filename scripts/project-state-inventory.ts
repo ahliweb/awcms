@@ -52,7 +52,7 @@ import {
   replaceBlock,
   type GeneratedBlockMarkers
 } from "./lib/markdown-table";
-import { listMigrationNames } from "./lib/migrations";
+import { listMigrationNames, migrationPrefix } from "./lib/migrations";
 import { listFilesRecursive } from "./lib/repo-files";
 
 export const BEGIN = "<!-- project-state-inventory:mulai -->";
@@ -432,8 +432,8 @@ export function collectInventory(): ProjectStateInventory {
     version: pkg.version,
     moduleCount: listModules().length,
     migrationCount: migrations.length,
-    migrationFirst: migrations[0]!.slice(0, 3),
-    migrationLast: migrations[migrations.length - 1]!.slice(0, 3),
+    migrationFirst: migrationPrefix(migrations[0]!),
+    migrationLast: migrationPrefix(migrations[migrations.length - 1]!),
     adrLowest: adrs[0]!.slice(0, 4),
     adrHighest: highestAdr.slice(0, 4),
     adrHighestStatus,

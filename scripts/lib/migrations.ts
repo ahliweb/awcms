@@ -44,15 +44,85 @@ export type MigrationFile = {
 };
 
 /**
- * Every `.sql` file in `sql/`, sorted by filename.
+ * Three or four digits (Issue #911, ADR-0130). Upstream keeps `001`–`899`;
+ * four-digit space (`1000`+) is for derived applications whose reserved band
+ * ran out.
+ */
+export const MIGRATION_FILE_PATTERN = /^\d{3,4}_awcms_[a-z0-9_]+\.sql$/;
+
+/** The numeric prefix as written, e.g. `"046"` or `"1000"`. */
+export function migrationPrefix(name: string): string {
+  return /^\d+/.exec(name)?.[0] ?? "";
+}
+
+/**
+ * Throws on the first name the runner would refuse: one that does not match
+ * {@link MIGRATION_FILE_PATTERN}, or one whose prefix has the same numeric
+ * value as another file's at a different width (`0100_` and `100_`). The
+ * second is refused because the order between them would rest on the name
+ * tie-break alone, which says nothing about which was meant to run first.
+ */
+export function assertValidMigrationNames(names: readonly string[]): void {
+  const invalid = names.find((name) => !MIGRATION_FILE_PATTERN.test(name));
+
+  if (invalid) {
+    throw new Error(
+      `Invalid migration file name: ${invalid}. Use NNN_awcms_<area>_<description>.sql or NNNN_awcms_<area>_<description>.sql.`
+    );
+  }
+
+  const widthByValue = new Map<number, string>();
+
+  for (const name of names) {
+    const prefix = migrationPrefix(name);
+    const value = Number.parseInt(prefix, 10);
+    const seen = widthByValue.get(value);
+
+    if (seen !== undefined && seen !== prefix) {
+      throw new Error(
+        `Migration prefixes ${seen} and ${prefix} have the same numeric value (${name}). Use one width per number.`
+      );
+    }
+
+    widthByValue.set(value, prefix);
+  }
+}
+
+/**
+ * The ONE order migrations are applied and folded in (Issue #911, ADR-0130).
+ *
+ * By the numeric value of the leading prefix, then by the full name as a
+ * tie-break. Plain `localeCompare` was correct only while every prefix had the
+ * same width: it puts `1000_…` before `999_…`, so a derived application that
+ * outgrew a three-digit band could never add a file that depends on its newest
+ * tables. For names of equal width, numeric order IS lexical order, so every
+ * existing `NNN_` sequence keeps its byte-identical order.
+ *
+ * `scripts/db-migrate.ts` applies with this, and {@link listMigrationNames}
+ * folds with it — a gate that folded in a different order than the runner
+ * applies would report an end-state no database ever reached.
+ */
+export function compareMigrationNames(left: string, right: string): number {
+  return (
+    Number.parseInt(left, 10) - Number.parseInt(right, 10) ||
+    left.localeCompare(right)
+  );
+}
+
+/**
+ * Every `.sql` file in `sql/`, in {@link compareMigrationNames} order.
  *
  * Throws when the directory is missing or holds no migrations — see the header
- * for why that must not be an empty list.
+ * for why that must not be an empty list — and on any name the runner would
+ * refuse ({@link assertValidMigrationNames}), so a gate never folds a file the
+ * runner would not apply.
  */
 export function listMigrationNames(): string[] {
   const names = readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
+    .sort(compareMigrationNames);
+
+  assertValidMigrationNames(names);
 
   if (names.length === 0) {
     throw new Error(

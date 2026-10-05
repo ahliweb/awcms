@@ -68,8 +68,8 @@ DATABASE_URL=postgres://awcms:awcms_password@localhost:5432/awcms bun run db:mig
 
 - The runtime is Bun, via `bun scripts/db-migrate.ts`.
 - The driver is `Bun.SQL`, not `pg` or a Node.js adapter.
-- Migration files are read from `sql/` and ordered by file name.
-- File names must follow `NNN_awcms_<area>_<description>.sql`.
+- Migration files are read from `sql/` and ordered by the numeric value of their prefix, with full file name as tie-break (see ADR-0130, Issue #911).
+- File names must follow `NNN_awcms_<area>_<description>.sql` (upstream norm) or `NNNN_awcms_<area>_<description>.sql` (derived applications with reserved band ≥ 1000). Exactly three or four digits; five-digit and two-digit prefixes are rejected, and so is one number written at two widths (`0100_` next to `100_`).
 - The runner ensures the `awcms_schema_migrations` table exists.
 - Migrations already recorded are skipped.
 - A SHA-256 checksum is stored for every applied migration.

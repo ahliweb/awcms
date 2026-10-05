@@ -5,7 +5,7 @@ description: Buat migration SQL PostgreSQL AWCMS yang benar. Gunakan setiap kali
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:0b7249e0e876ed360ef1dc32affce2ae9ad2e3be3be0529bd04c5e99d0682b51 -->
+<!-- i18n-source-hash: sha256:68244a69cb0c5dda2bb25439cf90167d717ab93ed1a2404e2fdd303d235bf91c -->
 
 # AWCMS — New SQL Migration
 
@@ -15,9 +15,12 @@ Ikuti standar di `docs/awcms/04_erd_data_dictionary.md` dan `docs/awcms/10_templ
 
 ```text
 sql/NNN_awcms_<area>_<description>.sql
+sql/NNNN_awcms_<area>_<description>.sql  # aplikasi turunan saja, band ≥ 1000
 ```
 
-- `NNN` berurutan, nol di depan (mis. `023`).
+- `NNN` (tiga digit) adalah standar upstream, berurutan, nol di depan (mis. `023`). Base menjaga `001`–`899`.
+- `NNNN` (empat digit, band ≥ 1000) dipakai aplikasi turunan saat namespace tiga-digit-nya habis (ADR-0130, Issue #911).
+- File diterapkan dalam urutan numerik awalan, dengan nama lengkap sebagai tie-break; urutan tiga-digit yang ada tidak berubah.
 - **Jangan** me-rename migration yang sudah rilis; koreksi = migration baru.
 - Cek nomor terakhir di `sql/` sebelum menambah.
 

@@ -463,13 +463,13 @@ export function checkSqlMigrationReferences(file, lines, sqlFileNames) {
   /** @type {Set<string>} */
   const knownNumbers = new Set();
   for (const name of sqlFileNames) {
-    const m = /^(\d{3})_/.exec(name);
+    const m = /^(\d{3,4})_/.exec(name);
     if (m?.[1]) knownNumbers.add(m[1]);
   }
 
   /** @type {Problem[]} */
   const problems = [];
-  const pattern = /\bsql\/(\d{3})([A-Za-z0-9_.-]*)/g;
+  const pattern = /\bsql\/(\d{3,4})([A-Za-z0-9_.-]*)/g;
   lines.forEach((line, i) => {
     for (const match of line.matchAll(pattern)) {
       const number = match[1] ?? "";
