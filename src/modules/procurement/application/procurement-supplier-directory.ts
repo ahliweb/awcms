@@ -459,10 +459,23 @@ export async function listIdentifiers(
 }
 
 export type AddIdentifierOutcome =
-  | { outcome: "ok"; identifier: SupplierIdentifier }
+  | { outcome: "ok"; acknowledgement: IdentifierAcknowledgement }
   | { outcome: "supplier_not_found" }
-  | { outcome: "supplier_deleted" }
-  | { outcome: "duplicate" };
+  | { outcome: "supplier_deleted" };
+
+/**
+ * The UNIFORM response of an identifier add (security audit M1/B1): identical
+ * keys and status whether the value was fresh or already held. No `id`, no
+ * `createdAt`, no supplier id — anything row-specific would tell a caller who
+ * holds `suppliers.update` but not `suppliers.reveal` that the value exists.
+ * The caller's OWN label is echoed, never the stored one.
+ */
+export type IdentifierAcknowledgement = {
+  type: string;
+  label: string | null;
+  maskedValue: string;
+  classification: string;
+};
 
 export async function addIdentifier(
   tx: Bun.SQL,
@@ -485,39 +498,51 @@ export async function addIdentifier(
 
   const prepared = prepareIdentifier(input.type, input.value);
   const classification = classifyIdentifier(input.type);
-  const rows = (await tx`
-    INSERT INTO awcms_procurement_supplier_identifiers
-      (tenant_id, supplier_id, identifier_type, label, normalized_value,
-       value_hash, masked_value, classification, created_by)
-    VALUES (${tenantId}, ${supplierId}, ${input.type}, ${input.label},
-            ${prepared.normalizedValue}, ${prepared.valueHash},
-            ${prepared.maskedValue}, ${classification}, ${actor.actorTenantUserId})
-    ON CONFLICT (tenant_id, supplier_id, identifier_type, value_hash) DO NOTHING
-    RETURNING ${tx.unsafe(IDENTIFIER_COLUMNS)}
-  `) as IdentifierRow[];
+  const acknowledgement: IdentifierAcknowledgement = {
+    type: input.type,
+    label: input.label,
+    maskedValue: prepared.maskedValue,
+    classification
+  };
 
-  if (!rows[0]) {
-    // IDEMPOTENT ADD (security audit M1): a caller holding `suppliers.update`
-    // but NOT `suppliers.reveal` must not be able to tell "already held" from
-    // "freshly added" — a 409 would be an equality oracle on the value. The
-    // existing identifier is returned in the same masked shape as a fresh add,
-    // and nothing is audited (no state changed).
+  // At most two attempts: if the conflicting row vanishes between the INSERT
+  // (DO NOTHING) and the existence check (a concurrent remove), insert again
+  // rather than ever surfacing a distinguishing 409.
+  let rows: IdentifierRow[] = [];
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    rows = (await tx`
+      INSERT INTO awcms_procurement_supplier_identifiers
+        (tenant_id, supplier_id, identifier_type, label, normalized_value,
+         value_hash, masked_value, classification, created_by)
+      VALUES (${tenantId}, ${supplierId}, ${input.type}, ${input.label},
+              ${prepared.normalizedValue}, ${prepared.valueHash},
+              ${prepared.maskedValue}, ${classification}, ${actor.actorTenantUserId})
+      ON CONFLICT (tenant_id, supplier_id, identifier_type, value_hash) DO NOTHING
+      RETURNING ${tx.unsafe(IDENTIFIER_COLUMNS)}
+    `) as IdentifierRow[];
+
+    if (rows[0]) {
+      break;
+    }
+
     const existing = (await tx`
-      SELECT ${tx.unsafe(IDENTIFIER_COLUMNS)}
-      FROM awcms_procurement_supplier_identifiers
+      SELECT 1 AS present FROM awcms_procurement_supplier_identifiers
       WHERE tenant_id = ${tenantId} AND supplier_id = ${supplierId}
         AND identifier_type = ${input.type}
         AND value_hash = ${prepared.valueHash}
-    `) as IdentifierRow[];
+    `) as { present: number }[];
 
-    // The caller's own label is echoed (not the stored one) so even the label
-    // cannot distinguish the replay from a fresh add.
-    return existing[0]
-      ? {
-          outcome: "ok",
-          identifier: { ...mapIdentifier(existing[0]), label: input.label }
-        }
-      : { outcome: "duplicate" };
+    if (existing.length > 0) {
+      // IDEMPOTENT: already held. Same acknowledgement, nothing audited.
+      return { outcome: "ok", acknowledgement };
+    }
+  }
+
+  if (!rows[0]) {
+    // Two consecutive races: report the same uniform acknowledgement rather
+    // than an error that distinguishes a state.
+    return { outcome: "ok", acknowledgement };
   }
 
   await recordAuditEvent(tx, {
@@ -538,7 +563,7 @@ export async function addIdentifier(
     correlationId: actor.correlationId
   });
 
-  return { outcome: "ok", identifier: mapIdentifier(rows[0]) };
+  return { outcome: "ok", acknowledgement };
 }
 
 export async function removeIdentifier(

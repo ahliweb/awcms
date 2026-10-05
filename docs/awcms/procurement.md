@@ -215,7 +215,9 @@ Known limits, stated explicitly (ADR-0128):
 - **The approval threshold is cost-based.** A document with zero or omitted cost, and every requisition and transfer, bypasses it.
 - **No location-scoped ABAC and no default maker/checker.** Separating `documents.submit` from `documents.finalise` is an operator duty: author a SoD rule over those two high-risk actions.
 - On anonymisation the supplier's `profile_id` link is **retained** (it resolves to an anonymised profile); the trading name is retained under the financial_tax obligation.
-- Adding an identifier the supplier already holds is idempotent (same masked `201`); soft-deleted suppliers' identifiers are unreachable until restore; the supplier report lists soft-deleted suppliers with `deleted: true`.
+- Adding an identifier the supplier already holds is idempotent (a uniform `201` acknowledgement of type, label, masked value and classification — no id, no timestamp — identical for a fresh and an already-held value, so it is no equality oracle); soft-deleted suppliers' identifiers are unreachable until restore; the supplier report lists soft-deleted suppliers with `deleted: true`.
+
+- **DB-level limit of the approval rule.** The database refuses `finalised`/`reversed` unless approval is `not_required|approved` and fixes the instance after submit, but it trusts the application at `draft → submitted`: it cannot tell that an `approved` status written at submit came from a real workflow decision.
 
 Recorded follow-ups:
 

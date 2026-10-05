@@ -11501,7 +11501,7 @@ Gated by `procurement.suppliers.read`. Tax/business identifiers and payment/cont
 - **operationId**: `procurementSupplierIdentifierAdd`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `procurement.suppliers.update`. Stored normalized with a lookup hash and a masked display value; the response carries the MASKED value only. `classification` is derived (`sensitive` for tax/business identifiers, `confidential` otherwise). The add is IDEMPOTENT, so re-adding a value the supplier already holds returns the same `201` masked shape as a fresh add (and audits nothing), so a caller without `suppliers.reveal` cannot use this operation as a value-equality oracle. Audited with the identifier type and classification, never the value.
+Gated by `procurement.suppliers.update`. Stored normalized with a lookup hash and a masked display value; the response carries the MASKED value only. `classification` is derived (`sensitive` for tax/business identifiers, `confidential` otherwise). The add is IDEMPOTENT, so re-adding a value the supplier already holds returns the same `201` uniform acknowledgement (type, label, maskedValue, classification; no id, no timestamp) as a fresh add (and audits nothing), so a caller without `suppliers.reveal` cannot use this operation as a value-equality oracle. Audited with the identifier type and classification, never the value.
 
 **Parameters**
 
@@ -11514,14 +11514,14 @@ Gated by `procurement.suppliers.update`. Stored normalized with a lookup hash an
 
 **Responses**
 
-| Status | Description                 | Schema                                 |
-| ------ | --------------------------- | -------------------------------------- |
-| 201    | The identifier, masked.     | object                                 |
-| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
-| 409    | SUPPLIER_DELETED.           | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Uniform acknowledgement, identical for a fresh and an already-held value. | object                                 |
+| 400    | Validation error.                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | SUPPLIER_DELETED.                                                         | [`ApiError`](#standard-error-envelope) |
 
 ### `DELETE /api/v1/procurement/suppliers/{id}/identifiers/{identifierId}` — Remove a supplier identifier or reference
 

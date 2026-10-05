@@ -1438,16 +1438,18 @@ suite("procurement HTTP surface (Issue #888)", () => {
         params: { id: supplier },
         body: { type: "tax_id", value: FAKE_TAX_ID }
       });
-      // IDEMPOTENT (audit M1): a duplicate is indistinguishable from a fresh
-      // add for a caller who cannot reveal — same status, same masked shape,
-      // the existing row, no second row, no second audit row.
+      // IDEMPOTENT (audit M1/B1): a duplicate answers the same uniform
+      // acknowledgement as a fresh add — no id, no createdAt — so it is no
+      // equality oracle. No second row, no second audit row.
       expect(duplicate.status).toBe(201);
-      expect((duplicate.body.data as { id: string }).id).toBe(identifierId);
+      expect(Object.keys(duplicate.body.data as object).sort()).toEqual([
+        "classification",
+        "label",
+        "maskedValue",
+        "type"
+      ]);
       expect((duplicate.body.data as { maskedValue: string }).maskedValue).toBe(
         "****************.000"
-      );
-      expect(Object.keys(duplicate.body.data as object).sort()).toEqual(
-        Object.keys(tax).sort()
       );
       const taxRows = (await admin()`
         SELECT count(*)::int AS n FROM awcms_procurement_supplier_identifiers
@@ -1638,6 +1640,41 @@ suite("procurement HTTP surface (Issue #888)", () => {
   // --- approval ---------------------------------------------------------------------
 
   describe("security audit hardening (Issue #888)", () => {
+    test("an update-only caller (no read, no reveal) cannot tell a fresh identifier add from a duplicate (audit B1)", async () => {
+      if (!handlerReady) return;
+      const updateOnly = await seedUser(env.tenantId, "update-only", [
+        "procurement.suppliers.update"
+      ]);
+      const add = (value: string) =>
+        call<Record<string, unknown>>(addIdentifier, {
+          method: "POST",
+          path: `/api/v1/procurement/suppliers/${supplier}/identifiers`,
+          params: { id: supplier },
+          token: updateOnly.token,
+          body: { type: "business_id", value, label: "reg" }
+        });
+
+      const fresh = await add("REG-UPDATE-ONLY-0001");
+      const duplicate = await add("REG-UPDATE-ONLY-0001");
+
+      expect(fresh.status).toBe(201);
+      expect(duplicate.status).toBe(fresh.status);
+      expect(Object.keys(duplicate.body.data!).sort()).toEqual(
+        Object.keys(fresh.body.data!).sort()
+      );
+      expect(duplicate.body.data).toEqual(fresh.body.data);
+      for (const key of ["id", "createdAt", "supplierId"]) {
+        expect(key in fresh.body.data!).toBe(false);
+      }
+      // ... and it really was a no-op the second time.
+      const rows = (await admin()`
+        SELECT count(*)::int AS n FROM awcms_procurement_supplier_identifiers
+        WHERE tenant_id = ${env.tenantId} AND supplier_id = ${supplier}
+          AND identifier_type = 'business_id'
+      `) as { n: number }[];
+      expect(rows[0]!.n).toBe(1);
+    });
+
     test("a second user presenting the first user's Idempotency-Key does not get the first user's response", async () => {
       if (!handlerReady) return;
       const other = await seedUser(
@@ -2017,7 +2054,7 @@ suite("procurement HTTP surface (Issue #888)", () => {
   }
 
   async function addTaxId(supplierId: string): Promise<string> {
-    const response = await call<{ id: string }>(addIdentifier, {
+    const response = await call(addIdentifier, {
       method: "POST",
       path: `/api/v1/procurement/suppliers/${supplierId}/identifiers`,
       params: { id: supplierId },
@@ -2025,7 +2062,15 @@ suite("procurement HTTP surface (Issue #888)", () => {
     });
     expect(response.status).toBe(201);
 
-    return response.body.data!.id;
+    // The add answers a uniform acknowledgement WITHOUT an id (audit B1), so
+    // the id is read from the row directly.
+    const rows = (await admin()`
+      SELECT id FROM awcms_procurement_supplier_identifiers
+      WHERE tenant_id = ${env.tenantId} AND supplier_id = ${supplierId}
+        AND identifier_type = 'tax_id'
+    `) as { id: string }[];
+
+    return rows[0]!.id;
   }
 
   async function revealAuditCount(): Promise<number> {

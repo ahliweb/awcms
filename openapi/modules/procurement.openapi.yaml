@@ -380,7 +380,7 @@ paths:
       description:
         Gated by `procurement.suppliers.update`. Stored normalized with a lookup hash and a
         masked display value; the response carries the MASKED value only. `classification` is derived
-        (`sensitive` for tax/business identifiers, `confidential` otherwise). The add is IDEMPOTENT, so re-adding a value the supplier already holds returns the same `201` masked shape as a fresh add
+        (`sensitive` for tax/business identifiers, `confidential` otherwise). The add is IDEMPOTENT, so re-adding a value the supplier already holds returns the same `201` uniform acknowledgement (type, label, maskedValue, classification; no id, no timestamp) as a fresh add
         (and audits nothing), so a caller without `suppliers.reveal` cannot use this operation as a value-equality oracle.
         Audited with the identifier type and classification, never the value.
       parameters:
@@ -405,7 +405,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "201":
-          description: The identifier, masked.
+          description: Uniform acknowledgement, identical for a fresh and an already-held value.
           content:
             application/json:
               schema:
@@ -416,7 +416,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/ProcurementSupplierIdentifier"
+                    $ref: "#/components/schemas/ProcurementIdentifierAcknowledgement"
                   meta:
                     type: object
         "409":
@@ -1380,6 +1380,24 @@ components:
           type: string
           maxLength: 100
           nullable: true
+    ProcurementIdentifierAcknowledgement:
+      description:
+        "The response of an identifier add, identical for a fresh and an already-held value: no id and no
+        timestamp, so a caller without suppliers.reveal cannot tell the two apart."
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/ProcurementIdentifierType"
+        label:
+          type: string
+          nullable: true
+        maskedValue:
+          type: string
+        classification:
+          type: string
+          enum:
+            - sensitive
+            - confidential
     ProcurementSupplierIdentifier:
       description:
         "A supplier identifier or reference as every surface shows it: MASKED. There is deliberately

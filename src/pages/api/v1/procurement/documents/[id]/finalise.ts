@@ -1,3 +1,4 @@
+import { fail } from "../../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import { inventoryLedgerPortAdapter } from "../../../../../../modules/inventory/application/inventory-ledger-port-adapter";
 import { finaliseDocument } from "../../../../../../modules/procurement/application/procurement-posting";
@@ -54,8 +55,19 @@ export const POST = defineTenantRoute<Prepared>({
     return body instanceof Response ? body : { id, idempotencyKey };
   },
   authorize: PROCUREMENT_GUARDS.documents.finalise,
-  handler: async ({ tx, tenantId, auth, prepared, locals }) =>
-    runIdempotent(
+  handler: async ({ tx, tenantId, auth, prepared, locals }) => {
+    // The finalise/reverse stamp names WHO did it (a NOT NULL fact in the
+    // schema). A principal with no tenant user id cannot be stamped, so refuse
+    // cleanly here instead of letting the CHECK (23514) surface as a 500.
+    if (!auth.context.tenantUserId) {
+      return fail(
+        403,
+        "ACTOR_REQUIRED",
+        "This action must be performed by a tenant user."
+      );
+    }
+
+    return runIdempotent(
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
@@ -81,5 +93,6 @@ export const POST = defineTenantRoute<Prepared>({
             }
           : documentFailureResponse(result);
       }
-    )
+    );
+  }
 });

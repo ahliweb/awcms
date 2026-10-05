@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](procurement.md)
 
-<!-- i18n-source-hash: sha256:48f6b344b58bd7464213e6163910aeb6d0dcbf0834bd82a1138f68fade564163 -->
+<!-- i18n-source-hash: sha256:67cd669c38b5d719e0fde899f9960c2f1f026f52f58594a9ec45370c73e889c7 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -199,7 +199,9 @@ Batasan yang dinyatakan eksplisit (ADR-0128):
 - **Ambang persetujuan berbasis biaya.** Dokumen berbiaya nol atau tak diisi, serta semua requisition dan transfer, melewatinya.
 - **Tanpa ABAC per-lokasi dan tanpa maker/checker bawaan.** Memisahkan `documents.submit` dari `documents.finalise` adalah kewajiban operator: tulis aturan SoD atas kedua aksi high-risk itu.
 - Saat anonimisasi, tautan `profile_id` pemasok **dipertahankan** (menunjuk profil teranonimkan); nama dagang dipertahankan di bawah kewajiban financial_tax.
-- Menambah identifier yang sudah dimiliki pemasok bersifat idempoten (`201` ter-mask yang sama); identifier pemasok soft-deleted tak terjangkau sampai dipulihkan; laporan pemasok memuat pemasok soft-deleted dengan `deleted: true`.
+- Menambah identifier yang sudah dimiliki pemasok bersifat idempoten (`201` pengakuan seragam berisi tipe, label, nilai ter-mask, dan klasifikasi — tanpa id, tanpa timestamp — identik untuk nilai baru maupun yang sudah dimiliki, sehingga bukan oracle kesamaan); identifier pemasok soft-deleted tak terjangkau sampai dipulihkan; laporan pemasok memuat pemasok soft-deleted dengan `deleted: true`.
+
+- **Batas tingkat-DB aturan approval.** Basis data menolak `finalised`/`reversed` kecuali approval `not_required|approved` dan mengunci instance setelah submit, tetapi mempercayai aplikasi pada `draft → submitted`: ia tak dapat memastikan status `approved` yang ditulis saat submit berasal dari keputusan workflow sungguhan.
 
 Tindak lanjut tercatat:
 
