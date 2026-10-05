@@ -4095,6 +4095,9 @@ msgstr "Profil situs"
 msgid "Inventory"
 msgstr "Inventori"
 
+msgid "Procurement"
+msgstr "Pengadaan"
+
 msgid "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
 msgstr "Siapa situs ini di mata pembaca: kepala halaman, footer, alamat redaksi, dan detail kontak."
 

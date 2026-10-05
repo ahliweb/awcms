@@ -712,7 +712,14 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // Balances are UPDATEd by every posting and by rebuild, but never DELETEd: a
   // balance row is the lock target for "the last unit", and deleting one under
   // a waiting poster would let two rows for the same key exist.
-  awcms_inventory_balances: ["SELECT", "INSERT", "UPDATE"]
+  awcms_inventory_balances: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0128 / `sql/174`. NOT retired — procurement documents and suppliers are
+  // never DELETEd (cancel/reverse/soft-delete instead); a trigger refuses
+  // DELETE as the second layer. The link and event tables are append-only.
+  awcms_procurement_suppliers: ["SELECT", "INSERT", "UPDATE"],
+  awcms_procurement_documents: ["SELECT", "INSERT", "UPDATE"],
+  awcms_procurement_document_movements: ["SELECT", "INSERT"],
+  awcms_procurement_document_events: ["SELECT", "INSERT"]
 };
 
 type RlsRow = {
@@ -1573,7 +1580,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // (`bun run reporting:projections:refresh`) and writes exclusively to its own
   // `awcms_reporting_projection_*` tables. No purge exists for this append-only
   // table, so no DELETE (ADR-0126 §7).
-  awcms_inventory_low_stock_signals: ["SELECT"]
+  awcms_inventory_low_stock_signals: ["SELECT"],
+  // Issue #888 (sql/174). SELECT only: the reporting engine's projection worker
+  // reads the document-event log as `awcms_worker` (ADR-0128 §7).
+  awcms_procurement_document_events: ["SELECT"]
 };
 
 /**

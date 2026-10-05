@@ -217,6 +217,32 @@ channels:
       `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is
       written. Same payload shape as `snapshot.finalised`; the totals are
       negative decimal strings and `originalSnapshotId` is set.
+  awcms.procurement.document.finalised:
+    address: awcms.procurement.document.finalised
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A procurement document (receive, supplier_return, requisition or transfer)
+      was finalised and its inventory movements posted through the ledger's port
+      (ADR-0128, Issue #888), in one transaction. Producer:
+      `procurement/application/procurement-posting.ts`'s `finaliseDocument`.
+      Published once per document — a replayed finalise posts and publishes
+      nothing. Payload: `documentId`, `documentNo`, `mode`, `supplierId`,
+      `locationId`, `sourceLocationId`, `currencyCode`, `totalCost` (decimal
+      string), `lineCount`, `movementCount`. Never a supplier name, an
+      identifier, a note or a reason.
+  awcms.procurement.document.reversed:
+    address: awcms.procurement.document.reversed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A finalised procurement document was reversed: compensating inventory
+      movements were posted and the document marked reversed (ADR-0128, Issue
+      #888), in one transaction. Producer:
+      `procurement/application/procurement-posting.ts`'s `reverseDocument`.
+      Same payload shape as `document.finalised`.
   awcms.email.message.queued:
     address: awcms.email.message.queued
     messages:
@@ -629,6 +655,18 @@ operations:
       $ref: "#/channels/awcms.tax.snapshot.reversed"
     messages:
       - $ref: "#/channels/awcms.tax.snapshot.reversed/messages/DomainEvent"
+  publishProcurementDocumentFinalised:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.procurement.document.finalised"
+    messages:
+      - $ref: "#/channels/awcms.procurement.document.finalised/messages/DomainEvent"
+  publishProcurementDocumentReversed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.procurement.document.reversed"
+    messages:
+      - $ref: "#/channels/awcms.procurement.document.reversed/messages/DomainEvent"
   publishEmailMessageQueued:
     action: send
     channel:

@@ -1322,6 +1322,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Privacy-first human visitor statistics. Visitor identifiers are stored as salted hashes, never raw, unless explicitly enabled. Figures are server-rendered from this tenant's own data.": ["Statistik pengunjung manusia yang mengutamakan privasi. Pengenal pengunjung disimpan sebagai hash ber-salt, tidak pernah mentah, kecuali diaktifkan secara eksplisit. Angka dirender di server dari data tenant ini sendiri."],
   "Privacy-minimized 404 observations, most-hit first": ["Observasi 404 yang diminimalkan privasinya, paling banyak kena dulu"],
   "Private": ["Privat"],
+  "Procurement": ["Pengadaan"],
   "Producer": ["Produsen"],
   "Profile": ["Profil"],
   "Profile (optional)": ["Profil (opsional)"],

@@ -196,6 +196,22 @@ const DOCUMENTED_EXCEPTIONS: {
       "a tenant with no published destructive-operation workflow " +
       "definition already gets — nothing is persisted either way. Revisit " +
       "if workflow-approval ever grows a swappable-adapter port."
+  },
+  {
+    from: "procurement",
+    to: "workflow",
+    reason:
+      "Issue #888 / ADR-0128. `application/procurement-document-directory.ts` " +
+      "calls `startWorkflowInstance` / `cancelWorkflowInstance` directly so a " +
+      "document above the tenant's approval threshold routes through the " +
+      "canonical workflow-approval engine instead of a second approval " +
+      "authority. Approval is OPTIONAL (threshold unset = off), so it cannot be " +
+      "a `dependencies` edge — that would make `workflow` un-disablable for " +
+      "every tenant that enables procurement, same as omes_control -> workflow " +
+      "above. The submit path checks `resolveModuleEnabled(tx, tenantId, " +
+      '"workflow")` and degrades to the fail-closed ' +
+      "`APPROVAL_WORKFLOW_NOT_CONFIGURED` refusal; nothing is persisted either " +
+      "way. Revisit if workflow-approval ever grows a swappable-adapter port."
   }
 ];
 

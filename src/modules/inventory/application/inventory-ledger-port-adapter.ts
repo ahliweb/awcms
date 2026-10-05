@@ -11,14 +11,21 @@
 import type {
   InventoryLedgerPort,
   InventoryPostOutcome,
-  InventoryPostRequest
+  InventoryPostRequest,
+  InventoryTransferRequest
 } from "../../_shared/ports/inventory-ledger-port";
 import {
   validatePostMovementInput,
-  type PostMovementInput
+  validateTransferInput,
+  type PostMovementInput,
+  type TransferInput
 } from "../domain/inventory-validation";
 import type { PostableMovementType } from "../domain/inventory-types";
-import { postMovement, type PostResult } from "./inventory-ledger";
+import {
+  postMovement,
+  postTransfer,
+  type PostResult
+} from "./inventory-ledger";
 import { canonicalQuantity } from "./inventory-rows";
 
 /** Thrown for a request the validators refuse — a programming error in the consumer, not a business refusal. */
@@ -44,6 +51,31 @@ function toInput(
     itemRef: request.itemRef,
     unitCode: request.unitCode,
     movementType,
+    quantity: request.quantity,
+    source: {
+      type: request.source.type,
+      id: request.source.id,
+      line: request.source.line
+    },
+    occurredAt: request.occurredAt?.toISOString(),
+    reasonCode: request.reasonCode,
+    note: request.note
+  });
+
+  if (!validation.valid) {
+    throw new InventoryPortRequestError(validation.errors);
+  }
+
+  return validation.value;
+}
+
+function toTransferInput(request: InventoryTransferRequest): TransferInput {
+  const validation = validateTransferInput({
+    fromLocationId: request.fromLocationId,
+    toLocationId: request.toLocationId,
+    itemType: request.itemType,
+    itemRef: request.itemRef,
+    unitCode: request.unitCode,
     quantity: request.quantity,
     source: {
       type: request.source.type,
@@ -98,7 +130,7 @@ function toOutcome(result: PostResult): InventoryPostOutcome {
       return { outcome: result.outcome, locationId: result.locationId };
     default:
       // `opening_not_first`, `target_not_found` and `not_reversible` cannot
-      // arise from the three operations this port exposes; `source_conflict`
+      // arise from the operations this port exposes; `source_conflict`
       // is the only remaining refusal.
       return { outcome: "source_conflict" };
   }
@@ -120,6 +152,16 @@ export const inventoryLedgerPortAdapter: InventoryLedgerPort = {
   postSale: post("sale"),
   postSaleReturn: post("sale_return"),
   postReceipt: post("receive"),
+  postSupplierReturn: post("supplier_return"),
+
+  async postTransfer(tx, tenantId, actorTenantUserId, request) {
+    return toOutcome(
+      await postTransfer(tx, tenantId, toTransferInput(request), {
+        actorTenantUserId,
+        correlationId: request.correlationId
+      })
+    );
+  },
 
   async getOnHand(tx, tenantId, locationId, item) {
     const rows = (await tx`
