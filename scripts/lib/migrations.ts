@@ -44,7 +44,28 @@ export type MigrationFile = {
 };
 
 /**
- * Every `.sql` file in `sql/`, sorted by filename.
+ * The ONE order migrations are applied and folded in (Issue #911, ADR-0130).
+ *
+ * By the numeric value of the leading prefix, then by the full name as a
+ * tie-break. Plain `localeCompare` was correct only while every prefix had the
+ * same width: it puts `1000_…` before `999_…`, so a derived application that
+ * outgrew a three-digit band could never add a file that depends on its newest
+ * tables. For names of equal width, numeric order IS lexical order, so every
+ * existing `NNN_` sequence keeps its byte-identical order.
+ *
+ * `scripts/db-migrate.ts` applies with this, and {@link listMigrationNames}
+ * folds with it — a gate that folded in a different order than the runner
+ * applies would report an end-state no database ever reached.
+ */
+export function compareMigrationNames(left: string, right: string): number {
+  return (
+    Number.parseInt(left, 10) - Number.parseInt(right, 10) ||
+    left.localeCompare(right)
+  );
+}
+
+/**
+ * Every `.sql` file in `sql/`, in {@link compareMigrationNames} order.
  *
  * Throws when the directory is missing or holds no migrations — see the header
  * for why that must not be an empty list.
@@ -52,7 +73,7 @@ export type MigrationFile = {
 export function listMigrationNames(): string[] {
   const names = readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
+    .sort(compareMigrationNames);
 
   if (names.length === 0) {
     throw new Error(

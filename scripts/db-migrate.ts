@@ -3,6 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { redactSecretsInText } from "../src/modules/_shared/redaction";
+import { compareMigrationNames } from "./lib/migrations";
 
 export type MigrationFile = {
   name: string;
@@ -21,7 +22,12 @@ type MigrationResult = {
   skipped: string[];
 };
 
-const MIGRATION_FILE_PATTERN = /^\d{3}_awcms_[a-z0-9_]+\.sql$/;
+/**
+ * Three or four digits (Issue #911, ADR-0130). Upstream keeps `001`–`899`;
+ * four-digit space (`1000`+) is for derived applications whose reserved band
+ * ran out. Ordering is numeric, see `compareMigrationNames`.
+ */
+const MIGRATION_FILE_PATTERN = /^\d{3,4}_awcms_[a-z0-9_]+\.sql$/;
 const MIGRATION_LOCK_KEY = 8_402_017_551;
 
 /**
@@ -79,7 +85,7 @@ export async function discoverMigrationFiles(
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
     .filter((name) => name.endsWith(".sql"))
-    .sort((left, right) => left.localeCompare(right));
+    .sort(compareMigrationNames);
 
   const invalidFile = fileNames.find(
     (fileName) => !MIGRATION_FILE_PATTERN.test(fileName)
@@ -87,7 +93,7 @@ export async function discoverMigrationFiles(
 
   if (invalidFile) {
     throw new Error(
-      `Invalid migration file name: ${invalidFile}. Use NNN_awcms_<area>_<description>.sql.`
+      `Invalid migration file name: ${invalidFile}. Use NNN_awcms_<area>_<description>.sql or NNNN_awcms_<area>_<description>.sql.`
     );
   }
 
