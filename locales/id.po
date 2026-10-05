@@ -7076,3 +7076,362 @@ msgstr "JSON tidak dapat ditampilkan sebagai baris. Sunting di bawah; server yan
 
 msgid "Discard the JSON and start the structured editor"
 msgstr "Buang JSON dan mulai editor terstruktur"
+
+# Issue #905 — the /admin/procurement screen.
+
+msgid "Receipt"
+msgstr "Penerimaan"
+
+msgid "Requisition"
+msgstr "Permintaan barang"
+
+msgid "Location transfer"
+msgstr "Transfer antar lokasi"
+
+msgid "Finalised"
+msgstr "Difinalisasi"
+
+msgid "Reversed"
+msgstr "Dibalikkan"
+
+msgid "Waiting for approval"
+msgstr "Menunggu persetujuan"
+
+msgid "Tax ID"
+msgstr "NPWP/ID pajak"
+
+msgid "Business ID"
+msgstr "ID usaha"
+
+msgid "Payment reference"
+msgstr "Referensi pembayaran"
+
+msgid "Contact reference"
+msgstr "Referensi kontak"
+
+msgid "Suppliers"
+msgstr "Pemasok"
+
+msgid "Approval policy"
+msgstr "Kebijakan persetujuan"
+
+msgid "Suppliers, receiving, supplier returns, requisitions and location transfers over the stock ledger. A document moves no stock until it is finalised, and finalising posts its movements through the ledger: nothing here edits a balance, and a mistake is corrected by reversing the document."
+msgstr "Pemasok, penerimaan, retur pemasok, permintaan barang, dan transfer antar lokasi di atas buku besar stok. Dokumen tidak memindahkan stok sampai difinalisasi, dan finalisasi mencatat pergerakannya lewat buku besar: tidak ada yang mengubah saldo di sini, dan kesalahan dikoreksi dengan membalikkan dokumen."
+
+msgid "You do not have permission to view procurement."
+msgstr "Anda tidak memiliki izin untuk melihat pengadaan."
+
+msgid "Could not load procurement. Please try again."
+msgstr "Tidak dapat memuat pengadaan. Silakan coba lagi."
+
+msgid "A supplier with that vendor code already exists."
+msgstr "Pemasok dengan kode vendor itu sudah ada."
+
+msgid "That supplier still has draft or submitted documents. Finalise or cancel them first."
+msgstr "Pemasok itu masih memiliki dokumen draf atau terkirim. Finalisasi atau batalkan dulu."
+
+msgid "That supplier is deleted. Restore it before editing."
+msgstr "Pemasok itu telah dihapus. Pulihkan sebelum mengubah."
+
+msgid "That supplier is inactive, blocked or deleted and cannot take part in a document."
+msgstr "Pemasok itu nonaktif, diblokir, atau dihapus dan tidak dapat dipakai dalam dokumen."
+
+msgid "That supplier does not exist."
+msgstr "Pemasok itu tidak ada."
+
+msgid "That stock location does not exist in this organisation."
+msgstr "Lokasi stok itu tidak ada di organisasi ini."
+
+msgid "The document is no longer in a state that allows that. Reload the page."
+msgstr "Dokumen tidak lagi dalam status yang mengizinkannya. Muat ulang halaman."
+
+msgid "Not enough stock, and the negative-stock policy forbids going below zero. Nothing was posted."
+msgstr "Stok tidak cukup, dan kebijakan stok negatif melarang di bawah nol. Tidak ada yang dicatat."
+
+msgid "An item is stocked in a different unit at that location. Nothing was posted."
+msgstr "Suatu barang disimpan dalam satuan berbeda di lokasi itu. Tidak ada yang dicatat."
+
+msgid "A stock location is inactive. Reactivate it before posting."
+msgstr "Lokasi stok nonaktif. Aktifkan kembali sebelum mencatat."
+
+msgid "The document is waiting for approval and cannot be finalised yet."
+msgstr "Dokumen menunggu persetujuan dan belum dapat difinalisasi."
+
+msgid "The approval workflow rejected this document. Cancel it instead."
+msgstr "Alur persetujuan menolak dokumen ini. Batalkan saja."
+
+msgid "This document needs approval, but no workflow named procurement.document_approval is published. Nothing was submitted."
+msgstr "Dokumen ini memerlukan persetujuan, tetapi tidak ada alur kerja bernama procurement.document_approval yang diterbitkan. Tidak ada yang dikirim."
+
+msgid "A live document already uses that external reference for this supplier."
+msgstr "Dokumen aktif sudah memakai referensi eksternal itu untuk pemasok ini."
+
+msgid "This action must be performed by a tenant user."
+msgstr "Tindakan ini harus dilakukan oleh pengguna tenant."
+
+msgid "Procurement sections"
+msgstr "Bagian pengadaan"
+
+msgid "That document does not exist, or you cannot read it."
+msgstr "Dokumen itu tidak ada, atau Anda tidak dapat membacanya."
+
+msgid "That supplier does not exist or has been deleted."
+msgstr "Pemasok itu tidak ada atau telah dihapus."
+
+msgid "Back to the list"
+msgstr "Kembali ke daftar"
+
+msgid "Show deleted suppliers"
+msgstr "Tampilkan pemasok yang dihapus"
+
+msgid "Register a supplier"
+msgstr "Daftarkan pemasok"
+
+msgid "Vendor code"
+msgstr "Kode vendor"
+
+msgid "Letters, digits, dots, underscores and hyphens. Unique per organisation, ignoring case."
+msgstr "Huruf, angka, titik, garis bawah, dan tanda hubung. Unik per organisasi, tanpa membedakan huruf besar/kecil."
+
+msgid "Tags"
+msgstr "Tag"
+
+msgid "Separate categories and tags with commas. Lower-case letters, digits, dots, underscores and hyphens."
+msgstr "Pisahkan kategori dan tag dengan koma. Huruf kecil, angka, titik, garis bawah, dan tanda hubung."
+
+msgid "Register supplier"
+msgstr "Daftarkan pemasok"
+
+msgid "No supplier matches. Register one to start."
+msgstr "Tidak ada pemasok yang cocok. Daftarkan satu untuk memulai."
+
+msgid "Open {code}"
+msgstr "Buka {code}"
+
+msgid "Back to the suppliers"
+msgstr "Kembali ke pemasok"
+
+msgid "Save supplier"
+msgstr "Simpan pemasok"
+
+msgid "Delete {code}? Its documents keep referencing it, and it can be restored later."
+msgstr "Hapus {code}? Dokumennya tetap merujuknya, dan ia dapat dipulihkan nanti."
+
+msgid "Delete supplier"
+msgstr "Hapus pemasok"
+
+msgid "Identifiers and references"
+msgstr "Identifier dan referensi"
+
+msgid "Tax and business identifiers and payment or contact references are shown masked. Revealing one is a separate permission and is recorded in the audit log."
+msgstr "Identifier pajak dan usaha serta referensi pembayaran atau kontak ditampilkan tersamar. Menampilkan satu memerlukan izin terpisah dan dicatat di log audit."
+
+msgid "This supplier has no identifier or reference yet."
+msgstr "Pemasok ini belum memiliki identifier atau referensi."
+
+msgid "Label"
+msgstr "Label"
+
+msgid "Value (masked)"
+msgstr "Nilai (tersamar)"
+
+msgid "Reveal this value in clear text? The disclosure is recorded in the audit log."
+msgstr "Tampilkan nilai ini dalam teks polos? Pengungkapan dicatat di log audit."
+
+msgid "Reveal"
+msgstr "Tampilkan"
+
+msgid "Remove this identifier or reference?"
+msgstr "Hapus identifier atau referensi ini?"
+
+msgid "Revealed value"
+msgstr "Nilai yang ditampilkan"
+
+msgid "Shown once. It is not stored, and it disappears when you hide it, after a minute, or when you leave the page."
+msgstr "Ditampilkan sekali. Tidak disimpan, dan hilang saat disembunyikan, setelah semenit, atau saat Anda meninggalkan halaman."
+
+msgid "Hide"
+msgstr "Sembunyikan"
+
+msgid "Add an identifier or reference"
+msgstr "Tambah identifier atau referensi"
+
+msgid "Add identifier"
+msgstr "Tambah identifier"
+
+msgid "New draft document"
+msgstr "Dokumen draf baru"
+
+msgid "A draft moves no stock. Submit it to freeze its lines, then finalise it to post the movements through the stock ledger."
+msgstr "Draf tidak memindahkan stok. Kirim untuk membekukan barisnya, lalu finalisasi untuk mencatat pergerakan lewat buku besar stok."
+
+msgid "Supplier"
+msgstr "Pemasok"
+
+msgid "Supplier id"
+msgstr "ID pemasok"
+
+msgid "Destination location"
+msgstr "Lokasi tujuan"
+
+msgid "Source location"
+msgstr "Lokasi asal"
+
+msgid "Source location id"
+msgstr "ID lokasi asal"
+
+msgid "External reference"
+msgstr "Referensi eksternal"
+
+msgid "Document date"
+msgstr "Tanggal dokumen"
+
+msgid "Remove line {n}"
+msgstr "Hapus baris {n}"
+
+msgid "Line {n}"
+msgstr "Baris {n}"
+
+msgid "Quantity and cost are exact decimals (up to 6 decimals). A receipt and a supplier return need a unit cost; an item appears once per document."
+msgstr "Jumlah dan biaya adalah desimal persis (hingga 6 desimal). Penerimaan dan retur pemasok memerlukan biaya satuan; satu barang muncul sekali per dokumen."
+
+msgid "Add a line"
+msgstr "Tambah baris"
+
+msgid "SKU"
+msgstr "SKU"
+
+msgid "Item name"
+msgstr "Nama barang"
+
+msgid "Unit cost"
+msgstr "Biaya satuan"
+
+msgid "No document matches. Create a draft to start."
+msgstr "Tidak ada dokumen yang cocok. Buat draf untuk memulai."
+
+msgid "Number"
+msgstr "Nomor"
+
+msgid "Total cost"
+msgstr "Total biaya"
+
+msgid "Date"
+msgstr "Tanggal"
+
+msgid "Back to the documents"
+msgstr "Kembali ke dokumen"
+
+msgid "Line total"
+msgstr "Total baris"
+
+msgid "{count} ledger movements are linked to this document."
+msgstr "{count} pergerakan buku besar terhubung ke dokumen ini."
+
+msgid "Submit this document? Its lines are frozen, and an approval may be started."
+msgstr "Kirim dokumen ini? Barisnya dibekukan, dan persetujuan dapat dimulai."
+
+msgid "Finalise this document? Its stock movements are posted to the ledger, all lines or none, and the document can no longer be edited."
+msgstr "Finalisasi dokumen ini? Pergerakan stoknya dicatat ke buku besar, semua baris atau tidak sama sekali, dan dokumen tidak dapat diubah lagi."
+
+msgid "Finalise"
+msgstr "Finalisasi"
+
+msgid "Cancel this document"
+msgstr "Batalkan dokumen ini"
+
+msgid "No stock was moved, so nothing is compensated. The document is kept, marked cancelled."
+msgstr "Tidak ada stok yang berpindah, jadi tidak ada yang dikompensasi. Dokumen disimpan dan ditandai dibatalkan."
+
+msgid "Cancel document"
+msgstr "Batalkan dokumen"
+
+msgid "Reverse this document"
+msgstr "Balikkan dokumen ini"
+
+msgid "Posts compensating stock movements. The original movements stay in the ledger, and a document can be reversed only once."
+msgstr "Mencatat pergerakan stok kompensasi. Pergerakan asli tetap di buku besar, dan dokumen hanya dapat dibalikkan sekali."
+
+msgid "Reverse document"
+msgstr "Balikkan dokumen"
+
+msgid "When a submitted document's total cost reaches the threshold, it needs approval before it can be finalised, through the workflow named {key}. With no threshold, approval is off. The threshold is cost-based, so a document without a cost, a requisition and a transfer never need it. A change applies only to documents submitted afterwards."
+msgstr "Bila total biaya dokumen terkirim mencapai ambang, dokumen perlu persetujuan sebelum difinalisasi, lewat alur kerja bernama {key}. Tanpa ambang, persetujuan nonaktif. Ambang berbasis biaya, jadi dokumen tanpa biaya, permintaan barang, dan transfer tidak pernah memerlukannya. Perubahan hanya berlaku untuk dokumen yang dikirim sesudahnya."
+
+msgid "Approval is off."
+msgstr "Persetujuan nonaktif."
+
+msgid "Documents with a total cost of {threshold} or more need approval."
+msgstr "Dokumen dengan total biaya {threshold} atau lebih memerlukan persetujuan."
+
+msgid "Approval threshold"
+msgstr "Ambang persetujuan"
+
+msgid "An exact decimal with up to 6 decimals. Leave empty to turn approval off."
+msgstr "Desimal persis hingga 6 desimal. Kosongkan untuk menonaktifkan persetujuan."
+
+msgid "Document date range"
+msgstr "Rentang tanggal dokumen"
+
+msgid "The date range is not valid. Use real dates, with From not after To."
+msgstr "Rentang tanggal tidak valid. Gunakan tanggal nyata, dengan Dari tidak setelah Sampai."
+
+msgid "Documents by kind and status"
+msgstr "Dokumen menurut jenis dan status"
+
+msgid "No document falls in this range."
+msgstr "Tidak ada dokumen dalam rentang ini."
+
+msgid "Activity per supplier"
+msgstr "Aktivitas per pemasok"
+
+msgid "No supplier activity falls in this range."
+msgstr "Tidak ada aktivitas pemasok dalam rentang ini."
+
+msgid "Receipts finalised"
+msgstr "Penerimaan difinalisasi"
+
+msgid "Returns finalised"
+msgstr "Retur difinalisasi"
+
+msgid "Open documents"
+msgstr "Dokumen terbuka"
+
+msgid "Received cost"
+msgstr "Biaya diterima"
+
+msgid "Returned cost"
+msgstr "Biaya diretur"
+
+msgid "Read-only proof that every finalised or reversed document agrees with the stock ledger: the right movements, of the right type, at the right location, in the right quantity. It changes nothing."
+msgstr "Bukti baca-saja bahwa setiap dokumen yang difinalisasi atau dibalikkan sesuai dengan buku besar stok: pergerakan yang benar, bertipe benar, di lokasi benar, dengan jumlah benar. Tidak mengubah apa pun."
+
+msgid "Reconciled: {documents} documents and {lines} lines were checked and all agree with the ledger."
+msgstr "Cocok: {documents} dokumen dan {lines} baris diperiksa dan semuanya sesuai dengan buku besar."
+
+msgid "Discrepancies found. {documents} documents and {lines} lines were checked."
+msgstr "Ditemukan selisih. {documents} dokumen dan {lines} baris diperiksa."
+
+msgid "{count} ledger movements carry a procurement identity with no document line behind them."
+msgstr "{count} pergerakan buku besar membawa identitas pengadaan tanpa baris dokumen di baliknya."
+
+msgid "The list is truncated; more discrepancies may exist."
+msgstr "Daftar dipotong; mungkin ada selisih lain."
+
+msgid "Expected movements"
+msgstr "Pergerakan diharapkan"
+
+msgid "Linked movements"
+msgstr "Pergerakan terhubung"
+
+msgid "Matching movements"
+msgstr "Pergerakan cocok"
+
+msgid "Post"
+msgstr "Posting"
+
+msgid "Recorded on the document and in the audit log."
+msgstr "Dicatat pada dokumen dan di log audit."
+
+msgid "Destination location id"
+msgstr "ID lokasi tujuan"

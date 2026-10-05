@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:0467cd45aeb9d06d077bcfaf82b0dffb265609d56d3c7d242ea2195c227915ba -->
+<!-- i18n-source-hash: sha256:6b1d39e4c412d82d5c2ceaf7408f1fdeb2424dabd114cd7c31c6c71edbfe972f -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -40,6 +40,11 @@ database, sehingga dokumen finalised immutable dan tak ada yang pernah dihapus.
 | `application/procurement-route-support.ts`      | Idempotensi, validasi body, dan pemetaan error bersama untuk route                                |
 | `src/pages/api/v1/procurement/**`               | 16 berkas route tipis; masing-masing mengotorisasi lewat `defineTenantRoute`                      |
 
-Status `experimental` sampai layar admin pertama mendarat (ADR-0128 §10).
+Status `active`: `/admin/procurement` (Issue #905) adalah layar admin yang disyaratkan
+ADR-0021 kriteria 1, dan mendarat bersama entri `navigation`-nya (dijaga
+`procurement.documents.read`). Cakupannya: pemasok (identifier ter-mask, reveal
+ber-audit), dokumen semua mode dengan submit/finalise/cancel/reverse, ambang
+persetujuan, laporan, dan rekonsiliasi. Menyunting draf di tempat
+(`documents.update`) tidak ada di layar: batalkan lalu masukkan ulang.
 
 **Ambang persetujuan:** berbasis biaya; hanya mencakup `receive` dan `supplier_return` (keduanya wajib `unitCost` per baris). `requisition` dan `transfer` tidak dibatasi biaya (gerbang berbasis mode/kuantitas adalah tindak lanjut tercatat).

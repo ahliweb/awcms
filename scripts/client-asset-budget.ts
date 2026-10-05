@@ -953,8 +953,30 @@ export const READER_BUDGET_BYTES = 24_000;
  * ```
  *
  * 309,626 is the measured value with no added margin.
+ *
+ * **Raised for Issue #905** (the `/admin/procurement` screen that flipped
+ * `procurement` to `active`). One screen script, and it is not per-screen
+ * duplication of the shared lifecycle: it imports `admin-form-client.ts`,
+ * `confirm-dialog-client.ts`, `reason-panel-client.ts` and
+ * `admin-idempotency-key.ts` (all already shared) and adds only what is the
+ * screen's own: the supplier and identifier requests, the audited reveal (one
+ * live region that clears itself), the document line editor (cloned from a
+ * `<template>`, no `innerHTML`), the mode-dependent field toggling, and the
+ * error-code-to-message map for a module with sixteen distinct refusals. The
+ * body shaping is the pure `procurement-document-model.ts`, unit-tested. The
+ * line editor reuses the tax editor's fieldset CSS rather than adding a copy.
+ * Measured actual total:
+ *
+ * ```
+ * before (309,626 ceiling)   309,626 B
+ * + procurement script        8,532 B
+ * + admin-screens.css rules      72 B
+ * after                      318,230 B (measured actual total)
+ * ```
+ *
+ * 318,230 is the measured value with no added margin.
  */
-export const APP_BUDGET_BYTES = 309_626;
+export const APP_BUDGET_BYTES = 318_230;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

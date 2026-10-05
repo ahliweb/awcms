@@ -1,0 +1,2619 @@
+---
+/**
+ * Procurement — ADR-0128, Issue #905. TENANT-scoped, over the supplier,
+ * receiving, return, requisition and transfer module (Issue #888) that shipped
+ * API-first.
+ *
+ * ## Five views, one entry decision per view
+ *
+ * Suppliers, documents, the approval policy, the reports and the reconciliation
+ * are independently permissioned (`suppliers.read`, `documents.read`,
+ * `policy.read`, `reports.read`, `documents.reconcile`), so the page is refused
+ * only when EVERY one is refused and each view answers for itself from `entry` —
+ * the any-of shape `/admin/inventory` uses. A view the operator may not read is
+ * not rendered and the switcher does not offer it. Every control is gated by its
+ * own `can(permission)` — the permission its endpoint enforces — so a read-only
+ * operator sees no write control at all, and a write control a role was not
+ * granted is not a dead button.
+ *
+ * ## A document never moves stock until it is finalised, and finalising is the
+ * ## ledger's job
+ *
+ * Creating a draft touches nothing. Submit freezes it, and — when the tenant set
+ * an approval threshold — starts the optional approval; Finalise posts the
+ * movements THROUGH THE INVENTORY LEDGER'S PORT (the endpoint does it, this page
+ * never writes a balance), all lines or none. Reverse posts compensating
+ * movements. Both need a confirmation / a mandatory reason, and each confirmed
+ * action carries an `Idempotency-Key` so a retry replays instead of posting twice.
+ *
+ * ## Identifiers are masked; reveal is a deliberate, audited act
+ *
+ * The page lists a supplier's tax/business identifiers and payment/contact
+ * references ONLY in their masked form (the read model has no value field).
+ * "Reveal" calls the one endpoint that returns a clear value (`suppliers.reveal`,
+ * audited, `Cache-Control: no-store`), and the value is shown in one live region
+ * that the operator can dismiss and that clears itself — it is never written to
+ * the page markup, to storage, or to a data attribute, and a reload drops it.
+ * An identifier add answers a minimal acknowledgement with no id, so the page
+ * reloads to re-list rather than trusting the response.
+ *
+ * ## Location and supplier pickers follow what the operator may read
+ *
+ * `procurement.*` does not imply `inventory.locations.read` or
+ * `procurement.suppliers.read`. A picker is offered only when the operator holds
+ * the read behind it (and the list was not truncated); otherwise the field takes
+ * an id, as `/admin/inventory` does. The endpoint is the authority either way.
+ *
+ * ## Not on this screen, and why
+ *
+ * `procurement.documents.update` (editing a DRAFT in place) stays on the
+ * shrink-only coverage ledger: a draft with a mistake is cancelled and entered
+ * again. Nothing here edits a submitted or finalised document — they are
+ * immutable by a database trigger.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import ReasonPanel from "../../components/ReasonPanel.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../lib/i18n";
+import { calendarDateOrEmpty } from "../../lib/ui/procurement-document-model";
+import { listLocations } from "../../modules/inventory/application/inventory-location-directory";
+import type { StockLocation } from "../../modules/inventory/application/inventory-rows";
+import {
+  decodeKeysetCursor,
+  type KeysetCursor
+} from "../../modules/_shared/keyset-pagination";
+import {
+  getDocument,
+  listDocuments,
+  parseDocumentCursor,
+  readApprovalThreshold
+} from "../../modules/procurement/application/procurement-document-directory";
+import {
+  getSupplier,
+  listIdentifiers,
+  listSuppliers,
+  parseSupplierCursor
+} from "../../modules/procurement/application/procurement-supplier-directory";
+import {
+  parseReportCursor,
+  receivingSummaryReport,
+  reconcileDocuments,
+  supplierActivityReport,
+  type ReceivingSummaryRow,
+  type ReconciliationReport,
+  type SupplierActivity
+} from "../../modules/procurement/application/procurement-reporting";
+import type {
+  DocumentDetail,
+  ProcurementDocument,
+  Supplier,
+  SupplierIdentifier
+} from "../../modules/procurement/application/procurement-rows";
+import {
+  APPROVAL_WORKFLOW_KEY,
+  DOCUMENT_MODES,
+  DOCUMENT_STATUSES,
+  IDENTIFIER_TYPES,
+  SUPPLIER_STATUSES,
+  isDocumentMode,
+  isDocumentStatus,
+  isSupplierStatus,
+  type ApprovalStatus,
+  type DocumentMode,
+  type DocumentStatus,
+  type SupplierIdentifierType,
+  type SupplierStatus
+} from "../../modules/procurement/domain/procurement-types";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t } = getTranslatorFor(locale);
+
+type View = "suppliers" | "documents" | "policy" | "reports" | "reconciliation";
+const VIEWS: readonly View[] = [
+  "suppliers",
+  "documents",
+  "policy",
+  "reports",
+  "reconciliation"
+];
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_FILTER_TEXT = 200;
+
+function queryText(name: string): string {
+  const value = Astro.url.searchParams.get(name)?.trim() ?? "";
+  return value.length > MAX_FILTER_TEXT ? "" : value;
+}
+function queryUuid(name: string): string {
+  const value = queryText(name);
+  return UUID_PATTERN.test(value) ? value.toLowerCase() : "";
+}
+
+const requestedView = Astro.url.searchParams.get("view");
+const supplierId = queryUuid("supplier");
+const documentId = queryUuid("document");
+const supplierStatusFilter = (() => {
+  const value = queryText("supplierStatus");
+  return isSupplierStatus(value) ? value : "";
+})();
+const showDeleted = Astro.url.searchParams.get("includeDeleted") === "1";
+const modeFilter = (() => {
+  const value = queryText("mode");
+  return isDocumentMode(value) ? value : "";
+})();
+const documentStatusFilter = (() => {
+  const value = queryText("status");
+  return isDocumentStatus(value) ? value : "";
+})();
+const fromDate = calendarDateOrEmpty(queryText("from"));
+const toDate = calendarDateOrEmpty(queryText("to"));
+const periodInvalid =
+  (queryText("from") !== "" && fromDate === "") ||
+  (queryText("to") !== "" && toDate === "") ||
+  (fromDate !== "" && toDate !== "" && fromDate > toDate);
+const cursorParam = queryText("cursor");
+const wantsReconcile = Astro.url.searchParams.get("run") === "1";
+
+const MODE_LABEL: Record<DocumentMode, string> = {
+  receive: t("Receipt"),
+  supplier_return: t("Supplier return"),
+  requisition: t("Requisition"),
+  transfer: t("Location transfer")
+};
+const STATUS_LABEL: Record<DocumentStatus, string> = {
+  draft: t("Draft"),
+  submitted: t("Submitted"),
+  finalised: t("Finalised"),
+  cancelled: t("Cancelled"),
+  reversed: t("Reversed")
+};
+const STATUS_TONE: Record<DocumentStatus, string> = {
+  draft: "neutral",
+  submitted: "warning",
+  finalised: "success",
+  cancelled: "neutral",
+  reversed: "danger"
+};
+const APPROVAL_LABEL: Record<ApprovalStatus, string> = {
+  not_required: t("Not required"),
+  pending: t("Waiting for approval"),
+  approved: t("Approved"),
+  rejected: t("Rejected")
+};
+const SUPPLIER_STATUS_LABEL: Record<SupplierStatus, string> = {
+  active: t("Active"),
+  inactive: t("Inactive"),
+  blocked: t("Blocked")
+};
+const SUPPLIER_STATUS_TONE: Record<SupplierStatus, string> = {
+  active: "success",
+  inactive: "neutral",
+  blocked: "danger"
+};
+const IDENTIFIER_TYPE_LABEL: Record<SupplierIdentifierType, string> = {
+  tax_id: t("Tax ID"),
+  business_id: t("Business ID"),
+  payment_ref: t("Payment reference"),
+  contact_ref: t("Contact reference"),
+  other: t("Other")
+};
+
+function modeLabel(value: string): string {
+  return isDocumentMode(value) ? MODE_LABEL[value] : value;
+}
+function statusLabel(value: string): string {
+  return isDocumentStatus(value) ? STATUS_LABEL[value] : value;
+}
+function statusTone(value: string): string {
+  return isDocumentStatus(value) ? STATUS_TONE[value] : "neutral";
+}
+function supplierStatusLabel(value: string): string {
+  return isSupplierStatus(value) ? SUPPLIER_STATUS_LABEL[value] : value;
+}
+function supplierStatusTone(value: string): string {
+  return isSupplierStatus(value) ? SUPPLIER_STATUS_TONE[value] : "neutral";
+}
+function identifierTypeLabel(value: string): string {
+  return (IDENTIFIER_TYPES as readonly string[]).includes(value)
+    ? IDENTIFIER_TYPE_LABEL[value as SupplierIdentifierType]
+    : value;
+}
+
+// A picker follows the supplier cursor, bounded: a tenant with more than this
+// many pages of active suppliers gets the id text input instead of a silently
+// truncated list (an older supplier could not be chosen from it).
+const SUPPLIER_PICKER_MAX_PAGES = 5;
+const LOCATION_PICKER_MAX_PAGES = 5;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "procurement", activityCode: "suppliers", action: "read" },
+    { moduleKey: "procurement", activityCode: "documents", action: "read" },
+    { moduleKey: "procurement", activityCode: "policy", action: "read" },
+    { moduleKey: "procurement", activityCode: "reports", action: "read" },
+    { moduleKey: "procurement", activityCode: "documents", action: "reconcile" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [maySuppliers, mayDocuments, mayPolicy, mayReports, mayReconcile] =
+      entry;
+    const view: View = (() => {
+      const allowed: Record<View, boolean> = {
+        suppliers: Boolean(maySuppliers),
+        documents: Boolean(mayDocuments),
+        policy: Boolean(mayPolicy),
+        reports: Boolean(mayReports),
+        reconciliation: Boolean(mayReconcile)
+      };
+      const wanted = VIEWS.find((candidate) => candidate === requestedView);
+      if (wanted && allowed[wanted]) return wanted;
+      return VIEWS.find((candidate) => allowed[candidate]) ?? "suppliers";
+    })();
+
+    // Sequential on purpose: `tx` is one reserved connection.
+    const canCreateSupplier = await can({
+      moduleKey: "procurement",
+      activityCode: "suppliers",
+      action: "create"
+    });
+    const canUpdateSupplier = await can({
+      moduleKey: "procurement",
+      activityCode: "suppliers",
+      action: "update"
+    });
+    const canDeleteSupplier = await can({
+      moduleKey: "procurement",
+      activityCode: "suppliers",
+      action: "delete"
+    });
+    const canRestoreSupplier = await can({
+      moduleKey: "procurement",
+      activityCode: "suppliers",
+      action: "restore"
+    });
+    const canRevealIdentifier = await can({
+      moduleKey: "procurement",
+      activityCode: "suppliers",
+      action: "reveal"
+    });
+    const canCreateDocument = await can({
+      moduleKey: "procurement",
+      activityCode: "documents",
+      action: "create"
+    });
+    const canSubmitDocument = await can({
+      moduleKey: "procurement",
+      activityCode: "documents",
+      action: "submit"
+    });
+    const canFinaliseDocument = await can({
+      moduleKey: "procurement",
+      activityCode: "documents",
+      action: "finalise"
+    });
+    const canCancelDocument = await can({
+      moduleKey: "procurement",
+      activityCode: "documents",
+      action: "cancel"
+    });
+    const canReverseDocument = await can({
+      moduleKey: "procurement",
+      activityCode: "documents",
+      action: "reverse"
+    });
+    const canConfigurePolicy = await can({
+      moduleKey: "procurement",
+      activityCode: "policy",
+      action: "configure"
+    });
+    const mayLocations = await can({
+      moduleKey: "inventory",
+      activityCode: "locations",
+      action: "read"
+    });
+
+    // Bounded like the supplier picker: a tenant with more than
+    // LOCATION_PICKER_MAX_PAGES pages of locations gets the id input rather than
+    // a silently truncated select (a later location could not be chosen).
+    const locations: StockLocation[] = [];
+    let locationsComplete = true;
+    if (mayLocations) {
+      let after: string | undefined;
+      for (let n = 0; n < LOCATION_PICKER_MAX_PAGES; n += 1) {
+        const batch = await listLocations(tx, ssr.tenantId, {
+          limit: 200,
+          ...(after ? { after } : {})
+        });
+        locations.push(...batch.items);
+        if (!batch.nextCursor) {
+          locationsComplete = true;
+          break;
+        }
+        locationsComplete = false;
+        after = batch.nextCursor;
+      }
+    }
+
+    let suppliers: Supplier[] = [];
+    let suppliersNext: string | null = null;
+    let supplier: Supplier | null = null;
+    let identifiers: SupplierIdentifier[] = [];
+    let documents: ProcurementDocument[] = [];
+    let documentsNext: string | null = null;
+    let document: DocumentDetail | null = null;
+    let pickerSuppliers: Supplier[] = [];
+    let pickerComplete = true;
+    let threshold: string | null = null;
+    let receiving: ReceivingSummaryRow[] = [];
+    let supplierReport: SupplierActivity[] = [];
+    let supplierReportNext: string | null = null;
+    let reconciliation: ReconciliationReport | null = null;
+
+    // `includeDeleted` is the power of whoever may restore, exactly as the list
+    // endpoint decides it, so `suppliers.read` alone cannot enumerate them.
+    const includeDeleted = showDeleted && canRestoreSupplier;
+
+    if (view === "suppliers") {
+      if (supplierId) {
+        supplier = await getSupplier(tx, ssr.tenantId, supplierId);
+        if (supplier) {
+          identifiers =
+            (await listIdentifiers(tx, ssr.tenantId, supplierId)) ?? [];
+        }
+      } else {
+        const cursor: KeysetCursor | null = cursorParam
+          ? parseSupplierCursor(cursorParam)
+          : null;
+        const page = await listSuppliers(
+          tx,
+          ssr.tenantId,
+          {
+            ...(supplierStatusFilter ? { status: supplierStatusFilter } : {}),
+            includeDeleted
+          },
+          cursor ?? undefined
+        );
+        suppliers = page.suppliers;
+        suppliersNext = page.nextCursor;
+      }
+    }
+
+    if (view === "documents") {
+      if (documentId) {
+        document = await getDocument(tx, ssr.tenantId, documentId);
+      } else {
+        const cursor: KeysetCursor | null = cursorParam
+          ? parseDocumentCursor(cursorParam)
+          : null;
+        const page = await listDocuments(
+          tx,
+          ssr.tenantId,
+          {
+            ...(modeFilter ? { mode: modeFilter } : {}),
+            ...(documentStatusFilter ? { status: documentStatusFilter } : {})
+          },
+          cursor ?? undefined
+        );
+        documents = page.documents;
+        documentsNext = page.nextCursor;
+
+        if (canCreateDocument && maySuppliers) {
+          let next: KeysetCursor | undefined;
+          for (let n = 0; n < SUPPLIER_PICKER_MAX_PAGES; n += 1) {
+            const batch = await listSuppliers(
+              tx,
+              ssr.tenantId,
+              { status: "active" },
+              next
+            );
+            pickerSuppliers.push(...batch.suppliers);
+            if (!batch.nextCursor) {
+              pickerComplete = true;
+              break;
+            }
+            pickerComplete = false;
+            next = decodeKeysetCursor(batch.nextCursor) ?? undefined;
+            if (!next) break;
+          }
+        }
+      }
+    }
+
+    if (view === "policy") {
+      threshold = await readApprovalThreshold(tx, ssr.tenantId);
+    }
+
+    if (view === "reports" && !periodInvalid) {
+      const range = {
+        from: fromDate === "" ? null : fromDate,
+        to: toDate === "" ? null : toDate
+      };
+      receiving = await receivingSummaryReport(tx, ssr.tenantId, range);
+      const cursor: KeysetCursor | null = cursorParam
+        ? parseReportCursor(cursorParam)
+        : null;
+      const page = await supplierActivityReport(
+        tx,
+        ssr.tenantId,
+        range,
+        cursor ?? undefined
+      );
+      supplierReport = page.suppliers;
+      supplierReportNext = page.nextCursor;
+    }
+
+    if (view === "reconciliation" && wantsReconcile) {
+      reconciliation = await reconcileDocuments(
+        tx,
+        ssr.tenantId,
+        documentId || null
+      );
+    }
+
+    return {
+      view,
+      maySuppliers: Boolean(maySuppliers),
+      mayDocuments: Boolean(mayDocuments),
+      mayPolicy: Boolean(mayPolicy),
+      mayReports: Boolean(mayReports),
+      mayReconcile: Boolean(mayReconcile),
+      mayLocations,
+      locations,
+      locationsComplete,
+      includeDeleted,
+      suppliers,
+      suppliersNext,
+      supplier,
+      identifiers,
+      documents,
+      documentsNext,
+      document,
+      pickerSuppliers,
+      pickerComplete,
+      threshold,
+      receiving,
+      supplierReport,
+      supplierReportNext,
+      reconciliation,
+      canCreateSupplier,
+      canUpdateSupplier,
+      canDeleteSupplier,
+      canRestoreSupplier,
+      canRevealIdentifier,
+      canCreateDocument,
+      canSubmitDocument,
+      canFinaliseDocument,
+      canCancelDocument,
+      canReverseDocument,
+      canConfigurePolicy
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/procurement.astro: failed to load the procurement screen",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+
+const view: View = data?.view ?? "suppliers";
+const locations: StockLocation[] = data?.locations ?? [];
+const locationById = new Map(
+  locations.map((location) => [location.id, location])
+);
+const mayLocations = data?.mayLocations ?? false;
+
+function locationLabel(id: string): string {
+  const location = locationById.get(id);
+  return location ? `${location.name} (${location.code})` : id.slice(0, 8);
+}
+
+const VIEW_LABEL: Record<View, string> = {
+  suppliers: t("Suppliers"),
+  documents: t("Documents"),
+  policy: t("Approval policy"),
+  reports: t("Reports"),
+  reconciliation: t("Reconciliation")
+};
+const viewAllowed: Record<View, boolean> = {
+  suppliers: data?.maySuppliers ?? false,
+  documents: data?.mayDocuments ?? false,
+  policy: data?.mayPolicy ?? false,
+  reports: data?.mayReports ?? false,
+  reconciliation: data?.mayReconcile ?? false
+};
+
+/** A same-page link that keeps the active filters, so paging does not drop them. */
+function pageUrl(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams();
+  const base: Record<string, string> = {
+    view,
+    ...(supplierStatusFilter ? { supplierStatus: supplierStatusFilter } : {}),
+    ...(data?.includeDeleted ? { includeDeleted: "1" } : {}),
+    ...(modeFilter ? { mode: modeFilter } : {}),
+    ...(documentStatusFilter ? { status: documentStatusFilter } : {}),
+    ...(fromDate ? { from: fromDate } : {}),
+    ...(toDate ? { to: toDate } : {})
+  };
+  for (const [key, value] of Object.entries({ ...base, ...overrides })) {
+    if (value !== null && value !== "") params.set(key, value);
+  }
+  return `/admin/procurement?${params.toString()}`;
+}
+
+const activeLocations = locations.filter(
+  (location) => location.status === "active"
+);
+// A select only when it is complete AND offers something: an empty `required`
+// select could never be submitted, so zero active locations falls back to the id
+// input, as does a truncated list.
+const locationPicker =
+  mayLocations &&
+  (data?.locationsComplete ?? false) &&
+  activeLocations.length > 0;
+const document_ = data?.document ?? null;
+const supplier_ = data?.supplier ?? null;
+const detailMissing =
+  (view === "documents" && documentId !== "" && document_ === null) ||
+  (view === "suppliers" && supplierId !== "" && supplier_ === null);
+const today = new Date().toISOString().slice(0, 10);
+---
+
+<AdminLayout
+  title={t("Procurement")}
+  description={t(
+    "Suppliers, receiving, supplier returns, requisitions and location transfers over the stock ledger. A document moves no stock until it is finalised, and finalising posts its movements through the ledger: nothing here edits a balance, and a mistake is corrected by reversing the document."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="procurement-denied">
+      {t("You do not have permission to view procurement.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="procurement-load-error">
+      {t("Could not load procurement. Please try again.")}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <>
+      <p
+        id="procurement-action-error"
+        class="state-notice"
+        role="alert"
+        hidden
+        data-msg-forbidden={t("You do not have permission to do that.")}
+        data-msg-validation={t("Check the values you entered and try again.")}
+        data-msg-conflict={t(
+          "That conflicts with the current state. Reload the page and try again."
+        )}
+        data-msg-vendor-code={t(
+          "A supplier with that vendor code already exists."
+        )}
+        data-msg-supplier-open={t(
+          "That supplier still has draft or submitted documents. Finalise or cancel them first."
+        )}
+        data-msg-supplier-deleted={t(
+          "That supplier is deleted. Restore it before editing."
+        )}
+        data-msg-supplier-unavailable={t(
+          "That supplier is inactive, blocked or deleted and cannot take part in a document."
+        )}
+        data-msg-supplier-not-found={t("That supplier does not exist.")}
+        data-msg-location-not-found={t(
+          "That stock location does not exist in this organisation."
+        )}
+        data-msg-invalid-state={t(
+          "The document is no longer in a state that allows that. Reload the page."
+        )}
+        data-msg-insufficient={t(
+          "Not enough stock, and the negative-stock policy forbids going below zero. Nothing was posted."
+        )}
+        data-msg-unit={t(
+          "An item is stocked in a different unit at that location. Nothing was posted."
+        )}
+        data-msg-inactive={t(
+          "A stock location is inactive. Reactivate it before posting."
+        )}
+        data-msg-approval-pending={t(
+          "The document is waiting for approval and cannot be finalised yet."
+        )}
+        data-msg-approval-rejected={t(
+          "The approval workflow rejected this document. Cancel it instead."
+        )}
+        data-msg-approval-missing={t(
+          "This document needs approval, but no workflow named procurement.document_approval is published. Nothing was submitted."
+        )}
+        data-msg-duplicate-reference={t(
+          "A live document already uses that external reference for this supplier."
+        )}
+        data-msg-actor={t("This action must be performed by a tenant user.")}
+        data-msg-not-found={t("Not found. Reload the page.")}
+        data-msg-generic={t("Could not save that. Please try again.")}
+      />
+
+      <nav class="admin-segmented" aria-label={t("Procurement sections")}>
+        {VIEWS.filter((candidate) => viewAllowed[candidate]).map(
+          (candidate) => (
+            <a
+              class="admin-segmented-option"
+              aria-current={candidate === view ? "page" : undefined}
+              href={`/admin/procurement?view=${candidate}`}
+            >
+              {VIEW_LABEL[candidate]}
+            </a>
+          )
+        )}
+      </nav>
+
+      {detailMissing && (
+        <p class="state-notice" id="procurement-detail-missing" role="status">
+          {view === "documents"
+            ? t("That document does not exist, or you cannot read it.")
+            : t("That supplier does not exist or has been deleted.")}{" "}
+          <a href={`/admin/procurement?view=${view}`}>
+            {t("Back to the list")}
+          </a>
+        </p>
+      )}
+
+      {/* ------------------------------------------------------------ SUPPLIERS */}
+      {view === "suppliers" && !supplier_ && !detailMissing && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-suppliers-heading"
+        >
+          <h2 id="procurement-suppliers-heading">{t("Suppliers")}</h2>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="suppliers" />
+            <p class="form-legend">{t("Filter")}</p>
+            <label for="suppliers-status">
+              {t("Status")}
+              <select id="suppliers-status" name="supplierStatus">
+                <option value="">{t("All statuses")}</option>
+                {SUPPLIER_STATUSES.map((status) => (
+                  <option
+                    value={status}
+                    selected={status === supplierStatusFilter}
+                  >
+                    {SUPPLIER_STATUS_LABEL[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {data.canRestoreSupplier && (
+              <label for="suppliers-deleted" class="checkbox-label">
+                <input
+                  id="suppliers-deleted"
+                  name="includeDeleted"
+                  type="checkbox"
+                  value="1"
+                  checked={data.includeDeleted}
+                />
+                {t("Show deleted suppliers")}
+              </label>
+            )}
+            <button type="submit" class="module-toggle">
+              {t("Apply filter")}
+            </button>
+            <a class="btn-inline" href="/admin/procurement?view=suppliers">
+              {t("Clear filter")}
+            </a>
+          </form>
+
+          {data.canCreateSupplier && (
+            <section aria-labelledby="procurement-supplier-add-heading">
+              <h3 id="procurement-supplier-add-heading">
+                {t("Register a supplier")}
+              </h3>
+              <form id="supplier-form" class="admin-create-form">
+                <label for="supplier-code">
+                  {t("Vendor code")}
+                  <input
+                    id="supplier-code"
+                    name="vendorCode"
+                    type="text"
+                    required
+                    maxlength="64"
+                    pattern="[A-Za-z0-9][A-Za-z0-9_.\-]*"
+                    autocomplete="off"
+                  />
+                </label>
+                <p class="page-description">
+                  {t(
+                    "Letters, digits, dots, underscores and hyphens. Unique per organisation, ignoring case."
+                  )}
+                </p>
+                <label for="supplier-name">
+                  {t("Name")}
+                  <input
+                    id="supplier-name"
+                    name="name"
+                    type="text"
+                    required
+                    maxlength="200"
+                  />
+                </label>
+                <label for="supplier-status">
+                  {t("Status")}
+                  <select id="supplier-status" name="status">
+                    {SUPPLIER_STATUSES.map((status) => (
+                      <option value={status}>
+                        {SUPPLIER_STATUS_LABEL[status]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label for="supplier-categories">
+                  {t("Categories")}
+                  <input
+                    id="supplier-categories"
+                    name="categories"
+                    type="text"
+                    autocomplete="off"
+                  />
+                </label>
+                <label for="supplier-tags">
+                  {t("Tags")}
+                  <input
+                    id="supplier-tags"
+                    name="tags"
+                    type="text"
+                    autocomplete="off"
+                  />
+                </label>
+                <p class="page-description">
+                  {t(
+                    "Separate categories and tags with commas. Lower-case letters, digits, dots, underscores and hyphens."
+                  )}
+                </p>
+                <button id="supplier-submit" type="submit">
+                  {t("Register supplier")}
+                </button>
+              </form>
+            </section>
+          )}
+
+          {data.suppliers.length === 0 ? (
+            <div class="empty-state">
+              <p id="procurement-suppliers-empty">
+                {t("No supplier matches. Register one to start.")}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="procurement-suppliers-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Vendor code")}</th>
+                    <th scope="col">{t("Name")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Categories")}</th>
+                    <th scope="col">{t("Actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.suppliers.map((row) => (
+                    <tr
+                      data-supplier-id={row.id}
+                      data-deleted={row.deletedAt ? "true" : "false"}
+                    >
+                      <th scope="row" data-label={t("Vendor code")}>
+                        {row.vendorCode}
+                      </th>
+                      <td data-label={t("Name")}>{row.name}</td>
+                      <td data-label={t("Status")}>
+                        {row.deletedAt ? (
+                          <span class="admin-status-pill" data-tone="danger">
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {t("Deleted")}
+                          </span>
+                        ) : (
+                          <span
+                            class="admin-status-pill"
+                            data-tone={supplierStatusTone(row.status)}
+                          >
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {supplierStatusLabel(row.status)}
+                          </span>
+                        )}
+                      </td>
+                      <td data-label={t("Categories")}>
+                        {row.categories.length > 0
+                          ? row.categories.join(", ")
+                          : "—"}
+                      </td>
+                      <td data-label={t("Actions")}>
+                        {row.deletedAt === null && (
+                          <a
+                            class="btn-inline"
+                            href={pageUrl({
+                              supplier: row.id,
+                              cursor: null
+                            })}
+                          >
+                            {t("Open {code}", { code: row.vendorCode })}
+                          </a>
+                        )}
+                        {row.deletedAt !== null && data.canRestoreSupplier && (
+                          <button
+                            type="button"
+                            class="module-toggle js-supplier-restore"
+                            data-supplier-id={row.id}
+                          >
+                            {t("Restore")}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.suppliersNext && (
+            <p>
+              <a
+                class="btn-inline"
+                href={pageUrl({ cursor: data.suppliersNext })}
+              >
+                {t("Next page")}
+              </a>
+            </p>
+          )}
+        </section>
+      )}
+
+      {view === "suppliers" && supplier_ && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-supplier-heading"
+        >
+          <p>
+            <a class="btn-inline" href={pageUrl({ supplier: null })}>
+              {t("Back to the suppliers")}
+            </a>
+          </p>
+          <h2 id="procurement-supplier-heading">
+            {supplier_.name} ({supplier_.vendorCode})
+          </h2>
+
+          {data.canUpdateSupplier ? (
+            <form
+              id="supplier-edit-form"
+              class="admin-create-form"
+              data-supplier-id={supplier_.id}
+            >
+              <label for="supplier-edit-name">
+                {t("Name")}
+                <input
+                  id="supplier-edit-name"
+                  name="name"
+                  type="text"
+                  required
+                  maxlength="200"
+                  value={supplier_.name}
+                />
+              </label>
+              <label for="supplier-edit-status">
+                {t("Status")}
+                <select id="supplier-edit-status" name="status">
+                  {SUPPLIER_STATUSES.map((status) => (
+                    <option
+                      value={status}
+                      selected={status === supplier_.status}
+                    >
+                      {SUPPLIER_STATUS_LABEL[status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label for="supplier-edit-categories">
+                {t("Categories")}
+                <input
+                  id="supplier-edit-categories"
+                  name="categories"
+                  type="text"
+                  autocomplete="off"
+                  value={supplier_.categories.join(", ")}
+                />
+              </label>
+              <label for="supplier-edit-tags">
+                {t("Tags")}
+                <input
+                  id="supplier-edit-tags"
+                  name="tags"
+                  type="text"
+                  autocomplete="off"
+                  value={supplier_.tags.join(", ")}
+                />
+              </label>
+              <button id="supplier-edit-submit" type="submit">
+                {t("Save supplier")}
+              </button>
+            </form>
+          ) : (
+            <dl class="admin-detail-list">
+              <dt>{t("Status")}</dt>
+              <dd>{supplierStatusLabel(supplier_.status)}</dd>
+              <dt>{t("Categories")}</dt>
+              <dd>
+                {supplier_.categories.length > 0
+                  ? supplier_.categories.join(", ")
+                  : "—"}
+              </dd>
+              <dt>{t("Tags")}</dt>
+              <dd>
+                {supplier_.tags.length > 0 ? supplier_.tags.join(", ") : "—"}
+              </dd>
+            </dl>
+          )}
+
+          {data.canDeleteSupplier && (
+            <p>
+              <button
+                id="supplier-delete"
+                type="button"
+                class="btn-inline btn-inline--danger js-supplier-delete"
+                data-supplier-id={supplier_.id}
+                data-confirm={t(
+                  "Delete {code}? Its documents keep referencing it, and it can be restored later.",
+                  { code: supplier_.vendorCode }
+                )}
+              >
+                {t("Delete supplier")}
+              </button>
+            </p>
+          )}
+
+          <section aria-labelledby="procurement-identifiers-heading">
+            <h3 id="procurement-identifiers-heading">
+              {t("Identifiers and references")}
+            </h3>
+            <p class="page-description">
+              {t(
+                "Tax and business identifiers and payment or contact references are shown masked. Revealing one is a separate permission and is recorded in the audit log."
+              )}
+            </p>
+
+            {data.identifiers.length === 0 ? (
+              <div class="empty-state">
+                <p id="procurement-identifiers-empty">
+                  {t("This supplier has no identifier or reference yet.")}
+                </p>
+              </div>
+            ) : (
+              <div class="data-table-scroll">
+                <table
+                  class="data-table data-table--stack"
+                  id="procurement-identifiers-table"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Type")}</th>
+                      <th scope="col">{t("Label")}</th>
+                      <th scope="col">{t("Value (masked)")}</th>
+                      {(data.canRevealIdentifier || data.canUpdateSupplier) && (
+                        <th scope="col">{t("Actions")}</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.identifiers.map((identifier) => (
+                      <tr data-identifier-id={identifier.id}>
+                        <th scope="row" data-label={t("Type")}>
+                          {identifierTypeLabel(identifier.type)}
+                        </th>
+                        <td data-label={t("Label")}>
+                          {identifier.label ?? "—"}
+                        </td>
+                        <td data-label={t("Value (masked)")}>
+                          <code>{identifier.maskedValue}</code>
+                        </td>
+                        {(data.canRevealIdentifier ||
+                          data.canUpdateSupplier) && (
+                          <td data-label={t("Actions")}>
+                            {data.canRevealIdentifier && (
+                              <button
+                                type="button"
+                                class="module-toggle js-reveal-identifier"
+                                data-supplier-id={supplier_.id}
+                                data-identifier-id={identifier.id}
+                                data-confirm={t(
+                                  "Reveal this value in clear text? The disclosure is recorded in the audit log."
+                                )}
+                                data-type-label={identifierTypeLabel(
+                                  identifier.type
+                                )}
+                              >
+                                {t("Reveal")}
+                              </button>
+                            )}
+                            {data.canUpdateSupplier && (
+                              <button
+                                type="button"
+                                class="btn-inline btn-inline--danger js-remove-identifier"
+                                data-supplier-id={supplier_.id}
+                                data-identifier-id={identifier.id}
+                                data-confirm={t(
+                                  "Remove this identifier or reference?"
+                                )}
+                              >
+                                {t("Remove")}
+                              </button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {data.canRevealIdentifier && (
+              <>
+                {/* The live region is persistent and never hidden: a region that
+                    is inserted or un-hidden at the moment its text changes is not
+                    reliably announced. Only its surroundings come and go. */}
+                <p>
+                  <code
+                    id="identifier-reveal-result"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  />
+                </p>
+                <div
+                  id="identifier-reveal-panel"
+                  hidden
+                  class="admin-code-block"
+                  data-msg-title={t("Revealed value")}
+                >
+                  <p id="identifier-reveal-title" class="form-legend"></p>
+                  <p class="page-description">
+                    {t(
+                      "Shown once. It is not stored, and it disappears when you hide it, after a minute, or when you leave the page."
+                    )}
+                  </p>
+                  <button
+                    id="identifier-reveal-hide"
+                    type="button"
+                    class="btn-inline"
+                  >
+                    {t("Hide")}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {data.canUpdateSupplier && (
+              <form
+                id="identifier-form"
+                class="admin-create-form"
+                data-supplier-id={supplier_.id}
+              >
+                <p class="form-legend">{t("Add an identifier or reference")}</p>
+                <label for="identifier-type">
+                  {t("Type")}
+                  <select id="identifier-type" name="type" required>
+                    {IDENTIFIER_TYPES.map((type) => (
+                      <option value={type}>
+                        {IDENTIFIER_TYPE_LABEL[type]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label for="identifier-value">
+                  {t("Value")}
+                  <input
+                    id="identifier-value"
+                    name="value"
+                    type="text"
+                    required
+                    maxlength="200"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </label>
+                <label for="identifier-label">
+                  {t("Label")}
+                  <input
+                    id="identifier-label"
+                    name="label"
+                    type="text"
+                    maxlength="100"
+                  />
+                </label>
+                <button id="identifier-submit" type="submit">
+                  {t("Add identifier")}
+                </button>
+              </form>
+            )}
+          </section>
+        </section>
+      )}
+
+      {/* ------------------------------------------------------------ DOCUMENTS */}
+      {view === "documents" && !document_ && !detailMissing && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-documents-heading"
+        >
+          <h2 id="procurement-documents-heading">{t("Documents")}</h2>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="documents" />
+            <p class="form-legend">{t("Filter")}</p>
+            <label for="documents-mode">
+              {t("Kind")}
+              <select id="documents-mode" name="mode">
+                <option value="">{t("All kinds")}</option>
+                {DOCUMENT_MODES.map((mode) => (
+                  <option value={mode} selected={mode === modeFilter}>
+                    {MODE_LABEL[mode]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label for="documents-status">
+              {t("Status")}
+              <select id="documents-status" name="status">
+                <option value="">{t("All statuses")}</option>
+                {DOCUMENT_STATUSES.map((status) => (
+                  <option
+                    value={status}
+                    selected={status === documentStatusFilter}
+                  >
+                    {STATUS_LABEL[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" class="module-toggle">
+              {t("Apply filter")}
+            </button>
+            <a class="btn-inline" href="/admin/procurement?view=documents">
+              {t("Clear filter")}
+            </a>
+          </form>
+
+          {data.canCreateDocument && (
+            <section aria-labelledby="procurement-document-add-heading">
+              <h3 id="procurement-document-add-heading">
+                {t("New draft document")}
+              </h3>
+              <form id="document-form" class="admin-create-form">
+                <p class="page-description">
+                  {t(
+                    "A draft moves no stock. Submit it to freeze its lines, then finalise it to post the movements through the stock ledger."
+                  )}
+                </p>
+                <label for="document-mode">
+                  {t("Kind")}
+                  <select id="document-mode" name="mode" required>
+                    {DOCUMENT_MODES.map((mode) => (
+                      <option value={mode}>{MODE_LABEL[mode]}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div class="js-supplier-mode-field">
+                  {data.pickerSuppliers.length > 0 && data.pickerComplete ? (
+                    <label for="document-supplier">
+                      {t("Supplier")}
+                      <select id="document-supplier" name="supplierId" required>
+                        {data.pickerSuppliers.map((row) => (
+                          <option value={row.id}>
+                            {row.name} ({row.vendorCode})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label for="document-supplier">
+                      {t("Supplier id")}
+                      <input
+                        id="document-supplier"
+                        name="supplierId"
+                        type="text"
+                        required
+                        autocomplete="off"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {locationPicker ? (
+                  <label for="document-location">
+                    <span class="js-location-label-default">
+                      {t("Location")}
+                    </span>
+                    <span class="js-location-label-destination" hidden>
+                      {t("Destination location")}
+                    </span>
+                    <select id="document-location" name="locationId" required>
+                      {activeLocations.map((location) => (
+                        <option value={location.id}>
+                          {location.name} ({location.code})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label for="document-location">
+                    <span class="js-location-label-default">
+                      {t("Location id")}
+                    </span>
+                    <span class="js-location-label-destination" hidden>
+                      {t("Destination location id")}
+                    </span>
+                    <input
+                      id="document-location"
+                      name="locationId"
+                      type="text"
+                      required
+                      autocomplete="off"
+                    />
+                  </label>
+                )}
+
+                <div class="js-location-mode-field" hidden>
+                  {locationPicker ? (
+                    <label for="document-source-location">
+                      {t("Source location")}
+                      <select
+                        id="document-source-location"
+                        name="sourceLocationId"
+                        required
+                        disabled
+                      >
+                        {activeLocations.map((location) => (
+                          <option value={location.id}>
+                            {location.name} ({location.code})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label for="document-source-location">
+                      {t("Source location id")}
+                      <input
+                        id="document-source-location"
+                        name="sourceLocationId"
+                        type="text"
+                        required
+                        disabled
+                        autocomplete="off"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <label for="document-reference">
+                  {t("External reference")}
+                  <input
+                    id="document-reference"
+                    name="externalReference"
+                    type="text"
+                    maxlength="200"
+                  />
+                </label>
+                <label for="document-date">
+                  {t("Document date")}
+                  <input
+                    id="document-date"
+                    name="documentDate"
+                    type="date"
+                    value={today}
+                  />
+                </label>
+                <label for="document-currency">
+                  {t("Currency")}
+                  <input
+                    id="document-currency"
+                    name="currencyCode"
+                    type="text"
+                    value="IDR"
+                    maxlength="3"
+                    pattern="[A-Za-z]{3}"
+                    autocomplete="off"
+                  />
+                </label>
+                <label for="document-notes">
+                  {t("Notes")}
+                  <input
+                    id="document-notes"
+                    name="notes"
+                    type="text"
+                    maxlength="500"
+                  />
+                </label>
+
+                <div
+                  id="document-lines"
+                  class="line-editor"
+                  data-remove-label={t("Remove line {n}")}
+                  data-line-label={t("Line {n}")}
+                >
+                  <p class="form-legend">{t("Lines")}</p>
+                  <p class="page-description">
+                    {t(
+                      "Quantity and cost are exact decimals (up to 6 decimals). A receipt and a supplier return need a unit cost; an item appears once per document."
+                    )}
+                  </p>
+                </div>
+                <p>
+                  <button
+                    id="document-add-line"
+                    type="button"
+                    class="btn-inline"
+                  >
+                    {t("Add a line")}
+                  </button>
+                </p>
+                <button id="document-submit" type="submit">
+                  {t("Create draft")}
+                </button>
+
+                <template id="document-line-template">
+                  <fieldset class="js-document-line">
+                    <legend class="js-line-legend"></legend>
+                    <label>
+                      {t("Item type")}
+                      <input
+                        name="itemType"
+                        type="text"
+                        maxlength="64"
+                        value="product"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label>
+                      {t("Item reference")}
+                      <input
+                        name="itemRef"
+                        type="text"
+                        maxlength="200"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label>
+                      {t("SKU")}
+                      <input
+                        name="sku"
+                        type="text"
+                        maxlength="120"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label>
+                      {t("Item name")}
+                      <input name="itemName" type="text" maxlength="200" />
+                    </label>
+                    <label>
+                      {t("Unit")}
+                      <input
+                        name="unitCode"
+                        type="text"
+                        maxlength="32"
+                        value="unit"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label>
+                      {t("Quantity")}
+                      <input
+                        name="quantity"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <label>
+                      {t("Unit cost")}
+                      <input
+                        name="unitCost"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      class="btn-inline btn-inline--danger js-remove-line"
+                    >
+                      {t("Remove")}
+                    </button>
+                  </fieldset>
+                </template>
+              </form>
+            </section>
+          )}
+
+          {data.documents.length === 0 ? (
+            <div class="empty-state">
+              <p id="procurement-documents-empty">
+                {t("No document matches. Create a draft to start.")}
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table
+                class="data-table data-table--stack"
+                id="procurement-documents-table"
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Number")}</th>
+                    <th scope="col">{t("Kind")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Supplier")}</th>
+                    <th scope="col">{t("Location")}</th>
+                    <th scope="col">{t("Lines")}</th>
+                    <th scope="col">{t("Total cost")}</th>
+                    <th scope="col">{t("Date")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.documents.map((row) => (
+                    <tr
+                      data-document-id={row.id}
+                      data-status={row.status}
+                      data-mode={row.mode}
+                    >
+                      <th scope="row" data-label={t("Number")}>
+                        <a href={pageUrl({ document: row.id, cursor: null })}>
+                          {row.documentNo}
+                        </a>
+                      </th>
+                      <td data-label={t("Kind")}>{modeLabel(row.mode)}</td>
+                      <td data-label={t("Status")}>
+                        <span
+                          class="admin-status-pill"
+                          data-tone={statusTone(row.status)}
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {statusLabel(row.status)}
+                        </span>
+                      </td>
+                      <td data-label={t("Supplier")}>
+                        {row.supplier
+                          ? `${row.supplier.name} (${row.supplier.code})`
+                          : "—"}
+                      </td>
+                      <td data-label={t("Location")}>
+                        {row.sourceLocationId
+                          ? `${locationLabel(row.sourceLocationId)} → ${locationLabel(row.locationId)}`
+                          : locationLabel(row.locationId)}
+                      </td>
+                      <td data-label={t("Lines")}>{row.lineCount}</td>
+                      <td data-label={t("Total cost")}>
+                        {row.totalCost === null
+                          ? "—"
+                          : `${row.totalCost} ${row.currencyCode}`}
+                      </td>
+                      <td data-label={t("Date")}>{row.documentDate}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {data.documentsNext && (
+            <p>
+              <a
+                class="btn-inline"
+                href={pageUrl({ cursor: data.documentsNext })}
+              >
+                {t("Next page")}
+              </a>
+            </p>
+          )}
+        </section>
+      )}
+
+      {view === "documents" && document_ && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-document-heading"
+        >
+          <p>
+            <a class="btn-inline" href={pageUrl({ document: null })}>
+              {t("Back to the documents")}
+            </a>
+          </p>
+          <h2 id="procurement-document-heading">
+            {document_.documentNo} — {modeLabel(document_.mode)}
+          </h2>
+
+          <dl
+            class="admin-detail-list"
+            id="procurement-document-detail"
+            data-status={document_.status}
+            data-document-id={document_.id}
+          >
+            <dt>{t("Status")}</dt>
+            <dd>
+              <span
+                class="admin-status-pill"
+                data-tone={statusTone(document_.status)}
+              >
+                <span class="admin-status-pill-dot" aria-hidden="true" />
+                {statusLabel(document_.status)}
+              </span>
+            </dd>
+            {document_.supplier && (
+              <>
+                <dt>{t("Supplier")}</dt>
+                <dd>
+                  {document_.supplier.name} ({document_.supplier.code})
+                </dd>
+              </>
+            )}
+            {document_.sourceLocationId && (
+              <>
+                <dt>{t("Source location")}</dt>
+                <dd>{locationLabel(document_.sourceLocationId)}</dd>
+              </>
+            )}
+            <dt>
+              {document_.sourceLocationId
+                ? t("Destination location")
+                : t("Location")}
+            </dt>
+            <dd>{locationLabel(document_.locationId)}</dd>
+            <dt>{t("Document date")}</dt>
+            <dd>{document_.documentDate}</dd>
+            <dt>{t("External reference")}</dt>
+            <dd>{document_.externalReference ?? "—"}</dd>
+            <dt>{t("Total cost")}</dt>
+            <dd>
+              {document_.totalCost === null
+                ? "—"
+                : `${document_.totalCost} ${document_.currencyCode}`}
+            </dd>
+            <dt>{t("Approval")}</dt>
+            <dd data-approval={document_.approvalStatus}>
+              {APPROVAL_LABEL[document_.approvalStatus as ApprovalStatus] ??
+                document_.approvalStatus}
+            </dd>
+            <dt>{t("Notes")}</dt>
+            <dd>{document_.notes ?? "—"}</dd>
+            {document_.submittedAt && (
+              <>
+                <dt>{t("Submitted")}</dt>
+                <dd>
+                  <time datetime={document_.submittedAt}>
+                    {formatDateTime(locale, document_.submittedAt, "UTC")}
+                  </time>
+                </dd>
+              </>
+            )}
+            {document_.finalisedAt && (
+              <>
+                <dt>{t("Finalised")}</dt>
+                <dd>
+                  <time datetime={document_.finalisedAt}>
+                    {formatDateTime(locale, document_.finalisedAt, "UTC")}
+                  </time>
+                </dd>
+              </>
+            )}
+            {document_.cancelledAt && (
+              <>
+                <dt>{t("Cancelled")}</dt>
+                <dd>
+                  <time datetime={document_.cancelledAt}>
+                    {formatDateTime(locale, document_.cancelledAt, "UTC")}
+                  </time>
+                  {document_.cancelReason && ` — ${document_.cancelReason}`}
+                </dd>
+              </>
+            )}
+            {document_.reversedAt && (
+              <>
+                <dt>{t("Reversed")}</dt>
+                <dd>
+                  <time datetime={document_.reversedAt}>
+                    {formatDateTime(locale, document_.reversedAt, "UTC")}
+                  </time>
+                  {document_.reverseReason && ` — ${document_.reverseReason}`}
+                </dd>
+              </>
+            )}
+          </dl>
+
+          <div class="data-table-scroll">
+            <table
+              class="data-table data-table--stack"
+              id="procurement-document-lines"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">{t("Line")}</th>
+                  <th scope="col">{t("Item")}</th>
+                  <th scope="col">{t("SKU")}</th>
+                  <th scope="col">{t("Quantity")}</th>
+                  <th scope="col">{t("Unit cost")}</th>
+                  <th scope="col">{t("Line total")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {document_.lines.map((line) => (
+                  <tr data-line-no={line.lineNo}>
+                    <td data-label={t("Line")}>{line.lineNo}</td>
+                    <th scope="row" data-label={t("Item")}>
+                      {line.itemName}
+                      <span class="page-description">
+                        {" "}
+                        {line.itemType}: {line.itemRef}
+                      </span>
+                    </th>
+                    <td data-label={t("SKU")}>{line.sku}</td>
+                    <td data-label={t("Quantity")}>
+                      {line.quantity} {line.unitCode}
+                    </td>
+                    <td data-label={t("Unit cost")}>{line.unitCost ?? "—"}</td>
+                    <td data-label={t("Line total")}>
+                      {line.lineTotal ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {document_.movements.length > 0 && (
+            <p class="page-description" id="procurement-document-movements">
+              {t("{count} ledger movements are linked to this document.", {
+                count: document_.movements.length
+              })}
+            </p>
+          )}
+
+          <div class="row-actions" id="procurement-document-actions">
+            {document_.status === "draft" && data.canSubmitDocument && (
+              <button
+                id="document-action-submit"
+                type="button"
+                class="module-toggle js-document-action"
+                data-action="submit"
+                data-document-id={document_.id}
+                data-confirm={t(
+                  "Submit this document? Its lines are frozen, and an approval may be started."
+                )}
+              >
+                {t("Submit")}
+              </button>
+            )}
+            {document_.status === "submitted" && data.canFinaliseDocument && (
+              <button
+                id="document-action-finalise"
+                type="button"
+                class="module-toggle js-document-action"
+                data-action="finalise"
+                data-document-id={document_.id}
+                data-confirm={t(
+                  "Finalise this document? Its stock movements are posted to the ledger, all lines or none, and the document can no longer be edited."
+                )}
+              >
+                {t("Finalise")}
+              </button>
+            )}
+            {(document_.status === "draft" ||
+              document_.status === "submitted") &&
+              data.canCancelDocument && (
+                <>
+                  <form
+                    id="document-cancel-form"
+                    class="js-document-reason-form"
+                    data-action="cancel"
+                    data-document-id={document_.id}
+                    hidden
+                  />
+                  <button
+                    id="document-action-cancel"
+                    type="button"
+                    class="btn-inline btn-inline--danger"
+                    data-reason-title={t("Cancel this document")}
+                    data-reason-description={t(
+                      "No stock was moved, so nothing is compensated. The document is kept, marked cancelled."
+                    )}
+                    data-reason-form="document-cancel-form"
+                    data-reason-field="reason"
+                    data-reason-max-length="500"
+                    data-reason-label={t("Cancel document")}
+                    data-reason-danger
+                  >
+                    {t("Cancel document")}
+                  </button>
+                </>
+              )}
+            {document_.status === "finalised" && data.canReverseDocument && (
+              <>
+                <form
+                  id="document-reverse-form"
+                  class="js-document-reason-form"
+                  data-action="reverse"
+                  data-document-id={document_.id}
+                  hidden
+                />
+                <button
+                  id="document-action-reverse"
+                  type="button"
+                  class="btn-inline btn-inline--danger"
+                  data-reason-title={t("Reverse this document")}
+                  data-reason-description={t(
+                    "Posts compensating stock movements. The original movements stay in the ledger, and a document can be reversed only once."
+                  )}
+                  data-reason-form="document-reverse-form"
+                  data-reason-field="reason"
+                  data-reason-max-length="500"
+                  data-reason-label={t("Reverse document")}
+                  data-reason-danger
+                >
+                  {t("Reverse")}
+                </button>
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* --------------------------------------------------------------- POLICY */}
+      {view === "policy" && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-policy-heading"
+        >
+          <h2 id="procurement-policy-heading">{t("Approval policy")}</h2>
+          <p class="page-description">
+            {t(
+              "When a submitted document's total cost reaches the threshold, it needs approval before it can be finalised, through the workflow named {key}. With no threshold, approval is off. The threshold is cost-based, so a document without a cost, a requisition and a transfer never need it. A change applies only to documents submitted afterwards.",
+              { key: APPROVAL_WORKFLOW_KEY }
+            )}
+          </p>
+          <p
+            id="procurement-policy-readout"
+            data-threshold={data.threshold ?? ""}
+          >
+            {data.threshold === null
+              ? t("Approval is off.")
+              : t(
+                  "Documents with a total cost of {threshold} or more need approval.",
+                  {
+                    threshold: data.threshold
+                  }
+                )}
+          </p>
+          {data.canConfigurePolicy && (
+            <form id="policy-form" class="admin-create-form">
+              <label for="policy-threshold">
+                {t("Approval threshold")}
+                <input
+                  id="policy-threshold"
+                  name="approvalThreshold"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  value={data.threshold ?? ""}
+                />
+              </label>
+              <p class="page-description">
+                {t(
+                  "An exact decimal with up to 6 decimals. Leave empty to turn approval off."
+                )}
+              </p>
+              <button id="policy-submit" type="submit">
+                {t("Save threshold")}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+
+      {/* -------------------------------------------------------------- REPORTS */}
+      {view === "reports" && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-reports-heading"
+        >
+          <h2 id="procurement-reports-heading">{t("Reports")}</h2>
+
+          <form class="admin-create-form" method="get" role="search">
+            <input type="hidden" name="view" value="reports" />
+            <p class="form-legend">{t("Document date range")}</p>
+            <label for="reports-from">
+              {t("From")}
+              <input
+                id="reports-from"
+                name="from"
+                type="date"
+                value={fromDate}
+              />
+            </label>
+            <label for="reports-to">
+              {t("To")}
+              <input id="reports-to" name="to" type="date" value={toDate} />
+            </label>
+            <button type="submit" class="module-toggle">
+              {t("Run report")}
+            </button>
+            <a class="btn-inline" href="/admin/procurement?view=reports">
+              {t("Clear filter")}
+            </a>
+          </form>
+
+          {periodInvalid ? (
+            <p class="state-notice" id="procurement-report-period-invalid">
+              {t(
+                "The date range is not valid. Use real dates, with From not after To."
+              )}
+            </p>
+          ) : (
+            <>
+              <h3 id="procurement-receiving-heading">
+                {t("Documents by kind and status")}
+              </h3>
+              {data.receiving.length === 0 ? (
+                <div class="empty-state">
+                  <p id="procurement-receiving-empty">
+                    {t("No document falls in this range.")}
+                  </p>
+                </div>
+              ) : (
+                <div class="data-table-scroll">
+                  <table
+                    class="data-table data-table--stack"
+                    id="procurement-receiving-table"
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Kind")}</th>
+                        <th scope="col">{t("Status")}</th>
+                        <th scope="col">{t("Documents")}</th>
+                        <th scope="col">{t("Total cost")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.receiving.map((row) => (
+                        <tr>
+                          <th scope="row" data-label={t("Kind")}>
+                            {modeLabel(row.mode)}
+                          </th>
+                          <td data-label={t("Status")}>
+                            {statusLabel(row.status)}
+                          </td>
+                          <td data-label={t("Documents")}>{row.documents}</td>
+                          <td data-label={t("Total cost")}>{row.totalCost}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <h3 id="procurement-supplier-report-heading">
+                {t("Activity per supplier")}
+              </h3>
+              {data.supplierReport.length === 0 ? (
+                <div class="empty-state">
+                  <p id="procurement-supplier-report-empty">
+                    {t("No supplier activity falls in this range.")}
+                  </p>
+                </div>
+              ) : (
+                <div class="data-table-scroll">
+                  <table
+                    class="data-table data-table--stack"
+                    id="procurement-supplier-report-table"
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Vendor code")}</th>
+                        <th scope="col">{t("Status")}</th>
+                        <th scope="col">{t("Receipts finalised")}</th>
+                        <th scope="col">{t("Returns finalised")}</th>
+                        <th scope="col">{t("Reversed")}</th>
+                        <th scope="col">{t("Open documents")}</th>
+                        <th scope="col">{t("Received cost")}</th>
+                        <th scope="col">{t("Returned cost")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.supplierReport.map((row) => (
+                        <tr data-deleted={row.deleted ? "true" : "false"}>
+                          <th scope="row" data-label={t("Vendor code")}>
+                            {row.vendorCode}
+                          </th>
+                          <td data-label={t("Status")}>
+                            {row.deleted
+                              ? t("Deleted")
+                              : supplierStatusLabel(row.status)}
+                          </td>
+                          <td data-label={t("Receipts finalised")}>
+                            {row.receiptsFinalised}
+                          </td>
+                          <td data-label={t("Returns finalised")}>
+                            {row.supplierReturnsFinalised}
+                          </td>
+                          <td data-label={t("Reversed")}>
+                            {row.documentsReversed}
+                          </td>
+                          <td data-label={t("Open documents")}>
+                            {row.openDocuments}
+                          </td>
+                          <td data-label={t("Received cost")}>
+                            {row.receivedCost}
+                          </td>
+                          <td data-label={t("Returned cost")}>
+                            {row.returnedCost}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {data.supplierReportNext && (
+                <p>
+                  <a
+                    class="btn-inline"
+                    href={pageUrl({ cursor: data.supplierReportNext })}
+                  >
+                    {t("Next page")}
+                  </a>
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* -------------------------------------------------------- RECONCILIATION */}
+      {view === "reconciliation" && (
+        <section
+          class="fade-in-up"
+          aria-labelledby="procurement-reconciliation-heading"
+        >
+          <h2 id="procurement-reconciliation-heading">{t("Reconciliation")}</h2>
+          <p class="page-description">
+            {t(
+              "Read-only proof that every finalised or reversed document agrees with the stock ledger: the right movements, of the right type, at the right location, in the right quantity. It changes nothing."
+            )}
+          </p>
+          <p>
+            <a
+              class="btn-inline"
+              id="procurement-reconcile-link"
+              href="/admin/procurement?view=reconciliation&run=1"
+            >
+              {t("Run reconciliation")}
+            </a>
+          </p>
+          {data.reconciliation && (
+            <div
+              id="procurement-reconcile-result"
+              role="status"
+              data-consistent={
+                data.reconciliation.reconciled ? "true" : "false"
+              }
+            >
+              <p>
+                {data.reconciliation.reconciled
+                  ? t(
+                      "Reconciled: {documents} documents and {lines} lines were checked and all agree with the ledger.",
+                      {
+                        documents: data.reconciliation.documentsChecked,
+                        lines: data.reconciliation.linesChecked
+                      }
+                    )
+                  : t(
+                      "Discrepancies found. {documents} documents and {lines} lines were checked.",
+                      {
+                        documents: data.reconciliation.documentsChecked,
+                        lines: data.reconciliation.linesChecked
+                      }
+                    )}
+              </p>
+              {data.reconciliation.unlinkedLedgerMovements > 0 && (
+                <p>
+                  {t(
+                    "{count} ledger movements carry a procurement identity with no document line behind them.",
+                    { count: data.reconciliation.unlinkedLedgerMovements }
+                  )}
+                </p>
+              )}
+              {data.reconciliation.discrepanciesTruncated && (
+                <p>
+                  {t("The list is truncated; more discrepancies may exist.")}
+                </p>
+              )}
+              {data.reconciliation.discrepancies.length > 0 && (
+                <div class="data-table-scroll">
+                  <table class="data-table data-table--stack">
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Document")}</th>
+                        <th scope="col">{t("Line")}</th>
+                        <th scope="col">{t("Operation")}</th>
+                        <th scope="col">{t("Expected movements")}</th>
+                        <th scope="col">{t("Linked movements")}</th>
+                        <th scope="col">{t("Matching movements")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.reconciliation.discrepancies.map((row) => (
+                        <tr>
+                          <th scope="row" data-label={t("Document")}>
+                            <a
+                              href={`/admin/procurement?view=documents&document=${row.documentId}`}
+                            >
+                              {row.documentId.slice(0, 8)}
+                            </a>
+                          </th>
+                          <td data-label={t("Line")}>{row.lineNo}</td>
+                          <td data-label={t("Operation")}>
+                            {row.operation === "post"
+                              ? t("Post")
+                              : t("Reversal")}
+                          </td>
+                          <td data-label={t("Expected movements")}>
+                            {row.expectedMovements}
+                          </td>
+                          <td data-label={t("Linked movements")}>
+                            {row.linkedMovements}
+                          </td>
+                          <td data-label={t("Matching movements")}>
+                            {row.matchingMovements}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      <ReasonPanel
+        cancelLabel={t("Close")}
+        reasonLabel={t("Reason")}
+        reasonHint={t("Recorded on the document and in the audit log.")}
+        defaultSubmitLabel={t("Confirm")}
+        defaultFailureMessage={t("Could not save that. Please try again.")}
+      />
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    blankToNull,
+    field,
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    onSubmitAll,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+  import { initReasonPanel } from "../../lib/ui/reason-panel-client";
+  import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
+  import {
+    buildDocumentBody,
+    isBlankLine,
+    isSupplierDocumentMode,
+    missingLineFields,
+    parseLabelList,
+    type LineFields
+  } from "../../lib/ui/procurement-document-model";
+
+  const errorBox = messageBox("procurement-action-error");
+  const errorElement = document.getElementById("procurement-action-error");
+  const nextKey = createIdempotencyKeySource();
+  const BASE = "/api/v1/procurement";
+
+  /** The message the server rendered (translated) for an error code. */
+  function messageFor(errorCode: string | null): string {
+    const data = errorElement?.dataset ?? {};
+    const generic = data.msgGeneric ?? "";
+
+    switch (errorCode) {
+      case "FORBIDDEN":
+      case "ACCESS_DENIED":
+        return data.msgForbidden ?? generic;
+      case "VALIDATION_ERROR":
+      case "VALIDATION_FAILED":
+        return data.msgValidation ?? generic;
+      case "VENDOR_CODE_CONFLICT":
+        return data.msgVendorCode ?? generic;
+      case "SUPPLIER_HAS_OPEN_DOCUMENTS":
+        return data.msgSupplierOpen ?? generic;
+      case "SUPPLIER_DELETED":
+        return data.msgSupplierDeleted ?? generic;
+      case "SUPPLIER_UNAVAILABLE":
+        return data.msgSupplierUnavailable ?? generic;
+      case "SUPPLIER_NOT_FOUND":
+        return data.msgSupplierNotFound ?? generic;
+      case "LOCATION_NOT_FOUND":
+        return data.msgLocationNotFound ?? generic;
+      case "INVALID_STATE":
+      case "MODE_IMMUTABLE":
+      case "NOT_DELETED":
+        return data.msgInvalidState ?? generic;
+      case "INSUFFICIENT_STOCK":
+        return data.msgInsufficient ?? generic;
+      case "UNIT_MISMATCH":
+        return data.msgUnit ?? generic;
+      case "LOCATION_INACTIVE":
+        return data.msgInactive ?? generic;
+      case "APPROVAL_PENDING":
+        return data.msgApprovalPending ?? generic;
+      case "APPROVAL_REJECTED":
+        return data.msgApprovalRejected ?? generic;
+      case "APPROVAL_WORKFLOW_NOT_CONFIGURED":
+      case "APPROVAL_WORKFLOW_MISCONFIGURED":
+        return data.msgApprovalMissing ?? generic;
+      case "DUPLICATE_EXTERNAL_REFERENCE":
+        return data.msgDuplicateReference ?? generic;
+      case "ACTOR_REQUIRED":
+        return data.msgActor ?? generic;
+      case "RESOURCE_NOT_FOUND":
+        return data.msgNotFound ?? generic;
+      case "CONFLICT":
+      case "IDEMPOTENCY_CONFLICT":
+      case "IDEMPOTENCY_KEY_CONFLICT":
+        return data.msgConflict ?? generic;
+      default:
+        return generic;
+    }
+  }
+
+  initReasonPanel();
+
+  // --- Suppliers ------------------------------------------------------------
+
+  onSubmit("supplier-form", async ({ data, submit }) => {
+    const body = {
+      vendorCode: field(data, "vendorCode"),
+      name: field(data, "name"),
+      status: field(data, "status"),
+      categories: parseLabelList(field(data, "categories")),
+      tags: parseLabelList(field(data, "tags"))
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () => sendJson("POST", `${BASE}/suppliers`, body),
+      messageFor
+    );
+  });
+
+  onSubmit("supplier-edit-form", async ({ form, data, submit }) => {
+    const id = form.dataset.supplierId;
+    if (!id) return;
+    const body = {
+      name: field(data, "name"),
+      status: field(data, "status"),
+      categories: parseLabelList(field(data, "categories")),
+      tags: parseLabelList(field(data, "tags"))
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("PATCH", `${BASE}/suppliers/${encodeURIComponent(id)}`, body),
+      messageFor
+    );
+  });
+
+  onAction(".js-supplier-delete", async (button) => {
+    const id = button.dataset.supplierId;
+    const message = button.dataset.confirm;
+    // The server-rendered, translated `data-confirm` is always present; with no
+    // text there is nothing translated to ask, so do not act.
+    if (!id || !message || !(await confirmAction(message))) return;
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson("DELETE", `${BASE}/suppliers/${encodeURIComponent(id)}`, {}),
+      messageFor
+    );
+  });
+
+  onAction(".js-supplier-restore", async (button) => {
+    const id = button.dataset.supplierId;
+    if (!id) return;
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson("POST", `${BASE}/suppliers/${encodeURIComponent(id)}/restore`),
+      messageFor
+    );
+  });
+
+  // --- Identifiers ----------------------------------------------------------
+  //
+  // An add answers a minimal acknowledgement with no id (so a caller without
+  // `suppliers.reveal` cannot learn whether a value already existed): the page
+  // reloads to re-list rather than reading anything back from the response.
+
+  onSubmit("identifier-form", async ({ form, data, submit }) => {
+    const id = form.dataset.supplierId;
+    if (!id) return;
+    const body = {
+      type: field(data, "type"),
+      value: field(data, "value"),
+      label: blankToNull(field(data, "label"))
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson(
+          "POST",
+          `${BASE}/suppliers/${encodeURIComponent(id)}/identifiers`,
+          body
+        ),
+      messageFor
+    );
+  });
+
+  onAction(".js-remove-identifier", async (button) => {
+    const id = button.dataset.supplierId;
+    const identifierId = button.dataset.identifierId;
+    const message = button.dataset.confirm;
+    if (!id || !identifierId || !message || !(await confirmAction(message))) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson(
+          "DELETE",
+          `${BASE}/suppliers/${encodeURIComponent(id)}/identifiers/${encodeURIComponent(identifierId)}`
+        ),
+      messageFor
+    );
+  });
+
+  // The ONE place a clear identifier value reaches the page. It goes into a
+  // single live region as text (never markup, never an attribute, never
+  // storage), is dropped on Hide, after a minute, and when the page is left, and
+  // is never read back: every Reveal is a fresh, audited request.
+  const revealPanel = document.getElementById("identifier-reveal-panel");
+  const revealTitle = document.getElementById("identifier-reveal-title");
+  const revealResult = document.getElementById("identifier-reveal-result");
+  let revealTimer: number | undefined;
+  // The Reveal button that opened the panel: Hide returns focus to it, because
+  // the Hide button disappears with the panel and focus would fall to <body>.
+  let revealOpener: HTMLButtonElement | null = null;
+
+  function hideRevealed(returnFocus = false): void {
+    window.clearTimeout(revealTimer);
+    if (revealResult) revealResult.textContent = "";
+    if (revealTitle) revealTitle.textContent = "";
+    if (revealPanel) revealPanel.hidden = true;
+    if (returnFocus && revealOpener?.isConnected) revealOpener.focus();
+  }
+
+  document
+    .getElementById("identifier-reveal-hide")
+    ?.addEventListener("click", () => hideRevealed(true));
+  window.addEventListener("pagehide", () => hideRevealed());
+
+  onAction(".js-reveal-identifier", async (button) => {
+    const id = button.dataset.supplierId;
+    const identifierId = button.dataset.identifierId;
+    const message = button.dataset.confirm;
+    if (!id || !identifierId || !message || !(await confirmAction(message))) {
+      return;
+    }
+
+    hideRevealed();
+    errorBox.clear();
+    const unlock = lockElement(button, "Please wait…");
+    const outcome = await sendJsonForData<{ value?: string }>(
+      "POST",
+      `${BASE}/suppliers/${encodeURIComponent(id)}/identifiers/${encodeURIComponent(identifierId)}/reveal`
+    );
+    unlock();
+
+    if (!outcome.ok || typeof outcome.data?.value !== "string") {
+      errorBox.show(messageFor(outcome.errorCode));
+      return;
+    }
+
+    revealOpener = button;
+    if (revealResult) revealResult.textContent = outcome.data.value;
+    if (revealTitle) {
+      revealTitle.textContent = `${revealPanel?.dataset.msgTitle ?? ""}: ${button.dataset.typeLabel ?? ""}`;
+    }
+    if (revealPanel) {
+      revealPanel.hidden = false;
+      revealTimer = window.setTimeout(hideRevealed, 60_000);
+    }
+  });
+
+  // --- Document form --------------------------------------------------------
+
+  const documentForm = document.getElementById("document-form");
+  const linesHost = document.getElementById("document-lines");
+  const lineTemplate = document.getElementById("document-line-template");
+
+  function lineRows(): HTMLElement[] {
+    return linesHost
+      ? Array.from(linesHost.querySelectorAll<HTMLElement>(".js-document-line"))
+      : [];
+  }
+
+  /** Numbers the rows, so every "Remove" has an accessible name of its own. */
+  function renumberLines(): void {
+    lineRows().forEach((row, index) => {
+      const n = String(index + 1);
+      const legend = row.querySelector(".js-line-legend");
+      if (legend) {
+        legend.textContent = (linesHost?.dataset.lineLabel ?? "").replace(
+          "{n}",
+          n
+        );
+      }
+      row
+        .querySelector(".js-remove-line")
+        ?.setAttribute(
+          "aria-label",
+          (linesHost?.dataset.removeLabel ?? "").replace("{n}", n)
+        );
+    });
+  }
+
+  function addLine(focus: boolean): void {
+    if (!(lineTemplate instanceof HTMLTemplateElement) || !linesHost) return;
+    const row = lineTemplate.content.firstElementChild?.cloneNode(true);
+    if (!(row instanceof HTMLElement)) return;
+    linesHost.append(row);
+    renumberLines();
+    if (focus) row.querySelector<HTMLInputElement>("input")?.focus();
+  }
+
+  function readLine(row: HTMLElement): LineFields {
+    const value = (name: string): string =>
+      row.querySelector<HTMLInputElement>(`[name="${name}"]`)?.value ?? "";
+    return {
+      itemType: value("itemType"),
+      itemRef: value("itemRef"),
+      sku: value("sku"),
+      itemName: value("itemName"),
+      unitCode: value("unitCode"),
+      quantity: value("quantity"),
+      unitCost: value("unitCost")
+    };
+  }
+
+  /** Shows the supplier or the source-location field, whichever the mode needs. */
+  function applyMode(): void {
+    if (!(documentForm instanceof HTMLFormElement)) return;
+    const mode = (
+      documentForm.elements.namedItem("mode") as HTMLSelectElement | null
+    )?.value;
+    const supplierMode = isSupplierDocumentMode(mode ?? "");
+    const supplierGroup = documentForm.querySelector<HTMLElement>(
+      ".js-supplier-mode-field"
+    );
+    const locationGroup = documentForm.querySelector<HTMLElement>(
+      ".js-location-mode-field"
+    );
+    for (const [group, shown] of [
+      [supplierGroup, supplierMode],
+      [locationGroup, !supplierMode]
+    ] as const) {
+      if (!group) continue;
+      group.hidden = !shown;
+      // A hidden control must not block the submit (`required`) or be sent.
+      for (const control of group.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("input, select")) {
+        control.disabled = !shown;
+      }
+    }
+    const plain = documentForm.querySelector<HTMLElement>(
+      ".js-location-label-default"
+    );
+    const destination = documentForm.querySelector<HTMLElement>(
+      ".js-location-label-destination"
+    );
+    if (plain) plain.hidden = !supplierMode;
+    if (destination) destination.hidden = supplierMode;
+  }
+
+  if (documentForm instanceof HTMLFormElement) {
+    addLine(false);
+    applyMode();
+    document
+      .getElementById("document-mode")
+      ?.addEventListener("change", applyMode);
+    document
+      .getElementById("document-add-line")
+      ?.addEventListener("click", () => addLine(true));
+    linesHost?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const remove = target.closest(".js-remove-line");
+      if (!remove) return;
+      // The last row stays: a document needs at least one line.
+      if (lineRows().length > 1) {
+        remove.closest(".js-document-line")?.remove();
+        renumberLines();
+        document.getElementById("document-add-line")?.focus();
+      }
+    });
+  }
+
+  onSubmit("document-form", async ({ data, submit }) => {
+    // Spare untouched rows are ignored. A half-filled row is caught here (the
+    // inputs are not `required`, or a spare row could never be left empty) and
+    // its first missing field is focused.
+    errorBox.clear();
+    const rows = lineRows();
+    for (const row of rows) {
+      const missing = missingLineFields(readLine(row))[0];
+      if (missing) {
+        errorBox.show(messageFor("VALIDATION_ERROR"));
+        row.querySelector<HTMLInputElement>(`[name="${missing}"]`)?.focus();
+        return;
+      }
+    }
+    const lines = rows.map(readLine).filter((line) => !isBlankLine(line));
+    if (lines.length === 0) {
+      errorBox.show(messageFor("VALIDATION_ERROR"));
+      rows[0]?.querySelector<HTMLInputElement>("input")?.focus();
+      return;
+    }
+    const body = buildDocumentBody({
+      mode: field(data, "mode"),
+      supplierId: field(data, "supplierId"),
+      locationId: field(data, "locationId"),
+      sourceLocationId: field(data, "sourceLocationId"),
+      externalReference: field(data, "externalReference"),
+      documentDate: field(data, "documentDate"),
+      notes: field(data, "notes"),
+      currencyCode: field(data, "currencyCode"),
+      lines
+    });
+
+    errorBox.clear();
+    const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
+    // The key is derived from the body, so pressing Create again after a dropped
+    // response replays the first draft instead of creating a second one.
+    const outcome = await sendJsonForData<{ id?: string }>(
+      "POST",
+      `${BASE}/documents`,
+      body,
+      { "Idempotency-Key": nextKey({ create: body }) }
+    );
+
+    if (outcome.ok && typeof outcome.data?.id === "string") {
+      window.location.assign(
+        `/admin/procurement?view=documents&document=${encodeURIComponent(outcome.data.id)}`
+      );
+      return;
+    }
+
+    unlock();
+    errorBox.show(messageFor(outcome.errorCode));
+  });
+
+  // --- Document actions -----------------------------------------------------
+  //
+  // Submit and Finalise are confirmed (Finalise posts stock) and each carries an
+  // `Idempotency-Key` that is the same for a retry of the same action on the same
+  // document, so a dropped response replays instead of repeating it.
+
+  onAction(".js-document-action", async (button) => {
+    const id = button.dataset.documentId;
+    const action = button.dataset.action;
+    const message = button.dataset.confirm;
+    if (!id || (action !== "submit" && action !== "finalise")) return;
+    if (!message || !(await confirmAction(message))) return;
+
+    await mutateAndReload(
+      button,
+      errorBox,
+      () =>
+        sendJson(
+          "POST",
+          `${BASE}/documents/${encodeURIComponent(id)}/${action}`,
+          {},
+          { "Idempotency-Key": nextKey({ action, id }) }
+        ),
+      messageFor
+    );
+  });
+
+  // The reason panel writes the typed reason into this hidden form's `reason`
+  // field and submits it: cancel and reverse both REQUIRE one.
+  onSubmitAll(".js-document-reason-form", async ({ form, data }) => {
+    const id = form.dataset.documentId;
+    const action = form.dataset.action;
+    if (!id || (action !== "cancel" && action !== "reverse")) return;
+    const body = { reason: field(data, "reason") };
+    const path = action === "reverse" ? "reversal" : "cancel";
+
+    await mutateAndReload(
+      null,
+      errorBox,
+      () =>
+        sendJson(
+          "POST",
+          `${BASE}/documents/${encodeURIComponent(id)}/${path}`,
+          body,
+          { "Idempotency-Key": nextKey({ action, id, body }) }
+        ),
+      messageFor
+    );
+  });
+
+  // --- Policy ---------------------------------------------------------------
+
+  onSubmit("policy-form", async ({ data, submit }) => {
+    const body = {
+      approvalThreshold: blankToNull(field(data, "approvalThreshold"))
+    };
+
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("PUT", `${BASE}/policy`, body, {
+          "Idempotency-Key": nextKey({ policy: body })
+        }),
+      messageFor
+    );
+  });
+</script>

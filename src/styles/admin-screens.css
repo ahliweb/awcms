@@ -646,9 +646,11 @@
   gap: var(--sp-2, 0.5rem);
 }
 
-/* Structured tax-definition editor (Issue #901). Fieldsets default to
-   `min-width: min-content`, which would push a 360px viewport sideways. */
-.tax-editor fieldset {
+/* Structured tax-definition editor (Issue #901) and the procurement document
+   line editor (Issue #905, `.line-editor`): the same stacked fieldset rows.
+   Fieldsets default to `min-width: min-content`, which would push a 360px
+   viewport sideways. */
+:is(.tax-editor, .line-editor) fieldset {
   min-width: 0;
   margin: 0 0 var(--sp-3, 0.75rem);
   padding: var(--sp-3, 0.75rem);
@@ -656,12 +658,12 @@
   border-radius: var(--radius-md, 6px);
 }
 
-.tax-editor label {
+:is(.tax-editor, .line-editor) label {
   display: block;
   margin-bottom: var(--sp-2, 0.5rem);
 }
 
-.tax-editor :is(input, select) {
+:is(.tax-editor, .line-editor) :is(input, select) {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -670,7 +672,7 @@
 /* Inside `.admin-create-form` every button is a solid primary one, so the
    remove buttons take the solid danger pair the form's own error banner uses
    (`.admin-create-error`) rather than red text on a blue fill. */
-.tax-editor .btn-inline.btn-inline--danger {
+:is(.tax-editor, .line-editor) .btn-inline.btn-inline--danger {
   background: var(--color-danger-strong);
   color: var(--color-primary-contrast);
 }

@@ -7088,3 +7088,362 @@ msgstr ""
 
 msgid "Discard the JSON and start the structured editor"
 msgstr ""
+
+# Issue #905 — the /admin/procurement screen.
+
+msgid "Receipt"
+msgstr ""
+
+msgid "Requisition"
+msgstr ""
+
+msgid "Location transfer"
+msgstr ""
+
+msgid "Finalised"
+msgstr ""
+
+msgid "Reversed"
+msgstr ""
+
+msgid "Waiting for approval"
+msgstr ""
+
+msgid "Tax ID"
+msgstr ""
+
+msgid "Business ID"
+msgstr ""
+
+msgid "Payment reference"
+msgstr ""
+
+msgid "Contact reference"
+msgstr ""
+
+msgid "Suppliers"
+msgstr ""
+
+msgid "Approval policy"
+msgstr ""
+
+msgid "Suppliers, receiving, supplier returns, requisitions and location transfers over the stock ledger. A document moves no stock until it is finalised, and finalising posts its movements through the ledger: nothing here edits a balance, and a mistake is corrected by reversing the document."
+msgstr ""
+
+msgid "You do not have permission to view procurement."
+msgstr ""
+
+msgid "Could not load procurement. Please try again."
+msgstr ""
+
+msgid "A supplier with that vendor code already exists."
+msgstr ""
+
+msgid "That supplier still has draft or submitted documents. Finalise or cancel them first."
+msgstr ""
+
+msgid "That supplier is deleted. Restore it before editing."
+msgstr ""
+
+msgid "That supplier is inactive, blocked or deleted and cannot take part in a document."
+msgstr ""
+
+msgid "That supplier does not exist."
+msgstr ""
+
+msgid "That stock location does not exist in this organisation."
+msgstr ""
+
+msgid "The document is no longer in a state that allows that. Reload the page."
+msgstr ""
+
+msgid "Not enough stock, and the negative-stock policy forbids going below zero. Nothing was posted."
+msgstr ""
+
+msgid "An item is stocked in a different unit at that location. Nothing was posted."
+msgstr ""
+
+msgid "A stock location is inactive. Reactivate it before posting."
+msgstr ""
+
+msgid "The document is waiting for approval and cannot be finalised yet."
+msgstr ""
+
+msgid "The approval workflow rejected this document. Cancel it instead."
+msgstr ""
+
+msgid "This document needs approval, but no workflow named procurement.document_approval is published. Nothing was submitted."
+msgstr ""
+
+msgid "A live document already uses that external reference for this supplier."
+msgstr ""
+
+msgid "This action must be performed by a tenant user."
+msgstr ""
+
+msgid "Procurement sections"
+msgstr ""
+
+msgid "That document does not exist, or you cannot read it."
+msgstr ""
+
+msgid "That supplier does not exist or has been deleted."
+msgstr ""
+
+msgid "Back to the list"
+msgstr ""
+
+msgid "Show deleted suppliers"
+msgstr ""
+
+msgid "Register a supplier"
+msgstr ""
+
+msgid "Vendor code"
+msgstr ""
+
+msgid "Letters, digits, dots, underscores and hyphens. Unique per organisation, ignoring case."
+msgstr ""
+
+msgid "Tags"
+msgstr ""
+
+msgid "Separate categories and tags with commas. Lower-case letters, digits, dots, underscores and hyphens."
+msgstr ""
+
+msgid "Register supplier"
+msgstr ""
+
+msgid "No supplier matches. Register one to start."
+msgstr ""
+
+msgid "Open {code}"
+msgstr ""
+
+msgid "Back to the suppliers"
+msgstr ""
+
+msgid "Save supplier"
+msgstr ""
+
+msgid "Delete {code}? Its documents keep referencing it, and it can be restored later."
+msgstr ""
+
+msgid "Delete supplier"
+msgstr ""
+
+msgid "Identifiers and references"
+msgstr ""
+
+msgid "Tax and business identifiers and payment or contact references are shown masked. Revealing one is a separate permission and is recorded in the audit log."
+msgstr ""
+
+msgid "This supplier has no identifier or reference yet."
+msgstr ""
+
+msgid "Label"
+msgstr ""
+
+msgid "Value (masked)"
+msgstr ""
+
+msgid "Reveal this value in clear text? The disclosure is recorded in the audit log."
+msgstr ""
+
+msgid "Reveal"
+msgstr ""
+
+msgid "Remove this identifier or reference?"
+msgstr ""
+
+msgid "Revealed value"
+msgstr ""
+
+msgid "Shown once. It is not stored, and it disappears when you hide it, after a minute, or when you leave the page."
+msgstr ""
+
+msgid "Hide"
+msgstr ""
+
+msgid "Add an identifier or reference"
+msgstr ""
+
+msgid "Add identifier"
+msgstr ""
+
+msgid "New draft document"
+msgstr ""
+
+msgid "A draft moves no stock. Submit it to freeze its lines, then finalise it to post the movements through the stock ledger."
+msgstr ""
+
+msgid "Supplier"
+msgstr ""
+
+msgid "Supplier id"
+msgstr ""
+
+msgid "Destination location"
+msgstr ""
+
+msgid "Source location"
+msgstr ""
+
+msgid "Source location id"
+msgstr ""
+
+msgid "External reference"
+msgstr ""
+
+msgid "Document date"
+msgstr ""
+
+msgid "Remove line {n}"
+msgstr ""
+
+msgid "Line {n}"
+msgstr ""
+
+msgid "Quantity and cost are exact decimals (up to 6 decimals). A receipt and a supplier return need a unit cost; an item appears once per document."
+msgstr ""
+
+msgid "Add a line"
+msgstr ""
+
+msgid "SKU"
+msgstr ""
+
+msgid "Item name"
+msgstr ""
+
+msgid "Unit cost"
+msgstr ""
+
+msgid "No document matches. Create a draft to start."
+msgstr ""
+
+msgid "Number"
+msgstr ""
+
+msgid "Total cost"
+msgstr ""
+
+msgid "Date"
+msgstr ""
+
+msgid "Back to the documents"
+msgstr ""
+
+msgid "Line total"
+msgstr ""
+
+msgid "{count} ledger movements are linked to this document."
+msgstr ""
+
+msgid "Submit this document? Its lines are frozen, and an approval may be started."
+msgstr ""
+
+msgid "Finalise this document? Its stock movements are posted to the ledger, all lines or none, and the document can no longer be edited."
+msgstr ""
+
+msgid "Finalise"
+msgstr ""
+
+msgid "Cancel this document"
+msgstr ""
+
+msgid "No stock was moved, so nothing is compensated. The document is kept, marked cancelled."
+msgstr ""
+
+msgid "Cancel document"
+msgstr ""
+
+msgid "Reverse this document"
+msgstr ""
+
+msgid "Posts compensating stock movements. The original movements stay in the ledger, and a document can be reversed only once."
+msgstr ""
+
+msgid "Reverse document"
+msgstr ""
+
+msgid "When a submitted document's total cost reaches the threshold, it needs approval before it can be finalised, through the workflow named {key}. With no threshold, approval is off. The threshold is cost-based, so a document without a cost, a requisition and a transfer never need it. A change applies only to documents submitted afterwards."
+msgstr ""
+
+msgid "Approval is off."
+msgstr ""
+
+msgid "Documents with a total cost of {threshold} or more need approval."
+msgstr ""
+
+msgid "Approval threshold"
+msgstr ""
+
+msgid "An exact decimal with up to 6 decimals. Leave empty to turn approval off."
+msgstr ""
+
+msgid "Document date range"
+msgstr ""
+
+msgid "The date range is not valid. Use real dates, with From not after To."
+msgstr ""
+
+msgid "Documents by kind and status"
+msgstr ""
+
+msgid "No document falls in this range."
+msgstr ""
+
+msgid "Activity per supplier"
+msgstr ""
+
+msgid "No supplier activity falls in this range."
+msgstr ""
+
+msgid "Receipts finalised"
+msgstr ""
+
+msgid "Returns finalised"
+msgstr ""
+
+msgid "Open documents"
+msgstr ""
+
+msgid "Received cost"
+msgstr ""
+
+msgid "Returned cost"
+msgstr ""
+
+msgid "Read-only proof that every finalised or reversed document agrees with the stock ledger: the right movements, of the right type, at the right location, in the right quantity. It changes nothing."
+msgstr ""
+
+msgid "Reconciled: {documents} documents and {lines} lines were checked and all agree with the ledger."
+msgstr ""
+
+msgid "Discrepancies found. {documents} documents and {lines} lines were checked."
+msgstr ""
+
+msgid "{count} ledger movements carry a procurement identity with no document line behind them."
+msgstr ""
+
+msgid "The list is truncated; more discrepancies may exist."
+msgstr ""
+
+msgid "Expected movements"
+msgstr ""
+
+msgid "Linked movements"
+msgstr ""
+
+msgid "Matching movements"
+msgstr ""
+
+msgid "Post"
+msgstr ""
+
+msgid "Recorded on the document and in the audit log."
+msgstr ""
+
+msgid "Destination location id"
+msgstr ""

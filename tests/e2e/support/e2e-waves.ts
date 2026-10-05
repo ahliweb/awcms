@@ -83,6 +83,9 @@ export const READ_WAVE: readonly string[] = [
   // each, and asserts the sidebar entry, the forms the owner is owed and the
   // empty states. GETs only.
   "admin-inventory-tax-read.e2e.ts",
+  // Issue #905 — loads every view of `/admin/procurement`, the sidebar entry,
+  // the mode-dependent form fields and the 360px width. GETs only.
+  "admin-procurement-read.e2e.ts",
   "admin-offices.e2e.ts",
   "admin-read-only-access.e2e.ts",
   "admin-screens-render.e2e.ts",
@@ -119,6 +122,10 @@ export const WRITE_WAVE: readonly string[] = [
   // rule version. It writes only inventory and tax rows, which no other spec's
   // screen counts, but it mutates through the app, so it is a write.
   "admin-inventory-tax-write.e2e.ts",
+  // Issue #905 — registers a supplier, adds and reveals an identifier, receives,
+  // transfers and reverses stock through documents, and cancels a draft. It
+  // writes only procurement/inventory rows, but it mutates through the app.
+  "admin-procurement-write.e2e.ts",
   "admin-modules-toggle.e2e.ts",
   "admin-offices-create.e2e.ts",
   "admin-offices-edit.e2e.ts",
