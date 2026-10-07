@@ -59,7 +59,10 @@ import {
   updateLocation
 } from "../../src/modules/inventory/application/inventory-location-directory";
 import { listMovements } from "../../src/modules/inventory/application/inventory-movement-directory";
-import { inventoryLedgerPortAdapter } from "../../src/modules/inventory/application/inventory-ledger-port-adapter";
+import {
+  InventoryPortRequestError,
+  inventoryLedgerPortAdapter
+} from "../../src/modules/inventory/application/inventory-ledger-port-adapter";
 import type {
   AdjustmentInput,
   PostMovementInput,
@@ -1153,6 +1156,137 @@ suite("inventory ledger (Issue #887, ADR-0126)", () => {
           })
         )
       ).toBe("0");
+    });
+  });
+
+  describe("InventoryLedgerPort.listBalances (Issue #913)", () => {
+    const port = inventoryLedgerPortAdapter;
+
+    async function seed(
+      tenantId: string,
+      loc: string,
+      refs: string[],
+      type = ITEM.itemType
+    ) {
+      for (const ref of refs) {
+        expectPosted(
+          await post(
+            tenantId,
+            movement(loc, "receive", "2", { itemType: type, itemRef: ref })
+          )
+        );
+      }
+    }
+
+    test("pages the whole set with no gaps or duplicates and next=null on the last page", async () => {
+      const refs = Array.from({ length: 7 }, (_, i) => `ref-${i}`);
+      await seed(TENANT_A, locA1, refs);
+
+      const seen: string[] = [];
+      let after: string | undefined;
+      let pages = 0;
+
+      do {
+        const page = await inTenant(TENANT_A, (tx) =>
+          port.listBalances(tx, TENANT_A, {
+            locationId: locA1,
+            limit: 3,
+            after
+          })
+        );
+        seen.push(...page.items.map((i) => i.itemRef));
+        after = page.next ?? undefined;
+        pages += 1;
+      } while (after);
+
+      expect(pages).toBe(3);
+      expect(seen).toEqual(refs);
+    });
+
+    test("exact multiple of limit yields no phantom extra page", async () => {
+      await seed(TENANT_A, locA1, ["a", "b"]);
+      const page = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, { locationId: locA1, limit: 2 })
+      );
+      expect(page.items).toHaveLength(2);
+      expect(page.next).toBeNull();
+      expect(page.items[0]).toEqual({
+        itemType: ITEM.itemType,
+        itemRef: "a",
+        unitCode: "unit",
+        onHand: "2"
+      });
+    });
+
+    test("itemTypePrefix is literal (underscore is not a wildcard) and nonZeroOnly drops zero balances", async () => {
+      await seed(TENANT_A, locA1, ["x"], "commerce.variant");
+      await seed(TENANT_A, locA1, ["y"], "commerce_variant");
+      await seed(TENANT_A, locA1, ["z"], "other.thing");
+      expectPosted(
+        await post(
+          TENANT_A,
+          movement(locA1, "sale", "2", {
+            itemType: "other.thing",
+            itemRef: "z"
+          })
+        )
+      );
+
+      const byPrefix = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, {
+          locationId: locA1,
+          itemTypePrefix: "commerce_"
+        })
+      );
+      expect(byPrefix.items.map((i) => i.itemRef)).toEqual(["y"]);
+
+      const all = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, { locationId: locA1 })
+      );
+      expect(all.items.map((i) => i.itemRef).sort()).toEqual(["x", "y", "z"]);
+
+      const nonZero = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, {
+          locationId: locA1,
+          nonZeroOnly: true
+        })
+      );
+      expect(nonZero.items.map((i) => i.itemRef).sort()).toEqual(["x", "y"]);
+    });
+
+    test("is scoped to the location and to the tenant (RLS)", async () => {
+      await seed(TENANT_A, locA1, ["a1"]);
+      await seed(TENANT_A, locA2, ["a2"]);
+      await seed(TENANT_B, locB1, ["b1"]);
+
+      const a1 = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, { locationId: locA1 })
+      );
+      expect(a1.items.map((i) => i.itemRef)).toEqual(["a1"]);
+
+      // Tenant B's location asked from tenant A's context: nothing leaks.
+      const cross = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, { locationId: locB1 })
+      );
+      expect(cross.items).toEqual([]);
+    });
+
+    test("a cursor issued for another location is rejected", async () => {
+      await seed(TENANT_A, locA1, ["a", "b", "c"]);
+      await seed(TENANT_A, locA2, ["a"]);
+      const page = await inTenant(TENANT_A, (tx) =>
+        port.listBalances(tx, TENANT_A, { locationId: locA1, limit: 1 })
+      );
+      expect(page.next).not.toBeNull();
+
+      await expect(
+        inTenant(TENANT_A, (tx) =>
+          port.listBalances(tx, TENANT_A, {
+            locationId: locA2,
+            after: page.next!
+          })
+        )
+      ).rejects.toBeInstanceOf(InventoryPortRequestError);
     });
   });
 

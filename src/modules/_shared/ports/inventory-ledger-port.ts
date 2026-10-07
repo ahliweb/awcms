@@ -131,6 +131,31 @@ export type InventoryPostOutcome =
   | { outcome: "location_not_found" | "location_inactive"; locationId: string }
   | { outcome: "source_conflict" };
 
+export type InventoryListBalancesQuery = {
+  locationId: string;
+  /** Items whose `itemType` starts with this text (literal match), e.g. `commerce.`. */
+  itemTypePrefix?: string;
+  /** Omit balances whose on-hand is exactly zero. */
+  nonZeroOnly?: boolean;
+  /** Opaque `next` cursor of the previous page; bound to the same `locationId`. */
+  after?: string;
+  /** Page size, 1..500; defaults to 100. */
+  limit?: number;
+};
+
+export type InventoryBalanceListItem = {
+  itemType: string;
+  itemRef: string;
+  unitCode: string;
+  onHand: string;
+};
+
+export type InventoryListBalancesResult = {
+  items: InventoryBalanceListItem[];
+  /** `null` on the last page. */
+  next: string | null;
+};
+
 export type InventoryLedgerPort = {
   /** Decrement for a sale. `replayed` means this exact line was already posted. */
   postSale(
@@ -188,4 +213,19 @@ export type InventoryLedgerPort = {
     locationId: string,
     item: InventoryItemRef
   ): Promise<string>;
+
+  /**
+   * List the balances of ONE location, keyset-paged by `(itemType, itemRef)` on
+   * the balances primary key. Read-only and current-balance only: it never
+   * returns movement history or `balance_after`. Lets a consumer find items the
+   * ledger holds that its own catalogue no longer knows (orphans) without
+   * reading the module's tables. Invalid input (non-UUID location, bad limit,
+   * malformed or foreign-location cursor, bad prefix) throws
+   * `InventoryPortRequestError`.
+   */
+  listBalances(
+    tx: Bun.SQL,
+    tenantId: string,
+    query: InventoryListBalancesQuery
+  ): Promise<InventoryListBalancesResult>;
 };
