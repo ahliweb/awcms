@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:94d9015ba09b9b655cf256ebdbea7a1858b977deb6817561afcc41bc9cf1642d -->
+<!-- i18n-source-hash: sha256:9ca65ba84248a8ca3246d0a591fce933fc1eac39f67e6786de80c3045a3afcce -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -635,33 +635,45 @@ Adapter mengonsumsi event lewat mekanisme registrasi konsumen generik yang masih
 harus dibangun hilir (ADR-0040 "known mechanism gap"); modul ini hanya
 mengeluarkan lewat outbox dan tak butuh registry konsumen sendiri.
 
-### 10.3 Port ketersediaan tenaga kerja (dikonsumsi; didefinisikan `hr_payroll`, #916)
+### 10.3 Port ketersediaan staf (dikonsumsi; didefinisikan `hr_payroll`, #916)
 
-Booking **membaca** ketersediaan staf lewat port yang didefinisikan oleh
-penerimaan `hr_payroll` (Issue #916, ADR-0132, sedang disusun paralel dengan
-paket ini) — tak pernah tabel payroll, kehadiran, atau karyawan. Permukaan yang
-dikonsumsi sengaja kecil dan merupakan _permintaan modul ini kepada ADR itu_,
-bukan definisinya:
+Booking **membaca** ketersediaan staf lewat `StaffAvailabilityPort`, yang
+didefinisikan oleh penerimaan `hr_payroll`
+([ADR-0132](../adr/0132-hr-payroll-module-family-admission.md), Issue #916;
+kontrak lengkap di [`hr-payroll.md`](hr-payroll.md) §5) — tak pernah tabel
+payroll, kehadiran, atau karyawan. Booking mengonsumsinya apa adanya dan tidak
+menambah persyaratan sendiri:
 
 ```ts
-interface WorkforceAvailabilityPort {
-  /** Windows [start,end) in UTC within [from,to) in which the staff member may be assigned. */
-  listAvailability(input: {
-    tenantId;
-    staffRef;
-    from;
-    to;
-  }): Promise<{ windows: Array<{ start: string; end: string }>; asOf: string }>;
+interface StaffAvailabilityPort {
+  getAvailability(
+    tx: TenantTx,
+    query: {
+      staffRefs: readonly string[]; // buram, 1..200
+      fromUtc: string; // inklusif
+      toUtc: string; // eksklusif, rentang <= 35 hari
+      officeId?: string;
+    }
+  ): Promise<{
+    asOf: string;
+    staff: ReadonlyArray<{
+      staffRef: string;
+      status: "resolved" | "unknown";
+      intervals: ReadonlyArray<{ startUtc: string; endUtc: string }>; // [start, end)
+    }>;
+  }>;
 }
 ```
 
 Diklasifikasikan kapabilitas `consumes` **opsional** (doc 21 §5). Tanpanya
 (`hr_payroll` tak aktif, atau tenant tak melacak shift) penugasan staf hanya
 dibatasi aturan eksklusi booking sendiri dan respons menyatakan
-`staffAvailability: "unchecked"`. Pembacaan bersifat point-in-time dan tanpa
-kunci: shift yang diedit di antara pembacaan dan commit tidak tertangkap di sini;
-perubahan kemudian dimunculkan laporan konflik §7.3, bukan dengan membatalkan.
-`staffRef` buram bagi booking dan hanya diselesaikan oleh port.
+`staffAvailability: "unchecked"`. Dengan port, pembacaan bersifat **advisory**:
+point-in-time dan tanpa kunci, sehingga shift yang diedit di antara pembacaan dan
+commit tidak tertangkap di sini; perubahan kemudian dimunculkan laporan konflik
+§7.3, bukan dengan membatalkan. `unknown` **tidak dapat dibooking** (fail
+closed): `STAFF_UNAVAILABLE`. `staffRef` buram bagi booking dan hanya
+diselesaikan oleh port.
 
 ### 10.4 Registrasi modul (desain)
 
