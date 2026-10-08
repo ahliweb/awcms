@@ -115,9 +115,9 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 
 | Aspect                            | Value (generated)                                                                      | Source of truth                                                                         |
 | --------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Version                           | **10.5.0**                                                                             | `package.json`                                                                          |
+| Version                           | **10.6.0**                                                                             | `package.json`                                                                          |
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.5.0..HEAD`                                                    |
+| Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.6.0..HEAD`                                                    |
 | Base modules                      | **28** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **175** (`sql/001`–`175`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0130** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
@@ -390,6 +390,33 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
+
+- **ISSUE ROUND — 8 October 2026 (v10.6.0): two fixes, one blocker found on
+  the way, and four design issues deliberately not started.**
+
+  **Done.** #913 (`InventoryLedgerPort.listBalances`, #919). Its keyset is
+  written as an UNCONDITIONAL `(location_id, item_type, item_ref) > (…)`, with a
+  `('', '')` sentinel when there is no cursor, instead of the repo's usual
+  `(after IS NULL OR …)`. Under a generic prepared plan the OR'd form is a
+  Filter, so each page re-walks the location's earlier rows (verified with
+  `plan_cache_mode = force_generic_plan`). The sentinel form is an Index Cond on
+  the primary key. `inventory-balance-directory.ts` still uses the OR'd form;
+  converting it is an open option, not a defect. #914 (#922): the
+  idn-admin-regions rollback had no comparison problem to "tie-break". The strict
+  `activated_at < active.activated_at` filter WAS the defect. `now()` is the
+  transaction start, so the active row can be stamped equal to OR EARLIER than
+  the row it superseded. Rollback now takes the latest superseded row by
+  `(activated_at, id)`, with no comparison. #920 (#921): three new transitive
+  advisories (sharp, shell-quote [critical], source-map-js) turned
+  `deps:audit:check` red on `main` and blocked every PR. They are closed with
+  `overrides`.
+
+  **NOT started, on purpose: #915 booking, #916 hr_payroll, #917 delivery,
+  #918 consumer registration (awcms-one#280 Wave A).** Each issue is gated
+  "not before the downstream owner accepts ADR-0040". On 8 October 2026,
+  awcms-one ADR-0040 is still `Diusulkan` (Proposed). Re-check that status
+  before picking any of them up. #918 item 1 is described as able to start
+  independently, but its issue carries the same gate.
 
 - **PROCUREMENT (#888, ADR-0128) — follow-ups recorded by its security audit.**
   Not done, on purpose, each with a reason: (1) **step-up and a rate limit on

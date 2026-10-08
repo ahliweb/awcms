@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:2ce2aa5c4d894b535e09ca85b222cc4c4fa0486216ad6931dde1b38d35efb56c -->
+<!-- i18n-source-hash: sha256:b165d62102f8fe9caec43084d0de7c1dc029433dfbcde0b252ab05f3613bdc8a -->
 
 # AWCMS — Project State & Continuation
 
@@ -116,9 +116,9 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 | Aspek                              | Nilai (ter-generate)                                                                  | Sumber kebenaran                                                                        |
 | ---------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi                              | **10.5.0**                                                                            | `package.json`                                                                          |
+| Versi                              | **10.6.0**                                                                            | `package.json`                                                                          |
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.5.0..HEAD`                                                    |
+| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.6.0..HEAD`                                                    |
 | Modul base                         | **28** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **175** (`sql/001`–`175`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0130** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
@@ -393,6 +393,34 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN ISSUE — 8 Oktober 2026 (v10.6.0): dua perbaikan, satu pemblokir
+  yang ditemukan di jalan, dan empat issue desain yang sengaja tidak dimulai.**
+
+  **Selesai.** #913 (`InventoryLedgerPort.listBalances`, #919). Keyset-nya
+  ditulis sebagai `(location_id, item_type, item_ref) > (…)` TANPA SYARAT,
+  dengan sentinel `('', '')` bila tak ada cursor, alih-alih pola repo yang biasa
+  `(after IS NULL OR …)`. Di bawah generic prepared plan, bentuk ber-OR itu
+  menjadi Filter, sehingga tiap halaman menelusuri ulang baris-baris lokasi yang
+  sudah lewat (diverifikasi dengan `plan_cache_mode = force_generic_plan`).
+  Bentuk sentinel menjadi Index Cond pada primary key.
+  `inventory-balance-directory.ts` masih memakai bentuk ber-OR; mengonversinya
+  adalah opsi terbuka, bukan cacat. #914 (#922): rollback idn-admin-regions tidak
+  punya masalah perbandingan yang perlu "tie-breaker". Filter ketat
+  `activated_at < active.activated_at` itulah cacatnya. `now()` adalah awal
+  transaksi, sehingga baris aktif bisa tercap sama dengan ATAU LEBIH AWAL dari
+  baris yang digantikannya. Rollback kini mengambil baris superseded terbaru
+  menurut `(activated_at, id)`, tanpa perbandingan. #920 (#921): tiga advisory
+  transitif baru (sharp, shell-quote [critical], source-map-js) memerahkan
+  `deps:audit:check` di `main` dan memblokir setiap PR. Ditutup lewat
+  `overrides`.
+
+  **TIDAK dimulai, sengaja: #915 booking, #916 hr_payroll, #917 delivery,
+  #918 registrasi consumer (awcms-one#280 Wave A).** Setiap issue bergerbang
+  "tidak sebelum pemilik hilir menerima ADR-0040". Per 8 Oktober 2026, ADR-0040
+  awcms-one masih `Diusulkan`. Cek ulang statusnya sebelum mengambil salah
+  satunya. Butir 1 #918 disebut bisa dimulai mandiri, tetapi issue-nya membawa
+  gerbang yang sama.
 
 - **PROCUREMENT (#888, ADR-0128) — tindak lanjut yang dicatat audit keamanannya.**
   Sengaja belum dikerjakan, masing-masing beralasan: (1) **step-up dan rate limit

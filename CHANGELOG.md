@@ -1,5 +1,17 @@
 # awcms
 
+## 10.6.0
+
+### Minor Changes
+
+- a0dabcd: feat(inventory): `InventoryLedgerPort.listBalances` — a keyset-paged, read-only list of the current balances of one location (`itemTypePrefix`, `nonZeroOnly`, `after`, `limit` up to 500), so a consumer can reconcile its catalogue against the ledger without reading the module's tables (#913, ADR-0126). Never returns movement history; runs under the caller's tenant RLS; a cursor is bound to its location.
+- 526b3bb: feat(db): `db:migrate` accepts three- or four-digit migration prefixes (`NNN_` or `NNNN_awcms_<area>_<description>.sql`) and applies them in numeric order of the prefix, with the full name as tie-break (#911, ADR-0130). Upstream keeps `001`–`899`; `1000`+ is for derived applications whose reserved band ran out. Every existing three-digit sequence keeps its byte-identical order, and the gate loader (`scripts/lib/migrations.ts`) folds in the same order the runner applies.
+
+### Patch Changes
+
+- 28c0897: fix(deps): close advisories in sharp 0.35.4 (GHSA-wq5f-xc86-pv6w, librsvg CVE-2026-96889), shell-quote 1.10.0 (GHSA-pqg4-j6r4-53mv, command injection), and source-map-js 1.2.1 (GHSA-68fv-2mgg-jv7q, event-loop DoS) by adding package.json overrides for sharp ^0.35.5, shell-quote ^1.11.0, and source-map-js ^1.2.2 (#920).
+- 38f9ae8: fix(idn-admin-regions): dataset rollback no longer refuses with `NO_PREVIOUS_DATASET` when two activations land close together (#914). `activated_at` is `now()`, the instant the activating transaction started, so the active dataset can carry an `activated_at` equal to, or earlier than, the dataset it superseded. The strict `activated_at < active.activated_at` filter then excluded the real target. Rollback now picks the most recently activated `superseded` dataset (`ORDER BY activated_at DESC, id DESC`), and `listDatasets` orders by `created_at DESC, id DESC` so equal timestamps no longer give an unspecified order.
+
 ## 10.5.0
 
 ### Minor Changes
