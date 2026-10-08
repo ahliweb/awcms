@@ -611,32 +611,43 @@ The adapter consumes events through the generic consumer-registration mechanism
 the downstream still has to build (ADR-0040 "known mechanism gap"); this module
 only emits through the outbox and needs no consumer registry of its own.
 
-### 10.3 Workforce availability port (consumed; defined by `hr_payroll`, #916)
+### 10.3 Staff availability port (consumed; defined by `hr_payroll`, #916)
 
-Booking **reads** staff availability through a port defined by the `hr_payroll`
-admission (Issue #916, ADR-0132, in preparation in parallel with this pack) —
-never payroll, attendance or employee tables. The consumed surface is deliberately
-small and is _this module's request to that ADR_, not a definition of it:
+Booking **reads** staff availability through `StaffAvailabilityPort`, defined by
+the `hr_payroll` admission ([ADR-0132](../adr/0132-hr-payroll-module-family-admission.md),
+Issue #916; full contract in [`hr-payroll.md`](hr-payroll.md) §5) — never payroll,
+attendance or employee tables. Booking consumes it as defined and adds no
+requirement of its own:
 
 ```ts
-interface WorkforceAvailabilityPort {
-  /** Windows [start,end) in UTC within [from,to) in which the staff member may be assigned. */
-  listAvailability(input: {
-    tenantId;
-    staffRef;
-    from;
-    to;
-  }): Promise<{ windows: Array<{ start: string; end: string }>; asOf: string }>;
+interface StaffAvailabilityPort {
+  getAvailability(
+    tx: TenantTx,
+    query: {
+      staffRefs: readonly string[]; // opaque, 1..200
+      fromUtc: string; // inclusive
+      toUtc: string; // exclusive, span <= 35 days
+      officeId?: string;
+    }
+  ): Promise<{
+    asOf: string;
+    staff: ReadonlyArray<{
+      staffRef: string;
+      status: "resolved" | "unknown";
+      intervals: ReadonlyArray<{ startUtc: string; endUtc: string }>; // [start, end)
+    }>;
+  }>;
 }
 ```
 
 Classified an **optional** `consumes` capability (doc 21 §5). Without it
 (`hr_payroll` not enabled, or the tenant tracks no shifts) staff assignments are
 constrained only by booking's own exclusion rule and the response says
-`staffAvailability: "unchecked"`. The read is point-in-time and unlocked: a
-shift edited between the read and the commit is not caught here; the later
-change is surfaced by the §7.3 conflict report, not by cancelling. `staffRef` is
-opaque to booking and resolved only by the port.
+`staffAvailability: "unchecked"`. With it, the read is **advisory**: point-in-time
+and unlocked, so a shift edited between the read and the commit is not caught
+here; the later change is surfaced by the §7.3 conflict report, not by
+cancelling. `unknown` is **not bookable** (fail closed): `STAFF_UNAVAILABLE`.
+`staffRef` is opaque to booking and resolved only by the port.
 
 ### 10.4 Module registration (design)
 

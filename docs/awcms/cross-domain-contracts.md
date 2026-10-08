@@ -243,11 +243,8 @@ fields per person and structurally contains no payroll data; the adapter's SQL
 names only the two schedule tables, and a test fails if it ever names a
 compensation, payroll or commission table.
 
-The booking pack sketched this port as `WorkforceAvailabilityPort.listAvailability`
-(one `staffRef`, `{ windows }`). The `hr_payroll` ADR settled the contract above
-(`StaffAvailabilityPort.getAvailability`, batched, three-field result, fail-closed
-`unknown`); **the settled contract wins**, and booking's implementation PR adopts
-its name and shape.
+There is one contract: this one. The booking pack ([`booking.md`](booking.md) §10.3)
+consumes it as defined and adds no requirement of its own.
 
 ## 5. WhatsApp delivery port
 

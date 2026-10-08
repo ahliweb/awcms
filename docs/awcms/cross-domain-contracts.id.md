@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:442d3dc918eb4ee13a1fe305ecf35ff270b9c6a645dd6ecebea7c1f5d70d520b -->
+<!-- i18n-source-hash: sha256:d83bd51e6e63f0d0b54867a730082c2c8e361661f4e13beecda652edd40e7764 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -251,11 +251,8 @@ Hasilnya adalah allow-list tiga field per orang dan secara struktural tidak
 memuat data payroll; SQL adapter hanya menyebut dua tabel jadwal, dan sebuah test
 gagal bila ia pernah menyebut tabel kompensasi, payroll, atau komisi.
 
-Paket booking menyketsa port ini sebagai `WorkforceAvailabilityPort.listAvailability`
-(satu `staffRef`, `{ windows }`). ADR `hr_payroll` menetapkan kontrak di atas
-(`StaffAvailabilityPort.getAvailability`, batch, hasil tiga field, `unknown`
-fail-closed); **kontrak yang ditetapkan menang**, dan PR implementasi booking
-mengadopsi nama dan bentuknya.
+Hanya ada satu kontrak: yang ini. Paket booking ([`booking.md`](booking.md) §10.3)
+mengonsumsinya apa adanya dan tidak menambah persyaratan sendiri.
 
 ## 5. Port pengiriman WhatsApp
 
