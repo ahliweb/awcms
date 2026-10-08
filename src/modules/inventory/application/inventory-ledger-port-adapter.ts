@@ -227,8 +227,13 @@ export const inventoryLedgerPortAdapter: InventoryLedgerPort = {
 
     const prefix = query.itemTypePrefix ?? null;
     const nonZeroOnly = query.nonZeroOnly === true;
-    const afterType = cursor?.itemType ?? null;
-    const afterRef = cursor?.itemRef ?? null;
+    // No cursor = ('', ''): an item type starts with [a-z], so '' precedes
+    // every row. Keeping the comparison unconditional (no `IS NULL OR`) and
+    // led by location_id makes it an Index Cond on the balances primary key
+    // even under a generic plan; as an OR'd Filter, each page would re-walk
+    // every earlier row of the location — quadratic over a full sweep.
+    const afterType = cursor?.itemType ?? "";
+    const afterRef = cursor?.itemRef ?? "";
 
     const rows = (await tx`
       SELECT item_type, item_ref, unit_code, on_hand::text AS on_hand
@@ -236,8 +241,8 @@ export const inventoryLedgerPortAdapter: InventoryLedgerPort = {
       WHERE tenant_id = ${tenantId} AND location_id = ${query.locationId}
         AND (${prefix}::text IS NULL OR starts_with(item_type, ${prefix}::text))
         AND (${nonZeroOnly}::boolean = false OR on_hand <> 0)
-        AND (${afterType}::text IS NULL
-             OR (item_type, item_ref) > (${afterType}::text, ${afterRef}::text))
+        AND (location_id, item_type, item_ref)
+            > (${query.locationId}::uuid, ${afterType}::text, ${afterRef}::text)
       ORDER BY item_type, item_ref
       LIMIT ${limit + 1}
     `) as {
