@@ -5,7 +5,7 @@ description: Tambah atau ubah domain event AWCMS. Gunakan saat mem-publish event
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:f02a9697ca6f4a8a7642dfdb8f2a486e29068853f5244eb5ff6807269e1024a5 -->
+<!-- i18n-source-hash: sha256:ca21e943b95ffb5c9641e83187f79ceb6ccfb39eb0ff6eb54410f21c9f727fe0 -->
 
 # AWCMS — New / Changed Domain Event
 
@@ -79,6 +79,27 @@ identik saat membaca/menulis kode di kedua layer.
 4. Publish **setelah** commit transaction (atau lewat outbox), bukan menggantikan audit.
 5. Node hybrid: event masuk `awcms_sync_outbox` untuk sync (`awcms-sync-hmac`).
 6. **Update AsyncAPI** (`asyncapi/`) untuk event & payload baru; jalankan `api:spec:check`.
+
+## Menambah subscriber (consumer)
+
+Consumer dideklarasikan di `module.ts` modul **pemilik**
+(`domainEventConsumers`, ADR-0134), tidak pernah ditambahkan ke
+`domain-event-runtime/infrastructure/consumer-registry.ts` (yang membangun
+registry dan tidak memegang consumer). Resep lengkap dan aturan:
+`src/modules/domain-event-runtime/README.id.md` §"Mendeklarasikan konsumen".
+Singkatnya:
+
+- cantumkan `domain_event_runtime` di `dependencies` modul;
+- `name` adalah `<modul>.<peran>`, unik global, dan **tak pernah diganti** (ia
+  menjadi kunci baris delivery dan ledger efek);
+- `eventTypes` harus ada di `events.publishes` salah satu modul (dan tipe event
+  di `DOMAIN_EVENT_TYPE_REGISTRY` + AsyncAPI) atau `bun run domain-events:consumers:check`
+  gagal;
+- `handle` adalah **efek samping**; registry membungkusnya dengan
+  `applyConsumerEffectOnce` (diterbitkan sekali bukan berarti ditangani sekali).
+  Jangan memanggil helper itu sendiri. Consumer dengan idempotensi sendiri
+  (upsert kunci alami, inbox sendiri) menyatakan `idempotency: "self_managed"`
+  beserta `idempotencyRationale`.
 
 ## Event inti (contoh channel nyata — bukan daftar lengkap)
 

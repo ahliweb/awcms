@@ -1,6 +1,6 @@
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
-  DOMAIN_EVENT_CONSUMERS,
+  listDomainEventConsumers,
   getConsumerByName
 } from "../infrastructure/consumer-registry";
 
@@ -74,7 +74,7 @@ export async function listConsumerStates(
     backlogByName.set(row.consumer_name, entry);
   }
 
-  return DOMAIN_EVENT_CONSUMERS.map((consumer) => {
+  return listDomainEventConsumers().map((consumer) => {
     const state = stateByName.get(consumer.name);
     const backlog = backlogByName.get(consumer.name) ?? {
       pending: 0,
