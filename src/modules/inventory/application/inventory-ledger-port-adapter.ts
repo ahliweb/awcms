@@ -27,6 +27,16 @@ import {
   type PostResult
 } from "./inventory-ledger";
 import { canonicalQuantity } from "./inventory-rows";
+import {
+  UUID_PATTERN,
+  decodeBalanceCursor,
+  encodeBalanceCursor
+} from "./inventory-balance-directory";
+
+const LIST_BALANCES_DEFAULT_LIMIT = 100;
+const LIST_BALANCES_MAX_LIMIT = 500;
+/** Item-type character set (same as the posting validator) — a prefix is a prefix of one. */
+const ITEM_TYPE_PREFIX_PATTERN = /^[a-z][a-z0-9_.-]{0,63}$/;
 
 /** Thrown for a request the validators refuse — a programming error in the consumer, not a business refusal. */
 export class InventoryPortRequestError extends Error {
@@ -161,6 +171,106 @@ export const inventoryLedgerPortAdapter: InventoryLedgerPort = {
         correlationId: request.correlationId
       })
     );
+  },
+
+  async listBalances(tx, tenantId, query) {
+    const errors: { field: string; message: string }[] = [];
+    const limit = query.limit ?? LIST_BALANCES_DEFAULT_LIMIT;
+
+    if (
+      typeof query.locationId !== "string" ||
+      !UUID_PATTERN.test(query.locationId)
+    ) {
+      errors.push({ field: "locationId", message: "must be a UUID" });
+    }
+
+    if (
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > LIST_BALANCES_MAX_LIMIT
+    ) {
+      errors.push({
+        field: "limit",
+        message: `must be an integer between 1 and ${LIST_BALANCES_MAX_LIMIT}`
+      });
+    }
+
+    if (
+      query.itemTypePrefix !== undefined &&
+      !ITEM_TYPE_PREFIX_PATTERN.test(query.itemTypePrefix)
+    ) {
+      errors.push({
+        field: "itemTypePrefix",
+        message: "must be a prefix of a valid item type"
+      });
+    }
+
+    let cursor: ReturnType<typeof decodeBalanceCursor> = null;
+
+    if (query.after !== undefined) {
+      cursor = decodeBalanceCursor(query.after);
+
+      if (
+        !cursor ||
+        cursor.locationId.toLowerCase() !== query.locationId?.toLowerCase?.()
+      ) {
+        errors.push({
+          field: "after",
+          message: "is not a cursor issued for this location"
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new InventoryPortRequestError(errors);
+    }
+
+    const prefix = query.itemTypePrefix ?? null;
+    const nonZeroOnly = query.nonZeroOnly === true;
+    // No cursor = ('', ''): an item type starts with [a-z], so '' precedes
+    // every row. Keeping the comparison unconditional (no `IS NULL OR`) and
+    // led by location_id makes it an Index Cond on the balances primary key
+    // even under a generic plan; as an OR'd Filter, each page would re-walk
+    // every earlier row of the location — quadratic over a full sweep.
+    const afterType = cursor?.itemType ?? "";
+    const afterRef = cursor?.itemRef ?? "";
+
+    const rows = (await tx`
+      SELECT item_type, item_ref, unit_code, on_hand::text AS on_hand
+      FROM awcms_inventory_balances
+      WHERE tenant_id = ${tenantId} AND location_id = ${query.locationId}
+        AND (${prefix}::text IS NULL OR starts_with(item_type, ${prefix}::text))
+        AND (${nonZeroOnly}::boolean = false OR on_hand <> 0)
+        AND (location_id, item_type, item_ref)
+            > (${query.locationId}::uuid, ${afterType}::text, ${afterRef}::text)
+      ORDER BY item_type, item_ref
+      LIMIT ${limit + 1}
+    `) as {
+      item_type: string;
+      item_ref: string;
+      unit_code: string;
+      on_hand: string;
+    }[];
+
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+
+    return {
+      items: page.map((row) => ({
+        itemType: row.item_type,
+        itemRef: row.item_ref,
+        unitCode: row.unit_code,
+        onHand: canonicalQuantity(row.on_hand)
+      })),
+      next:
+        rows.length > limit && last
+          ? encodeBalanceCursor({
+              locationId: query.locationId,
+              itemType: last.item_type,
+              itemRef: last.item_ref
+            })
+          : null
+    };
   },
 
   async getOnHand(tx, tenantId, locationId, item) {

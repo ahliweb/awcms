@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](inventory-ledger.md)
 
-<!-- i18n-source-hash: sha256:0962a68ec7adb8d4e6974f01e9d4110efce803146b23aea9db6ca6f70e17bd8e -->
+<!-- i18n-source-hash: sha256:c0974c3c10afab5c5b5c98fc2fd5ad4a40a002593370d212a379016c64ff9f48 -->
 
 # Inventory — buku besar stok multi-lokasi (paket dokumen modul)
 
@@ -310,6 +310,7 @@ postSale(tx, tenantId, actorTenantUserId, request); // kurangi
 postSaleReturn(tx, tenantId, actorTenantUserId, request); // kembalikan
 postReceipt(tx, tenantId, actorTenantUserId, request); // stok masuk
 getOnHand(tx, tenantId, locationId, item); // baca advisory, "0" bila belum pernah bergerak
+listBalances(tx, tenantId, { locationId, itemTypePrefix?, nonZeroOnly?, after?, limit? }); // saldo terkini berhalaman
 ```
 
 `tx` adalah transaksi tenant milik **pemanggil**, sehingga "kurangi stok" dan
@@ -324,6 +325,15 @@ ditangani konsumen:
   harus **melempar** untuk membatalkannya.
 - `getOnHand` bersifat advisory: stok bisa berubah sebelum posting. Posting —
   bukan pembacaan — yang menegakkan kebijakan.
+- `listBalances` memungkinkan konsumen merekonsiliasi katalognya dengan buku
+  besar (misalnya "saldo non-nol yang itemnya tidak lagi ada") tanpa membaca
+  tabel modul. Ia berhalaman keyset pada primary key saldo, mengembalikan
+  `{ items: { itemType, itemRef, unitCode, onHand }[], next }` (`limit` 1..500,
+  default 100), tidak pernah mengembalikan riwayat pergerakan, dan berjalan di
+  bawah RLS tenant pemanggil. `itemTypePrefix` adalah pencocokan awalan literal
+  (`_` bukan wildcard). Kursor `after` terikat pada `locationId`-nya; kursor
+  dari lokasi lain, kursor rusak, lokasi non-UUID, atau limit buruk melempar
+  `InventoryPortRequestError`.
 
 ### 6.3 Penjualan multi-baris
 

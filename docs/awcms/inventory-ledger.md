@@ -301,6 +301,7 @@ postSale(tx, tenantId, actorTenantUserId, request); // decrement
 postSaleReturn(tx, tenantId, actorTenantUserId, request); // put back
 postReceipt(tx, tenantId, actorTenantUserId, request); // stock in
 getOnHand(tx, tenantId, locationId, item); // advisory read, "0" if never moved
+listBalances(tx, tenantId, { locationId, itemTypePrefix?, nonZeroOnly?, after?, limit? }); // paged current balances
 ```
 
 `tx` is the **caller's** tenant transaction, so "decrement stock" and "record the
@@ -313,6 +314,15 @@ order line" commit together. A business refusal comes back as a **value**
   consumer that already wrote its own rows must **throw** to undo them.
 - `getOnHand` is advisory: stock can change before the post. The post — not the
   read — enforces the policy.
+- `listBalances` lets a consumer reconcile its catalogue against the ledger (for
+  example "non-zero balances whose item no longer resolves") without reading the
+  module's tables. It is keyset-paged on the balances primary key, returns
+  `{ items: { itemType, itemRef, unitCode, onHand }[], next }` (`limit` 1..500,
+  default 100), never returns movement history, and runs under the caller's
+  tenant RLS. `itemTypePrefix` is a literal prefix match (`_` is not a
+  wildcard). The `after` cursor is bound to its `locationId`; a cursor from
+  another location, a malformed cursor, a non-UUID location or a bad limit
+  throws `InventoryPortRequestError`.
 
 ### 6.3 Multi-line sales
 
