@@ -346,6 +346,44 @@ suite("idn_admin_regions (real PostgreSQL)", () => {
     );
   });
 
+  // Issue #914: `activated_at` is `now()` — the instant the activating
+  // transaction STARTED — so a fast pair of activations can stamp the active
+  // row equal to, or earlier than, the row it superseded. Each case is forced
+  // with an UPDATE computed in SQL (no JS Date round trip, which would drop
+  // microseconds and could hide the tie).
+  for (const [label, skew] of [
+    ["equal to", "0 seconds"],
+    ["earlier than", "1 second"]
+  ] as const) {
+    test(`rollback finds the previous dataset when the active one's activated_at is ${label} it`, async () => {
+      const sql = getAdminSql();
+
+      await asTx(sql, (tx) => commitDatasetImport(tx, planFor("a")));
+      await asTx(sql, (tx) => commitDatasetImport(tx, planFor("b")));
+
+      const [second, first] = await listDatasets(sql);
+
+      await asTx(sql, (tx) => activateDataset(tx, first!.id));
+      await asTx(sql, (tx) => activateDataset(tx, second!.id));
+
+      await sql.unsafe(
+        `UPDATE awcms_idn_region_datasets
+         SET activated_at = (
+           SELECT activated_at - $3::interval
+           FROM awcms_idn_region_datasets WHERE id = $1
+         )
+         WHERE id = $2`,
+        [first!.id, second!.id, skew]
+      );
+
+      const rolledBack = await asTx(sql, (tx) => rollbackActiveDataset(tx));
+
+      expect(rolledBack.dataset.id).toBe(first!.id);
+      expect(rolledBack.rolledBackFromId).toBe(second!.id);
+      expect((await getActiveDataset(sql))?.id).toBe(first!.id);
+    });
+  }
+
   test("lookup defaults to the active dataset and filters by tier, parent, and name", async () => {
     const sql = getAdminSql();
 

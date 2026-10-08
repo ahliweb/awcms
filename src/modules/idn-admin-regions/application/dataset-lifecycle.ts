@@ -111,7 +111,7 @@ export async function listDatasets(
   const rows = (await sql.unsafe(`
     SELECT ${DATASET_COLUMNS}
     FROM awcms_idn_region_datasets
-    ORDER BY created_at DESC
+    ORDER BY created_at DESC, id DESC
   `)) as DatasetRow[];
 
   return rows.map(toSummary);
@@ -200,16 +200,25 @@ export async function activateDataset(
 /**
  * Rolls back to the dataset that was active before the current one, resolved
  * from `activated_at` history.
+ *
+ * Every `superseded` row with an `activated_at` was active before the current
+ * one — activation is the only writer of both — so "previous" is simply the
+ * most recently activated of them. It is deliberately NOT filtered by
+ * `activated_at < active.activated_at` (Issue #914): `now()` is the instant the
+ * activating transaction STARTED, so two activations in quick succession can
+ * stamp equal values, or the later-committed one an EARLIER value, and the
+ * strict comparison then refused a rollback that had a target. `id` breaks
+ * ties so the choice is deterministic.
  */
 export async function rollbackActiveDataset(
   tx: Bun.TransactionSQL,
   options: { activatedBy?: string | null } = {}
 ): Promise<{ dataset: DatasetSummary; rolledBackFromId: string | null }> {
   const activeRows = (await tx`
-    SELECT id, activated_at FROM awcms_idn_region_datasets
+    SELECT id FROM awcms_idn_region_datasets
     WHERE status = 'active'
     FOR UPDATE
-  `) as { id: string; activated_at: string | null }[];
+  `) as { id: string }[];
 
   const active = activeRows[0];
 
@@ -218,9 +227,7 @@ export async function rollbackActiveDataset(
     FROM awcms_idn_region_datasets
     WHERE status = 'superseded'
       AND activated_at IS NOT NULL
-      AND (${active?.activated_at ?? null}::timestamptz IS NULL
-           OR activated_at < ${active?.activated_at ?? null}::timestamptz)
-    ORDER BY activated_at DESC
+    ORDER BY activated_at DESC, id DESC
     LIMIT 1
     FOR UPDATE
   `) as { id: string }[];
