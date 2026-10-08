@@ -198,7 +198,10 @@
     "nanoid": "^3.3.17",
     "js-yaml": "^4.3.2",
     "read-yaml-file": "^2.1.0",
+    "sharp": "^0.35.5",
+    "shell-quote": "^1.11.0",
     "smol-toml": "^1.7.1",
+    "source-map-js": "^1.2.2",
     "svgo": "^4.1.0",
     "devalue": "^5.9.4",
     "undici": "^8.10.2"
