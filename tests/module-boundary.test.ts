@@ -95,8 +95,8 @@ async function directoryKeyMap(): Promise<Map<string, string>> {
  * Modules every other module may call directly without declaring it.
  *
  * `logging` only. Audit logging is cross-cutting infrastructure: five modules
- * call `recordAuditEvent` directly today, and `consumer-registry.ts` documents
- * that as "the same cross-module call other modules already make directly".
+ * call `recordAuditEvent` directly today, and the domain-event runtime's
+ * reference audit projector is one of them.
  * Requiring a declaration would add a dependency edge from nearly every module
  * to one leaf and say nothing a reader did not already know.
  *
@@ -114,20 +114,6 @@ const DOCUMENTED_EXCEPTIONS: {
   to: string;
   reason: string;
 }[] = [
-  {
-    from: "domain_event_runtime",
-    to: "reporting",
-    reason:
-      "`infrastructure/consumer-registry.ts` is designated THE cross-module " +
-      "wiring point by `module-contract.ts`'s ProjectionEventSource docs, and " +
-      "registers a consumer that increments a `reporting` projection. It cannot " +
-      "be a `dependencies` edge: `reporting` already declares " +
-      "`domain_event_runtime`, so declaring the reverse is a cycle. It is not a " +
-      "capability either — that would require a port in `_shared/ports/`, and " +
-      "the registry is a static array read at publish time from inside " +
-      "`appendDomainEvent`, so a port would relocate the concrete import rather " +
-      "than remove it. Revisit if consumer registration ever becomes lazy."
-  },
   {
     from: "tenant_admin",
     to: "identity_access",

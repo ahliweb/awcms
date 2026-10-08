@@ -1,4 +1,8 @@
 import { defineModule } from "../_shared/module-contract";
+import {
+  SAMPLE_RECORDED_EVENT_TYPE,
+  SAMPLE_RECORDED_EVENT_VERSION
+} from "./domain/event-type-registry";
 
 /**
  * Lifecycle descriptor key (Issue #468). Exported so
@@ -15,7 +19,7 @@ export const domainEventRuntimeModule = defineModule({
   version: "0.1.0",
   status: "active",
   description:
-    "Transactional, versioned domain-event outbox and dispatcher. Provider-neutral, generic multi-consumer infrastructure — one event can fan out to MANY registered consumers, with explicit per-aggregate/order-key ordering (never a global total order). Producers call `application/append-domain-event.ts`'s `appendDomainEvent` inside their OWN business transaction (same-commit outbox write, ADR-0006 compliant: no external call happens there). A static, reviewed-source-code consumer registry (`infrastructure/consumer-registry.ts`) decides fan-out at publish time; `application/dispatch-domain-events.ts` (`bun run domain-events:dispatch`, built on the shared worker runner `src/lib/jobs/job-runner.ts`) claims/executes/finalizes deliveries with per-order-key ordering, exponential backoff, and dead-letter handling. Dead-lettered deliveries can be replayed by a permission-gated, reason-required, audited, idempotent admin action (`application/delivery-replay.ts`). Ships exactly one self-contained reference event type (`sample.recorded`, `domain/event-type-registry.ts`) and two representative consumers (a same-process cross-module audit projector, and a self-contained reporting/read-model activity-rollup projection) to exercise the full mechanism end-to-end — real producer/consumer wiring for domain modules is intentionally deferred to follow-up work. An optional broker adapter port (`infrastructure/broker-adapter-port.ts`) is defined for future out-of-process delivery; no external broker is required or registered by default — PostgreSQL/in-process dispatch is the only implemented path, so offline/LAN deployments are unaffected. Ported from awcms-mini's proven `domain-event-runtime` module. See `README.md` for full design rationale.",
+    "Transactional, versioned domain-event outbox and dispatcher. Provider-neutral, generic multi-consumer infrastructure — one event can fan out to MANY registered consumers, with explicit per-aggregate/order-key ordering (never a global total order). Producers call `application/append-domain-event.ts`'s `appendDomainEvent` inside their OWN business transaction (same-commit outbox write, ADR-0006 compliant: no external call happens there). The consumer registry (`infrastructure/consumer-registry.ts`) is BUILT from every module's descriptor-declared `domainEventConsumers` (ADR-0134) — reviewed source code, never database state — and decides fan-out at publish time; `application/dispatch-domain-events.ts` (`bun run domain-events:dispatch`, built on the shared worker runner `src/lib/jobs/job-runner.ts`) claims/executes/finalizes deliveries with per-order-key ordering, exponential backoff, and dead-letter handling. Dead-lettered deliveries can be replayed by a permission-gated, reason-required, audited, idempotent admin action (`application/delivery-replay.ts`). Ships exactly one self-contained reference event type (`sample.recorded`, `domain/event-type-registry.ts`) and two representative consumers (a same-process cross-module audit projector, and a self-contained reporting/read-model activity-rollup projection) to exercise the full mechanism end-to-end — real producer/consumer wiring for domain modules is intentionally deferred to follow-up work. An optional broker adapter port (`infrastructure/broker-adapter-port.ts`) is defined for future out-of-process delivery; no external broker is required or registered by default — PostgreSQL/in-process dispatch is the only implemented path, so offline/LAN deployments are unaffected. Ported from awcms-mini's proven `domain-event-runtime` module. See `README.md` for full design rationale.",
   dependencies: ["tenant_admin", "identity_access", "logging"],
   type: "system",
   events: {
@@ -23,6 +27,44 @@ export const domainEventRuntimeModule = defineModule({
     publishes: ["awcms.domain-event-runtime.sample.recorded"],
     subscribes: ["awcms.domain-event-runtime.sample.recorded"]
   },
+  /**
+   * The two reference consumers (ADR-0134). Names are byte-identical to the
+   * ones the static registry used: they key delivery rows and the effect
+   * ledger, so a rename would re-run every effect. The audit projector keeps its
+   * `logging.` prefix although it is declared here — it predates the
+   * `<owning module>.<role>` convention, and the effect it performs is this
+   * module's own sample event projected into `logging`'s public
+   * `recordAuditEvent`.
+   *
+   * Both rely on `runtime_effect_once` (the default): the registry wraps
+   * `handle` in `applyConsumerEffectOnce`.
+   */
+  domainEventConsumers: [
+    {
+      name: "logging.sample_event_audit_projector",
+      description:
+        "Reference same-process cross-module consumer — projects a sample.recorded domain event into the logging module's audit trail via recordAuditEvent.",
+      eventTypes: [SAMPLE_RECORDED_EVENT_TYPE],
+      eventVersions: [SAMPLE_RECORDED_EVENT_VERSION],
+      handle: async (tx, event, ctx) => {
+        const { projectSampleEventToAuditTrail } =
+          await import("./application/sample-consumers");
+        await projectSampleEventToAuditTrail(tx, event, ctx);
+      }
+    },
+    {
+      name: "domain_event_runtime.activity_rollup_projector",
+      description:
+        "Reference reporting/read-model projection consumer — maintains a per-tenant/day/event-type activity rollup (awcms_domain_event_activity_daily) for operational dashboards.",
+      eventTypes: [SAMPLE_RECORDED_EVENT_TYPE],
+      eventVersions: [SAMPLE_RECORDED_EVENT_VERSION],
+      handle: async (tx, event, ctx) => {
+        const { applyActivityRollupIncrement } =
+          await import("./application/sample-consumers");
+        await applyActivityRollupIncrement(tx, event, ctx);
+      }
+    }
+  ],
   permissions: [
     {
       activityCode: "events",

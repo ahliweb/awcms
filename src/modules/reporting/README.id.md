@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:810f8d7a3df364c9692465245ab83dd648436a5b6c6bad7ba14fbb8c4d7a7de2 -->
+<!-- i18n-source-hash: sha256:caa528673359d694dd352491f3ac50552d36764ae7ed4e29072bc8101d46378c -->
 
 # Management Reporting
 
@@ -75,11 +75,13 @@ reporting:projections:registry:check`.
   `domain_event_runtime` consumer (Issue #742), reusing that module's
   shared jobs/locks/batching/idempotency/retry/pause-resume machinery
   instead of building a second one. The ONE real (non-reference) new
-  consumer this issue registers lives in `domain-event-runtime/
-infrastructure/consumer-registry.ts` (`reporting.event_activity_
-projector`) — the one deliberate cross-module edge, one-directional
-  (`domain_event_runtime -> reporting/application`), verified cycle-free
-  by `tests/module-boundary.test.ts`.
+  consumer this issue registers, `reporting.event_activity_projector`, is
+  declared in THIS module's own `module.ts` (`domainEventConsumers`,
+  ADR-0134) and the runtime builds its registry from it — the edge points
+  `reporting -> domain_event_runtime` (a declared dependency), so there is
+  no cross-module import from the runtime into `reporting` and no
+  documented boundary exception. The runtime wraps its `handle` in
+  `applyConsumerEffectOnce` (`runtime_effect_once`).
 
 Every projection — REGARDLESS of its steady-state strategy — is
 REBUILT via the exact same bounded `cursor_table` re-scan mechanism

@@ -1,5 +1,6 @@
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { sanitizeErrorForLog } from "../../../lib/logging/error-sanitizer";
+import { toPersistableErrorMessage } from "../domain/persisted-error";
 import { log } from "../../../lib/logging/logger";
 import {
   recordCounter,
@@ -11,7 +12,7 @@ import type {
   DomainEventForHandler
 } from "../domain/consumer-types";
 import { evaluateDomainEventDeliveryRetry } from "../domain/delivery-retry";
-import { DOMAIN_EVENT_CONSUMERS } from "../infrastructure/consumer-registry";
+import { listDomainEventConsumers } from "../infrastructure/consumer-registry";
 
 /**
  * The dispatcher ("claim/dispatch/finalize using the shared worker runner,
@@ -174,6 +175,7 @@ async function recordDeliveryFailure(
       const newAttemptCount = Number(row.attempt_count) + 1;
       const maxAttempts = Number(row.max_attempts);
       const safeError = sanitizeErrorForLog(error);
+      safeError.message = toPersistableErrorMessage(safeError.message);
       const evaluation = evaluateDomainEventDeliveryRetry(
         error,
         newAttemptCount,
@@ -360,7 +362,7 @@ export async function dispatchDomainEventsForTenant(
     skipped: 0
   };
 
-  for (const consumer of DOMAIN_EVENT_CONSUMERS) {
+  for (const consumer of listDomainEventConsumers()) {
     if (await isConsumerPaused(sql, tenantId, consumer.name)) {
       continue;
     }
@@ -417,7 +419,7 @@ export async function dispatchDomainEventsForTenant(
  * Backlog/lag gauges ("observability for outbox lag, oldest pending age,
  * dispatch outcome, retry rate, consumer lag/checkpoint, and DLQ count with
  * low-cardinality labels"). `consumerName` is safe as a label — it is
- * always one of the small, fixed, code-defined `DOMAIN_EVENT_CONSUMERS`
+ * always one of the small, fixed, code-declared descriptor `domainEventConsumers`
  * entries, never tenant/request input. Called by
  * `scripts/domain-events-dispatch.ts` once per tenant per run, independent
  * of whether any deliveries were claimed THIS pass, so the gauge reflects

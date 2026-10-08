@@ -195,8 +195,9 @@ module at once (finance for the accrual, inventory for the expected receipt,
 notification for the vendor). See
 `src/modules/domain-event-runtime/README.md` (once written) for the full design.
 Producers call `appendDomainEvent(tx, tenantId, ...)` INSIDE their own business
-transaction (the same as the outbox pattern above); the static consumer registry
-(`infrastructure/consumer-registry.ts`) decides the fan-out at publish time, not at
+transaction (the same as the outbox pattern above); the consumer registry
+(`infrastructure/consumer-registry.ts`, built from each module's descriptor-declared
+`domainEventConsumers`, ADR-0134) decides the fan-out at publish time, not at
 dispatch time.
 
 **The important difference from the 3-phase CLAIM/SEND/FINALIZE above**: this

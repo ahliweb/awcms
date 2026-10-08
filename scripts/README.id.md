@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:7820c3b935e0b4f9b641c2a52729192f9da6867e9669a2c823c909ac20df55f5 -->
+<!-- i18n-source-hash: sha256:d31915b1f5940c732d52678cdd7085ec2bf1997c9377d6160d4cf567209fd7b5 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-129 target menjalankan berkas di `scripts/`; 57 di antaranya
+130 target menjalankan berkas di `scripts/`; 58 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -88,6 +88,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `design:token-contrast:check`             | `design-token-contrast-check.ts`               | ✅   |
 | `docs:i18n:stamp`                         | `docs-i18n-stamp.mjs`                          | —    |
 | `docs:i18n:stamp:check`                   | `docs-i18n-stamp.mjs`                          | ✅   |
+| `domain-events:consumers:check`           | `domain-event-consumers-check.ts`              | ✅   |
 | `domain-events:deliveries:purge`          | `domain-event-deliveries-purge.ts`             | —    |
 | `domain-events:dispatch`                  | `domain-events-dispatch.ts`                    | —    |
 | `edge-cache:purge`                        | `edge-cache-purge.ts`                          | —    |

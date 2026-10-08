@@ -24,10 +24,16 @@ modules.
   `appendDomainEvent` refuses to persist an event whose
   `(eventType, eventVersion)` is not listed here, stopping silent drift from
   the published AsyncAPI contract.
-- **Static consumer registry** — `infrastructure/consumer-registry.ts`: a
-  plain array of `DomainEventConsumerDefinition`, so the full fan-out for any
-  event type is knowable from source code alone. Fan-out is decided at
-  **publish** time.
+- **Descriptor-declared consumer registry** (ADR-0134) —
+  `infrastructure/consumer-registry.ts` BUILDS the registry from every
+  module's own `domainEventConsumers` (`ModuleDescriptor`, see
+  "Declaring a consumer" below); it imports no consumer, so the owning
+  module depends on the runtime and never the reverse. Still reviewed
+  source code, never database state, so the full fan-out for any event
+  type is knowable from source alone. Fan-out is decided at **publish**
+  time. An invalid set (duplicate name, a subscription to an event no module
+  publishes) makes the build throw and fails
+  `bun run domain-events:consumers:check`.
 - **Dispatcher** — `application/dispatch-domain-events.ts`
   (`bun run domain-events:dispatch`, built on the shared worker runner
   `src/lib/jobs/job-runner.ts`): claims, executes, and finalizes due
@@ -36,7 +42,8 @@ modules.
 - **Idempotent consumers** — `application/consumer-effect.ts`'s
   `applyConsumerEffectOnce` guarantees a consumer's side effect runs at most
   once per `(consumer, event)` even under legitimate redelivery
-  (at-least-once, never exactly-once).
+  (at-least-once, never exactly-once). The registry applies it for you
+  (ADR-0134): a consumer's `handle` is the side effect, wrapped by default.
 - **Operator-safe replay** — `application/delivery-replay.ts`:
   permission-gated, reason-required, `Idempotency-Key`-guarded, audited, and
   refuses to replay against an incompatible consumer schema.
@@ -60,11 +67,50 @@ representative consumers, to exercise the full mechanism end-to-end:
    read-model projection maintaining the per-tenant/day/event-type rollup
    table `awcms_domain_event_activity_daily`.
 
-> Port note: awcms-mini's registry additionally carries later-wave consumers
-> that project into its `reporting` and `integration_hub` modules. Those
-> modules do not exist in this repo, so those consumers are intentionally not
-> ported (they would import absent modules). Both consumers above are fully
-> self-contained.
+Both are declared in this module's own `module.ts`. A third,
+`reporting.event_activity_projector`, is declared by `reporting`
+(the same event, a projection into `awcms_reporting_projection_metrics`).
+Their names key delivery rows and the effect ledger, so they are pinned by
+`bun run domain-events:consumers:check` and must never be renamed.
+
+## Declaring a consumer (ADR-0134)
+
+In the module that OWNS the behaviour — never in this module:
+
+```ts
+// src/modules/<owner>/module.ts
+dependencies: ["domain_event_runtime", /* ... */],
+events: { /* the producer module lists its event in publishes */ },
+domainEventConsumers: [
+  {
+    name: "<owner>.<role>",              // globally unique, durable: never rename
+    description: "...",
+    eventTypes: ["awcms.<ns>.<aggregate>.<action>"], // must be in some module's events.publishes
+    eventVersions: ["1.0"],
+    // idempotency defaults to "runtime_effect_once": `handle` IS the side effect
+    handle: async (tx, event, ctx) => {
+      const { apply } = await import("./application/my-projection"); // lazy: keep the descriptor import-light
+      await apply(tx, ctx.tenantId, event);
+    }
+  }
+]
+```
+
+- The event type must also be in `domain/event-type-registry.ts` (and the
+  AsyncAPI channel) before anything can publish it; that catalogue is still a
+  hand-written list in this module (a follow-up in ADR-0134).
+- **Do not call `applyConsumerEffectOnce` in `handle`.** The registry already
+  claims the `(tenant, name, event)` marker; a second claim finds it taken and
+  silently skips your effect. The gate refuses the call anywhere else in `src/`.
+- A consumer that owns its idempotency (a natural-key upsert, its own inbox
+  table) declares `idempotency: "self_managed"` with a non-empty
+  `idempotencyRationale`. Emitted-once is not handled-once: say why a redelivery
+  cannot duplicate the effect.
+- Every declared consumer runs, whatever its module's `status` and whatever a
+  tenant's module toggle says (ADR-0134 §4): excluding any would strand
+  pending deliveries and drop events.
+- Tests that need a deliberately failing consumer use
+  `registerDomainEventConsumerForTests` / `resetDomainEventConsumersForTests`.
 
 ## HTTP surface (`/api/v1/domain-events`)
 

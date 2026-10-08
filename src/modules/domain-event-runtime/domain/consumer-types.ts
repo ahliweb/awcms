@@ -1,50 +1,21 @@
 /**
- * Static consumer registry types ("a static consumer registry owned by
- * reviewed source code"). Concrete registrations live in
- * `infrastructure/consumer-registry.ts` — a plain array, not a runtime
- * `registerConsumer()` call, so the full set of consumers for any event
- * type is always knowable from source code alone (grep/read), never from
- * database state or a dynamic plugin mechanism.
+ * Consumer types. The DECLARATION shape a module writes in its own descriptor
+ * lives in `_shared/domain-event-consumer-contract.ts` (ADR-0134); this file
+ * keeps the runtime's RESOLVED form (`DomainEventConsumerDefinition`), which the
+ * registry builds from those declarations
+ * (`infrastructure/consumer-registry.ts`) and the dispatcher executes. The
+ * handler/event types are re-exported so existing imports keep working.
  */
-
-/** What a consumer handler receives — a narrowed, already-typed projection of the joined `awcms_domain_events` row, never the raw DB row shape. */
-export type DomainEventForHandler = {
-  id: string;
-  eventType: string;
-  eventVersion: string;
-  aggregateType: string;
-  aggregateId: string;
-  orderKey: string;
-  correlationId: string | null;
-  causationId: string | null;
-  producerModule: string;
-  payload: Record<string, unknown>;
-  occurredAt: Date;
-  recordedAt: Date;
-};
-
-export type DomainEventConsumerHandlerContext = {
-  tenantId: string;
-  correlationId: string;
-};
-
-/**
- * `tx` is a tenant-scoped transaction (same one the delivery's own
- * claim/finalize runs in — see `application/dispatch-domain-events.ts`'s
- * doc comment for why this is safe for a same-process, DB-only handler and
- * what would need to change for a future out-of-transaction/broker-backed
- * consumer). A handler MUST be idempotent by `event.id` — the dispatcher
- * guarantees at-LEAST-once delivery per consumer, never exactly-once. Use
- * `application/consumer-effect.ts`'s `applyConsumerEffectOnce` to get this
- * for free.
- */
-export type DomainEventConsumerHandler = (
-  tx: Bun.SQL,
-  event: DomainEventForHandler,
-  ctx: DomainEventConsumerHandlerContext
-) => Promise<void>;
+export type {
+  DomainEventConsumerHandler,
+  DomainEventConsumerHandlerContext,
+  DomainEventForHandler
+} from "../../_shared/domain-event-consumer-contract";
+import type { DomainEventConsumerHandler } from "../../_shared/domain-event-consumer-contract";
 
 export type DomainEventConsumerDefinition = {
+  /** The module whose descriptor declared this consumer (ADR-0134). */
+  ownerModuleKey: string;
   /** Stable identifier — used as the delivery row's `consumer_name`, the idempotency-marker key, the pause/resume key, and the metrics label. Changing it orphans any already-pending delivery rows for the old name — treat it as a durable identifier, not a display label. Convention: `<owning module>.<role>`, e.g. `"logging.sample_event_audit_projector"`. */
   name: string;
   description: string;
@@ -54,6 +25,7 @@ export type DomainEventConsumerDefinition = {
   eventVersions: readonly string[];
   /** Defaults to 8 (`DEFAULT_CONSUMER_MAX_ATTEMPTS`) if omitted. */
   maxAttempts?: number;
+  /** Already wrapped in `applyConsumerEffectOnce` for `runtime_effect_once` consumers (`infrastructure/consumer-registry.ts`). */
   handler: DomainEventConsumerHandler;
 };
 

@@ -78,6 +78,26 @@ identical when reading/writing code in either layer.
 5. Hybrid nodes: the event goes into `awcms_sync_outbox` for sync (`awcms-sync-hmac`).
 6. **Update AsyncAPI** (`asyncapi/`) for a new event & payload; run `api:spec:check`.
 
+## Adding a subscriber (consumer)
+
+A consumer is declared in the **owning** module's `module.ts`
+(`domainEventConsumers`, ADR-0134), never appended to
+`domain-event-runtime/infrastructure/consumer-registry.ts` (which builds the
+registry and holds no consumers). Full recipe and rules:
+`src/modules/domain-event-runtime/README.md` §"Declaring a consumer". In short:
+
+- list `domain_event_runtime` in the module's `dependencies`;
+- `name` is `<module>.<role>`, globally unique, and **never renamed** (it keys
+  delivery rows and the effect ledger);
+- `eventTypes` must be in some module's `events.publishes` (and the event type in
+  `DOMAIN_EVENT_TYPE_REGISTRY` + AsyncAPI) or `bun run domain-events:consumers:check`
+  fails;
+- `handle` is the **side effect**; the registry wraps it in
+  `applyConsumerEffectOnce` (emitted-once is not handled-once). Do not call that
+  helper yourself. A consumer with its own idempotency (natural-key upsert, its
+  own inbox) declares `idempotency: "self_managed"` plus an
+  `idempotencyRationale`.
+
 ## Core events (real channel examples — not a complete list)
 
 `asyncapi/awcms-domain-events.asyncapi.yaml` is the single

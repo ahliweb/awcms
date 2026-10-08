@@ -1,12 +1,11 @@
 /**
  * Event-driven incremental projection apply function (Issue #753) — the
  * ONLY reporting-owned write path invoked from
- * `domain-event-runtime/infrastructure/consumer-registry.ts`'s registered
- * `reporting.event_activity_projector` consumer (that file is the ONE
- * place a cross-module edge exists: `domain_event_runtime` -> `reporting/
- * application`; this file itself imports nothing from `domain_event_runtime`,
- * so no import cycle is introduced — see `tests/unit/module-boundary-
- * cycles.test.ts`).
+ * the `reporting.event_activity_projector` consumer that `reporting/module.ts`
+ * declares in its own `domainEventConsumers` (ADR-0134). The edge points
+ * `reporting` -> `domain_event_runtime` (a declared dependency); this file
+ * imports nothing from `domain_event_runtime`, and the runtime imports nothing
+ * from `reporting`, so there is no cycle at either the module or file level.
  *
  * Called from INSIDE the dispatcher's own transaction
  * (`dispatch-domain-events.ts`'s claim-check + handler + finalize, all one
@@ -26,7 +25,7 @@
  * (security-auditor finding, PR #781): while a rebuild owns this
  * projection, this function used to just `return` early. That was a real
  * permanent-data-loss bug: this function runs as the `sideEffect` inside
- * `consumer-registry.ts`'s `applyConsumerEffectOnce(tx, ...)` call, and
+ * the runtime's `applyConsumerEffectOnce(tx, ...)` wrapper (the consumer is `runtime_effect_once`; the registry applies the wrapper, ADR-0134), and
  * `applyConsumerEffectOnce` writes its event-ID-keyed idempotency MARKER
  * (`INSERT ... ON CONFLICT DO NOTHING`) BEFORE invoking `sideEffect` — so
  * a silent `return` here left the marker committed with NO corresponding

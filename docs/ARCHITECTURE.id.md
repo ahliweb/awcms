@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ARCHITECTURE.md)
 
-<!-- i18n-source-hash: sha256:c8081886f24d7235978e674f0dae7821a4d989de584d1bf9acba433ea62bf189 -->
+<!-- i18n-source-hash: sha256:5ebfcfd9ca4d3da08091cbd7b153b97a4ad7feac9870cdcf8b62002d8238655f -->
 
 # Arsitektur AWCMS
 
@@ -52,7 +52,7 @@ src/modules/<module>/
   (enumeration-safe, single-use, mencabut semua sesi), self-registration
   ber-persetujuan admin (default MATI), tenant user membership, RBAC/ABAC dasar.
 - **`module_management`** (`isCore`) — registry modul berbasis DB: sync descriptor, enable/disable per tenant, settings non-secret, sinkron permission, navigation, job registry, health/readiness.
-- **`domain_event_runtime`** — outbox/dispatcher domain event transaksional, versi, multi-consumer, dead-letter + replay ter-audit.
+- **`domain_event_runtime`** — outbox/dispatcher domain event transaksional, versi, multi-consumer (consumer dideklarasikan di descriptor modul pemiliknya, `domainEventConsumers`, dan registry dibangun darinya — [ADR-0134](adr/0134-descriptor-declared-domain-event-consumers.id.md)), dead-letter + replay ter-audit.
 - **`sync_storage`** — node sync offline-first, outbox/inbox HMAC-signed anti-replay, conflict tracking, antrian upload objek.
 - **`workflow_approval`** — engine workflow definisi ber-versi (draft/publish/retire), node graph (approval/condition/parallel/join/notify), quorum, delegasi, eskalasi.
 - **`email`** — layanan email provider-neutral (Mailketing + `log` adapter), template management, dispatcher outbox, pengumuman massal.

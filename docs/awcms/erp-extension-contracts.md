@@ -140,9 +140,10 @@ endpoints, which apply masking per the `awcms-sensitive-data` skill.
 payloads take the shape `AccountingPostingRequestPayload`/
 `AccountingPostingResultPayload` (`_shared/business-transaction-contract.ts`).
 The events themselves ride on top of `domain_event_runtime` (Issue #742) — the
-extension registers its own event types/consumers in its own derived build (its
-forked version of `domain-event-runtime/infrastructure/consumer-registry.ts`),
-NOT in the base.
+extension declares its own consumers in its own module descriptor
+(`domainEventConsumers`, ADR-0134) rather than forking
+`domain-event-runtime/infrastructure/consumer-registry.ts`, and registers its own
+event types, NOT in the base.
 **Shape:**
 
 - Request: `requestId` (idempotency key), `transaction`

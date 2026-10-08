@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:10130e05f761ad177fb5c17e9a9b5a52d138692c2b904cacf56ce20b73065aaa -->
+<!-- i18n-source-hash: sha256:88f5bc955845ec2afaf19aa29d856d40994efd19b6c6aacac93b75389ba23d7f -->
 
 # Domain Event Runtime
 
@@ -28,10 +28,16 @@ tersedia.
   `appendDomainEvent` menolak mempersistenkan event yang
   `(eventType, eventVersion)`-nya tidak terdaftar di sini, sehingga menghentikan
   penyimpangan senyap dari kontrak AsyncAPI yang diterbitkan.
-- **Registry konsumen statis** — `infrastructure/consumer-registry.ts`: sebuah
-  array polos berisi `DomainEventConsumerDefinition`, sehingga fan-out penuh
-  untuk tipe event apa pun bisa diketahui dari kode sumber saja. Fan-out
-  ditentukan pada waktu **publish**.
+- **Registry konsumen yang dideklarasikan descriptor** (ADR-0134) —
+  `infrastructure/consumer-registry.ts` MEMBANGUN registry dari
+  `domainEventConsumers` milik setiap modul (`ModuleDescriptor`, lihat
+  "Mendeklarasikan konsumen" di bawah); ia tidak meng-import konsumen apa
+  pun, sehingga modul pemilik bergantung pada runtime dan tak pernah
+  sebaliknya. Tetap kode sumber yang ditinjau, bukan state database, sehingga
+  fan-out penuh untuk tipe event apa pun bisa diketahui dari kode sumber saja.
+  Fan-out ditentukan pada waktu **publish**. Himpunan tak valid (nama ganda,
+  langganan ke event yang tak diterbitkan modul mana pun) membuat build
+  melempar dan menggagalkan `bun run domain-events:consumers:check`.
 - **Dispatcher** — `application/dispatch-domain-events.ts`
   (`bun run domain-events:dispatch`, dibangun di atas runner worker bersama
   `src/lib/jobs/job-runner.ts`): mengklaim, mengeksekusi, dan menuntaskan
@@ -42,6 +48,8 @@ tersedia.
   `application/consumer-effect.ts` menjamin efek samping sebuah konsumen
   berjalan paling banyak sekali per `(consumer, event)` bahkan di bawah
   pengiriman ulang yang sah (at-least-once, tidak pernah exactly-once).
+  Registry menerapkannya untuk Anda (ADR-0134): `handle` sebuah konsumen adalah
+  efek sampingnya, dibungkus secara default.
 - **Replay yang aman bagi operator** — `application/delivery-replay.ts`:
   digerbangi izin, wajib beralasan, dijaga `Idempotency-Key`, diaudit, dan
   menolak melakukan replay terhadap skema konsumen yang tidak kompatibel.
@@ -66,11 +74,52 @@ representatif, untuk melatih seluruh mekanismenya dari ujung ke ujung:
    mandiri yang memelihara tabel rollup per-tenant/hari/tipe-event
    `awcms_domain_event_activity_daily`.
 
-> Catatan port: registry awcms-mini turut membawa konsumen gelombang berikutnya
-> yang memproyeksikan ke modul `reporting` dan `integration_hub` miliknya.
-> Modul-modul itu tidak ada di repo ini, jadi konsumen tersebut sengaja tidak
-> diport (mereka akan mengimpor modul yang tidak ada). Kedua konsumen di atas
-> sepenuhnya mandiri.
+Keduanya dideklarasikan di `module.ts` modul ini sendiri. Konsumen ketiga,
+`reporting.event_activity_projector`, dideklarasikan oleh `reporting` (event
+yang sama, proyeksi ke `awcms_reporting_projection_metrics`). Nama-nama itu
+menjadi kunci baris delivery dan ledger efek, sehingga dikunci oleh
+`bun run domain-events:consumers:check` dan tidak boleh diganti.
+
+## Mendeklarasikan konsumen (ADR-0134)
+
+Di modul yang MEMILIKI perilakunya, bukan di modul ini:
+
+```ts
+// src/modules/<pemilik>/module.ts
+dependencies: ["domain_event_runtime", /* ... */],
+events: { /* modul produsen mencantumkan event-nya di publishes */ },
+domainEventConsumers: [
+  {
+    name: "<pemilik>.<peran>",           // unik global, tahan lama: jangan diganti
+    description: "...",
+    eventTypes: ["awcms.<ns>.<aggregate>.<action>"], // harus ada di events.publishes salah satu modul
+    eventVersions: ["1.0"],
+    // idempotency default "runtime_effect_once": `handle` ADALAH efek sampingnya
+    handle: async (tx, event, ctx) => {
+      const { apply } = await import("./application/my-projection"); // lazy: jaga descriptor tetap ringan import
+      await apply(tx, ctx.tenantId, event);
+    }
+  }
+]
+```
+
+- Tipe event juga harus ada di `domain/event-type-registry.ts` (dan channel
+  AsyncAPI) sebelum ada yang dapat menerbitkannya; katalog itu masih daftar
+  tulisan tangan di modul ini (tindak lanjut ADR-0134).
+- **Jangan memanggil `applyConsumerEffectOnce` di dalam `handle`.** Registry
+  sudah mengklaim marker `(tenant, nama, event)`; klaim kedua mendapati marker
+  terambil dan diam-diam melewati efek Anda. Gate menolak pemanggilan itu di
+  mana pun lain di `src/`.
+- Konsumen yang memiliki idempotensinya sendiri (upsert kunci alami, tabel
+  inbox sendiri) menyatakan `idempotency: "self_managed"` dengan
+  `idempotencyRationale` tak kosong. Diterbitkan sekali bukan berarti
+  ditangani sekali: jelaskan mengapa pengiriman ulang tak dapat menggandakan
+  efek.
+- Setiap konsumen yang dideklarasikan berjalan, apa pun `status` modulnya dan
+  apa pun saklar modul tenant (ADR-0134 §4): mengecualikan salah satunya akan
+  menelantarkan delivery tertunda dan menjatuhkan event.
+- Tes yang membutuhkan konsumen yang sengaja gagal memakai
+  `registerDomainEventConsumerForTests` / `resetDomainEventConsumersForTests`.
 
 ## Permukaan HTTP (`/api/v1/domain-events`)
 

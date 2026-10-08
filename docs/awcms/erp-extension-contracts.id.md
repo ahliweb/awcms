@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](erp-extension-contracts.md)
 
-<!-- i18n-source-hash: sha256:d7bfdbe97b0dd94a523a43020b15cf583907667e4ba51797e20b619f2a998772 -->
+<!-- i18n-source-hash: sha256:379e7af98829dff6a991fee4dbad6104c5a7998aef816f2f7b5eccc15c66274b -->
 
 # Kontrak Kesiapan Ekstensi ERP
 
@@ -148,9 +148,10 @@ sesuai skill `awcms-sensitive-data`.
 yang payload-nya berbentuk `AccountingPostingRequestPayload`/
 `AccountingPostingResultPayload` (`_shared/business-transaction-
 contract.ts`). Event itu sendiri naik di atas `domain_event_runtime`
-(Issue #742) — ekstensi meregistrasi event type/consumer-nya sendiri
-di build turunannya sendiri (`domain-event-runtime/infrastructure/
-consumer-registry.ts` versi fork-nya), TIDAK di base.
+(Issue #742) — ekstensi mendeklarasikan consumer-nya sendiri di descriptor
+modulnya sendiri (`domainEventConsumers`, ADR-0134), bukan mem-fork
+`domain-event-runtime/infrastructure/consumer-registry.ts`, dan meregistrasi
+event type-nya sendiri, TIDAK di base.
 **Bentuk:**
 
 - Request: `requestId` (idempotency key), `transaction`

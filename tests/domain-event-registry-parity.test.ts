@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "bun:test";
 import { parse } from "yaml";
 
-import { DOMAIN_EVENT_CONSUMERS } from "../src/modules/domain-event-runtime/infrastructure/consumer-registry";
+import { listDomainEventConsumers } from "../src/modules/domain-event-runtime/infrastructure/consumer-registry";
 import { DOMAIN_EVENT_TYPE_REGISTRY } from "../src/modules/domain-event-runtime/domain/event-type-registry";
 import {
   isValidEventType,
@@ -51,7 +51,7 @@ describe("domain-event-runtime registry <-> AsyncAPI parity", () => {
       DOMAIN_EVENT_TYPE_REGISTRY.map((entry) => entry.eventType)
     );
 
-    for (const consumer of DOMAIN_EVENT_CONSUMERS) {
+    for (const consumer of listDomainEventConsumers()) {
       for (const eventType of consumer.eventTypes) {
         expect(registeredTypes.has(eventType)).toBe(true);
       }

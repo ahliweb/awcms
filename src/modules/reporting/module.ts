@@ -243,6 +243,36 @@ export const reportingModule = defineModule({
   // demonstration) — a derived/domain module contributes its OWN entries
   // to its OWN `reportingProjections` array the same way, never by
   // editing this file.
+  /**
+   * ADR-0134: the steady-state updater of the `event_activity_summary`
+   * projection below. Declared HERE, by the module that owns the projection,
+   * rather than in `domain-event-runtime`'s registry file — `reporting` already
+   * depends on `domain_event_runtime`, so this points the right way and the old
+   * `domain_event_runtime -> reporting` import cycle is gone. Name unchanged
+   * (`EVENT_ACTIVITY_PROJECTOR_CONSUMER_NAME`): the effect ledger is keyed by it.
+   *
+   * `runtime_effect_once` (default): the registry wraps `handle` in
+   * `applyConsumerEffectOnce`. See `application/event-activity-projection.ts`
+   * for the rebuild-deferral that makes `handle` THROW rather than no-op.
+   */
+  domainEventConsumers: [
+    {
+      name: EVENT_ACTIVITY_PROJECTOR_CONSUMER_NAME,
+      description:
+        "reporting module consumer — projects a sample.recorded domain event into awcms_reporting_projection_metrics' reporting.event_activity_summary/sample_recorded_count counter.",
+      eventTypes: ["awcms.domain-event-runtime.sample.recorded"],
+      eventVersions: ["1.0"],
+      handle: async (tx, event, ctx) => {
+        const { applyEventActivityProjectionIncrement } =
+          await import("./application/event-activity-projection");
+        await applyEventActivityProjectionIncrement(
+          tx,
+          ctx.tenantId,
+          event.occurredAt
+        );
+      }
+    }
+  ],
   reportingProjections: [
     {
       key: ACCESS_AUDIT_SUMMARY_PROJECTION_KEY,

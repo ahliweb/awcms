@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](16_backend_data_access_integration.md)
 
-<!-- i18n-source-hash: sha256:9e0c2b5fc1f7433ac9659d016cabc0978bfa5f520b1dc1ca0a85d9d90fd27e1a -->
+<!-- i18n-source-hash: sha256:297d8dcf24c34abf64639cc1f8cbd7cf6c73242d293816f14eb613400aa91e1b -->
 
 # Bagian 16 — Backend Data Access dan Integrasi Database
 
@@ -202,7 +202,8 @@ inventory untuk expected receipt, notifikasi untuk vendor). Lihat
 `src/modules/domain-event-runtime/README.md` (saat ditulis) untuk desain
 lengkap. Produsen memanggil `appendDomainEvent(tx, tenantId, ...)` di
 DALAM transaksi bisnisnya sendiri (sama seperti pola outbox di atas);
-static consumer registry (`infrastructure/consumer-registry.ts`)
+consumer registry (`infrastructure/consumer-registry.ts`, dibangun dari
+`domainEventConsumers` yang dideklarasikan descriptor tiap modul, ADR-0134)
 memutuskan fan-out saat publish, bukan saat dispatch.
 
 **Beda penting dari CLAIM/SEND/FINALIZE 3-fase di atas**: reference

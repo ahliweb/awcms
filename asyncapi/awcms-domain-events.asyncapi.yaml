@@ -27,10 +27,10 @@ channels:
       `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own
       doc comment). Producer: any caller of
       `application/append-domain-event.ts`'s `appendDomainEvent` for this
-      event type; consumers:
-      `infrastructure/consumer-registry.ts`'s two reference consumers
-      (a same-process cross-module audit projector and a self-contained
-      read-model activity-rollup projection).
+      event type; consumers: the reference consumers declared in the
+      descriptors of `domain_event_runtime` (a same-process cross-module
+      audit projector and a self-contained read-model activity-rollup
+      projection) and `reporting` (an event-activity projector), ADR-0134.
   awcms.workflow.instance.started:
     address: awcms.workflow.instance.started
     messages:

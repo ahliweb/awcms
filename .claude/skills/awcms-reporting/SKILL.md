@@ -74,7 +74,8 @@ array, one central aggregator reads `listModules()`" pattern as
   on top of a source that can be restored/hard-deleted without equivalent
   CDC/delta tracking.**
 - **`domain_event`** — steady-state updates are PUSHED by a registered
-  `domain_event_runtime` consumer (Issue #742), reusing the existing job/lock/batching/
+  `domain_event_runtime` consumer (Issue #742) declared in the projection
+  owner's own `domainEventConsumers` (ADR-0134), reusing the existing job/lock/batching/
   idempotency/retry/pause-resume rather than building a second
   mechanism.
 
