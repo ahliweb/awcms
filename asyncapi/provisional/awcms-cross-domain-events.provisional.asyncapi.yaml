@@ -1,0 +1,765 @@
+asyncapi: 3.0.0
+info:
+  title: AWCMS Cross-Domain Events (PROVISIONAL)
+  version: 0.1.0
+  x-awcms-status: provisional
+  x-awcms-emitted-by-code: false
+  description: |-
+    PROVISIONAL. NOT part of the live event contract and NOT emitted by any
+    code today. This document holds the event schemas that the booking,
+    hr_payroll and whatsapp_delivery design packs settled on, validated by
+    `bun run asyncapi:provisional:check`, so that the names and payloads are
+    reviewed as data before any module exists.
+
+    An event lives in exactly ONE of two places: this file, or
+    `asyncapi/awcms-domain-events.asyncapi.yaml` plus
+    `DOMAIN_EVENT_TYPE_REGISTRY`. The implementation PR of each module moves
+    its events out of this file into the live pair, and the check fails if an
+    event is in both (or is in the live pair and still here).
+
+    Same AsyncAPI version and the same `DomainEventEnvelope` as the live
+    file; the check compares the envelope byte-for-byte as data. Payloads carry
+    identifiers, enums, counts and UTC instants only: no personal data, no
+    amount, no payment state, no phone number.
+
+    See docs/awcms/cross-domain-contracts.md for the capability ports,
+    consumer idempotency and the provisional-to-live migration.
+channels:
+  awcms.booking.reservation.created:
+    address: awcms.booking.reservation.created
+    x-awcms-status: provisional
+    messages:
+      BookingReservationCreated:
+        $ref: "#/components/messages/BookingReservationCreated"
+    description: >-
+      PROVISIONAL. A reservation exists (held, or confirmed when the offering confirms immediately). Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.held:
+    address: awcms.booking.reservation.held
+    x-awcms-status: provisional
+    messages:
+      BookingReservationHeld:
+        $ref: "#/components/messages/BookingReservationHeld"
+    description: >-
+      PROVISIONAL. A hold was placed; not emitted when the offering confirms immediately. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.confirmed:
+    address: awcms.booking.reservation.confirmed
+    x-awcms-status: provisional
+    messages:
+      BookingReservationConfirmed:
+        $ref: "#/components/messages/BookingReservationConfirmed"
+    description: >-
+      PROVISIONAL. A hold became confirmed, or a reservation was created already confirmed. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.rescheduled:
+    address: awcms.booking.reservation.rescheduled
+    x-awcms-status: provisional
+    messages:
+      BookingReservationRescheduled:
+        $ref: "#/components/messages/BookingReservationRescheduled"
+    description: >-
+      PROVISIONAL. The old reservation was superseded by a new one; carries supersededById (old reservation) and the new reservation's rescheduledFromId is on its created event. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.cancelled:
+    address: awcms.booking.reservation.cancelled
+    x-awcms-status: provisional
+    messages:
+      BookingReservationCancelled:
+        $ref: "#/components/messages/BookingReservationCancelled"
+    description: >-
+      PROVISIONAL. A held or confirmed reservation was cancelled; carries lateCancellation. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.checked_in:
+    address: awcms.booking.reservation.checked_in
+    x-awcms-status: provisional
+    messages:
+      BookingReservationCheckedIn:
+        $ref: "#/components/messages/BookingReservationCheckedIn"
+    description: >-
+      PROVISIONAL. A confirmed reservation was checked in. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.completed:
+    address: awcms.booking.reservation.completed
+    x-awcms-status: provisional
+    messages:
+      BookingReservationCompleted:
+        $ref: "#/components/messages/BookingReservationCompleted"
+    description: >-
+      PROVISIONAL. A checked-in reservation was completed. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.no_show:
+    address: awcms.booking.reservation.no_show
+    x-awcms-status: provisional
+    messages:
+      BookingReservationNoShow:
+        $ref: "#/components/messages/BookingReservationNoShow"
+    description: >-
+      PROVISIONAL. A confirmed reservation was marked no-show by a person. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.booking.reservation.expired:
+    address: awcms.booking.reservation.expired
+    x-awcms-status: provisional
+    messages:
+      BookingReservationExpired:
+        $ref: "#/components/messages/BookingReservationExpired"
+    description: >-
+      PROVISIONAL. A hold expired (by the sweep job or by lazy reclaim). Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
+      Becomes live with: booking phase 1.
+  awcms.hr.attendance.recorded:
+    address: awcms.hr.attendance.recorded
+    x-awcms-status: provisional
+    messages:
+      HrAttendanceRecorded:
+        $ref: "#/components/messages/HrAttendanceRecorded"
+    description: >-
+      PROVISIONAL. A new, non-replayed attendance event was stored. Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
+      Becomes live with: hr_workforce phase 1.
+  awcms.hr.shift.assigned:
+    address: awcms.hr.shift.assigned
+    x-awcms-status: provisional
+    messages:
+      HrShiftAssigned:
+        $ref: "#/components/messages/HrShiftAssigned"
+    description: >-
+      PROVISIONAL. A shift assignment became published, or was cancelled (cancelled: true). Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
+      Becomes live with: hr_workforce phase 1.
+  awcms.hr.commission.accrued:
+    address: awcms.hr.commission.accrued
+    x-awcms-status: provisional
+    messages:
+      HrCommissionAccrued:
+        $ref: "#/components/messages/HrCommissionAccrued"
+    description: >-
+      PROVISIONAL. A new commission accrual was posted; a replay publishes nothing. Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
+      Becomes live with: hr phase 2.
+  awcms.hr.commission.approved:
+    address: awcms.hr.commission.approved
+    x-awcms-status: provisional
+    messages:
+      HrCommissionApproved:
+        $ref: "#/components/messages/HrCommissionApproved"
+    description: >-
+      PROVISIONAL. A commission accrual was approved. Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
+      Becomes live with: hr phase 2.
+  awcms.hr.payroll.finalized:
+    address: awcms.hr.payroll.finalized
+    x-awcms-status: provisional
+    messages:
+      HrPayrollFinalized:
+        $ref: "#/components/messages/HrPayrollFinalized"
+    description: >-
+      PROVISIONAL. A payroll run was finalized. Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
+      Becomes live with: hr phase 3.
+  awcms.hr.payroll.reversed:
+    address: awcms.hr.payroll.reversed
+    x-awcms-status: provisional
+    messages:
+      HrPayrollReversed:
+        $ref: "#/components/messages/HrPayrollReversed"
+    description: >-
+      PROVISIONAL. A payroll run was reversed by a reversal run. Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
+      Becomes live with: hr phase 3.
+  awcms.whatsapp.message.queued:
+    address: awcms.whatsapp.message.queued
+    x-awcms-status: provisional
+    messages:
+      WhatsappMessageQueued:
+        $ref: "#/components/messages/WhatsappMessageQueued"
+    description: >-
+      PROVISIONAL. A message was accepted into the WhatsApp outbox. Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+  awcms.whatsapp.message.sent:
+    address: awcms.whatsapp.message.sent
+    x-awcms-status: provisional
+    messages:
+      WhatsappMessageSent:
+        $ref: "#/components/messages/WhatsappMessageSent"
+    description: >-
+      PROVISIONAL. The provider accepted the message. Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+  awcms.whatsapp.message.failed:
+    address: awcms.whatsapp.message.failed
+    x-awcms-status: provisional
+    messages:
+      WhatsappMessageFailed:
+        $ref: "#/components/messages/WhatsappMessageFailed"
+    description: >-
+      PROVISIONAL. The message reached a terminal failure; carries a coarse failureCode. Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+  awcms.whatsapp.message.expired:
+    address: awcms.whatsapp.message.expired
+    x-awcms-status: provisional
+    messages:
+      WhatsappMessageExpired:
+        $ref: "#/components/messages/WhatsappMessageExpired"
+    description: >-
+      PROVISIONAL. The message passed its expiry before it was sent. Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+  awcms.whatsapp.consent.granted:
+    address: awcms.whatsapp.consent.granted
+    x-awcms-status: provisional
+    messages:
+      WhatsappConsentGranted:
+        $ref: "#/components/messages/WhatsappConsentGranted"
+    description: >-
+      PROVISIONAL. A recipient's consent for a purpose was recorded. Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+  awcms.whatsapp.consent.withdrawn:
+    address: awcms.whatsapp.consent.withdrawn
+    x-awcms-status: provisional
+    messages:
+      WhatsappConsentWithdrawn:
+        $ref: "#/components/messages/WhatsappConsentWithdrawn"
+    description: >-
+      PROVISIONAL. A recipient's consent for a purpose was withdrawn. Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+  awcms.whatsapp.dispatch.failed:
+    address: awcms.whatsapp.dispatch.failed
+    x-awcms-status: provisional
+    messages:
+      WhatsappDispatchFailed:
+        $ref: "#/components/messages/WhatsappDispatchFailed"
+    description: >-
+      PROVISIONAL. A dispatcher pass failed as a whole (job level, not one message). Owner: whatsapp_delivery (ADR-0133 section 8).
+      Becomes live with: whatsapp_delivery implementation.
+components:
+  messages:
+    BookingReservationCreated:
+      name: BookingReservationCreated
+      title: awcms.booking.reservation.created
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.created }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationHeld:
+      name: BookingReservationHeld
+      title: awcms.booking.reservation.held
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.held }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationConfirmed:
+      name: BookingReservationConfirmed
+      title: awcms.booking.reservation.confirmed
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.confirmed }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationRescheduled:
+      name: BookingReservationRescheduled
+      title: awcms.booking.reservation.rescheduled
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.rescheduled }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationCancelled:
+      name: BookingReservationCancelled
+      title: awcms.booking.reservation.cancelled
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.cancelled }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationCheckedIn:
+      name: BookingReservationCheckedIn
+      title: awcms.booking.reservation.checked_in
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.checked_in }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationCompleted:
+      name: BookingReservationCompleted
+      title: awcms.booking.reservation.completed
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.completed }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationNoShow:
+      name: BookingReservationNoShow
+      title: awcms.booking.reservation.no_show
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.no_show }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    BookingReservationExpired:
+      name: BookingReservationExpired
+      title: awcms.booking.reservation.expired
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.booking.reservation.expired }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: reservation }
+              payload:
+                $ref: "#/components/schemas/BookingReservationPayload"
+    HrAttendanceRecorded:
+      name: HrAttendanceRecorded
+      title: awcms.hr.attendance.recorded
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.hr.attendance.recorded }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: attendance_event }
+              payload:
+                $ref: "#/components/schemas/HrAttendanceRecordedPayload"
+    HrShiftAssigned:
+      name: HrShiftAssigned
+      title: awcms.hr.shift.assigned
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.hr.shift.assigned }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: shift_assignment }
+              payload:
+                $ref: "#/components/schemas/HrShiftAssignedPayload"
+    HrCommissionAccrued:
+      name: HrCommissionAccrued
+      title: awcms.hr.commission.accrued
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.hr.commission.accrued }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: commission_accrual }
+              payload:
+                $ref: "#/components/schemas/HrCommissionAccruedPayload"
+    HrCommissionApproved:
+      name: HrCommissionApproved
+      title: awcms.hr.commission.approved
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.hr.commission.approved }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: commission_accrual }
+              payload:
+                $ref: "#/components/schemas/HrCommissionApprovedPayload"
+    HrPayrollFinalized:
+      name: HrPayrollFinalized
+      title: awcms.hr.payroll.finalized
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.hr.payroll.finalized }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: payroll_run }
+              payload:
+                $ref: "#/components/schemas/HrPayrollFinalizedPayload"
+    HrPayrollReversed:
+      name: HrPayrollReversed
+      title: awcms.hr.payroll.reversed
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.hr.payroll.reversed }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: payroll_run }
+              payload:
+                $ref: "#/components/schemas/HrPayrollReversedPayload"
+    WhatsappMessageQueued:
+      name: WhatsappMessageQueued
+      title: awcms.whatsapp.message.queued
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.message.queued }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_message }
+              payload:
+                $ref: "#/components/schemas/WhatsappMessagePayload"
+    WhatsappMessageSent:
+      name: WhatsappMessageSent
+      title: awcms.whatsapp.message.sent
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.message.sent }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_message }
+              payload:
+                $ref: "#/components/schemas/WhatsappMessagePayload"
+    WhatsappMessageFailed:
+      name: WhatsappMessageFailed
+      title: awcms.whatsapp.message.failed
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.message.failed }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_message }
+              payload:
+                $ref: "#/components/schemas/WhatsappMessagePayload"
+    WhatsappMessageExpired:
+      name: WhatsappMessageExpired
+      title: awcms.whatsapp.message.expired
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.message.expired }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_message }
+              payload:
+                $ref: "#/components/schemas/WhatsappMessagePayload"
+    WhatsappConsentGranted:
+      name: WhatsappConsentGranted
+      title: awcms.whatsapp.consent.granted
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.consent.granted }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_consent }
+              payload:
+                $ref: "#/components/schemas/WhatsappConsentPayload"
+    WhatsappConsentWithdrawn:
+      name: WhatsappConsentWithdrawn
+      title: awcms.whatsapp.consent.withdrawn
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.consent.withdrawn }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_consent }
+              payload:
+                $ref: "#/components/schemas/WhatsappConsentPayload"
+    WhatsappDispatchFailed:
+      name: WhatsappDispatchFailed
+      title: awcms.whatsapp.dispatch.failed
+      contentType: application/json
+      x-awcms-status: provisional
+      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/DomainEventEnvelope"
+          - type: object
+            properties:
+              eventType: { const: awcms.whatsapp.dispatch.failed }
+              eventVersion: { const: "1.0" }
+              aggregateType: { const: whatsapp_dispatch }
+              payload:
+                $ref: "#/components/schemas/WhatsappDispatchFailedPayload"
+  schemas:
+    DomainEventEnvelope:
+      type: object
+      required:
+        [
+          eventId,
+          eventType,
+          eventVersion,
+          tenantId,
+          aggregateType,
+          aggregateId,
+          occurredAt,
+          payload,
+          metadata
+        ]
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        eventVersion: { type: string }
+        tenantId: { type: string, format: uuid }
+        nodeId: { type: string, format: uuid }
+        aggregateType: { type: string }
+        aggregateId: { type: string }
+        occurredAt: { type: string, format: date-time }
+        actor:
+          type: object
+          properties:
+            tenantUserId: { type: string, format: uuid }
+            profileId: { type: string, format: uuid }
+        correlationId: { type: string }
+        causationId: { type: string }
+        payload: {}
+        metadata:
+          type: object
+          required: [sourceModule, schemaVersion]
+          properties:
+            sourceModule: { type: string }
+            schemaVersion: { type: string }
+    BookingReservationPayload:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          reservationId,
+          reservationNo,
+          lineageId,
+          status,
+          previousStatus,
+          startsAt,
+          endsAt,
+          resourceIds,
+          offeringIds,
+          partySize,
+          occurredAt
+        ]
+      description: >-
+        Never a customer name, contact, note or reason text, and no payment
+        state. externalRefType/externalRef are the adapter's own opaque pair.
+        lateCancellation is carried by cancelled; supersededById by rescheduled;
+        rescheduledFromId by the created event of the replacement.
+      properties:
+        reservationId: { type: string, format: uuid }
+        reservationNo: { type: string }
+        lineageId: { type: string, format: uuid }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                held,
+                confirmed,
+                rescheduled,
+                cancelled,
+                checked_in,
+                completed,
+                no_show,
+                expired
+              ]
+          }
+        previousStatus:
+          { type: [string, "null"], enum: [held, confirmed, checked_in, null] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        resourceIds: { type: array, items: { type: string, format: uuid } }
+        offeringIds: { type: array, items: { type: string, format: uuid } }
+        partySize: { type: integer, minimum: 1 }
+        externalRefType: { type: [string, "null"] }
+        externalRef: { type: [string, "null"] }
+        lateCancellation: { type: boolean }
+        supersededById: { type: string, format: uuid }
+        rescheduledFromId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        correlationId: { type: string }
+    HrAttendanceRecordedPayload:
+      type: object
+      additionalProperties: false
+      required: [eventId, employmentId, kind, occurredAt, source]
+      description: eventId here is the attendance event's id, not the envelope's.
+      properties:
+        eventId: { type: string, format: uuid }
+        employmentId: { type: string, format: uuid }
+        kind: { type: string }
+        occurredAt: { type: string, format: date-time }
+        source: { type: string }
+        officeId: { type: [string, "null"], format: uuid }
+    HrShiftAssignedPayload:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, employmentId, kind, startsAt, endsAt, cancelled]
+      properties:
+        assignmentId: { type: string, format: uuid }
+        employmentId: { type: string, format: uuid }
+        kind: { type: string, enum: [work, time_off] }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        cancelled: { type: boolean }
+    HrCommissionAccruedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        [accrualId, employmentId, sourceType, ruleKey, ruleVersion, operation]
+      description: No amount, by pack rule; totals are read through an authorized read.
+      properties:
+        accrualId: { type: string, format: uuid }
+        employmentId: { type: string, format: uuid }
+        sourceType: { type: string }
+        ruleKey: { type: string }
+        ruleVersion: { type: integer, minimum: 1 }
+        operation: { type: string }
+    HrCommissionApprovedPayload:
+      type: object
+      additionalProperties: false
+      required: [accrualId, employmentId]
+      properties:
+        accrualId: { type: string, format: uuid }
+        employmentId: { type: string, format: uuid }
+    HrPayrollFinalizedPayload:
+      type: object
+      additionalProperties: false
+      required: [runId, periodKey, kind, employeeCount, currencyCode]
+      description: No amount, by pack rule; currencyCode is an ISO 4217 code, not a value.
+      properties:
+        runId: { type: string, format: uuid }
+        periodKey: { type: string }
+        kind: { type: string }
+        employeeCount: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: "^[A-Z]{3}$" }
+    HrPayrollReversedPayload:
+      type: object
+      additionalProperties: false
+      required: [runId, reversalRunId, periodKey, employeeCount]
+      properties:
+        runId: { type: string, format: uuid }
+        reversalRunId: { type: string, format: uuid }
+        periodKey: { type: string }
+        employeeCount: { type: integer, minimum: 0 }
+    WhatsappMessagePayload:
+      type: object
+      additionalProperties: false
+      required: [messageId, templateKey, purpose, recipientMasked, status]
+      description: >-
+        Never a phone number, message body or template variable. The caller's
+        record is joined through the envelope correlationId.
+      properties:
+        messageId: { type: string, format: uuid }
+        templateKey: { type: string }
+        purpose: { type: string, enum: [transactional, security, marketing] }
+        recipientMasked: { type: string }
+        status: { type: string, enum: [queued, sent, failed, expired] }
+        failureCode: { type: string }
+    WhatsappConsentPayload:
+      type: object
+      additionalProperties: false
+      required: [consentId, purpose, recipientMasked]
+      properties:
+        consentId: { type: string, format: uuid }
+        purpose: { type: string, enum: [transactional, security, marketing] }
+        recipientMasked: { type: string }
+    WhatsappDispatchFailedPayload:
+      type: object
+      additionalProperties: false
+      required: [failureCode, occurredAt]
+      properties:
+        failureCode: { type: string }
+        batchSize: { type: integer, minimum: 0 }
+        occurredAt: { type: string, format: date-time }

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ARCHITECTURE.md)
 
-<!-- i18n-source-hash: sha256:5ebfcfd9ca4d3da08091cbd7b153b97a4ad7feac9870cdcf8b62002d8238655f -->
+<!-- i18n-source-hash: sha256:32d8c25ce28fbc3fc730d753a77250c9a44940994f4a05a8c0c728369366fcb5 -->
 
 # Arsitektur AWCMS
 
@@ -372,6 +372,8 @@ queued/sent/failed/suppressed/cancelled) — dipublikasikan lewat
 `appendDomainEvent` di transaksi bisnis yang sama (ADR-0006, same-commit
 outbox write) dan dikirim `bun run domain-events:dispatch` dengan
 per-order-key ordering, backoff, dead-letter + replay ter-audit.
+
+Dokumen **provisional** yang terpisah, `asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml`, menyimpan skema event untuk modul yang belum ada (booking, hr_payroll, pengiriman WhatsApp). Ia bukan bagian dari kontrak live, tidak diterbitkan kode mana pun, dan digerbangi `bun run asyncapi:provisional:check`; sebuah event hidup di tepat satu dari dua berkas. Lihat [`docs/awcms/cross-domain-contracts.md`](awcms/cross-domain-contracts.md).
 
 ## Migration
 

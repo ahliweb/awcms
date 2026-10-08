@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:d31915b1f5940c732d52678cdd7085ec2bf1997c9377d6160d4cf567209fd7b5 -->
+<!-- i18n-source-hash: sha256:c0944adef0de9b3e03f448e80ddce6f1a026e5451d37a903188c4f4bcf6686ab -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-130 target menjalankan berkas di `scripts/`; 58 di antaranya
+131 target menjalankan berkas di `scripts/`; 59 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -48,6 +48,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `api:docs:generate`                       | `api-docs-generate.ts`                         | —    |
 | `api:spec:check`                          | `api-spec-check.ts`                            | ✅   |
 | `api:tenant-route:check`                  | `tenant-route-factory-check.ts`                | ✅   |
+| `asyncapi:provisional:check`              | `asyncapi-provisional-check.ts`                | ✅   |
 | `blog:ads:drop-readiness`                 | `blog-ads-drop-readiness.ts`                   | —    |
 | `blog:ads:ingest`                         | `blog-ads-ingest.ts`                           | —    |
 | `blog:legacy:article-paths`               | `blog-legacy-article-paths.ts`                 | —    |
