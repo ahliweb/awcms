@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](erp-extension-contracts.md)
 
-<!-- i18n-source-hash: sha256:379e7af98829dff6a991fee4dbad6104c5a7998aef816f2f7b5eccc15c66274b -->
+<!-- i18n-source-hash: sha256:e2af3b3e75fafe4839de97d1759f92dca4e7974c40785c27cebac51f35888d39 -->
 
 # Kontrak Kesiapan Ekstensi ERP
 
@@ -47,7 +47,7 @@ Anda mengedit registry modul base (Issue #740/#741, ADR-0014/0015).
 | 1   | Business transaction reference & lifecycle       | `src/modules/_shared/business-transaction-contract.ts`              | Tipe data pasif                         | Issue #755 (baru)               |
 | 2   | Document/reference/numbering integration         | `document_infrastructure`'s API publik + `DocumentReferenceLink`    | Tipe data pasif + layanan modul pemilik | Issue #751 (dipakai ulang)      |
 | 3   | Tenant/legal-entity/organization scope reference | `_shared/ports/business-scope-hierarchy-port.ts`                    | Port + tipe data                        | Issue #746/#749 (dipakai ulang) |
-| 4   | Party kanonik + peran kontekstual                | `_shared/ports/party-directory-port.ts`                             | Port                                    | Issue #748 (dipakai ulang)      |
+| 4   | Party kanonik + peran kontekstual                | `awcms_profiles` (FK komposit `profile_id`; tidak ada berkas port)  | Referensi tabel                         | Issue #748 (dipakai ulang)      |
 | 5   | Posting request/result event envelope            | `_shared/business-transaction-contract.ts`                          | Tipe payload event                      | Issue #755 (baru)               |
 | 6   | Period-lock query/check                          | `_shared/ports/period-lock-port.ts`                                 | Port berperilaku, fail-closed           | Issue #755 (baru)               |
 | 7   | Item/service reference                           | `_shared/erp-reference-data-contract.ts`                            | Tipe data pasif                         | Issue #755 (baru)               |
@@ -123,23 +123,26 @@ struktur organisasi, bukan data personal.
 
 ## 4. Party kanonik + peran kontekstual
 
-**Pemilik:** `_shared/ports/party-directory-port.ts` (Issue #748,
-diimplementasikan `profile_identity`).
+> **Koreksi ([ADR-0132](../adr/0132-hr-payroll-module-family-admission.id.md) §2).**
+> Bagian ini dulu menyebut `_shared/ports/party-directory-port.ts` ("Issue #748").
+> Berkas itu tidak pernah ada di tree ini; mekanisme yang nyata dijelaskan di
+> bawah. `PartyDirectoryPort`, `resolveSummary`, dan kedua DTO ringkasan tidak
+> pernah dibangun.
+
+**Pemilik:** `profile_identity` (`awcms_profiles`).
 **Pola untuk ekstensi ERP:** tabel "customer"/"supplier"/"employee"
-milik ekstensi Anda menyimpan REFERENSI (`profileId`) ke party
-kanonik lewat port ini — TIDAK PERNAH menduplikasi nama/kontak/data
-identitas party ke tabel ekstensi Anda sendiri. Gunakan
-`resolveSummary`/`resolvePublicSafeSummary` untuk menampilkan
-nama/status tanpa menyalinnya secara permanen.
-**Failure semantics:** `null` berarti party tidak ada/soft-deleted/
-merged-away untuk tenant tersebut — ekstensi WAJIB memperlakukan
-sebagai "tidak ditemukan", tidak pernah menampilkan data basi.
-**Klasifikasi privasi:** `PartyDirectorySummaryDTO`/
-`PartyDirectoryPublicSafeDTO` adalah allow-list eksplisit — field apa
-pun DI LUAR daftar itu (email/telepon mentah, dst.) tidak pernah
-terekspos lewat port ini; ekstensi yang butuh data lebih detail
-memanggil endpoint `profile_identity` sendiri, yang menerapkan masking
-sesuai skill `awcms-sensitive-data`.
+milik ekstensi Anda menyimpan REFERENSI (`profile_id`) ke party kanonik
+sebagai foreign key komposit `(tenant_id, profile_id)` ke `awcms_profiles
+(tenant_id, id)` (preseden: pemasok pada procurement, ADR-0128 §2) — TIDAK
+PERNAH menduplikasi nama/kontak/data identitas party ke tabel ekstensi Anda
+sendiri. Baca nama/status dari endpoint `profile_identity` sendiri, tanpa
+menyalinnya secara permanen.
+**Failure semantics:** profil yang tidak ada/soft-deleted/merged-away untuk
+tenant tersebut adalah "tidak ditemukan" — ekstensi WAJIB memperlakukannya
+demikian, tidak pernah menampilkan data basi.
+**Klasifikasi privasi:** endpoint `profile_identity` menerapkan masking sesuai
+skill `awcms-sensitive-data`; ekstensi tidak pernah menyimpan email/telepon/
+identifier nasional mentah miliknya sendiri.
 
 ## 5. Posting request/result event envelope
 

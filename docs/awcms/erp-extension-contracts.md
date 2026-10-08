@@ -43,7 +43,7 @@ registry (Issue #740/#741, ADR-0014/0015).
 | 1   | Business transaction reference & lifecycle       | `src/modules/_shared/business-transaction-contract.ts`              | Passive data type                         | Issue #755 (new)         |
 | 2   | Document/reference/numbering integration         | `document_infrastructure`'s public API + `DocumentReferenceLink`    | Passive data type + owning module service | Issue #751 (reused)      |
 | 3   | Tenant/legal-entity/organization scope reference | `_shared/ports/business-scope-hierarchy-port.ts`                    | Port + data type                          | Issue #746/#749 (reused) |
-| 4   | Canonical party + contextual roles               | `_shared/ports/party-directory-port.ts`                             | Port                                      | Issue #748 (reused)      |
+| 4   | Canonical party + contextual roles               | `awcms_profiles` (composite FK `profile_id`; no port file exists)   | Table reference                           | Issue #748 (reused)      |
 | 5   | Posting request/result event envelope            | `_shared/business-transaction-contract.ts`                          | Event payload type                        | Issue #755 (new)         |
 | 6   | Period-lock query/check                          | `_shared/ports/period-lock-port.ts`                                 | Behavioural port, fail-closed             | Issue #755 (new)         |
 | 7   | Item/service reference                           | `_shared/erp-reference-data-contract.ts`                            | Passive data type                         | Issue #755 (new)         |
@@ -117,21 +117,26 @@ identifier, not personal data.
 
 ## 4. Canonical party + contextual roles
 
-**Owner:** `_shared/ports/party-directory-port.ts` (Issue #748, implemented by
-`profile_identity`).
+> **Correction ([ADR-0132](../adr/0132-hr-payroll-module-family-admission.md) §2).**
+> This section used to cite `_shared/ports/party-directory-port.ts` ("Issue #748").
+> That file has never existed in this tree; the mechanism that is real is
+> described below. `PartyDirectoryPort`, `resolveSummary` and the two summary DTOs
+> were never built.
+
+**Owner:** `profile_identity` (`awcms_profiles`).
 **Pattern for an ERP extension:** your extension's "customer"/"supplier"/
-"employee" tables store a REFERENCE (`profileId`) to the canonical party through
-this port — NEVER duplicating the party's name/contact/identity data into your
-own extension tables. Use `resolveSummary`/`resolvePublicSafeSummary` to display
-the name/status without copying it permanently.
-**Failure semantics:** `null` means the party does not exist/is soft-deleted/
-merged-away for that tenant — the extension MUST treat it as "not found", never
+"employee" tables store a REFERENCE (`profile_id`) to the canonical party as a
+composite `(tenant_id, profile_id)` foreign key to `awcms_profiles (tenant_id,
+id)` (the precedent is procurement's supplier, ADR-0128 §2) — NEVER duplicating
+the party's name/contact/identity data into your own extension tables. Read the
+name/status from `profile_identity`'s own endpoints, without copying it
+permanently.
+**Failure semantics:** a profile that does not exist/is soft-deleted/merged-away
+for that tenant is "not found" — the extension MUST treat it as such, never
 display stale data.
-**Privacy classification:** `PartyDirectorySummaryDTO`/
-`PartyDirectoryPublicSafeDTO` are an explicit allow-list — any field OUTSIDE
-that list (raw email/phone, etc.) is never exposed through this port; an
-extension that needs more detailed data calls `profile_identity`'s own
-endpoints, which apply masking per the `awcms-sensitive-data` skill.
+**Privacy classification:** `profile_identity`'s endpoints apply masking per the
+`awcms-sensitive-data` skill; an extension never stores raw email/phone/national
+identifiers of its own.
 
 ## 5. Posting request/result event envelope
 
