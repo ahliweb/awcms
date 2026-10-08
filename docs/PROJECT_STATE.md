@@ -115,9 +115,9 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 
 | Aspect                            | Value (generated)                                                                      | Source of truth                                                                         |
 | --------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Version                           | **10.6.0**                                                                             | `package.json`                                                                          |
+| Version                           | **10.7.0**                                                                             | `package.json`                                                                          |
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.6.0..HEAD`                                                    |
+| Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Base modules                      | **28** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **175** (`sql/001`–`175`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0134** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
@@ -391,6 +391,35 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **AW BUSINESS PLATFORM WAVE A — 8 October 2026 (v10.7.0): #915–#918 done
+  upstream, the same day downstream ADR-0040 was accepted (awcms-one#335, O0).**
+
+  Four admissions, all docs except ADR-0134: ADR-0131 booking (#927,
+  `docs/awcms/booking.md`), ADR-0132 hr_payroll family (#928,
+  `docs/awcms/hr-payroll.md`), ADR-0133 generic `whatsapp_delivery` (#925),
+  ADR-0134 descriptor-declared domain-event consumers (#926, code), and the
+  cross-domain contracts (#929, `docs/awcms/cross-domain-contracts.md` + 22
+  provisional events in `asyncapi/provisional/`, gated by
+  `asyncapi:provisional:check`). **No module code, migration or live
+  OpenAPI/AsyncAPI path exists for booking, hr or WhatsApp yet.** Each module's
+  phase-1 PR creates its `_shared/ports` file and moves its events from the
+  provisional file to the live contract (the gate forces "exactly one place").
+
+  **Owner decisions are still open, and the packs record them as open, not
+  decided:** O1–O3, O5, O8, O9, O12 (booking); O1, O4–O7 (hr; payroll is
+  additionally gated on at-rest encryption plus security and legal review);
+  O10 Telegram deferred, O11 orchestration not admitted (delivery). Read the
+  pack's "Open questions" before writing a migration.
+
+  **Two things to know before touching the consumer registry (#926).**
+  Consumers run regardless of module `status`: an earlier draft that skipped
+  `disabled` modules stranded pending deliveries, broke replay and dropped
+  events, and was removed after the security review. The registry is rebuilt
+  on every call (no cache keyed on array identity). The CI gate is the primary
+  guard against a bad composition; the runtime throw inside the producer's
+  transaction is only the backstop (there is no boot-time validation path).
+  Follow-up: descriptor-declared e-mail categories.
+
 - **ISSUE ROUND — 8 October 2026 (v10.6.0): two fixes, one blocker found on
   the way, and four design issues deliberately not started.**
 
@@ -411,7 +440,7 @@ pioneered directly here after the ADR-0047 freeze.)
   `deps:audit:check` red on `main` and blocked every PR. They are closed with
   `overrides`.
 
-  **NOT started, on purpose: #915 booking, #916 hr_payroll, #917 delivery,
+  **SUPERSEDED the same day (see the Wave A entry above): NOT started, on purpose: #915 booking, #916 hr_payroll, #917 delivery,
   #918 consumer registration (awcms-one#280 Wave A).** Each issue is gated
   "not before the downstream owner accepts ADR-0040". On 8 October 2026,
   awcms-one ADR-0040 is still `Diusulkan` (Proposed). Re-check that status
