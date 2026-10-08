@@ -21,7 +21,7 @@ Memory agent Claude Code disimpan di `~/.claude/projects/<slug-cwd>/memory/` —
 - Repo ini **publik**. Jangan pernah menulis secret/kredensial nyata ke memory — nilai seperti `awcms_password` adalah placeholder yang sama dengan `.env.example` dan memang sudah publik.
 - `MEMORY.md` adalah indeks yang dimuat tiap sesi; file lain dimuat sesuai relevansi.
 
-**Jumlah memory saat snapshot terakhir: 131.**
+**Jumlah memory saat snapshot terakhir: 132.**
 
 ## Sengaja TIDAK disertakan
 
@@ -123,6 +123,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [CodeQL `js/bad-tag-filter` menandai SATU bentuk per putaran](codeql-bad-tag-filter-iterates.md) — tambal sekaligus `</script(?:[\s/][^>]*)?>`
 - [Merge PR dependabot](awcms-dependabot-merge-notes.md) — `package.json` & workflow TAK exempt gate changeset; astro bump memerahkan `family:conformance`
 - [Antrean merge WAJIB serial](awcms-serial-merge-queue-tax.md) — auto-merge MATI + up-to-date wajib; update-branch paralel MEMBAKAR CI; resolusi rebase = KEDUA sisi per baris lalu regenerasi
+- [Penanda konflik DISAMARKAN prettier](rebase-markers-survive-prettier.md) — jadi `> > > > >`; cek penanda SEBELUM format, jangan rantai `;` ke `rebase --continue`
 - [Hazard branch subagent](awcms-subagent-branch-hazard.md) — verifikasi `git branch --show-current` SEBELUM commit
 - [Subagent MENDELEGASI ULANG → agen yatim](subagent-redelegation-orphans.md) — 2 dari 4 lapor "selesai" tanpa kerja; anak tak bisa di-`TaskStop`; larang spawn di prompt, cek commit count
 - [Hazard cwd Bash lintas-repo](bash-cwd-persists-cross-repo-audit-hazard.md) — `cd` persisten antar panggilan; pakai path absolut; `isolation:"worktree"` IKUT cwd itu → buat worktree sendiri
@@ -7932,6 +7933,45 @@ lain dari [[awcms-gate-checks-matrix-not-need]].
 
 Cek cepat sebelum menambah grant worker: kalau statementnya `ON CONFLICT`
 atau `UPDATE … WHERE`, ia butuh SELECT.
+`````
+
+<!-- memory-file: rebase-markers-survive-prettier.md -->
+
+`````markdown
+---
+name: rebase-markers-survive-prettier
+description: "Penanda konflik yang lolos ke `bun run format` DISAMARKAN prettier jadi `> > > > > > >` — grep `^>>>>>>>` tak lagi melihatnya; jangan rantai `resolve && format && rebase --continue` tanpa cek di antaranya"
+metadata:
+  node_type: memory
+  type: feedback
+  modified: 2026-10-08T11:25:21.722Z
+---
+
+8 Oktober 2026, saat merge serial PR ADR paralel (#928 di atas #925/#926/#927):
+skrip Python resolusi konflik **gagal di tengah** (assert pada `README.id.md`,
+nama berkas mirror berbeda), tetapi perintah berikutnya di baris yang sama
+tetap jalan (`; bun run format; git add -A && git rebase --continue`).
+Hasilnya commit dengan penanda konflik di tiga berkas. Lebih buruk lagi,
+**prettier memformat penanda markdown itu menjadi blockquote bersarang
+`> > > > > > > c0c89eb9 (...)`**, sehingga `grep '^>>>>>>> '` melaporkan bersih.
+
+**Why:** konflik indeks ADR/README terjadi di SETIAP PR ADR paralel. Resolusinya
+selalu diskrip, dan satu skrip yang gagal diam-diam lalu diformat akan
+menghasilkan dokumen rusak yang terlihat sah.
+
+**How to apply:**
+- Pisahkan langkah: jalankan resolusi, lalu **cek penanda SEBELUM format**
+  (`grep -rln '^<<<<<<< \|^=======$\|^>>>>>>> '`), dan baru `rebase --continue`
+  bila kosong. Pakai `set -e` atau `&&`, jangan `;`, di rantai itu.
+- Setelah format, cek juga bentuk yang disamarkan: `grep -rn '^> > > > '`.
+- Bila sudah telanjur ter-commit, lebih bersih **reset ke branch remote
+  pra-rebase lalu rebase ulang** daripada menambal di atas teks yang sudah
+  diformat ulang.
+- Untuk tabel indeks (`docs/adr/README*`, `docs/awcms/README*`) yang bentrok
+  karena prettier meratakan ulang kolom: ambil versi main, lalu SISIPKAN baris
+  branch setelah baris anker (urut nomor), dan regenerasi PROJECT_STATE §2 /
+  `repo-inventory.md` dengan generatornya. Lihat [[awcms-generated-artifact-merge-drift]],
+  [[awcms-serial-merge-queue-tax]].
 `````
 
 <!-- memory-file: seputarborneo-legacy-site-is-on-this-machine.md -->

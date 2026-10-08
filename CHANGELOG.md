@@ -1,5 +1,15 @@
 # awcms
 
+## 10.7.0
+
+### Minor Changes
+
+- 78c1b3b: feat(domain-event-runtime): domain-event consumers are declared in the owning module's descriptor (`domainEventConsumers`, module contract 4.2.0) and the runtime builds its registry from the composed module list, so a module or a downstream template registers a consumer without editing `domain-event-runtime/infrastructure/consumer-registry.ts` and the `domain_event_runtime -> reporting` import and its boundary exception are gone (#918 items 1 and 4, ADR-0134). Behaviour change for module authors: `DOMAIN_EVENT_CONSUMERS` is replaced by `listDomainEventConsumers()`; the three shipped consumer names are unchanged (they key delivery rows and the effect ledger). `handle` is now the side effect and the registry wraps it in `applyConsumerEffectOnce` (`self_managed` needs a written rationale). New gate `domain-events:consumers:check` rejects duplicate names, subscriptions to events no module publishes, a missing `domain_event_runtime` dependency, renamed shipped consumers and any other caller of `applyConsumerEffectOnce`; the registry build throws on the same defects.
+
+### Patch Changes
+
+- 3329ebb: docs(contracts): a PROVISIONAL, machine-validated AsyncAPI document for the booking, hr_payroll and WhatsApp delivery events, plus `docs/awcms/cross-domain-contracts.md` (capability ports, per-consumer idempotency, provisional-to-live migration) (#918 items 2-3). New gate `asyncapi:provisional:check` in the `check` chain; no runtime code, no live contract change.
+
 ## 10.6.0
 
 ### Minor Changes
