@@ -124,7 +124,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Antrean merge WAJIB serial](awcms-serial-merge-queue-tax.md) — auto-merge MATI + up-to-date wajib; update-branch paralel MEMBAKAR CI; resolusi rebase = KEDUA sisi per baris lalu regenerasi
 - [Hazard branch subagent](awcms-subagent-branch-hazard.md) — verifikasi `git branch --show-current` SEBELUM commit
 - [Subagent MENDELEGASI ULANG → agen yatim](subagent-redelegation-orphans.md) — 2 dari 4 lapor "selesai" tanpa kerja; anak tak bisa di-`TaskStop`; larang spawn di prompt, cek commit count
-- [Hazard cwd Bash lintas-repo](bash-cwd-persists-cross-repo-audit-hazard.md) — `cd` persisten antar panggilan; pakai path absolut
+- [Hazard cwd Bash lintas-repo](bash-cwd-persists-cross-repo-audit-hazard.md) — `cd` persisten antar panggilan; pakai path absolut; `isolation:"worktree"` IKUT cwd itu → buat worktree sendiri
 - [Gerbang lockfile npm itu buta](npm-lockfile-gates-are-blind.md) — `npm ci` menerima lockfile BERLEBIH dengan exit 0
 - [Sync HMAC versioning](awcms-sync-hmac-versioning-notes.md) — v2 ikat tenant+node; tak cukup tanpa `SYNC_HMAC_ALLOW_LEGACY=false`
 - [Catatan masking identifier](awcms-identifier-masking-notes.md) — cabang email deteksi-`@`; 23505→409 wajib di-catch DI DALAM `withTenant`
@@ -7055,7 +7055,7 @@ description: "cwd Bash PERSISTEN antar panggilan — satu `cd` ke awcms-mini mem
 metadata: 
   node_type: memory
   type: feedback
-  modified: 2026-07-25T10:15:14.840Z
+  modified: 2026-10-07T23:01:46.736Z
 ---
 
 Working directory tool Bash **bertahan antar panggilan**. Saat membandingkan
@@ -7074,6 +7074,15 @@ absolut** (`ls /home/data/dev_react/awcms-mini/docs/adr/`) atau bungkus dengan
 subshell `(cd /path && ...)` sehingga cwd tidak bocor. Jangan pernah `cd` telanjang
 saat sedang membandingkan repo. Verifikasi dengan `pwd` sebelum menarik kesimpulan
 apa pun tentang "repo ini punya X".
+
+**Varian 2026-10-08 — `Agent isolation: "worktree"` ikut cwd itu.** Satu `cd
+/home/data/dev_bun/awcms-one` untuk mengecek ADR hilir, lalu dua subagent
+`isolation: "worktree"` di-spawn: keduanya mendapat worktree dari **awcms-one**,
+bukan awcms, lalu direktorinya lenyap di tengah kerja. Hasilnya nol commit dan
+satu putaran agen terbuang. Obatnya: untuk kerja paralel di awcms, buat worktree
+sendiri (`git -C /home/data/dev_bun/awcms worktree add -b <branch>
+/home/data/dev_bun/awcms-wt-<issue> origin/main`, lalu `bun install`), dan beri
+path absolutnya ke agen **tanpa** `isolation`.
 
 Temuan yang benar setelah diulang dengan path absolut tercatat di repo
 (`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`, PR #235): lima modul
