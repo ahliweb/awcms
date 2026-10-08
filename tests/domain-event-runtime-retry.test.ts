@@ -79,3 +79,42 @@ describe("evaluateDomainEventDeliveryRetry", () => {
     expect(result.classification).toBe("unknown");
   });
 });
+
+import { sanitizeErrorForLog } from "../src/lib/logging/error-sanitizer";
+import { toPersistableErrorMessage } from "../src/modules/domain-event-runtime/domain/persisted-error";
+
+describe("persisted delivery error message (ADR-0134, L4)", () => {
+  test("sanitizeErrorForLog alone leaves an absolute path in a module-resolution message", () => {
+    const detail = sanitizeErrorForLog(
+      new Error(
+        "Cannot find module '/app/dist/server/chunks/x.mjs' from '/app/dist'"
+      )
+    );
+    expect(detail.message).toContain("/app/dist/server/chunks/x.mjs");
+  });
+
+  test("a module-resolution failure is persisted without filesystem paths", () => {
+    const message = toPersistableErrorMessage(
+      sanitizeErrorForLog(
+        new Error(
+          "Cannot find module '/app/dist/server/chunks/x.mjs' from '/app/dist'"
+        )
+      ).message
+    );
+    expect(message).not.toContain("/app");
+    expect(message).toContain("Cannot find module");
+    expect(message).toContain("<path>");
+  });
+
+  test("windows and file:// paths are scrubbed too, other messages are untouched", () => {
+    expect(
+      toPersistableErrorMessage("Module not found: C:\\srv\\app\\dist\\x.mjs")
+    ).not.toContain("srv");
+    expect(
+      toPersistableErrorMessage("Cannot find module file:///app/dist/x.mjs")
+    ).not.toContain("/app");
+    expect(toPersistableErrorMessage("upstream returned /v1/items 500")).toBe(
+      "upstream returned /v1/items 500"
+    );
+  });
+});

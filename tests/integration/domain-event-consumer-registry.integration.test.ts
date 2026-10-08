@@ -127,7 +127,7 @@ suite("descriptor-declared domain-event consumers (ADR-0134)", () => {
     // effect markers still committed.
     await getAdminSql()`
       UPDATE awcms_domain_event_deliveries
-      SET status = 'pending', next_attempt_at = now()
+      SET status = 'pending', next_attempt_at = now() - interval '1 second'
       WHERE tenant_id = ${TENANT}
     `;
     const second = await dispatchDomainEventsForTenant(getRuntimeSql(), TENANT);

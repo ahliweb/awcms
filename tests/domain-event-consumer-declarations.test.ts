@@ -212,13 +212,17 @@ describe("buildDomainEventConsumerRegistry", () => {
     expect(reverse.map((c) => c.name)).toEqual(forward.map((c) => c.name));
   });
 
-  test("a module with status disabled contributes no running consumer, but is still validated", () => {
+  test("a module with status disabled STILL contributes its consumers (ADR-0134 §4)", () => {
     const disabled = mod("off", {
       status: "disabled",
       domainEventConsumers: [consumer("off.projector")]
     });
-    expect(buildDomainEventConsumerRegistry([publisher, disabled])).toEqual([]);
+    expect(
+      buildDomainEventConsumerRegistry([publisher, disabled]).map((c) => c.name)
+    ).toEqual(["off.projector"]);
+  });
 
+  test("a disabled module cannot hide an invalid declaration", () => {
     const broken = mod("off", {
       status: "disabled",
       domainEventConsumers: [
@@ -286,6 +290,27 @@ describe("domain-events:consumers:check helpers", () => {
     ];
     expect(findEffectGuardBypasses(files)).toEqual([
       "src/modules/x/application/bad.ts"
+    ]);
+  });
+
+  test("findEffectGuardBypasses flags the ledger table name and the consumer-effect import path", () => {
+    const files = [
+      {
+        path: "src/modules/x/a.ts",
+        text: "await tx`INSERT INTO awcms_domain_event_consumer_effects (a) VALUES (1)`;"
+      },
+      {
+        path: "src/modules/x/b.ts",
+        text: 'import { z } from "../../domain-event-runtime/application/consumer-effect";'
+      },
+      {
+        path: "src/modules/x/c.ts",
+        text: "// awcms_domain_event_consumer_effects and application/consumer-effect are only named here\nexport const ok = 1;"
+      }
+    ];
+    expect(findEffectGuardBypasses(files)).toEqual([
+      "src/modules/x/a.ts",
+      "src/modules/x/b.ts"
     ]);
   });
 

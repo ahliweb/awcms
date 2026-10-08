@@ -106,9 +106,9 @@ domainEventConsumers: [
   table) declares `idempotency: "self_managed"` with a non-empty
   `idempotencyRationale`. Emitted-once is not handled-once: say why a redelivery
   cannot duplicate the effect.
-- Consumers of a module with `status: "disabled"` do not run. A tenant's
-  per-tenant module toggle is NOT consulted (ADR-0134 §4): fan-out is decided
-  at publish time and delivery rows must stay deliverable.
+- Every declared consumer runs, whatever its module's `status` and whatever a
+  tenant's module toggle says (ADR-0134 §4): excluding any would strand
+  pending deliveries and drop events.
 - Tests that need a deliberately failing consumer use
   `registerDomainEventConsumerForTests` / `resetDomainEventConsumersForTests`.
 

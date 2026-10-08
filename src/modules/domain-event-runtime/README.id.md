@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:14c8fe7f2d2deeacf8d9a95f1c0f571a87891c1a6a9ad4ab6b56b9009a8637e2 -->
+<!-- i18n-source-hash: sha256:88f5bc955845ec2afaf19aa29d856d40994efd19b6c6aacac93b75389ba23d7f -->
 
 # Domain Event Runtime
 
@@ -115,9 +115,9 @@ domainEventConsumers: [
   `idempotencyRationale` tak kosong. Diterbitkan sekali bukan berarti
   ditangani sekali: jelaskan mengapa pengiriman ulang tak dapat menggandakan
   efek.
-- Konsumen modul berstatus `"disabled"` tidak berjalan. Saklar modul per tenant
-  TIDAK dikonsultasikan (ADR-0134 §4): fan-out diputuskan saat publish dan baris
-  delivery harus tetap dapat dikirim.
+- Setiap konsumen yang dideklarasikan berjalan, apa pun `status` modulnya dan
+  apa pun saklar modul tenant (ADR-0134 §4): mengecualikan salah satunya akan
+  menelantarkan delivery tertunda dan menjatuhkan event.
 - Tes yang membutuhkan konsumen yang sengaja gagal memakai
   `registerDomainEventConsumerForTests` / `resetDomainEventConsumersForTests`.
 

@@ -1,5 +1,6 @@
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { sanitizeErrorForLog } from "../../../lib/logging/error-sanitizer";
+import { toPersistableErrorMessage } from "../domain/persisted-error";
 import { log } from "../../../lib/logging/logger";
 import {
   recordCounter,
@@ -174,6 +175,7 @@ async function recordDeliveryFailure(
       const newAttemptCount = Number(row.attempt_count) + 1;
       const maxAttempts = Number(row.max_attempts);
       const safeError = sanitizeErrorForLog(error);
+      safeError.message = toPersistableErrorMessage(safeError.message);
       const evaluation = evaluateDomainEventDeliveryRetry(
         error,
         newAttemptCount,

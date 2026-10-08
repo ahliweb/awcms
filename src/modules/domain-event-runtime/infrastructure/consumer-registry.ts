@@ -33,18 +33,16 @@ import type { ModuleDescriptor } from "../../_shared/module-contract";
  * receives nothing.
  *
  * ## Which modules' consumers run
- *
- * Consumers of a module whose `status` is `"disabled"` (disabled by code or
- * deployment) are excluded; every other status runs. Per-TENANT enable/disable
- * (`awcms_tenant_modules`) is deliberately NOT consulted, matching how the
- * module's jobs behave and what that toggle is documented to do ("writes only
- * `awcms_tenant_modules`, never unloads code"): the fan-out is decided once, at
- * publish time, and a delivery row must stay deliverable. A dispatcher that
- * skipped a tenant's rows because the owning module was toggled off would
- * strand them head-of-line behind an order key and then process them in a burst
- * on re-enable.
- *
- * ## Idempotency (emitted-once is not handled-once)
+
+Every declared consumer runs, regardless of its module's `status` and of any
+per-tenant enable/disable (`awcms_tenant_modules`) — identical to the
+static array this replaced, which never excluded anyone. Excluding a consumer
+by status would strand its pending deliveries, hide them from
+`listConsumerStates`, make replay fail with `UnknownReplayConsumerError`, and
+silently drop events published meanwhile. A "disabled module => no events"
+semantic would be lossy and needs its own decision (ADR-0134 §4).
+
+## Idempotency (emitted-once is not handled-once)
  *
  * A `runtime_effect_once` consumer (the default) has its `handle` wrapped in
  * `applyConsumerEffectOnce` HERE, keyed `(tenant, name, event.id)` — the same
@@ -94,7 +92,7 @@ function resolveConsumer(
   };
 }
 
-/** Pure given its input: validate, drop `disabled` modules' consumers, wrap. Sorted by consumer name. */
+/** Pure given its input: validate, wrap. Sorted by consumer name. Cheap enough to run on every call, so it is not cached. */
 export function buildDomainEventConsumerRegistry(
   modules: readonly ModuleDescriptor[]
 ): readonly DomainEventConsumerDefinition[] {
@@ -106,44 +104,23 @@ export function buildDomainEventConsumerRegistry(
     );
   }
 
-  return result.consumers
-    .filter((entry) => entry.ownerStatus !== "disabled")
-    .map(resolveConsumer);
+  return result.consumers.map(resolveConsumer);
 }
 
-let cache:
-  | {
-      modules: readonly ModuleDescriptor[];
-      length: number;
-      consumers: readonly DomainEventConsumerDefinition[];
-    }
-  | undefined;
 let testExtras: readonly DomainEventConsumerDefinition[] = [];
 
 /**
- * The live registry for the current composition. Memoised against the identity
- * AND length of `listModules()` (the stable array a downstream composition
- * appends to at startup), so a module added after the first call is picked up
- * rather than silently ignored.
+ * The live registry for the current composition, built on every call: it is a
+ * sort and a validation over a few dozen entries, and it must see a module
+ * appended to `listModules()` after startup. (Caching keyed on array identity
+ * and length would miss an in-place edit of a descriptor; if a cache is ever
+ * measured to be worth it, fingerprint module keys, statuses, events and
+ * consumer object identities instead.)
  */
 export function listDomainEventConsumers(): readonly DomainEventConsumerDefinition[] {
-  const modules = listModules();
+  const consumers = buildDomainEventConsumerRegistry(listModules());
 
-  if (
-    cache === undefined ||
-    cache.modules !== modules ||
-    cache.length !== modules.length
-  ) {
-    cache = {
-      modules,
-      length: modules.length,
-      consumers: buildDomainEventConsumerRegistry(modules)
-    };
-  }
-
-  return testExtras.length === 0
-    ? cache.consumers
-    : [...cache.consumers, ...testExtras];
+  return testExtras.length === 0 ? consumers : [...consumers, ...testExtras];
 }
 
 /** Test-only. Appends a (typically deliberately-failing) consumer for the rest of the process — call `resetDomainEventConsumersForTests()` to drop it. Never called from production code. */
@@ -153,10 +130,9 @@ export function registerDomainEventConsumerForTests(
   testExtras = [...testExtras, consumer];
 }
 
-/** Test-only. Drops every consumer added by `registerDomainEventConsumerForTests` and forgets the memoised build. */
+/** Test-only. Drops every consumer added by `registerDomainEventConsumerForTests`. */
 export function resetDomainEventConsumersForTests(): void {
   testExtras = [];
-  cache = undefined;
 }
 
 export function getConsumersForEventType(
