@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0132-hr-payroll-module-family-admission.md)
 
-<!-- i18n-source-hash: sha256:02f1dbd52bf33831f79f1a0132db5cf66f2039262ce0d613cfb0f3b1f0b52cc6 -->
+<!-- i18n-source-hash: sha256:5f52b7b0c76d820d461f58a6e951879ee73a55d843f5e1ae7af6829afff9d8f6 -->
 
 # ADR-0132 — Penerimaan keluarga modul `hr_payroll` (workforce, komisi, payroll), bertahap
 
@@ -105,6 +105,7 @@ Data HR adalah data pribadi tentang orang yang tidak memilih perangkat lunak ten
 - **Rollback** hanya maju seperti setiap migrasi di sini: berhenti memanggil modul, pertahankan tabelnya (inert), nonaktifkan per tenant. Menjatuhkannya adalah keputusan kelas-restore. Setelah restore apa pun jalankan rekonsiliasi kehadiran dan (fase 3) payroll bersama-sama.
 - **Celah sisa yang dinyatakan sekarang:** tidak ada step-up atau rate limit pada reveal rekening pembayaran sampai fase 3 memutuskannya secara bersyarat (`requireStepUp` tanpa syarat adalah jebakan ADR-0058 §E); tidak ada atribut ABAC garis-atasan (alasan ownership-grant mencakupnya); pengaman merge dan pertanyaan `btree_gist` adalah keputusan saat implementasi; manajemen cuti bukan tujuan.
 - **Hilir:** baris DoR untuk A3 di `ahliweb/awcms-one` dapat berpindah ke "penerimaan diterima"; O1, O4, O5, O6, dan O7 tetap **terbuka di sana** (di bawah), dan tak satu pun ditutup oleh ADR ini.
+- **Pembaruan (2026-10-10): jawaban pemilik dicatat.** Pemilik awcms-one menjawab O4, O6, dan O7; pack mencatatnya ([`hr-payroll.md`](../awcms/hr-payroll.id.md) §7.3, §4.3, §7.5, §16). O4: profil Indonesia dimiliki masing-masing konsumen (upstream hanya mengirim mesin dan berlaku-efektif). O6: kehadiran boleh memakai geolokasi saja, mati secara default per tenant, dan tetap butuh ADR sendiri. O7: pemisahan tugas dapat dikonfigurasi per tenant (default hitung ≠ setujui ≠ bayar; boleh dilonggarkan ke siapkan ≠ setujui, diaudit). **O7 bertentangan dengan pernyataan ADR ini bahwa aturan database per-instance tidak bisa dikonfigurasi hilang** (§7 dan "Role-level SoD only" di bawah). ADR ini tidak dibalik oleh sebuah catatan: gerbang fase 3 kini memuat ADR amandemen yang merekonsiliasi keduanya, dan sampai diterima, teks yang lebih ketat di atas yang berlaku.
 
 ## Keputusan pemilik yang terbuka (tidak diputuskan di sini)
 

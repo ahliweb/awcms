@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:01f021467f3ead4859f58702c1f8749df8dabc49ea412d13c29fb09739be243a -->
+<!-- i18n-source-hash: sha256:2f44d7874c23d02d84d0099a7bf58ac02457b29625aa56f0764f38281b0f1e0f -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -19,18 +19,18 @@
 
 ## 1. Keluarga, fase, dan gerbangnya
 
-| Fase | Kunci modul     | Cakupan                                                                               | Bergantung pada                         | Dapat dibangun ketika                                                                                                                                      |
-| ---- | --------------- | ------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | `hr_workforce`  | konteks kepegawaian, kehadiran, koreksi, shift, **port ketersediaan staf**            | `tenant_admin`, `profile_identity`      | sekarang (DoD biasa, tinjauan keamanan port baru dan jalur kepemilikan)                                                                                    |
-| 2    | `hr_commission` | aturan komisi dan ledger akrual                                                       | `hr_workforce`                          | fase 1 mendarat                                                                                                                                            |
-| 3    | `hr_payroll`    | kompensasi, rekening pembayaran, periode, run, baris, slip gaji, versi aturan payroll | `hr_workforce`, `hr_commission` (lunak) | **O4 dan O7 terjawab; enkripsi-saat-diam rekening pembayaran diputuskan; tinjauan keamanan; tinjauan hukum atas profil yurisdiksi apa pun; gladi restore** |
+| Fase | Kunci modul     | Cakupan                                                                               | Bergantung pada                         | Dapat dibangun ketika                                                                                                                                                                                                                                                                      |
+| ---- | --------------- | ------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | `hr_workforce`  | konteks kepegawaian, kehadiran, koreksi, shift, **port ketersediaan staf**            | `tenant_admin`, `profile_identity`      | sekarang (DoD biasa, tinjauan keamanan port baru dan jalur kepemilikan)                                                                                                                                                                                                                    |
+| 2    | `hr_commission` | aturan komisi dan ledger akrual                                                       | `hr_workforce`                          | fase 1 mendarat                                                                                                                                                                                                                                                                            |
+| 3    | `hr_payroll`    | kompensasi, rekening pembayaran, periode, run, baris, slip gaji, versi aturan payroll | `hr_workforce`, `hr_commission` (lunak) | **O4 dan O7 terjawab (2026-10-10); amandemen ADR-0132 untuk mode SoD yang dapat dikonfigurasi (§7.5); enkripsi-saat-diam rekening pembayaran diputuskan; tinjauan keamanan; tinjauan hukum atas kontrol versi-aturan mesin (profil yurisdiksi apa pun milik konsumen, O4); gladi restore** |
 
 **Di luar cakupan untuk seluruh keluarga:** buku besar dan entri akuntansi apa
 pun; dokumen fiskal (SPT tahunan, bukti potong); pembuatan berkas bank dan
 panggilan penyedia pembayaran apa pun (isu berikutnya, lewat outbox, tidak
 pernah di dalam transaksi database); saldo dan akrual cuti; pinjaman dan
 tunjangan; pelacakan pelamar; penilaian kinerja; **komisi afiliasi** (penerima
-berbeda, bukan pegawai); bukti kehadiran geolokasi/foto/perangkat (§4.3).
+berbeda, bukan pegawai); bukti kehadiran foto, biometrik, dan sidik-jari perangkat (tidak pernah, O6); bukti geolokasi-saja tidak termasuk fase yang diterima dan butuh ADR sendiri (§4.3).
 
 ## 2. PRD-lite
 
@@ -50,14 +50,14 @@ supervisor (menyetujui koreksi dan melihat lingkup kantornya); penjadwal
 (menugaskan shift; tidak dapat membaca gaji); administrator HR (kepegawaian,
 tautan akun); modul Booking (membaca ketersediaan lewat port); auditor.
 
-| Kriteria penerimaan (dari isu)                                                                                | Di mana                                                                  |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Kepegawaian menyimpan referensi `profile_identity` dan tidak pernah menyalin nama, kontak, identitas nasional | §3, `profile_id` FK komposit; tak ada kolom pribadi di tabel HR mana pun |
-| Unit organisasi, atasan, status berlaku-efektif                                                               | §4.1 `employment_terms`                                                  |
-| Event kehadiran, koreksi, persetujuan lewat `workflow_approval`                                               | §4.2                                                                     |
-| Bukti geolokasi/foto/perangkat adalah fitur terpisah, mati secara default                                     | §4.3 (tidak ada di fase 1; O6)                                           |
-| Template dan penugasan shift dengan deteksi konflik                                                           | §4.4                                                                     |
-| Port ketersediaan staf untuk Booking                                                                          | §5                                                                       |
+| Kriteria penerimaan (dari isu)                                                                                                | Di mana                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Kepegawaian menyimpan referensi `profile_identity` dan tidak pernah menyalin nama, kontak, identitas nasional                 | §3, `profile_id` FK komposit; tak ada kolom pribadi di tabel HR mana pun |
+| Unit organisasi, atasan, status berlaku-efektif                                                                               | §4.1 `employment_terms`                                                  |
+| Event kehadiran, koreksi, persetujuan lewat `workflow_approval`                                                               | §4.2                                                                     |
+| Bukti geolokasi-saja adalah fitur terpisah, mati secara default per tenant; bukti foto, biometrik, dan perangkat tidak pernah | §4.3 (tidak ada di fase 1; O6 terjawab)                                  |
+| Template dan penugasan shift dengan deteksi konflik                                                                           | §4.4                                                                     |
+| Port ketersediaan staf untuk Booking                                                                                          | §5                                                                       |
 
 ### 2.2 Fase 2 — Komisi
 
@@ -97,13 +97,13 @@ gaji yang hanya terlihat oleh pemiliknya.
 memfinalisasi), pencair (mencatat pembayaran), pegawai (slip sendiri), auditor,
 pembaca keuangan (total, lewat pembacaan terotorisasi).
 
-| Kriteria penerimaan                                                | Di mana            |
-| ------------------------------------------------------------------ | ------------------ |
-| Periode, run, baris, slip gaji                                     | §7                 |
-| SoD: hitung vs setujui vs bayar                                    | §7.5, O7 (terbuka) |
-| Kunci periode; run finalized immutable; koreksi dengan reversal    | §7.2, §7.4         |
-| Aturan berlaku-efektif, netral yurisdiksi                          | §7.3               |
-| Profil Indonesia adalah data aturan, kepemilikan keputusan pemilik | §7.3, O4 (terbuka) |
+| Kriteria penerimaan                                                  | Di mana             |
+| -------------------------------------------------------------------- | ------------------- |
+| Periode, run, baris, slip gaji                                       | §7                  |
+| SoD: hitung vs setujui vs bayar, dapat dikonfigurasi per tenant      | §7.5, O7 (terjawab) |
+| Kunci periode; run finalized immutable; koreksi dengan reversal      | §7.2, §7.4          |
+| Aturan berlaku-efektif, netral yurisdiksi                            | §7.3                |
+| Profil Indonesia adalah data aturan, dimiliki masing-masing konsumen | §7.3, O4 (terjawab) |
 
 ## 3. Referensi identitas dan apa yang tidak pernah disimpan keluarga ini
 
@@ -177,14 +177,21 @@ event.
 
 ### 4.3 Bukti geolokasi, foto, dan perangkat
 
-**Bukan bagian penerimaan ini dan tidak ada di fase 1 secara konstruksi:** tanpa
-tabel, kolom, pengaturan, atau route (keputusan pemilik **O6** terbuka). Bila O6
-pernah dijawab ya, batas minimumnya adalah ADR sendiri, penilaian dampak
-perlindungan data, tabel terpisah dengan izin dan catatan persetujuan sendiri,
-mati secara default per tenant, bukti **kasar** lebih disukai daripada presisi
-(misalnya "di dalam geofence kantor: ya/tidak" alih-alih koordinat), foto disimpan
-lewat `media_library` di tier rahasia, dan retensi singkat yang ditegakkan
-`data_lifecycle`.
+**Keputusan pemilik O6 (dijawab 2026-10-10, DoR awcms-one):** kehadiran
+**boleh** memakai **geolokasi saja** — **tanpa foto, tanpa biometrik, dan tanpa
+sidik-jari perangkat, selamanya** — dan **mati secara default per tenant**.
+Jawaban ini mengizinkan fitur bukti geolokasi dirancang; ia **tidak**
+menerimanya. Bagian ini karenanya tetap **bukan bagian penerimaan ini dan tidak
+ada di fase 1 secara konstruksi**: tanpa tabel, kolom, pengaturan, atau route.
+Membangunnya butuh ADR sendiri, ditulis setelah penilaian dampak perlindungan
+data, dan ADR itu berangkat dari batas ini: tabel terpisah dengan izin dan
+catatan persetujuan sendiri; sakelar per tenant yang **mati secara default**;
+bukti **kasar** lebih disukai daripada presisi (misalnya "di dalam geofence
+kantor: ya/tidak" alih-alih koordinat) kecuali ADR membenarkan lain; dan retensi
+singkat yang ditegakkan `data_lifecycle`. Opsi foto (disimpan lewat
+`media_library`) serta opsi biometrik atau sidik-jari perangkat yang masih
+dibiarkan terbuka oleh draf awal bagian ini **dihapus**: pemilik
+mengecualikannya.
 
 ### 4.4 Shift dan deteksi konflik
 
@@ -430,11 +437,17 @@ PMK 168/2023, PP 49/2025, dan BPJS. Paket ini tidak menegaskan isinya: parameter
 iuran dan batas upah, pengali lembur, tunjangan hari raya) harus **ditranskripsi dari
 teks regulasi oleh peninjau bernama, dengan kutipan dan tanggal berlaku disimpan pada
 versinya**, dan regulasi berikutnya datang sebagai **versi baru**, tidak pernah
-suntingan. Apakah profil ini dikirim upstream sebagai data seed atau dimiliki
-masing-masing konsumen adalah **keputusan pemilik O4** (§16). Sampai dijawab, mesin
-dikirim kosong dari isi Indonesia. Usulan, bukan keputusan: mesin upstream tanpa isi
-regulasi; profil Indonesia **paket data terpisah** berversi dengan provenans, dimiliki
-konsumen sampai peninjau hukum ditunjuk.
+suntingan. **Keputusan pemilik O4 (dijawab 2026-10-10, DoR awcms-one): profil
+payroll Indonesia dimiliki masing-masing konsumen.** Upstream hanya mengirim
+**mesin dan berlaku-efektif** serta **tanpa tarif, batas, kategori, maupun teks
+regulasi Indonesia** — bukan sebagai data seed dan bukan sebagai paket data repo
+ini. Konsumen yang membutuhkan profil itu menyusunnya sebagai versi aturan di
+repositorinya sendiri di bawah aturan provenans di atas (peninjau bernama,
+kutipan, dan tanggal berlaku pada setiap versi) dan menanggung tinjauan
+hukumnya sendiri. Cakupan profil itu (hanya PPh 21, atau juga BPJS, lembur, dan
+tunjangan hari raya) karenanya keputusan konsumen, bukan upstream; regulasi yang
+disebut di atas menggambarkan apa yang akan ditranskripsi profil konsumen dan
+bukan komitmen paket ini.
 
 ### 7.4 Finalisasi, imutabilitas, dan koreksi
 
@@ -447,31 +460,62 @@ run finalized dapat direproduksi dari snapshot-nya (versi aturan, versi kompensa
 input kehadiran dan komisi), dan pembacaan rekonsiliasi (§14) membuktikan baris
 berjumlah total run dan slip berjumlah baris.
 
-### 7.5 Pemisahan tugas (keputusan pemilik O7 — usulan)
+### 7.5 Pemisahan tugas (keputusan pemilik O7 — terjawab: dapat dikonfigurasi per tenant)
 
 Tugas adalah izin terpisah: **C** hitung (`runs.calculate`), **A** setujui
 (`runs.approve`), **F** finalisasi (`runs.finalize`), **P** bayar (`runs.pay`),
 **R** reverse (`runs.reverse`), ditambah **K** tulis kompensasi
 (`compensation.update`) dan **U** terbitkan aturan (`rules.publish`).
 
-| Pasangan dipegang satu orang             | Default usulan | Mekanisme tingkat peran                                                                                               |
-| ---------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| C × A (hitung dan setujui)               | dilarang       | aturan SoD, `global_within_tenant`, `critical`, tanpa pengecualian                                                    |
-| A × P (setujui dan bayar)                | dilarang       | aturan SoD, `critical`, tanpa pengecualian                                                                            |
-| C × P (hitung dan bayar)                 | dilarang       | aturan SoD, `high`; pengecualian boleh, berbatas waktu (≤ 30 hari), disetujui orang ketiga yang memegang izin berbeda |
-| C × F, F × P                             | dilarang       | aturan SoD, `high`                                                                                                    |
-| A × F (setujui dan finalisasi)           | **boleh**      | tingkat tugas sama, F membekukan apa yang disetujui A                                                                 |
-| K × A (ubah gaji dan setujui run)        | dilarang       | aturan SoD, `critical`, tanpa pengecualian                                                                            |
-| U × A (terbitkan aturan dan setujui run) | dilarang       | aturan SoD, `high`                                                                                                    |
-| R × P (reverse dan bayar)                | dilarang       | aturan SoD, `high`                                                                                                    |
+| Pasangan dipegang satu orang             | Mode ketat (default) | Mekanisme tingkat peran                                                                                               |
+| ---------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| C × A (hitung dan setujui)               | dilarang             | aturan SoD, `global_within_tenant`, `critical`, tanpa pengecualian                                                    |
+| A × P (setujui dan bayar)                | dilarang             | aturan SoD, `critical`, tanpa pengecualian                                                                            |
+| C × P (hitung dan bayar)                 | dilarang             | aturan SoD, `high`; pengecualian boleh, berbatas waktu (≤ 30 hari), disetujui orang ketiga yang memegang izin berbeda |
+| C × F, F × P                             | dilarang             | aturan SoD, `high`                                                                                                    |
+| A × F (setujui dan finalisasi)           | **boleh**            | tingkat tugas sama, F membekukan apa yang disetujui A                                                                 |
+| K × A (ubah gaji dan setujui run)        | dilarang             | aturan SoD, `critical`, tanpa pengecualian                                                                            |
+| U × A (terbitkan aturan dan setujui run) | dilarang             | aturan SoD, `high`                                                                                                    |
+| R × P (reverse dan bayar)                | dilarang             | aturan SoD, `high`                                                                                                    |
 
-Apa pun yang dikonfigurasi tenant, **aturan per-instance ada di database** dan tidak
-bisa dikonfigurasi hilang: `approved_by <> calculated_by`; `finalized_by <>
-calculated_by`; `paid_by` berbeda dari `calculated_by`, `approved_by`, dan
-`finalized_by`. Guard persetujuan-diri yang sudah ada juga berlaku pada `approve`.
-Konsekuensi bagi tenant sangat kecil dinyatakan, tidak disembunyikan: menjalankan
-payroll reguler membutuhkan **setidaknya tiga orang berbeda**, atau pengecualian C ×
-P berbatas waktu di atas. Apakah itu default yang tepat adalah O7.
+**Keputusan pemilik O7 (dijawab 2026-10-10, DoR awcms-one): pemisahan tugas
+dapat dikonfigurasi per tenant.** Tabel di atas adalah **mode ketat dan default**:
+hitung ≠ setujui ≠ bayar. Tenant boleh **melonggarkannya** menjadi **siapkan ≠
+setujui**, dan **pelonggaran itu diaudit**.
+
+- **Mode.** Pengaturan per tenant `payroll_sod_mode` ∈ {`strict` (default),
+  `relaxed`} pada pengaturan modul. Pada mode `relaxed` tugas _penyiap_ — C, F,
+  dan P — boleh dipegang satu orang, tetapi **penyetuju (A) tetap harus orang
+  berbeda dari yang menghitung dan dari yang membayar**; setiap pasangan lain di
+  tabel (C × A, A × P, K × A, U × A, R × P) tidak berubah. Tenant sangat kecil
+  karenanya butuh **dua** orang berbeda, bukan tiga. Mode ketat mempertahankan
+  konsekuensi yang dinyatakan sebelumnya: setidaknya **tiga orang berbeda**, atau
+  pengecualian C × P berbatas waktu di atas.
+- **Pelonggaran adalah tindakan berisiko tinggi yang diaudit.** Mengubah mode
+  membutuhkan izin tersendiri (dinamai di PR fase 3; diusulkan tidak dipegang
+  tingkat tugas C maupun A), `Idempotency-Key`, kode alasan, step-up bersyarat
+  ADR-0058 §E, dan menulis baris audit berseverity `critical` yang memuat aktor
+  serta mode sebelum/sesudah tanpa teks bebas. Setiap run mencatat mode yang
+  berlaku saat dihitung (`sod_mode`, immutable setelah `calculate`), dan setiap
+  baris audit run mode-longgar memuat `sodMode: "relaxed"`, sehingga mengubah
+  pengaturan kemudian tidak pernah mengubah run yang sedang berjalan.
+- **Aturan per-instance di database.** `approved_by <> calculated_by` dan
+  `approved_by <> paid_by` berlaku **di kedua mode, tanpa syarat**.
+  `finalized_by <> calculated_by` dan `paid_by` berbeda dari `calculated_by` dan
+  `finalized_by` berlaku bila `sod_mode = 'strict'` pada run; inilah yang dilepas
+  pelonggaran. Guard persetujuan-diri yang sudah ada juga berlaku pada `approve`
+  di kedua mode.
+- **Konflik dengan ADR yang sudah diterima, dinyatakan, bukan disembunyikan.**
+  ADR-0132 menyatakan aturan per-instance "tidak bisa dikonfigurasi hilang".
+  Jawaban ini mengonfigurasi hilang sebagian darinya berdasarkan keputusan
+  pemilik. Paket ini **tidak** diam-diam membalik ADR-0132: gerbang fase 3 (§1)
+  kini memuat ADR amandemen atas ADR-0132 yang merekonsiliasi keduanya, dan
+  sampai diterima, teks ADR yang lebih ketat yang berlaku.
+- **Sub-pertanyaan terbuka O7a (tidak diputuskan di sini).** Pasangan mana
+  persisnya yang dilonggarkan "siapkan ≠ setujui". Paket ini membaca _siapkan_
+  sebagai C, F, dan P dan menjaga A berbeda dari C dan dari P. Bila pemilik
+  bermaksud himpunan lain (misalnya penyetuju boleh membayar), konfirmasikan
+  sebelum migrasi fase 3.
 
 Finalize, pay, dan reverse sebaiknya mensyaratkan step-up principal bila terdaftar,
 diterapkan **secara bersyarat** sebagaimana diresepkan ADR-0058 §E (step-up tanpa
@@ -675,23 +719,24 @@ Setiap pernyataan adalah tes integrasi yang harus ditulis isu implementasi terha
 database nyata sebagai role runtime, lulus dua arah (aktor yang disebut dapat;
 setiap aktor lain tidak). "Mekanisme" adalah apa yang sudah ada di repositori ini.
 
-| #   | Pernyataan                                                                                                                                                                                                                                                                                                                                                        | Mekanisme                                                                                                                                                                                                                                        |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S1  | Pegawai dengan peran dasar saja membaca event kehadiran **miliknya sendiri** dan **tidak dapat** membaca milik pegawai lain (keduanya `403`).                                                                                                                                                                                                                     | `ownershipGrant` untuk `attendance.read`, dihitung server dari `employment.tenant_user_id === ctx.tenantUserId`; hanya melebarkan, ABAC/tenant/SoD tetap menolak; decision log mencatat `ownership_grant:<reason>`.                              |
-| S2  | Pegawai membaca **slip gaji miliknya yang sudah dirilis** dan tidak dapat membacanya sebelum rilis, maupun milik orang lain.                                                                                                                                                                                                                                      | `ownershipGrant` pada `payslips.read` ditambah predikat status (`released_at IS NOT NULL`) pada kueri handler; tanpa atribut baru.                                                                                                               |
-| S3  | Pegawai clock-in untuk dirinya sendiri; pegawai yang sama tidak dapat mencatat kehadiran rekan kerja.                                                                                                                                                                                                                                                             | `ownershipGrant` pada `attendance.create` terbatas pada kepegawaian sendiri; mencatat untuk orang lain membutuhkan kunci `attendance.create` yang tidak dimodifikasi.                                                                            |
-| S4  | Supervisor yang ditugaskan ke kantor O membaca kehadiran dan koreksi untuk kepegawaian **di O dan turunannya**, bukan kantor lain.                                                                                                                                                                                                                                | business scope `office` dengan `requiredScopeType=office`, `requiredScopeId=<kantor kepegawaian>`, `requiredScopeRelations=["exact","descendant"]` dan adapter hierarki yang ada (ADR-0060); scope tak ter-resolve menolak aksi berisiko tinggi. |
-| S5  | Supervisor dapat menyetujui koreksi bawahan tetapi **tidak dapat menyetujui** koreksinya sendiri.                                                                                                                                                                                                                                                                 | keputusan `workflow_approval` + guard persetujuan-diri yang ada (`approve` dengan `requestedByTenantUserId`).                                                                                                                                    |
-| S6  | Manajer melihat bawahan langsungnya meski tidak memegang scope pada kantor bawahan.                                                                                                                                                                                                                                                                               | alasan `ownershipGrant` yang dihitung server (`manager_of`) dari rantai atasan tersimpan; **bukan** atribut ABAC (`resource.managerTenantUserId` membutuhkan penerimaan sendiri dan tidak diasumsikan).                                          |
-| S7  | Penjadwal pemegang `shifts.*` membuat dan menerbitkan penugasan dan **menerima `403` pada setiap route `compensation.*`, `payout_accounts.*`, `runs.*`, dan `payslips.*`.**                                                                                                                                                                                       | RBAC default-deny: izin terpisah, tak satu pun diberikan peran penjadwal; tabel terpisah.                                                                                                                                                        |
-| S8  | Adapter ketersediaan, dijalankan dengan `tx` ber-scope tenant, mengembalikan interval kerja dan **tidak ada yang lain**; SQL-nya tidak pernah menyebut tabel kompensasi atau payroll.                                                                                                                                                                             | DTO allow-list `StaffAvailabilityPort`; tes teks-sumber atas adapter (gaya sama dengan `access:chokepoint:check`).                                                                                                                               |
-| S9  | Pengguna yang menghitung sebuah run **tidak dapat menyetujuinya**; penyetuju **tidak dapat membayarnya**; pengguna yang memegang kedua izin ditolak saat penugasan peran dan, bila jalur pengecualian dipakai, saat waktu-aksi.                                                                                                                                   | CHECK DB pada baris run (`approved_by <> calculated_by`, `paid_by` berbeda) **dan** `sodRules` atas kunci izin (`global_within_tenant`, `critical`); guard persetujuan-diri pada `approve`.                                                      |
-| S10 | Pengguna yang mengubah kompensasi pegawai tidak dapat menyetujui run payroll yang memuatnya; kompensasi yang diusulkan A tidak dapat disetujui A.                                                                                                                                                                                                                 | aturan SoD K × A; CHECK `approved_by <> proposed_by`; guard persetujuan-diri.                                                                                                                                                                    |
-| S11 | Marketer CRM (memegang `crm.*` dan `profile_identity.profile_management.read`) dan resepsionis (memegang booking dan baca-shift saja) menerima `403` pada setiap route `compensation`, `payout_accounts`, `runs`, `payslips`, dan `commission.accruals` dan **tidak melihat gaji atau identitas nasional** lewat daftar profil (hanya nama; identifier ter-mask). | RBAC default-deny: tanpa izin payroll `hr_*`; masking `profile_identity` tidak berubah; tabel payroll tak terjangkau tanpa kuncinya sendiri.                                                                                                     |
-| S12 | Mengungkap rekening pembayaran tanpa `payout_accounts.reveal` adalah `403`; dengannya respons `no-store`, baris audit pada `warning` mencatat bahwa itu terjadi dan oleh siapa tetapi tidak pernah nilainya.                                                                                                                                                      | aksi berisiko tinggi `reveal`; pola reveal procurement.                                                                                                                                                                                          |
-| S13 | Dengan modul dinonaktifkan untuk tenant T, setiap route modul itu ditolak untuk T dan tabel T tidak tersentuh; payroll T2 tidak terpengaruh.                                                                                                                                                                                                                      | enable/disable modul (`awcms_tenant_modules`); FORCE RLS.                                                                                                                                                                                        |
-| S14 | Kredensial mesin (token API) tidak dapat menjalankan `ownershipGrant`.                                                                                                                                                                                                                                                                                            | ADR-0063 §A mengecualikan kredensial mesin.                                                                                                                                                                                                      |
-| S15 | Permintaan yang menyuplai `employment_id`, `profile_id`, atau `office_id` tenant lain ditolak, meski id itu ada.                                                                                                                                                                                                                                                  | FK komposit `(tenant_id, id)` ditambah FORCE RLS; handler membaca ulang di dalam `withTenant`.                                                                                                                                                   |
+| #   | Pernyataan                                                                                                                                                                                                                                                                                                                                                                                                                                | Mekanisme                                                                                                                                                                                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | Pegawai dengan peran dasar saja membaca event kehadiran **miliknya sendiri** dan **tidak dapat** membaca milik pegawai lain (keduanya `403`).                                                                                                                                                                                                                                                                                             | `ownershipGrant` untuk `attendance.read`, dihitung server dari `employment.tenant_user_id === ctx.tenantUserId`; hanya melebarkan, ABAC/tenant/SoD tetap menolak; decision log mencatat `ownership_grant:<reason>`.                              |
+| S2  | Pegawai membaca **slip gaji miliknya yang sudah dirilis** dan tidak dapat membacanya sebelum rilis, maupun milik orang lain.                                                                                                                                                                                                                                                                                                              | `ownershipGrant` pada `payslips.read` ditambah predikat status (`released_at IS NOT NULL`) pada kueri handler; tanpa atribut baru.                                                                                                               |
+| S3  | Pegawai clock-in untuk dirinya sendiri; pegawai yang sama tidak dapat mencatat kehadiran rekan kerja.                                                                                                                                                                                                                                                                                                                                     | `ownershipGrant` pada `attendance.create` terbatas pada kepegawaian sendiri; mencatat untuk orang lain membutuhkan kunci `attendance.create` yang tidak dimodifikasi.                                                                            |
+| S4  | Supervisor yang ditugaskan ke kantor O membaca kehadiran dan koreksi untuk kepegawaian **di O dan turunannya**, bukan kantor lain.                                                                                                                                                                                                                                                                                                        | business scope `office` dengan `requiredScopeType=office`, `requiredScopeId=<kantor kepegawaian>`, `requiredScopeRelations=["exact","descendant"]` dan adapter hierarki yang ada (ADR-0060); scope tak ter-resolve menolak aksi berisiko tinggi. |
+| S5  | Supervisor dapat menyetujui koreksi bawahan tetapi **tidak dapat menyetujui** koreksinya sendiri.                                                                                                                                                                                                                                                                                                                                         | keputusan `workflow_approval` + guard persetujuan-diri yang ada (`approve` dengan `requestedByTenantUserId`).                                                                                                                                    |
+| S6  | Manajer melihat bawahan langsungnya meski tidak memegang scope pada kantor bawahan.                                                                                                                                                                                                                                                                                                                                                       | alasan `ownershipGrant` yang dihitung server (`manager_of`) dari rantai atasan tersimpan; **bukan** atribut ABAC (`resource.managerTenantUserId` membutuhkan penerimaan sendiri dan tidak diasumsikan).                                          |
+| S7  | Penjadwal pemegang `shifts.*` membuat dan menerbitkan penugasan dan **menerima `403` pada setiap route `compensation.*`, `payout_accounts.*`, `runs.*`, dan `payslips.*`.**                                                                                                                                                                                                                                                               | RBAC default-deny: izin terpisah, tak satu pun diberikan peran penjadwal; tabel terpisah.                                                                                                                                                        |
+| S8  | Adapter ketersediaan, dijalankan dengan `tx` ber-scope tenant, mengembalikan interval kerja dan **tidak ada yang lain**; SQL-nya tidak pernah menyebut tabel kompensasi atau payroll.                                                                                                                                                                                                                                                     | DTO allow-list `StaffAvailabilityPort`; tes teks-sumber atas adapter (gaya sama dengan `access:chokepoint:check`).                                                                                                                               |
+| S9  | Pengguna yang menghitung sebuah run **tidak dapat menyetujuinya**; penyetuju **tidak dapat membayarnya**; pengguna yang memegang kedua izin ditolak saat penugasan peran dan, bila jalur pengecualian dipakai, saat waktu-aksi.                                                                                                                                                                                                           | CHECK DB pada baris run (`approved_by <> calculated_by`, `paid_by` berbeda) **dan** `sodRules` atas kunci izin (`global_within_tenant`, `critical`); guard persetujuan-diri pada `approve`.                                                      |
+| S9a | Pada mode SoD `relaxed` satu orang boleh menghitung dan membayar run, tetapi penyetuju tetap **tidak dapat** menjadi penghitung atau pembayarnya (keduanya ditolak database); mengalihkan tenant ke `relaxed` tanpa izin konfigurasi adalah `403`, dan dengan izin itu menulis baris audit `critical` berisi mode sebelum/sesudah tanpa teks bebas; run yang dihitung pada mode `strict` tetap ketat bila tenant melonggarkan sesudahnya. | CHECK DB bersyarat pada `sod_mode` run yang immutable; izin pengaturan; baris audit.                                                                                                                                                             |
+| S10 | Pengguna yang mengubah kompensasi pegawai tidak dapat menyetujui run payroll yang memuatnya; kompensasi yang diusulkan A tidak dapat disetujui A.                                                                                                                                                                                                                                                                                         | aturan SoD K × A; CHECK `approved_by <> proposed_by`; guard persetujuan-diri.                                                                                                                                                                    |
+| S11 | Marketer CRM (memegang `crm.*` dan `profile_identity.profile_management.read`) dan resepsionis (memegang booking dan baca-shift saja) menerima `403` pada setiap route `compensation`, `payout_accounts`, `runs`, `payslips`, dan `commission.accruals` dan **tidak melihat gaji atau identitas nasional** lewat daftar profil (hanya nama; identifier ter-mask).                                                                         | RBAC default-deny: tanpa izin payroll `hr_*`; masking `profile_identity` tidak berubah; tabel payroll tak terjangkau tanpa kuncinya sendiri.                                                                                                     |
+| S12 | Mengungkap rekening pembayaran tanpa `payout_accounts.reveal` adalah `403`; dengannya respons `no-store`, baris audit pada `warning` mencatat bahwa itu terjadi dan oleh siapa tetapi tidak pernah nilainya.                                                                                                                                                                                                                              | aksi berisiko tinggi `reveal`; pola reveal procurement.                                                                                                                                                                                          |
+| S13 | Dengan modul dinonaktifkan untuk tenant T, setiap route modul itu ditolak untuk T dan tabel T tidak tersentuh; payroll T2 tidak terpengaruh.                                                                                                                                                                                                                                                                                              | enable/disable modul (`awcms_tenant_modules`); FORCE RLS.                                                                                                                                                                                        |
+| S14 | Kredensial mesin (token API) tidak dapat menjalankan `ownershipGrant`.                                                                                                                                                                                                                                                                                                                                                                    | ADR-0063 §A mengecualikan kredensial mesin.                                                                                                                                                                                                      |
+| S15 | Permintaan yang menyuplai `employment_id`, `profile_id`, atau `office_id` tenant lain ditolak, meski id itu ada.                                                                                                                                                                                                                                                                                                                          | FK komposit `(tenant_id, id)` ditambah FORCE RLS; handler membaca ulang di dalam `withTenant`.                                                                                                                                                   |
 
 **Apa yang membutuhkan penerimaan baru, dinyatakan terus terang.** Pembatasan
 per-bawahan lewat _kebijakan_ ABAC (alih-alih alasan kepemilikan yang dihitung
@@ -704,24 +749,24 @@ skenario di atas dapat dipenuhi tanpa itu.
 
 ### 13.1 Ancaman
 
-| Ancaman                                                                   | Kontrol                                                                                                                     |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Baca atau tulis lintas tenant data kepegawaian atau gaji                  | FORCE RLS + FK komposit + `defineTenantRoute`; RLS diuji sebagai `awcms_app`                                                |
-| Penjadwal atau marketer membaca gaji (horizontal dalam-tenant)            | izin dan tabel terpisah; S7, S11; port ketersediaan adalah allow-list                                                       |
-| Penyalahgunaan layanan mandiri: pegawai membaca slip/kehadiran orang lain | `ownershipGrant` dihitung dari tautan tersimpan, tidak pernah dari permintaan; kredensial mesin dikecualikan                |
-| Pembajakan tautan akun: menautkan login saya ke kepegawaian rekan         | `assign` berisiko tinggi, diaudit, dapat di-SoD; mengubahnya adalah event                                                   |
-| Penipuan payroll: orang dalam mengubah gaji, menjalankan, dan membayar    | usul/setujui kompensasi; CHECK DB per-instance C/A/P; run finalized immutable; kunci periode; koreksi hanya dengan reversal |
-| Pembayaran ganda (klik ganda, retry, replay)                              | pemeriksaan status + `Idempotency-Key` + slip unik per periode/pegawai + pembayaran unik per run                            |
-| Pemalsuan kehadiran (mundur-tanggal, clock-in hantu)                      | event append-only, `recorded_at` server, supersesi oleh koreksi disetujui, batas selisih; tanpa penyuntingan                |
-| Pencurian waktu oleh rekan yang clock-in untuk orang lain                 | mencatat untuk orang lain membutuhkan kunci tak-dimodifikasi, diaudit lewat `source` dan aktor; bukti adalah O6             |
-| Inflasi ledger oleh sumber komisi palsu                                   | identitas sumber unik; kewajiban adapter memverifikasi (terdokumentasi); `approve` oleh pihak ketiga                        |
-| Kebocoran lewat event, log, ekspor, notifikasi                            | hanya id/hitungan; uang tidak ada di log; `redactedColumns`; pemberitahuan slip tanpa jumlah                                |
-| Rekening pembayaran polos saat diam                                       | **gerbang fase 3**: enkripsi-saat-diam dan hashing berkunci diputuskan sebelum tabel ada                                    |
-| Oracle keberadaan (apakah X pegawai? apakah X dijadwalkan?)               | `unknown` tak dapat dibedakan; acknowledgement seragam untuk penambahan identifier                                          |
-| Penyalahgunaan aturan (tarif pajak diubah agar under-withhold)            | versi aturan immutable setelah terbit, diterbitkan maker/checker, kutipan wajib, audit pada `warning`                       |
-| Perubahan gaji mundur-tanggal setelah periode ditutup                     | kunci periode; `backdate` berisiko tinggi; tanpa unlock                                                                     |
-| Panggilan penyedia di dalam transaksi                                     | tidak ada; integrasi bank/penyedia apa pun lewat outbox di isu berikutnya                                                   |
-| Replay kehadiran offline memalsukan waktu                                 | keunikan `client_event_key`; flag `late` untuk ditinjau; koreksi membutuhkan persetujuan                                    |
+| Ancaman                                                                   | Kontrol                                                                                                                                                 |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baca atau tulis lintas tenant data kepegawaian atau gaji                  | FORCE RLS + FK komposit + `defineTenantRoute`; RLS diuji sebagai `awcms_app`                                                                            |
+| Penjadwal atau marketer membaca gaji (horizontal dalam-tenant)            | izin dan tabel terpisah; S7, S11; port ketersediaan adalah allow-list                                                                                   |
+| Penyalahgunaan layanan mandiri: pegawai membaca slip/kehadiran orang lain | `ownershipGrant` dihitung dari tautan tersimpan, tidak pernah dari permintaan; kredensial mesin dikecualikan                                            |
+| Pembajakan tautan akun: menautkan login saya ke kepegawaian rekan         | `assign` berisiko tinggi, diaudit, dapat di-SoD; mengubahnya adalah event                                                                               |
+| Penipuan payroll: orang dalam mengubah gaji, menjalankan, dan membayar    | usul/setujui kompensasi; CHECK DB per-instance C/A/P; run finalized immutable; kunci periode; koreksi hanya dengan reversal                             |
+| Pembayaran ganda (klik ganda, retry, replay)                              | pemeriksaan status + `Idempotency-Key` + slip unik per periode/pegawai + pembayaran unik per run                                                        |
+| Pemalsuan kehadiran (mundur-tanggal, clock-in hantu)                      | event append-only, `recorded_at` server, supersesi oleh koreksi disetujui, batas selisih; tanpa penyuntingan                                            |
+| Pencurian waktu oleh rekan yang clock-in untuk orang lain                 | mencatat untuk orang lain membutuhkan kunci tak-dimodifikasi, diaudit lewat `source` dan aktor; bukti geolokasi, bila pernah dibangun, ada di §4.3 (O6) |
+| Inflasi ledger oleh sumber komisi palsu                                   | identitas sumber unik; kewajiban adapter memverifikasi (terdokumentasi); `approve` oleh pihak ketiga                                                    |
+| Kebocoran lewat event, log, ekspor, notifikasi                            | hanya id/hitungan; uang tidak ada di log; `redactedColumns`; pemberitahuan slip tanpa jumlah                                                            |
+| Rekening pembayaran polos saat diam                                       | **gerbang fase 3**: enkripsi-saat-diam dan hashing berkunci diputuskan sebelum tabel ada                                                                |
+| Oracle keberadaan (apakah X pegawai? apakah X dijadwalkan?)               | `unknown` tak dapat dibedakan; acknowledgement seragam untuk penambahan identifier                                                                      |
+| Penyalahgunaan aturan (tarif pajak diubah agar under-withhold)            | versi aturan immutable setelah terbit, diterbitkan maker/checker, kutipan wajib, audit pada `warning`                                                   |
+| Perubahan gaji mundur-tanggal setelah periode ditutup                     | kunci periode; `backdate` berisiko tinggi; tanpa unlock                                                                                                 |
+| Panggilan penyedia di dalam transaksi                                     | tidak ada; integrasi bank/penyedia apa pun lewat outbox di isu berikutnya                                                                               |
+| Replay kehadiran offline memalsukan waktu                                 | keunikan `client_event_key`; flag `late` untuk ditinjau; koreksi membutuhkan persetujuan                                                                |
 
 ### 13.2 Privasi (UU PDP 27/2022)
 
@@ -732,8 +777,7 @@ deployment.
   (lewat `profile_identity`), kepegawaian, kehadiran, dan jadwal. Keuangan: gaji,
   rekening bank, pemotongan. **Data pribadi bersifat spesifik** menurut undang-undang
   harus diperlakukan lebih hati-hati: kesehatan (alasan cuti sakit: karena itu tidak
-  ada alasan time-off yang disimpan), dan berpotensi data biometrik atau geolokasi
-  (karena itu bukti dikecualikan, O6).
+  ada alasan time-off yang disimpan), dan berpotensi data biometrik atau geolokasi (karena itu bukti foto, biometrik, dan perangkat dikecualikan selamanya, dan bukti geolokasi mati secara default serta butuh ADR sendiri, O6).
 - **Dasar hukum dan tujuan.** Pemrosesan untuk hubungan kerja dan kewajiban hukum
   pemberi kerja (ketenagakerjaan, pajak, jaminan sosial). Setiap kolom punya tujuan
   yang dinyatakan lewat rasional `subjectData`-nya; data di luar tujuan itu (foto,
@@ -795,16 +839,25 @@ harus kembali dari titik waktu yang sama.
   adalah isu berikutnya.
 - `awcms_profile_entity_links` boleh ditulis tambahan untuk penemuan ("modul mana
   menautkan profil ini"); opsional, tindak lanjut.
+- Jawaban pemilik yang dicatat 2026-10-10 dan butuh pekerjaan sendiri sebelum
+  implementasi apa pun: ADR yang mengamandemen ADR-0132 untuk mode SoD yang
+  dapat dikonfigurasi (§7.5) beserta sub-pertanyaan terbukanya O7a; ADR untuk
+  bukti kehadiran geolokasi, setelah penilaian dampak perlindungan data (§4.3).
+- Kanal pengiriman (O10, O11): pemilik menerima adapter Telegram (opsional, mati
+  secara default) dan menginginkan orkestrasi notifikasi. Keduanya tidak mengubah
+  paket ini: notifikasi slip gaji tidak memuat nominal (ADR-0132) dan, menurut
+  ADR-0133 §7, tidak boleh pernah sampai ke Telegram atau kanal fallback mana
+  pun. Telegram dan orkestrasi masing-masing tetap butuh ADR/isu sendiri (lihat
+  catatan pembaruan ADR-0133).
 
-## 16. Pertanyaan terbuka (keputusan pemilik — terbuka, belum diputuskan)
+## 16. Pertanyaan terbuka (keputusan pemilik — yang terjawab ditandai, sisanya terbuka)
 
-Dilacak di hilir pada `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. Tak
-satu pun ditutup oleh ADR-0132.
+Dilacak di hilir pada `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. Pemilik menjawab O1–O12 pada 2026-10-10; baris di bawah mencatat jawaban yang mengikat paket ini (O4, O6, O7). O1 dan O5 dijawab pada hari yang sama tetapi tidak mengubah apa pun di sini dan belum direkonsiliasi ke paket ini. ADR-0132 sendiri tidak menutup satu pun.
 
-| Id  | Pertanyaan                                                                                                                             | Mengapa penting di sini                                                                             | Memblokir                 | Sikap paket ini                                                                                         |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- |
-| O1  | Cakupan dan urutan epik platform seperti dilacak di hilir (apakah fase terbit bersama, berurutan, atau per konsumen)                   | Ketiga fase dirancang terbit satu per satu; konsumen mungkin menginginkan payroll bersama workforce | urutan isu implementasi   | Dirancang terbit berurutan; payroll tak pernah terbit sebelum gerbangnya                                |
-| O4  | Profil payroll Indonesia: hanya PPh 21, atau juga BPJS, lembur, tunjangan hari raya; dan apakah data seed upstream atau milik konsumen | Isi regulasi harus berlaku-efektif dan terlacak; cakupan menentukan ukuran dan tinjauan hukum       | gerbang fase 3            | Mesin netral yurisdiksi dan kosong dari isi Indonesia; profil sebagai paket berversi terpisah (§7.3)    |
-| O5  | Peran hukum operator platform per deployment: pengendali, prosesor, atau keduanya                                                      | Menentukan kepemilikan permintaan subjek, ketentuan pemrosesan, notifikasi pelanggaran              | analisis privasi, retensi | Dirancang untuk isolasi per tenant apa pun hasilnya (§13.2)                                             |
-| O6  | Apakah kehadiran boleh pernah memakai bukti geolokasi, foto, atau perangkat                                                            | Data pribadi spesifik/biometrik; menentukan apakah ada di desain mana pun                           | ADR bukti apa pun         | Dikecualikan dari fase 1 secara konstruksi; batas minimum dinyatakan (§4.3)                             |
-| O7  | Pemisahan tugas payroll: siapa boleh menghitung, menyetujui, memfinalisasi, membayar                                                   | Matriks otorisasi dan skenario ABAC minimum; dampak tenant kecil                                    | gerbang fase 3            | Matriks default diusulkan (§7.5); CHECK DB per-instance apa pun hasilnya; minimum tiga orang dinyatakan |
+| Id  | Pertanyaan                                                                                                                             | Mengapa penting di sini                                                                             | Memblokir                                               | Sikap paket ini                                                                                                                                                         |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | Cakupan dan urutan epik platform seperti dilacak di hilir (apakah fase terbit bersama, berurutan, atau per konsumen)                   | Ketiga fase dirancang terbit satu per satu; konsumen mungkin menginginkan payroll bersama workforce | urutan isu implementasi                                 | Dirancang terbit berurutan; payroll tak pernah terbit sebelum gerbangnya                                                                                                |
+| O4  | Profil payroll Indonesia: hanya PPh 21, atau juga BPJS, lembur, tunjangan hari raya; dan apakah data seed upstream atau milik konsumen | Isi regulasi harus berlaku-efektif dan terlacak; cakupan menentukan ukuran dan tinjauan hukum       | tidak ada (sebelumnya: gerbang fase 3)                  | **Terjawab 2026-10-10:** dimiliki masing-masing konsumen; upstream hanya mengirim mesin dan berlaku-efektif, tanpa tarif Indonesia (§7.3)                               |
+| O5  | Peran hukum operator platform per deployment: pengendali, prosesor, atau keduanya                                                      | Menentukan kepemilikan permintaan subjek, ketentuan pemrosesan, notifikasi pelanggaran              | analisis privasi, retensi                               | Dirancang untuk isolasi per tenant apa pun hasilnya (§13.2)                                                                                                             |
+| O6  | Apakah kehadiran boleh pernah memakai bukti geolokasi, foto, atau perangkat                                                            | Data pribadi spesifik/biometrik; menentukan apakah ada di desain mana pun                           | ADR bukti geolokasi apa pun                             | **Terjawab 2026-10-10:** geolokasi saja (tanpa foto, biometrik, atau sidik-jari perangkat), mati secara default per tenant; tetap butuh ADR sendiri setelah DPIA (§4.3) |
+| O7  | Pemisahan tugas payroll: siapa boleh menghitung, menyetujui, memfinalisasi, membayar                                                   | Matriks otorisasi dan skenario ABAC minimum; dampak tenant kecil                                    | gerbang fase 3 (amandemen ADR-0132, sub-pertanyaan O7a) | **Terjawab 2026-10-10:** dapat dikonfigurasi per tenant; default hitung != setujui != bayar; boleh dilonggarkan ke siapkan != setujui, pelonggaran diaudit (§7.5)       |

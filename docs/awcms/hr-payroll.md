@@ -17,18 +17,18 @@
 
 ## 1. The family, its phases and its gates
 
-| Phase | Module key      | Scope                                                                                | Depends on                             | Buildable when                                                                                                                                  |
-| ----- | --------------- | ------------------------------------------------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | `hr_workforce`  | employment context, attendance, corrections, shifts, **staff-availability port**     | `tenant_admin`, `profile_identity`     | now (usual DoD, security review of the new port and the ownership paths)                                                                        |
-| 2     | `hr_commission` | commission rules and accrual ledger                                                  | `hr_workforce`                         | phase 1 landed                                                                                                                                  |
-| 3     | `hr_payroll`    | compensation, payout accounts, periods, runs, lines, payslips, payroll rule versions | `hr_workforce`, `hr_commission` (soft) | **O4 and O7 answered; payout-account at-rest encryption decided; security review; legal review of any jurisdiction profile; restore rehearsal** |
+| Phase | Module key      | Scope                                                                                | Depends on                             | Buildable when                                                                                                                                                                                                                                                                             |
+| ----- | --------------- | ------------------------------------------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1     | `hr_workforce`  | employment context, attendance, corrections, shifts, **staff-availability port**     | `tenant_admin`, `profile_identity`     | now (usual DoD, security review of the new port and the ownership paths)                                                                                                                                                                                                                   |
+| 2     | `hr_commission` | commission rules and accrual ledger                                                  | `hr_workforce`                         | phase 1 landed                                                                                                                                                                                                                                                                             |
+| 3     | `hr_payroll`    | compensation, payout accounts, periods, runs, lines, payslips, payroll rule versions | `hr_workforce`, `hr_commission` (soft) | **O4 and O7 answered (2026-10-10); an amendment to ADR-0132 for the configurable SoD mode (§7.5); payout-account at-rest encryption decided; security review; legal review of the engine's rule-version controls (any jurisdiction profile is the consumer's own, O4); restore rehearsal** |
 
 **Out of scope for the whole family:** general ledger and any accounting entry;
 fiscal documents (annual return, withholding certificates); bank-file generation
 and any payment-provider call (a later issue, through the outbox, never inside a
 database transaction); leave balances and accrual; loans and benefits; applicant
 tracking; performance review; **affiliate commission** (a different beneficiary,
-not an employee); geolocation/photo/device attendance evidence (§4.3).
+not an employee); photo, biometric and device-fingerprint attendance evidence (never, O6); geolocation-only evidence is not part of the admitted phases and needs its own ADR (§4.3).
 
 ## 2. PRD-lite
 
@@ -48,14 +48,14 @@ with conflict detection, and a narrow port exposing working intervals.
 cannot read salary); an HR administrator (employments, accounts links); a Booking
 module (reads availability through the port); an auditor.
 
-| Acceptance criterion (from the issue)                                                        | Where                                                             |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Employment stores a `profile_identity` reference and never copies name, contact, national id | §3, `profile_id` composite FK; no personal column in any HR table |
-| Org unit, manager, effective-dated status                                                    | §4.1 `employment_terms`                                           |
-| Attendance events, corrections, approval via `workflow_approval`                             | §4.2                                                              |
-| Geolocation/photo/device evidence is a separate feature, off by default                      | §4.3 (absent in phase 1; O6)                                      |
-| Shift templates and assignments with conflict detection                                      | §4.4                                                              |
-| A staff-availability port for Booking                                                        | §5                                                                |
+| Acceptance criterion (from the issue)                                                                                  | Where                                                             |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Employment stores a `profile_identity` reference and never copies name, contact, national id                           | §3, `profile_id` composite FK; no personal column in any HR table |
+| Org unit, manager, effective-dated status                                                                              | §4.1 `employment_terms`                                           |
+| Attendance events, corrections, approval via `workflow_approval`                                                       | §4.2                                                              |
+| Geolocation-only evidence is a separate feature, off by default per tenant; photo, biometric and device evidence never | §4.3 (absent in phase 1; O6 answered)                             |
+| Shift templates and assignments with conflict detection                                                                | §4.4                                                              |
+| A staff-availability port for Booking                                                                                  | §5                                                                |
 
 ### 2.2 Phase 2 — Commission
 
@@ -92,13 +92,13 @@ owner.
 finalizes), a disburser (records payment), an employee (own payslip), an auditor,
 a finance reader (totals, through an authorized read).
 
-| Acceptance criterion                                          | Where           |
-| ------------------------------------------------------------- | --------------- |
-| Period, run, line, payslip                                    | §7              |
-| SoD: calculate vs approve vs pay                              | §7.5, O7 (open) |
-| Period lock; immutable finalized runs; correction by reversal | §7.2, §7.4      |
-| Effective-dated, jurisdiction-neutral rules                   | §7.3            |
-| Indonesian profile is rule data, ownership an owner decision  | §7.3, O4 (open) |
+| Acceptance criterion                                          | Where               |
+| ------------------------------------------------------------- | ------------------- |
+| Period, run, line, payslip                                    | §7                  |
+| SoD: calculate vs approve vs pay, configurable per tenant     | §7.5, O7 (answered) |
+| Period lock; immutable finalized runs; correction by reversal | §7.2, §7.4          |
+| Effective-dated, jurisdiction-neutral rules                   | §7.3                |
+| Indonesian profile is rule data, owned by each consumer       | §7.3, O4 (answered) |
 
 ## 3. Identity reference and what the family never stores
 
@@ -167,14 +167,20 @@ reason text is personal data and never rides in an audit row or event.
 
 ### 4.3 Geolocation, photo and device evidence
 
-**Not part of this admission and absent from phase 1 by construction:** no table,
-no column, no setting, no route (owner decision **O6** open). If O6 is ever
-answered yes, the minimum bar is its own ADR, a data-protection impact
-assessment, a separate table with its own permission and consent record, off by
-default per tenant, **coarse** evidence preferred over precise (for example "within
-the office geofence: yes/no" rather than coordinates), photos stored through
-`media_library` under a confidential tier, and a short retention enforced by
-`data_lifecycle`.
+**Owner decision O6 (answered 2026-10-10, awcms-one DoR):** attendance **may**
+use **geolocation only** — **no photo, no biometric and no device fingerprint,
+ever** — and it is **off by default per tenant**. The answer permits a
+geolocation evidence feature to be designed; it does **not** admit one. This
+section therefore stays **not part of this admission and absent from phase 1 by
+construction**: no table, no column, no setting, no route. Building it needs its
+own ADR, written after a data-protection impact assessment, and that ADR starts
+from this bar: a separate table with its own permission and consent record; a
+per-tenant switch that is **off by default**; **coarse** evidence preferred over
+precise (for example "within the office geofence: yes/no" rather than
+coordinates) unless the ADR justifies otherwise; and a short retention enforced
+by `data_lifecycle`. The photo option (stored through `media_library`) and any
+biometric or device-fingerprint option that earlier drafts of this section kept
+open are **removed**: the owner excluded them.
 
 ### 4.4 Shifts and conflict detection
 
@@ -411,12 +417,18 @@ parameters (monthly withholding brackets by status category with a periodic
 true-up, contribution rates and salary ceilings, overtime multipliers, holiday
 allowance) must be **transcribed from the regulation text by a named reviewer,
 with the citation and effective date stored on the version**, and a later
-regulation arrives as a **new version**, never an edit. Whether this profile ships
-upstream as seed data or is owned by each consumer is **owner decision O4**
-(§12). Until it is answered, the engine ships empty of Indonesian content. A
-proposal, not a decision: the engine upstream with no regulatory content; the
-Indonesian profile a **separate, versioned data package** with provenance,
-consumer-owned until a legal reviewer is named.
+regulation arrives as a **new version**, never an edit. **Owner decision O4
+(answered 2026-10-10, awcms-one DoR): the Indonesian payroll profile is owned by
+each consumer.** Upstream ships **only the engine and effective-dating** and
+**no Indonesian rates, ceilings, categories or regulation text** — not as seed
+data and not as a data package of this repository. A consumer that needs the
+profile authors it as rule versions in its own repository under the provenance
+rule above (a named reviewer, the citation and the effective date on each
+version) and carries its own legal review. The scope of that profile (PPh 21
+only, or BPJS, overtime and holiday allowance as well) is therefore the
+consumer's decision, not an upstream one; the regulations named above describe
+what a consumer's profile would transcribe and are not a commitment of this
+pack.
 
 ### 7.4 Finalization, immutability and correction
 
@@ -430,31 +442,60 @@ versions, compensation versions, attendance and commission inputs), and a
 reconciliation read (§14) proves the lines sum to the run totals and the payslips
 sum to the lines.
 
-### 7.5 Segregation of duties (owner decision O7 — proposal)
+### 7.5 Segregation of duties (owner decision O7 — answered: configurable per tenant)
 
 Duties are separate permissions: **C**alculate (`runs.calculate`), **A**pprove
 (`runs.approve`), **F**inalize (`runs.finalize`), **P**ay (`runs.pay`), **R**everse
 (`runs.reverse`), plus **K** compensation write (`compensation.update`) and
 **U** rule publish (`rules.publish`).
 
-| Pair held by one person                 | Proposed default | Role-level mechanism                                                                                                   |
-| --------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| C × A (calculate and approve)           | forbidden        | SoD rule, `global_within_tenant`, `critical`, no exception                                                             |
-| A × P (approve and pay)                 | forbidden        | SoD rule, `critical`, no exception                                                                                     |
-| C × P (calculate and pay)               | forbidden        | SoD rule, `high`; exception allowed, time-bound (≤ 30 days), approved by a third person holding a different permission |
-| C × F, F × P                            | forbidden        | SoD rules, `high`                                                                                                      |
-| A × F (approve and finalize)            | **allowed**      | same duty tier, F freezes what A approved                                                                              |
-| K × A (change salary and approve a run) | forbidden        | SoD rule, `critical`, no exception                                                                                     |
-| U × A (publish rules and approve a run) | forbidden        | SoD rule, `high`                                                                                                       |
-| R × P (reverse and pay)                 | forbidden        | SoD rule, `high`                                                                                                       |
+| Pair held by one person                 | Strict mode (default) | Role-level mechanism                                                                                                   |
+| --------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| C × A (calculate and approve)           | forbidden             | SoD rule, `global_within_tenant`, `critical`, no exception                                                             |
+| A × P (approve and pay)                 | forbidden             | SoD rule, `critical`, no exception                                                                                     |
+| C × P (calculate and pay)               | forbidden             | SoD rule, `high`; exception allowed, time-bound (≤ 30 days), approved by a third person holding a different permission |
+| C × F, F × P                            | forbidden             | SoD rules, `high`                                                                                                      |
+| A × F (approve and finalize)            | **allowed**           | same duty tier, F freezes what A approved                                                                              |
+| K × A (change salary and approve a run) | forbidden             | SoD rule, `critical`, no exception                                                                                     |
+| U × A (publish rules and approve a run) | forbidden             | SoD rule, `high`                                                                                                       |
+| R × P (reverse and pay)                 | forbidden             | SoD rule, `high`                                                                                                       |
 
-Whatever the tenant configures, the **per-instance rule is in the database** and
-cannot be configured away: `approved_by <> calculated_by`; `finalized_by <>
-calculated_by`; `paid_by` differs from `calculated_by`, `approved_by` and
-`finalized_by`. The existing self-approval guard also applies to `approve`. The
-consequence for a very small tenant is stated, not hidden: running a regular
-payroll needs **at least three distinct people**, or the time-bound C × P exception
-above. Whether that is the right default is O7.
+**Owner decision O7 (answered 2026-10-10, awcms-one DoR): separation of duties
+is configurable per tenant.** The table above is the **strict mode and the
+default**: calculate ≠ approve ≠ pay. A tenant may **relax** it to **prepare ≠
+approve**, and **the relaxation is audited**.
+
+- **Modes.** A per-tenant setting `payroll_sod_mode` ∈ {`strict` (default),
+  `relaxed`} in the module's settings. In `relaxed` mode the _preparer_ duties —
+  C, F and P — may be held by one person, but the **approver (A) must remain a
+  different person from whoever calculated and from whoever pays**; every other
+  pair in the table (C × A, A × P, K × A, U × A, R × P) is unchanged. A very small
+  tenant therefore needs **two** distinct people instead of three. Strict mode
+  keeps the consequence stated before: at least **three distinct people**, or the
+  time-bound C × P exception above.
+- **The relaxation is a high-risk, audited act.** Changing the mode needs its own
+  permission (named in the phase 3 PR; proposed to be held by neither the C nor
+  the A duty tier), an `Idempotency-Key`, a reason code, the conditional step-up
+  of ADR-0058 §E, and writes an audit row at `critical` severity carrying the
+  actor and the before/after mode and no free text. Each run records the mode in
+  force when it was calculated (`sod_mode`, immutable after `calculate`), and every
+  audit row of a relaxed-mode run carries `sodMode: "relaxed"`, so changing the
+  setting later never alters a run already in flight.
+- **Per-instance rules in the database.** `approved_by <> calculated_by` and
+  `approved_by <> paid_by` hold **in both modes, unconditionally**.
+  `finalized_by <> calculated_by` and `paid_by` differing from `calculated_by` and
+  `finalized_by` hold when the run's `sod_mode = 'strict'`; they are what
+  relaxation lifts. The existing self-approval guard also applies to `approve` in
+  both modes.
+- **Conflict with an accepted ADR, stated rather than hidden.** ADR-0132 says the
+  per-instance rule "cannot be configured away". This answer configures part of it
+  away by owner decision. This pack does **not** silently reverse ADR-0132: the
+  phase 3 gate (§1) includes an amendment ADR to ADR-0132 reconciling the two, and
+  until it is accepted the stricter ADR text governs.
+- **Open sub-question O7a (not decided here).** Exactly which pairs "prepare ≠
+  approve" relaxes. This pack reads _prepare_ as C, F and P and keeps A distinct
+  from C and from P. If the owner meant a different set (for example allowing the
+  approver to pay), confirm before the phase 3 migration.
 
 Finalize, pay and reverse should require the principal's step-up where enrolled,
 applied **conditionally** as ADR-0058 §E prescribes (an unconditional step-up is
@@ -657,23 +698,24 @@ Each statement is an integration test the implementing issue must write against 
 real database as the runtime role, passing both ways (the named actor can; every
 other actor cannot). "Mechanism" is what already exists in this repository.
 
-| #   | Statement                                                                                                                                                                                                                                                                                                                                             | Mechanism                                                                                                                                                                                                                                  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S1  | An employee with only the base role reads **their own** attendance events and **cannot** read another employee's (both `403`).                                                                                                                                                                                                                        | `ownershipGrant` for `attendance.read`, computed server-side from `employment.tenant_user_id === ctx.tenantUserId`; widens only, ABAC/tenant/SoD still deny; the decision log records `ownership_grant:<reason>`.                          |
-| S2  | An employee reads **their own released payslip** and cannot read it before release, nor anyone else's.                                                                                                                                                                                                                                                | `ownershipGrant` on `payslips.read` plus a state predicate (`released_at IS NOT NULL`) in the handler's query; no new attribute.                                                                                                           |
-| S3  | An employee clocks in for themself; the same employee cannot record attendance for a colleague.                                                                                                                                                                                                                                                       | `ownershipGrant` on `attendance.create` limited to the own employment; recording for others needs the unmodified `attendance.create` key.                                                                                                  |
-| S4  | A supervisor assigned to office O reads attendance and corrections for employments **in O and its descendants**, not for another office.                                                                                                                                                                                                              | `office` business scope with `requiredScopeType=office`, `requiredScopeId=<employment office>`, `requiredScopeRelations=["exact","descendant"]` and the existing hierarchy adapter (ADR-0060); unresolved scope denies a high-risk action. |
-| S5  | A supervisor can approve a correction for a report but **cannot approve their own** correction.                                                                                                                                                                                                                                                       | `workflow_approval` decision + the existing self-approval guard (`approve` with `requestedByTenantUserId`).                                                                                                                                |
-| S6  | A manager sees their direct reports even where they hold no scope on the reports' office.                                                                                                                                                                                                                                                             | a server-computed `ownershipGrant` reason (`manager_of`) from the persisted manager chain; **not** an ABAC attribute (`resource.managerTenantUserId` would need its own admission and is not assumed).                                     |
-| S7  | A scheduler holding `shifts.*` creates and publishes assignments and **receives `403` on every `compensation.*`, `payout_accounts.*`, `runs.*` and `payslips.*` route.**                                                                                                                                                                              | RBAC default-deny: separate permissions, none granted by the scheduler role; separate tables.                                                                                                                                              |
-| S8  | The availability adapter, run with a tenant-scoped `tx`, returns working intervals and **nothing else**; its SQL never names a compensation or payroll table.                                                                                                                                                                                         | `StaffAvailabilityPort` allow-list DTO; a source-text test over the adapter (the same style as `access:chokepoint:check`).                                                                                                                 |
-| S9  | The user who calculated a run **cannot approve it**; the approver **cannot pay** it; a user holding both permissions is refused at role assignment and, if the exception path was used, at action time.                                                                                                                                               | DB CHECKs on the run row (`approved_by <> calculated_by`, `paid_by` distinct) **and** `sodRules` over the permission keys (`global_within_tenant`, `critical`); self-approval guard on `approve`.                                          |
-| S10 | A user who changes an employee's compensation cannot approve a payroll run that includes them; compensation proposed by A cannot be approved by A.                                                                                                                                                                                                    | SoD rule K × A; `approved_by <> proposed_by` CHECK; self-approval guard.                                                                                                                                                                   |
-| S11 | A CRM marketer (holding `crm.*` and `profile_identity.profile_management.read`) and a receptionist (holding booking and shift-read only) receive `403` on every `compensation`, `payout_accounts`, `runs`, `payslips` and `commission.accruals` route and see **no salary or national id** through the profile list (names only; identifiers masked). | RBAC default-deny: no `hr_*` payroll permission; `profile_identity` masking is unchanged; payroll tables are unreachable without their own keys.                                                                                           |
-| S12 | Revealing a payout account without `payout_accounts.reveal` is `403`; with it the response is `no-store`, an audit row at `warning` records that it happened and by whom but never the value.                                                                                                                                                         | `reveal` high-risk action; the procurement reveal pattern.                                                                                                                                                                                 |
-| S13 | With the module disabled for tenant T, every route of that module is denied for T and T's tables are untouched; T2's payroll is unaffected.                                                                                                                                                                                                           | module enable/disable (`awcms_tenant_modules`); FORCE RLS.                                                                                                                                                                                 |
-| S14 | A machine credential (API token) cannot exercise an `ownershipGrant`.                                                                                                                                                                                                                                                                                 | ADR-0063 §A excludes machine credentials.                                                                                                                                                                                                  |
-| S15 | A request supplying another tenant's `employment_id`, `profile_id` or `office_id` is rejected, even if the id exists.                                                                                                                                                                                                                                 | composite `(tenant_id, id)` FKs plus FORCE RLS; the handler re-reads inside `withTenant`.                                                                                                                                                  |
+| #   | Statement                                                                                                                                                                                                                                                                                                                                                                                                         | Mechanism                                                                                                                                                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | An employee with only the base role reads **their own** attendance events and **cannot** read another employee's (both `403`).                                                                                                                                                                                                                                                                                    | `ownershipGrant` for `attendance.read`, computed server-side from `employment.tenant_user_id === ctx.tenantUserId`; widens only, ABAC/tenant/SoD still deny; the decision log records `ownership_grant:<reason>`.                          |
+| S2  | An employee reads **their own released payslip** and cannot read it before release, nor anyone else's.                                                                                                                                                                                                                                                                                                            | `ownershipGrant` on `payslips.read` plus a state predicate (`released_at IS NOT NULL`) in the handler's query; no new attribute.                                                                                                           |
+| S3  | An employee clocks in for themself; the same employee cannot record attendance for a colleague.                                                                                                                                                                                                                                                                                                                   | `ownershipGrant` on `attendance.create` limited to the own employment; recording for others needs the unmodified `attendance.create` key.                                                                                                  |
+| S4  | A supervisor assigned to office O reads attendance and corrections for employments **in O and its descendants**, not for another office.                                                                                                                                                                                                                                                                          | `office` business scope with `requiredScopeType=office`, `requiredScopeId=<employment office>`, `requiredScopeRelations=["exact","descendant"]` and the existing hierarchy adapter (ADR-0060); unresolved scope denies a high-risk action. |
+| S5  | A supervisor can approve a correction for a report but **cannot approve their own** correction.                                                                                                                                                                                                                                                                                                                   | `workflow_approval` decision + the existing self-approval guard (`approve` with `requestedByTenantUserId`).                                                                                                                                |
+| S6  | A manager sees their direct reports even where they hold no scope on the reports' office.                                                                                                                                                                                                                                                                                                                         | a server-computed `ownershipGrant` reason (`manager_of`) from the persisted manager chain; **not** an ABAC attribute (`resource.managerTenantUserId` would need its own admission and is not assumed).                                     |
+| S7  | A scheduler holding `shifts.*` creates and publishes assignments and **receives `403` on every `compensation.*`, `payout_accounts.*`, `runs.*` and `payslips.*` route.**                                                                                                                                                                                                                                          | RBAC default-deny: separate permissions, none granted by the scheduler role; separate tables.                                                                                                                                              |
+| S8  | The availability adapter, run with a tenant-scoped `tx`, returns working intervals and **nothing else**; its SQL never names a compensation or payroll table.                                                                                                                                                                                                                                                     | `StaffAvailabilityPort` allow-list DTO; a source-text test over the adapter (the same style as `access:chokepoint:check`).                                                                                                                 |
+| S9  | The user who calculated a run **cannot approve it**; the approver **cannot pay** it; a user holding both permissions is refused at role assignment and, if the exception path was used, at action time.                                                                                                                                                                                                           | DB CHECKs on the run row (`approved_by <> calculated_by`, `paid_by` distinct) **and** `sodRules` over the permission keys (`global_within_tenant`, `critical`); self-approval guard on `approve`.                                          |
+| S9a | In `relaxed` SoD mode one person may calculate and pay a run, but the approver still **cannot** be the calculator or the payer (both refused by the database); switching a tenant to `relaxed` without the configure permission is `403`, and with it writes a `critical` audit row with the before/after mode and no free text; a run calculated in `strict` mode stays strict if the tenant relaxes afterwards. | DB CHECKs conditional on the run's immutable `sod_mode`; settings permission; audit row.                                                                                                                                                   |
+| S10 | A user who changes an employee's compensation cannot approve a payroll run that includes them; compensation proposed by A cannot be approved by A.                                                                                                                                                                                                                                                                | SoD rule K × A; `approved_by <> proposed_by` CHECK; self-approval guard.                                                                                                                                                                   |
+| S11 | A CRM marketer (holding `crm.*` and `profile_identity.profile_management.read`) and a receptionist (holding booking and shift-read only) receive `403` on every `compensation`, `payout_accounts`, `runs`, `payslips` and `commission.accruals` route and see **no salary or national id** through the profile list (names only; identifiers masked).                                                             | RBAC default-deny: no `hr_*` payroll permission; `profile_identity` masking is unchanged; payroll tables are unreachable without their own keys.                                                                                           |
+| S12 | Revealing a payout account without `payout_accounts.reveal` is `403`; with it the response is `no-store`, an audit row at `warning` records that it happened and by whom but never the value.                                                                                                                                                                                                                     | `reveal` high-risk action; the procurement reveal pattern.                                                                                                                                                                                 |
+| S13 | With the module disabled for tenant T, every route of that module is denied for T and T's tables are untouched; T2's payroll is unaffected.                                                                                                                                                                                                                                                                       | module enable/disable (`awcms_tenant_modules`); FORCE RLS.                                                                                                                                                                                 |
+| S14 | A machine credential (API token) cannot exercise an `ownershipGrant`.                                                                                                                                                                                                                                                                                                                                             | ADR-0063 §A excludes machine credentials.                                                                                                                                                                                                  |
+| S15 | A request supplying another tenant's `employment_id`, `profile_id` or `office_id` is rejected, even if the id exists.                                                                                                                                                                                                                                                                                             | composite `(tenant_id, id)` FKs plus FORCE RLS; the handler re-reads inside `withTenant`.                                                                                                                                                  |
 
 **What needs a new admission, said plainly.** Per-report scoping through an ABAC
 _policy_ (rather than a server-computed ownership reason), a payroll-grade or
@@ -685,24 +727,24 @@ None is assumed; the scenarios above are satisfiable without them.
 
 ### 13.1 Threats
 
-| Threat                                                            | Control                                                                                                                     |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Cross-tenant read or write of employment or pay data              | FORCE RLS + composite FKs + `defineTenantRoute`; RLS tested as `awcms_app`                                                  |
-| Scheduler or marketer reading salary (horizontal in-tenant)       | separate permissions and tables; S7, S11; the availability port is an allow-list                                            |
-| Self-service abuse: employee reading another's payslip/attendance | `ownershipGrant` computed from the persisted link, never from the request; machine credentials excluded                     |
-| Account-link hijack: linking my login to a colleague's employment | `assign` is high-risk, audited, SoD-able; changing it is an event                                                           |
-| Payroll fraud: insider alters salary, runs and pays               | propose/approve compensation; C/A/P per-instance DB CHECKs; immutable finalized runs; period lock; reversal-only correction |
-| Double payment (double click, retry, replay)                      | state check + `Idempotency-Key` + unique payslip per period/employee + unique payment per run                               |
-| Attendance tampering (back-dating, ghost clock-ins)               | append-only events, server `recorded_at`, supersession by approved correction, skew bound; no editing                       |
-| Time-theft by a colleague clocking in for another                 | clocking for another requires the unmodified key, audited by `source` and actor; evidence is O6                             |
-| Ledger inflation by forged commission source                      | unique source identity; the adapter's duty to verify (documented); `approve` by a third party                               |
-| Leakage through events, logs, exports, notifications              | ids/counts only; money absent from logs; `redactedColumns`; payslip notices carry no amount                                 |
-| Plaintext payout accounts at rest                                 | **phase 3 gate**: encryption at rest and keyed hashing decided before the table exists                                      |
-| Existence oracle (is X an employee? is X scheduled?)              | `unknown` is indistinguishable; uniform acknowledgements for identifier adds                                                |
-| Rule tampering (a tax rate changed to under-withhold)             | rule versions immutable once published, published by maker/checker, citation required, audit at `warning`                   |
-| Backdated pay change after a period closed                        | period lock; `backdate` high-risk; no unlock                                                                                |
-| Provider call inside a transaction                                | none; any bank/provider integration goes through the outbox in a later issue                                                |
-| Offline replay of attendance forging time                         | `client_event_key` uniqueness; `late` flag for review; correction needs approval                                            |
+| Threat                                                            | Control                                                                                                                            |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Cross-tenant read or write of employment or pay data              | FORCE RLS + composite FKs + `defineTenantRoute`; RLS tested as `awcms_app`                                                         |
+| Scheduler or marketer reading salary (horizontal in-tenant)       | separate permissions and tables; S7, S11; the availability port is an allow-list                                                   |
+| Self-service abuse: employee reading another's payslip/attendance | `ownershipGrant` computed from the persisted link, never from the request; machine credentials excluded                            |
+| Account-link hijack: linking my login to a colleague's employment | `assign` is high-risk, audited, SoD-able; changing it is an event                                                                  |
+| Payroll fraud: insider alters salary, runs and pays               | propose/approve compensation; C/A/P per-instance DB CHECKs; immutable finalized runs; period lock; reversal-only correction        |
+| Double payment (double click, retry, replay)                      | state check + `Idempotency-Key` + unique payslip per period/employee + unique payment per run                                      |
+| Attendance tampering (back-dating, ghost clock-ins)               | append-only events, server `recorded_at`, supersession by approved correction, skew bound; no editing                              |
+| Time-theft by a colleague clocking in for another                 | clocking for another requires the unmodified key, audited by `source` and actor; geolocation evidence, if ever built, is §4.3 (O6) |
+| Ledger inflation by forged commission source                      | unique source identity; the adapter's duty to verify (documented); `approve` by a third party                                      |
+| Leakage through events, logs, exports, notifications              | ids/counts only; money absent from logs; `redactedColumns`; payslip notices carry no amount                                        |
+| Plaintext payout accounts at rest                                 | **phase 3 gate**: encryption at rest and keyed hashing decided before the table exists                                             |
+| Existence oracle (is X an employee? is X scheduled?)              | `unknown` is indistinguishable; uniform acknowledgements for identifier adds                                                       |
+| Rule tampering (a tax rate changed to under-withhold)             | rule versions immutable once published, published by maker/checker, citation required, audit at `warning`                          |
+| Backdated pay change after a period closed                        | period lock; `backdate` high-risk; no unlock                                                                                       |
+| Provider call inside a transaction                                | none; any bank/provider integration goes through the outbox in a later issue                                                       |
+| Offline replay of attendance forging time                         | `client_event_key` uniqueness; `late` flag for review; correction needs approval                                                   |
 
 ### 13.2 Privacy (UU PDP 27/2022)
 
@@ -713,8 +755,7 @@ assessment.
   identity (via `profile_identity`), employment, attendance and schedule.
   Financial: salary, bank account, withholding. **Specific personal data** under the
   law must be treated with extra care: health (sick-leave reasons: hence no time-off
-  reason is stored), and potentially biometric or geolocation data (hence evidence
-  is excluded, O6).
+  reason is stored), and potentially biometric or geolocation data (hence photo, biometric and device evidence are excluded for good, and geolocation evidence is off by default and needs its own ADR, O6).
 - **Lawful basis and purpose.** Processing is for the employment relationship and
   the employer's legal obligations (labour, tax, social security). Each column has
   a stated purpose through its `subjectData` rationale; data beyond that purpose
@@ -773,16 +814,24 @@ payroll must come back from the same point in time.
   later issues.
 - `awcms_profile_entity_links` may additionally be written for discovery ("which
   module links this profile"); optional, follow-up.
+- Owner answers recorded 2026-10-10 that need their own work before any
+  implementation: an ADR amending ADR-0132 for the configurable SoD mode (§7.5)
+  and its open sub-question O7a; an ADR for geolocation attendance evidence,
+  after a data-protection impact assessment (§4.3).
+- Delivery channels (O10, O11): the owner admitted a Telegram adapter (optional,
+  off by default) and wants notification orchestration. Neither changes this
+  pack: payslip notices carry no amount (ADR-0132) and, per ADR-0133 §7, must
+  never reach Telegram or any fallback channel. Telegram and orchestration each
+  still need their own ADR/issue (see the ADR-0133 update note).
 
-## 16. Open questions (owner decisions — open, not decided)
+## 16. Open questions (owner decisions — answered ones marked, the remainder open)
 
-Tracked downstream in `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. None
-is closed by ADR-0132.
+Tracked downstream in `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. The owner answered O1–O12 on 2026-10-10; the rows below record the answers that bind this pack (O4, O6, O7). O1 and O5 were answered the same day but change nothing here and are not yet reconciled into this pack. ADR-0132 itself closes none of them.
 
-| Id  | Question                                                                                                                                      | Why it matters here                                                                          | Blocks                           | This pack's stance                                                                                          |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| O1  | Scope and sequencing of the platform epic as tracked downstream (whether the phases ship together, in order, or per consumer)                 | The three phases are designed to ship one by one; a consumer may want payroll with workforce | the order of implementing issues | Designed to ship in order; payroll never ships before its gate                                              |
-| O4  | Indonesian payroll profile: PPh 21 only, or BPJS, overtime, holiday allowance as well; and whether it is upstream seed data or consumer-owned | Regulatory content must be effective-dated and traceable; scope drives size and legal review | phase 3 gate                     | Engine jurisdiction-neutral and empty of Indonesian content; profile as a separate versioned package (§7.3) |
-| O5  | Legal role of the platform operator per deployment: controller, processor or both                                                             | Decides subject-request ownership, processing terms, breach notification                     | privacy analysis, retention      | Designed for per-tenant isolation either way (§13.2)                                                        |
-| O6  | Whether attendance may ever use geolocation, photo or device evidence                                                                         | Specific/biometric personal data; decides whether it is in any design at all                 | any evidence ADR                 | Excluded from phase 1 by construction; minimum bar stated (§4.3)                                            |
-| O7  | Segregation of duties for payroll: who may calculate, approve, finalize, pay                                                                  | Authorization matrix and minimum ABAC scenarios; small-tenant impact                         | phase 3 gate                     | Default matrix proposed (§7.5); per-instance DB checks regardless; three-person minimum stated              |
+| Id  | Question                                                                                                                                      | Why it matters here                                                                          | Blocks                                              | This pack's stance                                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | Scope and sequencing of the platform epic as tracked downstream (whether the phases ship together, in order, or per consumer)                 | The three phases are designed to ship one by one; a consumer may want payroll with workforce | the order of implementing issues                    | Designed to ship in order; payroll never ships before its gate                                                                                                |
+| O4  | Indonesian payroll profile: PPh 21 only, or BPJS, overtime, holiday allowance as well; and whether it is upstream seed data or consumer-owned | Regulatory content must be effective-dated and traceable; scope drives size and legal review | nothing (was: phase 3 gate)                         | **Answered 2026-10-10:** owned by each consumer; upstream ships only the engine and effective-dating, no Indonesian rates (§7.3)                              |
+| O5  | Legal role of the platform operator per deployment: controller, processor or both                                                             | Decides subject-request ownership, processing terms, breach notification                     | privacy analysis, retention                         | Designed for per-tenant isolation either way (§13.2)                                                                                                          |
+| O6  | Whether attendance may ever use geolocation, photo or device evidence                                                                         | Specific/biometric personal data; decides whether it is in any design at all                 | any geolocation-evidence ADR                        | **Answered 2026-10-10:** geolocation only (no photo, biometric or device fingerprint), off by default per tenant; still needs its own ADR after a DPIA (§4.3) |
+| O7  | Segregation of duties for payroll: who may calculate, approve, finalize, pay                                                                  | Authorization matrix and minimum ABAC scenarios; small-tenant impact                         | phase 3 gate (ADR-0132 amendment, sub-question O7a) | **Answered 2026-10-10:** configurable per tenant; default calculate != approve != pay; may relax to prepare != approve, the relaxation audited (§7.5)         |
