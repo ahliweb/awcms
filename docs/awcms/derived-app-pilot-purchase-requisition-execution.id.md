@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](derived-app-pilot-purchase-requisition-execution.md)
 
-<!-- i18n-source-hash: sha256:e40fe86bc0d3a33c36abc7c50edbd8cf8e618970c7450a41552c236c7bb3315a -->
+<!-- i18n-source-hash: sha256:602069856f9fee5cc20b77ef702d71bf3b37f22329d58d026e8fe4404e8118a0 -->
 
 # Runbook Eksekusi Increment-1 — Pilot Turunan #187 (`awcms-erp-pilot`, Purchase Requisition)
 
@@ -393,8 +393,9 @@ send`) untuk tiap event PR, DAN entri `events.publishes` di `module.ts`.
   bentuk `{eventType, eventVersion, description}`). Parity test
   (`domain-event-registry-parity.test.ts`) menegakkan: registry↔AsyncAPI
   dua-arah, `events.publishes` memuat entri milik modul, tak ada duplikat.
-- Consumer strategi `domain_event` butuh edit consumer-registry statik → untuk
-  projeksi PR (increment berikutnya) pakai **`cursor_table`** biar modul
+- Consumer strategi `domain_event` tidak lagi butuh edit consumer-registry: consumer
+  dideklarasikan di `domainEventConsumers` milik modul pemilik (ADR-0134). Untuk
+  projeksi PR (increment berikutnya) tetap pakai **`cursor_table`** biar modul
   self-contained.
 
 ## 5. Fase C — Test, gate, CI, PR, review, merge

@@ -391,9 +391,9 @@ send`) for every PR event, AND an `events.publishes` entry in `module.ts`.
   of the shape `{eventType, eventVersion, description}`). The parity test
   (`domain-event-registry-parity.test.ts`) enforces: registry↔AsyncAPI
   in both directions, `events.publishes` contains the module's own entries, no duplicates.
-- The `domain_event` consumer strategy requires editing the static consumer registry → for
-  the PR projection (a later increment) use **`cursor_table`** so the module stays
-  self-contained.
+- The `domain_event` consumer strategy no longer requires editing the consumer registry: the
+  consumer is declared in the owning module's `domainEventConsumers` (ADR-0134). For the PR
+  projection (a later increment) keep **`cursor_table`** so the module stays self-contained.
 
 ## 5. Phase C — Tests, gates, CI, PR, review, merge
 
