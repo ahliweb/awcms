@@ -193,8 +193,9 @@ bite.
 - Domain events: register in `DOMAIN_EVENT_TYPE_REGISTRY` + `events.publishes` in
   module.ts + the asyncapi channel + the parity test
   (`domain-event-registry-parity.test.ts`). A `domain_event`-strategy consumer
-  requires a static edit to the consumer-registry → so the PR projection uses
-  **cursor_table** to keep the module self-contained.
+  is declared in the owning module's own `domainEventConsumers` (ADR-0134), so it
+  needs no edit to the runtime's consumer-registry. The PR projection still uses
+  **cursor_table** (a later increment) to keep the module self-contained.
 
 ## Deploy / compat / CI / env (important reality-check)
 

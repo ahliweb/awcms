@@ -5,7 +5,7 @@ description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan por
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:a5a008eb05e826f3553c838c2c076b7e1f8f6ecda6e5db90a5ea0302753ae1cb -->
+<!-- i18n-source-hash: sha256:ed124f24c18411a233b4a07931c9fffbe3c1eb548ccd0cdeb604b9211f6a7a4e -->
 
 # AWCMS — Integration Hub Module
 
@@ -88,11 +88,12 @@ bypass sebelum merge, jadi jangan re-derive validasinya dari nol.
    (`POST /api/v1/integration-hub/subscriptions`) — event type internal
    yang didengar, `targetUrl` (SSRF-validated saat write), `filter`
    deklaratif bounded opsional.
-2. Consumer statis `integration_hub` sendiri
+2. Consumer `integration_hub` sendiri
    (`integrationHubOutboundFanoutConsumer`,
-   `application/outbound-fanout-consumer.ts`) terdaftar di
-   `domain-event-runtime/infrastructure/consumer-registry.ts`'s array —
-   titik ekstensi additive yang sama dipakai `workflow_approval`/
+   `application/outbound-fanout-consumer.ts`) dideklarasikan di
+   `ModuleDescriptor.domainEventConsumers` miliknya sendiri (ADR-0134);
+   `consumer-registry.ts` milik `domain-event-runtime` membangun registry dari
+   situ dan tidak memegang consumer — titik ekstensi additive yang sama dipakai `workflow_approval`/
    `organization_structure` untuk jadi PRODUCER event nyata; modul ini
    adalah CONSUMER pihak-ketiga nyata pertama. Berjalan dalam transaksi
    YANG SAMA dengan commit event sumbernya — handler same-process, DB-only
@@ -217,9 +218,11 @@ menit via cron/systemd timer, dibangun di atas shared worker runner
    `integration_hub` sendiri** (`awcms.integration-hub.inbound-message.
 normalized`) — modul producer masa depan yang ingin fan-out webhook
    outbound untuk event type-nya SENDIRI menambahkannya ke
-   `integrationHubOutboundFanoutConsumer`'s `eventTypes` array
-   (`domain-event-runtime/infrastructure/consumer-registry.ts`) DAN ke
-   allowlist check `subscription-directory.ts` — pola registrasi
+   `integrationHubOutboundFanoutConsumer`'s `eventTypes` array di
+   deklarasi `domainEventConsumers` pada `module.ts` milik `integration_hub`
+   (ADR-0134; registry dibangun darinya, jadi tanpa edit ke
+   `consumer-registry.ts`) DAN ke allowlist check `subscription-directory.ts`
+   — pola registrasi
    reviewed-source-code yang sama dipakai producer/consumer lain.
 
 ## Pitfall umum

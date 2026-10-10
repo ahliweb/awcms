@@ -87,11 +87,12 @@ from scratch.
    (`POST /api/v1/integration-hub/subscriptions`) — the internal event type it
    listens for, a `targetUrl` (SSRF-validated at write time), and an optional
    bounded declarative `filter`.
-2. `integration_hub`'s own static consumer
+2. `integration_hub`'s own consumer
    (`integrationHubOutboundFanoutConsumer`,
-   `application/outbound-fanout-consumer.ts`) is registered in
-   `domain-event-runtime/infrastructure/consumer-registry.ts`'s array — the
-   same additive extension point used by `workflow_approval`/
+   `application/outbound-fanout-consumer.ts`) is declared in its own
+   `ModuleDescriptor.domainEventConsumers` (ADR-0134); `domain-event-runtime`'s
+   `consumer-registry.ts` builds the registry from that and holds no consumer —
+   the same additive extension point used by `workflow_approval`/
    `organization_structure` to become real event PRODUCERs; this module is the
    first real third-party CONSUMER. It runs in the SAME transaction as the
    source event's commit — a same-process, DB-only (zero network calls)
@@ -213,9 +214,10 @@ minutes via cron/systemd timer, built on top of the shared worker runner
    event type** (`awcms.integration-hub.inbound-message.
 normalized`) — a future producer module that wants outbound webhook fan-out
    for its OWN event types adds them to
-   `integrationHubOutboundFanoutConsumer`'s `eventTypes` array
-   (`domain-event-runtime/infrastructure/consumer-registry.ts`) AND to the
-   allowlist check in `subscription-directory.ts` — the same
+   `integrationHubOutboundFanoutConsumer`'s `eventTypes` array in
+   `integration_hub`'s `module.ts` `domainEventConsumers` declaration (ADR-0134;
+   the registry is built from it, so no edit to `consumer-registry.ts`) AND to
+   the allowlist check in `subscription-directory.ts` — the same
    reviewed-source-code registration pattern used by other
    producers/consumers.
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](derived-app-pilot-purchase-requisition-plan.md)
 
-<!-- i18n-source-hash: sha256:92a309a7417050487401815bf49781247bb729b18b24a122be2e35456764f56b -->
+<!-- i18n-source-hash: sha256:46bedc29d3f4214919744b7bbad33ec27c3c003dfe1c4f7b84919ddf3d5661ff -->
 
 # Rencana Pilot Turunan #187 — Purchase Requisition (`awcms-erp-pilot`), Increment 1
 
@@ -184,8 +184,9 @@ sebelum guard) benar-benar menggigit.
 - Domain event: register di `DOMAIN_EVENT_TYPE_REGISTRY` + `events.publishes` di
   module.ts + channel asyncapi + parity test
   (`domain-event-registry-parity.test.ts`). Konsumen `domain_event`-strategy
-  butuh edit statik consumer-registry → untuk projeksi PR pakai **cursor_table**
-  biar modul self-contained.
+  dideklarasikan di `domainEventConsumers` milik modul pemilik sendiri (ADR-0134),
+  jadi tidak butuh edit ke consumer-registry runtime. Projeksi PR tetap memakai
+  **cursor_table** (increment berikutnya) biar modul self-contained.
 
 ## Deploy / compat / CI / env (reality-check penting)
 
