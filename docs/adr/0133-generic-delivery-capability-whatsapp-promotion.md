@@ -128,6 +128,8 @@ Phases (each its own PR; none starts until the previous merged):
 
 **Notification orchestration is NOT admitted**, pending a written value case (O11): per-user channel preferences, cross-channel fallback ("WhatsApp failed, send e-mail"), and a unified cross-channel status are not part of this capability. Consequences that this ADR makes explicit so they are not smuggled in: the port in §8 is **WhatsApp-specific** (`WhatsappDeliveryPort`), not a `MessageDeliveryPort(channel, …)` multi-channel facade — a facade with a channel parameter is the first step of orchestration; callers that want e-mail call the e-mail port; and no module in this repo may implement automatic fallback between channels. `workflow_approval`'s existing notification port is unaffected.
 
+**Update (2026-10-10): owner answers recorded, this ADR unchanged.** The awcms-one owner answered O10 and O11. **O10:** Telegram is admitted as an optional, off-by-default adapter. **O11:** notification orchestration is wanted, subject to a written value case and an upstream ADR. Taken faithfully, this changes who decides, not what this repository has accepted: Telegram is still **not admitted here** until its own ADR/issue exists, and that ADR starts from the constraints recorded above (off by default, explicit chat authorization, never a fallback for payroll or personal data). Orchestration is still **not admitted** until the value case and its ADR exist; the WhatsApp-specific port (§8) and the rule that no module implements automatic fallback between channels stand until such an ADR amends them.
+
 ### 8. The delivery port contract (what booking and hr call)
 
 Shape only; names are **provisional** and are fixed by the implementation ADR/PR (no code now). A capability port per ADR-0011, in `src/modules/_shared/ports/`, with the module's application layer as the adapter:
@@ -206,7 +208,7 @@ Provisional permissions: `whatsapp_delivery.messages.read|cancel`, `whatsapp_del
 5. **Shared dispatcher code**: extract a common lease/claim helper now, or let the fourth copy stand and extract in a follow-up? This ADR permits either; a reviewer should insist if the implementation PR would otherwise copy more than the claim query.
 6. **Booking reminders at scale**: a reminder scheduled days ahead is a queue row waiting; confirm the dispatcher claim index and the purge's "waiting" exclusion hold for long `notBefore` horizons, or decide that reminders are enqueued shortly before the send time by a booking job instead.
 7. **Reveal of the raw number** to an admin (to call a customer): required or not? Default is no.
-8. **O10 and O11** remain owner decisions in the downstream tracker; this ADR does not answer them (§7).
+8. **O10 and O11** were answered by the owner on 2026-10-10 (Telegram admitted as an optional, off-by-default adapter; orchestration wanted, subject to a value case); see the update note in §7. Neither is admitted in this repository until it has its own ADR/issue.
 
 ## Consequences
 

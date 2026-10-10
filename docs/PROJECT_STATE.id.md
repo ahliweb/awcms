@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1e6c11b54a9de5cc8e02f9183c09dbd387df666c3a93925af11bae1ade031d51 -->
+<!-- i18n-source-hash: sha256:9e4d4b90fa34848ed3c12f6ef33994fb8e768104bafc5d75bd4936bc524f5121 -->
 
 # AWCMS — Project State & Continuation
 
@@ -408,11 +408,17 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   modul membuat berkas `_shared/ports`-nya dan memindahkan event-nya dari berkas
   provisional ke kontrak hidup (gerbang memaksa "tepat di satu tempat").
 
-  **Keputusan pemilik masih terbuka, dan pack mencatatnya sebagai terbuka, bukan
-  diputuskan:** O1–O3, O5, O8, O9, O12 (booking); O1, O4–O7 (hr; payroll juga
-  digerbangi enkripsi at-rest serta review keamanan dan hukum); O10 Telegram
-  ditunda, O11 orkestrasi tidak diterima (delivery). Baca bagian "Open
-  questions" pack sebelum menulis migrasi.
+  **Keputusan pemilik (dijawab 2026-10-10 di DoR awcms-one).** Dicatat di
+  pack tempat ia mengikat: booking O8 dan O12 (hold tidak dihitung dalam
+  occupancy; commerce tetap otoritas pelanggan, sehingga tanpa
+  `customer_profile_id`); hr O4 (profil Indonesia milik konsumen), O6 (geolokasi
+  saja, mati secara default, tetap butuh ADR sendiri) dan O7 (SoD dapat
+  dikonfigurasi per tenant; butuh amandemen ADR-0132 dan punya sub-pertanyaan
+  terbuka O7a; payroll juga digerbangi enkripsi at-rest serta review keamanan).
+  Delivery O10/O11: Telegram dan orkestrasi diinginkan pemilik tetapi belum
+  diterima di sini; masing-masing butuh ADR/isu sendiri. O2 booking ditangani
+  Issue #931; O1, O3, O5, dan O9 belum direkonsiliasi ke pack. Baca tabel
+  pertanyaan terbuka pack sebelum menulis migrasi.
 
   **Dua hal sebelum menyentuh registry consumer (#926).** Consumer berjalan
   apa pun `status` modulnya: draf awal yang melewati modul `disabled`
