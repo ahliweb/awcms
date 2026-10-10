@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0131-generic-booking-module-admission.md)
 
-<!-- i18n-source-hash: sha256:6da2ade75c4b5e84194575fca5633b23e15378592b8332d35302b17baf96b7d1 -->
+<!-- i18n-source-hash: sha256:fa03ad0bdfaf11fd67ca013c0655ca1e2ed671d8306ac71b2f532026e7736d0f -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -79,7 +79,7 @@ Reservasi, item, alokasi, penugasan staf, dan event adalah bukti di balik bookin
 - **Biaya:** sekitar 13 tabel, ~29 izin, anggota `AccessAction` baru (`confirm`, `reschedule`, `check_in`, `complete`, `no_show`, dan `override` BERISIKO TINGGI), ekstensi `btree_gist`, satu job, satu port, 9 event, dua proyeksi. Pencarian ketersediaan (pembacaan) bisa mahal; dibatasi oleh jendela, halaman, dan rate per-principal (paket §9), dan tak pernah di-edge-cache (ia per-tenant secara alami).
 - **Rollback** bersifat forward-only seperti setiap migrasi di sini: berhenti memanggil modul, pertahankan tabel (inert), dan setiap order hilir tetap valid. Menjatuhkan tabel adalah keputusan kelas restore. Setelah restore, rekonsiliasikan reservasi terhadap alokasi (paket §7).
 - **Terbuka dan tidak diputuskan di sini:** keputusan pemilik O1, O2, O3, O5, O8, O9, dan O12 pada tracker DoR hilir (paket §11). O12 dan O2 memengaruhi skema (referensi pelanggan, kebijakan catatan, field vertikal pertama) dan **harus dijawab sebelum migrasi ditulis**; O8 hanya memengaruhi definisi proyeksi. ADR ini menerima modul dan menetapkan properti yang berlaku apa pun jawabannya.
-- **Pembaruan (2026-10-10): jawaban pemilik dicatat.** Pemilik awcms-one menjawab O1–O12 pada 2026-10-10. Jawaban yang mengikat paket ini dicatat di [`booking.md`](../awcms/booking.id.md) §11 dan §7.2: O8 (occupancy tidak menghitung hold; jendela retensi 90 hari adalah KPI retensi pelanggan; net revenue adalah angka utama) dan O12 (commerce tetap otoritas pelanggan, sehingga v1 hanya membawa `external_customer_ref` yang buram dan tanpa `customer_profile_id`). O2 ditangani terpisah (Issue #931). Keputusan ADR ini tidak berubah.
+- **Pembaruan (2026-10-10): jawaban pemilik dicatat.** Pemilik awcms-one menjawab O1–O12 pada 2026-10-10. Jawaban yang mengikat paket ini dicatat di [`booking.md`](../awcms/booking.id.md) §11 dan §7.2: O8 (occupancy tidak menghitung hold; jendela retensi 90 hari adalah KPI retensi pelanggan; net revenue adalah angka utama) dan O12 (commerce tetap otoritas pelanggan, sehingga v1 hanya membawa `external_customer_ref` yang buram dan tanpa `customer_profile_id`). O2 (vertikal pertama hotel / vila / rental) bertentangan dengan asumsi pack bahwa menginap per malam di luar v1; ia diselesaikan oleh [ADR-0135](0135-day-granularity-stays-admitted-into-booking-v1.id.md), yang mengubah ADR ini (Issue #931). Selebihnya ADR ini tidak berubah.
 - **Tidak diterima di v1:** kapasitas terhitung tanpa baris unit, sinkronisasi kalender resource dengan kalender eksternal (iCal/Google), waitlist otomatis, harga dinamis, endpoint publik (anonim) (urusan BFF hilir), optimasi multi-resource (best-fit packing), turnaround bersama antar booking berurutan (buffer konservatif), dan layar admin (tindak lanjut tercatat; modul terdaftar `experimental` sampai layar pertamanya, seperti `inventory` dan `procurement`).
 
 ## Alternatif yang ditolak
