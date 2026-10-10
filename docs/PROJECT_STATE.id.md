@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:9e4d4b90fa34848ed3c12f6ef33994fb8e768104bafc5d75bd4936bc524f5121 -->
+<!-- i18n-source-hash: sha256:546d83b8c0d56cb22a75904c3fd7815bdcc07acdc9e7d51fd267e9482797e5dd -->
 
 # AWCMS — Project State & Continuation
 
@@ -121,7 +121,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Modul base                         | **28** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **175** (`sql/001`–`175`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0134** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0135** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **67** berkas `.astro` di `src/pages/admin/`; **0 dari 28** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **84** (50.514 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **63** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -416,8 +416,7 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   dikonfigurasi per tenant; butuh amandemen ADR-0132 dan punya sub-pertanyaan
   terbuka O7a; payroll juga digerbangi enkripsi at-rest serta review keamanan).
   Delivery O10/O11: Telegram dan orkestrasi diinginkan pemilik tetapi belum
-  diterima di sini; masing-masing butuh ADR/isu sendiri. O2 booking ditangani
-  Issue #931; O1, O3, O5, dan O9 belum direkonsiliasi ke pack. Baca tabel
+  diterima di sini; masing-masing butuh ADR/isu sendiri. O2 booking (vertikal pertama hotel / vila / rental) terjawab dan memasukkan menginap berbasis hari ke v1 lewat ADR-0135 (Issue #931); O1, O3, O5, dan O9 belum direkonsiliasi ke pack. Baca tabel
   pertanyaan terbuka pack sebelum menulis migrasi.
 
   **Dua hal sebelum menyentuh registry consumer (#926).** Consumer berjalan

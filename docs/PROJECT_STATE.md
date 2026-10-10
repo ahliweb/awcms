@@ -120,7 +120,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Base modules                      | **28** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **175** (`sql/001`–`175`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0134** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0135** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **67** `.astro` files in `src/pages/admin/`; **0 of 28** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **84** (50.514 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **63** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
@@ -413,7 +413,7 @@ pioneered directly here after the ADR-0047 freeze.)
   amendment and has an open sub-question O7a; payroll is additionally gated on
   at-rest encryption plus security review). Delivery O10/O11: Telegram and
   orchestration are wanted by the owner but are still not admitted here; each
-  needs its own ADR/issue. Booking O2 is handled by Issue #931; O1, O3, O5 and
+  needs its own ADR/issue. Booking O2 (first vertical hotel / villa / rental) is answered and admits day-granularity stays into v1 through ADR-0135 (Issue #931); O1, O3, O5 and
   O9 are not yet reconciled into the packs. Read the pack's open-questions table
   before writing a migration.
 
