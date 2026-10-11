@@ -720,7 +720,7 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   awcms_procurement_documents: ["SELECT", "INSERT", "UPDATE"],
   awcms_procurement_document_movements: ["SELECT", "INSERT"],
   awcms_procurement_document_events: ["SELECT", "INSERT"],
-  // ADR-0132 / `sql/180`. NOT retired — an employment ends by a `terminated`
+  // ADR-0132 / `sql/176`. NOT retired — an employment ends by a `terminated`
   // term (or is soft-deleted when entered by mistake) and the terms history is
   // append-only (the only UPDATE closes the open row); a trigger refuses DELETE
   // as the second layer. Settings are upserted, never deleted.

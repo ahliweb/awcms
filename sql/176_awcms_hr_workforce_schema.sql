@@ -26,7 +26,8 @@
 --   * TERMINATED IS TERMINAL: a `terminated` term stamps the header
 --     (`terminated_on`), after which no further term can be written and the stamp
 --     cannot be cleared.
---   * THE MANAGER CHAIN is acyclic and at most 10 deep.
+--   * THE MANAGER CHAIN is acyclic and at most 10 edges deep INCLUDING the subtree
+--     below the employee, and manager-edge writes are serialised per tenant.
 --   * A PROFILE MERGE (`merged_into_profile_id`) between two profiles that both
 --     carry an ACTIVE employment is refused (ADR-0132 section 2).
 --
@@ -283,6 +284,83 @@ CREATE TRIGGER awcms_hr_employments_update_guard
   BEFORE UPDATE ON awcms_hr_employments
   FOR EACH ROW EXECUTE FUNCTION awcms_hr_guard_employment_update();
 
+-- The manager-chain rule, in ONE place so the trigger and the application's
+-- pre-check cannot drift. Returns 'cycle', 'depth' or NULL.
+--
+--   * CYCLE: walking up from `p_manager` reaches `p_employment`.
+--   * DEPTH: the longest reporting path through the employee, in edges, is
+--     (nodes from the manager up to the root) + (height of the subtree BELOW
+--     the employee), and must be at most 10. Counting only the upward half let a
+--     manager be added ABOVE an already-full chain.
+--
+-- CONCURRENCY: the walk reads committed rows, so two transactions that each add
+-- one edge of a cycle (A under B, B under A) would both see an acyclic chain
+-- and both commit. Every writer of a manager edge therefore takes ONE
+-- transaction-scoped advisory lock per tenant before it walks, and holds it to
+-- commit; the loser re-reads, under READ COMMITTED, the winner's committed edge
+-- and is refused. It lives here (not only in the handler) so it holds for ANY
+-- writer, including a maintenance session. Edges are written rarely, so a
+-- tenant-wide lock costs nothing that matters.
+CREATE OR REPLACE FUNCTION awcms_hr_manager_chain_problem(
+  p_tenant uuid, p_employment uuid, p_manager uuid
+)
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  walker uuid := p_manager;
+  up_nodes integer := 0;
+  down_edges integer := 0;
+BEGIN
+  IF p_manager IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('hr_manager_chain:' || p_tenant::text, 0)
+  );
+
+  WHILE walker IS NOT NULL LOOP
+    IF p_employment IS NOT NULL AND walker = p_employment THEN
+      RETURN 'cycle';
+    END IF;
+
+    up_nodes := up_nodes + 1;
+
+    IF up_nodes > 10 THEN
+      RETURN 'depth';
+    END IF;
+
+    SELECT t.manager_employment_id INTO walker
+      FROM awcms_hr_employment_terms t
+     WHERE t.tenant_id = p_tenant
+       AND t.employment_id = walker
+       AND t.effective_to IS NULL;
+  END LOOP;
+
+  IF p_employment IS NOT NULL THEN
+    WITH RECURSIVE sub(id, d) AS (
+      SELECT p_employment, 0
+      UNION ALL
+      SELECT t.employment_id, sub.d + 1
+        FROM sub
+        JOIN awcms_hr_employment_terms t
+          ON t.tenant_id = p_tenant
+         AND t.manager_employment_id = sub.id
+         AND t.effective_to IS NULL
+       WHERE sub.d < 12
+    )
+    SELECT COALESCE(max(d), 0) INTO down_edges FROM sub;
+  END IF;
+
+  IF up_nodes + down_edges > 10 THEN
+    RETURN 'depth';
+  END IF;
+
+  RETURN NULL;
+END;
+$$;
+
 -- Terms, BEFORE INSERT: no term on a deleted or terminated employment, no
 -- overlap, and an acyclic, bounded manager chain.
 CREATE OR REPLACE FUNCTION awcms_hr_guard_term_insert()
@@ -291,8 +369,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   header awcms_hr_employments%ROWTYPE;
-  walker uuid;
-  steps integer := 0;
+  problem text;
 BEGIN
   SELECT * INTO header FROM awcms_hr_employments
    WHERE tenant_id = NEW.tenant_id AND id = NEW.employment_id;
@@ -315,25 +392,15 @@ BEGIN
     RAISE EXCEPTION 'awcms_hr: HR_TERMS_OVERLAP' USING ERRCODE = '23P01';
   END IF;
 
-  walker := NEW.manager_employment_id;
+  problem := awcms_hr_manager_chain_problem(
+    NEW.tenant_id, NEW.employment_id, NEW.manager_employment_id
+  );
 
-  WHILE walker IS NOT NULL LOOP
-    IF walker = NEW.employment_id THEN
-      RAISE EXCEPTION 'awcms_hr: HR_MANAGER_CYCLE' USING ERRCODE = '23514';
-    END IF;
-
-    steps := steps + 1;
-
-    IF steps > 10 THEN
-      RAISE EXCEPTION 'awcms_hr: HR_MANAGER_DEPTH' USING ERRCODE = '23514';
-    END IF;
-
-    SELECT t.manager_employment_id INTO walker
-      FROM awcms_hr_employment_terms t
-     WHERE t.tenant_id = NEW.tenant_id
-       AND t.employment_id = walker
-       AND t.effective_to IS NULL;
-  END LOOP;
+  IF problem = 'cycle' THEN
+    RAISE EXCEPTION 'awcms_hr: HR_MANAGER_CYCLE' USING ERRCODE = '23514';
+  ELSIF problem = 'depth' THEN
+    RAISE EXCEPTION 'awcms_hr: HR_MANAGER_DEPTH' USING ERRCODE = '23514';
+  END IF;
 
   RETURN NEW;
 END;

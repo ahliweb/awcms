@@ -25,12 +25,14 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EMPLOYEE_NO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_./-]{0,63}$/;
 const WORKFLOW_KEY_PATTERN = /^[a-z][a-z0-9_.-]{0,99}$/;
 
-/** Mirror the CHECK constraints in `sql/180`. */
+/** Mirror the CHECK constraints in `sql/176`. */
 export const HR_WORKFORCE_LIMITS = {
   employeeNo: 64,
   jobTitle: 120,
   reason: 500,
-  clockSkewMaxSeconds: 3600
+  clockSkewMaxSeconds: 3600,
+  minYear: 1900,
+  maxYear: 2200
 } as const;
 
 type Body = Record<string, unknown>;
@@ -89,8 +91,17 @@ function uuidField(
 
 /** A real calendar date, `YYYY-MM-DD`. */
 export function isCalendarDate(value: string): boolean {
+  if (!DATE_PATTERN.test(value)) {
+    return false;
+  }
+
+  const year = Number(value.slice(0, 4));
+
+  // A bounded range: `date` accepts far more than any employment can mean, and
+  // an absurd year would otherwise reach the database and the `infinity` logic.
   return (
-    DATE_PATTERN.test(value) &&
+    year >= HR_WORKFORCE_LIMITS.minYear &&
+    year <= HR_WORKFORCE_LIMITS.maxYear &&
     new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
   );
 }

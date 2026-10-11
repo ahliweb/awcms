@@ -571,6 +571,92 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
     });
   });
 
+  describe("the manager chain under concurrency and depth (audit M1, M2)", () => {
+    test("two concurrent edges that would close a cycle: exactly one commits", async () => {
+      const a = await employ(TENANT_A, profileA);
+      const b = await employ(TENANT_A, await seedProfile(TENANT_A, "b"));
+
+      // Each transaction closes its own open row, writes its manager edge and
+      // then HOLDS the transaction open, so the two overlap. Without the
+      // per-tenant advisory lock both walks see an acyclic committed chain.
+      const edge = (employment: string, manager: string) =>
+        inTenant(TENANT_A, async (tx) => {
+          await tx`
+            UPDATE awcms_hr_employment_terms SET effective_to = '2026-03-01'
+            WHERE employment_id = ${employment} AND effective_to IS NULL
+          `;
+          await tx`
+            INSERT INTO awcms_hr_employment_terms
+              (tenant_id, employment_id, manager_employment_id, employment_type,
+               status, effective_from)
+            VALUES (${TENANT_A}, ${employment}, ${manager}, 'permanent',
+                    'active', '2026-03-01')
+          `;
+          await tx`SELECT pg_sleep(0.5)`;
+        });
+
+      const results = await Promise.allSettled([edge(a, b), edge(b, a)]);
+      resetDatabaseCircuitBreakerForTests();
+
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.find((r) => r.status === "rejected") as
+        PromiseRejectedResult | undefined;
+      expect(String(rejected?.reason?.message)).toMatch(/HR_MANAGER_CYCLE/);
+
+      const cyclic = (await getAdminSql()`
+        SELECT count(*)::int AS n FROM awcms_hr_employment_terms t
+        WHERE t.tenant_id = ${TENANT_A} AND t.effective_to IS NULL
+          AND t.manager_employment_id IS NOT NULL
+      `) as { n: number }[];
+      expect(cyclic[0]!.n).toBe(1);
+    });
+
+    test("depth counts the subtree BELOW: adding a manager above a full chain is refused", async () => {
+      const root = await employ(TENANT_A, profileA);
+      let top = root;
+
+      for (let level = 0; level < 10; level += 1) {
+        top = await employ(TENANT_A, await seedProfile(TENANT_A, `d${level}`), {
+          managerId: top
+        });
+      }
+
+      // root -> ... -> 10 levels below: 10 edges. Giving the ROOT a manager
+      // would make 11, though the walk upward from that manager is one node.
+      const newBoss = await employ(
+        TENANT_A,
+        await seedProfile(TENANT_A, "newboss")
+      );
+      await closeOpenTerm(TENANT_A, root, "2026-03-01");
+
+      await assertRejected(
+        insertTerm(TENANT_A, root, { from: "2026-03-01", managerId: newBoss }),
+        /HR_MANAGER_DEPTH|23514/
+      );
+
+      // Control: one level shorter is fine.
+      const shortRoot = await employ(
+        TENANT_A,
+        await seedProfile(TENANT_A, "short")
+      );
+      let shortTop = shortRoot;
+
+      for (let level = 0; level < 9; level += 1) {
+        shortTop = await employ(
+          TENANT_A,
+          await seedProfile(TENANT_A, `s${level}`),
+          { managerId: shortTop }
+        );
+      }
+
+      await closeOpenTerm(TENANT_A, shortRoot, "2026-03-01");
+      await insertTerm(TENANT_A, shortRoot, {
+        from: "2026-03-01",
+        managerId: newBoss
+      });
+    });
+  });
+
   describe("profile merge", () => {
     test("is refused while both profiles carry an ACTIVE employment, allowed once one has ended", async () => {
       const second = await seedProfile(TENANT_A, "second");

@@ -789,9 +789,39 @@ export function selectAnyAllowed(
   return results.find((result) => result.allowed) ?? results[0]!;
 }
 
+/**
+ * `ownershipGrant` is a READ basis ("my own record"), not a write one. Until a
+ * write route has its own reviewed need, defining one with an ownership grant
+ * is refused AT DEFINITION TIME — at module load, so it fails the build and
+ * every test that imports the route, not a request in production. The function
+ * form of `authorize` cannot be inspected before a request, so it is refused
+ * too.
+ */
+export function assertOwnershipGrantIsReadOnly(
+  authorize: TenantRouteConfig<never>["authorize"]
+): void {
+  if (typeof authorize === "function") {
+    throw new Error(
+      "defineTenantRoute: ownershipGrant requires a static `authorize` (a guard or an array of guards) so every action can be checked at definition time."
+    );
+  }
+
+  const guards = Array.isArray(authorize) ? authorize : [authorize];
+
+  if (guards.length === 0 || guards.some((guard) => guard.action !== "read")) {
+    throw new Error(
+      "defineTenantRoute: ownershipGrant may only widen a `read` guard; a write or high-risk action cannot be granted by ownership."
+    );
+  }
+}
+
 export function defineTenantRoute<TPrepared = undefined>(
   config: TenantRouteConfig<TPrepared>
 ): APIRoute {
+  if (config.ownershipGrant) {
+    assertOwnershipGrantIsReadOnly(config.authorize);
+  }
+
   return async ({ request, cookies, url, params, locals, clientAddress }) => {
     const { tenantId, token } = resolveAuthInputs(request, cookies);
 

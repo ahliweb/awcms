@@ -1,6 +1,6 @@
 /**
  * Vocabulary of the employment context (Issue #945, ADR-0132). Mirrors the
- * CHECK constraints in `sql/180`; the database is the authority, these exist so
+ * CHECK constraints in `sql/176`; the database is the authority, these exist so
  * a bad value is a 400 and not a 500.
  */
 export const EMPLOYMENT_TYPES = [

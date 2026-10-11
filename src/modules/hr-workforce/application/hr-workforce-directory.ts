@@ -332,8 +332,14 @@ async function liveEmploymentExists(
 
 /**
  * Would `managerId` as the manager of `employmentId` make the chain cyclic or
- * deeper than {@link MANAGER_CHAIN_MAX_DEPTH}? Mirrors the BEFORE INSERT trigger
- * in `sql/180`, which remains the backstop.
+ * longer than {@link MANAGER_CHAIN_MAX_DEPTH} edges (counting the subtree BELOW
+ * the employee, not only the chain above the manager)?
+ *
+ * The rule lives in ONE SQL function (`awcms_hr_manager_chain_problem`,
+ * `sql/176`) shared with the BEFORE INSERT trigger, so the two cannot drift. It
+ * also takes the per-tenant advisory lock that serialises manager-edge writes
+ * until this transaction commits; calling it here, before any write, means the
+ * pre-check and the trigger decide on the same committed state.
  */
 async function managerChainProblem(
   tx: Bun.SQL,
@@ -341,30 +347,13 @@ async function managerChainProblem(
   employmentId: string | null,
   managerId: string
 ): Promise<"cycle" | "depth" | null> {
-  let walker: string | null = managerId;
-  let steps = 0;
+  const rows = (await tx`
+    SELECT awcms_hr_manager_chain_problem(
+      ${tenantId}::uuid, ${employmentId}::uuid, ${managerId}::uuid
+    ) AS problem
+  `) as { problem: "cycle" | "depth" | null }[];
 
-  while (walker !== null) {
-    if (employmentId !== null && walker === employmentId) {
-      return "cycle";
-    }
-
-    steps += 1;
-
-    if (steps > MANAGER_CHAIN_MAX_DEPTH) {
-      return "depth";
-    }
-
-    const rows = (await tx`
-      SELECT manager_employment_id FROM awcms_hr_employment_terms
-      WHERE tenant_id = ${tenantId} AND employment_id = ${walker}
-        AND effective_to IS NULL
-    `) as { manager_employment_id: string | null }[];
-
-    walker = rows[0]?.manager_employment_id ?? null;
-  }
-
-  return null;
+  return rows[0]?.problem ?? null;
 }
 
 type TermsRefusal =

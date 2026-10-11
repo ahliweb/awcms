@@ -4,7 +4,7 @@
 
 > **Status:** admitted by [ADR-0132](../adr/0132-hr-payroll-module-family-admission.md)
 > (Issue #916). **Design, plus one landed slice:** the phase 1 _foundation_
-> (module `hr_workforce`, `experimental`, `sql/180`–`sql/181`: employments,
+> (module `hr_workforce`, `experimental`, `sql/176`–`sql/177`: employments,
 > effective-dated terms, settings, employee-sees-own; Issue #945) exists. Attendance,
 > shifts, the availability port, commission and payroll are still design only: no
 > table, route or migration exists for them.

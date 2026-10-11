@@ -15,7 +15,7 @@
  * `awcms_hr_employment_terms` (effective-dated, append-only office / manager /
  * title / type / status) and `awcms_hr_workforce_settings`; one active
  * employment per profile and per login, enforced by the database; employee-sees-
- * own through an `ownershipGrant`; permissions seeded by `sql/181`;
+ * own through an `ownershipGrant`; permissions seeded by `sql/177`;
  * `data_lifecycle` and `subjectData` coverage.
  *
  * IS NOT: attendance, corrections, shifts, the staff-availability port,
@@ -50,6 +50,9 @@ function retained(input: {
   indexColumns?: string[];
   indexPurpose?: string;
   personal: boolean;
+  /** The employer's own record (`financial_tax`: labour, tax, social security) vs. live configuration. */
+  retentionClass: "financial_tax" | "system_event";
+  deletionMode: "status_transition_then_purge" | "hard_delete";
 }): HighVolumeTableDescriptor {
   return {
     key: input.key,
@@ -57,7 +60,7 @@ function retained(input: {
     ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
     scope: "tenant",
     cursorColumn: "created_at",
-    retentionClass: "system_event",
+    retentionClass: input.retentionClass,
     retentionMinDays: 2555,
     retentionMaxDays: 3650,
     defaultRetentionDays: 3650,
@@ -67,7 +70,7 @@ function retained(input: {
       rationale:
         "No archive step exists or is warranted: the table is the employer's employment record, or live state. Archive-then-purge for HR rows is a recorded follow-up (docs/awcms/hr-payroll.md section 15)."
     },
-    deletion: { mode: "hard_delete", rationale: input.deletionWhy },
+    deletion: { mode: input.deletionMode, rationale: input.deletionWhy },
     legalHold: {
       applicable: input.personal,
       precedence: input.personal ? "overrides_retention" : "not_applicable"
@@ -77,7 +80,7 @@ function retained(input: {
         columns: input.indexColumns ?? ["tenant_id"],
         purpose:
           input.indexPurpose ??
-          "Leading column of the table's primary key / unique keys (sql/180); nothing scans this table by age."
+          "Leading column of the table's primary key / unique keys (sql/176); nothing scans this table by age."
       }
     ],
     batchLimit: 5000,
@@ -104,7 +107,7 @@ export const hrWorkforceModule = defineModule({
   // screens land".
   status: "experimental",
   description:
-    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten deep, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. High-risk actions (create, terms change, assign, delete, restore, configure) are idempotent and audited without any name, title, number or account id. Attendance, shifts, the staff-availability port, commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
+    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or account id. Attendance, shifts, the staff-availability port, commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
   dependencies: ["tenant_admin", "profile_identity"],
   type: "domain",
   api: {
@@ -162,31 +165,37 @@ export const hrWorkforceModule = defineModule({
       key: "hr_workforce.employments",
       tableName: "awcms_hr_employments",
       personal: true,
+      retentionClass: "financial_tax",
+      deletionMode: "status_transition_then_purge",
       why: "One row per employment, authored by an administrator, so its ceiling is the number of people a tenant has employed. It is the employer's record of a relationship and a trigger refuses DELETE.",
       deletionWhy:
-        "Not performed and not permitted: awcms_app is denied DELETE and a trigger rejects it. An employment ends by a terminated term, or is soft-deleted when entered by mistake.",
+        "The lifecycle is soft delete (a mistaken entry) and, eventually, a purge once the employer's retention period has run; NO purge exists yet (recorded follow-up), so nothing is removed today. awcms_app is denied DELETE and a trigger rejects it, so a future purge must be a reviewed, privileged job. An employment ends by a terminated term, not by deletion.",
       indexColumns: ["tenant_id", "created_at"],
       indexPurpose:
-        "awcms_hr_employments_list_idx (sql/180) — the newest-first listing and any future bounded archive scan."
+        "awcms_hr_employments_list_idx (sql/176) — the newest-first listing and any future bounded archive scan."
     }),
     retained({
       key: "hr_workforce.employment_terms",
       tableName: "awcms_hr_employment_terms",
       personal: true,
+      retentionClass: "financial_tax",
+      deletionMode: "status_transition_then_purge",
       why: "One row per change of terms, authored by an administrator, so its ceiling is employments times changes. Append-only: the only UPDATE closes the open row.",
       deletionWhy:
-        "Not performed and not permitted: history is append-only, awcms_app is denied DELETE and a trigger rejects it.",
+        "Removed only together with its employment, by the same future purge (none exists yet; recorded follow-up). Until then nothing is removed: history is append-only, awcms_app is denied DELETE and a trigger rejects it.",
       indexColumns: ["tenant_id", "employment_id", "effective_from"],
       indexPurpose:
-        "awcms_hr_employment_terms_employment_idx (sql/180) — the per-employment history read."
+        "awcms_hr_employment_terms_employment_idx (sql/176) — the per-employment history read."
     }),
     retained({
       key: "hr_workforce.settings",
       tableName: "awcms_hr_workforce_settings",
       personal: false,
+      retentionClass: "system_event",
+      deletionMode: "hard_delete",
       why: "One row per tenant, upserted. An age-based purge would silently reset the tenant's configuration for being old.",
       deletionWhy:
-        "Not performed. The row is the tenant's own configuration; deleting it would silently restore the defaults."
+        "Not performed by any job: a live configuration row, not a record. Deleting it would silently restore the defaults, so no purge is declared."
     })
   ],
   subjectData: [

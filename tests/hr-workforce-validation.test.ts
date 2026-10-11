@@ -191,6 +191,11 @@ describe("small validators", () => {
     expect(isCalendarDate("2026-02-28")).toBe(true);
     expect(isCalendarDate("2026-02-30")).toBe(false);
     expect(isCalendarDate("2026-2-3")).toBe(false);
+    expect(isCalendarDate("1900-01-01")).toBe(true);
+    expect(isCalendarDate("2200-12-31")).toBe(true);
+    expect(isCalendarDate("1899-12-31")).toBe(false);
+    expect(isCalendarDate("2201-01-01")).toBe(false);
+    expect(isCalendarDate("0001-01-01")).toBe(false);
   });
 });
 

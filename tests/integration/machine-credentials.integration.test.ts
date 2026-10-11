@@ -229,6 +229,58 @@ suite("machine credentials + session introspection (ADR-0049)", () => {
     }
   });
 
+  test("an ownership grant never applies to a machine credential (ADR-0049 §3, ADR-0063)", async () => {
+    // A READ permission the service account does NOT hold. The credential's
+    // allow-list names it, so the only thing that could allow it is the
+    // ownership grant — which a credential must never carry.
+    const NOT_HELD = {
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "read"
+    } as const;
+    const ownership = { granted: true, reason: "employee reads their own" };
+    const { token } = await issue([
+      "blog_content.posts.read",
+      "blog_content.pages.read"
+    ]);
+    const runtime = getRuntimeSql();
+
+    const machine = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        new Date(),
+        NOT_HELD,
+        { ownershipGrant: ownership }
+      )
+    );
+
+    expect(machine.allowed).toBe(false);
+    if (!machine.allowed) expect(machine.denied.status).toBe(403);
+
+    // Control: the SAME grant on a human session IS honoured, so the deny
+    // above is the machine exclusion and not a broken grant.
+    const sessionToken = "human-session-token-ownership";
+    await getAdminSql()`
+      INSERT INTO awcms_sessions (tenant_id, identity_id, token_hash, expires_at)
+      VALUES (${TENANT_A}, ${humanIdentityA}, ${hashSessionToken(sessionToken)}, now() + interval '1 hour')
+    `;
+
+    const human = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(sessionToken),
+        new Date(),
+        NOT_HELD,
+        { ownershipGrant: ownership }
+      )
+    );
+
+    expect(human.allowed).toBe(true);
+  });
+
   test("READ-ONLY holds even when the service account is granted the action", async () => {
     // The credential's allow-list even NAMES the update permission, and the
     // account genuinely holds it. The refusal comes from the action class.

@@ -25,11 +25,15 @@ declares no `navigation`. It flips to `active` with its first screen.
   birth date, NIK or NPWP column exists on any HR table; display reads
   `profile_identity`. A test asserts no such column appears.
 - **One active employment per profile and per login**, by partial unique indexes
-  (`sql/180`), not by handler code. Rehire is a new employment after the first is
+  (`sql/176`), not by handler code. Rehire is a new employment after the first is
   terminated.
 - **Terms are append-only and effective-dated.** A change closes the open row and
   inserts the next; terms never overlap; `terminated` is terminal and stamps the
-  header; the manager chain is acyclic and at most ten deep. Each of those is a
+  header; the manager chain is acyclic and at most ten edges deep, counting the reports
+  BELOW an employee as well as the managers above (one SQL function shared by the
+  trigger and the handler pre-check). Manager-edge writes take one
+  per-tenant advisory lock, so two concurrent edges that would close a cycle
+  cannot both commit. Each of those is a
   trigger, so a bypassing session cannot break it.
 - **Profile merge** between two actively employed profiles is refused by a trigger
   on `awcms_profiles` (ADR-0132 section 2).
@@ -65,6 +69,35 @@ asserted here); archive-then-purge for HR rows is a recorded follow-up.
 | `application/hr-workforce-directory.ts`     | All SQL: list/get, create, terms change, assign, delete/restore, settings |
 | `application/hr-workforce-route-support.ts` | Idempotency, body validation and the ownership basis shared by the routes |
 | `src/pages/api/v1/hr-workforce/**`          | 6 thin route files, each authorizing through `defineTenantRoute`          |
+
+## Open items and recorded phase-1 postures
+
+Open (tracked, not hidden):
+
+- **Terms are not joined into the subject export.** `awcms_hr_employment_terms`
+  is `exportable: false` because a subject descriptor cannot express the
+  `employment_id` join to a person. A subject-access export today carries the
+  employment header only; the employee reads their own terms through
+  `GET /employments/{id}/terms`. This is an **open item**: a direct
+  employment-to-subject join in the export must land before the module leaves
+  `experimental`.
+- **No purge exists.** The `data_lifecycle` descriptors state the intended
+  lifecycle (soft delete, then a purge after the employer's retention period) but
+  nothing purges; archive-then-purge for HR rows is a follow-up.
+
+Known phase-1 posture (documented, no code change in this PR):
+
+- Reads are tenant-wide for a holder of `employments.read`: there is no per-office
+  or per-manager scoping yet (acceptance scenarios S4 and S6 of the design pack
+  need the `office` scope adapter and a `manager_of` ownership reason, both later
+  issues).
+- The login link (`assign`) has no step-up and registers no segregation-of-duties
+  rule; it is high-risk, audited and idempotent, and a tenant may author an SoD
+  rule over it.
+- The ownership resolver reads one boolean about a row before the guard decides
+  (inside the tenant transaction, under RLS); a missing id and someone else's row
+  both answer 403, so it is not an existence oracle, but the read happens before
+  the decision.
 
 ## Limitations
 
