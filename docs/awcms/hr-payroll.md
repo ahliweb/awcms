@@ -3,7 +3,11 @@
 # HR and payroll — workforce, commission, payroll (design pack)
 
 > **Status:** admitted by [ADR-0132](../adr/0132-hr-payroll-module-family-admission.md)
-> (Issue #916). **Design only: no module, table, route or migration exists.**
+> (Issue #916). **Design, plus one landed slice:** the phase 1 _foundation_
+> (module `hr_workforce`, `experimental`, `sql/180`–`sql/181`: employments,
+> effective-dated terms, settings, employee-sees-own; Issue #945) exists. Attendance,
+> shifts, the availability port, commission and payroll are still design only: no
+> table, route or migration exists for them.
 > This pack is the PRD-lite per phase, the state machines, the ERD and data
 > dictionary, the permissions/RLS matrix, the masking, audit and idempotency
 > matrices, the RBAC/ABAC acceptance scenarios, the threat and privacy analysis,

@@ -4111,6 +4111,9 @@ msgstr ""
 msgid "Procurement"
 msgstr ""
 
+msgid "HR Workforce"
+msgstr ""
+
 msgid "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
 msgstr ""
 

@@ -5,7 +5,11 @@
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
 > **Status:** diterima oleh [ADR-0132](../adr/0132-hr-payroll-module-family-admission.id.md)
-> (Issue #916). **Hanya desain: belum ada modul, tabel, route, atau migrasi.**
+> (Issue #916). **Desain, ditambah satu irisan yang sudah mendarat:** _fondasi_
+> fase 1 (modul `hr_workforce`, `experimental`, `sql/180`–`sql/181`: employment,
+> terms berlaku-efektif, settings, karyawan-melihat-miliknya; Issue #945) sudah ada.
+> Kehadiran, shift, port ketersediaan, komisi, dan payroll masih hanya desain: belum
+> ada tabel, route, atau migrasi untuk itu.
 > Paket ini memuat PRD-lite per fase, state machine, ERD dan kamus data, matriks
 > izin/RLS, matriks masking, audit dan idempotensi, skenario penerimaan
 > RBAC/ABAC, analisis ancaman dan privasi, event sementara, dan keputusan

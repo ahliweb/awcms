@@ -12,8 +12,10 @@ import type { WorkClass } from "../../lib/database/work-class";
 import {
   authorizeInTransaction,
   resolveAuthInputs,
-  type AuthorizeResult
+  type AuthorizeResult,
+  type OwnershipGrant
 } from "../identity-access/application/access-guard";
+import { resolveTenantContext } from "../identity-access/application/auth-context";
 import { createAuthorizationReadCache } from "../identity-access/application/authorization-read-cache";
 import type { AccessRequest } from "../identity-access/domain/access-control";
 import {
@@ -196,6 +198,31 @@ export type TenantRouteConfig<TPrepared> = {
     hierarchyPort?: BusinessScopeHierarchyPort;
     sodRules?: readonly SoDRuleDescriptor[];
   };
+  /**
+   * An ownership basis for the guard (ADR-0063), for a route whose subject can
+   * be "my own record" — `hr_workforce` is the first (an employee reads their
+   * own employment). Evaluated INSIDE the tenant transaction, before the guard,
+   * because the answer needs a row ("is this employment linked to the caller's
+   * login?") that `authorize` cannot see.
+   *
+   * It only WIDENS what `authorizeInTransaction` evaluates: ABAC (including an
+   * explicit deny), the platform-scope gate and SoD still run, a machine
+   * credential never carries it (it resolves to no tenant user here), and the
+   * decision log records `ownership_grant:<reason>`. Not called at all when the
+   * caller has no active session, so an unauthenticated request costs nothing
+   * extra and learns nothing. The resolver must return `granted: false` for
+   * "no such row" exactly as for "someone else's row" — otherwise the 403 vs
+   * 404 difference becomes an existence oracle.
+   */
+  ownershipGrant?: (
+    context: TenantRouteRequestContext & {
+      tx: Bun.TransactionSQL;
+      tokenHash: string;
+      /** The caller's tenant user id, already resolved from the session. */
+      tenantUserId: string;
+      prepared: TPrepared;
+    }
+  ) => Promise<OwnershipGrant>;
   /**
    * Runs AFTER the tenant/token checks and BEFORE any database work — the slot
    * for everything hand-written routes do between the 401 guard and
@@ -884,8 +911,30 @@ export function defineTenantRoute<TPrepared = undefined>(
           ? guard
           : [guard];
 
+        let ownershipGrant: OwnershipGrant | undefined;
+
+        if (config.ownershipGrant && !heldPrepareRefusal) {
+          const principal = await resolveTenantContext(
+            tx,
+            tenantId,
+            tokenHash,
+            requestContext.now
+          );
+
+          ownershipGrant = principal
+            ? await config.ownershipGrant({
+                ...requestContext,
+                tx,
+                tokenHash,
+                tenantUserId: principal.tenantUserId,
+                prepared
+              })
+            : undefined;
+        }
+
         const authorizeOptions = {
           ...config.authorizeOptions,
+          ...(ownershipGrant ? { ownershipGrant } : {}),
           clientIp: resolveClientIp(request, clientAddress),
           readCache: createAuthorizationReadCache()
         };

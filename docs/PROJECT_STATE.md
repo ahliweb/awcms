@@ -201,7 +201,7 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 3. What is already done (do not rebuild it)
 
-- **28 modules** registered with `FORCE` RLS, DB role separation
+- **29 modules** registered with `FORCE` RLS, DB role separation
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Advanced auth**: MFA TOTP + session-assurance/step-up (`sql/024`), tenant-aware
   OIDC/SSO + SSRF guard + break-glass (`sql/025`/`026`), profile-aware Turnstile bot

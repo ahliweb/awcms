@@ -147,5 +147,18 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // (`PUT /documents/{id}`): the screen creates a draft and, for a mistake,
   // cancels it and enters a new one, so this stays on the shrink-only list until
   // a draft editor is a decision.
-  "procurement.documents.update"
+  "procurement.documents.update",
+
+  // hr_workforce (8) — ADR-0132 / Issue #945. Phase 1 foundation ships API-first
+  // and `experimental` (flag off): the employment, terms and settings screens
+  // are the recorded follow-up that flips the module to `active`, so each
+  // permission is listed here until a screen claims it.
+  "hr_workforce.employments.assign",
+  "hr_workforce.employments.create",
+  "hr_workforce.employments.delete",
+  "hr_workforce.employments.read",
+  "hr_workforce.employments.restore",
+  "hr_workforce.employments.update",
+  "hr_workforce.settings.configure",
+  "hr_workforce.settings.read"
 ];
