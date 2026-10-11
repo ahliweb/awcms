@@ -84,7 +84,7 @@ tags:
   - name: Procurement
     description: "Suppliers, receiving, supplier returns, stock requisitions and location transfers (procurement module, Issue #888, ADR-0128) on top of the inventory ledger. A supplier is a business role that may reference the canonical profile_identity party, with vendor code, status, categories/tags and SENSITIVE tax/business identifiers and payment/contact references that are masked in every response and revealed only by one audited, separately permissioned operation. A document (receive, supplier_return, requisition, transfer) has line snapshots of SKU, name, unit and exact-decimal cost and a lifecycle draft -> submitted -> finalised | cancelled, finalised -> reversed enforced by a database trigger; finalised documents are immutable and nothing is deleted. Finalise posts inventory movements THROUGH THE LEDGER'S PORT (never a balance), all lines or none and idempotently; reversal posts compensating movements; a requisition or transfer is a paired ledger transfer. Optional threshold approval through workflow_approval (fail closed). finalise, reverse, cancel and reveal are high-risk, separately grantable, and audited."
   - name: HR Workforce
-    description: "The employment context (hr_workforce module, Issue #945, ADR-0132, phase 1 of the hr_* family). An employment REFERENCES a profile_identity party and never copies its name, contact or national id; no photo, biometric or device field exists (owner decision O6). Terms (office, manager, job title, type, status) are effective-dated and append-only, the manager chain is acyclic and bounded, terminated is terminal, and the database enforces one active employment per profile and per login. An employee reads their own employment through an ownership grant on the persisted login link; the link itself (assign), delete, restore and settings configure are high-risk, idempotency-keyed and audited. Attendance, shifts, commission and payroll are later phases."
+    description: "The employment context (hr_workforce module, Issues #945 and #946, ADR-0132, phase 1 of the hr_* family). An employment REFERENCES a profile_identity party and never copies its name, contact or national id; no photo, biometric or device field exists (owner decision O6). Terms (office, manager, job title, type, status) are effective-dated and append-only, the manager chain is acyclic and bounded, terminated is terminal, and the database enforces one active employment per profile and per login. An employee reads their own employment through an ownership grant on the persisted login link; the link itself (assign), delete, restore and settings configure are high-risk, idempotency-keyed and audited. Shift templates are patterns (local start, elapsed duration, optional break, IANA zone); a shift assignment is one UTC half-open interval per employment, drafted, published (high-risk) and cancelled, with no overlap among non-cancelled rows per employment enforced by the database and no free-text or reason field (time off carries a coarse category only). An employee reads their own published schedule through an ownership grant. Attendance, commission and payroll are later phases."
   - name: WhatsApp Delivery
     description: "Operator surface of the generic WhatsApp delivery capability (whatsapp_delivery module, ADR-0133, Issue #963): the tenant's queue diagnostics, cancelling a waiting message, the registered templates, the suppression list and the per-recipient marketing consent store. There is NO enqueue or send endpoint: queueing is a capability-port call (WhatsappDeliveryPort) made in the consuming module's own transaction, and the provider is called only by the dispatcher job, outside any transaction (ADR-0006). A channel queue table, the repo's third after email and push — what ADR-0133 refuses is a second WhatsApp queue, one per consuming domain. Recipients are masked in every response and message bodies and variables are never returned. Consent is independent of segment membership: a marketing message needs an explicit recorded opt-in, checked at enqueue and again at dispatch. Credentials are per deployment from the environment, never per tenant. Ships inert behind WHATSAPP_ENABLED."
   - name: HR Commission
@@ -9966,6 +9966,470 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/shift-assignments:
+    get:
+      operationId: hrWorkforceShiftAssignmentsList
+      tags:
+        - HR Workforce
+      summary: List shift assignments
+      description: Gated by `hr_workforce.shifts.read` (drafts visible), EXCEPT `mine=true`, which answers only the caller's OWN PUBLISHED schedule and needs no permission (an ownership grant on the persisted login link, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). Oldest start first, keyset paginated (`cursor`); `from` (inclusive) and `to` (exclusive) are whole-minute UTC instants and an assignment is listed when it overlaps that window. Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - name: employmentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - published
+              - cancelled
+        - name: mine
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of assignments.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      assignments:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrShiftAssignment"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: hrWorkforceShiftAssignmentCreate
+      tags:
+        - HR Workforce
+      summary: Draft a shift or time-off assignment
+      description: "Gated by `hr_workforce.shifts.create`. Send EITHER `templateId` + `localDate` (the wall clock is resolved to UTC once, here, in the template's zone) OR the explicit `startsAt`/`endsAt` UTC interval with its `timeZone`. Created as a DRAFT: invisible to scheduling consumers until published, but it already counts for the overlap rule. An employment cannot have two non-cancelled assignments that overlap (half-open, across kinds): `409 SHIFT_CONFLICT`, with the other assignment's id in `error.details.conflictingAssignmentId` ONLY when the caller also holds `hr_workforce.shifts.read` (otherwise the id is omitted, so a create-only caller cannot enumerate other people's schedule ids). Time off carries a coarse `timeOffKind` and NEVER a reason; no free-text field exists. Requires an Idempotency-Key. Audited."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrShiftAssignmentInput"
+      responses:
+        "201":
+          description: The draft assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftAssignment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or SHIFT_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: EMPLOYMENT_NOT_FOUND, TEMPLATE_NOT_FOUND, OFFICE_NOT_FOUND or INVALID_TIME_ZONE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/shift-assignments/{id}/cancel:
+    post:
+      operationId: hrWorkforceShiftAssignmentCancel
+      tags:
+        - HR Workforce
+      summary: Cancel a shift assignment
+      description: Gated by `hr_workforce.shifts.cancel` (high-risk). draft or published -> cancelled (terminal). The row stays; it stops counting for the overlap rule and for availability. Requires an Idempotency-Key. Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The cancelled assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftAssignment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or SHIFT_ALREADY_CANCELLED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/shift-assignments/{id}/publish:
+    post:
+      operationId: hrWorkforceShiftAssignmentPublish
+      tags:
+        - HR Workforce
+      summary: Publish a shift assignment
+      description: "Gated by `hr_workforce.shifts.publish` (high-risk). draft -> published. Only a published assignment is visible to scheduling consumers (the `StaffAvailabilityPort`). A published assignment is immutable: it is cancelled, never edited or deleted. Requires an Idempotency-Key. Audited."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The published assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftAssignment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, SHIFT_NOT_DRAFT or EMPLOYMENT_DELETED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/shift-templates:
+    get:
+      operationId: hrWorkforceShiftTemplatesList
+      tags:
+        - HR Workforce
+      summary: List shift templates
+      description: Gated by `hr_workforce.templates.read`. Live templates, newest first, keyset paginated (`cursor`). A template is a pattern and names no person. Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of shift templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      templates:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrShiftTemplate"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: hrWorkforceShiftTemplateCreate
+      tags:
+        - HR Workforce
+      summary: Create a shift template
+      description: "Gated by `hr_workforce.templates.create`. A pattern: a local start time, an ELAPSED duration in minutes, an optional single break and an IANA zone. Codes are unique among live templates (`409 TEMPLATE_CODE_CONFLICT`). Requires an Idempotency-Key. Audited."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrShiftTemplateInput"
+      responses:
+        "201":
+          description: The template.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftTemplate"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or TEMPLATE_CODE_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: OFFICE_NOT_FOUND or INVALID_TIME_ZONE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/shift-templates/{id}:
+    get:
+      operationId: hrWorkforceShiftTemplateGet
+      tags:
+        - HR Workforce
+      summary: Get a shift template
+      description: Gated by `hr_workforce.templates.read`. A soft-deleted template is a 404.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The template.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftTemplate"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: hrWorkforceShiftTemplateUpdate
+      tags:
+        - HR Workforce
+      summary: Edit a shift template
+      description: "Gated by `hr_workforce.templates.update`. Only the keys sent change (the code is fixed); `officeId: null`, or both break keys `null`, clear them. Assignments already made are NOT moved: they hold their own resolved instants. The call sets values, so repeating it is harmless and it needs no Idempotency-Key. Audited."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrShiftTemplatePatch"
+      responses:
+        "200":
+          description: The template.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftTemplate"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: OFFICE_NOT_FOUND, INVALID_TIME_ZONE or VALIDATION_ERROR (the break must end within the shift).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: hrWorkforceShiftTemplateDelete
+      tags:
+        - HR Workforce
+      summary: Soft-delete a shift template
+      description: Gated by `hr_workforce.templates.delete` (high-risk). Soft delete; frees the code. Assignments made from it are unaffected. Requires an Idempotency-Key. Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The deleted template.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrShiftTemplate"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or TEMPLATE_DELETED.
           content:
             application/json:
               schema:
@@ -27324,6 +27788,218 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+    HrShiftAssignment:
+      type: object
+      description: One scheduled interval for one employment, in UTC and half-open `[startsAt, endsAt)`. It carries no name and no free text; time off has a coarse `timeOffKind` and never a reason.
+      properties:
+        id:
+          type: string
+          format: uuid
+        employmentId:
+          type: string
+          format: uuid
+        templateId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Provenance only; the instants are authoritative and never recomputed.
+        kind:
+          type: string
+          enum:
+            - work
+            - time_off
+        timeOffKind:
+          type: string
+          nullable: true
+          enum:
+            - leave
+            - holiday
+            - other
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        breakStartsAt:
+          type: string
+          format: date-time
+          nullable: true
+        breakEndsAt:
+          type: string
+          format: date-time
+          nullable: true
+        timeZone:
+          type: string
+          description: The IANA zone the interval was resolved in (a snapshot).
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+            - cancelled
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    HrShiftAssignmentInput:
+      type: object
+      additionalProperties: false
+      description: Send EITHER `templateId` + `localDate` (work only) OR `startsAt` + `endsAt` + `timeZone`. Instants are whole-minute UTC ending in Z; a work shift is at most 24 hours, time off at most 31 days; an optional single break must lie inside a work interval.
+      required:
+        - employmentId
+        - kind
+      properties:
+        employmentId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - work
+            - time_off
+        timeOffKind:
+          type: string
+          enum:
+            - leave
+            - holiday
+            - other
+        templateId:
+          type: string
+          format: uuid
+        localDate:
+          type: string
+          format: date
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        breakStartsAt:
+          type: string
+          format: date-time
+        breakEndsAt:
+          type: string
+          format: date-time
+        timeZone:
+          type: string
+        officeId:
+          type: string
+          format: uuid
+    HrShiftTemplate:
+      type: object
+      description: A shift pattern. It names no person.
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        localStart:
+          type: string
+          description: Local wall-clock start, HH:MM (24 hours), in `timeZone`.
+        durationMinutes:
+          type: integer
+          description: ELAPSED minutes; the end is the start plus this, whatever the wall clock does.
+        breakOffsetMinutes:
+          type: integer
+          nullable: true
+        breakMinutes:
+          type: integer
+          nullable: true
+        timeZone:
+          type: string
+          description: IANA zone name.
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+    HrShiftTemplateInput:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - localStart
+        - durationMinutes
+        - timeZone
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        localStart:
+          type: string
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+        durationMinutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        breakOffsetMinutes:
+          type: integer
+          minimum: 0
+          maximum: 1439
+        breakMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        timeZone:
+          type: string
+        officeId:
+          type: string
+          format: uuid
+    HrShiftTemplatePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        localStart:
+          type: string
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+        durationMinutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        breakOffsetMinutes:
+          type: integer
+          nullable: true
+        breakMinutes:
+          type: integer
+          nullable: true
+        timeZone:
+          type: string
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
     HrTermsChangeInput:
       type: object
       additionalProperties: false

@@ -220,11 +220,14 @@ describe("the descriptor", () => {
     expect(lifecycle.sort()).toEqual([
       "awcms_hr_employment_terms",
       "awcms_hr_employments",
+      "awcms_hr_shift_assignments",
+      "awcms_hr_shift_templates",
       "awcms_hr_workforce_settings"
     ]);
     expect(subject.sort()).toEqual([
       "awcms_hr_employment_terms",
-      "awcms_hr_employments"
+      "awcms_hr_employments",
+      "awcms_hr_shift_assignments"
     ]);
   });
 });

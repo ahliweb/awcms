@@ -717,7 +717,10 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         // The label of a commission RULE (Issue #950): a tenant's name for its
         // own scheme, not a person's name. hr-commission-database covers that
         // table's own minimisation (no person or employment column at all).
-        .filter((c) => c !== "awcms_hr_commission_rules.name");
+        .filter((c) => c !== "awcms_hr_commission_rules.name")
+        // Issue #946: a shift TEMPLATE's label ("Morning", "Night") names a
+        // pattern, never a person; assignments carry no label at all.
+        .filter((c) => c !== "awcms_hr_shift_templates.name");
 
       expect(offenders).toEqual([]);
     });

@@ -1,0 +1,5 @@
+---
+"awcms": minor
+---
+
+hr_workforce: shift templates, shift assignments and the StaffAvailabilityPort (Issue 946, ADR-0132, migrations sql/184-sql/185). Templates are patterns (local start, elapsed duration, optional break, IANA zone) resolved to UTC once when put on a date; assignments are UTC half-open intervals per employment (work or time off with a coarse category and no reason field), draft then published then cancelled, never deleted, immutable once published. The database refuses overlapping non-cancelled assignments of one employment across kinds, including under concurrent writers (advisory-lock trigger). Publish, cancel and template delete are high-risk, idempotent and audited without personal data; an employee reads their own published schedule through an ownership grant. The generic StaffAvailabilityPort (shared port type plus hr_workforce adapter) returns working intervals per opaque staff reference, fail-closed, read-only and tenant-scoped, with daylight-saving table tests; no Booking code is touched. Existing tenants need the permission backfill for the new shifts and templates permissions.

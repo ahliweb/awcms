@@ -18,8 +18,11 @@
  * own through an `ownershipGrant`; permissions seeded by `sql/177`;
  * `data_lifecycle` and `subjectData` coverage.
  *
- * IS NOT: attendance, corrections, shifts, the staff-availability port,
- * commission or payroll (later issues of the same ADR), and **never** a photo,
+ * Issue #946 adds shift templates, shift assignments and the generic
+ * `StaffAvailabilityPort` adapter (`sql/184`-`sql/185`).
+ *
+ * IS NOT: attendance, corrections, commission or payroll (later issues of the
+ * same ADR), and **never** a photo,
  * biometric or device-fingerprint field (owner decision O6).
  *
  * ## Dependencies
@@ -49,6 +52,8 @@ function retained(input: {
   deletionWhy: string;
   indexColumns?: string[];
   indexPurpose?: string;
+  /** The column a future bounded scan would order by. Defaults to `created_at`. */
+  cursorColumn?: string;
   personal: boolean;
   /** The employer's own record (`financial_tax`: labour, tax, social security) vs. live configuration. */
   retentionClass: "financial_tax" | "system_event";
@@ -59,7 +64,7 @@ function retained(input: {
     tableName: input.tableName,
     ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
     scope: "tenant",
-    cursorColumn: "created_at",
+    cursorColumn: input.cursorColumn ?? "created_at",
     retentionClass: input.retentionClass,
     retentionMinDays: 2555,
     retentionMaxDays: 3650,
@@ -107,7 +112,7 @@ export const hrWorkforceModule = defineModule({
   // screens land".
   status: "experimental",
   description:
-    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or reason (the assign row carries only the login's UUID). Attendance, shifts, the staff-availability port, commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
+    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or reason (the assign row carries only the login's UUID). Shifts (Issue #946): shift templates are patterns (local start, elapsed duration, one optional break, IANA zone) and a shift assignment is one UTC half-open interval per employment, work or time off (a coarse category, never a reason; no free-text field exists), draft then published then cancelled, never deleted. The database refuses two overlapping non-cancelled assignments of one employment, across kinds, even for two concurrent writers (a per-employment advisory lock inside the trigger), and a published or cancelled row is immutable. Publish and cancel are high-risk, idempotent and audited with ids only; an employee reads their own published schedule through an ownership grant. The module's StaffAvailabilityPort adapter exposes working intervals per opaque staff reference (published work, minus breaks and time off, while the terms are active) and nothing else, read-only in the caller's tenant transaction. Attendance, corrections, commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
   dependencies: ["tenant_admin", "profile_identity"],
   type: "domain",
   api: {
@@ -149,6 +154,49 @@ export const hrWorkforceModule = defineModule({
         "Link or unlink the login that is the employee (the basis of self-service ownership) — audited, high-risk"
     },
     {
+      activityCode: "shifts",
+      action: "read",
+      description:
+        "Read shift assignments, drafts included; an employee reads their own published schedule without this"
+    },
+    {
+      activityCode: "shifts",
+      action: "create",
+      description:
+        "Create a draft shift or time-off assignment for an employment"
+    },
+    {
+      activityCode: "shifts",
+      action: "publish",
+      description:
+        "Publish a draft shift assignment so scheduling consumers can see it — high-risk"
+    },
+    {
+      activityCode: "shifts",
+      action: "cancel",
+      description: "Cancel a draft or published shift assignment — high-risk"
+    },
+    {
+      activityCode: "templates",
+      action: "read",
+      description: "Read shift templates"
+    },
+    {
+      activityCode: "templates",
+      action: "create",
+      description: "Create a shift template"
+    },
+    {
+      activityCode: "templates",
+      action: "update",
+      description: "Edit a shift template; existing assignments are not moved"
+    },
+    {
+      activityCode: "templates",
+      action: "delete",
+      description: "Soft-delete a shift template — high-risk"
+    },
+    {
       activityCode: "settings",
       action: "read",
       description:
@@ -188,6 +236,33 @@ export const hrWorkforceModule = defineModule({
         "awcms_hr_employment_terms_employment_idx (sql/176) — the per-employment history read."
     }),
     retained({
+      key: "hr_workforce.shift_templates",
+      tableName: "awcms_hr_shift_templates",
+      personal: false,
+      retentionClass: "system_event",
+      deletionMode: "status_transition_then_purge",
+      why: "One row per shift pattern, authored by an administrator, so its ceiling is the number of patterns a tenant defines. A pattern holds no person.",
+      deletionWhy:
+        "The lifecycle is soft delete (the code is freed for reuse). NO purge exists yet, so nothing is removed today; assignments keep their own resolved instants, so a purge of a template could never change a schedule. awcms_app is denied DELETE and a trigger rejects it, so a future purge must be a reviewed, privileged job.",
+      indexColumns: ["tenant_id", "created_at"],
+      indexPurpose:
+        "awcms_hr_shift_templates_list_idx (sql/184) — the newest-first listing and any future bounded scan."
+    }),
+    retained({
+      key: "hr_workforce.shift_assignments",
+      tableName: "awcms_hr_shift_assignments",
+      personal: true,
+      retentionClass: "financial_tax",
+      deletionMode: "status_transition_then_purge",
+      cursorColumn: "starts_at",
+      why: "One row per scheduled shift or time-off interval, so its ceiling is employments times days worked. Rosters can support the employer's pay and working-hours records, so they follow the same retention class as the employment history; the actual period is the employer's counsel's, not asserted here.",
+      deletionWhy:
+        "The lifecycle is draft, published, then cancelled (terminal); a row is never deleted. NO purge exists yet (recorded follow-up, with the other HR rows), so nothing is removed today. awcms_app is denied DELETE and a trigger rejects it, so a future purge must be a reviewed, privileged job.",
+      indexColumns: ["tenant_id", "starts_at"],
+      indexPurpose:
+        "awcms_hr_shift_assignments_list_idx (sql/184) — the time-ordered listing and any future bounded scan."
+    }),
+    retained({
       key: "hr_workforce.settings",
       tableName: "awcms_hr_workforce_settings",
       personal: false,
@@ -199,6 +274,20 @@ export const hrWorkforceModule = defineModule({
     })
   ],
   subjectData: [
+    {
+      key: "hr_workforce.shift_assignments",
+      tableName: "awcms_hr_shift_assignments",
+      ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "published_by", references: "tenant_user" },
+        { column: "cancelled_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "When a person was scheduled to work and when they were away (a coarse category, never a reason). The row reaches the person only through `employment_id`, which the registry's direct subject columns cannot express, so the descriptor names only the actor stamps — the same open item the employment terms carry (tracked as issue 985, which covers both tables). The subject's own published schedule remains readable through the ownership-granted GET /api/v1/hr-workforce/shift-assignments?mine=true. Rows are never deleted and a published one is immutable, so an erasure could not rewrite them; the anonymised profile makes the schedule resolve to nobody. Retained under the employer's working-hours and pay obligations (ADR-0132 section 13.2)."
+    },
     {
       key: "hr_workforce.employments",
       tableName: "awcms_hr_employments",
@@ -224,7 +313,7 @@ export const hrWorkforceModule = defineModule({
       exportable: false,
       erasure: "retain_under_obligation",
       rationale:
-        "The effective-dated history of where an employee worked, under whom and in what status. The row reaches the person only through `employment_id` (an employment), which the registry's direct subject columns cannot express, so the descriptor names only the actor stamp. The subject's own history remains readable through the ownership-granted GET /api/v1/hr-workforce/employments/{id}/terms. Append-only by trigger and retained under the employer's legal obligations (ADR-0132 section 13.2), so an erasure could not rewrite it; the anonymised profile makes the history resolve to nobody. A direct employment-to-subject join in the export is a recorded follow-up."
+        "The effective-dated history of where an employee worked, under whom and in what status. The row reaches the person only through `employment_id` (an employment), which the registry's direct subject columns cannot express, so the descriptor names only the actor stamp. The subject's own history remains readable through the ownership-granted GET /api/v1/hr-workforce/employments/{id}/terms. Append-only by trigger and retained under the employer's legal obligations (ADR-0132 section 13.2), so an erasure could not rewrite it; the anonymised profile makes the history resolve to nobody. A direct employment-to-subject join in the export is a recorded follow-up (issue 985, which covers this table and the shift assignments)."
     }
   ]
 });

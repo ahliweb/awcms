@@ -662,6 +662,31 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/hr-workforce/shift-assignments/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/shift-assignments/[id]/publish.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/shift-assignments/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/shift-templates/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/shift-templates/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/identity/business-scope/assignments/[id]/revoke.ts",
       "workClass": "interactive",
       "source": "default"

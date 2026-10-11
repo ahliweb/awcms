@@ -5,11 +5,14 @@
 > **Status:** admitted by [ADR-0132](../adr/0132-hr-payroll-module-family-admission.md)
 > (Issue #916). **Design, plus one landed slice:** the phase 1 _foundation_
 > (module `hr_workforce`, `experimental`, `sql/176`–`sql/177`: employments,
-> effective-dated terms, settings, employee-sees-own; Issue #945) and the phase 2
-> _rule foundation_ (module `hr_commission`, `experimental`, `sql/182`–`sql/183`:
-> versioned commission rules and their pure evaluation; Issue #950) exist.
-> Attendance, shifts, the availability port, the commission accrual ledger and
-> payroll are still design only: no table, route or migration exists for them.
+> effective-dated terms, settings, employee-sees-own; Issue #945), the **shift
+> slice** (`sql/184`–`sql/185`: shift templates, shift assignments with a
+> database-enforced overlap rule, and the `StaffAvailabilityPort` adapter; Issue
+> #946) and the phase 2 _rule foundation_ (module `hr_commission`,
+> `experimental`, `sql/182`–`sql/183`: versioned commission rules and their pure
+> evaluation; Issue #950) exist. Attendance, corrections, the commission accrual
+> ledger and payroll are still design only: no table, route or migration exists
+> for them.
 > This pack is the PRD-lite per phase, the state machines, the ERD and data
 > dictionary, the permissions/RLS matrix, the masking, audit and idempotency
 > matrices, the RBAC/ABAC acceptance scenarios, the threat and privacy analysis,
@@ -230,12 +233,14 @@ date-keyed rows. Time off carries a coarse `time_off_kind` (`leave`, `holiday`,
 **Conflict rule.** For one employment, no two assignments with `status <>
 'cancelled'` may overlap as half-open intervals, **across kinds** (work over time
 off conflicts). Violation is `409 SHIFT_CONFLICT` naming the conflicting assignment
-id only. Enforcement: one transaction that locks the employment row `FOR UPDATE`,
-checks overlap, and writes, plus a **deferred constraint trigger as backstop** so a
-maintenance session cannot create an overlap. A GiST exclusion constraint on
-`tstzrange(starts_at, ends_at, '[)')` is tighter but requires `btree_gist`, never
-used in this repo's migrations; the phase 1 PR decides, with the provisioning
-owner. Only `published` assignments are visible to the availability port.
+id only. **As built (Issue #946, `sql/184`):** a `BEFORE INSERT OR UPDATE` trigger
+takes a transaction-scoped advisory lock keyed on (tenant, employment) and then
+refuses an overlapping non-cancelled row (`23P01`, `HR_SHIFT_CONFLICT`); the handler
+takes the same lock and pre-checks, so the refusal is a named `409` and not a
+poisoned transaction, and a maintenance session cannot create an overlap either. No
+`btree_gist` exclusion constraint is used (the extension needs a privileged
+`CREATE EXTENSION` no migration in this repo asks for; `sql/171` records the same
+decision). Only `published` assignments are visible to the availability port.
 A published assignment is cancelled, never deleted.
 
 ## 5. The staff-availability port
@@ -317,8 +322,10 @@ export interface StaffAvailabilityPort {
   staff × assignments in the window.
 - **No payroll exposure, structurally.** The result has three fields per staff
   member: `staffRef`, `status`, `intervals`. No name, office, template code, kind
-  label, grade, rate or any HR attribute. The adapter's SQL names only the two
-  schedule tables; a test fails if it ever names a compensation, payroll or
+  label, grade, rate or any HR attribute. The adapter's SQL names only the schedule
+  (`awcms_hr_shift_assignments`), the terms (`awcms_hr_employment_terms`) and the
+  employment header (`awcms_hr_employments`, because soft-delete lives there; none
+  holds a name or a rate); a test fails if it ever names a compensation, payroll or
   commission table. The port reads, so it carries no write and no event.
 - **Authorization and audit.** The port authorizes nothing and audits nothing
   (as `InventoryLedgerPort` documents): the consumer's composition root authorizes
@@ -906,8 +913,8 @@ payroll must come back from the same point in time.
 - Reveal of a payout account: step-up conditional on an enrolled factor and a
   per-actor rate limit, decided in ADR-0137 §4 (not unconditionally, ADR-0058 §E);
   the implementation is a later issue.
-- Merge guard between two actively-employed profiles, the `btree_gist` question and
-  the `AccessAction` additions (`calculate`, `pay`) are implementation-time.
+- Merge guard between two actively-employed profiles (landed, #945), the
+  `btree_gist` question (decided: advisory-lock trigger, #946) and the `AccessAction` additions (`calculate`, `pay`) are implementation-time.
 - Archive-then-purge for financial rows, admin screens, and bank-file output are
   later issues.
 - `awcms_profile_entity_links` may additionally be written for discovery ("which

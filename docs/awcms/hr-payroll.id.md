@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:80061cdc7988a3be223361175952b8fcd9220e0ca504fcbeffacda591badc65e -->
+<!-- i18n-source-hash: sha256:36f6fe0ccf97569ea5e71ddde464935ba2684c4381049b0e853befbdf031df82 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -8,10 +8,12 @@
 > (Issue #916). **Desain, ditambah satu irisan yang sudah mendarat:** _fondasi_
 > fase 1 (modul `hr_workforce`, `experimental`, `sql/176`–`sql/177`: employment,
 > terms berlaku-efektif, settings, karyawan-melihat-miliknya; Issue #945) dan
-> _fondasi aturan_ fase 2 (modul `hr_commission`, `experimental`, `sql/182`–`sql/183`:
-> aturan komisi berversi dan evaluasinya yang murni; Issue #950) sudah ada.
-> Kehadiran, shift, port ketersediaan, buku besar akrual komisi, dan payroll masih
-> hanya desain: belum ada tabel, route, atau migrasi untuk itu.
+> _irisan shift_ (`sql/184`–`sql/185`: template shift, penugasan shift dengan aturan
+> tumpang-tindih yang ditegakkan database, dan adapter `StaffAvailabilityPort`;
+> Issue #946), serta _fondasi aturan_ fase 2 (modul `hr_commission`, `experimental`,
+> `sql/182`–`sql/183`: aturan komisi berversi dan evaluasinya yang murni; Issue #950)
+> sudah ada. Kehadiran, koreksi, buku besar akrual komisi, dan payroll masih hanya
+> desain: belum ada tabel, route, atau migrasi untuk itu.
 > Paket ini memuat PRD-lite per fase, state machine, ERD dan kamus data, matriks
 > izin/RLS, matriks masking, audit dan idempotensi, skenario penerimaan
 > RBAC/ABAC, analisis ancaman dan privasi, event sementara, dan keputusan
@@ -246,11 +248,14 @@ kesehatan.
 **lintas kind** (work di atas time off bentrok). Pelanggaran adalah `409
 SHIFT_CONFLICT` yang hanya menyebut id penugasan yang bentrok. Penegakan: satu
 transaksi yang mengunci baris kepegawaian `FOR UPDATE`, memeriksa tumpang tindih,
-lalu menulis, ditambah **constraint trigger tertunda sebagai cadangan** agar
-sesi pemeliharaan tidak bisa membuat tumpang tindih. Constraint eksklusi GiST pada
-`tstzrange(starts_at, ends_at, '[)')` lebih rapat tetapi membutuhkan `btree_gist`,
-yang tak pernah dipakai di migrasi repo ini; PR fase 1 memutuskan, bersama pemilik
-provisioning. Hanya penugasan `published` yang terlihat oleh port ketersediaan.
+lalu menulis. **Sebagaimana dibangun (Issue #946, `sql/184`):** trigger `BEFORE
+INSERT OR UPDATE` mengambil advisory lock lingkup-transaksi berkunci (tenant,
+employment) lalu menolak baris non-batal yang tumpang tindih (`23P01`,
+`HR_SHIFT_CONFLICT`); handler mengambil lock yang sama dan memeriksa lebih dulu,
+sehingga penolakan adalah `409` bernama dan bukan transaksi yang teracuni, dan sesi
+pemeliharaan pun tidak bisa membuat tumpang tindih. Constraint eksklusi `btree_gist`
+tidak dipakai (ekstensinya butuh `CREATE EXTENSION` berhak-istimewa yang tak diminta
+migrasi mana pun di repo ini; `sql/171` mencatat keputusan yang sama). Hanya penugasan `published` yang terlihat oleh port ketersediaan.
 Penugasan terbit dibatalkan, tidak pernah dihapus.
 
 ## 5. Port ketersediaan staf
@@ -336,8 +341,10 @@ export interface StaffAvailabilityPort {
   × penugasan di jendela.
 - **Tanpa paparan payroll, secara struktural.** Hasil memiliki tiga field per staf:
   `staffRef`, `status`, `intervals`. Tanpa nama, kantor, kode template, label kind,
-  grade, tarif, atau atribut HR apa pun. SQL adapter hanya menyebut dua tabel
-  jadwal; tes gagal bila pernah menyebut tabel kompensasi, payroll, atau komisi.
+  grade, tarif, atau atribut HR apa pun. SQL adapter hanya menyebut jadwal
+  (`awcms_hr_shift_assignments`), terms (`awcms_hr_employment_terms`) dan header
+  employment (`awcms_hr_employments`, karena soft-delete ada di sana; tak satu pun
+  memuat nama atau tarif); tes gagal bila pernah menyebut tabel kompensasi, payroll, atau komisi.
   Port ini membaca, jadi tidak membawa tulis dan tidak ada event.
 - **Otorisasi dan audit.** Port tidak mengotorisasi dan tidak mengaudit apa pun
   (seperti didokumentasikan `InventoryLedgerPort`): composition root konsumen
@@ -932,8 +939,8 @@ harus kembali dari titik waktu yang sama.
 - Reveal rekening pembayaran: step-up bersyarat pada faktor yang terdaftar dan rate
   limit per aktor, diputuskan di ADR-0137 §4 (tidak tanpa syarat, ADR-0058 §E);
   implementasinya issue berikutnya.
-- Pengaman merge antara dua profil berpegawai-aktif, pertanyaan `btree_gist`, dan
-  tambahan `AccessAction` (`calculate`, `pay`) adalah keputusan saat implementasi.
+- Pengaman merge antara dua profil berpegawai-aktif (mendarat, #945), pertanyaan
+  `btree_gist` (diputuskan: trigger advisory-lock, #946), dan tambahan `AccessAction` (`calculate`, `pay`) adalah keputusan saat implementasi.
 - Arsip-lalu-purge untuk baris keuangan, layar admin, dan keluaran berkas bank
   adalah isu berikutnya.
 - `awcms_profile_entity_links` boleh ditulis tambahan untuk penemuan ("modul mana

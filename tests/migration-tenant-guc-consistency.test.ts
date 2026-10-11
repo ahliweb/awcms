@@ -48,7 +48,12 @@ const CURRENT_SETTING = /current_setting\(\s*'([^']+)'/g;
  * Names that are legitimately not the tenant GUC. Empty today, and an addition
  * here should be rare enough to argue for in review.
  */
-const ALLOWED_OTHER_GUCS = new Set<string>([]);
+const ALLOWED_OTHER_GUCS = new Set<string>([
+  // A built-in PostgreSQL parameter, not an application GUC: the shift overlap
+  // guard (sql/184, Issue #946) refuses to run outside READ COMMITTED because
+  // its advisory-lock argument depends on re-reading committed rows.
+  "transaction_isolation"
+]);
 
 /**
  * Strip `--` line comments and `/* *\/` block comments.

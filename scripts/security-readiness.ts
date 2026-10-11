@@ -743,7 +743,12 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   awcms_booking_reservation_events: ["SELECT", "INSERT"],
   // ADR-0132 / `sql/182`. NOT retired — a rule ends by being retired (a status
   // UPDATE) and a trigger refuses DELETE as the second layer.
-  awcms_hr_commission_rules: ["SELECT", "INSERT", "UPDATE"]
+  awcms_hr_commission_rules: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0132 / `sql/184`. NOT retired — a template is soft-deleted and an
+  // assignment is cancelled, never deleted (a trigger refuses DELETE as the
+  // second layer).
+  awcms_hr_shift_templates: ["SELECT", "INSERT", "UPDATE"],
+  awcms_hr_shift_assignments: ["SELECT", "INSERT", "UPDATE"]
 };
 
 type RlsRow = {

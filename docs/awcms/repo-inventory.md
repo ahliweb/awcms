@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 183   |
-| `awcms_*` tables                    | 202   |
-| Tables with `FORCE` RLS             | 184   |
+| Migrations                          | 185   |
+| `awcms_*` tables                    | 204   |
+| Tables with `FORCE` RLS             | 186   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 607   |
-| Route files                         | 496   |
+| Test files                          | 610   |
+| Route files                         | 501   |
 | ADR                                 | 282   |
 
 ### Modules
@@ -240,6 +240,8 @@
 | 181 | `sql/181_awcms_booking_permissions.sql`                            |
 | 182 | `sql/182_awcms_hr_commission_rules_schema.sql`                     |
 | 183 | `sql/183_awcms_hr_commission_permissions.sql`                      |
+| 184 | `sql/184_awcms_hr_shifts_schema.sql`                               |
+| 185 | `sql/185_awcms_hr_shifts_permissions.sql`                          |
 
 ### Tables & Row-Level Security
 
@@ -312,6 +314,8 @@
 | `awcms_hr_commission_rules`              | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
 | `awcms_hr_employment_terms`              | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_hr_employments`                   | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_hr_shift_assignments`             | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
+| `awcms_hr_shift_templates`               | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
 | `awcms_hr_workforce_settings`            | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_idempotency_keys`                 | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
 | `awcms_identities`                       | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
@@ -452,16 +456,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 481        |
+| `(root)`      | 482        |
 | `e2e`         | 25         |
-| `integration` | 100        |
+| `integration` | 102        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 397   |
+| `/api/v1/**`    | 402   |
 | `/admin/**`     | 69    |
 | publik / anonim | 30    |
 

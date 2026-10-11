@@ -206,5 +206,16 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_commission.rules.publish",
   "hr_commission.rules.read",
   "hr_commission.rules.retire",
-  "hr_commission.rules.update"
+  "hr_commission.rules.update",
+  // hr_workforce shifts (8) — ADR-0132 / Issue #946. Same posture as above:
+  // API-first and `experimental`; the shift roster and template screens are the
+  // recorded follow-up that flips the module to `active`.
+  "hr_workforce.shifts.cancel",
+  "hr_workforce.shifts.create",
+  "hr_workforce.shifts.publish",
+  "hr_workforce.shifts.read",
+  "hr_workforce.templates.create",
+  "hr_workforce.templates.delete",
+  "hr_workforce.templates.read",
+  "hr_workforce.templates.update"
 ];
