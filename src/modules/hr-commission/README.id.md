@@ -1,23 +1,26 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8586f3c4d407cdc4bec17457788b615c9b8283977ee4b8ff14be356de891952f -->
+<!-- i18n-source-hash: sha256:e5ba8102bd992acec070a39432e29fdadc498bda9ab5465c5239a82166ad6441 -->
 
 # `hr_commission`
 
-**Aturan komisi berversi** (Issue #950,
+**Aturan komisi berversi** (Issue #950) dan **buku besar akrual** (Issue #951),
 [ADR-0132](../../../docs/adr/0132-hr-payroll-module-family-admission.id.md), fase 2
-keluarga `hr_*`). Paket desainnya adalah
+keluarga `hr_*`. Paket desainnya adalah
 [`docs/awcms/hr-payroll.id.md`](../../../docs/awcms/hr-payroll.id.md) bagian 2.2 dan
 6; berkas ini adalah peta kodenya.
 
 ## Apa yang ada, dan apa yang belum
 
-Ini adalah **fondasi aturan**: `awcms_hr_commission_rules`, API draft / publish /
-retire, dan **fungsi evaluasi yang murni**. **Belum ada:** buku besar akrual,
-siklus persetujuannya (approve, release, pay, void), reversal, port event sumber,
-dan event `awcms.hr.commission.*` (issue berikutnya di bawah ADR yang sama). Ini
-**bukan komisi afiliasi** (hr-payroll.md 6.4) dan **tidak membawa aturan negara
-atau yurisdiksi mana pun**: tenant menyusun aturannya sendiri.
+Ini adalah **fondasi aturan** (#950: `awcms_hr_commission_rules`, API draft /
+publish / retire, **fungsi evaluasi yang murni**) dan **buku besar akrual** (#951:
+`awcms_hr_commission_accruals`, `awcms_hr_commission_transitions`, siklus approve /
+release / void / pay, dan port atribusi-penjualan). **Belum ada:** reversal
+(akrual negatif kompensasi untuk akrual yang payable atau paid), event
+`awcms.hr.commission.*`, dan klaim payroll atas sebuah akrual (PS-19, di bawah).
+Ini **bukan komisi afiliasi** (hr-payroll.md 6.4: penerimanya di sini selalu sebuah
+employment) dan **tidak membawa aturan negara atau yurisdiksi mana pun**: tenant
+menyusun aturannya sendiri.
 
 Status `experimental`: flag mati, belum ada layar admin, dan modul tidak
 mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.
@@ -89,23 +92,137 @@ PUBLISH_BY_AUTHOR_FORBIDDEN`) — kontrol yang diminta desain payroll untuk atur
   membuktikan tiap guard menggigit (memegang semua permission lain ditolak,
   memegang hanya itu berhasil).
 
+## Buku besar akrual (Issue #951)
+
+- **Satu akrual per (sumber, employment), tepat sekali.** Kunci unik `(tenant,
+source_type, source_ref, source_line, employment, operation)` adalah otoritasnya
+  (`sql/188`). Pengiriman ulang request kanonik yang sama mengembalikan ASLINYA
+  (`replayed`), apa pun yang terjadi pada akrual atau aturan sejak itu (juga
+  setelah void: akrual yang di-void tidak dihidupkan kembali); identitas yang sama
+  dengan jumlah, tanggal, aturan, atau mata uang berbeda adalah `409
+SOURCE_CONFLICT`. Dua pengiriman BERLOMBA menjadi satu baris (`ON CONFLICT DO
+NOTHING`, yang kalah membaca ulang pemenangnya), dibuktikan dengan sepuluh paralel
+  dan terbukti gagal tanpa klausa itu. Satu baris sumber boleh dibagi antar staf:
+  `employment_id` ada di kunci.
+- **Jumlah dihitung, tidak pernah diterima.** Versi published dari kunci aturan
+  yang jendelanya memuat `occurredOn` (tanggal sipil penjualan, diturunkan
+  pemanggil) dievaluasi dengan fungsi murni berbasis `bigint` dari #950 dan
+  dibulatkan sekali; body tidak dapat menyatakan jumlah, versi aturan, status, atau
+  stempel. Trigger insert memeriksa ulang bahwa aturan itu published, berlaku pada
+  tanggal tersebut, dan sama dalam kunci, versi, tipe sumber, mata uang, kalkulasi,
+  dan istilah snapshot, serta jumlah yang disimpan SAMA DENGAN evaluasi aturan atas
+  input yang disimpan: database menghitung ulang (`awcms_hr_commission_expected_
+amount`, `numeric` eksak, kembaran SQL dari evaluasi murni: mode pembulatan,
+  skala, lantai, dan plafon) dan menolak ketidakcocokan, sehingga sesi yang
+  melewati aplikasi tak dapat menulis komisi yang tidak dihasilkan aturan. Sebuah
+  tes menjalankan kedua implementasi atas ketujuh mode dan batas setengah dan
+  menuntut keduanya sepakat.
+- **Usia event dibatasi.** `occurredAt` sebuah akrual paling lama 730 hari (dan tak
+  lebih dari sehari ke depan), di port, lewat HTTP, dan di trigger: penjualan lebih
+  tua dari dua tahun bukan pengiriman terlambat, dan usia tak terbatas akan
+  membiarkan publish berlaku-surut menjangkau masa lalu sembarang jauh.
+- **Memposting adalah aksi berisiko tinggi tersendiri.** `accruals.accrue` (aksi
+  baru; bukan `create`, yang tidak berisiko tinggi, dan klasifikasinya per aksi)
+  berisiko tinggi, sehingga pemeriksaan SoD saat-aksi dapat disusun atas siapa yang
+  boleh memposting, menyetujui, dan membayar. Port sendiri tidak memeriksa apa pun:
+  composition root yang melakukannya.
+- **Aturan berlaku-surut (diputuskan di sini; `sql/187`).** Akrual memakai aturan
+  yang berlaku pada tanggal event, sehingga mempublikasikan versi yang jendelanya
+  DIMULAI DI MASA LALU mengubah aturan mana yang berlaku untuk event yang sudah
+  terjadi tetapi belum diakrualkan (penjualan yang dilaporkan terlambat). Akrual
+  yang sudah ada tidak tersentuh (ia mengutip aturannya lewat foreign key dan versi
+  published tidak dapat diubah), justru itu sebabnya perubahan itu akan senyap.
+  Maka: jendela yang dimulai sebelum HARI INI (tanggal UTC transaksi publish) hanya
+  dapat dipublikasikan dengan `backdatedReason` (selain itu `409
+RULE_BACKDATED_REASON_REQUIRED`); DATABASE menstempel `publish_backdated` dari
+  jendelanya (klien tak dapat menyatakannya ke arah mana pun) dan menolak publish
+  tanpa alasan walau aplikasi dilewati; alasan tetap di baris aturan dan baris audit
+  hanya membawa `backdated: true`. Versi retired tidak lagi berlaku: penjualan yang
+  tanggalnya jatuh di luar jendela published mana pun adalah `no_effective_rule`,
+  dan tenant mempublikasikan penggantinya.
+- **Induknya divalidasi di bawah kunci.** Aturan dan employment dibaca `FOR SHARE`
+  (dan lagi oleh trigger insert): retire, terminasi, atau soft delete yang
+  bersamaan antre di belakang akrual atau melihat hasilnya, sehingga akrual tak
+  pernah ditulis terhadap aturan atau employment yang ditarik sesaat sebelumnya.
+  Employment harus aktif dan bekerja pada tanggal event (hari masuk dan hari
+  terminasi inklusif). Kedua kunci dibuktikan oleh tes yang menjadi merah bila
+  kuncinya dihapus.
+- **Mesinnya milik database.** Tepat lima sisi: `pending -> approved -> payable ->
+paid`, dan `voided` dari `pending` atau `approved`. Tiap sisi menstempel aktor dan
+  waktunya sendiri dan tak menyentuh stempel lain; fakta moneter dibandingkan byte
+  demi byte oleh trigger; tak ada baris yang dihapus. Akrual yang di-void tak pernah
+  dapat dibayar. `canTransition` yang murni dan trigger diuji satu terhadap yang
+  lain pada setiap pasang status. **Pemisahan tugas**, di handler dan di trigger
+  (`sodViolation` yang murni adalah kembarannya): penerima (login milik employment
+  itu sendiri) tak dapat approve, release, atau pay akrualnya sendiri; pembuat
+  akrual tak dapat menyetujuinya; penyetuju tak dapat membayarnya (`403
+SEGREGATION_OF_DUTIES`, atau `APPROVE_OWN_ACCRUAL_FORBIDDEN` untuk penerima yang
+  menyetujui). Void tidak dipisahkan. Sebuah tes menghapus guard trigger dan
+  menunjukkan bypass-nya berhasil.
+- **Log tak dapat menyimpang dari status.** `awcms_hr_commission_transitions`
+  ditulis hanya oleh trigger milik akrual (insert langsung ditolak oleh
+  `pg_trigger_depth()`), sekali saat lahir dan sekali per perubahan status, sehingga
+  status akrual selalu transisi terakhirnya. `reconcileAccruals` membuktikannya
+  (status terhadap transisi terakhir, kontinuitas rantai, dan saldo per-mata-uang-
+  dan-status yang diturunkan dua arah) dan melaporkan akrual mana yang tak cocok
+  bila baris diubah di luar peran aplikasi; sebuah tes mengubahnya sebagai superuser
+  dan melihatnya gagal.
+- **Audit dan masking.** Approve, release, void, dan pay berisiko tinggi (`pay`
+  adalah aksi akses baru), dapat diberikan terpisah, berkunci-idempotensi, dan
+  diaudit pada `warning`; akrual BARU diaudit pada `info`, replay tidak mengaudit
+  apa pun. **Tidak ada baris audit yang membawa jumlah, basis, tarif, referensi
+  sumber, atau referensi pembayaran** (penghasilan adalah data finansial tentang
+  seseorang; baris buku besar menyimpan jumlahnya dan correlation id
+  menghubungkannya ke baris audit). Alasan void adalah kode pendek dan referensi
+  pembayaran adalah token buram: keduanya bukan teks bebas.
+- **Tanpa data personal.** Akrual merujuk sebuah employment (id buram) dan empat
+  stempel aktor; tabelnya tidak memuat kolom nama, identifier, kontak, rekening,
+  foto, biometrik, atau perangkat (sebuah tes memindainya).
+- **Port.** `_shared/ports/commission-accrual-port.ts` menetapkan bentuk tempat
+  adapter melaporkan penjualan; modul ini tidak mengimpor apa pun dari commerce atau
+  booking. Adapter, bukan buku besar, yang memverifikasi penjualan nyata, lunas, dan
+  milik karyawan itu, dan menentukan apa yang layak dikomisikan. Otorisasi dan audit
+  tetap pada composition root pemanggil (`POST /api/v1/hr-commission/accruals`
+  adalah salah satunya).
+- **Celah yang diketahui: void mengonsumsi kunci sumber secara permanen.** Akrual
+  yang di-void mempertahankan identitas `(sumber, employment)`-nya, sehingga
+  pengiriman ulang sumber yang sama mengembalikan aslinya yang void (tak pernah
+  akrual baru) dan komisi tak dapat diperoleh ulang untuk sumber itu. Sampai
+  reversal dan jalur akrual-ulang ada (#962 dan fase reversal), mengoreksi akrual
+  yang keliru di-void berarti referensi sumber baru yang dipilih adapter. Ini
+  disengaja (void tak boleh dibatalkan diam-diam oleh pengiriman ulang) dan dicatat
+  sebagai celah, bukan fitur.
+- **PS-19 (sebuah akrual dibayar oleh tepat satu run payroll, termasuk setelah
+  reversal) dirancang, belum dibangun.** `payable -> paid` terjadi sekali dan `paid`
+  final; indeks parsial melayani pemilihan `FOR UPDATE SKIP LOCKED` atas akrual
+  payable oleh run; dan reversal, saat mendarat, adalah baris BARU yang tak pernah
+  membuka kembali aslinya, sehingga tak ada status yang memungkinkan satu akrual
+  diklaim dua kali. Catatan klaimnya sendiri (id run; dilepas saat run dibatalkan)
+  milik #962 karena pelepasan klaim bergantung pada keputusan pemulihan yang belum
+  dibuat PS-02.
+
 ## Peta
 
-| Berkas                                        | Isi                                                                         |
-| --------------------------------------------- | --------------------------------------------------------------------------- |
-| `module.ts`                                   | Descriptor, permission, `dataLifecycle`, dan `subjectData`                  |
-| `domain/hr-commission-decimal.ts`             | Parsing, pembulatan, dan format desimal `bigint` yang eksak                 |
-| `domain/hr-commission-evaluation.ts`          | `evaluateCommission` dan `selectEffectiveRule` yang MURNI                   |
-| `domain/hr-commission-validation.ts`          | Validator request yang ketat (uang sebagai string)                          |
-| `domain/hr-commission-permissions.ts`         | Guard, sebagai objek literal                                                |
-| `application/hr-commission-rule-directory.ts` | List, get, create, edit draft, publish, retire (outcome, audit)             |
-| `application/hr-commission-route-support.ts`  | Idempotency, parsing body, dan helper id yang dipakai bersama route         |
-| `src/pages/api/v1/hr-commission/rules/**`     | 4 berkas route tipis (`/rules`, `/rules/{id}`, `.../publish`, `.../retire`) |
+| Berkas                                              | Isi                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `module.ts`                                         | Descriptor, permission, `dataLifecycle`, dan `subjectData`                     |
+| `domain/hr-commission-accrual-state.ts`             | Mesin akrual murni, jendela berlaku-surut, dan aturan tanggal employment       |
+| `domain/hr-commission-accrual-validation.ts`        | Validator request akrual, digest request kanonik                               |
+| `application/hr-commission-accrual-ledger.ts`       | Accrue, list, get, transisi, rekonsiliasi (outcome, audit)                     |
+| `application/hr-commission-accrual-port-adapter.ts` | `CommissionAccrualPort` yang konkret                                           |
+| `src/pages/api/v1/hr-commission/accruals/**`        | 6 berkas route tipis (`/accruals`, `/{id}`, `.../approve\|release\|void\|pay`) |
+| `domain/hr-commission-decimal.ts`                   | Parsing, pembulatan, dan format desimal `bigint` yang eksak                    |
+| `domain/hr-commission-evaluation.ts`                | `evaluateCommission` dan `selectEffectiveRule` yang MURNI                      |
+| `domain/hr-commission-validation.ts`                | Validator request yang ketat (uang sebagai string)                             |
+| `domain/hr-commission-permissions.ts`               | Guard, sebagai objek literal                                                   |
+| `application/hr-commission-rule-directory.ts`       | List, get, create, edit draft, publish, retire (outcome, audit)                |
+| `application/hr-commission-route-support.ts`        | Idempotency, parsing body, dan helper id yang dipakai bersama route            |
+| `src/pages/api/v1/hr-commission/rules/**`           | 4 berkas route tipis (`/rules`, `/rules/{id}`, `.../publish`, `.../retire`)    |
 
 ## Item terbuka dan postur tercatat
 
-- **Evaluasi tidak punya endpoint HTTP.** Ia dipakai issue akrual berikutnya;
-  endpoint dry-run tidak dibuka.
+- **Evaluasi tidak punya endpoint HTTP sendiri.** Endpoint akrual adalah
+  pemakainya; endpoint dry-run tidak dibuka.
 - **Helper desimal adalah salinan kecil** dari gagasan di `tax/domain/decimal.ts`,
   karena modul ini tidak mendeklarasikan dependensi ke `tax`. Mengangkat keduanya
   ke `_shared` adalah tindak lanjut.
@@ -119,18 +236,36 @@ PUBLISH_BY_AUTHOR_FORBIDDEN`) — kontrol yang diminta desain payroll untuk atur
   yang dikutip akrual nanti adalah milik penasihat hukum tenant dan tidak ada
   pemiliknya di sini; arsip-lalu-purge untuk baris HR adalah tindak lanjut
   (hr-payroll.md bagian 15).
-- **Mempublikasikan jendela berlaku-surut TIDAK digerbangi khusus.** Di luar
-  cakupan fase ini dan ditunda ke issue akrual: belum ada buku besar yang memakai
-  aturan, sehingga `effectiveFrom` di masa lalu tidak mengubah apa pun yang ada.
-  Saat akrual mendarat, publish yang jendelanya dimulai di masa lalu membutuhkan
-  flag eksplisit dan alasan (berisiko tinggi, diaudit), karena ia dapat diam-diam
-  mengubah aturan mana yang berlaku untuk event yang sudah terjadi.
+- **Reversal adalah langkah berikutnya buku besar.** Reversal akrual yang payable
+  atau paid adalah baris negatif BARU (`operation = reversal`,
+  `reverses_accrual_id`) di bawah identitas sumbernya sendiri, sekali per akrual,
+  tak dapat di-reversal, tak pernah membuka kembali aslinya. Kunci unik, kolom
+  `operation`, dan log transisi sudah punya ruangnya; sebuah `sql/NNN` yang
+  melebarkan CHECK `operation` dan status serta mesinnya akan menambahkannya.
+- **Event masih provisional.** `awcms.hr.commission.accrued` dan `.approved`
+  (hr-payroll.md bagian 10) belum dipancarkan: buku besar tidak menulis baris outbox
+  dan tidak ada channel AsyncAPI, jadi tak ada yang diterbitkan sampai ada konsumen.
+- **Belum ada baca-akrual-sendiri dan scope office.** `accruals.read` adalah
+  permission biasa: jalur "karyawan melihat akrualnya sendiri" (ownership grant pada
+  login employment) dan business scope `office` adalah tindak lanjut bersama
+  permukaan swalayan.
+- **Mengekspor riwayat akrual seseorang** (dilacak di issue #985) membutuhkan join employment-ke-subjek yang
+  tak dapat diungkapkan kolom subjek langsung registri (batas yang dicatat
+  `hr_workforce.employment_terms`); descriptor hanya menamai stempel aktor dan
+  `exportable: false` sampai join itu ada.
+- **Retensi: disimpan selama hidup tenant, tanpa periode yang diklaim.** Sengaja
+  TIDAK ada descriptor `dataLifecycle` untuk ketiga tabel (descriptor harus
+  mengklaim periode dan mode purge, dan tak ada yang mem-purge): tabel buku besar
+  dijawab oleh entri `BOUNDED_BY_DESIGN` di
+  `scripts/data-lifecycle-table-coverage-check.ts`. Periodenya milik penasihat
+  hukum pemberi kerja; arsip-lalu-purge akrual PAID dan VOIDED adalah tindak lanjut
+  (hr-payroll.md bagian 15).
 - **Descriptor subjek hanya stempel aktor** dan `exportable: false`: sebuah aturan
   tidak menamai subjek data.
 
 ## Keterbatasan
 
-- Tanpa layar admin; `experimental`.
+- Tanpa layar admin; `experimental`. Layar akrual (daftar, approve / release / void / pay) adalah tindak lanjut yang membuat modul `active`.
 - Tenant yang sudah ada perlu `bun run identity-access:permissions:backfill` untuk
   menerima permission yang di-seed (keterbatasan yang dibawa setiap seed permission).
 - Draft hanya dapat diubah dengan mengganti seluruh field yang dapat diedit (`PUT`);

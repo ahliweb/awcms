@@ -751,7 +751,13 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // assignment is cancelled, never deleted (a trigger refuses DELETE as the
   // second layer).
   awcms_hr_shift_templates: ["SELECT", "INSERT", "UPDATE"],
-  awcms_hr_shift_assignments: ["SELECT", "INSERT", "UPDATE"]
+  awcms_hr_shift_assignments: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0132 / `sql/188`. NOT retired — an accrual ends by being voided (a status
+  // UPDATE; its monetary facts are immutable by trigger) and a trigger refuses
+  // DELETE as the second layer. The transition log is append-only and written
+  // only by the accrual's own triggers: INSERT and SELECT only.
+  awcms_hr_commission_accruals: ["SELECT", "INSERT", "UPDATE"],
+  awcms_hr_commission_transitions: ["SELECT", "INSERT"]
 };
 
 type RlsRow = {

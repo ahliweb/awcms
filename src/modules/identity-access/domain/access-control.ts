@@ -220,7 +220,16 @@ export type AccessAction =
   | "check_in"
   | "complete"
   | "no_show"
-  | "override";
+  | "override"
+  // HR commission (`hr_commission`, ADR-0132, Issue #951): `pay` records that a
+  // payable commission accrual has been paid. High-risk and a different power
+  // from `release` (making it payable). `accrue` posts an accrual — a payable
+  // earnings claim on a person's behalf — and is high-risk so the action-time SoD
+  // check is available over who may post, approve and pay. (`read`/`approve`/
+  // `release`/`cancel` for accruals reuse existing members; `cancel` is the
+  // design's void.)
+  | "pay"
+  | "accrue";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -388,7 +397,10 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "reveal",
   // Booking (ADR-0131): an override lifts a scheduling business rule, so the
   // action-time SoD check is available the moment a tenant authors a rule.
-  "override"
+  "override",
+  // HR commission (ADR-0132): recording a payment is a financial posting.
+  "pay",
+  "accrue"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

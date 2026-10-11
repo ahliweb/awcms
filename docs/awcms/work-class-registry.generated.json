@@ -637,6 +637,36 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/hr-commission/accruals/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/accruals/[id]/pay.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/accruals/[id]/release.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/accruals/[id]/void.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/accruals/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/hr-commission/rules/[id].ts",
       "workClass": "interactive",
       "source": "factory"

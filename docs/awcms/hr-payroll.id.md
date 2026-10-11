@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:36f6fe0ccf97569ea5e71ddde464935ba2684c4381049b0e853befbdf031df82 -->
+<!-- i18n-source-hash: sha256:483af98cd6be5428324ed8b614b04f275414bcca21359d65faa988bbebee99fc -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -378,7 +378,25 @@ akrual adalah yang **berlaku pada `occurred_at` event**, tidak pernah `now()`.
 > di-retire); jendela published tidak boleh tumpang-tindih dengan versi published
 > lain dari aturan yang sama (trigger, dikunci advisory). Evaluasi adalah
 > `src/modules/hr-commission/domain/hr-commission-evaluation.ts` yang murni (string
-> desimal `bigint`, tanpa tier, tanpa bahasa ekspresi). Buku besar di bawah belum dibangun.
+> desimal `bigint`, tanpa tier, tanpa bahasa ekspresi). Buku besar di bawah mendarat di #951.
+>
+> **Mendarat di #951 (buku besar, tanpa reversal).** `awcms_hr_commission_accruals`
+> dan `awcms_hr_commission_transitions` (`sql/188`; permission `sql/189`);
+> `operation` untuk sementara hanya `accrue` dan `amount` karenanya tidak negatif
+> (baris negatif reversal adalah langkah berikutnya). Mesin statusnya `pending →
+approved → payable → paid`, dan `voided` dari `pending` atau `approved`; log hanya
+> ditulis oleh trigger milik akrual, sehingga status dan log tak dapat menyimpang.
+> **Aturan berlaku-surut (diputuskan di #951, `sql/187`):** aturan dipilih dari
+> tanggal event itu sendiri, sehingga mempublikasikan versi yang jendelanya dimulai
+> sebelum hari ini (UTC) mengubah aturan mana yang berlaku untuk event yang belum
+> diakrualkan; publish demikian membutuhkan `backdatedReason` (409 bila tidak ada),
+> database menstempel `publish_backdated` dan menolak publish tanpa alasan walau
+> aplikasi dilewati, dan baris audit hanya membawa flag-nya. Akrual yang sudah ada
+> mengutip aturannya lewat foreign key dan tak pernah berubah. **PS-19** dirancang,
+> belum dibangun: `paid` final dan dicapai sekali, indeks parsial melayani pemilihan
+> `FOR UPDATE SKIP LOCKED` atas akrual payable, dan reversal tak pernah membuka
+> kembali aslinya; catatan klaim milik #962. Belum: reversal, event
+> `awcms.hr.commission.*`, baca-sendiri, dan scope `office`.
 
 `awcms_hr_commission_accruals` adalah ledger. Fakta moneter —
 `employment_id`, snapshot `rule_id` dan `rule_version`, `source_type`,
@@ -391,7 +409,7 @@ kapan.
 ### 6.2 Akrual tepat-sekali
 
 Kunci unik `(tenant_id, source_type, source_ref, source_line, employment_id,
-operation)`. Adapter hilir memanggil port (bentuk ditunda ke PR fase 2) dengan
+operation)`. Adapter hilir memanggil port (`src/modules/_shared/ports/commission-accrual-port.ts`) dengan
 identitas sumber; memposting identitas yang sudah ada dengan permintaan kanonis
 yang sama mengembalikan yang asli (`replayed: true`); jumlah atau aturan berbeda
 untuk identitas yang sama adalah `409 SOURCE_CONFLICT`. `employment_id` ada di

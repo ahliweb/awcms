@@ -720,7 +720,13 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         .filter((c) => c !== "awcms_hr_commission_rules.name")
         // Issue #946: a shift TEMPLATE's label ("Morning", "Night") names a
         // pattern, never a person; assignments carry no label at all.
-        .filter((c) => c !== "awcms_hr_shift_templates.name");
+        .filter((c) => c !== "awcms_hr_shift_templates.name")
+        // The publisher's justification for a BACK-DATED rule window (Issue #951):
+        // operator text about a commercial term, kept on the rule row and never
+        // echoed to an audit row (the audit carries a boolean). Everything else
+        // an accrual stores is a code or an opaque reference, and
+        // hr-commission-accrual-database scans the ledger tables itself.
+        .filter((c) => c !== "awcms_hr_commission_rules.backdated_reason");
 
       expect(offenders).toEqual([]);
     });

@@ -35,6 +35,7 @@ import type {
   CommissionCalculation,
   CommissionRuleStatus
 } from "../domain/hr-commission-types";
+import { isBackdatedWindow } from "../domain/hr-commission-accrual-state";
 import { ruleContentDigest } from "../domain/hr-commission-digest";
 import type {
   CreateRuleInput,
@@ -70,6 +71,10 @@ export type CommissionRule = {
   createdAt: string;
   publishedAt: string | null;
   retiredAt: string | null;
+  /** The window started before the UTC date it was published on (stamped by the database). */
+  publishBackdated: boolean;
+  /** The publisher's reason for a back-dated window; `null` otherwise. */
+  backdatedReason: string | null;
 };
 
 type RuleRow = {
@@ -92,6 +97,8 @@ type RuleRow = {
   created_at: Date | string;
   published_at: Date | string | null;
   retired_at: Date | string | null;
+  publish_backdated: boolean;
+  backdated_reason: string | null;
 };
 
 const RULE_SELECT = `
@@ -102,7 +109,7 @@ const RULE_SELECT = `
   rounding_scale::int AS rounding_scale,
   to_char(effective_from, 'YYYY-MM-DD') AS effective_from,
   to_char(effective_to, 'YYYY-MM-DD') AS effective_to,
-  created_at, published_at, retired_at`;
+  created_at, published_at, retired_at, publish_backdated, backdated_reason`;
 
 const iso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
@@ -141,7 +148,9 @@ function mapRule(row: RuleRow): CommissionRule {
     contentDigest: ruleContentDigest(terms),
     createdAt: iso(row.created_at),
     publishedAt: row.published_at ? iso(row.published_at) : null,
-    retiredAt: row.retired_at ? iso(row.retired_at) : null
+    retiredAt: row.retired_at ? iso(row.retired_at) : null,
+    publishBackdated: row.publish_backdated,
+    backdatedReason: row.backdated_reason
   };
 }
 
@@ -363,6 +372,7 @@ export type PublishRuleOutcome =
   | { outcome: "not_draft"; status: CommissionRuleStatus }
   | { outcome: "stale"; currentContentDigest: string }
   | { outcome: "self_publish" }
+  | { outcome: "backdated_reason_required"; todayUtc: string }
   | { outcome: "window_overlap"; conflictingVersionNo: number };
 
 /**
@@ -377,7 +387,8 @@ export async function publishRule(
   tenantId: string,
   id: string,
   actor: Actor,
-  expectedContentDigest: string
+  expectedContentDigest: string,
+  backdatedReason: string | null = null
 ): Promise<PublishRuleOutcome> {
   const locked = await lockRow(tx, tenantId, id);
 
@@ -401,6 +412,20 @@ export async function publishRule(
       locked.updated_by === actor.actorTenantUserId)
   ) {
     return { outcome: "self_publish" };
+  }
+
+  // A window starting before today changes which rule applies to events that
+  // already happened but are not accrued yet; it needs a stated reason. "Today"
+  // is the UTC date of this transaction, the same instant `sql/187`'s trigger
+  // uses, so the pre-check and the backstop cannot disagree.
+  const todayRows = (await tx`
+    SELECT to_char((now() AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS today
+  `) as { today: string }[];
+  const todayUtc = todayRows[0]!.today;
+  const backdated = isBackdatedWindow(current.effectiveFrom, todayUtc);
+
+  if (backdated && backdatedReason === null) {
+    return { outcome: "backdated_reason_required", todayUtc };
   }
 
   await lockRule(tx, tenantId, locked.rule_key);
@@ -431,6 +456,7 @@ export async function publishRule(
     UPDATE awcms_hr_commission_rules
     SET status = 'published', published_at = now(),
         published_by = ${actor.actorTenantUserId},
+        backdated_reason = ${backdated ? backdatedReason : null},
         updated_at = now(), updated_by = ${actor.actorTenantUserId}
     WHERE tenant_id = ${tenantId} AND id = ${id}
   `;
@@ -451,7 +477,8 @@ export async function publishRule(
       versionNo: rule.versionNo,
       effectiveFrom: rule.effectiveFrom,
       effectiveTo: rule.effectiveTo,
-      contentDigest: rule.contentDigest
+      contentDigest: rule.contentDigest,
+      backdated: rule.publishBackdated
     },
     correlationId: actor.correlationId
   });

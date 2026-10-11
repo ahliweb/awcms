@@ -311,7 +311,11 @@ async function publish(
     method: "POST",
     path: `/api/v1/hr-commission/rules/${id}/publish`,
     params: { id },
-    body: { expectedContentDigest: digest ?? (await digestOf(id)) },
+    body: {
+      expectedContentDigest: digest ?? (await digestOf(id)),
+      // The fixtures' windows start in the past; the reason is only stored when needed.
+      backdatedReason: "fixture"
+    },
     token: token ?? publisherToken,
     idempotencyKey: key
   });

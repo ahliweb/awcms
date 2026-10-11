@@ -15,6 +15,7 @@ type Prepared = {
   id: string;
   idempotencyKey: string;
   expectedContentDigest: string;
+  backdatedReason: string | null;
 };
 
 const SCOPE = "hr_commission_rule_publish";
@@ -51,7 +52,8 @@ export const POST = defineTenantRoute<Prepared>({
       : {
           id,
           idempotencyKey,
-          expectedContentDigest: body.expectedContentDigest
+          expectedContentDigest: body.expectedContentDigest,
+          backdatedReason: body.backdatedReason
         };
   },
   authorize: HR_COMMISSION_GUARDS.rules.publish,
@@ -64,7 +66,8 @@ export const POST = defineTenantRoute<Prepared>({
       auth.context.tenantUserId,
       {
         id: prepared.id,
-        expectedContentDigest: prepared.expectedContentDigest
+        expectedContentDigest: prepared.expectedContentDigest,
+        backdatedReason: prepared.backdatedReason
       },
       async () => {
         const result = await publishRule(
@@ -75,7 +78,8 @@ export const POST = defineTenantRoute<Prepared>({
             actorTenantUserId: auth.context.tenantUserId,
             correlationId: locals.correlationId
           },
-          prepared.expectedContentDigest
+          prepared.expectedContentDigest,
+          prepared.backdatedReason
         );
 
         switch (result.outcome) {
@@ -104,6 +108,12 @@ export const POST = defineTenantRoute<Prepared>({
               403,
               "PUBLISH_BY_AUTHOR_FORBIDDEN",
               "The person who created or last edited a draft cannot publish it; a second person must."
+            );
+          case "backdated_reason_required":
+            return fail(
+              409,
+              "RULE_BACKDATED_REASON_REQUIRED",
+              `The window starts before today (${result.todayUtc}, UTC): it changes which rule applies to events that already happened, so publishing it needs a backdatedReason.`
             );
           case "window_overlap":
             return fail(

@@ -150,7 +150,8 @@ async function insertRule(tenantId: string, values: RuleValues = {}) {
       tenantId,
       (tx) => tx`
         UPDATE awcms_hr_commission_rules
-        SET status = 'published', published_at = now() WHERE id = ${id}
+        SET status = 'published', published_at = now(),
+            backdated_reason = 'fixture' WHERE id = ${id}
       `
     );
   } else if (status === "retired") {
@@ -283,7 +284,8 @@ suite("hr_commission database invariants (Issue #950, ADR-0132)", () => {
         TENANT_A,
         (tx) => tx`
           UPDATE awcms_hr_commission_rules
-          SET status = 'published', published_at = now() WHERE id = ${id}
+          SET status = 'published', published_at = now(),
+            backdated_reason = 'fixture' WHERE id = ${id}
         `
       );
 
@@ -504,7 +506,8 @@ suite("hr_commission database invariants (Issue #950, ADR-0132)", () => {
           TENANT_A,
           (tx) => tx`
             UPDATE awcms_hr_commission_rules
-            SET status = 'published', published_at = now() WHERE id = ${draft}
+            SET status = 'published', published_at = now(),
+                backdated_reason = 'fixture' WHERE id = ${draft}
           `
         ),
         /overlap|23P01/
@@ -539,7 +542,8 @@ suite("hr_commission database invariants (Issue #950, ADR-0132)", () => {
         inTenant(TENANT_A, async (tx) => {
           await tx`
             UPDATE awcms_hr_commission_rules
-            SET status = 'published', published_at = now() WHERE id = ${id}
+            SET status = 'published', published_at = now(),
+            backdated_reason = 'fixture' WHERE id = ${id}
           `;
           await tx`SELECT pg_sleep(0.5)`;
         });
@@ -605,7 +609,8 @@ suite("hr_commission database invariants (Issue #950, ADR-0132)", () => {
         inTenant(
           TENANT_A,
           (tx) => tx`
-            UPDATE awcms_hr_commission_rules SET status = 'published'
+            UPDATE awcms_hr_commission_rules
+            SET status = 'published', effective_from = current_date
             WHERE id = ${id}
           `
         ),

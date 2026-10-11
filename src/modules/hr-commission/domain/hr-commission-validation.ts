@@ -407,22 +407,50 @@ export function validateUpdateRule(raw: unknown): Validated<UpdateRuleInput> {
     : { valid: true, value: { ...draft, expectedContentDigest } };
 }
 
-/** Publish names the digest of the terms the publisher reviewed. */
-export function validatePublishBody(
-  raw: unknown
-): Validated<{ expectedContentDigest: string }> {
+/**
+ * Publish names the digest of the terms the publisher reviewed, and — only when
+ * the window starts before today (back-dated) — the reason. The reason is the
+ * actor's own sentence about a commercial term: at most 500 characters, kept on
+ * the rule row and never in an audit row.
+ */
+export function validatePublishBody(raw: unknown): Validated<{
+  expectedContentDigest: string;
+  backdatedReason: string | null;
+}> {
   const errors: ValidationError[] = [];
-  const body = asBody(raw, ["expectedContentDigest"], errors);
+  const body = asBody(
+    raw,
+    ["expectedContentDigest", "backdatedReason"],
+    errors
+  );
 
   if (!body) {
     return { valid: false, errors };
   }
 
   const expectedContentDigest = digestField(body, errors);
+  let backdatedReason: string | null = null;
+  const reason = body.backdatedReason;
+
+  if (reason !== undefined && reason !== null) {
+    if (typeof reason !== "string" || reason.trim().length === 0) {
+      errors.push({
+        field: "backdatedReason",
+        message: "backdatedReason must be a non-empty string."
+      });
+    } else if (reason.trim().length > 500) {
+      errors.push({
+        field: "backdatedReason",
+        message: "backdatedReason must be at most 500 characters."
+      });
+    } else {
+      backdatedReason = reason.trim();
+    }
+  }
 
   return errors.length > 0 || !expectedContentDigest
     ? { valid: false, errors }
-    : { valid: true, value: { expectedContentDigest } };
+    : { valid: true, value: { expectedContentDigest, backdatedReason } };
 }
 
 export function validateEmptyBody(

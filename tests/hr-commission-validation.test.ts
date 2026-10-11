@@ -309,12 +309,18 @@ describe("the hr_commission descriptor", () => {
     ]);
   });
 
-  test("declares the five rule permissions and no accrual or payroll power", () => {
+  test("declares the five rule permissions and the six accrual permissions, and no payroll or compensation power", () => {
     const keys = (hrCommissionModule.permissions ?? []).map(
       (p) => `${p.activityCode}.${p.action}`
     );
 
     expect(keys.sort()).toEqual([
+      "accruals.accrue",
+      "accruals.approve",
+      "accruals.cancel",
+      "accruals.pay",
+      "accruals.read",
+      "accruals.release",
       "rules.create",
       "rules.publish",
       "rules.read",
@@ -323,10 +329,15 @@ describe("the hr_commission descriptor", () => {
     ]);
   });
 
-  test("asserts no retention period (no dataLifecycle descriptor) and answers subject-data for its table", () => {
+  test("no table asserts a retention period or a purge (BOUNDED_BY_DESIGN answers all three); subject-data answers every table", () => {
+    // No table asserts a retention period or a purge mode: nothing purges. All
+    // three are answered by BOUNDED_BY_DESIGN entries (retained, no period).
     expect(hrCommissionModule.dataLifecycle ?? []).toEqual([]);
+
     expect(hrCommissionModule.subjectData?.map((d) => d.tableName)).toEqual([
-      "awcms_hr_commission_rules"
+      "awcms_hr_commission_rules",
+      "awcms_hr_commission_accruals",
+      "awcms_hr_commission_transitions"
     ]);
   });
 });
