@@ -132,6 +132,8 @@ Phases (each its own PR; none starts until the previous merged):
 
 **Update (2026-10-12): O11 resolved by ADR-0139.** The written value case for notification orchestration now exists and concludes **not admitted, for now**: no facade, no fallback engine, no second outbox. The rules above stand unchanged; ADR-0139 §3 lists the conditions under which the question reopens and §4 the smallest design that would then be acceptable.
 
+**Update (2026-10-12): O10 resolved by ADR-0140.** Telegram is now admitted, as an optional, off-by-default adapter for **operational and staff alerts only** (`staff_ops`): never payroll, never personal data, never customer-facing, never OTP or `security`-class messages, never a fallback for another channel. The constraints recorded above become binding decisions there (explicit chat binding by an audited, revocable one-time-code handshake with confirmation in the authenticated session; private chats only; one Telegram queue per deployment; chat id encrypted with the ADR-0137 helper and looked up by keyed hash; webhook with a verified secret and no inbound command beyond the handshake and `/stop`). The rest of this section, in particular the WhatsApp-specific port (§8) and the no-fallback rule, stands unchanged. Implementation is issue #965.
+
 ### 8. The delivery port contract (what booking and hr call)
 
 Shape only; names are **provisional** and are fixed by the implementation ADR/PR (no code now). A capability port per ADR-0011, in `src/modules/_shared/ports/`, with the module's application layer as the adapter:

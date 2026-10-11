@@ -923,8 +923,9 @@ payroll must come back from the same point in time.
 - Delivery channels (O10, O11): the owner admitted a Telegram adapter (optional,
   off by default) and wants notification orchestration. Neither changes this
   pack: payslip notices carry no amount (ADR-0132) and, per ADR-0133 §7, must
-  never reach Telegram or any fallback channel. Telegram still needs its own
-  ADR/issue (see the ADR-0133 update note). O11 is resolved by ADR-0139:
+  never reach Telegram or any fallback channel. Telegram is admitted by ADR-0140
+  for operational and staff alerts only (implementation #965), so payroll,
+  payslip and personal-data messages are refused by its registry. O11 is resolved by ADR-0139:
   notification orchestration is not admitted for now, so payroll notices have
   no cross-channel fallback or preference engine to depend on.
 

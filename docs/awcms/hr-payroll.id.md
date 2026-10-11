@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:1b40e51f2369386e13faeb4796d56e62b57c1a972de8d54ff8e4127cccfbb720 -->
+<!-- i18n-source-hash: sha256:80061cdc7988a3be223361175952b8fcd9220e0ca504fcbeffacda591badc65e -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -951,8 +951,9 @@ harus kembali dari titik waktu yang sama.
   secara default) dan menginginkan orkestrasi notifikasi. Keduanya tidak mengubah
   paket ini: notifikasi slip gaji tidak memuat nominal (ADR-0132) dan, menurut
   ADR-0133 §7, tidak boleh pernah sampai ke Telegram atau kanal fallback mana
-  pun. Telegram tetap butuh ADR/isu sendiri (lihat catatan pembaruan ADR-0133).
-  O11 diselesaikan oleh ADR-0139: orkestrasi notifikasi tidak diterima untuk
+  pun. Telegram diterima oleh ADR-0140 hanya untuk peringatan operasional dan staf
+  (implementasi #965), sehingga pesan payroll, slip gaji, dan data pribadi
+  ditolak oleh registry-nya. O11 diselesaikan oleh ADR-0139: orkestrasi notifikasi tidak diterima untuk
   saat ini, sehingga notifikasi payroll tidak bergantung pada fallback
   lintas-kanal atau mesin preferensi.
 

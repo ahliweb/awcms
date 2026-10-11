@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0133-generic-delivery-capability-whatsapp-promotion.md)
 
-<!-- i18n-source-hash: sha256:4e509e5113b8589c9e9f2cec6799167a32611155c543bbcef59443d6300d5516 -->
+<!-- i18n-source-hash: sha256:8f856d37edf38e7a3b7f92cbe0fd5f4302c1576bf64025cb6f6c1efceafd81bf -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -135,6 +135,8 @@ Fase (masing-masing PR sendiri; tidak ada yang mulai sebelum yang sebelumnya mer
 **Pembaruan (2026-10-10): jawaban pemilik dicatat, ADR ini tidak berubah.** Pemilik awcms-one menjawab O10 dan O11. **O10:** Telegram diterima sebagai adapter opsional yang mati secara default. **O11:** orkestrasi notifikasi diinginkan, dengan syarat kasus nilai tertulis dan ADR upstream. Dibaca secara setia, ini mengubah siapa yang memutuskan, bukan apa yang sudah diterima repo ini: Telegram tetap **belum diterima di sini** sampai ADR/isu sendiri ada, dan ADR itu berangkat dari batasan yang dicatat di atas (mati secara default, otorisasi chat eksplisit, tidak pernah menjadi fallback untuk payroll atau data pribadi). Orkestrasi tetap **belum diterima** sampai kasus nilai dan ADR-nya ada; port khusus WhatsApp (§8) dan aturan bahwa tak ada modul yang mengimplementasikan fallback otomatis antarkanal tetap berlaku sampai ADR semacam itu mengubahnya.
 
 **Pembaruan (2026-10-12): O11 diselesaikan oleh ADR-0139.** Kasus nilai tertulis untuk orkestrasi notifikasi kini ada dan menyimpulkan **tidak diterima, untuk saat ini**: tanpa fasad, tanpa mesin fallback, tanpa outbox kedua. Aturan di atas tetap tidak berubah; ADR-0139 §3 mendaftar kondisi pembukaan kembali dan §4 desain terkecil yang kemudian dapat diterima.
+
+**Pembaruan (2026-10-12): O10 diselesaikan oleh ADR-0140.** Telegram kini diterima, sebagai adapter opsional yang mati secara default untuk **peringatan operasional dan staf saja** (`staff_ops`): tidak pernah payroll, tidak pernah data pribadi, tidak pernah menghadap pelanggan, tidak pernah OTP atau pesan kelas `security`, tidak pernah fallback kanal lain. Batasan yang tercatat di atas menjadi keputusan mengikat di sana (pengikatan chat eksplisit lewat jabat tangan kode sekali pakai yang diaudit dan dapat dicabut dengan konfirmasi di sesi terautentikasi; hanya chat privat; satu antrean Telegram per deployment; chat id dienkripsi dengan helper ADR-0137 dan dicari lewat hash berkunci; webhook dengan rahasia terverifikasi dan tanpa perintah masuk selain jabat tangan dan `/stop`). Sisa bagian ini, khususnya port khusus-WhatsApp (§8) dan aturan tanpa-fallback, tidak berubah. Implementasinya issue #965.
 
 ### 8. Kontrak port pengiriman (yang dipanggil booking dan hr)
 
