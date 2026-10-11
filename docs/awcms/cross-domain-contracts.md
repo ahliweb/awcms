@@ -21,15 +21,15 @@
 
 ## 1. What is contracted here, and what is not
 
-| Artifact                                                                            | Status          | Where                                                                                                                               |
-| ----------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Booking port (`quote`, `hold`, `confirm`, `cancel`, `reschedule`)                   | design          | §3                                                                                                                                  |
-| Staff availability port (`getAvailability`)                                         | design          | §4                                                                                                                                  |
-| WhatsApp delivery port (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | **live** (#963) | §5                                                                                                                                  |
-| 15 provisional event schemas (9 booking, 6 hr); the 7 whatsapp events are **live**  | **provisional** | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
-| Consumer registration (`ModuleDescriptor.domainEventConsumers`)                     | ADR-0134        | not restated; this document only _uses_ it                                                                                          |
-| Idempotency per side-effecting consumer                                             | design          | §6                                                                                                                                  |
-| How an event moves from provisional to live                                         | process         | §7                                                                                                                                  |
+| Artifact                                                                            | Status           | Where                                                                                                                               |
+| ----------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Booking port (`quote`, `hold`, `confirm`, `cancel`, `reschedule`)                   | design           | §3                                                                                                                                  |
+| Staff availability port (`getAvailability`)                                         | **built** (#946) | §4                                                                                                                                  |
+| WhatsApp delivery port (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | **live** (#963)  | §5                                                                                                                                  |
+| 15 provisional event schemas (9 booking, 6 hr); the 7 whatsapp events are **live**  | **provisional**  | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
+| Consumer registration (`ModuleDescriptor.domainEventConsumers`)                     | ADR-0134         | not restated; this document only _uses_ it                                                                                          |
+| Idempotency per side-effecting consumer                                             | design           | §6                                                                                                                                  |
+| How an event moves from provisional to live                                         | process          | §7                                                                                                                                  |
 
 Not contracted here: schemas, endpoints, permissions and state machines of the
 modules themselves. They are in the packs and ADRs above and are not duplicated.
@@ -240,8 +240,11 @@ silently cancelling; display names come from the consumer's own resource or
 `profile_identity`, never from this port; do not infer an absence reason from a
 gap; do not log the full result at `info`. The result is an allow-list of three
 fields per person and structurally contains no payroll data; the adapter's SQL
-names only the two schedule tables, and a test fails if it ever names a
-compensation, payroll or commission table.
+names only the schedule, the terms and the employment header (the soft-delete
+flag lives there; none holds a name or a rate), and a test fails if it ever names a
+compensation, payroll or commission table. **Built in Issue #946**
+(`src/modules/_shared/ports/staff-availability-port.ts`; adapter
+`hr_workforce/application/staff-availability-adapter.ts`).
 
 There is one contract: this one. The booking pack ([`booking.md`](booking.md) §10.3)
 consumes it as defined and adds no requirement of its own.

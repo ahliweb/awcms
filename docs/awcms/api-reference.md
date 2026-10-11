@@ -11600,7 +11600,7 @@ Gated by `procurement.suppliers.restore` (HIGH-RISK). Audited at warning severit
 
 ## HR Workforce
 
-The employment context (hr_workforce module, Issue #945, ADR-0132, phase 1 of the hr_* family). An employment REFERENCES a profile_identity party and never copies its name, contact or national id; no photo, biometric or device field exists (owner decision O6). Terms (office, manager, job title, type, status) are effective-dated and append-only, the manager chain is acyclic and bounded, terminated is terminal, and the database enforces one active employment per profile and per login. An employee reads their own employment through an ownership grant on the persisted login link; the link itself (assign), delete, restore and settings configure are high-risk, idempotency-keyed and audited. Attendance, shifts, commission and payroll are later phases.
+The employment context (hr_workforce module, Issues #945 and #946, ADR-0132, phase 1 of the hr_* family). An employment REFERENCES a profile_identity party and never copies its name, contact or national id; no photo, biometric or device field exists (owner decision O6). Terms (office, manager, job title, type, status) are effective-dated and append-only, the manager chain is acyclic and bounded, terminated is terminal, and the database enforces one active employment per profile and per login. An employee reads their own employment through an ownership grant on the persisted login link; the link itself (assign), delete, restore and settings configure are high-risk, idempotency-keyed and audited. Shift templates are patterns (local start, elapsed duration, optional break, IANA zone); a shift assignment is one UTC half-open interval per employment, drafted, published (high-risk) and cancelled, with no overlap among non-cancelled rows per employment enforced by the database and no free-text or reason field (time off carries a coarse category only). An employee reads their own published schedule through an ownership grant. Attendance, commission and payroll are later phases.
 
 ### `GET /api/v1/hr-workforce/employments` — List employments
 
@@ -11864,6 +11864,240 @@ Gated by `hr_workforce.settings.configure` (high-risk). An omitted field keeps i
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/shift-assignments` — List shift assignments
+
+- **operationId**: `hrWorkforceShiftAssignmentsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.shifts.read` (drafts visible), EXCEPT `mine=true`, which answers only the caller's OWN PUBLISHED schedule and needs no permission (an ownership grant on the persisted login link, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). Oldest start first, keyset paginated (`cursor`); `from` (inclusive) and `to` (exclusive) are whole-minute UTC instants and an assignment is listed when it overlaps that window. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                    | Description |
+| ------------------ | ------ | -------- | --------------------------------------- | ----------- |
+| `employmentId`     | query  | no       | string (uuid)                           |             |
+| `from`             | query  | no       | string (date-time)                      |             |
+| `to`               | query  | no       | string (date-time)                      |             |
+| `status`           | query  | no       | enum(`draft`, `published`, `cancelled`) |             |
+| `mine`             | query  | no       | boolean                                 |             |
+| `cursor`           | query  | no       | string                                  |             |
+| `X-Correlation-ID` | header | no       | string                                  |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of assignments.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/shift-assignments` — Draft a shift or time-off assignment
+
+- **operationId**: `hrWorkforceShiftAssignmentCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.shifts.create`. Send EITHER `templateId` + `localDate` (the wall clock is resolved to UTC once, here, in the template's zone) OR the explicit `startsAt`/`endsAt` UTC interval with its `timeZone`. Created as a DRAFT: invisible to scheduling consumers until published, but it already counts for the overlap rule. An employment cannot have two non-cancelled assignments that overlap (half-open, across kinds): `409 SHIFT_CONFLICT`, with the other assignment's id in `error.details.conflictingAssignmentId` ONLY when the caller also holds `hr_workforce.shifts.read` (otherwise the id is omitted, so a create-only caller cannot enumerate other people's schedule ids). Time off carries a coarse `timeOffKind` and NEVER a reason; no free-text field exists. Requires an Idempotency-Key. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrShiftAssignmentInput`](#schema-hrshiftassignmentinput)
+
+**Responses**
+
+| Status | Description                                                                      | Schema                                 |
+| ------ | -------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The draft assignment.                                                            | object                                 |
+| 400    | Validation error.                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or SHIFT_CONFLICT.                                          | [`ApiError`](#standard-error-envelope) |
+| 422    | EMPLOYMENT_NOT_FOUND, TEMPLATE_NOT_FOUND, OFFICE_NOT_FOUND or INVALID_TIME_ZONE. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/shift-assignments/{id}/cancel` — Cancel a shift assignment
+
+- **operationId**: `hrWorkforceShiftAssignmentCancel`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.shifts.cancel` (high-risk). draft or published -> cancelled (terminal). The row stays; it stops counting for the overlap rule and for availability. Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 200    | The cancelled assignment.                        | object                                 |
+| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                              | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or SHIFT_ALREADY_CANCELLED. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/shift-assignments/{id}/publish` — Publish a shift assignment
+
+- **operationId**: `hrWorkforceShiftAssignmentPublish`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.shifts.publish` (high-risk). draft -> published. Only a published assignment is visible to scheduling consumers (the `StaffAvailabilityPort`). A published assignment is immutable: it is cancelled, never edited or deleted. Requires an Idempotency-Key. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                  | Schema                                 |
+| ------ | ------------------------------------------------------------ | -------------------------------------- |
+| 200    | The published assignment.                                    | object                                 |
+| 400    | Validation error.                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, SHIFT_NOT_DRAFT or EMPLOYMENT_DELETED. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/shift-templates` — List shift templates
+
+- **operationId**: `hrWorkforceShiftTemplatesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.templates.read`. Live templates, newest first, keyset paginated (`cursor`). A template is a pattern and names no person. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `cursor`           | query  | no       | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of shift templates.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/shift-templates` — Create a shift template
+
+- **operationId**: `hrWorkforceShiftTemplateCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.templates.create`. A pattern: a local start time, an ELAPSED duration in minutes, an optional single break and an IANA zone. Codes are unique among live templates (`409 TEMPLATE_CODE_CONFLICT`). Requires an Idempotency-Key. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrShiftTemplateInput`](#schema-hrshifttemplateinput)
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 201    | The template.                                   | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or TEMPLATE_CODE_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | OFFICE_NOT_FOUND or INVALID_TIME_ZONE.          | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/shift-templates/{id}` — Get a shift template
+
+- **operationId**: `hrWorkforceShiftTemplateGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.templates.read`. A soft-deleted template is a 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The template.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/hr-workforce/shift-templates/{id}` — Edit a shift template
+
+- **operationId**: `hrWorkforceShiftTemplateUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.templates.update`. Only the keys sent change (the code is fixed); `officeId: null`, or both break keys `null`, clear them. Assignments already made are NOT moved: they hold their own resolved instants. The call sets values, so repeating it is harmless and it needs no Idempotency-Key. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`HrShiftTemplatePatch`](#schema-hrshifttemplatepatch)
+
+**Responses**
+
+| Status | Description                                                                                    | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The template.                                                                                  | object                                 |
+| 400    | Validation error.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 422    | OFFICE_NOT_FOUND, INVALID_TIME_ZONE or VALIDATION_ERROR (the break must end within the shift). | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/hr-workforce/shift-templates/{id}` — Soft-delete a shift template
+
+- **operationId**: `hrWorkforceShiftTemplateDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.templates.delete` (high-risk). Soft delete; frees the code. Assignments made from it are unaffected. Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                               | Schema                                 |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| 200    | The deleted template.                     | object                                 |
+| 400    | Validation error.                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.               | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                       | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or TEMPLATE_DELETED. | [`ApiError`](#standard-error-envelope) |
 
 ## WhatsApp Delivery
 
@@ -13190,6 +13424,96 @@ _No properties declared._
 ```json
 {
   "reason": "string"
+}
+```
+
+### Schema: HrShiftAssignmentInput
+
+Send EITHER `templateId` + `localDate` (work only) OR `startsAt` + `endsAt` + `timeZone`. Instants are whole-minute UTC ending in Z; a work shift is at most 24 hours, time off at most 31 days; an optional single break must lie inside a work interval.
+
+| Field           | Type                              | Required | Nullable | Description |
+| --------------- | --------------------------------- | -------- | -------- | ----------- |
+| `employmentId`  | string (uuid)                     | yes      | no       |             |
+| `kind`          | enum(`work`, `time_off`)          | yes      | no       |             |
+| `timeOffKind`   | enum(`leave`, `holiday`, `other`) | no       | no       |             |
+| `templateId`    | string (uuid)                     | no       | no       |             |
+| `localDate`     | string (date)                     | no       | no       |             |
+| `startsAt`      | string (date-time)                | no       | no       |             |
+| `endsAt`        | string (date-time)                | no       | no       |             |
+| `breakStartsAt` | string (date-time)                | no       | no       |             |
+| `breakEndsAt`   | string (date-time)                | no       | no       |             |
+| `timeZone`      | string                            | no       | no       |             |
+| `officeId`      | string (uuid)                     | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "employmentId": "00000000-0000-0000-0000-000000000000",
+  "kind": "work",
+  "timeOffKind": "leave",
+  "templateId": "00000000-0000-0000-0000-000000000000",
+  "localDate": "2026-01-01",
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "endsAt": "2026-01-01T00:00:00.000Z",
+  "breakStartsAt": "2026-01-01T00:00:00.000Z",
+  "breakEndsAt": "2026-01-01T00:00:00.000Z",
+  "timeZone": "string",
+  "officeId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: HrShiftTemplateInput
+
+| Field                | Type          | Required | Nullable | Description |
+| -------------------- | ------------- | -------- | -------- | ----------- |
+| `code`               | string        | yes      | no       |             |
+| `name`               | string        | yes      | no       |             |
+| `localStart`         | string        | yes      | no       |             |
+| `durationMinutes`    | integer       | yes      | no       |             |
+| `breakOffsetMinutes` | integer       | no       | no       |             |
+| `breakMinutes`       | integer       | no       | no       |             |
+| `timeZone`           | string        | yes      | no       |             |
+| `officeId`           | string (uuid) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "localStart": "string",
+  "durationMinutes": 15,
+  "breakOffsetMinutes": 0,
+  "breakMinutes": 1,
+  "timeZone": "string",
+  "officeId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: HrShiftTemplatePatch
+
+| Field                | Type          | Required | Nullable | Description |
+| -------------------- | ------------- | -------- | -------- | ----------- |
+| `name`               | string        | no       | no       |             |
+| `localStart`         | string        | no       | no       |             |
+| `durationMinutes`    | integer       | no       | no       |             |
+| `breakOffsetMinutes` | integer       | no       | yes      |             |
+| `breakMinutes`       | integer       | no       | yes      |             |
+| `timeZone`           | string        | no       | no       |             |
+| `officeId`           | string (uuid) | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "localStart": "string",
+  "durationMinutes": 15,
+  "breakOffsetMinutes": 0,
+  "breakMinutes": 0,
+  "timeZone": "string",
+  "officeId": "00000000-0000-0000-0000-000000000000"
 }
 ```
 

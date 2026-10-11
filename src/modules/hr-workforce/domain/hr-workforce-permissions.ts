@@ -8,7 +8,7 @@
  * `moduleKey`, `activityCode` and `action` together as string literals in one
  * object.
  *
- * `delete`, `restore`, `assign` and `configure` are HIGH-RISK actions
+ * `delete`, `restore`, `assign`, `configure`, `publish` and `cancel` are HIGH-RISK actions
  * (`identity-access/domain/access-control.ts`).
  */
 export const HR_WORKFORCE_MODULE_KEY = "hr_workforce";
@@ -44,6 +44,50 @@ export const HR_WORKFORCE_GUARDS = {
       moduleKey: "hr_workforce",
       activityCode: "employments",
       action: "assign" as const
+    }
+  },
+  shifts: {
+    read: {
+      moduleKey: "hr_workforce",
+      activityCode: "shifts",
+      action: "read" as const
+    },
+    create: {
+      moduleKey: "hr_workforce",
+      activityCode: "shifts",
+      action: "create" as const
+    },
+    publish: {
+      moduleKey: "hr_workforce",
+      activityCode: "shifts",
+      action: "publish" as const
+    },
+    cancel: {
+      moduleKey: "hr_workforce",
+      activityCode: "shifts",
+      action: "cancel" as const
+    }
+  },
+  templates: {
+    read: {
+      moduleKey: "hr_workforce",
+      activityCode: "templates",
+      action: "read" as const
+    },
+    create: {
+      moduleKey: "hr_workforce",
+      activityCode: "templates",
+      action: "create" as const
+    },
+    update: {
+      moduleKey: "hr_workforce",
+      activityCode: "templates",
+      action: "update" as const
+    },
+    delete: {
+      moduleKey: "hr_workforce",
+      activityCode: "templates",
+      action: "delete" as const
     }
   },
   settings: {
