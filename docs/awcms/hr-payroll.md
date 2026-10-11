@@ -28,7 +28,7 @@ fiscal documents (annual return, withholding certificates); bank-file generation
 and any payment-provider call (a later issue, through the outbox, never inside a
 database transaction); leave balances and accrual; loans and benefits; applicant
 tracking; performance review; **affiliate commission** (a different beneficiary,
-not an employee); photo, biometric and device-fingerprint attendance evidence (never, O6); geolocation-only evidence is not part of the admitted phases and needs its own ADR (§4.3).
+not an employee); photo, biometric and device-fingerprint attendance evidence (never, O6); geolocation-only evidence is not part of the admitted phases; its design is decided in ADR-0138 and built only by a follow-up issue (§4.3).
 
 ## 2. PRD-lite
 
@@ -53,7 +53,7 @@ module (reads availability through the port); an auditor.
 | Employment stores a `profile_identity` reference and never copies name, contact, national id                           | §3, `profile_id` composite FK; no personal column in any HR table |
 | Org unit, manager, effective-dated status                                                                              | §4.1 `employment_terms`                                           |
 | Attendance events, corrections, approval via `workflow_approval`                                                       | §4.2                                                              |
-| Geolocation-only evidence is a separate feature, off by default per tenant; photo, biometric and device evidence never | §4.3 (absent in phase 1; O6 answered)                             |
+| Geolocation-only evidence is a separate feature, off by default per tenant; photo, biometric and device evidence never | §4.3 (decided in ADR-0138; absent in phase 1)                     |
 | Shift templates and assignments with conflict detection                                                                | §4.4                                                              |
 | A staff-availability port for Booking                                                                                  | §5                                                                |
 
@@ -169,18 +169,41 @@ reason text is personal data and never rides in an audit row or event.
 
 **Owner decision O6 (answered 2026-10-10, awcms-one DoR):** attendance **may**
 use **geolocation only** — **no photo, no biometric and no device fingerprint,
-ever** — and it is **off by default per tenant**. The answer permits a
-geolocation evidence feature to be designed; it does **not** admit one. This
-section therefore stays **not part of this admission and absent from phase 1 by
-construction**: no table, no column, no setting, no route. Building it needs its
-own ADR, written after a data-protection impact assessment, and that ADR starts
-from this bar: a separate table with its own permission and consent record; a
-per-tenant switch that is **off by default**; **coarse** evidence preferred over
-precise (for example "within the office geofence: yes/no" rather than
-coordinates) unless the ADR justifies otherwise; and a short retention enforced
-by `data_lifecycle`. The photo option (stored through `media_library`) and any
-biometric or device-fingerprint option that earlier drafts of this section kept
-open are **removed**: the owner excluded them.
+ever** — and it is **off by default per tenant**. **Decided in ADR-0138
+(Accepted, 2026-10-12) — as a decision record only: no table, column, setting,
+permission or route exists, and phase 1 still ships none of it.** An
+implementation issue is created from the ADR and depends on the attendance
+implementation (#947). The decision:
+
+- **Verdict-only evidence.** At `clock_in`/`clock_out` only, the server evaluates
+  one position sample against a tenant geofence and persists a verdict
+  (`inside`/`outside`/`not_provided`) with coarse distance and accuracy bands.
+  **No coordinate is ever at rest**, in a log, event, audit row or export. Raw and
+  rounded coordinates, a client-side verdict and a raw short-lived window were
+  rejected.
+- **Separate append-only table** linked to the event (no location column on
+  `awcms_hr_attendance_events`), so evidence is purged without touching the
+  payroll-relevant event.
+- **Off for every tenant**; enabling needs `hr_workforce.geolocation_evidence.configure`
+  (not seeded to default roles), a recorded DPIA reference, a published notice
+  version and a geofence; audited at `critical`. Disabling is always allowed.
+- **Notice acknowledgement** per employee is evidence of notice, not consent as
+  the lawful basis; declining records `not_provided` and never blocks clocking.
+- **Purpose-limited:** presence at an authorised site only; a non-`inside`
+  verdict raises a human-review flag and decides nothing automatically.
+- **Read roster:** `hr_workforce.attendance_evidence.read` for HR and supervisors
+  in scope, the employee's own rows via `ownershipGrant`; schedulers, cashiers,
+  marketers and payroll operators have no path.
+- **Retention** by a `data_lifecycle` descriptor created with the table
+  (30 / 90 / 180 days min / default / max, hard delete, no archive, legal hold
+  overrides), plus a subject-data descriptor for export and erasure (ADR-0094).
+- **Explicitly out:** photo, biometric, device fingerprint or network identifiers;
+  coordinates at rest; tracking or history; any location outside the two events;
+  provider calls; automated adverse decisions; kiosk or import positions.
+
+The photo option (stored through `media_library`) and any biometric or
+device-fingerprint option that earlier drafts of this section kept open stay
+**removed**: the owner excluded them.
 
 ### 4.4 Shifts and conflict detection
 
@@ -760,7 +783,7 @@ assessment.
   identity (via `profile_identity`), employment, attendance and schedule.
   Financial: salary, bank account, withholding. **Specific personal data** under the
   law must be treated with extra care: health (sick-leave reasons: hence no time-off
-  reason is stored), and potentially biometric or geolocation data (hence photo, biometric and device evidence are excluded for good, and geolocation evidence is off by default and needs its own ADR, O6).
+  reason is stored), and potentially biometric or geolocation data (hence photo, biometric and device evidence are excluded for good, and geolocation evidence is off by default and verdict-only, ADR-0138, O6).
 - **Lawful basis and purpose.** Processing is for the employment relationship and
   the employer's legal obligations (labour, tax, social security). Each column has
   a stated purpose through its `subjectData` rationale; data beyond that purpose
@@ -822,8 +845,9 @@ payroll must come back from the same point in time.
   module links this profile"); optional, follow-up.
 - Owner answers recorded 2026-10-10 that need their own work before any
   implementation: an ADR amending ADR-0132 for the configurable SoD mode (§7.5)
-  and its open sub-question O7a; an ADR for geolocation attendance evidence,
-  after a data-protection impact assessment (§4.3).
+  and its open sub-question O7a; geolocation attendance evidence is now
+  decided in ADR-0138 (verdict-only, off by default; §4.3) and needs only its
+  follow-up implementation issue, with a per-tenant DPIA before enabling.
 - Delivery channels (O10, O11): the owner admitted a Telegram adapter (optional,
   off by default) and wants notification orchestration. Neither changes this
   pack: payslip notices carry no amount (ADR-0132) and, per ADR-0133 §7, must
@@ -834,10 +858,10 @@ payroll must come back from the same point in time.
 
 Tracked downstream in `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. The owner answered O1–O12 on 2026-10-10; the rows below record the answers that bind this pack (O4, O6, O7). O1 and O5 were answered the same day but change nothing here and are not yet reconciled into this pack. ADR-0132 itself closes none of them.
 
-| Id  | Question                                                                                                                                      | Why it matters here                                                                          | Blocks                                              | This pack's stance                                                                                                                                            |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| O1  | Scope and sequencing of the platform epic as tracked downstream (whether the phases ship together, in order, or per consumer)                 | The three phases are designed to ship one by one; a consumer may want payroll with workforce | the order of implementing issues                    | Designed to ship in order; payroll never ships before its gate                                                                                                |
-| O4  | Indonesian payroll profile: PPh 21 only, or BPJS, overtime, holiday allowance as well; and whether it is upstream seed data or consumer-owned | Regulatory content must be effective-dated and traceable; scope drives size and legal review | nothing (was: phase 3 gate)                         | **Answered 2026-10-10:** owned by each consumer; upstream ships only the engine and effective-dating, no Indonesian rates (§7.3)                              |
-| O5  | Legal role of the platform operator per deployment: controller, processor or both                                                             | Decides subject-request ownership, processing terms, breach notification                     | privacy analysis, retention                         | Designed for per-tenant isolation either way (§13.2)                                                                                                          |
-| O6  | Whether attendance may ever use geolocation, photo or device evidence                                                                         | Specific/biometric personal data; decides whether it is in any design at all                 | any geolocation-evidence ADR                        | **Answered 2026-10-10:** geolocation only (no photo, biometric or device fingerprint), off by default per tenant; still needs its own ADR after a DPIA (§4.3) |
-| O7  | Segregation of duties for payroll: who may calculate, approve, finalize, pay                                                                  | Authorization matrix and minimum ABAC scenarios; small-tenant impact                         | phase 3 gate (ADR-0132 amendment, sub-question O7a) | **Answered 2026-10-10:** configurable per tenant; default calculate != approve != pay; may relax to prepare != approve, the relaxation audited (§7.5)         |
+| Id  | Question                                                                                                                                      | Why it matters here                                                                          | Blocks                                              | This pack's stance                                                                                                                                                                                                              |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | Scope and sequencing of the platform epic as tracked downstream (whether the phases ship together, in order, or per consumer)                 | The three phases are designed to ship one by one; a consumer may want payroll with workforce | the order of implementing issues                    | Designed to ship in order; payroll never ships before its gate                                                                                                                                                                  |
+| O4  | Indonesian payroll profile: PPh 21 only, or BPJS, overtime, holiday allowance as well; and whether it is upstream seed data or consumer-owned | Regulatory content must be effective-dated and traceable; scope drives size and legal review | nothing (was: phase 3 gate)                         | **Answered 2026-10-10:** owned by each consumer; upstream ships only the engine and effective-dating, no Indonesian rates (§7.3)                                                                                                |
+| O5  | Legal role of the platform operator per deployment: controller, processor or both                                                             | Decides subject-request ownership, processing terms, breach notification                     | privacy analysis, retention                         | Designed for per-tenant isolation either way (§13.2)                                                                                                                                                                            |
+| O6  | Whether attendance may ever use geolocation, photo or device evidence                                                                         | Specific/biometric personal data; decides whether it is in any design at all                 | ADR-0138                                            | **Answered 2026-10-10:** geolocation only (no photo, biometric or device fingerprint), off by default per tenant; **decided in ADR-0138 (2026-10-12)**, built only by a follow-up issue, DPIA per tenant before enabling (§4.3) |
+| O7  | Segregation of duties for payroll: who may calculate, approve, finalize, pay                                                                  | Authorization matrix and minimum ABAC scenarios; small-tenant impact                         | phase 3 gate (ADR-0132 amendment, sub-question O7a) | **Answered 2026-10-10:** configurable per tenant; default calculate != approve != pay; may relax to prepare != approve, the relaxation audited (§7.5)                                                                           |

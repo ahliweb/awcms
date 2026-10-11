@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:2a9f990cf013a9b95c8f60d11e81e4c51e52fe0187e0ceec5bcd5d33cd5747fb -->
+<!-- i18n-source-hash: sha256:8bea09dfe3e80c8ee0c4312b9a241f85039b85fb38289d4e77d0acfc1d9184ef -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -30,7 +30,7 @@ pun; dokumen fiskal (SPT tahunan, bukti potong); pembuatan berkas bank dan
 panggilan penyedia pembayaran apa pun (isu berikutnya, lewat outbox, tidak
 pernah di dalam transaksi database); saldo dan akrual cuti; pinjaman dan
 tunjangan; pelacakan pelamar; penilaian kinerja; **komisi afiliasi** (penerima
-berbeda, bukan pegawai); bukti kehadiran foto, biometrik, dan sidik-jari perangkat (tidak pernah, O6); bukti geolokasi-saja tidak termasuk fase yang diterima dan butuh ADR sendiri (§4.3).
+berbeda, bukan pegawai); bukti kehadiran foto, biometrik, dan sidik-jari perangkat (tidak pernah, O6); bukti geolokasi-saja tidak termasuk fase yang diterima; desainnya diputuskan di ADR-0138 dan dibangun hanya oleh issue tindak-lanjut (§4.3).
 
 ## 2. PRD-lite
 
@@ -180,18 +180,43 @@ event.
 **Keputusan pemilik O6 (dijawab 2026-10-10, DoR awcms-one):** kehadiran
 **boleh** memakai **geolokasi saja** — **tanpa foto, tanpa biometrik, dan tanpa
 sidik-jari perangkat, selamanya** — dan **mati secara default per tenant**.
-Jawaban ini mengizinkan fitur bukti geolokasi dirancang; ia **tidak**
-menerimanya. Bagian ini karenanya tetap **bukan bagian penerimaan ini dan tidak
-ada di fase 1 secara konstruksi**: tanpa tabel, kolom, pengaturan, atau route.
-Membangunnya butuh ADR sendiri, ditulis setelah penilaian dampak perlindungan
-data, dan ADR itu berangkat dari batas ini: tabel terpisah dengan izin dan
-catatan persetujuan sendiri; sakelar per tenant yang **mati secara default**;
-bukti **kasar** lebih disukai daripada presisi (misalnya "di dalam geofence
-kantor: ya/tidak" alih-alih koordinat) kecuali ADR membenarkan lain; dan retensi
-singkat yang ditegakkan `data_lifecycle`. Opsi foto (disimpan lewat
-`media_library`) serta opsi biometrik atau sidik-jari perangkat yang masih
-dibiarkan terbuka oleh draf awal bagian ini **dihapus**: pemilik
-mengecualikannya.
+**Diputuskan di ADR-0138 (Diterima, 2026-10-12) — hanya sebagai catatan
+keputusan: tidak ada tabel, kolom, pengaturan, permission, atau route, dan fase 1
+tetap tidak mengirim satu pun.** Issue implementasi dibuat dari ADR itu dan
+bergantung pada implementasi absensi (#947). Keputusannya:
+
+- **Bukti hanya-putusan.** Hanya pada `clock_in`/`clock_out`, server
+  mengevaluasi satu sampel posisi terhadap geofence tenant dan menyimpan putusan
+  (`inside`/`outside`/`not_provided`) dengan pita jarak dan akurasi kasar.
+  **Tidak ada koordinat yang pernah tersimpan**, di log, event, baris audit, atau
+  ekspor. Koordinat mentah dan dibulatkan, putusan di klien, serta jendela mentah
+  berumur pendek ditolak.
+- **Tabel append-only terpisah** yang terhubung ke event (tidak ada kolom lokasi
+  pada `awcms_hr_attendance_events`), sehingga bukti dipurge tanpa menyentuh
+  event yang relevan untuk gaji.
+- **Mati untuk setiap tenant**; mengaktifkan butuh
+  `hr_workforce.geolocation_evidence.configure` (tidak di-seed ke peran bawaan),
+  rujukan DPIA tercatat, versi pemberitahuan terbit, dan geofence; diaudit pada
+  `critical`. Mematikan selalu boleh.
+- **Pengakuan pemberitahuan** per karyawan adalah bukti pemberitahuan, bukan
+  persetujuan sebagai dasar hukum; menolak mencatat `not_provided` dan tidak
+  pernah memblokir clock.
+- **Dibatasi tujuan:** hanya kehadiran di lokasi sah; putusan selain `inside`
+  menaikkan bendera tinjauan manusia dan tidak memutuskan apa pun otomatis.
+- **Daftar pembaca:** `hr_workforce.attendance_evidence.read` untuk HR dan
+  supervisor dalam cakupan, baris milik sendiri lewat `ownershipGrant`;
+  penjadwal, kasir, pemasar, dan operator payroll tidak punya jalur.
+- **Retensi** lewat descriptor `data_lifecycle` yang dibuat bersama tabelnya
+  (30 / 90 / 180 hari min / bawaan / maks, hard delete, tanpa arsip, legal hold
+  menimpa), plus descriptor subject-data untuk ekspor dan penghapusan (ADR-0094).
+- **Dikecualikan eksplisit:** foto, biometrik, sidik-jari perangkat atau pengenal
+  jaringan; koordinat tersimpan; pelacakan atau riwayat; lokasi di luar dua
+  event; panggilan provider; keputusan merugikan otomatis; posisi dari kiosk atau
+  impor.
+
+Opsi foto (disimpan lewat `media_library`) serta opsi biometrik atau sidik-jari
+perangkat yang masih dibiarkan terbuka oleh draf awal bagian ini tetap
+**dihapus**: pemilik mengecualikannya.
 
 ### 4.4 Shift dan deteksi konflik
 
@@ -782,7 +807,7 @@ deployment.
   (lewat `profile_identity`), kepegawaian, kehadiran, dan jadwal. Keuangan: gaji,
   rekening bank, pemotongan. **Data pribadi bersifat spesifik** menurut undang-undang
   harus diperlakukan lebih hati-hati: kesehatan (alasan cuti sakit: karena itu tidak
-  ada alasan time-off yang disimpan), dan berpotensi data biometrik atau geolokasi (karena itu bukti foto, biometrik, dan perangkat dikecualikan selamanya, dan bukti geolokasi mati secara default serta butuh ADR sendiri, O6).
+  ada alasan time-off yang disimpan), dan berpotensi data biometrik atau geolokasi (karena itu bukti foto, biometrik, dan perangkat dikecualikan selamanya, dan bukti geolokasi mati secara default dan hanya-putusan, ADR-0138, O6).
 - **Dasar hukum dan tujuan.** Pemrosesan untuk hubungan kerja dan kewajiban hukum
   pemberi kerja (ketenagakerjaan, pajak, jaminan sosial). Setiap kolom punya tujuan
   yang dinyatakan lewat rasional `subjectData`-nya; data di luar tujuan itu (foto,
@@ -847,8 +872,10 @@ harus kembali dari titik waktu yang sama.
   menautkan profil ini"); opsional, tindak lanjut.
 - Jawaban pemilik yang dicatat 2026-10-10 dan butuh pekerjaan sendiri sebelum
   implementasi apa pun: ADR yang mengamandemen ADR-0132 untuk mode SoD yang
-  dapat dikonfigurasi (§7.5) beserta sub-pertanyaan terbukanya O7a; ADR untuk
-  bukti kehadiran geolokasi, setelah penilaian dampak perlindungan data (§4.3).
+  dapat dikonfigurasi (§7.5) beserta sub-pertanyaan terbukanya O7a; bukti
+  kehadiran geolokasi kini diputuskan di ADR-0138 (hanya-putusan, mati bawaan;
+  §4.3) dan hanya butuh issue implementasi tindak-lanjut, dengan DPIA per tenant
+  sebelum diaktifkan.
 - Kanal pengiriman (O10, O11): pemilik menerima adapter Telegram (opsional, mati
   secara default) dan menginginkan orkestrasi notifikasi. Keduanya tidak mengubah
   paket ini: notifikasi slip gaji tidak memuat nominal (ADR-0132) dan, menurut
@@ -860,10 +887,10 @@ harus kembali dari titik waktu yang sama.
 
 Dilacak di hilir pada `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. Pemilik menjawab O1–O12 pada 2026-10-10; baris di bawah mencatat jawaban yang mengikat paket ini (O4, O6, O7). O1 dan O5 dijawab pada hari yang sama tetapi tidak mengubah apa pun di sini dan belum direkonsiliasi ke paket ini. ADR-0132 sendiri tidak menutup satu pun.
 
-| Id  | Pertanyaan                                                                                                                             | Mengapa penting di sini                                                                             | Memblokir                                               | Sikap paket ini                                                                                                                                                         |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| O1  | Cakupan dan urutan epik platform seperti dilacak di hilir (apakah fase terbit bersama, berurutan, atau per konsumen)                   | Ketiga fase dirancang terbit satu per satu; konsumen mungkin menginginkan payroll bersama workforce | urutan isu implementasi                                 | Dirancang terbit berurutan; payroll tak pernah terbit sebelum gerbangnya                                                                                                |
-| O4  | Profil payroll Indonesia: hanya PPh 21, atau juga BPJS, lembur, tunjangan hari raya; dan apakah data seed upstream atau milik konsumen | Isi regulasi harus berlaku-efektif dan terlacak; cakupan menentukan ukuran dan tinjauan hukum       | tidak ada (sebelumnya: gerbang fase 3)                  | **Terjawab 2026-10-10:** dimiliki masing-masing konsumen; upstream hanya mengirim mesin dan berlaku-efektif, tanpa tarif Indonesia (§7.3)                               |
-| O5  | Peran hukum operator platform per deployment: pengendali, prosesor, atau keduanya                                                      | Menentukan kepemilikan permintaan subjek, ketentuan pemrosesan, notifikasi pelanggaran              | analisis privasi, retensi                               | Dirancang untuk isolasi per tenant apa pun hasilnya (§13.2)                                                                                                             |
-| O6  | Apakah kehadiran boleh pernah memakai bukti geolokasi, foto, atau perangkat                                                            | Data pribadi spesifik/biometrik; menentukan apakah ada di desain mana pun                           | ADR bukti geolokasi apa pun                             | **Terjawab 2026-10-10:** geolokasi saja (tanpa foto, biometrik, atau sidik-jari perangkat), mati secara default per tenant; tetap butuh ADR sendiri setelah DPIA (§4.3) |
-| O7  | Pemisahan tugas payroll: siapa boleh menghitung, menyetujui, memfinalisasi, membayar                                                   | Matriks otorisasi dan skenario ABAC minimum; dampak tenant kecil                                    | gerbang fase 3 (amandemen ADR-0132, sub-pertanyaan O7a) | **Terjawab 2026-10-10:** dapat dikonfigurasi per tenant; default hitung != setujui != bayar; boleh dilonggarkan ke siapkan != setujui, pelonggaran diaudit (§7.5)       |
+| Id  | Pertanyaan                                                                                                                             | Mengapa penting di sini                                                                             | Memblokir                                               | Sikap paket ini                                                                                                                                                                                                                                         |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | Cakupan dan urutan epik platform seperti dilacak di hilir (apakah fase terbit bersama, berurutan, atau per konsumen)                   | Ketiga fase dirancang terbit satu per satu; konsumen mungkin menginginkan payroll bersama workforce | urutan isu implementasi                                 | Dirancang terbit berurutan; payroll tak pernah terbit sebelum gerbangnya                                                                                                                                                                                |
+| O4  | Profil payroll Indonesia: hanya PPh 21, atau juga BPJS, lembur, tunjangan hari raya; dan apakah data seed upstream atau milik konsumen | Isi regulasi harus berlaku-efektif dan terlacak; cakupan menentukan ukuran dan tinjauan hukum       | tidak ada (sebelumnya: gerbang fase 3)                  | **Terjawab 2026-10-10:** dimiliki masing-masing konsumen; upstream hanya mengirim mesin dan berlaku-efektif, tanpa tarif Indonesia (§7.3)                                                                                                               |
+| O5  | Peran hukum operator platform per deployment: pengendali, prosesor, atau keduanya                                                      | Menentukan kepemilikan permintaan subjek, ketentuan pemrosesan, notifikasi pelanggaran              | analisis privasi, retensi                               | Dirancang untuk isolasi per tenant apa pun hasilnya (§13.2)                                                                                                                                                                                             |
+| O6  | Apakah kehadiran boleh pernah memakai bukti geolokasi, foto, atau perangkat                                                            | Data pribadi spesifik/biometrik; menentukan apakah ada di desain mana pun                           | ADR-0138                                                | **Terjawab 2026-10-10:** geolokasi saja (tanpa foto, biometrik, atau sidik-jari perangkat), mati secara default per tenant; **diputuskan di ADR-0138 (2026-10-12)**, dibangun hanya oleh issue tindak-lanjut, DPIA per tenant sebelum diaktifkan (§4.3) |
+| O7  | Pemisahan tugas payroll: siapa boleh menghitung, menyetujui, memfinalisasi, membayar                                                   | Matriks otorisasi dan skenario ABAC minimum; dampak tenant kecil                                    | gerbang fase 3 (amandemen ADR-0132, sub-pertanyaan O7a) | **Terjawab 2026-10-10:** dapat dikonfigurasi per tenant; default hitung != setujui != bayar; boleh dilonggarkan ke siapkan != setujui, pelonggaran diaudit (§7.5)                                                                                       |
