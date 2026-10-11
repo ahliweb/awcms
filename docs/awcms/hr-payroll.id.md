@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:483af98cd6be5428324ed8b614b04f275414bcca21359d65faa988bbebee99fc -->
+<!-- i18n-source-hash: sha256:44c56fb8328a801c2c4bfaefc7a9d58cb87b4b7b46fe807e259c747aea055c28 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -10,10 +10,11 @@
 > terms berlaku-efektif, settings, karyawan-melihat-miliknya; Issue #945) dan
 > _irisan shift_ (`sql/184`–`sql/185`: template shift, penugasan shift dengan aturan
 > tumpang-tindih yang ditegakkan database, dan adapter `StaffAvailabilityPort`;
-> Issue #946), serta _fondasi aturan_ fase 2 (modul `hr_commission`, `experimental`,
-> `sql/182`–`sql/183`: aturan komisi berversi dan evaluasinya yang murni; Issue #950)
-> sudah ada. Kehadiran, koreksi, buku besar akrual komisi, dan payroll masih hanya
-> desain: belum ada tabel, route, atau migrasi untuk itu.
+> Issue #946), _irisan kehadiran_ (`sql/198`–`sql/199`: event kehadiran hanya-tambah
+> dan koreksi dengan persetujuan; Issue #947), serta _fondasi aturan_ fase 2 (modul
+> `hr_commission`, `experimental`, `sql/182`–`sql/183`: aturan komisi berversi dan
+> evaluasinya yang murni; Issue #950) sudah ada. Buku besar akrual komisi dan payroll
+> masih hanya desain: belum ada tabel, route, atau migrasi untuk itu.
 > Paket ini memuat PRD-lite per fase, state machine, ERD dan kamus data, matriks
 > izin/RLS, matriks masking, audit dan idempotensi, skenario penerimaan
 > RBAC/ABAC, analisis ancaman dan privasi, event sementara, dan keputusan
@@ -182,6 +183,27 @@ terbit mendapat `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` saat submit. Guard
 persetujuan-diri yang sudah ada mencegah pegawai menyetujui koreksinya sendiri.
 Teks alasan adalah data pribadi dan tidak pernah ikut dalam baris audit atau
 event.
+
+**Seperti yang dibangun (Issue #947, `sql/198`–`sql/199`).** Dua penyempurnaan teks
+di atas, keduanya ditegakkan database. (1) `source` punya nilai kelima,
+`correction`, yang hanya ditulis koreksi yang disetujui (event juga membawa
+`correction_id`; guard mensyaratkan koreksi `approved` dan event cocok persis pada
+kind, instan, employment, dan target, sekali saja). (2) Aturan waktu usang dibagi
+menurut sumber, untuk memenuhi aturan putar-ulang offline sekaligus kendali
+pemalsuan: event `self`/`supervisor` mengklaim "sekarang", jadi waktu klaim yang
+lebih tua dari skew tenant **ditolak** (`ATTENDANCE_BACKDATED`: pakai koreksi); event
+`kiosk`/`import` adalah antrean yang diputar ulang, jadi waktu usang **diterima**
+hingga 7 hari dan ditandai `late` lewat 15 menit (lebih tua: ditolak). Baris koreksi
+hanya mengubah status dan status itu harus mengikuti putusan `workflow_approval`,
+pemohon tidak pernah boleh menjadi penyetuju (CHECK, trigger atas baris keputusan
+workflow termasuk delegat yang bertindak atas nama pemohon, dan chokepoint), dan
+instance workflow dimulai tanpa fakta. Menerapkan putusan adalah tarik: `POST
+.../attendance-corrections/{id}/settle`. Dasar baca: sendiri (`?mine=true`) dan
+rantai atasan di bawah pemanggil (`?reports=true`) adalah ownership grant pada route
+BACA; employment yang di-soft-delete memutus rantai. Kunci permission yang ditambahkan
+adalah `clock.create`, `attendance.create`/`read`, dan
+`corrections.create`/`read`/`cancel`/`approve`. Daftar lengkap penundaan ada di
+README modul.
 
 ### 4.3 Bukti geolokasi, foto, dan perangkat
 

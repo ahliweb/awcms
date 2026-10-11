@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f3c316a66a09a71460abf525644e2939f1649491288e333c2d2d0b3f59a0d172 -->
+<!-- i18n-source-hash: sha256:9c366a24a4e4dd0281d4863464b0df667aaaec97f88874e73a4c8de1f18714ca -->
 
 # `hr_workforce`
 
@@ -13,11 +13,13 @@ dan 4.1; berkas ini adalah peta kodenya.
 ## Apa yang ada, dan apa yang belum
 
 Ini adalah **fondasi** (employment, terms berlaku-efektif, settings, dan
-karyawan-melihat-miliknya) plus **shift dan port ketersediaan staf** (Issue #946).
-**Belum ada:** kehadiran, koreksi, komisi, dan payroll (issue berikutnya di bawah
-ADR yang sama) —
+karyawan-melihat-miliknya), **shift dan port ketersediaan staf** (Issue #946), dan
+**event kehadiran serta koreksi dengan persetujuan** (Issue #947).
+**Belum ada:** komisi dan payroll (issue berikutnya di bawah ADR yang sama) —
 dan **tidak akan pernah** ada field foto, biometrik, atau sidik-jari perangkat
-(keputusan pemilik O6).
+(keputusan pemilik O6). Bukti geolokasi (ADR-0138, Issue #970) BUKAN bagian dari
+kehadiran: ia akan menjadi tabel hanya-tambah terpisah yang dikunci pada id event,
+sehingga tidak pernah ada kolom lokasi di `awcms_hr_attendance_events`.
 
 Status `experimental`: flag mati, belum ada layar admin, dan modul tidak
 mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.
@@ -101,46 +103,169 @@ setengah-jam).
   tabel kompensasi, payroll, komisi, atau payout. Tidak ada kode Booking yang
   diimpor di mana pun; Booking (issue berikutnya) akan memakai tipe port.
 
+## Kehadiran dan koreksi (Issue #947, `sql/198`-`sql/199`)
+
+`awcms_hr_attendance_events` adalah satu fakta per baris: sebuah employment
+clock-in, clock-out, memulai atau mengakhiri istirahat, pada instan yang
+**diklaim** (`occurred_at`), **dicatat** oleh database pada instannya sendiri
+(`recorded_at`), dari sebuah `source` (`self`, `supervisor`, `kiosk`, `import`,
+atau `correction`). `awcms_hr_attendance_corrections` adalah **perubahan yang
+diusulkan** (`add` event yang hilang, atau `replace` satu event) dengan alasan wajib
+dan satu instance `workflow_approval`. Catatan efektifnya adalah "event yang belum
+digantikan".
+
+- **Hanya-tambah, di database.** `awcms_app` hanya memegang `SELECT` dan `INSERT`
+  pada event (terdaftar di `RETIRED_TENANT_TABLE_PRIVILEGES`), dan trigger menolak
+  `UPDATE` dan `DELETE` untuk peran lain juga. Baris koreksi hanya mengubah
+  **status**-nya; usulan, alasan, pemohon, dan instance-nya tidak dapat diubah.
+- **Jam server.** Trigger menimpa `recorded_at` dengan `clock_timestamp()`; klien
+  tidak dapat memasoknya (juga bukan `late`: keduanya kunci tak dikenal dan
+  ditolak). Waktu yang diklaim dibatasi `clock_skew_seconds` tenant
+  (`awcms_hr_workforce_settings`, bawaan 300): **di masa depan** melebihinya ditolak
+  untuk setiap sumber (`422 ATTENDANCE_TIME_IN_FUTURE`).
+- **Mundur-waktu, didamaikan.** Paket desain berkata event offline diterima dan
+  ditandai `late`; issue berkata event mundur-waktu melebihi skew ditolak. Keduanya
+  berlaku, menurut sumber: event **`self`/`supervisor`** mengklaim "sekarang", jadi
+  waktu klaim yang lebih tua dari skew ditolak (`ATTENDANCE_BACKDATED`: ajukan
+  koreksi); event **`kiosk`/`import`** adalah antrean offline yang diputar ulang,
+  jadi waktu usang diterima hingga **7 hari** (lebih tua: `ATTENDANCE_TOO_OLD`) dan
+  ditandai `late` lewat 15 menit. 7 hari dan 15 menit adalah konstanta di guard;
+  menjadikannya setelan tenant adalah tindak lanjut tercatat.
+- **Putar ulang.** `(tenant_id, employment_id, client_event_key)` unik. Putar ulang
+  mengembalikan **aslinya** (`200`, bukan `201`); event berbeda di bawah kunci yang
+  sudah dipakai adalah `409 CLIENT_EVENT_KEY_CONFLICT`. Post serentak satu kunci
+  tercatat sekali (`ON CONFLICT DO NOTHING` plus pembacaan pemenang).
+- **Siapa mencatat untuk siapa.** `source: self` butuh `hr_workforce.clock.create`
+  DAN employment yang tertaut ke login pemanggil (selain itu `403`, ada atau tidak:
+  S3). Ia permission dan bukan `ownershipGrant` karena grant hanya boleh melebarkan
+  pembacaan. `supervisor`/`kiosk`/`import` butuh `hr_workforce.attendance.create`
+  dan tidak pernah boleh memakai `self`. `attendance.create` adalah kuasa
+  **tepercaya** (`import` dapat mengklaim waktu hingga 7 hari lalu, ditandai `late`,
+  tanpa persetujuan): tidak diberikan ke peran mana pun secara bawaan, dan
+  pembatasan per kantor menunggu adapter scope.
+- **Koreksi tidak pernah menyunting aslinya.** Persetujuan menambahkan event BARU
+  (`source = correction`, `supersedes_event_id`, `correction_id`); database menolak
+  event bersumber-koreksi kecuali koreksinya `approved` dan event cocok persis pada
+  kind, instan, employment, dan target, sekali saja. Sebuah event digantikan paling
+  banyak sekali (indeks unik), dan hanya oleh koreksi; satu koreksi **pending** per
+  event target (indeks unik).
+- **Persetujuan wajib dan fail-closed.** Dengan modul `workflow` mati atau tanpa
+  definisi terbit di bawah `correction_workflow_key` (bawaan
+  `hr.attendance_correction`): `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` dan tidak ada
+  yang dibuat (tanpa baris, tanpa instance). Instance dimulai **tanpa fakta**,
+  sehingga alasan maupun waktu usulan tidak masuk ke penyimpanan workflow. Penyetuju
+  adalah assignee definisi; keputusannya sendiri adalah keputusan workflow
+  (`POST /workflows/tasks/{id}/decisions`).
+- **`settle` menerapkan putusan (tarik, seperti procurement).** `POST
+.../attendance-corrections/{id}/settle` (`corrections.approve`, berisiko tinggi)
+  membaca instance: pending -> `409 CORRECTION_STILL_PENDING`; approved -> status
+  pindah ke `approved` **dan** event pengganti ditambahkan dalam satu savepoint;
+  rejected -> `rejected`; dibatalkan di tempat lain -> `withdrawn`. Memanggilnya
+  adalah langkah yang diambil pemegang `corrections.approve` (consumer domain-event
+  yang menyelesaikan otomatis adalah tindak lanjut tercatat).
+- **Pemisahan tugas, empat lapis.** (1) guard milik engine workflow mencegah
+  pemohon memutuskan; (2) guard self-approval chokepoint menolak pemohon
+  **menyelesaikan** (`403`); (3) handler menolak instance approved yang tidak punya
+  keputusan setuju manusia (`409 CORRECTION_NO_APPROVER`: graf tanpa node persetujuan
+  akan menjadikan pemohon penyetuju dirinya) atau yang diikuti pemohon **langsung
+  atau sebagai pemberi delegasi yang kedudukannya dipakai delegat**
+  (`409 CORRECTION_SELF_APPROVED`: guard engine hanya membandingkan pengguna yang
+  bertindak, sehingga delegat yang menyetujui atas nama pemohon lolos); (4)
+  database: `CHECK (status <> 'approved' OR decided_by <> requested_by)` dan trigger
+  yang membaca ulang baris keputusan workflow sendiri. Status koreksi hanya dapat
+  mengikuti putusan instance (`approved`/`rejected`/`cancelled`), dan baris
+  `approved` tanpa event-nya tidak dapat commit (constraint trigger tertunda).
+- **Siapa melihat apa.** `?mine=true` (employment sendiri, yang sudah terminasi
+  termasuk) dan `?reports=true` (**rantai atasan saat ini** di bawah employment
+  pemanggil yang hidup dan belum terminasi) adalah `ownershipGrant` pada route BACA
+  saja; daftar tanpa batas butuh `attendance.read` / `corrections.read` ("HR melihat
+  semua"). `employmentId` di luar dasar yang dipilih adalah `403`.
+  `awcms_hr_report_ids` menelusuri paling banyak sepuluh tingkat dan **tidak
+  mengembalikan maupun menelusuri employment yang di-soft-delete**: postur atasan
+  terhapus di bawah bersifat fail-closed (atasan satu tingkat di atas kehilangan
+  pandangan atas orang di bawah atasan tengah yang terhapus sampai HR menulis ulang
+  terms mereka). Request cacat ditahan sampai otorisasi memutuskan, sehingga
+  pemanggil yang tidak berwenang diberi `403` sebelum `400`.
+- **Alasan bersifat sensitif.** Ia dipilih hanya pada `GET .../{id}` dan hanya untuk
+  pemohon, assignee workflow dari instance, atau pemanggil yang perannya memberi
+  `corrections.read`; atasan yang membaca koreksi bawahannya lewat rantai saja
+  melihat semuanya kecuali alasan. Tidak ada respons tulis yang membawanya (jadi
+  penyimpanan idempotensi tidak menyimpannya), daftar tidak pernah, dan tidak ada
+  baris audit, domain event, log, atau fakta workflow yang membawanya (tes teks-sumber
+  dan runtime memindai sentinel).
+- **Guard mengambil baris induk `FOR SHARE`** (employment, instance workflow,
+  koreksi), sehingga delete atau terminasi serentak berserialisasi dengan insert
+  alih-alih berlomba (sebuah tes menahan soft-delete yang belum commit dan
+  membuktikan insert menunggu lalu ditolak). Tabel event sendiri tidak dapat dikunci
+  `FOR SHARE` oleh `awcms_app` (tanpa hak `UPDATE`), karenanya target pergantian
+  dibaca biasa: tabelnya tak dapat diubah.
+- **Audit dan idempotensi.** Request, withdraw, dan settle diaudit hanya dengan id
+  dan status (`info`; settle `warning` bila approved); mencatat event tidak diaudit
+  (volume tinggi: event adalah catatannya). Setiap tulis butuh `Idempotency-Key`.
+- **Belum ada domain event.** `awcms.hr.attendance.recorded` tetap provisional
+  sampai ada consumer (seperti shift).
+
 ## Keputusan hak subjek data (cakupan ADR-0094)
 
-| Tabel                         | `subjectData`                                                    | Alasan                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `awcms_hr_employments`        | tercakup: `profile_id`, `tenant_user_id` + stempel; diekspor     | Catatan kepegawaian milik subjek sendiri. Dipertahankan di bawah kewajiban ketenagakerjaan/pajak/jaminan sosial pemberi kerja (`retain_under_obligation`); tautannya tetap dan mengarah ke profil yang sudah dianonimkan.                                                                                                                              |
-| `awcms_hr_employment_terms`   | tercakup: hanya stempel aktor; **tidak diekspor**; dipertahankan | Mencapai orangnya hanya lewat `employment_id`, yang tidak bisa dinyatakan kolom subjek langsung. Subjek membaca riwayatnya sendiri lewat `GET .../terms` yang diberi hak kepemilikan. Hanya-tambah, sehingga penghapusan tidak bisa menulis ulangnya. Join employment-ke-subjek langsung di ekspor adalah tindak lanjut tercatat (lihat Keterbatasan). |
-| `awcms_hr_shift_assignments`  | tercakup: hanya stempel aktor; **tidak diekspor**; dipertahankan | Kapan seseorang dijadwalkan dan kapan berhalangan (kategori kasar, tak pernah alasan). Mencapai orangnya hanya lewat `employment_id`, butir terbuka yang sama dengan terms (di bawah). Subjek membaca jadwal terbit miliknya lewat `?mine=true`. Tak pernah dihapus, baris terbit tak dapat diubah.                                                    |
-| `awcms_hr_shift_templates`    | `NO_SUBJECT_DATA` (alasan tercatat)                              | Pola tanpa orang; hanya stempel aktor.                                                                                                                                                                                                                                                                                                                 |
-| `awcms_hr_workforce_settings` | `NO_SUBJECT_DATA` (alasan tercatat)                              | Baris konfigurasi tenant; hanya stempel `updated_by`.                                                                                                                                                                                                                                                                                                  |
+| Tabel                             | `subjectData`                                                             | Alasan                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `awcms_hr_employments`            | tercakup: `profile_id`, `tenant_user_id` + stempel; diekspor              | Catatan kepegawaian milik subjek sendiri. Dipertahankan di bawah kewajiban ketenagakerjaan/pajak/jaminan sosial pemberi kerja (`retain_under_obligation`); tautannya tetap dan mengarah ke profil yang sudah dianonimkan.                                                                                                                              |
+| `awcms_hr_employment_terms`       | tercakup: hanya stempel aktor; **tidak diekspor**; dipertahankan          | Mencapai orangnya hanya lewat `employment_id`, yang tidak bisa dinyatakan kolom subjek langsung. Subjek membaca riwayatnya sendiri lewat `GET .../terms` yang diberi hak kepemilikan. Hanya-tambah, sehingga penghapusan tidak bisa menulis ulangnya. Join employment-ke-subjek langsung di ekspor adalah tindak lanjut tercatat (lihat Keterbatasan). |
+| `awcms_hr_shift_assignments`      | tercakup: hanya stempel aktor; **tidak diekspor**; dipertahankan          | Kapan seseorang dijadwalkan dan kapan berhalangan (kategori kasar, tak pernah alasan). Mencapai orangnya hanya lewat `employment_id`, butir terbuka yang sama dengan terms (di bawah). Subjek membaca jadwal terbit miliknya lewat `?mine=true`. Tak pernah dihapus, baris terbit tak dapat diubah.                                                    |
+| `awcms_hr_attendance_events`      | tercakup: hanya stempel `recorded_by`; **tidak diekspor**; dipertahankan  | Kapan seseorang clock-in dan clock-out (data perilaku), mencapai orangnya hanya lewat `employment_id` (issue 985, seperti terms dan shift). Hanya-tambah. Subjek membaca miliknya lewat `?mine=true`. Tidak memuat nilai lokasi, foto, perangkat, atau jaringan.                                                                                       |
+| `awcms_hr_attendance_corrections` | tercakup: `requested_by`, `decided_by`; **tidak diekspor**; dipertahankan | Permintaan mengubah kapan seseorang tercatat bekerja, dengan alasan sensitif. Mencapai karyawan hanya lewat `employment_id` (issue 985). Mengekspor alasan ke subjek adalah tindak lanjut tercatat bersama join itu.                                                                                                                                   |
+| `awcms_hr_shift_templates`        | `NO_SUBJECT_DATA` (alasan tercatat)                                       | Pola tanpa orang; hanya stempel aktor.                                                                                                                                                                                                                                                                                                                 |
+| `awcms_hr_workforce_settings`     | `NO_SUBJECT_DATA` (alasan tercatat)                                       | Baris konfigurasi tenant; hanya stempel `updated_by`.                                                                                                                                                                                                                                                                                                  |
 
-Kelima tabel didaftarkan ke `data_lifecycle` sebagai `delegated`, tanpa purge:
+Ketujuh tabel didaftarkan ke `data_lifecycle` sebagai `delegated`, tanpa purge:
 riwayat HR dipertahankan selama masa hukum pemberi kerja (menurut penasihat
 hukum, tidak ditegaskan di sini); archive-then-purge untuk baris HR adalah tindak
 lanjut tercatat.
 
 ## Tata letak
 
-| Path                                        | Isinya                                                                              |
-| ------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `module.ts`                                 | Deskriptor: 16 permission, `dataLifecycle` + `subjectData`                          |
-| `domain/hr-shift-types.ts`                  | Kind, status, dan batas shift — murni                                               |
-| `domain/hr-shift-time.ts`                   | Penyelesaian jam dinding ke UTC, aturan celah/tumpang tindih DST — murni            |
-| `domain/availability-intervals.ts`          | Aljabar interval dan aturan waktu kerja — murni                                     |
-| `domain/hr-shift-validation.ts`             | Validator template dan penugasan yang ketat (tanpa teks bebas) — murni              |
-| `application/hr-shift-directory.ts`         | SQL template dan penugasan: draft, publish, cancel, daftar                          |
-| `application/staff-availability-adapter.ts` | Adapter `StaffAvailabilityPort` (hanya-baca)                                        |
-| `domain/hr-workforce-types.ts`              | Tipe dan status employment — murni                                                  |
-| `domain/hr-workforce-validation.ts`         | Validator request ketat (tanpa field personal, tanpa tanggal akhir turunan) — murni |
-| `domain/hr-workforce-permissions.ts`        | Objek guard literal yang diteruskan ke `authorizeInTransaction`                     |
-| `application/hr-workforce-directory.ts`     | Seluruh SQL: list/get, buat, ubah terms, assign, delete/restore, settings           |
-| `application/hr-workforce-route-support.ts` | Idempotensi, validasi body, dan dasar kepemilikan yang dipakai bersama oleh route   |
-| `src/pages/api/v1/hr-workforce/**`          | 11 berkas route tipis, masing-masing otorisasi lewat `defineTenantRoute`            |
+| Path                                        | Isinya                                                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `module.ts`                                 | Deskriptor: 23 permission, `dataLifecycle` + `subjectData`                                    |
+| `domain/hr-shift-types.ts`                  | Kind, status, dan batas shift — murni                                                         |
+| `domain/hr-shift-time.ts`                   | Penyelesaian jam dinding ke UTC, aturan celah/tumpang tindih DST — murni                      |
+| `domain/availability-intervals.ts`          | Aljabar interval dan aturan waktu kerja — murni                                               |
+| `domain/hr-shift-validation.ts`             | Validator template dan penugasan yang ketat (tanpa teks bebas) — murni                        |
+| `application/hr-shift-directory.ts`         | SQL template dan penugasan: draft, publish, cancel, daftar                                    |
+| `application/staff-availability-adapter.ts` | Adapter `StaffAvailabilityPort` (hanya-baca)                                                  |
+| `domain/hr-workforce-types.ts`              | Tipe dan status employment — murni                                                            |
+| `domain/hr-workforce-validation.ts`         | Validator request ketat (tanpa field personal, tanpa tanggal akhir turunan) — murni           |
+| `domain/hr-workforce-permissions.ts`        | Objek guard literal yang diteruskan ke `authorizeInTransaction`                               |
+| `application/hr-workforce-directory.ts`     | Seluruh SQL: list/get, buat, ubah terms, assign, delete/restore, settings                     |
+| `application/hr-workforce-route-support.ts` | Idempotensi, validasi body, dan dasar kepemilikan yang dipakai bersama oleh route             |
+| `domain/hr-attendance-types.ts`             | Kind, sumber, status koreksi, dan batas kehadiran — murni                                     |
+| `domain/hr-attendance-validation.ts`        | Validator event dan koreksi yang ketat (tanpa lokasi, tanpa teks bebas selain alasan) — murni |
+| `application/hr-attendance-directory.ts`    | Event, koreksi, dasar baca (sendiri, bawahan), settle dan withdraw                            |
+| `src/pages/api/v1/hr-workforce/**`          | 16 berkas route tipis, masing-masing otorisasi lewat `defineTenantRoute`                      |
 
 ## Butir terbuka dan postur fase 1 yang tercatat
 
 Terbuka (dilacak, tidak disembunyikan):
 
-- **Penugasan shift juga belum di-join ke ekspor subjek** (issue 985 mencakup
-  kedua tabel), karena alasan yang sama dengan terms (`exportable: false`; karyawan membaca jadwal terbit miliknya lewat
-  `?mine=true`). Tindak lanjut yang sama menutup keduanya.
+- **Penugasan shift, event kehadiran, dan koreksi juga belum di-join ke ekspor
+  subjek** (issue 985 mencakup semuanya), karena alasan yang sama dengan terms
+  (`exportable: false`; karyawan membaca jadwal terbit dan kehadiran miliknya lewat
+  `?mine=true`). Tindak lanjut yang sama menutup semuanya, dan menambahkan alasan
+  koreksi ke ekspor milik subjek sendiri.
+- **Kehadiran, ditunda dan tercatat:** belum ada `void` (koreksi yang menghapus
+  event tanpa pengganti): clock-in hantu diganti dengan event yang benar; tanpa
+  validasi urutan (`clock_out` tanpa `clock_in` dicatat sebagaimana diklaim; catatan
+  efektif dibaca, tidak ditegakkan); jendela putar ulang 7 hari dan ambang `late` 15
+  menit adalah konstanta, bukan setelan tenant; **settle adalah tarik** (tidak ada
+  consumer yang menerapkan persetujuan otomatis); rantai atasan hanya memberi akses
+  baca, sehingga atasan tetap tidak bisa mencatat untuk bawahan tanpa
+  `attendance.create`; **tanpa scope per kantor** pada `attendance.read`/`create`
+  (adapter scope adalah issue berikutnya, seperti employments); tanpa domain event;
+  tanpa layar admin; penyetuju workflow koreksi adalah assignee tetap definisi,
+  bukan "atasan pemohon" (engine tidak punya tipe assignee seperti itu).
+- **Tidak ada purge `data_lifecycle` untuk kehadiran** (dinyatakan `delegated`,
+  kelas `financial_tax`, periodenya milik penasihat hukum pemberi kerja); daftar
+  event dipaginasi keyset 100 per halaman sementara itu.
 - **Tidak ada purge `data_lifecycle` untuk baris shift** (dinyatakan `delegated`,
   kelas retensi `financial_tax` seperti baris HR lain; periodenya milik penasihat
   hukum pemberi kerja). **Tidak ada domain event** (`awcms.hr.shift.assigned` tetap
@@ -186,7 +311,7 @@ Postur fase 1 yang diketahui (didokumentasikan, tanpa kode tambahan di PR ini):
 
 ## Keterbatasan
 
-- Belum ada layar admin; `experimental`.
+- Belum ada layar admin; `experimental`. Tenant yang sudah ada juga perlu backfill untuk permission `shifts.*`, `templates.*`, `clock.*`, `attendance.*`, dan `corrections.*`, dan operator harus **menerbitkan workflow** di bawah `hr.attendance_correction` (atau kunci tenant) sebelum koreksi dapat diajukan.
 - Tenant yang sudah ada perlu `bun run identity-access:permissions:backfill`
   untuk menerima permission yang di-seed (keterbatasan setiap seed permission).
 - Nomor karyawan dan tanggal masuk tidak bisa disunting langsung (hapus lalu buat

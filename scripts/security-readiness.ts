@@ -757,7 +757,14 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // DELETE as the second layer. The transition log is append-only and written
   // only by the accrual's own triggers: INSERT and SELECT only.
   awcms_hr_commission_accruals: ["SELECT", "INSERT", "UPDATE"],
-  awcms_hr_commission_transitions: ["SELECT", "INSERT"]
+  awcms_hr_commission_transitions: ["SELECT", "INSERT"],
+  // ADR-0132 / `sql/198`. The events are APPEND-ONLY: awcms_app holds no UPDATE
+  // or DELETE (privilege), and a trigger refuses both as the second layer.
+  awcms_hr_attendance_events: ["SELECT", "INSERT"],
+  // NOT retired in the same way — a correction only ever changes its STATUS
+  // (a trigger allows exactly the status moves and nothing else) and is never
+  // deleted (privilege plus trigger).
+  awcms_hr_attendance_corrections: ["SELECT", "INSERT", "UPDATE"]
 };
 
 type RlsRow = {

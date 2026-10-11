@@ -218,6 +218,8 @@ describe("the descriptor", () => {
     );
 
     expect(lifecycle.sort()).toEqual([
+      "awcms_hr_attendance_corrections",
+      "awcms_hr_attendance_events",
       "awcms_hr_employment_terms",
       "awcms_hr_employments",
       "awcms_hr_shift_assignments",
@@ -225,6 +227,8 @@ describe("the descriptor", () => {
       "awcms_hr_workforce_settings"
     ]);
     expect(subject.sort()).toEqual([
+      "awcms_hr_attendance_corrections",
+      "awcms_hr_attendance_events",
       "awcms_hr_employment_terms",
       "awcms_hr_employments",
       "awcms_hr_shift_assignments"

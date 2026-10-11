@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 189   |
-| `awcms_*` tables                    | 207   |
-| Tables with `FORCE` RLS             | 189   |
+| Migrations                          | 191   |
+| `awcms_*` tables                    | 209   |
+| Tables with `FORCE` RLS             | 191   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 620   |
-| Route files                         | 512   |
+| Test files                          | 623   |
+| Route files                         | 517   |
 | ADR                                 | 282   |
 
 ### Modules
@@ -246,6 +246,8 @@
 | 187 | `sql/187_awcms_hr_commission_rules_backdated.sql`                  |
 | 188 | `sql/188_awcms_hr_commission_accruals_schema.sql`                  |
 | 189 | `sql/189_awcms_hr_commission_accrual_permissions.sql`              |
+| 190 | `sql/198_awcms_hr_attendance_schema.sql`                           |
+| 191 | `sql/199_awcms_hr_attendance_permissions.sql`                      |
 
 ### Tables & Row-Level Security
 
@@ -316,6 +318,8 @@
 | `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
 | `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
 | `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
+| `awcms_hr_attendance_corrections`        | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
+| `awcms_hr_attendance_events`             | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
 | `awcms_hr_commission_accruals`           | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
 | `awcms_hr_commission_rules`              | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
 | `awcms_hr_commission_transitions`        | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
@@ -463,16 +467,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 489        |
+| `(root)`      | 490        |
 | `e2e`         | 25         |
-| `integration` | 105        |
+| `integration` | 107        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 413   |
+| `/api/v1/**`    | 418   |
 | `/admin/**`     | 69    |
 | publik / anonim | 30    |
 

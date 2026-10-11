@@ -8,11 +8,12 @@
 > effective-dated terms, settings, employee-sees-own; Issue #945), the **shift
 > slice** (`sql/184`–`sql/185`: shift templates, shift assignments with a
 > database-enforced overlap rule, and the `StaffAvailabilityPort` adapter; Issue
-> #946) and the phase 2 _rule foundation_ (module `hr_commission`,
-> `experimental`, `sql/182`–`sql/183`: versioned commission rules and their pure
-> evaluation; Issue #950) exist. Attendance, corrections, the commission accrual
-> ledger and payroll are still design only: no table, route or migration exists
-> for them.
+> #946), the **attendance slice** (`sql/198`–`sql/199`: append-only attendance
+> events and corrections with approval; Issue #947) and the phase 2 _rule
+> foundation_ (module `hr_commission`, `experimental`, `sql/182`–`sql/183`:
+> versioned commission rules and their pure evaluation; Issue #950) exist. The
+> commission accrual ledger and payroll are still design only: no table, route or
+> migration exists for them.
 > This pack is the PRD-lite per phase, the state machines, the ERD and data
 > dictionary, the permissions/RLS matrix, the masking, audit and idempotency
 > matrices, the RBAC/ABAC acceptance scenarios, the threat and privacy analysis,
@@ -173,6 +174,26 @@ proposes an added or replaced event with a mandatory reason, starts a
 workflow gets `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` at submit. The existing
 self-approval guard stops an employee from approving their own correction. The
 reason text is personal data and never rides in an audit row or event.
+
+**As built (Issue #947, `sql/198`–`sql/199`).** Two refinements of the text above,
+both enforced by the database. (1) `source` has a fifth value, `correction`, written
+only by an approved correction (the event also carries `correction_id`; the guard
+requires the correction to be `approved` and the event to match its kind, instant,
+employment and target exactly, once). (2) The stale-time rule is split by source, to
+satisfy both the offline-replay rule and the tampering control: a `self`/`supervisor`
+event claims "now", so a claimed time older than the tenant skew is **refused**
+(`ATTENDANCE_BACKDATED`: use a correction); a `kiosk`/`import` event is a replayed
+queue, so a stale time is **accepted** up to 7 days and flagged `late` past 15
+minutes (older: refused). The correction row only changes status and that status
+must follow the `workflow_approval` verdict, the requester can never be the approver
+(CHECK, trigger over the workflow's decision rows including a delegate acting on the
+requester's behalf, and the chokepoint), and the workflow instance is started with no
+facts. Applying a verdict is a pull: `POST .../attendance-corrections/{id}/settle`.
+Read bases: own (`?mine=true`) and the manager chain below the caller (`?reports=true`)
+are ownership grants on the READ routes; a soft-deleted employment breaks the chain.
+The permission keys added are `clock.create`, `attendance.create`/`read` and
+`corrections.create`/`read`/`cancel`/`approve`. See the module README for the full
+list of deferrals.
 
 ### 4.3 Geolocation, photo and device evidence
 

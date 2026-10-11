@@ -726,7 +726,13 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         // echoed to an audit row (the audit carries a boolean). Everything else
         // an accrual stores is a code or an opaque reference, and
         // hr-commission-accrual-database scans the ledger tables itself.
-        .filter((c) => c !== "awcms_hr_commission_rules.backdated_reason");
+        .filter((c) => c !== "awcms_hr_commission_rules.backdated_reason")
+        // Issue #947: the MANDATORY reason of an attendance correction. It is
+        // sensitive free text by requirement (the issue asks for it), so it is
+        // access-controlled in responses and kept out of every audit row, event,
+        // log and the workflow store (tests/integration/hr-attendance-*), and it
+        // lives in this ONE column of this ONE table. Events carry no such column.
+        .filter((c) => c !== "awcms_hr_attendance_corrections.reason");
 
       expect(offenders).toEqual([]);
     });
