@@ -29,6 +29,7 @@ import { inventoryModule } from "./inventory/module";
 import { procurementModule } from "./procurement/module";
 import { hrWorkforceModule } from "./hr-workforce/module";
 import { whatsappDeliveryModule } from "./whatsapp-delivery/module";
+import { bookingModule } from "./booking/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -206,7 +207,13 @@ const baseModules: ModuleDescriptor[] = [
   // depends on it (consumers reach it through the capability port). Ships INERT:
   // WHATSAPP_ENABLED is off by default. See
   // src/modules/whatsapp-delivery/module.ts's `description`.
-  whatsappDeliveryModule
+  whatsappDeliveryModule,
+  // Admitted by ADR-0131 / ADR-0135 (Issue #937): generic resources, schedules
+  // and reservations whose double-booking guarantee is held by the database.
+  // Foundation slice only (`experimental`, no route or screen until #938-#941).
+  // Depends on tenant_admin/identity_access/logging (all above), so the DAG
+  // stays acyclic; nothing depends on it and it never imports commerce.
+  bookingModule
 ];
 
 /**

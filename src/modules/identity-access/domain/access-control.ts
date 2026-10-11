@@ -207,7 +207,20 @@ export type AccessAction =
   // (it can only stop messages), so it must be grantable to a front-desk role
   // that may not record an opt-in. (`read`/`create`/`delete`/`cancel` reuse
   // existing members.)
-  | "withdraw";
+  | "withdraw"
+  // Booking (`booking`, ADR-0131, Issue #937): the reservation transition verbs.
+  // `confirm`, `reschedule`, `check_in`, `complete` and `no_show` are NOT
+  // high-risk: each is reversible by cancel or compensated by an event.
+  // `override` lifts a business rule (book or reschedule outside schedule hours
+  // or lead time) and is high-risk below; it never overrides the allocation
+  // exclusion constraint. (`read`/`create`/`update`/`delete`/`restore`/`cancel`/
+  // `release`/`configure`/`reconcile` reuse existing members.)
+  | "confirm"
+  | "reschedule"
+  | "check_in"
+  | "complete"
+  | "no_show"
+  | "override";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -372,7 +385,10 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   // reuses Tax's `reverse` above), and revealing a supplier identifier
   // discloses sensitive data.
   "finalise",
-  "reveal"
+  "reveal",
+  // Booking (ADR-0131): an override lifts a scheduling business rule, so the
+  // action-time SoD check is available the moment a tenant authors a rule.
+  "override"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

@@ -261,6 +261,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Body": ["Isi"],
   "Body text": ["Teks isi"],
   "Book a placement": ["Pesan penempatan"],
+  "Booking": ["Pemesanan"],
   "Bootstrap": ["Bootstrap"],
   "Bot pageviews": ["Tayangan halaman bot"],
   "Bot reason": ["Alasan bot"],

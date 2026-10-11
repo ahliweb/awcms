@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:139bad89738be9281109a0802476e549e3bb610f353024b641072873205c2645 -->
+<!-- i18n-source-hash: sha256:64c1a77bf0272426fa8736131d18952807f7a5499cc90366a3af6b16ff64cbf1 -->
 
 # AWCMS — Project State & Continuation
 
@@ -119,10 +119,10 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Versi                              | **10.7.0**                                                                                                                                                                                                                                                                   | `package.json`                                                                          |
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                                                                                                                                                           | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                                                                                                                                                           | `git rev-list --count v10.7.0..HEAD`                                                    |
-| Modul base                         | **30** (lihat daftar di ARCHITECTURE.md)                                                                                                                                                                                                                                     | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **179** (`sql/001`–`179`)                                                                                                                                                                                                                                                    | `ls sql/`                                                                               |
+| Modul base                         | **31** (lihat daftar di ARCHITECTURE.md)                                                                                                                                                                                                                                     | `src/modules/index.ts`                                                                  |
+| Migrasi                            | **181** (`sql/001`–`181`)                                                                                                                                                                                                                                                    | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0139** (`0000` = template; status ADR tertinggi: **Accepted. The decision it records is a **rejection**: orchestration is **not admitted, for now**. (The ADR status vocabulary in the ADR README has no `Rejected`; the ADR is accepted, its subject is not.)**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **68** berkas `.astro` di `src/pages/admin/`; **1 dari 30** modul tanpa `navigation:` (`hr-workforce`)                                                                                                                                                                       | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Layar admin                        | **68** berkas `.astro` di `src/pages/admin/`; **2 dari 31** modul tanpa `navigation:` (`booking`, `hr-workforce`)                                                                                                                                                            | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **85** (51.431 baris) — soal typecheck lihat §6                                                                                                                                                                                                                              | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **63** di rantai `bun run check`                                                                                                                                                                                                                                             | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.2.0**                                                                                                                                                                                                    | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
@@ -202,7 +202,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **30 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
+- **31 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection

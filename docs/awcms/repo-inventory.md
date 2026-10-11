@@ -7,12 +7,12 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 30    |
-| Migrations                          | 179   |
-| `awcms_*` tables                    | 190   |
-| Tables with `FORCE` RLS             | 172   |
+| Registered modules                  | 31    |
+| Migrations                          | 181   |
+| `awcms_*` tables                    | 201   |
+| Tables with `FORCE` RLS             | 183   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 601   |
+| Test files                          | 603   |
 | Route files                         | 492   |
 | ADR                                 | 280   |
 
@@ -50,6 +50,7 @@
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory` |
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
+| `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
 ### Migrations
 
@@ -234,6 +235,8 @@
 | 177 | `sql/177_awcms_hr_workforce_permissions.sql`                       |
 | 178 | `sql/178_awcms_whatsapp_delivery_schema.sql`                       |
 | 179 | `sql/179_awcms_whatsapp_delivery_permissions.sql`                  |
+| 180 | `sql/180_awcms_booking_schema.sql`                                 |
+| 181 | `sql/181_awcms_booking_permissions.sql`                            |
 
 ### Tables & Row-Level Security
 
@@ -264,6 +267,17 @@
 | `awcms_blog_terms`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
 | `awcms_blog_theme_settings`              | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
 | `awcms_blog_widgets`                     | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_booking_reservation_events`       | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_reservation_items`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_reservations`             | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_allocations`     | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_pools`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_units`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resources`                | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_schedule_exceptions`      | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_schedules`                | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_service_offerings`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_settings`                 | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_business_scope_assignment_events` | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
 | `awcms_business_scope_assignments`       | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
 | `awcms_comments_abuse_events`            | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
@@ -434,9 +448,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 478        |
+| `(root)`      | 479        |
 | `e2e`         | 25         |
-| `integration` | 97         |
+| `integration` | 98         |
 | `unit`        | 1          |
 
 ### Routes
