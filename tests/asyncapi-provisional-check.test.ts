@@ -46,11 +46,11 @@ describe("asyncapi provisional check", () => {
     expect(problemsOf(await fixtures())).toEqual([]);
   });
 
-  test("carries the 22 settled event names", async () => {
+  test("carries the 15 settled event names (the 7 whatsapp events went live with whatsapp_delivery, Issue #963)", async () => {
     const { provisional } = await fixtures();
     const names = Object.keys(provisional.channels);
 
-    expect(names).toHaveLength(22);
+    expect(names).toHaveLength(15);
     for (const verb of [
       "created",
       "held",
@@ -139,7 +139,7 @@ describe("asyncapi provisional check", () => {
     schemas.BookingReservationPayload.properties.paymentState = {
       type: "string"
     };
-    schemas.WhatsappMessagePayload.properties.phoneNumber = { type: "string" };
+    schemas.HrShiftAssignedPayload.properties.phoneNumber = { type: "string" };
     delete schemas.HrCommissionApprovedPayload.additionalProperties;
 
     const text = problemsOf(input).join("\n");

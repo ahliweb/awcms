@@ -25,8 +25,8 @@
 | ----------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Booking port (`quote`, `hold`, `confirm`, `cancel`, `reschedule`)                   | design          | §3                                                                                                                                  |
 | Staff availability port (`getAvailability`)                                         | design          | §4                                                                                                                                  |
-| WhatsApp delivery port (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | design          | §5                                                                                                                                  |
-| 22 event schemas (9 booking, 6 hr, 7 whatsapp)                                      | **provisional** | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
+| WhatsApp delivery port (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | **live** (#963) | §5                                                                                                                                  |
+| 15 provisional event schemas (9 booking, 6 hr); the 7 whatsapp events are **live**  | **provisional** | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
 | Consumer registration (`ModuleDescriptor.domainEventConsumers`)                     | ADR-0134        | not restated; this document only _uses_ it                                                                                          |
 | Idempotency per side-effecting consumer                                             | design          | §6                                                                                                                                  |
 | How an event moves from provisional to live                                         | process         | §7                                                                                                                                  |
@@ -248,6 +248,13 @@ consumes it as defined and adds no requirement of its own.
 
 ## 5. WhatsApp delivery port
 
+- **Status:** **live since Issue #963** (ADR-0133 phase 1, inert behind
+  `WHATSAPP_ENABLED`). The signatures below are the ones implemented, with three
+  additions to the provisional sketch: the refusal reasons also include
+  `RECIPIENT_INVALID`, `RECIPIENT_UNRESOLVED` and `EXPIRY_REQUIRED`; the input
+  accepts an optional `createdBy`; and the transaction type is `Bun.TransactionSQL`
+  (`WhatsappTenantTx`). Its seven events moved from the provisional document to
+  `asyncapi/awcms-domain-events.asyncapi.yaml` and `DOMAIN_EVENT_TYPE_REGISTRY`.
 - **Owning module:** `whatsapp_delivery` (ADR-0133; `src/modules/_shared/ports/whatsapp-delivery-port.ts`).
 - **Consumers:** `booking` (reminders, confirmations), `hr_payroll` (shift and
   payroll _notices_), a downstream commerce adapter (OTP, order-paid, campaigns,

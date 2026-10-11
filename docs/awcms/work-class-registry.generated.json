@@ -1642,6 +1642,41 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/whatsapp/consents/[id]/withdraw.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/consents/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/diagnostics.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/messages/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/suppressions/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/suppressions/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/templates.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/workflows/definitions/[id].ts",
       "workClass": "interactive",
       "source": "explicit"
@@ -1898,6 +1933,18 @@
       "workClass": "background_sync",
       "source": "registry",
       "rationale": "Frequent scheduled aggregation (analytics:rollup, doc recommends every run of the daily rollup) — same low-priority-but-regular profile as sync push/pull, not a one-off maintenance task."
+    },
+    {
+      "path": "scripts/whatsapp-dispatch.ts",
+      "workClass": "background_sync",
+      "source": "registry",
+      "rationale": "Outbox dispatcher (whatsapp:dispatch, ADR-0133), recommended every 1-2 minutes — the same profile as push/email dispatch, and every withTenantOrThrow call inside whatsapp-dispatch.ts already passes workClass: \"background_sync\" explicitly."
+    },
+    {
+      "path": "scripts/whatsapp-queue-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge (whatsapp:queue:purge, ADR-0133) — same tolerant-of-delay profile as push:queue:purge; purgeWhatsappQueue passes workClass: \"maintenance\" explicitly."
     },
     {
       "path": "scripts/workflow-escalations-dispatch.ts",

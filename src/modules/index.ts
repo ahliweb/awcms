@@ -28,6 +28,7 @@ import { omesControlModule } from "./omes-control/module";
 import { inventoryModule } from "./inventory/module";
 import { procurementModule } from "./procurement/module";
 import { hrWorkforceModule } from "./hr-workforce/module";
+import { whatsappDeliveryModule } from "./whatsapp-delivery/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -197,7 +198,15 @@ const baseModules: ModuleDescriptor[] = [
   // profile_identity (both above), so the DAG stays acyclic; nothing depends on
   // it. `experimental` (flag off): no admin screen yet. See
   // src/modules/hr-workforce/module.ts's `description`.
-  hrWorkforceModule
+  hrWorkforceModule,
+  // Admitted by ADR-0133 (Issue #963): generic WhatsApp delivery — a channel
+  // queue with a lease dispatcher, WhatsApp-specific provider adapters, a consent
+  // store and a suppression list. Depends on tenant_admin/profile_identity/
+  // logging/domain_event_runtime (all above), so the DAG stays acyclic; nothing
+  // depends on it (consumers reach it through the capability port). Ships INERT:
+  // WHATSAPP_ENABLED is off by default. See
+  // src/modules/whatsapp-delivery/module.ts's `description`.
+  whatsappDeliveryModule
 ];
 
 /**

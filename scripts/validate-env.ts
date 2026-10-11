@@ -16,6 +16,7 @@ import { readFile } from "node:fs/promises";
 
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { parseVapidConfig } from "../src/modules/push-delivery/domain/vapid-config";
+import { parseRecipientHashKeys } from "../src/modules/whatsapp-delivery/domain/whatsapp-recipient";
 
 type EnvBag = Record<string, string | undefined>;
 
@@ -289,6 +290,51 @@ const RULES: readonly Rule[] = [
   { name: "PUSH_VAPID_PUBLIC_KEY", required: false, type: "string" },
   { name: "PUSH_VAPID_PRIVATE_KEY", required: false, type: "string" },
   { name: "PUSH_VAPID_SUBJECT", required: false, type: "string" },
+
+  // whatsapp_delivery (ADR-0133, Issue #963). Off by default; off means enqueue
+  // answers `refused: DISABLED` and the dispatcher claims nothing. Credentials
+  // are per DEPLOYMENT, never per tenant. `WHATSAPP_PROVIDER` lists only the
+  // adapters that exist.
+  { name: "WHATSAPP_ENABLED", required: false, type: "bool" },
+  {
+    name: "WHATSAPP_PROVIDER",
+    required: false,
+    type: "enum",
+    values: ["log", "fonnte", "meta"]
+  },
+  { name: "WHATSAPP_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
+  { name: "WHATSAPP_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
+  {
+    name: "WHATSAPP_RATE_PER_RECIPIENT_PER_HOUR",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "WHATSAPP_RATE_PER_TENANT_PER_HOUR",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  { name: "WHATSAPP_DEFAULT_COUNTRY_CODE", required: false, type: "string" },
+  {
+    name: "WHATSAPP_RATE_SECURITY_PER_RECIPIENT_PER_HOUR",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  // Secret key ring (`keyId:base64` pairs, first writes, all read) for the
+  // recipient hash that consent, suppression and rate limits key on. No default.
+  {
+    name: "WHATSAPP_RECIPIENT_HASH_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  { name: "WHATSAPP_FONNTE_TOKEN", required: false, type: "string" },
+  { name: "WHATSAPP_META_ACCESS_TOKEN", required: false, type: "string" },
+  { name: "WHATSAPP_META_PHONE_NUMBER_ID", required: false, type: "string" },
+  { name: "WHATSAPP_META_API_VERSION", required: false, type: "string" },
 
   // visitor_analytics (ported from awcms-micro epic #617-#624). All optional,
   // privacy-first off-by-default; see
@@ -648,6 +694,49 @@ export function validateEnv(env: EnvBag): string[] {
       if (!vapid.ok) {
         problems.push(`Konfigurasi VAPID tidak valid: ${vapid.reason}.`);
       }
+    }
+  }
+
+  // whatsapp_delivery (ADR-0133): enabling WhatsApp REQUIRES naming an adapter
+  // and, for a real one, its credential. Without them the resolver degrades to a
+  // provider that fails every send non-retryably, so every queued message would
+  // go terminal with an error only the attempt ledger shows. Caught at config
+  // time instead.
+  if (env.WHATSAPP_ENABLED === "true") {
+    const provider = env.WHATSAPP_PROVIDER?.trim() ?? "";
+
+    if (provider === "") {
+      problems.push(
+        "WHATSAPP_PROVIDER wajib diisi saat WHATSAPP_ENABLED=true (tanpa adapter, setiap pesan yang diantre langsung menjadi `failed`)."
+      );
+    }
+
+    // The same parser the runtime uses, so the validator cannot disagree with
+    // the thing it validates. Without a usable ring enqueue and the consent
+    // endpoints refuse (fail closed), so enabling WhatsApp without one is a
+    // config error, not a runtime surprise.
+    const ring = parseRecipientHashKeys(env as NodeJS.ProcessEnv);
+
+    if (!ring.ok) {
+      problems.push(
+        `${ring.reason} Wajib valid saat WHATSAPP_ENABLED=true (tanpa kunci, hash penerima tidak aman dan enqueue ditolak).`
+      );
+    }
+
+    if (provider === "fonnte" && !(env.WHATSAPP_FONNTE_TOKEN?.trim() ?? "")) {
+      problems.push(
+        "WHATSAPP_FONNTE_TOKEN wajib diisi saat WHATSAPP_PROVIDER=fonnte."
+      );
+    }
+
+    if (
+      provider === "meta" &&
+      (!(env.WHATSAPP_META_ACCESS_TOKEN?.trim() ?? "") ||
+        !(env.WHATSAPP_META_PHONE_NUMBER_ID?.trim() ?? ""))
+    ) {
+      problems.push(
+        "WHATSAPP_META_ACCESS_TOKEN dan WHATSAPP_META_PHONE_NUMBER_ID wajib diisi saat WHATSAPP_PROVIDER=meta."
+      );
     }
   }
 

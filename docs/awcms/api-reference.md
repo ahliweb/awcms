@@ -11865,6 +11865,208 @@ Gated by `hr_workforce.settings.configure` (high-risk). An omitted field keeps i
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
 
+## WhatsApp Delivery
+
+Operator surface of the generic WhatsApp delivery capability (whatsapp_delivery module, ADR-0133, Issue #963): the tenant's queue diagnostics, cancelling a waiting message, the registered templates, the suppression list and the per-recipient marketing consent store. There is NO enqueue or send endpoint: queueing is a capability-port call (WhatsappDeliveryPort) made in the consuming module's own transaction, and the provider is called only by the dispatcher job, outside any transaction (ADR-0006). A channel queue table, the repo's third after email and push — what ADR-0133 refuses is a second WhatsApp queue, one per consuming domain. Recipients are masked in every response and message bodies and variables are never returned. Consent is independent of segment membership: a marketing message needs an explicit recorded opt-in, checked at enqueue and again at dispatch. Credentials are per deployment from the environment, never per tenant. Ships inert behind WHATSAPP_ENABLED.
+
+### `GET /api/v1/whatsapp/consents` — List recorded marketing consents.
+
+- **operationId**: `listWhatsappConsents`
+- **Security**: bearerAuth + tenantHeader
+
+Per-recipient consent records (masked). Consent is never inferred from segment, list or campaign-audience membership; only this record decides who may receive a marketing message. Bounded: `hasMore` says whether the list was cut. Requires `whatsapp_delivery.consents.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                                     | Description                                                              |
+| -------- | ----- | -------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `status` | query | no       | [`WhatsappConsentStatus`](#schema-whatsappconsentstatus) | Narrow to granted or withdrawn consents.                                 |
+| `limit`  | query | no       | integer                                                  | 1-200, default 50. Out-of-range values are REJECTED rather than clamped. |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | Consent entries.                | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+| 422    | `status` or `limit` is invalid. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/whatsapp/consents` — Record an explicit marketing opt-in.
+
+- **operationId**: `grantWhatsappConsent`
+- **Security**: bearerAuth + tenantHeader
+
+Explicit, per recipient, per channel, recorded with its source and time (ADR-0133 section 4). Naturally idempotent: the unique key is (tenant, recipient, purpose), so a retry re-stamps the same row instead of adding one, which is why no Idempotency-Key is taken. A re-grant after a withdrawal is a new, deliberate act; history lives in the audit log and the `whatsapp.consent.*` events. The body is validated after authorization. Re-granting over a WITHDRAWN consent reverses an opt-out, so it is never implicit: it is refused with 409 unless the body sets `reinstateWithdrawn` with an `evidenceRef`, it is refused for `source` `import` (422), it needs `whatsapp_delivery.consents.restore` (high-risk) instead, and the withdrawal is kept in the row's history. Requires `whatsapp_delivery.consents.create` (or `consents.restore` when reinstating). 503 when the deployment has no recipient-hash key ring.
+
+**Request body** (required): [`WhatsappConsentGrantRequest`](#schema-whatsappconsentgrantrequest)
+
+**Responses**
+
+| Status | Description                                                                                                      | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The consent was recorded.                                                                                        | object                                 |
+| 400    | Validation error.                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | The recipient opted out and the request did not ask to reinstate (`CONSENT_WITHDRAWN`).                          | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 422    | Reinstatement refused (`REINSTATEMENT_REFUSED`) - an import cannot reverse an opt-out, and evidence is required. | [`ApiError`](#standard-error-envelope) |
+| 503    | The deployment has no usable recipient-hash key ring (`WHATSAPP_HASH_KEYS_UNAVAILABLE`).                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/whatsapp/consents/{id}/withdraw` — Record a marketing opt-out.
+
+- **operationId**: `withdrawWhatsappConsent`
+- **Security**: bearerAuth + tenantHeader
+
+Immediate, and wins over everything queued: the recipient's waiting marketing messages are cancelled in the same transaction, and the dispatcher re-checks consent again right before every send. Naturally idempotent (withdrawing a withdrawn consent keeps the original stamp). Withdrawing is protective, so it is a separate, lower-friction permission than granting. Requires `whatsapp_delivery.consents.withdraw`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description     |
+| ---- | ---- | -------- | ------------- | --------------- |
+| `id` | path | yes      | string (uuid) | The consent id. |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The consent was withdrawn.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/diagnostics` — The tenant's WhatsApp queue - counts, recent messages, attempts.
+
+- **operationId**: `getWhatsappDiagnostics`
+- **Security**: bearerAuth + tenantHeader
+
+One endpoint rather than three because the parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated; the historical tail is removed by retention (`bun run whatsapp:queue:purge`), not browsed, and `hasMoreMessages` says when the list was cut. Recipients are MASKED and message bodies and variables are never projected (a security- class body can hold an OTP until it is terminal). `configured` reports the DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck queue from a deployment where WhatsApp is simply off. Requires `whatsapp_delivery.messages.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                                     | Description                                                              |
+| -------- | ----- | -------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `status` | query | no       | [`WhatsappMessageStatus`](#schema-whatsappmessagestatus) | Narrow the message list to one queue status.                             |
+| `limit`  | query | no       | integer                                                  | 1-200, default 50. Out-of-range values are REJECTED rather than clamped. |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | WhatsApp queue diagnostics.     | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+| 422    | `status` or `limit` is invalid. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/whatsapp/messages/{id}/cancel` — Cancel a WhatsApp message that has not been sent yet.
+
+- **operationId**: `cancelWhatsappMessage`
+- **Security**: bearerAuth + tenantHeader
+
+Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. A secret-bearing body is cleared with the cancel. Deliberately NOT idempotency-keyed: a second call performs no new work. Requires `whatsapp_delivery.messages.cancel`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description     |
+| ---- | ---- | -------- | ------------- | --------------- |
+| `id` | path | yes      | string (uuid) | The message id. |
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The message was cancelled before delivery.                                                                                                                                                                              | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" - distinguishing them would hand a narrow grant an existence oracle over the queue. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/suppressions` — List the suppression list.
+
+- **operationId**: `listWhatsappSuppressions`
+- **Security**: bearerAuth + tenantHeader
+
+Numbers that no WhatsApp message is sent to, with the reason; recipients masked. Bounded: `hasMore` says whether the list was cut. Requires `whatsapp_delivery.suppressions.read`.
+
+**Parameters**
+
+| Name    | In    | Required | Type    | Description                                                              |
+| ------- | ----- | -------- | ------- | ------------------------------------------------------------------------ |
+| `limit` | query | no       | integer | 1-200, default 50. Out-of-range values are REJECTED rather than clamped. |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Suppression entries.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 422    | `limit` is invalid.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/whatsapp/suppressions` — Suppress a number.
+
+- **operationId**: `createWhatsappSuppression`
+- **Security**: bearerAuth + tenantHeader
+
+Records a `manual` or `stop_reply` suppression; waiting transactional and marketing messages to the number are cancelled in the same transaction (a security-class message honours hard failures only). `hard_failure` is written only by the dispatcher on a provider verdict, so an operator cannot forge one. Naturally idempotent: suppressing an already suppressed number answers 200 with `alreadySuppressed`, which is why no Idempotency-Key is taken. The body is validated after authorization. Requires `whatsapp_delivery.suppressions.create`.
+
+**Request body** (required): [`WhatsappSuppressionCreateRequest`](#schema-whatsappsuppressioncreaterequest)
+
+**Responses**
+
+| Status | Description                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The number was already suppressed.                                                       | object                                 |
+| 201    | The number was suppressed.                                                               | object                                 |
+| 400    | Validation error.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                              | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 503    | The deployment has no usable recipient-hash key ring (`WHATSAPP_HASH_KEYS_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/whatsapp/suppressions/{id}` — Remove a suppression entry.
+
+- **operationId**: `deleteWhatsappSuppression`
+- **Security**: bearerAuth + tenantHeader
+
+A hard delete: a suppression is a live operational flag, not master data with a restore workflow. High-risk because it RESUMES sending to a number that was stopped, so it is audited at warning severity with the original reason. Not idempotency-keyed: a second call finds nothing and answers 404. Requires `whatsapp_delivery.suppressions.delete`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description         |
+| ---- | ---- | -------- | ------------- | ------------------- |
+| `id` | path | yes      | string (uuid) | The suppression id. |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The entry was removed.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/templates` — The registered WhatsApp templates.
+
+- **operationId**: `listWhatsappTemplates`
+- **Security**: bearerAuth + tenantHeader
+
+Key, version, the ONE purpose each template is registered with, its variable allow-list and which variables are secret. The wording is not returned: it is the owning module's copy. Requires `whatsapp_delivery.templates.read`.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Registered templates.       | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -14660,6 +14862,62 @@ At least one field required. `status` may not be `active` (use verify); `hostnam
 }
 ```
 
+### Schema: WhatsappConsentGrantRequest
+
+| Field                | Type    | Required | Nullable | Description                                                                                    |
+| -------------------- | ------- | -------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `phone`              | string  | yes      | no       | Same forms as the suppression request. Never echoed back.                                      |
+| `reinstateWithdrawn` | boolean | no       | no       | Must be true to grant over a recorded opt-out; needs `consents.restore` and `evidenceRef`.     |
+| `evidenceRef`        | string  | no       | no       | A reference to the evidence of the new consent (ticket, form id). Required when reinstating.   |
+| `source`             | string  | yes      | no       | Where the opt-in came from (`admin`, `form`, `import`, `inbound_reply`); recorded as evidence. |
+
+**Example**
+
+```json
+{
+  "phone": "string",
+  "reinstateWithdrawn": false,
+  "evidenceRef": "string",
+  "source": "string"
+}
+```
+
+### Schema: WhatsappConsentStatus
+
+Enum values: `granted`, `withdrawn`.
+
+**Example**
+
+```json
+"granted"
+```
+
+### Schema: WhatsappMessageStatus
+
+Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`, `expired`.
+
+**Example**
+
+```json
+"queued"
+```
+
+### Schema: WhatsappSuppressionCreateRequest
+
+| Field    | Type                         | Required | Nullable | Description                                                                                                                                                      |
+| -------- | ---------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `phone`  | string                       | yes      | no       | E.164 (`+62...`) or `00`-prefixed; a national number with a leading 0 is accepted only when the deployment configures a default country code. Never echoed back. |
+| `reason` | enum(`manual`, `stop_reply`) | yes      | no       |                                                                                                                                                                  |
+
+**Example**
+
+```json
+{
+  "phone": "string",
+  "reason": "manual"
+}
+```
+
 ## Domain events
 
 Every channel below carries the SAME message envelope (`DomainEvent` /
@@ -14714,7 +14972,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (51)
+### Channels (58)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -14759,6 +15017,13 @@ consumer/subscriber contract in this file).
 - `awcms.tax.rule_version.published` — A tax rule version was published and became the rule in force from its effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishRuleVersionPublishedEvent`, called by `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The payload carries identifiers, codes and dates only — `ruleVersionId`, `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and `closedVersionId` (the predecessor whose window this ended, or null).
 - `awcms.tax.snapshot.finalised` — A document's tax was finalised into an immutable snapshot (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written — an idempotent replay publishes nothing. The payload carries the opaque document reference, the rule version used, the tax date and decimal-string totals; no customer data of any kind.
 - `awcms.tax.snapshot.reversed` — A finalised document's tax was reversed from its original snapshot (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is written. Same payload shape as `snapshot.finalised`; the totals are negative decimal strings and `originalSnapshotId` is set.
+- `awcms.whatsapp.consent.granted` — A recipient's WhatsApp marketing consent was recorded (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-consent- directory.ts`'s `grantMarketingConsent`. Payload: `consentId`, `purpose`, `recipientMasked`. Never the number.
+- `awcms.whatsapp.consent.withdrawn` — A recipient's WhatsApp marketing consent was withdrawn; their waiting marketing messages were cancelled in the same transaction (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-consent- directory.ts`'s `withdrawMarketingConsent`. Same payload shape as `consent.granted`.
+- `awcms.whatsapp.dispatch.failed` — A WhatsApp dispatcher pass failed as a whole — job level, not one message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp- dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.
+- `awcms.whatsapp.message.expired` — A WhatsApp message passed its expiry before it was sent and was not retried late (ADR-0133, Issue #963) — an OTP that arrives after its validity is worse than none. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` expired.
+- `awcms.whatsapp.message.failed` — A WhatsApp message reached a terminal failure (ADR-0133, Issue #963): a non- retryable provider rejection, exhausted retries, or a template that is no longer registered. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` failed and a coarse `failureCode`.
+- `awcms.whatsapp.message.queued` — A message was accepted into the WhatsApp outbox (ADR-0133, Issue #963), in the SAME transaction as the caller's fact: a rolled-back booking emits nothing. Producer: `whatsapp-delivery/application/whatsapp-enqueue.ts`'s `enqueueWhatsappMessage`. Payload: `messageId`, `templateKey`, `purpose` (transactional | security | marketing), `recipientMasked`, `status` (queued). Never a phone number, message body or template variable; the caller's own record is joined through the envelope `correlationId`.
+- `awcms.whatsapp.message.sent` — The provider accepted the WhatsApp message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-dispatch.ts`, in the finalise transaction after the provider call returned. Same payload shape as `message.queued` with `status` sent.
 - `awcms.workflow.delegation.created` — A workflow delegation/substitute assignment was created. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `createWorkflowDelegation`.
 - `awcms.workflow.delegation.revoked` — A workflow delegation/substitute assignment was revoked. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `revokeWorkflowDelegation`.
 - `awcms.workflow.instance.advanced` — A workflow instance's active task was decided (or force-decided) and the instance advanced to its next node(s), without yet reaching a terminal outcome. Producer: `workflow-approval/application/workflow-instance-decision.ts`'s `completeApprovalTaskAndAdvance`.

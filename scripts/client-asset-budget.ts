@@ -981,8 +981,21 @@ export const READER_BUDGET_BYTES = 24_000;
  * (the `role`/`tabindex`/`aria-*` attributes live in server-rendered HTML and
  * weigh nothing here). Measured actual total, no added margin: 318,319 B
  * (+89 B on 318,230 = 318,319).
+ *
+ * **Raised for Issue #963** (the `/admin/whatsapp` screen that flipped
+ * `whatsapp_delivery` to `active`). One screen script of 1,913 B, and it is not
+ * per-screen duplication of the shared lifecycle: it imports `admin-form-client.ts`
+ * (already shared) and adds only the screen's own five requests (cancel a queued
+ * message, record an opt-in, record an opt-out, suppress a number, remove a
+ * suppression) and their error-code-to-message strings. No new stylesheet rules:
+ * it reuses the admin table, stat-card and status-pill classes. Measured actual
+ * total, no added margin: 320,232 B (+1,913 B on 318,319 = 320,232).
+ *
+ * **Raised again for Issue #963's security audit** (F3): the same screen script
+ * gains the reinstate-over-opt-out fields (two body keys and one refusal message).
+ * Measured actual total, no added margin: 320,435 B (+203 B on 320,232).
  */
-export const APP_BUDGET_BYTES = 318_319;
+export const APP_BUDGET_BYTES = 320_435;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

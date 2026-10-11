@@ -200,7 +200,14 @@ export type AccessAction =
   // `reconcile` reuse existing members.)
   | "submit"
   | "finalise"
-  | "reveal";
+  | "reveal"
+  // WhatsApp delivery (`whatsapp_delivery`, ADR-0133, Issue #963): `withdraw`
+  // records a recipient's marketing opt-out. Deliberately NOT high-risk and a
+  // separate action from `consents.create`: withdrawing consent is protective
+  // (it can only stop messages), so it must be grantable to a front-desk role
+  // that may not record an opt-in. (`read`/`create`/`delete`/`cancel` reuse
+  // existing members.)
+  | "withdraw";
 
 export type AccessRequest = {
   moduleKey: string;

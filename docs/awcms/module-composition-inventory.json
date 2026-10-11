@@ -1,5 +1,5 @@
 {
-  "moduleCount": 29,
+  "moduleCount": 30,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -539,6 +539,27 @@
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 8,
+      "navigationCount": 1,
+      "jobCount": 2,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "whatsapp_delivery",
+      "name": "WhatsApp Delivery",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "system",
+      "dependencies": [
+        "tenant_admin",
+        "profile_identity",
+        "logging",
+        "domain_event_runtime"
+      ],
+      "capabilitiesProvided": ["whatsapp_delivery"],
+      "capabilitiesConsumed": [],
+      "permissionCount": 10,
       "navigationCount": 1,
       "jobCount": 2,
       "hasHealthCheck": false,

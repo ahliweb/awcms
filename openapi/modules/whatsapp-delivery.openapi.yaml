@@ -1,0 +1,783 @@
+# Source fragment for the "whatsapp_delivery" module (Issue #963, ADR-0133).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations. Schemas
+# shared by 2+ modules (or referenced by none) live in the root fragment
+# (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses) only resolve after
+# `bun run openapi:bundle` merges this file with the root fragment and every
+# sibling module fragment into openapi/awcms-public-api.openapi.yaml. Edit this
+# file (or the root fragment for shared components), never the generated bundle.
+#
+# ## What is deliberately NOT here
+#
+# There is no "send a message" or "enqueue" endpoint. Queueing is a capability
+# port call (`WhatsappDeliveryPort`, `_shared/ports/whatsapp-delivery-port.ts`)
+# made in the CONSUMER's own transaction and authorised by the consumer's own
+# permission for its own business action. Nothing on this surface ever returns a
+# phone number, a message body or a template variable: recipients are masked.
+paths:
+  /api/v1/whatsapp/diagnostics:
+    get:
+      operationId: getWhatsappDiagnostics
+      tags:
+        - WhatsApp Delivery
+      summary: The tenant's WhatsApp queue - counts, recent messages, attempts.
+      description: >-
+        One endpoint rather than three because the parts are only readable together:
+        they come from ONE transaction, so a queue count and a message list can
+        never describe two different instants. Bounded rather than paginated; the
+        historical tail is removed by retention (`bun run whatsapp:queue:purge`),
+        not browsed, and `hasMoreMessages` says when the list was cut. Recipients
+        are MASKED and message bodies and variables are never projected (a security-
+        class body can hold an OTP until it is terminal). `configured` reports the
+        DEPLOYMENT's flag and adapter name, which is what distinguishes a stuck
+        queue from a deployment where WhatsApp is simply off. Requires
+        `whatsapp_delivery.messages.read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Narrow the message list to one queue status.
+          schema:
+            $ref: "#/components/schemas/WhatsappMessageStatus"
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            1-200, default 50. Out-of-range values are REJECTED rather than clamped.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: WhatsApp queue diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappDiagnostics"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >-
+            `status` or `limit` is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/whatsapp/templates:
+    get:
+      operationId: listWhatsappTemplates
+      tags:
+        - WhatsApp Delivery
+      summary: The registered WhatsApp templates.
+      description: >-
+        Key, version, the ONE purpose each template is registered with, its variable
+        allow-list and which variables are secret. The wording is not returned: it
+        is the owning module's copy. Requires `whatsapp_delivery.templates.read`.
+      responses:
+        "200":
+          description: Registered templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappTemplateList"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/whatsapp/messages/{id}/cancel:
+    post:
+      operationId: cancelWhatsappMessage
+      tags:
+        - WhatsApp Delivery
+      summary: Cancel a WhatsApp message that has not been sent yet.
+      description: >-
+        Only `queued` and `retry_wait` are cancellable. A row in `sending` has been
+        claimed by a dispatcher pass that may already be inside the HTTP call, so
+        recording it as cancelled would be a claim this system cannot substantiate.
+        A secret-bearing body is cleared with the cancel. Deliberately NOT
+        idempotency-keyed: a second call performs no new work. Requires
+        `whatsapp_delivery.messages.cancel`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The message id.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The message was cancelled before delivery.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      cancelled:
+                        type: boolean
+                        enum:
+                          - true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" - distinguishing them would hand a narrow grant an existence oracle over the queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/whatsapp/suppressions:
+    get:
+      operationId: listWhatsappSuppressions
+      tags:
+        - WhatsApp Delivery
+      summary: List the suppression list.
+      description: >-
+        Numbers that no WhatsApp message is sent to, with the reason; recipients
+        masked. Bounded: `hasMore` says whether the list was cut. Requires
+        `whatsapp_delivery.suppressions.read`.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            1-200, default 50. Out-of-range values are REJECTED rather than clamped.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Suppression entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappSuppressionPage"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >-
+            `limit` is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createWhatsappSuppression
+      tags:
+        - WhatsApp Delivery
+      summary: Suppress a number.
+      description: >-
+        Records a `manual` or `stop_reply` suppression; waiting transactional and
+        marketing messages to the number are cancelled in the same transaction (a
+        security-class message honours hard failures only). `hard_failure` is
+        written only by the dispatcher on a provider verdict, so an operator cannot
+        forge one. Naturally idempotent: suppressing an already suppressed number
+        answers 200 with `alreadySuppressed`, which is why no Idempotency-Key is
+        taken. The body is validated after authorization. Requires
+        `whatsapp_delivery.suppressions.create`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappSuppressionCreateRequest"
+      responses:
+        "201":
+          description: The number was suppressed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappSuppression"
+                  meta:
+                    type: object
+        "200":
+          description: The number was already suppressed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappSuppression"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: Request body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The deployment has no usable recipient-hash key ring (`WHATSAPP_HASH_KEYS_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/whatsapp/suppressions/{id}:
+    delete:
+      operationId: deleteWhatsappSuppression
+      tags:
+        - WhatsApp Delivery
+      summary: Remove a suppression entry.
+      description: >-
+        A hard delete: a suppression is a live operational flag, not master data
+        with a restore workflow. High-risk because it RESUMES sending to a number
+        that was stopped, so it is audited at warning severity with the original
+        reason. Not idempotency-keyed: a second call finds nothing and answers 404.
+        Requires `whatsapp_delivery.suppressions.delete`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The suppression id.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The entry was removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                        enum:
+                          - true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/whatsapp/consents:
+    get:
+      operationId: listWhatsappConsents
+      tags:
+        - WhatsApp Delivery
+      summary: List recorded marketing consents.
+      description: >-
+        Per-recipient consent records (masked). Consent is never inferred from
+        segment, list or campaign-audience membership; only this record decides who
+        may receive a marketing message. Bounded: `hasMore` says whether the list
+        was cut. Requires `whatsapp_delivery.consents.read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Narrow to granted or withdrawn consents.
+          schema:
+            $ref: "#/components/schemas/WhatsappConsentStatus"
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            1-200, default 50. Out-of-range values are REJECTED rather than clamped.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Consent entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappConsentPage"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >-
+            `status` or `limit` is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: grantWhatsappConsent
+      tags:
+        - WhatsApp Delivery
+      summary: Record an explicit marketing opt-in.
+      description: >-
+        Explicit, per recipient, per channel, recorded with its source and time
+        (ADR-0133 section 4). Naturally idempotent: the unique key is (tenant,
+        recipient, purpose), so a retry re-stamps the same row instead of adding
+        one, which is why no Idempotency-Key is taken. A re-grant after a withdrawal
+        is a new, deliberate act; history lives in the audit log and the
+        `whatsapp.consent.*` events. The body is validated after authorization.
+        Re-granting over a WITHDRAWN consent reverses an opt-out, so it is never implicit: it is refused with 409 unless the body sets `reinstateWithdrawn` with an `evidenceRef`, it is refused for `source` `import` (422), it needs `whatsapp_delivery.consents.restore` (high-risk) instead, and the withdrawal is kept in the row's history. Requires `whatsapp_delivery.consents.create` (or `consents.restore` when reinstating). 503 when the deployment has no recipient-hash key ring.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappConsentGrantRequest"
+      responses:
+        "200":
+          description: The consent was recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappConsent"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The recipient opted out and the request did not ask to reinstate (`CONSENT_WITHDRAWN`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Request body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Reinstatement refused (`REINSTATEMENT_REFUSED`) - an import cannot reverse an opt-out, and evidence is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The deployment has no usable recipient-hash key ring (`WHATSAPP_HASH_KEYS_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/whatsapp/consents/{id}/withdraw:
+    post:
+      operationId: withdrawWhatsappConsent
+      tags:
+        - WhatsApp Delivery
+      summary: Record a marketing opt-out.
+      description: >-
+        Immediate, and wins over everything queued: the recipient's waiting
+        marketing messages are cancelled in the same transaction, and the dispatcher
+        re-checks consent again right before every send. Naturally idempotent
+        (withdrawing a withdrawn consent keeps the original stamp). Withdrawing is
+        protective, so it is a separate, lower-friction permission than granting.
+        Requires `whatsapp_delivery.consents.withdraw`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The consent id.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The consent was withdrawn.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappConsentWithdrawal"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  schemas:
+    WhatsappPurpose:
+      type: string
+      enum:
+        - transactional
+        - security
+        - marketing
+      description: >-
+        Set by the template's registration, never by the caller. `transactional`
+        needs no marketing consent; `security` (OTP, step-up code) is never
+        blocked by an opt-out and always carries an expiry; `marketing` needs a
+        recorded opt-in, checked at enqueue and again at dispatch.
+    WhatsappMessageStatus:
+      type: string
+      enum:
+        - queued
+        - retry_wait
+        - sending
+        - sent
+        - failed
+        - cancelled
+        - expired
+    WhatsappConsentStatus:
+      type: string
+      enum:
+        - granted
+        - withdrawn
+    WhatsappSuppressionReason:
+      type: string
+      enum:
+        - hard_failure
+        - stop_reply
+        - manual
+    WhatsappMessage:
+      type: object
+      description: >-
+        A queue row. The raw number, the rendered body and the template variables
+        are never part of this projection.
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateKey:
+          type: string
+        purpose:
+          $ref: "#/components/schemas/WhatsappPurpose"
+        status:
+          $ref: "#/components/schemas/WhatsappMessageStatus"
+        recipientMasked:
+          type: string
+        correlationId:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
+        failureCode:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+        providerName:
+          type: string
+          nullable: true
+        notBefore:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+    WhatsappDeliveryAttempt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+        attemptNo:
+          type: integer
+        outcome:
+          type: string
+          enum:
+            - success
+            - failure
+        providerName:
+          type: string
+        providerResponseSnippet:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    WhatsappQueueSummary:
+      type: object
+      properties:
+        countsByStatus:
+          type: object
+          description: Every status is present, with 0 when it has no rows.
+          additionalProperties:
+            type: integer
+        oldestPendingAt:
+          type: string
+          format: date-time
+          nullable: true
+        suppressions:
+          type: integer
+        grantedConsents:
+          type: integer
+    WhatsappDiagnostics:
+      type: object
+      properties:
+        summary:
+          $ref: "#/components/schemas/WhatsappQueueSummary"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappMessage"
+        hasMoreMessages:
+          type: boolean
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappDeliveryAttempt"
+        configured:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            provider:
+              type: string
+              nullable: true
+              description: The adapter name (`log`, `fonnte` or `meta`), or null when unset or unknown. Never a credential.
+    WhatsappTemplateList:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              version:
+                type: integer
+              purpose:
+                $ref: "#/components/schemas/WhatsappPurpose"
+              variables:
+                type: array
+                items:
+                  type: string
+              secretVariables:
+                type: array
+                items:
+                  type: string
+              hasApprovedProviderTemplate:
+                type: boolean
+    WhatsappSuppression:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipientMasked:
+          type: string
+        reason:
+          $ref: "#/components/schemas/WhatsappSuppressionReason"
+        createdAt:
+          type: string
+          format: date-time
+        alreadySuppressed:
+          type: boolean
+          description: Present and true only when the number was already suppressed.
+    WhatsappSuppressionPage:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappSuppression"
+        hasMore:
+          type: boolean
+    WhatsappSuppressionCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - phone
+        - reason
+      properties:
+        phone:
+          type: string
+          description: >-
+            E.164 (`+62...`) or `00`-prefixed; a national number with a leading 0
+            is accepted only when the deployment configures a default country
+            code. Never echoed back.
+        reason:
+          type: string
+          enum:
+            - manual
+            - stop_reply
+    WhatsappConsent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipientMasked:
+          type: string
+        purpose:
+          type: string
+          enum:
+            - marketing
+        status:
+          $ref: "#/components/schemas/WhatsappConsentStatus"
+        source:
+          type: string
+        grantedAt:
+          type: string
+          format: date-time
+        withdrawnAt:
+          type: string
+          format: date-time
+          nullable: true
+    WhatsappConsentWithdrawal:
+      allOf:
+        - $ref: "#/components/schemas/WhatsappConsent"
+        - type: object
+          properties:
+            cancelledMessages:
+              type: integer
+              description: Waiting marketing messages to this recipient cancelled by the withdrawal.
+    WhatsappConsentPage:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappConsent"
+        hasMore:
+          type: boolean
+    WhatsappConsentGrantRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - phone
+        - source
+      properties:
+        phone:
+          type: string
+          description: Same forms as the suppression request. Never echoed back.
+        reinstateWithdrawn:
+          type: boolean
+          description: Must be true to grant over a recorded opt-out; needs `consents.restore` and `evidenceRef`.
+        evidenceRef:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: A reference to the evidence of the new consent (ticket, form id). Required when reinstating.
+        source:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{0,63}$"
+          description: Where the opt-in came from (`admin`, `form`, `import`, `inbound_reply`); recorded as evidence.

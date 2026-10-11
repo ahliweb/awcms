@@ -243,6 +243,81 @@ channels:
       #888), in one transaction. Producer:
       `procurement/application/procurement-posting.ts`'s `reverseDocument`.
       Same payload shape as `document.finalised`.
+  awcms.whatsapp.message.queued:
+    address: awcms.whatsapp.message.queued
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A message was accepted into the WhatsApp outbox (ADR-0133, Issue #963), in
+      the SAME transaction as the caller's fact: a rolled-back booking emits
+      nothing. Producer: `whatsapp-delivery/application/whatsapp-enqueue.ts`'s
+      `enqueueWhatsappMessage`. Payload: `messageId`, `templateKey`, `purpose`
+      (transactional | security | marketing), `recipientMasked`, `status`
+      (queued). Never a phone number, message body or template variable; the
+      caller's own record is joined through the envelope `correlationId`.
+  awcms.whatsapp.message.sent:
+    address: awcms.whatsapp.message.sent
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      The provider accepted the WhatsApp message (ADR-0133, Issue #963). Producer:
+      `whatsapp-delivery/application/whatsapp-dispatch.ts`, in the finalise
+      transaction after the provider call returned. Same payload shape as
+      `message.queued` with `status` sent.
+  awcms.whatsapp.message.failed:
+    address: awcms.whatsapp.message.failed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A WhatsApp message reached a terminal failure (ADR-0133, Issue #963): a non-
+      retryable provider rejection, exhausted retries, or a template that is no
+      longer registered. Producer: `whatsapp-delivery/application/whatsapp-
+      dispatch.ts`. Same payload shape as `message.queued` with `status` failed
+      and a coarse `failureCode`.
+  awcms.whatsapp.message.expired:
+    address: awcms.whatsapp.message.expired
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A WhatsApp message passed its expiry before it was sent and was not retried
+      late (ADR-0133, Issue #963) — an OTP that arrives after its validity is
+      worse than none. Producer: `whatsapp-delivery/application/whatsapp-
+      dispatch.ts`. Same payload shape as `message.queued` with `status` expired.
+  awcms.whatsapp.consent.granted:
+    address: awcms.whatsapp.consent.granted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A recipient's WhatsApp marketing consent was recorded (ADR-0133, Issue
+      #963). Producer: `whatsapp-delivery/application/whatsapp-consent-
+      directory.ts`'s `grantMarketingConsent`. Payload: `consentId`, `purpose`,
+      `recipientMasked`. Never the number.
+  awcms.whatsapp.consent.withdrawn:
+    address: awcms.whatsapp.consent.withdrawn
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A recipient's WhatsApp marketing consent was withdrawn; their waiting
+      marketing messages were cancelled in the same transaction (ADR-0133, Issue
+      #963). Producer: `whatsapp-delivery/application/whatsapp-consent-
+      directory.ts`'s `withdrawMarketingConsent`. Same payload shape as
+      `consent.granted`.
+  awcms.whatsapp.dispatch.failed:
+    address: awcms.whatsapp.dispatch.failed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A WhatsApp dispatcher pass failed as a whole — job level, not one message
+      (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-
+      dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp-
+      dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.
   awcms.email.message.queued:
     address: awcms.email.message.queued
     messages:
@@ -667,6 +742,48 @@ operations:
       $ref: "#/channels/awcms.procurement.document.reversed"
     messages:
       - $ref: "#/channels/awcms.procurement.document.reversed/messages/DomainEvent"
+  publishWhatsappMessageQueued:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.message.queued"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.message.queued/messages/DomainEvent"
+  publishWhatsappMessageSent:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.message.sent"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.message.sent/messages/DomainEvent"
+  publishWhatsappMessageFailed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.message.failed"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.message.failed/messages/DomainEvent"
+  publishWhatsappMessageExpired:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.message.expired"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.message.expired/messages/DomainEvent"
+  publishWhatsappConsentGranted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.consent.granted"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.consent.granted/messages/DomainEvent"
+  publishWhatsappConsentWithdrawn:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.consent.withdrawn"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.consent.withdrawn/messages/DomainEvent"
+  publishWhatsappDispatchFailed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.whatsapp.dispatch.failed"
+    messages:
+      - $ref: "#/channels/awcms.whatsapp.dispatch.failed/messages/DomainEvent"
   publishEmailMessageQueued:
     action: send
     channel:
