@@ -5,9 +5,11 @@
 > **Status:** admitted by [ADR-0132](../adr/0132-hr-payroll-module-family-admission.md)
 > (Issue #916). **Design, plus one landed slice:** the phase 1 _foundation_
 > (module `hr_workforce`, `experimental`, `sql/176`–`sql/177`: employments,
-> effective-dated terms, settings, employee-sees-own; Issue #945) exists. Attendance,
-> shifts, the availability port, commission and payroll are still design only: no
-> table, route or migration exists for them.
+> effective-dated terms, settings, employee-sees-own; Issue #945) and the phase 2
+> _rule foundation_ (module `hr_commission`, `experimental`, `sql/182`–`sql/183`:
+> versioned commission rules and their pure evaluation; Issue #950) exist.
+> Attendance, shifts, the availability port, the commission accrual ledger and
+> payroll are still design only: no table, route or migration exists for them.
 > This pack is the PRD-lite per phase, the state machines, the ERD and data
 > dictionary, the permissions/RLS matrix, the masking, audit and idempotency
 > matrices, the RBAC/ABAC acceptance scenarios, the threat and privacy analysis,
@@ -342,6 +344,14 @@ amount, or `fixed` per unit), `rate` or `fixed_amount`, `currency_code`,
 `rounding_mode`, `source_type` it applies to. Published and retired versions are
 **immutable** (trigger); change is a new version. The rule applied to an accrual is
 the one **effective at the event's `occurred_at`**, never `now()`.
+
+> **Landed in #950 (rules only).** `percent` and `fixed` (per whole unit) exist,
+> plus an optional floor and ceiling applied to the rounded amount; `status`
+> moves `draft` → `published` → `retired` (a draft may also be retired); a
+> published window may not overlap another published version of the same rule
+> (trigger, advisory-locked). Evaluation is the pure
+> `src/modules/hr-commission/domain/hr-commission-evaluation.ts` (`bigint`
+> decimal strings, no tiers, no expression language). The ledger below is not built.
 
 `awcms_hr_commission_accruals` is the ledger. The monetary facts —
 `employment_id`, `rule_id` and `rule_version` snapshot, `source_type`,

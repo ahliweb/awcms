@@ -520,7 +520,13 @@ describe("the real repository", () => {
       // carries a real `dataLifecycle` descriptor with a database-enforced
       // retention floor. The entry is the authored-configuration argument the
       // first five make, not a new kind of one.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(15);
+      //
+      // Raised 15 -> 16 for `awcms_hr_commission_rules` (Issue #950, ADR-0132):
+      // authored configuration that must NOT carry an asserted retention period
+      // (nobody owns that decision), so the honest answer is this entry and not
+      // a `dataLifecycle` descriptor. Same authored-configuration argument as the
+      // entries above, not a new kind of one.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(16);
     });
 
     test("every entry names a table that really exists in sql/", () => {

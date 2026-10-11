@@ -4104,6 +4104,9 @@ msgstr "Tenaga kerja HR"
 msgid "Booking"
 msgstr "Pemesanan"
 
+msgid "HR Commission"
+msgstr "Komisi HR"
+
 msgid "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
 msgstr "Siapa situs ini di mata pembaca: kepala halaman, footer, alamat redaksi, dan detail kontak."
 

@@ -612,6 +612,26 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/hr-commission/rules/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/rules/[id]/publish.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/rules/[id]/retire.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/rules/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/hr-workforce/employments/[id].ts",
       "workClass": "interactive",
       "source": "factory"

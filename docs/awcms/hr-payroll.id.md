@@ -1,15 +1,17 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:6c272f690dd94d8edcd4f4411d4d84d5214041f07b1b4fec65b3e06785027b06 -->
+<!-- i18n-source-hash: sha256:1b40e51f2369386e13faeb4796d56e62b57c1a972de8d54ff8e4127cccfbb720 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
 > **Status:** diterima oleh [ADR-0132](../adr/0132-hr-payroll-module-family-admission.id.md)
 > (Issue #916). **Desain, ditambah satu irisan yang sudah mendarat:** _fondasi_
 > fase 1 (modul `hr_workforce`, `experimental`, `sql/176`–`sql/177`: employment,
-> terms berlaku-efektif, settings, karyawan-melihat-miliknya; Issue #945) sudah ada.
-> Kehadiran, shift, port ketersediaan, komisi, dan payroll masih hanya desain: belum
-> ada tabel, route, atau migrasi untuk itu.
+> terms berlaku-efektif, settings, karyawan-melihat-miliknya; Issue #945) dan
+> _fondasi aturan_ fase 2 (modul `hr_commission`, `experimental`, `sql/182`–`sql/183`:
+> aturan komisi berversi dan evaluasinya yang murni; Issue #950) sudah ada.
+> Kehadiran, shift, port ketersediaan, buku besar akrual komisi, dan payroll masih
+> hanya desain: belum ada tabel, route, atau migrasi untuk itu.
 > Paket ini memuat PRD-lite per fase, state machine, ERD dan kamus data, matriks
 > izin/RLS, matriks masking, audit dan idempotensi, skenario penerimaan
 > RBAC/ABAC, analisis ancaman dan privasi, event sementara, dan keputusan
@@ -362,6 +364,14 @@ basis, atau `fixed` per unit), `rate` atau `fixed_amount`, `currency_code`,
 `rounding_mode`, `source_type` yang dicakup. Versi published dan retired
 **immutable** (trigger); perubahan adalah versi baru. Aturan yang dipakai pada
 akrual adalah yang **berlaku pada `occurred_at` event**, tidak pernah `now()`.
+
+> **Mendarat di #950 (hanya aturan).** `percent` dan `fixed` (per unit utuh) ada,
+> ditambah batas bawah dan atas opsional yang dikenakan pada jumlah yang sudah
+> dibulatkan; `status` bergerak `draft` → `published` → `retired` (draft juga boleh
+> di-retire); jendela published tidak boleh tumpang-tindih dengan versi published
+> lain dari aturan yang sama (trigger, dikunci advisory). Evaluasi adalah
+> `src/modules/hr-commission/domain/hr-commission-evaluation.ts` yang murni (string
+> desimal `bigint`, tanpa tier, tanpa bahasa ekspresi). Buku besar di bawah belum dibangun.
 
 `awcms_hr_commission_accruals` adalah ledger. Fakta moneter —
 `employment_id`, snapshot `rule_id` dan `rule_version`, `source_type`,

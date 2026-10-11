@@ -12067,6 +12067,166 @@ Key, version, the ONE purpose each template is registered with, its variable all
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
+## HR Commission
+
+Versioned commission rules (hr_commission module, Issue #950, ADR-0132, phase 2 of the hr_* family). A rule is jurisdiction-neutral, tenant-authored configuration: a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling; it references no person or employment. A rule changes only by a new version; a draft is editable, a published version is immutable (also by database trigger) and may only become retired, and no two published windows of one rule overlap. Rates and amounts are decimal strings. publish and retire are high-risk, separately grantable, idempotency-keyed and audited. The accrual ledger and payroll are later phases.
+
+### `GET /api/v1/hr-commission/rules` — List commission rule versions
+
+- **operationId**: `hrCommissionRulesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.rules.read`. Newest first, keyset paginated (`cursor`), optionally filtered by `ruleKey` and `status`. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                  | Description |
+| ------------------ | ------ | -------- | ------------------------------------- | ----------- |
+| `ruleKey`          | query  | no       | string                                |             |
+| `status`           | query  | no       | enum(`draft`, `published`, `retired`) |             |
+| `cursor`           | query  | no       | string                                |             |
+| `X-Correlation-ID` | header | no       | string                                |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of rule versions.    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/rules` — Create a draft commission rule version
+
+- **operationId**: `hrCommissionRuleCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.rules.create`. Creates a DRAFT; the version number is assigned (the next one for `ruleKey`, or 1) and the status is always `draft`. A draft never applies to anything. A body naming `status`, `versionNo`, a stamp, an employment or a JSON-number amount is a 400. Requires an Idempotency-Key. Audited (rule key and version only).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrCommissionRuleCreateInput`](#schema-hrcommissionrulecreateinput)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 201    | The draft rule version.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-commission/rules/{id}` — Get a commission rule version
+
+- **operationId**: `hrCommissionRuleGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.rules.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The rule version.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/hr-commission/rules/{id}` — Replace a draft commission rule version
+
+- **operationId**: `hrCommissionRuleUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.rules.update`. Replaces every editable field of a DRAFT; `ruleKey` and the version never change. The body names the `expectedContentDigest` of the version you were shown; if the terms changed since (another editor) it is `409 RULE_CHANGED` and nothing is written. A published or retired version is immutable (`409 RULE_NOT_DRAFT`, also enforced by a database trigger): create a new version instead. Replacing a draft with the same body is a no-op, so no Idempotency-Key is required. Audited (rule key and version only).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`HrCommissionRuleInput`](#schema-hrcommissionruleinput)
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | The updated draft.              | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.             | [`ApiError`](#standard-error-envelope) |
+| 409    | RULE_NOT_DRAFT or RULE_CHANGED. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/rules/{id}/publish` — Publish a commission rule version
+
+- **operationId**: `hrCommissionRulePublish`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.rules.publish` (high-risk). Makes a draft IMMUTABLE and eligible to apply. The body names the `expectedContentDigest` of the terms the publisher reviewed: if they changed since it is `409 RULE_CHANGED`. Maker / checker: whoever created or last edited the draft cannot publish it (`403 PUBLISH_BY_AUTHOR_FORBIDDEN`). Refused with 409 `RULE_WINDOW_OVERLAP`, naming the conflicting version, when its window overlaps another published version of the same rule (race-safe: concurrent publishes serialise). Requires an Idempotency-Key; replaying it returns the stored response. Audited at warning severity (rule key, version, window and the content digest of what was published — never a rate or an amount). Publishing a version whose window starts in the past is not specially gated in this phase: no ledger consumes rules yet, and the guard belongs with the accrual issue (docs/awcms/hr-payroll.md section 6).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrCommissionPublishInput`](#schema-hrcommissionpublishinput)
+
+**Responses**
+
+| Status | Description                                                                                             | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The published rule version.                                                                             | object                                 |
+| 400    | Validation error.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or PUBLISH_BY_AUTHOR_FORBIDDEN (the creator or last editor of the draft may not publish it). | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, RULE_NOT_DRAFT, RULE_CHANGED or RULE_WINDOW_OVERLAP.                              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/rules/{id}/retire` — Retire a commission rule version
+
+- **operationId**: `hrCommissionRuleRetire`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.rules.retire` (high-risk). Withdraws a draft (abandoning it) or a published version (it no longer applies to new events). Terminal: a retired version never changes again. Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                   | Schema                                 |
+| ------ | --------------------------------------------- | -------------------------------------- |
+| 200    | The retired rule version.                     | object                                 |
+| 400    | Validation error.                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                   | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                           | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or RULE_ALREADY_RETIRED. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -12888,6 +13048,106 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 ```json
 {
   "tenantUserId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: HrCommissionPublishInput
+
+| Field                   | Type   | Required | Nullable | Description                                                                              |
+| ----------------------- | ------ | -------- | -------- | ---------------------------------------------------------------------------------------- |
+| `expectedContentDigest` | string | yes      | no       | The `contentDigest` of the terms the publisher reviewed; a mismatch is 409 RULE_CHANGED. |
+
+**Example**
+
+```json
+{
+  "expectedContentDigest": "string"
+}
+```
+
+### Schema: HrCommissionRuleCreateInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "sourceType": "string",
+  "calculation": "percent",
+  "rate": "2.5",
+  "fixedAmount": "10",
+  "minAmount": "string",
+  "maxAmount": "string",
+  "currencyCode": "string",
+  "roundingMode": "half_up",
+  "roundingScale": 0,
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2026-01-01",
+  "ruleKey": "string"
+}
+```
+
+### Schema: HrCommissionRuleFields
+
+The editable terms of a rule version. Money is a decimal STRING. PERCENT needs `rate` (2.5 means 2.5 %, at most 6 fractional digits, 0 to 100) and no `fixedAmount`; FIXED needs `fixedAmount` (per unit) and no `rate`. `minAmount` and `maxAmount` clamp the ROUNDED commission and carry no more fractional digits than `roundingScale`. The window is half-open, `effectiveTo` exclusive; omit it for an open-ended version.
+
+| Field           | Type                                                                        | Required | Nullable | Description |
+| --------------- | --------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `name`          | string                                                                      | yes      | no       |             |
+| `sourceType`    | string                                                                      | yes      | no       |             |
+| `calculation`   | enum(`percent`, `fixed`)                                                    | yes      | no       |             |
+| `rate`          | string                                                                      | no       | yes      |             |
+| `fixedAmount`   | string                                                                      | no       | yes      |             |
+| `minAmount`     | string                                                                      | no       | yes      |             |
+| `maxAmount`     | string                                                                      | no       | yes      |             |
+| `currencyCode`  | string                                                                      | yes      | no       |             |
+| `roundingMode`  | enum(`half_up`, `half_down`, `half_even`, `up`, `down`, `ceiling`, `floor`) | yes      | no       |             |
+| `roundingScale` | integer                                                                     | yes      | no       |             |
+| `effectiveFrom` | string (date)                                                               | yes      | no       |             |
+| `effectiveTo`   | string (date)                                                               | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "sourceType": "string",
+  "calculation": "percent",
+  "rate": "2.5",
+  "fixedAmount": "10",
+  "minAmount": "string",
+  "maxAmount": "string",
+  "currencyCode": "string",
+  "roundingMode": "half_up",
+  "roundingScale": 0,
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2026-01-01"
+}
+```
+
+### Schema: HrCommissionRuleInput
+
+_No properties declared._
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "sourceType": "string",
+  "calculation": "percent",
+  "rate": "2.5",
+  "fixedAmount": "10",
+  "minAmount": "string",
+  "maxAmount": "string",
+  "currencyCode": "string",
+  "roundingMode": "half_up",
+  "roundingScale": 0,
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2026-01-01",
+  "expectedContentDigest": "string"
 }
 ```
 
