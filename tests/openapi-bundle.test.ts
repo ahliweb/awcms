@@ -439,6 +439,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     const added = [...afterTags].filter((n) => !beforeTags.has(n)).sort();
     expect(added).toEqual([
       "Blog Content",
+      // "Booking" (booking, ADR-0131, Issue #938) -- genuinely new surface:
+      // schedules, schedule exceptions and the availability read. Nothing here
+      // is anonymous.
+      "Booking",
       "Comments",
       "Data Lifecycle",
       "Domain Event Runtime",

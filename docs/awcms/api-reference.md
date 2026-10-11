@@ -12099,6 +12099,242 @@ Gated by `hr_workforce.templates.delete` (high-risk). Soft delete; frees the cod
 | 404    | RESOURCE_NOT_FOUND.                       | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT or TEMPLATE_DELETED. | [`ApiError`](#standard-error-envelope) |
 
+## Booking
+
+Availability and schedules of the generic booking module (booking module, Issues #937 and #938, ADR-0131, ADR-0135): schedules written in local wall-clock time in an IANA zone, closures and override-hours exceptions, and a read-only availability search for slot resources (UTC half-open intervals, RFC 5545 gap and fold rules, setup and cleanup buffers, lead time and horizon) and stay resources (local date intervals, nights by date arithmetic, same-day turnover allowed, blocked nights as a hard exclusion, closures as a soft one). Availability persists and claims nothing and may be stale when read; the allocator's database exclusion constraints, not this surface, prevent a double booking. Rate limited per principal. No price, payment or customer name exists in the module.
+
+### `GET /api/v1/booking/availability` — Search availability
+
+- **operationId**: `bookingAvailabilityGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.availability.read`. READ-ONLY: persists and claims nothing, and the answer may be stale when read (the allocator's exclusion constraints prevent a double booking). A SLOT resource is asked with `from` and `to` (RFC 3339 with an explicit offset or Z, half-open, at most 31 days) and answers the bookable slots, ascending, each with the number of free units; slots are bounded by `limit` (500 at most) and `truncated` says whether more exist. A STAY resource is asked with `checkInDate` and `checkOutDate` (local dates in the resource's zone, half-open; an instant is never accepted) and answers `available`, the night count (date arithmetic, never hours), the derived arrival and departure instants, and the reasons it is not available, each flagged `overridable` (lead time, horizon and a soft closure can be lifted by `booking.reservations.override`; a block or an allocation conflict never can). Lead time and horizon come from the offering, then the tenant policy, then the module default. Rate limited per principal (`429 RATE_LIMITED`, `Retry-After`). Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type               | Description                                                                               |
+| ------------------ | ------ | -------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| `resourceId`       | query  | yes      | string (uuid)      |                                                                                           |
+| `offeringId`       | query  | yes      | string (uuid)      |                                                                                           |
+| `quantity`         | query  | no       | integer            | Units one booking claims at once; default 1.                                              |
+| `from`             | query  | no       | string (date-time) | Slot resources. Start of the search window, RFC 3339 with an offset or Z.                 |
+| `to`               | query  | no       | string (date-time) | Slot resources. Exclusive end of the search window; after `from`, at most 31 days later.  |
+| `limit`            | query  | no       | integer            | Slot resources. Slots returned at most; default 100, at most 500.                         |
+| `checkInDate`      | query  | no       | string (date)      | Stay resources. Local check-in date YYYY-MM-DD in the resource's zone.                    |
+| `checkOutDate`     | query  | no       | string (date)      | Stay resources. Local check-out date, exclusive; after `checkInDate`, at most 366 nights. |
+| `X-Correlation-ID` | header | no       | string             |                                                                                           |
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The slots of a slot resource, or the evaluation of a stay.                                                        | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND (the resource or the offering is not in this tenant, is inactive or is deleted).               | [`ApiError`](#standard-error-envelope) |
+| 409    | BOOKING_MODE_MISMATCH (from/to sent for a stay resource or offering, or checkInDate/checkOutDate for a slot one). | [`ApiError`](#standard-error-envelope) |
+| 422    | QUANTITY_EXCEEDS_UNITS.                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 429    | RATE_LIMITED.                                                                                                     | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/schedule-exceptions` — List schedule exceptions
+
+- **operationId**: `bookingScheduleExceptionsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.read`. Closures and override hours, newest first, keyset paginated (`cursor`). `scheduleId` and `resourceId` narrow the list. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `scheduleId`       | query  | no       | string (uuid) |             |
+| `resourceId`       | query  | no       | string (uuid) |             |
+| `cursor`           | query  | no       | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of exceptions.       | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/schedule-exceptions` — Create a schedule exception
+
+- **operationId**: `bookingScheduleExceptionCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.create`. A `closed` day range or replacement `override_hours` over a half-open range of LOCAL dates in the schedule's zone (at most 366 days), owned by exactly one of a schedule or a resource. The reason is a short code, never free text. A closure beats an override on the same date; an override only modifies a date a schedule covers. For a stay resource only `closed` applies, as a SOFT closure. Changes FUTURE availability only and never touches an existing reservation. An identical exception is `409 EXCEPTION_DUPLICATE`. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BookingScheduleExceptionInput`](#schema-bookingscheduleexceptioninput)
+
+**Responses**
+
+| Status | Description                                                                            | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The exception.                                                                         | object                                 |
+| 400    | Validation error.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND (the schedule or the resource).                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | EXCEPTION_DUPLICATE (an identical exception of the same owner, kind and range exists). | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/booking/schedule-exceptions/{id}` — Delete a schedule exception
+
+- **operationId**: `bookingScheduleExceptionDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.delete`. Deletes one exception (configuration with no history value). Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Deleted.                    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/schedules` — List schedules
+
+- **operationId**: `bookingSchedulesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.read`. Newest first, keyset paginated (`cursor`). `resourceId` narrows to one resource's schedules; `activeOnly=true` hides deactivated windows. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `resourceId`       | query  | no       | string (uuid) |             |
+| `activeOnly`       | query  | no       | boolean       |             |
+| `cursor`           | query  | no       | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of schedules.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/schedules` — Create a schedule window
+
+- **operationId**: `bookingScheduleCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.create`. Weekly LOCAL windows in an IANA zone (an offset or an abbreviation is a 400). A new window SUPERSEDES rather than edits: it is `409 SCHEDULE_OVERLAP` against an active window of the same scope (one resource, or the tenant default) that overlaps its half-open `[effectiveFrom, effectiveTo)`. A schedule bound to a resource is written in that resource's zone (`409 SCHEDULE_TIMEZONE_MISMATCH`); a tenant-default schedule applies only to resources in its own zone. Changes FUTURE availability only; no reservation is touched. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BookingScheduleInput`](#schema-bookingscheduleinput)
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 201    | The schedule.                                   | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                             | [`ApiError`](#standard-error-envelope) |
+| 409    | SCHEDULE_OVERLAP or SCHEDULE_TIMEZONE_MISMATCH. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/schedules/{id}` — Read a schedule
+
+- **operationId**: `bookingScheduleGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.read`. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The schedule.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/booking/schedules/{id}` — Shorten a schedule window
+
+- **operationId**: `bookingSchedulePatch`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.update`. A window is superseded, not edited: the only change is a SHORTER `effectiveTo` (it can never be lengthened or reopened; create a new window instead) and `status: inactive`. `409 SCHEDULE_NOT_EDITABLE` otherwise. The database trigger holds the same rule for every writer. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BookingSchedulePatch`](#schema-bookingschedulepatch)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The schedule.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+| 409    | SCHEDULE_NOT_EDITABLE.      | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/booking/schedules/{id}` — Deactivate a schedule
+
+- **operationId**: `bookingScheduleDeactivate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.schedules.delete`. DEACTIVATES the window (it is never removed; a confirmed reservation does not depend on it). `409 SCHEDULE_NOT_EDITABLE` when it is already inactive. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The deactivated schedule.   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+| 409    | SCHEDULE_NOT_EDITABLE.      | [`ApiError`](#standard-error-envelope) |
+
 ## WhatsApp Delivery
 
 Operator surface of the generic WhatsApp delivery capability (whatsapp_delivery module, ADR-0133, Issue #963): the tenant's queue diagnostics, cancelling a waiting message, the registered templates, the suppression list and the per-recipient marketing consent store. There is NO enqueue or send endpoint: queueing is a capability-port call (WhatsappDeliveryPort) made in the consuming module's own transaction, and the provider is called only by the dispatcher job, outside any transaction (ADR-0006). A channel queue table, the repo's third after email and push — what ADR-0133 refuses is a second WhatsApp queue, one per consuming domain. Recipients are masked in every response and message bodies and variables are never returned. Consent is independent of segment membership: a marketing message needs an explicit recorded opt-in, checked at enqueue and again at dispatch. Credentials are per deployment from the environment, never per tenant. Ships inert behind WHATSAPP_ENABLED.
@@ -12916,6 +13152,111 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
   "name": "string",
   "slug": "example-slug",
   "description": "string"
+}
+```
+
+### Schema: BookingLocalWindow
+
+A local wall-clock window [from, to) in the schedule's zone; it never crosses midnight.
+
+| Field  | Type   | Required | Nullable | Description                             |
+| ------ | ------ | -------- | -------- | --------------------------------------- |
+| `from` | string | yes      | no       |                                         |
+| `to`   | string | yes      | no       | HH:MM, or 24:00 for the end of the day. |
+
+**Example**
+
+```json
+{
+  "from": "09:00",
+  "to": "17:00"
+}
+```
+
+### Schema: BookingScheduleExceptionInput
+
+| Field        | Type                                                        | Required | Nullable | Description                                        |
+| ------------ | ----------------------------------------------------------- | -------- | -------- | -------------------------------------------------- |
+| `scheduleId` | string (uuid)                                               | no       | yes      |                                                    |
+| `resourceId` | string (uuid)                                               | no       | yes      |                                                    |
+| `localFrom`  | string (date)                                               | yes      | no       |                                                    |
+| `localTo`    | string (date)                                               | yes      | no       | Exclusive end; after localFrom, at most 366 days.  |
+| `kind`       | enum(`closed`, `override_hours`)                            | yes      | no       |                                                    |
+| `windows`    | array of [`BookingLocalWindow`](#schema-bookinglocalwindow) | no       | no       | Required for override_hours, forbidden for closed. |
+| `reasonCode` | string                                                      | no       | yes      | A short code, never free text.                     |
+
+**Example**
+
+```json
+{
+  "scheduleId": "00000000-0000-0000-0000-000000000000",
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "localFrom": "2026-01-01",
+  "localTo": "2026-01-01",
+  "kind": "closed",
+  "windows": [
+    {
+      "from": "09:00",
+      "to": "17:00"
+    }
+  ],
+  "reasonCode": "string"
+}
+```
+
+### Schema: BookingScheduleInput
+
+| Field           | Type                                                   | Required | Nullable | Description                                                                        |
+| --------------- | ------------------------------------------------------ | -------- | -------- | ---------------------------------------------------------------------------------- |
+| `resourceId`    | string (uuid)                                          | no       | yes      | Null (or absent) is the tenant default schedule.                                   |
+| `timezone`      | string                                                 | yes      | no       | An IANA zone name such as Asia/Pontianak; an offset or an abbreviation is refused. |
+| `effectiveFrom` | string (date)                                          | yes      | no       |                                                                                    |
+| `effectiveTo`   | string (date)                                          | no       | yes      | Exclusive end; null for open-ended.                                                |
+| `rules`         | [`BookingScheduleRules`](#schema-bookingschedulerules) | yes      | no       |                                                                                    |
+
+**Example**
+
+```json
+{
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "timezone": "string",
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": "2026-01-01",
+  "rules": {
+    "weekly": "(operation-specific payload)"
+  }
+}
+```
+
+### Schema: BookingSchedulePatch
+
+| Field         | Type             | Required | Nullable | Description                  |
+| ------------- | ---------------- | -------- | -------- | ---------------------------- |
+| `effectiveTo` | string (date)    | no       | no       | May only shorten the window. |
+| `status`      | enum(`inactive`) | no       | no       |                              |
+
+**Example**
+
+```json
+{
+  "effectiveTo": "2026-01-01",
+  "status": "inactive"
+}
+```
+
+### Schema: BookingScheduleRules
+
+The closed rules schema. Only `weekly` is accepted; a weekday absent from it is closed.
+
+| Field    | Type   | Required | Nullable | Description                                                                                        |
+| -------- | ------ | -------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `weekly` | object | yes      | no       | Weekday keys sun, mon, tue, wed, thu, fri, sat; at most 8 ascending, non-overlapping windows each. |
+
+**Example**
+
+```json
+{
+  "weekly": "(operation-specific payload)"
 }
 ```
 

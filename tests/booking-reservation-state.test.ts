@@ -274,10 +274,14 @@ describe("creation", () => {
 });
 
 describe("module descriptor, guards and audit names stay in step", () => {
-  test("the module is experimental, owns no route and declares no navigation", () => {
+  test("the module is experimental, declares its API fragment and no navigation", () => {
     expect(bookingModule.key).toBe(BOOKING_MODULE_KEY);
     expect(bookingModule.status).toBe("experimental");
-    expect(bookingModule.api).toBeUndefined();
+    // Issue #938 added the availability and schedule routes; there is still no
+    // admin screen, so no navigation entry.
+    expect(bookingModule.api?.openApiPath).toBe(
+      "openapi/modules/booking.openapi.yaml"
+    );
     expect(bookingModule.navigation ?? []).toEqual([]);
   });
 

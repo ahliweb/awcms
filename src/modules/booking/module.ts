@@ -130,13 +130,18 @@ export const bookingModule = defineModule({
   key: BOOKING_MODULE_KEY,
   name: "Booking",
   version: "0.1.0",
-  // `experimental` is the feature flag: the module has no route and no admin
-  // screen until Issues #938 to #941, and ADR-0021's "every ACTIVE module
-  // declares a screen" would be false the other way round.
+  // `experimental` is the feature flag: the module has no admin screen until
+  // Issues #939 to #941 (Issue #938 added the availability read and the schedule
+  // routes), and ADR-0021's "every ACTIVE module declares a screen" would be
+  // false the other way round.
   status: "experimental",
   description:
-    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. No allocator, availability search or API yet. Holds no price, payment state, product id or customer name.",
+    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. No allocator yet. Holds no price, payment state, product id or customer name.",
   dependencies: ["tenant_admin", "identity_access", "logging"],
+  api: {
+    openApiPath: "openapi/modules/booking.openapi.yaml",
+    basePath: "/api/v1/booking"
+  },
   permissions: [
     {
       activityCode: "resources",
@@ -386,6 +391,16 @@ export const bookingModule = defineModule({
         "awcms_booking_schedule_exceptions_created_by_idx (sql/180) leads with tenant_id; nothing scans this table by age."
     }),
     retained({
+      key: "booking.resource_blocks",
+      tableName: "awcms_booking_resource_blocks",
+      retentionClass: "system_event",
+      why: "Authored by an administrator; the ceiling is the number of maintenance or owner-use ranges a tenant blocks out, not traffic.",
+      deletionWhy:
+        "Not performed. A block is released (status), never removed: awcms_app is denied DELETE and a trigger rejects it.",
+      indexColumns: ["tenant_id", "resource_id", "block_from"],
+      indexPurpose: "awcms_booking_resource_blocks_resource_idx (sql/186)."
+    }),
+    retained({
       key: "booking.reservations",
       tableName: "awcms_booking_reservations",
       retentionClass: "system_event",
@@ -470,6 +485,13 @@ export const bookingModule = defineModule({
       columns: ["created_by"],
       rationale:
         "Closed days and override hours with a short reason code, never free text; a person appears only as the tenant user who authored it."
+    }),
+    stamps({
+      key: "resource_blocks",
+      tableName: "awcms_booking_resource_blocks",
+      columns: ["created_by", "released_by"],
+      rationale:
+        "Blocked nights of a stay resource with a closed reason code, never free text; a person appears only as the tenant user who placed or released it."
     }),
     {
       key: "booking.reservations",

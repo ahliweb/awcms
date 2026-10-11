@@ -73,6 +73,7 @@ const BOOKING_TABLES = [
   "awcms_booking_reservations",
   "awcms_booking_reservation_items",
   "awcms_booking_resource_allocations",
+  "awcms_booking_resource_blocks",
   "awcms_booking_reservation_events"
 ] as const;
 
@@ -398,7 +399,9 @@ suite("booking database invariants (Issue #937, ADR-0131)", () => {
           table !== "awcms_booking_settings" &&
           table !== "awcms_booking_resource_pools" &&
           table !== "awcms_booking_schedules" &&
-          table !== "awcms_booking_schedule_exceptions"
+          table !== "awcms_booking_schedule_exceptions" &&
+          // Blocks are covered by booking-availability.integration.test.ts.
+          table !== "awcms_booking_resource_blocks"
         ) {
           expect(asA[0]!.n).toBeGreaterThan(0);
         }

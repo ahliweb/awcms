@@ -737,6 +737,9 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   awcms_booking_resource_units: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_service_offerings: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_schedules: ["SELECT", "INSERT", "UPDATE"],
+  // `sql/186`: blocks are released (status), never deleted; DELETE is revoked
+  // and a trigger refuses it as the second layer.
+  awcms_booking_resource_blocks: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_reservations: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_resource_allocations: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_reservation_items: ["SELECT", "INSERT"],

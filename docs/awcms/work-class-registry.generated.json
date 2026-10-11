@@ -427,6 +427,31 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/booking/availability.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/schedule-exceptions/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/schedule-exceptions/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/schedules/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/schedules/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/comments/admin/[id]/archive.ts",
       "workClass": "interactive",
       "source": "default"

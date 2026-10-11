@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 185   |
-| `awcms_*` tables                    | 204   |
-| Tables with `FORCE` RLS             | 186   |
+| Migrations                          | 186   |
+| `awcms_*` tables                    | 205   |
+| Tables with `FORCE` RLS             | 187   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 611   |
-| Route files                         | 501   |
+| Test files                          | 617   |
+| Route files                         | 506   |
 | ADR                                 | 282   |
 
 ### Modules
@@ -242,6 +242,7 @@
 | 183 | `sql/183_awcms_hr_commission_permissions.sql`                      |
 | 184 | `sql/184_awcms_hr_shifts_schema.sql`                               |
 | 185 | `sql/185_awcms_hr_shifts_permissions.sql`                          |
+| 186 | `sql/186_awcms_booking_availability.sql`                           |
 
 ### Tables & Row-Level Security
 
@@ -276,6 +277,7 @@
 | `awcms_booking_reservation_items`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_reservations`             | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_resource_allocations`     | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_blocks`          | `sql/186_awcms_booking_availability.sql`                   | yes | yes   |
 | `awcms_booking_resource_pools`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_resource_units`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_resources`                | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
@@ -456,16 +458,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 483        |
+| `(root)`      | 488        |
 | `e2e`         | 25         |
-| `integration` | 102        |
+| `integration` | 103        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 402   |
+| `/api/v1/**`    | 407   |
 | `/admin/**`     | 69    |
 | publik / anonim | 30    |
 
