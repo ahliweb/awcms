@@ -217,5 +217,15 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_workforce.templates.create",
   "hr_workforce.templates.delete",
   "hr_workforce.templates.read",
-  "hr_workforce.templates.update"
+  "hr_workforce.templates.update",
+
+  // hr_commission accruals (6) — ADR-0132 / Issue #951. The ledger ships API-first
+  // like the rules: the accrual screens (list, approve/release/void/pay) are the
+  // recorded follow-up that flips the module to `active`.
+  "hr_commission.accruals.approve",
+  "hr_commission.accruals.cancel",
+  "hr_commission.accruals.accrue",
+  "hr_commission.accruals.pay",
+  "hr_commission.accruals.read",
+  "hr_commission.accruals.release"
 ];

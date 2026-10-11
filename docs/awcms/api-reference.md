@@ -12539,7 +12539,197 @@ Key, version, the ONE purpose each template is registered with, its variable all
 
 ## HR Commission
 
-Versioned commission rules (hr_commission module, Issue #950, ADR-0132, phase 2 of the hr_* family). A rule is jurisdiction-neutral, tenant-authored configuration: a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling; it references no person or employment. A rule changes only by a new version; a draft is editable, a published version is immutable (also by database trigger) and may only become retired, and no two published windows of one rule overlap. Rates and amounts are decimal strings. publish and retire are high-risk, separately grantable, idempotency-keyed and audited. The accrual ledger and payroll are later phases.
+Versioned commission rules (hr_commission module, Issue #950, ADR-0132, phase 2 of the hr_* family). A rule is jurisdiction-neutral, tenant-authored configuration: a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling; it references no person or employment. A rule changes only by a new version; a draft is editable, a published version is immutable (also by database trigger) and may only become retired, and no two published windows of one rule overlap. Rates and amounts are decimal strings. publish and retire are high-risk, separately grantable, idempotency-keyed and audited; a back-dated publish needs a reason. Issue #951 adds the accrual LEDGER: one commission per (source, employment), exactly once (a redelivery returns the original), its amount computed from the published rule in force on the event's own date and never asserted by a client, an advancing status (pending, approved, payable, paid, or voided) with an append-only transition log, a beneficiary who cannot approve their own accrual, and high-risk idempotency-keyed approve, release, void and pay audited without any amount. Employee commission only. Reversal and payroll are later phases.
+
+### `GET /api/v1/hr-commission/accruals` — List commission accruals
+
+- **operationId**: `hrCommissionAccrualsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.read`. Newest first, keyset paginated (`cursor`), optionally filtered by `employmentId`, `status` and `sourceType`. Amounts are decimal strings and a person's earnings, which is why the permission is its own. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                             | Description |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------- | ----------- |
+| `employmentId`     | query  | no       | string (uuid)                                                    |             |
+| `status`           | query  | no       | [`HrCommissionAccrualStatus`](#schema-hrcommissionaccrualstatus) |             |
+| `sourceType`       | query  | no       | string                                                           |             |
+| `cursor`           | query  | no       | string                                                           |             |
+| `X-Correlation-ID` | header | no       | string                                                           |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of accruals.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/accruals` — Report a sale fact and accrue its commission
+
+- **operationId**: `hrCommissionAccrualCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.accrue` (high-risk, its own action so the action-time SoD check can be authored over who may post). Accrues the commission a source event earns an EMPLOYMENT, exactly once per `(source type, source ref, source line, employment)` (a database unique key, race-safe). The AMOUNT is computed from the PUBLISHED version of `ruleKey` whose window contains `occurredOn` (never now()), by exact decimal arithmetic; the body can never assert an amount, a rule version, a status or a stamp, and money is a decimal string (a JSON number is 400). `source.type` must equal the rule's source type and `currencyCode` its currency. A redelivery of the same canonical request returns the ORIGINAL with `replayed: true` (200) whatever Idempotency-Key it arrives under, also after the accrual was voided; the same source with a different amount, date, rule or currency is 409 `SOURCE_CONFLICT`. The employment must be live and employed on `occurredOn`, and the event at most 730 days old; the database recomputes the stored amount from the rule version and refuses a mismatch. Requires an Idempotency-Key. A NEW accrual is audited at info severity (employment, rule key and version, source type; never an amount, a base, a rate or a source reference); a replay audits nothing. The in-process adapter contract is `_shared/ports/commission-accrual-port.ts`. Employee commission only: affiliate and referral commission is not here.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrCommissionAccrualCreateInput`](#schema-hrcommissionaccrualcreateinput)
+
+**Responses**
+
+| Status | Description                                                                                                                                   | Schema                                                             |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 200    | The same source was already accrued for this employment with the same request; the original is returned (`replayed: true`).                   | [`HrCommissionAccrualCreated`](#schema-hrcommissionaccrualcreated) |
+| 201    | A new accrual, status `pending`.                                                                                                              | [`HrCommissionAccrualCreated`](#schema-hrcommissionaccrualcreated) |
+| 400    | Validation error.                                                                                                                             | [`ApiError`](#standard-error-envelope)                             |
+| 401    | Missing or invalid session.                                                                                                                   | [`ApiError`](#standard-error-envelope)                             |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                   | [`ApiError`](#standard-error-envelope)                             |
+| 404    | EMPLOYMENT_NOT_FOUND.                                                                                                                         | [`ApiError`](#standard-error-envelope)                             |
+| 409    | IDEMPOTENCY_CONFLICT, SOURCE_CONFLICT, NO_EFFECTIVE_RULE, RULE_AMBIGUOUS, SOURCE_TYPE_MISMATCH, CURRENCY_MISMATCH or EMPLOYMENT_NOT_ELIGIBLE. | [`ApiError`](#standard-error-envelope)                             |
+
+### `GET /api/v1/hr-commission/accruals/{id}` — Get a commission accrual with its transition history
+
+- **operationId**: `hrCommissionAccrualGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | The accrual and its append-only transition log. | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                             | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/accruals/{id}/approve` — Approve a pending commission accrual
+
+- **operationId**: `hrCommissionAccrualApprove`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.approve` (high-risk). `pending` -> `approved`. Segregation of duties, also enforced by a database trigger: the beneficiary (the employment's own login) cannot approve their own accrual (`403 APPROVE_OWN_ACCRUAL_FORBIDDEN`) and whoever created the accrual cannot approve it (`403 SEGREGATION_OF_DUTIES`). Body: none. Requires an Idempotency-Key; replaying it returns the stored response. A transition the status does not allow is 409 `ACCRUAL_INVALID_STATE`. Audited at warning severity (employment, rule key and version, from and to status; never an amount).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                        | Schema                                 |
+| ------ | ------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The accrual after the transition.                                  | object                                 |
+| 400    | Validation error.                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, APPROVE_OWN_ACCRUAL_FORBIDDEN or SEGREGATION_OF_DUTIES. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE.                     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/accruals/{id}/pay` — Record that a payable accrual has been paid
+
+- **operationId**: `hrCommissionAccrualPay`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.pay` (high-risk). `payable` -> `paid`, terminal: an accrual is paid once. Whoever approved the accrual, and the beneficiary, cannot pay it (`403 SEGREGATION_OF_DUTIES`). Optional `paymentReference` is an opaque reference (a payout batch), never an account number. Requires an Idempotency-Key; replaying it returns the stored response. A transition the status does not allow is 409 `ACCRUAL_INVALID_STATE`. Audited at warning severity (employment, rule key and version, from and to status; never an amount).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): [`HrCommissionAccrualPayInput`](#schema-hrcommissionaccrualpayinput)
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | The accrual after the transition.              | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or SEGREGATION_OF_DUTIES.           | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/accruals/{id}/release` — Release an approved accrual as payable
+
+- **operationId**: `hrCommissionAccrualRelease`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.release` (high-risk). `approved` -> `payable`: from here payroll may pay it. The beneficiary cannot release their own accrual (`403 SEGREGATION_OF_DUTIES`). Body: none. Requires an Idempotency-Key; replaying it returns the stored response. A transition the status does not allow is 409 `ACCRUAL_INVALID_STATE`. Audited at warning severity (employment, rule key and version, from and to status; never an amount).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | The accrual after the transition.              | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or SEGREGATION_OF_DUTIES.           | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-commission/accruals/{id}/void` — Void a pending or approved accrual
+
+- **operationId**: `hrCommissionAccrualVoid`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.accruals.cancel` (high-risk). `pending` or `approved` -> `voided`. No money has moved, so no compensating row exists. A voided accrual can never be approved, released or paid, and its source identity stays taken PERMANENTLY: a redelivery returns the voided original and the commission cannot be re-earned for that source until reversal and a re-accrual path exist (a known gap, #962 and the reversal phase). Optional `reasonCode` is a short code, never free text. Requires an Idempotency-Key; replaying it returns the stored response. A transition the status does not allow is 409 `ACCRUAL_INVALID_STATE`. Audited at warning severity (employment, rule key and version, from and to status; never an amount).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): [`HrCommissionAccrualVoidInput`](#schema-hrcommissionaccrualvoidinput)
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | The accrual after the transition.              | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or SEGREGATION_OF_DUTIES.           | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/hr-commission/rules` — List commission rule versions
 
@@ -12648,7 +12838,7 @@ Gated by `hr_commission.rules.update`. Replaces every editable field of a DRAFT;
 - **operationId**: `hrCommissionRulePublish`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_commission.rules.publish` (high-risk). Makes a draft IMMUTABLE and eligible to apply. The body names the `expectedContentDigest` of the terms the publisher reviewed: if they changed since it is `409 RULE_CHANGED`. Maker / checker: whoever created or last edited the draft cannot publish it (`403 PUBLISH_BY_AUTHOR_FORBIDDEN`). Refused with 409 `RULE_WINDOW_OVERLAP`, naming the conflicting version, when its window overlaps another published version of the same rule (race-safe: concurrent publishes serialise). Requires an Idempotency-Key; replaying it returns the stored response. Audited at warning severity (rule key, version, window and the content digest of what was published — never a rate or an amount). Publishing a version whose window starts in the past is not specially gated in this phase: no ledger consumes rules yet, and the guard belongs with the accrual issue (docs/awcms/hr-payroll.md section 6).
+Gated by `hr_commission.rules.publish` (high-risk). Makes a draft IMMUTABLE and eligible to apply. The body names the `expectedContentDigest` of the terms the publisher reviewed: if they changed since it is `409 RULE_CHANGED`. Maker / checker: whoever created or last edited the draft cannot publish it (`403 PUBLISH_BY_AUTHOR_FORBIDDEN`). Refused with 409 `RULE_WINDOW_OVERLAP`, naming the conflicting version, when its window overlaps another published version of the same rule (race-safe: concurrent publishes serialise). Requires an Idempotency-Key; replaying it returns the stored response. Audited at warning severity (rule key, version, window and the content digest of what was published — never a rate or an amount). A window that starts BEFORE TODAY (the UTC date of the publishing transaction) is back-dated: it changes which rule applies to events that already happened but are not accrued yet, so it needs a `backdatedReason` (409 `RULE_BACKDATED_REASON_REQUIRED` without one). The database stamps `publishBackdated` and keeps the reason on the rule; the audit row carries `backdated: true` and never the reason. Accruals that already exist are untouched. A reason sent for a window starting today or later is dropped.
 
 **Parameters**
 
@@ -12662,14 +12852,14 @@ Gated by `hr_commission.rules.publish` (high-risk). Makes a draft IMMUTABLE and 
 
 **Responses**
 
-| Status | Description                                                                                             | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The published rule version.                                                                             | object                                 |
-| 400    | Validation error.                                                                                       | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                             | [`ApiError`](#standard-error-envelope) |
-| 403    | Forbidden, or PUBLISH_BY_AUTHOR_FORBIDDEN (the creator or last editor of the draft may not publish it). | [`ApiError`](#standard-error-envelope) |
-| 404    | RESOURCE_NOT_FOUND.                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 409    | IDEMPOTENCY_CONFLICT, RULE_NOT_DRAFT, RULE_CHANGED or RULE_WINDOW_OVERLAP.                              | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The published rule version.                                                                                | object                                 |
+| 400    | Validation error.                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Forbidden, or PUBLISH_BY_AUTHOR_FORBIDDEN (the creator or last editor of the draft may not publish it).    | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, RULE_NOT_DRAFT, RULE_CHANGED, RULE_BACKDATED_REASON_REQUIRED or RULE_WINDOW_OVERLAP. | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/hr-commission/rules/{id}/retire` — Retire a commission rule version
 
@@ -13626,17 +13816,205 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 }
 ```
 
-### Schema: HrCommissionPublishInput
+### Schema: HrCommissionAccrual
 
-| Field                   | Type   | Required | Nullable | Description                                                                              |
-| ----------------------- | ------ | -------- | -------- | ---------------------------------------------------------------------------------------- |
-| `expectedContentDigest` | string | yes      | no       | The `contentDigest` of the terms the publisher reviewed; a mismatch is 409 RULE_CHANGED. |
+One commission earned by one employment from one source event. The monetary facts are immutable by trigger; only `status` and its stamps advance. `amount` is a fixed-scale decimal string.
+
+| Field              | Type                                                             | Required | Nullable | Description |
+| ------------------ | ---------------------------------------------------------------- | -------- | -------- | ----------- |
+| `id`               | string (uuid)                                                    | no       | no       |             |
+| `employmentId`     | string (uuid)                                                    | no       | no       |             |
+| `ruleId`           | string (uuid)                                                    | no       | no       |             |
+| `ruleKey`          | string                                                           | no       | no       |             |
+| `ruleVersion`      | integer                                                          | no       | no       |             |
+| `status`           | [`HrCommissionAccrualStatus`](#schema-hrcommissionaccrualstatus) | no       | no       |             |
+| `amount`           | string                                                           | no       | no       |             |
+| `currencyCode`     | string                                                           | no       | no       |             |
+| `sourceType`       | string                                                           | no       | no       |             |
+| `sourceRef`        | string                                                           | no       | no       |             |
+| `sourceLine`       | string                                                           | no       | no       |             |
+| `operation`        | enum(`accrue`)                                                   | no       | no       |             |
+| `calculation`      | enum(`percent`, `fixed`)                                         | no       | no       |             |
+| `baseAmount`       | string                                                           | no       | yes      |             |
+| `units`            | integer                                                          | no       | yes      |             |
+| `rate`             | string                                                           | no       | yes      |             |
+| `fixedAmount`      | string                                                           | no       | yes      |             |
+| `occurredAt`       | string (date-time)                                               | no       | no       |             |
+| `occurredOn`       | string (date)                                                    | no       | no       |             |
+| `createdAt`        | string (date-time)                                               | no       | no       |             |
+| `approvedAt`       | string (date-time)                                               | no       | yes      |             |
+| `releasedAt`       | string (date-time)                                               | no       | yes      |             |
+| `paidAt`           | string (date-time)                                               | no       | yes      |             |
+| `paymentReference` | string                                                           | no       | yes      |             |
+| `voidedAt`         | string (date-time)                                               | no       | yes      |             |
+| `voidReasonCode`   | string                                                           | no       | yes      |             |
 
 **Example**
 
 ```json
 {
-  "expectedContentDigest": "string"
+  "id": "00000000-0000-0000-0000-000000000000",
+  "employmentId": "00000000-0000-0000-0000-000000000000",
+  "ruleId": "00000000-0000-0000-0000-000000000000",
+  "ruleKey": "string",
+  "ruleVersion": 1,
+  "status": "pending",
+  "amount": "25.000000",
+  "currencyCode": "string",
+  "sourceType": "string",
+  "sourceRef": "string",
+  "sourceLine": "string",
+  "operation": "accrue",
+  "calculation": "percent",
+  "baseAmount": "string",
+  "units": 0,
+  "rate": "string",
+  "fixedAmount": "string",
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "occurredOn": "2026-01-01",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "approvedAt": "2026-01-01T00:00:00.000Z",
+  "releasedAt": "2026-01-01T00:00:00.000Z",
+  "paidAt": "2026-01-01T00:00:00.000Z",
+  "paymentReference": "string",
+  "voidedAt": "2026-01-01T00:00:00.000Z",
+  "voidReasonCode": "string"
+}
+```
+
+### Schema: HrCommissionAccrualCreated
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "replayed": false,
+    "accrual": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "employmentId": "00000000-0000-0000-0000-000000000000",
+      "ruleId": "00000000-0000-0000-0000-000000000000",
+      "ruleKey": "string",
+      "ruleVersion": 1,
+      "status": "pending",
+      "amount": "25.000000",
+      "currencyCode": "string",
+      "sourceType": "string",
+      "sourceRef": "string",
+      "sourceLine": "string",
+      "operation": "accrue",
+      "calculation": "percent",
+      "baseAmount": "string",
+      "units": 0,
+      "rate": "string",
+      "fixedAmount": "string",
+      "occurredAt": "2026-01-01T00:00:00.000Z",
+      "occurredOn": "2026-01-01",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "approvedAt": "2026-01-01T00:00:00.000Z",
+      "releasedAt": "2026-01-01T00:00:00.000Z",
+      "paidAt": "2026-01-01T00:00:00.000Z",
+      "paymentReference": "string",
+      "voidedAt": "2026-01-01T00:00:00.000Z",
+      "voidReasonCode": "string"
+    }
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: HrCommissionAccrualCreateInput
+
+Exactly one of `baseAmount` (a percent rule) or `units` (a fixed rule). No amount, rule version, status or stamp is accepted.
+
+| Field          | Type               | Required | Nullable | Description                                                                                                                                      |
+| -------------- | ------------------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `employmentId` | string (uuid)      | yes      | no       | The beneficiary, an hr_workforce employment.                                                                                                     |
+| `ruleKey`      | string             | yes      | no       |                                                                                                                                                  |
+| `source`       | object             | yes      | no       |                                                                                                                                                  |
+| `baseAmount`   | string             | no       | no       | Non-negative decimal string, at most 12 integer and 6 fractional digits. A JSON number is refused.                                               |
+| `units`        | integer            | no       | no       |                                                                                                                                                  |
+| `currencyCode` | string             | yes      | no       | Must equal the rule's currency.                                                                                                                  |
+| `occurredAt`   | string (date-time) | yes      | no       | The instant of the sale; not more than a day ahead of the server clock and not more than 730 days old.                                           |
+| `occurredOn`   | string (date)      | yes      | no       | The sale's civil date in the tenant's own time, derived by the caller; within one day of the UTC date of `occurredAt`. Selects the rule version. |
+
+**Example**
+
+```json
+{
+  "employmentId": "00000000-0000-0000-0000-000000000000",
+  "ruleKey": "string",
+  "source": {
+    "type": "string",
+    "ref": "string",
+    "line": "string"
+  },
+  "baseAmount": "1000.10",
+  "units": 0,
+  "currencyCode": "string",
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "occurredOn": "2026-01-01"
+}
+```
+
+### Schema: HrCommissionAccrualPayInput
+
+| Field              | Type   | Required | Nullable | Description |
+| ------------------ | ------ | -------- | -------- | ----------- |
+| `paymentReference` | string | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "paymentReference": "string"
+}
+```
+
+### Schema: HrCommissionAccrualStatus
+
+Enum values: `pending`, `approved`, `payable`, `paid`, `voided`.
+
+**Example**
+
+```json
+"pending"
+```
+
+### Schema: HrCommissionAccrualVoidInput
+
+| Field        | Type   | Required | Nullable | Description |
+| ------------ | ------ | -------- | -------- | ----------- |
+| `reasonCode` | string | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "reasonCode": "string"
+}
+```
+
+### Schema: HrCommissionPublishInput
+
+| Field                   | Type   | Required | Nullable | Description                                                                                                        |
+| ----------------------- | ------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `expectedContentDigest` | string | yes      | no       | The `contentDigest` of the terms the publisher reviewed; a mismatch is 409 RULE_CHANGED.                           |
+| `backdatedReason`       | string | no       | no       | Required when the window starts before today (UTC); stored on the rule, never in the audit log. Ignored otherwise. |
+
+**Example**
+
+```json
+{
+  "expectedContentDigest": "string",
+  "backdatedReason": "string"
 }
 ```
 

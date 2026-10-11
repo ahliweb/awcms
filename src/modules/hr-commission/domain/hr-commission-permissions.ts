@@ -8,8 +8,8 @@
  * `moduleKey`, `activityCode` and `action` together as string literals in one
  * object.
  *
- * `publish` and `retire` are HIGH-RISK actions
- * (`identity-access/domain/access-control.ts`).
+ * `publish`, `retire`, and (accruals) `approve`, `release`, `cancel`, `pay` are
+ * HIGH-RISK actions (`identity-access/domain/access-control.ts`).
  */
 export const HR_COMMISSION_MODULE_KEY = "hr_commission";
 
@@ -39,6 +39,38 @@ export const HR_COMMISSION_GUARDS = {
       moduleKey: "hr_commission",
       activityCode: "rules",
       action: "retire" as const
+    }
+  },
+  accruals: {
+    read: {
+      moduleKey: "hr_commission",
+      activityCode: "accruals",
+      action: "read" as const
+    },
+    accrue: {
+      moduleKey: "hr_commission",
+      activityCode: "accruals",
+      action: "accrue" as const
+    },
+    approve: {
+      moduleKey: "hr_commission",
+      activityCode: "accruals",
+      action: "approve" as const
+    },
+    release: {
+      moduleKey: "hr_commission",
+      activityCode: "accruals",
+      action: "release" as const
+    },
+    cancel: {
+      moduleKey: "hr_commission",
+      activityCode: "accruals",
+      action: "cancel" as const
+    },
+    pay: {
+      moduleKey: "hr_commission",
+      activityCode: "accruals",
+      action: "pay" as const
     }
   }
 } as const;

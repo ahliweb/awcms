@@ -358,7 +358,25 @@ the one **effective at the event's `occurred_at`**, never `now()`.
 > published window may not overlap another published version of the same rule
 > (trigger, advisory-locked). Evaluation is the pure
 > `src/modules/hr-commission/domain/hr-commission-evaluation.ts` (`bigint`
-> decimal strings, no tiers, no expression language). The ledger below is not built.
+> decimal strings, no tiers, no expression language). The ledger below landed in #951.
+>
+> **Landed in #951 (the ledger, without reversal).** `awcms_hr_commission_accruals`
+> and `awcms_hr_commission_transitions` (`sql/188`; permissions `sql/189`);
+> `operation` is `accrue` only for now and `amount` is therefore non-negative (a
+> reversal's negative row is the next step). The status machine is `pending →
+approved → payable → paid`, and `voided` from `pending` or `approved`; the log is
+> written only by the accrual's own triggers, so status and log cannot diverge.
+> **Back-dated rules (decided in #951, `sql/187`):** the rule is selected by the
+> event's own date, so publishing a version whose window starts before today (UTC)
+> changes which rule applies to events not yet accrued; such a publish needs a
+> `backdatedReason` (409 without), the database stamps `publish_backdated` and
+> refuses a publish without a reason even if the application is bypassed, and the
+> audit row carries only the flag. Existing accruals cite their rule by foreign key
+> and never change. **PS-19** is designed for, not built: `paid` is terminal and
+> reached once, a partial index serves `FOR UPDATE SKIP LOCKED` selection of
+> payable accruals, and a reversal never re-opens its original; the claim record
+> belongs to #962. Not yet: reversal, the `awcms.hr.commission.*` events, own-read
+> and the `office` scope.
 
 `awcms_hr_commission_accruals` is the ledger. The monetary facts —
 `employment_id`, `rule_id` and `rule_version` snapshot, `source_type`,
@@ -370,7 +388,7 @@ the one **effective at the event's `occurred_at`**, never `now()`.
 ### 6.2 Exactly-once accrual
 
 Unique key `(tenant_id, source_type, source_ref, source_line, employment_id,
-operation)`. A downstream adapter calls a port (shape deferred to the phase 2 PR)
+operation)`. A downstream adapter calls a port (`src/modules/_shared/ports/commission-accrual-port.ts`)
 with the source identity; posting an existing identity with the same canonical
 request returns the original (`replayed: true`); a different amount or rule for the
 same identity is `409 SOURCE_CONFLICT`. `employment_id` is in the key so one source

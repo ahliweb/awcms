@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 186   |
-| `awcms_*` tables                    | 205   |
-| Tables with `FORCE` RLS             | 187   |
+| Migrations                          | 189   |
+| `awcms_*` tables                    | 207   |
+| Tables with `FORCE` RLS             | 189   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 617   |
-| Route files                         | 506   |
+| Test files                          | 620   |
+| Route files                         | 512   |
 | ADR                                 | 282   |
 
 ### Modules
@@ -51,7 +51,7 @@
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 | `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
-| `hr_commission`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
+| `hr_commission`        | 0.2.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
 
 ### Migrations
 
@@ -243,6 +243,9 @@
 | 184 | `sql/184_awcms_hr_shifts_schema.sql`                               |
 | 185 | `sql/185_awcms_hr_shifts_permissions.sql`                          |
 | 186 | `sql/186_awcms_booking_availability.sql`                           |
+| 187 | `sql/187_awcms_hr_commission_rules_backdated.sql`                  |
+| 188 | `sql/188_awcms_hr_commission_accruals_schema.sql`                  |
+| 189 | `sql/189_awcms_hr_commission_accrual_permissions.sql`              |
 
 ### Tables & Row-Level Security
 
@@ -313,7 +316,9 @@
 | `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
 | `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
 | `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
+| `awcms_hr_commission_accruals`           | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
 | `awcms_hr_commission_rules`              | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
+| `awcms_hr_commission_transitions`        | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
 | `awcms_hr_employment_terms`              | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_hr_employments`                   | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_hr_shift_assignments`             | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
@@ -458,16 +463,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 488        |
+| `(root)`      | 489        |
 | `e2e`         | 25         |
-| `integration` | 103        |
+| `integration` | 105        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 407   |
+| `/api/v1/**`    | 413   |
 | `/admin/**`     | 69    |
 | publik / anonim | 30    |
 
