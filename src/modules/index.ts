@@ -27,6 +27,7 @@ import { pushDeliveryModule } from "./push-delivery/module";
 import { omesControlModule } from "./omes-control/module";
 import { inventoryModule } from "./inventory/module";
 import { procurementModule } from "./procurement/module";
+import { hrWorkforceModule } from "./hr-workforce/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -189,7 +190,14 @@ const baseModules: ModuleDescriptor[] = [
   // above), so the DAG stays acyclic; nothing depends on it. workflow_approval
   // is an optional soft integration, not a dependency. API-first: no admin
   // screen yet. See src/modules/procurement/module.ts's `description`.
-  procurementModule
+  procurementModule,
+  // Admitted by ADR-0132 (Issue #945), phase 1 of the hr_* family: the
+  // employment context (employment header referencing a profile_identity party,
+  // effective-dated terms, settings). Depends only on tenant_admin and
+  // profile_identity (both above), so the DAG stays acyclic; nothing depends on
+  // it. `experimental` (flag off): no admin screen yet. See
+  // src/modules/hr-workforce/module.ts's `description`.
+  hrWorkforceModule
 ];
 
 /**

@@ -443,6 +443,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "Data Lifecycle",
       "Domain Event Runtime",
       "Form Drafts",
+      // "HR Workforce" (hr_workforce, ADR-0132, Issue #945) — genuinely new
+      // surface: the employment context (employments, effective-dated terms,
+      // settings). Nothing here is anonymous.
+      "HR Workforce",
       "Indonesia Regions",
       // "Inventory" (inventory, ADR-0126, Issue #887) — genuinely new surface:
       // the multi-location stock ledger (locations, movements, adjustments,

@@ -612,6 +612,36 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/hr-workforce/employments/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/employments/[id]/account.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/employments/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/employments/[id]/terms.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/employments/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/identity/business-scope/assignments/[id]/revoke.ts",
       "workClass": "interactive",
       "source": "default"

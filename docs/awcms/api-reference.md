@@ -11598,6 +11598,273 @@ Gated by `procurement.suppliers.restore` (HIGH-RISK). Audited at warning severit
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 | 409    | NOT_DELETED.                | [`ApiError`](#standard-error-envelope) |
 
+## HR Workforce
+
+The employment context (hr_workforce module, Issue #945, ADR-0132, phase 1 of the hr_* family). An employment REFERENCES a profile_identity party and never copies its name, contact or national id; no photo, biometric or device field exists (owner decision O6). Terms (office, manager, job title, type, status) are effective-dated and append-only, the manager chain is acyclic and bounded, terminated is terminal, and the database enforces one active employment per profile and per login. An employee reads their own employment through an ownership grant on the persisted login link; the link itself (assign), delete, restore and settings configure are high-risk, idempotency-keyed and audited. Attendance, shifts, commission and payroll are later phases.
+
+### `GET /api/v1/hr-workforce/employments` — List employments
+
+- **operationId**: `hrWorkforceEmploymentsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.read`, EXCEPT `mine=true`, which answers only the caller's own employment and needs no permission (an ownership grant on the persisted login link, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). Newest first, keyset paginated (`cursor`). Each row REFERENCES its person (`profileId`); no name, contact or national id is ever returned. Soft-deleted rows are hidden unless `includeDeleted=true`, which additionally needs `hr_workforce.employments.restore`. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                         | Description |
+| ------------------ | ------ | -------- | ---------------------------- | ----------- |
+| `state`            | query  | no       | enum(`active`, `terminated`) |             |
+| `officeId`         | query  | no       | string (uuid)                |             |
+| `mine`             | query  | no       | boolean                      |             |
+| `includeDeleted`   | query  | no       | boolean                      |             |
+| `cursor`           | query  | no       | string                       |             |
+| `X-Correlation-ID` | header | no       | string                       |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of employments.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/employments` — Create an employment
+
+- **operationId**: `hrWorkforceEmploymentCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.create`. Creates the employment for an existing, active `profile_identity` party together with its first terms effective on `hiredOn`. A body naming a personal field (name, contact, national id) or `terminatedOn` is a 400. One ACTIVE employment per profile and tenant (`409 ALREADY_EMPLOYED`); employee numbers are unique among live rows (`409 EMPLOYEE_NO_CONFLICT`). Requires an Idempotency-Key. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrEmploymentInput`](#schema-hremploymentinput)
+
+**Responses**
+
+| Status | Description                                                                                            | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 201    | The employment.                                                                                        | object                                 |
+| 400    | Validation error.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, ALREADY_EMPLOYED, EMPLOYEE_NO_CONFLICT, MANAGER_CYCLE or MANAGER_CHAIN_TOO_DEEP. | [`ApiError`](#standard-error-envelope) |
+| 422    | PROFILE_NOT_FOUND, OFFICE_NOT_FOUND or MANAGER_NOT_FOUND.                                              | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/employments/{id}` — Get an employment
+
+- **operationId**: `hrWorkforceEmploymentGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.read`; the employee the employment is linked to may read their own without it (an ownership grant). A missing id and someone else's employment are indistinguishable to a caller without the permission (both 403).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                            | Schema                                 |
+| ------ | -------------------------------------- | -------------------------------------- |
+| 200    | The employment with its current terms. | object                                 |
+| 400    | Validation error.                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                    | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/hr-workforce/employments/{id}` — Soft-delete an employment
+
+- **operationId**: `hrWorkforceEmploymentDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.delete` (high-risk). For an employment entered by mistake; a real end of employment is a terminated term. Optional `reason` (at most 500 characters, never echoed into the audit row). Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrReasonInput`](#schema-hrreasoninput)
+
+**Responses**
+
+| Status | Description                                 | Schema                                 |
+| ------ | ------------------------------------------- | -------------------------------------- |
+| 200    | The deleted employment.                     | object                                 |
+| 400    | Validation error.                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                 | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                         | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or EMPLOYMENT_DELETED. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/hr-workforce/employments/{id}/account` — Link or unlink the employee's login
+
+- **operationId**: `hrWorkforceEmploymentAccountAssign`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid>"}` links the login that IS this employee; `null` unlinks. This is the basis of self-service ownership. One active employment per login. The audit row records the login UUID (not PII) and the previous one. Requires an Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrAccountInput`](#schema-hraccountinput)
+
+**Responses**
+
+| Status | Description                                                                        | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The employment, with `replayed` true when the link was already as asked.           | object                                 |
+| 400    | Validation error.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, EMPLOYMENT_DELETED, EMPLOYMENT_TERMINATED or ACCOUNT_IN_USE. | [`ApiError`](#standard-error-envelope) |
+| 422    | USER_NOT_FOUND.                                                                    | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/employments/{id}/restore` — Restore an employment
+
+- **operationId**: `hrWorkforceEmploymentRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.restore` (high-risk). Refused with 409 while the employee number, the person's active employment or the linked login has been taken meanwhile. Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                                             | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The restored employment.                                                                                | object                                 |
+| 400    | Validation error.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                             | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, EMPLOYMENT_NOT_DELETED, EMPLOYEE_NO_CONFLICT, ALREADY_EMPLOYED or ACCOUNT_IN_USE. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/employments/{id}/terms` — List an employment's terms
+
+- **operationId**: `hrWorkforceEmploymentTermsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.read`; the linked employee may read their own history without it (an ownership grant). Effective-dated and append-only, oldest first (at most 500).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The terms history.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/employments/{id}/terms` — Append the next terms
+
+- **operationId**: `hrWorkforceEmploymentTermsChange`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.employments.update`. Appends the next terms from `effectiveFrom` (strictly after the current terms' start, never before the hire date); the open row is closed, never edited. `status: terminated` ends the employment and is terminal (rehire is a new employment). The manager chain must stay acyclic and at most 10 deep. Re-sending identical terms is a no-op answering 200 `replayed: true`. Requires an Idempotency-Key. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrTermsChangeInput`](#schema-hrtermschangeinput)
+
+**Responses**
+
+| Status | Description                                                                                                                   | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The identical terms were already current (replayed).                                                                          | object                                 |
+| 201    | The terms were appended.                                                                                                      | object                                 |
+| 400    | Validation error.                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, EMPLOYMENT_DELETED, EMPLOYMENT_TERMINATED, TERMS_OUT_OF_ORDER, MANAGER_CYCLE or MANAGER_CHAIN_TOO_DEEP. | [`ApiError`](#standard-error-envelope) |
+| 422    | EFFECTIVE_BEFORE_HIRE, OFFICE_NOT_FOUND or MANAGER_NOT_FOUND.                                                                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/settings` — Read the workforce settings
+
+- **operationId**: `hrWorkforceSettingsGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.settings.read`. Defaults apply until a row exists. There is no evidence, location or photo setting, by construction (owner decision O6).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The settings.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/hr-workforce/settings` — Change the workforce settings
+
+- **operationId**: `hrWorkforceSettingsSet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.settings.configure` (high-risk). An omitted field keeps its value; at least one is required. Requires an Idempotency-Key. Audited at warning severity (the row records which setting changed, not its value).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrWorkforceSettingsInput`](#schema-hrworkforcesettingsinput)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The settings.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -12405,6 +12672,102 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "isEnabled": false,
   "startsAt": "2026-01-01T00:00:00.000Z",
   "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: HrAccountInput
+
+| Field          | Type          | Required | Nullable | Description |
+| -------------- | ------------- | -------- | -------- | ----------- |
+| `tenantUserId` | string (uuid) | yes      | yes      |             |
+
+**Example**
+
+```json
+{
+  "tenantUserId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: HrEmploymentInput
+
+| Field                 | Type                                                   | Required | Nullable | Description                               |
+| --------------------- | ------------------------------------------------------ | -------- | -------- | ----------------------------------------- |
+| `profileId`           | string (uuid)                                          | yes      | no       |                                           |
+| `employeeNo`          | string                                                 | yes      | no       |                                           |
+| `hiredOn`             | string (date)                                          | yes      | no       |                                           |
+| `officeId`            | string (uuid)                                          | no       | yes      |                                           |
+| `managerEmploymentId` | string (uuid)                                          | no       | yes      |                                           |
+| `jobTitle`            | string                                                 | no       | yes      |                                           |
+| `employmentType`      | enum(`permanent`, `fixed_term`, `part_time`, `casual`) | yes      | no       |                                           |
+| `status`              | enum(`active`, `on_leave`, `suspended`)                | yes      | no       | A new employment cannot start terminated. |
+
+**Example**
+
+```json
+{
+  "profileId": "00000000-0000-0000-0000-000000000000",
+  "employeeNo": "string",
+  "hiredOn": "2026-01-01",
+  "officeId": "00000000-0000-0000-0000-000000000000",
+  "managerEmploymentId": "00000000-0000-0000-0000-000000000000",
+  "jobTitle": "string",
+  "employmentType": "permanent",
+  "status": "active"
+}
+```
+
+### Schema: HrReasonInput
+
+| Field    | Type   | Required | Nullable | Description |
+| -------- | ------ | -------- | -------- | ----------- |
+| `reason` | string | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "reason": "string"
+}
+```
+
+### Schema: HrTermsChangeInput
+
+| Field                 | Type                                                   | Required | Nullable | Description |
+| --------------------- | ------------------------------------------------------ | -------- | -------- | ----------- |
+| `effectiveFrom`       | string (date)                                          | yes      | no       |             |
+| `officeId`            | string (uuid)                                          | no       | yes      |             |
+| `managerEmploymentId` | string (uuid)                                          | no       | yes      |             |
+| `jobTitle`            | string                                                 | no       | yes      |             |
+| `employmentType`      | enum(`permanent`, `fixed_term`, `part_time`, `casual`) | yes      | no       |             |
+| `status`              | enum(`active`, `on_leave`, `suspended`, `terminated`)  | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "effectiveFrom": "2026-01-01",
+  "officeId": "00000000-0000-0000-0000-000000000000",
+  "managerEmploymentId": "00000000-0000-0000-0000-000000000000",
+  "jobTitle": "string",
+  "employmentType": "permanent",
+  "status": "active"
+}
+```
+
+### Schema: HrWorkforceSettingsInput
+
+| Field                   | Type    | Required | Nullable | Description |
+| ----------------------- | ------- | -------- | -------- | ----------- |
+| `clockSkewSeconds`      | integer | no       | no       |             |
+| `correctionWorkflowKey` | string  | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "clockSkewSeconds": 0,
+  "correctionWorkflowKey": "string"
 }
 ```
 

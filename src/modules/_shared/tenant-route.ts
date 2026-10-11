@@ -12,8 +12,10 @@ import type { WorkClass } from "../../lib/database/work-class";
 import {
   authorizeInTransaction,
   resolveAuthInputs,
-  type AuthorizeResult
+  type AuthorizeResult,
+  type OwnershipGrant
 } from "../identity-access/application/access-guard";
+import { resolveTenantContext } from "../identity-access/application/auth-context";
 import { createAuthorizationReadCache } from "../identity-access/application/authorization-read-cache";
 import type { AccessRequest } from "../identity-access/domain/access-control";
 import {
@@ -196,6 +198,31 @@ export type TenantRouteConfig<TPrepared> = {
     hierarchyPort?: BusinessScopeHierarchyPort;
     sodRules?: readonly SoDRuleDescriptor[];
   };
+  /**
+   * An ownership basis for the guard (ADR-0063), for a route whose subject can
+   * be "my own record" — `hr_workforce` is the first (an employee reads their
+   * own employment). Evaluated INSIDE the tenant transaction, before the guard,
+   * because the answer needs a row ("is this employment linked to the caller's
+   * login?") that `authorize` cannot see.
+   *
+   * It only WIDENS what `authorizeInTransaction` evaluates: ABAC (including an
+   * explicit deny), the platform-scope gate and SoD still run, a machine
+   * credential never carries it (it resolves to no tenant user here), and the
+   * decision log records `ownership_grant:<reason>`. Not called at all when the
+   * caller has no active session, so an unauthenticated request costs nothing
+   * extra and learns nothing. The resolver must return `granted: false` for
+   * "no such row" exactly as for "someone else's row" — otherwise the 403 vs
+   * 404 difference becomes an existence oracle.
+   */
+  ownershipGrant?: (
+    context: TenantRouteRequestContext & {
+      tx: Bun.TransactionSQL;
+      tokenHash: string;
+      /** The caller's tenant user id, already resolved from the session. */
+      tenantUserId: string;
+      prepared: TPrepared;
+    }
+  ) => Promise<OwnershipGrant>;
   /**
    * Runs AFTER the tenant/token checks and BEFORE any database work — the slot
    * for everything hand-written routes do between the 401 guard and
@@ -762,9 +789,39 @@ export function selectAnyAllowed(
   return results.find((result) => result.allowed) ?? results[0]!;
 }
 
+/**
+ * `ownershipGrant` is a READ basis ("my own record"), not a write one. Until a
+ * write route has its own reviewed need, defining one with an ownership grant
+ * is refused AT DEFINITION TIME — at module load, so it fails the build and
+ * every test that imports the route, not a request in production. The function
+ * form of `authorize` cannot be inspected before a request, so it is refused
+ * too.
+ */
+export function assertOwnershipGrantIsReadOnly(
+  authorize: TenantRouteConfig<never>["authorize"]
+): void {
+  if (typeof authorize === "function") {
+    throw new Error(
+      "defineTenantRoute: ownershipGrant requires a static `authorize` (a guard or an array of guards) so every action can be checked at definition time."
+    );
+  }
+
+  const guards = Array.isArray(authorize) ? authorize : [authorize];
+
+  if (guards.length === 0 || guards.some((guard) => guard.action !== "read")) {
+    throw new Error(
+      "defineTenantRoute: ownershipGrant may only widen a `read` guard; a write or high-risk action cannot be granted by ownership."
+    );
+  }
+}
+
 export function defineTenantRoute<TPrepared = undefined>(
   config: TenantRouteConfig<TPrepared>
 ): APIRoute {
+  if (config.ownershipGrant) {
+    assertOwnershipGrantIsReadOnly(config.authorize);
+  }
+
   return async ({ request, cookies, url, params, locals, clientAddress }) => {
     const { tenantId, token } = resolveAuthInputs(request, cookies);
 
@@ -884,8 +941,30 @@ export function defineTenantRoute<TPrepared = undefined>(
           ? guard
           : [guard];
 
+        let ownershipGrant: OwnershipGrant | undefined;
+
+        if (config.ownershipGrant && !heldPrepareRefusal) {
+          const principal = await resolveTenantContext(
+            tx,
+            tenantId,
+            tokenHash,
+            requestContext.now
+          );
+
+          ownershipGrant = principal
+            ? await config.ownershipGrant({
+                ...requestContext,
+                tx,
+                tokenHash,
+                tenantUserId: principal.tenantUserId,
+                prepared
+              })
+            : undefined;
+        }
+
         const authorizeOptions = {
           ...config.authorizeOptions,
+          ...(ownershipGrant ? { ownershipGrant } : {}),
           clientIp: resolveClientIp(request, clientAddress),
           readCache: createAuthorizationReadCache()
         };

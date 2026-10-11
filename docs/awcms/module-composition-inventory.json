@@ -1,5 +1,5 @@
 {
-  "moduleCount": 28,
+  "moduleCount": 29,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -117,6 +117,22 @@
       "permissionCount": 4,
       "navigationCount": 1,
       "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "hr_workforce",
+      "name": "HR Workforce",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "profile_identity"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 8,
+      "navigationCount": 0,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

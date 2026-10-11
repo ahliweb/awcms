@@ -83,6 +83,8 @@ tags:
     description: "A generic, auditable multi-location STOCK LEDGER (inventory module, Issue #887, ADR-0126) that any domain module — commerce, POS, storefront — adopts as its inventory authority instead of keeping its own stock counter. Stock locations; IMMUTABLE finalised movements (opening, receive, sale, sale_return, supplier_return, transfer_out/transfer_in, adjustment) that are append-only by trigger and by privileges and corrected only by compensating movements; a per-(location,item) balance that is a read model always equal to the sum of its movements, with a reconciliation that proves it and a rebuild that repairs a drifted row FROM the ledger; a negative-stock policy per tenant and location; low-stock thresholds with a projection on the reporting engine. Item references are an OPAQUE (itemType, itemRef) supplied by the consumer — never a foreign key to any catalogue. Every posting carries an idempotent source identity (type, id, line) and an Idempotency-Key; replaying either returns the ORIGINAL movement. A transfer is always a balanced out/in pair posted in one transaction. A client can NEVER assert a balance: no operation accepts one, and a body that names onHand/balanceAfter is a 400. adjust, transfer and rebuild are high-risk, separately grantable, and audited."
   - name: Procurement
     description: "Suppliers, receiving, supplier returns, stock requisitions and location transfers (procurement module, Issue #888, ADR-0128) on top of the inventory ledger. A supplier is a business role that may reference the canonical profile_identity party, with vendor code, status, categories/tags and SENSITIVE tax/business identifiers and payment/contact references that are masked in every response and revealed only by one audited, separately permissioned operation. A document (receive, supplier_return, requisition, transfer) has line snapshots of SKU, name, unit and exact-decimal cost and a lifecycle draft -> submitted -> finalised | cancelled, finalised -> reversed enforced by a database trigger; finalised documents are immutable and nothing is deleted. Finalise posts inventory movements THROUGH THE LEDGER'S PORT (never a balance), all lines or none and idempotently; reversal posts compensating movements; a requisition or transfer is a paired ledger transfer. Optional threshold approval through workflow_approval (fail closed). finalise, reverse, cancel and reveal are high-risk, separately grantable, and audited."
+  - name: HR Workforce
+    description: "The employment context (hr_workforce module, Issue #945, ADR-0132, phase 1 of the hr_* family). An employment REFERENCES a profile_identity party and never copies its name, contact or national id; no photo, biometric or device field exists (owner decision O6). Terms (office, manager, job title, type, status) are effective-dated and append-only, the manager chain is acyclic and bounded, terminated is terminal, and the database enforces one active employment per profile and per login. An employee reads their own employment through an ownership grant on the persisted login link; the link itself (assign), delete, restore and settings configure are high-risk, idempotency-keyed and audited. Attendance, shifts, commission and payroll are later phases."
 paths:
   /api/v1/abac/policies:
     get:
@@ -9115,6 +9117,546 @@ paths:
                       generatedAt:
                         type: string
                         format: date-time
+  /api/v1/hr-workforce/employments:
+    get:
+      operationId: hrWorkforceEmploymentsList
+      tags:
+        - HR Workforce
+      summary: List employments
+      description: Gated by `hr_workforce.employments.read`, EXCEPT `mine=true`, which answers only the caller's own employment and needs no permission (an ownership grant on the persisted login link, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). Newest first, keyset paginated (`cursor`). Each row REFERENCES its person (`profileId`); no name, contact or national id is ever returned. Soft-deleted rows are hidden unless `includeDeleted=true`, which additionally needs `hr_workforce.employments.restore`. Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - terminated
+        - name: officeId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: mine
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: includeDeleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of employments.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      employments:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrEmployment"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: hrWorkforceEmploymentCreate
+      tags:
+        - HR Workforce
+      summary: Create an employment
+      description: Gated by `hr_workforce.employments.create`. Creates the employment for an existing, active `profile_identity` party together with its first terms effective on `hiredOn`. A body naming a personal field (name, contact, national id) or `terminatedOn` is a 400. One ACTIVE employment per profile and tenant (`409 ALREADY_EMPLOYED`); employee numbers are unique among live rows (`409 EMPLOYEE_NO_CONFLICT`). Requires an Idempotency-Key. Audited.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrEmploymentInput"
+      responses:
+        "201":
+          description: The employment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, ALREADY_EMPLOYED, EMPLOYEE_NO_CONFLICT, MANAGER_CYCLE or MANAGER_CHAIN_TOO_DEEP.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: PROFILE_NOT_FOUND, OFFICE_NOT_FOUND or MANAGER_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/employments/{id}:
+    get:
+      operationId: hrWorkforceEmploymentGet
+      tags:
+        - HR Workforce
+      summary: Get an employment
+      description: Gated by `hr_workforce.employments.read`; the employee the employment is linked to may read their own without it (an ownership grant). A missing id and someone else's employment are indistinguishable to a caller without the permission (both 403).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The employment with its current terms.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: hrWorkforceEmploymentDelete
+      tags:
+        - HR Workforce
+      summary: Soft-delete an employment
+      description: Gated by `hr_workforce.employments.delete` (high-risk). For an employment entered by mistake; a real end of employment is a terminated term. Optional `reason` (at most 500 characters, never echoed into the audit row). Requires an Idempotency-Key. Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrReasonInput"
+      responses:
+        "200":
+          description: The deleted employment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or EMPLOYMENT_DELETED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/employments/{id}/account:
+    put:
+      operationId: hrWorkforceEmploymentAccountAssign
+      tags:
+        - HR Workforce
+      summary: Link or unlink the employee's login
+      description: 'Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid>"}` links the login that IS this employee; `null` unlinks. This is the basis of self-service ownership. One active employment per login. The audit row records the login UUID (not PII) and the previous one. Requires an Idempotency-Key.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrAccountInput"
+      responses:
+        "200":
+          description: The employment, with `replayed` true when the link was already as asked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      replayed:
+                        type: boolean
+                      employment:
+                        $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, EMPLOYMENT_DELETED, EMPLOYMENT_TERMINATED or ACCOUNT_IN_USE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: USER_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/employments/{id}/restore:
+    post:
+      operationId: hrWorkforceEmploymentRestore
+      tags:
+        - HR Workforce
+      summary: Restore an employment
+      description: Gated by `hr_workforce.employments.restore` (high-risk). Refused with 409 while the employee number, the person's active employment or the linked login has been taken meanwhile. Requires an Idempotency-Key. Audited at warning severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The restored employment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, EMPLOYMENT_NOT_DELETED, EMPLOYEE_NO_CONFLICT, ALREADY_EMPLOYED or ACCOUNT_IN_USE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/employments/{id}/terms:
+    get:
+      operationId: hrWorkforceEmploymentTermsList
+      tags:
+        - HR Workforce
+      summary: List an employment's terms
+      description: Gated by `hr_workforce.employments.read`; the linked employee may read their own history without it (an ownership grant). Effective-dated and append-only, oldest first (at most 500).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The terms history.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      terms:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrEmploymentTerm"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: hrWorkforceEmploymentTermsChange
+      tags:
+        - HR Workforce
+      summary: Append the next terms
+      description: "Gated by `hr_workforce.employments.update`. Appends the next terms from `effectiveFrom` (strictly after the current terms' start, never before the hire date); the open row is closed, never edited. `status: terminated` ends the employment and is terminal (rehire is a new employment). The manager chain must stay acyclic and at most 10 deep. Re-sending identical terms is a no-op answering 200 `replayed: true`. Requires an Idempotency-Key. Audited."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrTermsChangeInput"
+      responses:
+        "200":
+          description: The identical terms were already current (replayed).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      replayed:
+                        type: boolean
+                      employment:
+                        $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "201":
+          description: The terms were appended.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      replayed:
+                        type: boolean
+                      employment:
+                        $ref: "#/components/schemas/HrEmployment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, EMPLOYMENT_DELETED, EMPLOYMENT_TERMINATED, TERMS_OUT_OF_ORDER, MANAGER_CYCLE or MANAGER_CHAIN_TOO_DEEP.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: EFFECTIVE_BEFORE_HIRE, OFFICE_NOT_FOUND or MANAGER_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/settings:
+    get:
+      operationId: hrWorkforceSettingsGet
+      tags:
+        - HR Workforce
+      summary: Read the workforce settings
+      description: Gated by `hr_workforce.settings.read`. Defaults apply until a row exists. There is no evidence, location or photo setting, by construction (owner decision O6).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrWorkforceSettings"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: hrWorkforceSettingsSet
+      tags:
+        - HR Workforce
+      summary: Change the workforce settings
+      description: Gated by `hr_workforce.settings.configure` (high-risk). An omitted field keeps its value; at least one is required. Requires an Idempotency-Key. Audited at warning severity (the row records which setting changed, not its value).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrWorkforceSettingsInput"
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrWorkforceSettings"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/identity/business-scope/assignments:
     get:
       operationId: listBusinessScopeAssignments
@@ -25783,6 +26325,229 @@ components:
           type: string
           format: date-time
           nullable: true
+    HrAccountInput:
+      type: object
+      additionalProperties: false
+      required:
+        - tenantUserId
+      properties:
+        tenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+    HrEmployment:
+      type: object
+      description: An employment. It REFERENCES a profile_identity party by `profileId`; the person's name and identifiers are read from profile_identity, never from here. `accountLinked` says whether a login is attached; the login's id is not returned.
+      properties:
+        id:
+          type: string
+          format: uuid
+        profileId:
+          type: string
+          format: uuid
+        employeeNo:
+          type: string
+        hiredOn:
+          type: string
+          format: date
+        terminatedOn:
+          type: string
+          format: date
+          nullable: true
+        accountLinked:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        currentTerm:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/HrEmploymentTerm"
+    HrEmploymentInput:
+      type: object
+      additionalProperties: false
+      required:
+        - profileId
+        - employeeNo
+        - hiredOn
+        - employmentType
+        - status
+      properties:
+        profileId:
+          type: string
+          format: uuid
+        employeeNo:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_./-]{0,63}$
+        hiredOn:
+          type: string
+          format: date
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        managerEmploymentId:
+          type: string
+          format: uuid
+          nullable: true
+        jobTitle:
+          type: string
+          minLength: 1
+          maxLength: 120
+          nullable: true
+        employmentType:
+          type: string
+          enum:
+            - permanent
+            - fixed_term
+            - part_time
+            - casual
+        status:
+          type: string
+          description: A new employment cannot start terminated.
+          enum:
+            - active
+            - on_leave
+            - suspended
+    HrEmploymentTerm:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        managerEmploymentId:
+          type: string
+          format: uuid
+          nullable: true
+        jobTitle:
+          type: string
+          nullable: true
+        employmentType:
+          type: string
+          enum:
+            - permanent
+            - fixed_term
+            - part_time
+            - casual
+        status:
+          type: string
+          enum:
+            - active
+            - on_leave
+            - suspended
+            - terminated
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: string
+          format: date
+          nullable: true
+          description: Exclusive end; null for the current row.
+    HrReasonInput:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    HrTermsChangeInput:
+      type: object
+      additionalProperties: false
+      required:
+        - effectiveFrom
+        - employmentType
+        - status
+      properties:
+        effectiveFrom:
+          type: string
+          format: date
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        managerEmploymentId:
+          type: string
+          format: uuid
+          nullable: true
+        jobTitle:
+          type: string
+          minLength: 1
+          maxLength: 120
+          nullable: true
+        employmentType:
+          type: string
+          enum:
+            - permanent
+            - fixed_term
+            - part_time
+            - casual
+        status:
+          type: string
+          enum:
+            - active
+            - on_leave
+            - suspended
+            - terminated
+    HrTermsFields:
+      type: object
+      properties:
+        officeId:
+          type: string
+          format: uuid
+          nullable: true
+        managerEmploymentId:
+          type: string
+          format: uuid
+          nullable: true
+        jobTitle:
+          type: string
+          minLength: 1
+          maxLength: 120
+          nullable: true
+        employmentType:
+          type: string
+          enum:
+            - permanent
+            - fixed_term
+            - part_time
+            - casual
+        status:
+          type: string
+          enum:
+            - active
+            - on_leave
+            - suspended
+            - terminated
+    HrWorkforceSettings:
+      type: object
+      properties:
+        clockSkewSeconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+        correctionWorkflowKey:
+          type: string
+    HrWorkforceSettingsInput:
+      type: object
+      additionalProperties: false
+      properties:
+        clockSkewSeconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+        correctionWorkflowKey:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]{0,99}$
     IdnRegionDataset:
       type: object
       required:
