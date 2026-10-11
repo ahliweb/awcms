@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:2f44d7874c23d02d84d0099a7bf58ac02457b29625aa56f0764f38281b0f1e0f -->
+<!-- i18n-source-hash: sha256:2a9f990cf013a9b95c8f60d11e81e4c51e52fe0187e0ceec5bcd5d33cd5747fb -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -19,11 +19,11 @@
 
 ## 1. Keluarga, fase, dan gerbangnya
 
-| Fase | Kunci modul     | Cakupan                                                                               | Bergantung pada                         | Dapat dibangun ketika                                                                                                                                                                                                                                                                      |
-| ---- | --------------- | ------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1    | `hr_workforce`  | konteks kepegawaian, kehadiran, koreksi, shift, **port ketersediaan staf**            | `tenant_admin`, `profile_identity`      | sekarang (DoD biasa, tinjauan keamanan port baru dan jalur kepemilikan)                                                                                                                                                                                                                    |
-| 2    | `hr_commission` | aturan komisi dan ledger akrual                                                       | `hr_workforce`                          | fase 1 mendarat                                                                                                                                                                                                                                                                            |
-| 3    | `hr_payroll`    | kompensasi, rekening pembayaran, periode, run, baris, slip gaji, versi aturan payroll | `hr_workforce`, `hr_commission` (lunak) | **O4 dan O7 terjawab (2026-10-10); amandemen ADR-0132 untuk mode SoD yang dapat dikonfigurasi (§7.5); enkripsi-saat-diam rekening pembayaran diputuskan; tinjauan keamanan; tinjauan hukum atas kontrol versi-aturan mesin (profil yurisdiksi apa pun milik konsumen, O4); gladi restore** |
+| Fase | Kunci modul     | Cakupan                                                                               | Bergantung pada                         | Dapat dibangun ketika                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---- | --------------- | ------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `hr_workforce`  | konteks kepegawaian, kehadiran, koreksi, shift, **port ketersediaan staf**            | `tenant_admin`, `profile_identity`      | sekarang (DoD biasa, tinjauan keamanan port baru dan jalur kepemilikan)                                                                                                                                                                                                                                                                                                                                        |
+| 2    | `hr_commission` | aturan komisi dan ledger akrual                                                       | `hr_workforce`                          | fase 1 mendarat                                                                                                                                                                                                                                                                                                                                                                                                |
+| 3    | `hr_payroll`    | kompensasi, rekening pembayaran, periode, run, baris, slip gaji, versi aturan payroll | `hr_workforce`, `hr_commission` (lunak) | **O4 dan O7 terjawab (2026-10-10); amandemen ADR-0132 untuk mode SoD yang dapat dikonfigurasi (§7.5); enkripsi-saat-diam rekening pembayaran diputuskan (**selesai: [ADR-0137](../adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.id.md), hanya desain, [x]**); tinjauan keamanan; tinjauan hukum atas kontrol versi-aturan mesin (profil yurisdiksi apa pun milik konsumen, O4); gladi restore** |
 
 **Di luar cakupan untuk seluruh keluarga:** buku besar dan entri akuntansi apa
 pun; dokumen fiskal (SPT tahunan, bukti potong); pembuatan berkas bank dan
@@ -391,10 +391,13 @@ persetujuan-diri); `approved_by <> proposed_by` juga CHECK. Versi yang
 `effective_from`-nya jatuh di periode **terkunci** ditolak (`backdate` adalah aksi
 berisiko tinggi untuk kasus lebih sempit: periode terbuka sebelum hari ini).
 `awcms_hr_payout_accounts`: referensi bank atau dompet per kepegawaian,
-klasifikasi `sensitive`, `normalized_value`, hash **tanpa kunci**, mask (pola
-identifier procurement); **enkripsi-saat-diam nilai adalah gerbang fase 3**, dan
-hashing berkunci adalah tindak lanjut yang sama yang dicatat ADR-0128 untuk
-identifier pemasok.
+klasifikasi `sensitive`; **diputuskan oleh [ADR-0137](../adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.id.md)
+(hanya desain; belum ada yang diimplementasikan)**: nomor rekening hanya disimpan
+sebagai ciphertext AES-256-GCM dengan id kunci di dalam nilai dan baris terikat
+sebagai associated data, HMAC berkunci terikat tenant (`account_hash`, ring kunci
+terpisah) untuk pencarian kesamaan, dan mask; **tidak ada kolom
+`normalized_value` plaintext** (berbeda dari pola identifier pemasok ADR-0128,
+yang hash tanpa kuncinya tidak dipakai di sini).
 
 ### 7.2 Periode, run, baris, slip gaji
 
@@ -684,7 +687,7 @@ itulah sebabnya SQL adapter ketersediaan diuji agar tidak menyebut tabel payroll
 | Alasan kehadiran, alasan koreksi | koreksi                       | pemohon, penyetuju, `corrections.read`                                              | baris audit, event                            |
 | Jenis time-off                   | penugasan                     | hanya jenis kasar; tidak pernah alasan                                              | —                                             |
 
-`normalized_value`, hash, dan mask rekening pembayaran adalah `redactedColumns` dan
+`account_ciphertext`, `account_hash`, dan `account_mask` rekening pembayaran adalah `redactedColumns` dan
 tidak pernah ikut ekspor. Uang dalam respons adalah string desimal; di log tidak ada.
 
 ### 11.3 Audit dan idempotensi
@@ -749,24 +752,26 @@ skenario di atas dapat dipenuhi tanpa itu.
 
 ### 13.1 Ancaman
 
-| Ancaman                                                                   | Kontrol                                                                                                                                                 |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Baca atau tulis lintas tenant data kepegawaian atau gaji                  | FORCE RLS + FK komposit + `defineTenantRoute`; RLS diuji sebagai `awcms_app`                                                                            |
-| Penjadwal atau marketer membaca gaji (horizontal dalam-tenant)            | izin dan tabel terpisah; S7, S11; port ketersediaan adalah allow-list                                                                                   |
-| Penyalahgunaan layanan mandiri: pegawai membaca slip/kehadiran orang lain | `ownershipGrant` dihitung dari tautan tersimpan, tidak pernah dari permintaan; kredensial mesin dikecualikan                                            |
-| Pembajakan tautan akun: menautkan login saya ke kepegawaian rekan         | `assign` berisiko tinggi, diaudit, dapat di-SoD; mengubahnya adalah event                                                                               |
-| Penipuan payroll: orang dalam mengubah gaji, menjalankan, dan membayar    | usul/setujui kompensasi; CHECK DB per-instance C/A/P; run finalized immutable; kunci periode; koreksi hanya dengan reversal                             |
-| Pembayaran ganda (klik ganda, retry, replay)                              | pemeriksaan status + `Idempotency-Key` + slip unik per periode/pegawai + pembayaran unik per run                                                        |
-| Pemalsuan kehadiran (mundur-tanggal, clock-in hantu)                      | event append-only, `recorded_at` server, supersesi oleh koreksi disetujui, batas selisih; tanpa penyuntingan                                            |
-| Pencurian waktu oleh rekan yang clock-in untuk orang lain                 | mencatat untuk orang lain membutuhkan kunci tak-dimodifikasi, diaudit lewat `source` dan aktor; bukti geolokasi, bila pernah dibangun, ada di §4.3 (O6) |
-| Inflasi ledger oleh sumber komisi palsu                                   | identitas sumber unik; kewajiban adapter memverifikasi (terdokumentasi); `approve` oleh pihak ketiga                                                    |
-| Kebocoran lewat event, log, ekspor, notifikasi                            | hanya id/hitungan; uang tidak ada di log; `redactedColumns`; pemberitahuan slip tanpa jumlah                                                            |
-| Rekening pembayaran polos saat diam                                       | **gerbang fase 3**: enkripsi-saat-diam dan hashing berkunci diputuskan sebelum tabel ada                                                                |
-| Oracle keberadaan (apakah X pegawai? apakah X dijadwalkan?)               | `unknown` tak dapat dibedakan; acknowledgement seragam untuk penambahan identifier                                                                      |
-| Penyalahgunaan aturan (tarif pajak diubah agar under-withhold)            | versi aturan immutable setelah terbit, diterbitkan maker/checker, kutipan wajib, audit pada `warning`                                                   |
-| Perubahan gaji mundur-tanggal setelah periode ditutup                     | kunci periode; `backdate` berisiko tinggi; tanpa unlock                                                                                                 |
-| Panggilan penyedia di dalam transaksi                                     | tidak ada; integrasi bank/penyedia apa pun lewat outbox di isu berikutnya                                                                               |
-| Replay kehadiran offline memalsukan waktu                                 | keunikan `client_event_key`; flag `late` untuk ditinjau; koreksi membutuhkan persetujuan                                                                |
+| Ancaman                                                                   | Kontrol                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baca atau tulis lintas tenant data kepegawaian atau gaji                  | FORCE RLS + FK komposit + `defineTenantRoute`; RLS diuji sebagai `awcms_app`                                                                                                                                                             |
+| Penjadwal atau marketer membaca gaji (horizontal dalam-tenant)            | izin dan tabel terpisah; S7, S11; port ketersediaan adalah allow-list                                                                                                                                                                    |
+| Penyalahgunaan layanan mandiri: pegawai membaca slip/kehadiran orang lain | `ownershipGrant` dihitung dari tautan tersimpan, tidak pernah dari permintaan; kredensial mesin dikecualikan                                                                                                                             |
+| Pembajakan tautan akun: menautkan login saya ke kepegawaian rekan         | `assign` berisiko tinggi, diaudit, dapat di-SoD; mengubahnya adalah event                                                                                                                                                                |
+| Penipuan payroll: orang dalam mengubah gaji, menjalankan, dan membayar    | usul/setujui kompensasi; CHECK DB per-instance C/A/P; run finalized immutable; kunci periode; koreksi hanya dengan reversal                                                                                                              |
+| Pembayaran ganda (klik ganda, retry, replay)                              | pemeriksaan status + `Idempotency-Key` + slip unik per periode/pegawai + pembayaran unik per run                                                                                                                                         |
+| Pemalsuan kehadiran (mundur-tanggal, clock-in hantu)                      | event append-only, `recorded_at` server, supersesi oleh koreksi disetujui, batas selisih; tanpa penyuntingan                                                                                                                             |
+| Pencurian waktu oleh rekan yang clock-in untuk orang lain                 | mencatat untuk orang lain membutuhkan kunci tak-dimodifikasi, diaudit lewat `source` dan aktor; bukti geolokasi, bila pernah dibangun, ada di §4.3 (O6)                                                                                  |
+| Inflasi ledger oleh sumber komisi palsu                                   | identitas sumber unik; kewajiban adapter memverifikasi (terdokumentasi); `approve` oleh pihak ketiga                                                                                                                                     |
+| Kebocoran lewat event, log, ekspor, notifikasi                            | hanya id/hitungan; uang tidak ada di log; `redactedColumns`; pemberitahuan slip tanpa jumlah                                                                                                                                             |
+| Rekening pembayaran polos saat diam                                       | hanya ciphertext, HMAC berkunci untuk pencarian, ring kunci dengan rotasi, gagal-tertutup bila kunci hilang: [ADR-0137](../adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.id.md) (**diputuskan, belum diimplementasikan**) |
+| Brute-force rekening dari kolom hash atau dump                            | HMAC dengan kunci terpisah terikat tenant (bukan hash tanpa kunci); kunci di luar database dan backup-nya; restore tanpa kunci tak dapat reveal (ADR-0137 §3, §6)                                                                        |
+| Pemanenan massal rekening lewat `reveal`                                  | `reveal` berisiko tinggi, `no-store`, diaudit `warning`, step-up bersyarat, rate limit per aktor, `403` tanpa izin (ADR-0137 §4)                                                                                                         |
+| Oracle keberadaan (apakah X pegawai? apakah X dijadwalkan?)               | `unknown` tak dapat dibedakan; acknowledgement seragam untuk penambahan identifier                                                                                                                                                       |
+| Penyalahgunaan aturan (tarif pajak diubah agar under-withhold)            | versi aturan immutable setelah terbit, diterbitkan maker/checker, kutipan wajib, audit pada `warning`                                                                                                                                    |
+| Perubahan gaji mundur-tanggal setelah periode ditutup                     | kunci periode; `backdate` berisiko tinggi; tanpa unlock                                                                                                                                                                                  |
+| Panggilan penyedia di dalam transaksi                                     | tidak ada; integrasi bank/penyedia apa pun lewat outbox di isu berikutnya                                                                                                                                                                |
+| Replay kehadiran offline memalsukan waktu                                 | keunikan `client_event_key`; flag `late` untuk ditinjau; koreksi membutuhkan persetujuan                                                                                                                                                 |
 
 ### 13.2 Privasi (UU PDP 27/2022)
 
@@ -804,7 +809,7 @@ deployment.
   `data_lifecycle`; baris keuangan dipertahankan selama usia tenant sampai ada
   desain arsip-lalu-purge (tindak lanjut tercatat, seperti ADR-0128 §7).
 - **Pengamanan.** Enkripsi in-transit; kontrol akses di atas; rekening pembayaran
-  dienkripsi saat diam sebelum fase 3; audit atas reveal; penanganan backup
+  dienkripsi saat diam (desain di ADR-0137, diimplementasikan sebelum fase 3 dirilis); audit atas reveal; penanganan backup
   mengikuti runbook yang ada, dan restore membutuhkan rekonsiliasi di §14.
 - **Kesiapan pelanggaran.** Audit dan decision log menjawab "siapa membaca apa";
   kewajiban notifikasi mengikuti hasil O5.
@@ -831,8 +836,9 @@ harus kembali dari titik waktu yang sama.
   posting akuntansi bukan tujuan.
 - Tanpa hierarki unit organisasi HR (kantor adalah unitnya); tanpa atribut ABAC
   garis-atasan.
-- Reveal rekening pembayaran: step-up dan rate limit diputuskan secara bersyarat di
-  fase 3 (tidak tanpa syarat, ADR-0058 §E).
+- Reveal rekening pembayaran: step-up bersyarat pada faktor yang terdaftar dan rate
+  limit per aktor, diputuskan di ADR-0137 §4 (tidak tanpa syarat, ADR-0058 §E);
+  implementasinya issue berikutnya.
 - Pengaman merge antara dua profil berpegawai-aktif, pertanyaan `btree_gist`, dan
   tambahan `AccessAction` (`calculate`, `pay`) adalah keputusan saat implementasi.
 - Arsip-lalu-purge untuk baris keuangan, layar admin, dan keluaran berkas bank

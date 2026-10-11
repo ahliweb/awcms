@@ -17,11 +17,11 @@
 
 ## 1. The family, its phases and its gates
 
-| Phase | Module key      | Scope                                                                                | Depends on                             | Buildable when                                                                                                                                                                                                                                                                             |
-| ----- | --------------- | ------------------------------------------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1     | `hr_workforce`  | employment context, attendance, corrections, shifts, **staff-availability port**     | `tenant_admin`, `profile_identity`     | now (usual DoD, security review of the new port and the ownership paths)                                                                                                                                                                                                                   |
-| 2     | `hr_commission` | commission rules and accrual ledger                                                  | `hr_workforce`                         | phase 1 landed                                                                                                                                                                                                                                                                             |
-| 3     | `hr_payroll`    | compensation, payout accounts, periods, runs, lines, payslips, payroll rule versions | `hr_workforce`, `hr_commission` (soft) | **O4 and O7 answered (2026-10-10); an amendment to ADR-0132 for the configurable SoD mode (§7.5); payout-account at-rest encryption decided; security review; legal review of the engine's rule-version controls (any jurisdiction profile is the consumer's own, O4); restore rehearsal** |
+| Phase | Module key      | Scope                                                                                | Depends on                             | Buildable when                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----- | --------------- | ------------------------------------------------------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `hr_workforce`  | employment context, attendance, corrections, shifts, **staff-availability port**     | `tenant_admin`, `profile_identity`     | now (usual DoD, security review of the new port and the ownership paths)                                                                                                                                                                                                                                                                                                                                |
+| 2     | `hr_commission` | commission rules and accrual ledger                                                  | `hr_workforce`                         | phase 1 landed                                                                                                                                                                                                                                                                                                                                                                                          |
+| 3     | `hr_payroll`    | compensation, payout accounts, periods, runs, lines, payslips, payroll rule versions | `hr_workforce`, `hr_commission` (soft) | **O4 and O7 answered (2026-10-10); an amendment to ADR-0132 for the configurable SoD mode (§7.5); payout-account at-rest encryption decided (**done: [ADR-0137](../adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.md), design only, [x]**); security review; legal review of the engine's rule-version controls (any jurisdiction profile is the consumer's own, O4); restore rehearsal** |
 
 **Out of scope for the whole family:** general ledger and any accounting entry;
 fiscal documents (annual return, withholding certificates); bank-file generation
@@ -371,9 +371,12 @@ decides which events are commissionable.
 `effective_from` lies in a **locked** period is refused (`backdate` is the
 high-risk action for the narrower case of an open period before today).
 `awcms_hr_payout_accounts`: bank or wallet reference per employment, classification
-`sensitive`, `normalized_value`, **unkeyed** hash, mask (the procurement identifier
-pattern); **encryption at rest of the value is a phase 3 gate**, and keyed hashing
-the same follow-up ADR-0128 recorded for supplier identifiers.
+`sensitive`; **decided by [ADR-0137](../adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.md)
+(design only; nothing implemented)**: the account number is stored only as AES-256-GCM
+ciphertext with the key id inside the value and the row bound as associated data,
+a keyed tenant-bound HMAC (`account_hash`, separate key ring) for equality lookup,
+and a mask; there is **no plaintext `normalized_value` column** (unlike the supplier
+identifier pattern of ADR-0128, whose unkeyed hash is not reused here).
 
 ### 7.2 Periods, runs, lines, payslips
 
@@ -662,7 +665,7 @@ why the availability adapter's SQL is tested not to name a payroll table.
 | Attendance reason, correction reason | corrections                    | requester, approver, `corrections.read`                                                   | audit rows, events                         |
 | Time-off kind                        | assignments                    | coarse kind only; no reason ever                                                          | —                                          |
 
-`normalized_value`, hashes and masks of payout accounts are `redactedColumns` and
+`account_ciphertext`, `account_hash` and `account_mask` of payout accounts are `redactedColumns` and
 never ride in an export. Money in a response is a decimal string; in a log it is
 absent.
 
@@ -727,24 +730,26 @@ None is assumed; the scenarios above are satisfiable without them.
 
 ### 13.1 Threats
 
-| Threat                                                            | Control                                                                                                                            |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Cross-tenant read or write of employment or pay data              | FORCE RLS + composite FKs + `defineTenantRoute`; RLS tested as `awcms_app`                                                         |
-| Scheduler or marketer reading salary (horizontal in-tenant)       | separate permissions and tables; S7, S11; the availability port is an allow-list                                                   |
-| Self-service abuse: employee reading another's payslip/attendance | `ownershipGrant` computed from the persisted link, never from the request; machine credentials excluded                            |
-| Account-link hijack: linking my login to a colleague's employment | `assign` is high-risk, audited, SoD-able; changing it is an event                                                                  |
-| Payroll fraud: insider alters salary, runs and pays               | propose/approve compensation; C/A/P per-instance DB CHECKs; immutable finalized runs; period lock; reversal-only correction        |
-| Double payment (double click, retry, replay)                      | state check + `Idempotency-Key` + unique payslip per period/employee + unique payment per run                                      |
-| Attendance tampering (back-dating, ghost clock-ins)               | append-only events, server `recorded_at`, supersession by approved correction, skew bound; no editing                              |
-| Time-theft by a colleague clocking in for another                 | clocking for another requires the unmodified key, audited by `source` and actor; geolocation evidence, if ever built, is §4.3 (O6) |
-| Ledger inflation by forged commission source                      | unique source identity; the adapter's duty to verify (documented); `approve` by a third party                                      |
-| Leakage through events, logs, exports, notifications              | ids/counts only; money absent from logs; `redactedColumns`; payslip notices carry no amount                                        |
-| Plaintext payout accounts at rest                                 | **phase 3 gate**: encryption at rest and keyed hashing decided before the table exists                                             |
-| Existence oracle (is X an employee? is X scheduled?)              | `unknown` is indistinguishable; uniform acknowledgements for identifier adds                                                       |
-| Rule tampering (a tax rate changed to under-withhold)             | rule versions immutable once published, published by maker/checker, citation required, audit at `warning`                          |
-| Backdated pay change after a period closed                        | period lock; `backdate` high-risk; no unlock                                                                                       |
-| Provider call inside a transaction                                | none; any bank/provider integration goes through the outbox in a later issue                                                       |
-| Offline replay of attendance forging time                         | `client_event_key` uniqueness; `late` flag for review; correction needs approval                                                   |
+| Threat                                                            | Control                                                                                                                                                                                                         |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cross-tenant read or write of employment or pay data              | FORCE RLS + composite FKs + `defineTenantRoute`; RLS tested as `awcms_app`                                                                                                                                      |
+| Scheduler or marketer reading salary (horizontal in-tenant)       | separate permissions and tables; S7, S11; the availability port is an allow-list                                                                                                                                |
+| Self-service abuse: employee reading another's payslip/attendance | `ownershipGrant` computed from the persisted link, never from the request; machine credentials excluded                                                                                                         |
+| Account-link hijack: linking my login to a colleague's employment | `assign` is high-risk, audited, SoD-able; changing it is an event                                                                                                                                               |
+| Payroll fraud: insider alters salary, runs and pays               | propose/approve compensation; C/A/P per-instance DB CHECKs; immutable finalized runs; period lock; reversal-only correction                                                                                     |
+| Double payment (double click, retry, replay)                      | state check + `Idempotency-Key` + unique payslip per period/employee + unique payment per run                                                                                                                   |
+| Attendance tampering (back-dating, ghost clock-ins)               | append-only events, server `recorded_at`, supersession by approved correction, skew bound; no editing                                                                                                           |
+| Time-theft by a colleague clocking in for another                 | clocking for another requires the unmodified key, audited by `source` and actor; geolocation evidence, if ever built, is §4.3 (O6)                                                                              |
+| Ledger inflation by forged commission source                      | unique source identity; the adapter's duty to verify (documented); `approve` by a third party                                                                                                                   |
+| Leakage through events, logs, exports, notifications              | ids/counts only; money absent from logs; `redactedColumns`; payslip notices carry no amount                                                                                                                     |
+| Plaintext payout accounts at rest                                 | ciphertext only, keyed HMAC for lookup, key ring with rotation, fail-closed on a missing key: [ADR-0137](../adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.md) (**decided, not yet implemented**) |
+| Brute-forcing a payout account from the hash column or a dump     | HMAC under a separate tenant-bound key (never an unkeyed hash); keys outside the database and its backups; restore without the key cannot reveal (ADR-0137 §3, §6)                                              |
+| Bulk harvesting of accounts through `reveal`                      | `reveal` is HIGH-RISK, `no-store`, audited at `warning`, conditional step-up, per-actor rate limit, `403` without the permission (ADR-0137 §4)                                                                  |
+| Existence oracle (is X an employee? is X scheduled?)              | `unknown` is indistinguishable; uniform acknowledgements for identifier adds                                                                                                                                    |
+| Rule tampering (a tax rate changed to under-withhold)             | rule versions immutable once published, published by maker/checker, citation required, audit at `warning`                                                                                                       |
+| Backdated pay change after a period closed                        | period lock; `backdate` high-risk; no unlock                                                                                                                                                                    |
+| Provider call inside a transaction                                | none; any bank/provider integration goes through the outbox in a later issue                                                                                                                                    |
+| Offline replay of attendance forging time                         | `client_event_key` uniqueness; `late` flag for review; correction needs approval                                                                                                                                |
 
 ### 13.2 Privacy (UU PDP 27/2022)
 
@@ -780,7 +785,7 @@ assessment.
   descriptor; financial rows are retained for the life of the tenant until an
   archive-then-purge design exists (a recorded follow-up, as ADR-0128 §7).
 - **Security safeguards.** Encryption in transit; access control above; payout
-  accounts encrypted at rest before phase 3; audit of reveals; backup handling
+  accounts encrypted at rest (design in ADR-0137, to be implemented before phase 3 ships); audit of reveals; backup handling
   follows the existing runbooks, and a restore requires the reconciliations in §14.
 - **Breach readiness.** Audit and the decision log answer "who read what"; the
   notification duties follow the O5 outcome.
@@ -806,8 +811,9 @@ payroll must come back from the same point in time.
 - Leave balances and accrual, loans, benefits, overtime _policy_ negotiation, and
   accounting posting are non-goals.
 - No HR org-unit hierarchy (office is the unit); no manager-line ABAC attribute.
-- Reveal of a payout account: step-up and rate limit decided conditionally in
-  phase 3 (not unconditionally, ADR-0058 §E).
+- Reveal of a payout account: step-up conditional on an enrolled factor and a
+  per-actor rate limit, decided in ADR-0137 §4 (not unconditionally, ADR-0058 §E);
+  the implementation is a later issue.
 - Merge guard between two actively-employed profiles, the `btree_gist` question and
   the `AccessAction` additions (`calculate`, `pay`) are implementation-time.
 - Archive-then-purge for financial rows, admin screens, and bank-file output are
