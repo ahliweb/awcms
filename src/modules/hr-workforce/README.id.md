@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:528d5eb5b3a38d05e595c5eb4f2ae05c856b31838d40b2f4ede5d7cdc8a1b9d9 -->
+<!-- i18n-source-hash: sha256:40d47b81130ed9938a7ee9a5ea61c50d013242ef953ef22d68d2495949db5aea -->
 
 # `hr_workforce`
 
@@ -48,7 +48,8 @@ mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.
   adalah `employments.assign`: berisiko tinggi dan diaudit.
 - **Aksi berisiko tinggi** (`create`, perubahan terms, `assign`, `delete`,
   `restore`, `configure`) mewajibkan `Idempotency-Key` dan diaudit tanpa nama,
-  jabatan, nomor, alasan, atau id akun.
+  jabatan, nomor, atau alasan; satu-satunya pengenal yang dibawanya adalah UUID
+  login pada baris `assign`.
 
 ## Keputusan hak subjek data (cakupan ADR-0094)
 
@@ -90,15 +91,26 @@ Terbuka (dilacak, tidak disembunyikan):
   dimaksud (soft delete, lalu purge setelah masa retensi pemberi kerja) tetapi
   belum ada yang mem-purge; archive-then-purge untuk baris HR adalah tindak lanjut.
 
-Postur fase 1 yang diketahui (didokumentasikan, tanpa perubahan kode di PR ini):
+Postur fase 1 yang diketahui (didokumentasikan, tanpa kode tambahan di PR ini):
 
-- Pembacaan berlaku se-tenant bagi pemegang `employments.read`: belum ada
-  pembatasan per kantor atau per atasan (skenario S4 dan S6 paket desain butuh
-  adapter scope `office` dan alasan kepemilikan `manager_of`, keduanya issue
-  berikutnya).
-- Penautan login (`assign`) tidak memakai step-up dan tidak mendaftarkan aturan
-  pemisahan tugas; ia berisiko tinggi, diaudit, dan idempoten, dan tenant dapat
-  menyusun aturan SoD atasnya.
+- **Penautan `assign` tidak terikat pada karyawannya.** Tidak ada yang
+  membuktikan login yang ditautkan adalah orang yang dimaksud employment. Pemegang
+  `assign` dapat menautkan login MILIKNYA ke employment mana pun lalu
+  membacanya lewat ownership grant. Kendalinya adalah permission itu sendiri
+  (berisiko tinggi, diaudit, idempoten, tidak pernah diberikan ke role secara
+  default): baris audit mencatat login MANA yang menerima kepemilikan
+  (`linkedTenantUserId`, sebuah UUID, beserta yang sebelumnya) sehingga
+  penyalahgunaan dapat ditelusuri, dan tenant dapat menyusun aturan SoD atas
+  `assign`. Tidak ada step-up.
+- **`employments.read` berlaku se-tenant.** Tidak ada business scope `office`
+  yang membatasinya di fase 1; pembacaan per kantor dan per atasan (skenario S4
+  dan S6 paket desain) butuh adapter scope dan alasan kepemilikan `manager_of`,
+  keduanya issue berikutnya.
+- **Atasan yang di-soft-delete meninggalkan referensi menggantung.** Menghapus
+  lunak employment yang menjadi atasan seseorang tidak menulis ulang terms
+  bawahannya, sehingga `managerEmploymentId` menunjuk baris yang sudah dihapus
+  (masih ada, `deletedAt` terisi). Apa pun yang menelusuri rantai harus menangani
+  atasan yang terhapus; aturan kedalaman dan siklus tetap menghitungnya.
 - Resolver kepemilikan membaca satu boolean tentang sebuah baris sebelum guard
   memutuskan (di dalam transaksi tenant, di bawah RLS); id yang tidak ada dan baris
   milik orang lain sama-sama dijawab 403, jadi bukan oracle keberadaan, tetapi

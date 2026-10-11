@@ -1052,7 +1052,7 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
 
   // --- audit -----------------------------------------------------------------------------------
 
-  test("audit rows say what happened and carry no employee number, title, reason or login id", async () => {
+  test("audit rows say what happened and carry no employee number, title or reason; the link row names the login UUID", async () => {
     if (!handlerReady) return;
     const user = await seedUser(env.tenantId, "audited", []);
     const employment = await hire("audit", {
@@ -1091,14 +1091,23 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
     ]);
     expect(rows[1]!.severity).toBe("warning");
 
+    // The link row names WHICH login received ownership (a UUID, not PII).
+    const linkRow = JSON.parse(rows[1]!.attributes!) as {
+      linked: boolean;
+      linkedTenantUserId: string | null;
+      previousTenantUserId: string | null;
+    };
+    expect(linkRow.linked).toBe(true);
+    expect(linkRow.linkedTenantUserId).toBe(user.tenantUserId);
+    expect(linkRow.previousTenantUserId).toBeNull();
+
     const text = JSON.stringify(rows);
 
     for (const forbidden of [
       "E-SECRET-77",
       "Secret Officer",
       "Another Secret Title",
-      "private reason text",
-      user.tenantUserId
+      "private reason text"
     ]) {
       expect(text).not.toContain(forbidden);
     }

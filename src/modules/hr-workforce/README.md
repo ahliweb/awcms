@@ -44,7 +44,8 @@ declares no `navigation`. It flips to `active` with its first screen.
   are the same 403. The link itself is `employments.assign`: high-risk and audited.
 - **High-risk actions** (`create`, terms change, `assign`, `delete`, `restore`,
   `configure`) require an `Idempotency-Key` and are audited without any name,
-  title, number, reason or account id.
+  title, number or reason; the one identifier they carry is the login's UUID on
+  the `assign` row.
 
 ## Subject-rights decision (ADR-0094 coverage)
 
@@ -85,15 +86,24 @@ Open (tracked, not hidden):
   lifecycle (soft delete, then a purge after the employer's retention period) but
   nothing purges; archive-then-purge for HR rows is a follow-up.
 
-Known phase-1 posture (documented, no code change in this PR):
+Known phase-1 posture (documented, no further code in this PR):
 
-- Reads are tenant-wide for a holder of `employments.read`: there is no per-office
-  or per-manager scoping yet (acceptance scenarios S4 and S6 of the design pack
-  need the `office` scope adapter and a `manager_of` ownership reason, both later
-  issues).
-- The login link (`assign`) has no step-up and registers no segregation-of-duties
-  rule; it is high-risk, audited and idempotent, and a tenant may author an SoD
-  rule over it.
+- **The `assign` link is not bound to the employee.** Nothing proves the login
+  being linked is the person the employment is about. A holder of `assign` can
+  link their OWN login to any employment and then read it through the ownership
+  grant. The control is the permission itself (high-risk, audited, idempotent,
+  never granted to a role by default): the audit row records WHICH login received
+  ownership (`linkedTenantUserId`, a UUID, and the previous one) so a misuse is
+  attributable, and a tenant may author an SoD rule over `assign`. There is no
+  step-up.
+- **`employments.read` is tenant-wide.** No `office` business scope bounds it
+  in phase 1; per-office and per-manager reads (design-pack scenarios S4 and S6)
+  need the scope adapter and a `manager_of` ownership reason, both later issues.
+- **A soft-deleted manager leaves a dangling reference.** Soft-deleting an
+  employment that is someone's current manager does not rewrite the reports'
+  terms, so their `managerEmploymentId` points at a deleted row (still present,
+  `deletedAt` set). Anything walking the chain must handle a deleted manager; the
+  chain-depth and cycle rules still count it.
 - The ownership resolver reads one boolean about a row before the guard decides
   (inside the tenant transaction, under RLS); a missing id and someone else's row
   both answer 403, so it is not an existence oracle, but the read happens before

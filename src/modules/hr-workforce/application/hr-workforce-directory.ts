@@ -17,7 +17,7 @@
  * an outcome; the triggers are the backstop for a path that bypasses this file.
  *
  * Audit rows carry what happened and to which employment id, never a title, a
- * number, a name or an account id.
+ * number or a name; the account link's row also carries the login's UUID.
  */
 import {
   decodeKeysetCursor,
@@ -647,7 +647,8 @@ export type AssignAccountOutcome =
 /**
  * Link (or unlink with `null`) the login that IS this employee. This is the
  * basis of self-service ownership, so it is a high-risk `assign`, audited at
- * `warning`, and the audit row records THAT it happened — never which login.
+ * `warning`, and the audit row records the login's UUID (not PII) and the
+ * previous one, so a misuse is attributable.
  */
 export async function assignAccount(
   tx: Bun.SQL,
@@ -725,7 +726,14 @@ export async function assignAccount(
       tenantUserId === null
         ? "Employment account link removed."
         : "Employment account link set.",
-    attributes: { linked: tenantUserId !== null },
+    // The login that received (or lost) ownership is a UUID, not personal data,
+    // and is exactly what an auditor needs: WHICH login can now read this
+    // employment through the ownership grant.
+    attributes: {
+      linked: tenantUserId !== null,
+      linkedTenantUserId: tenantUserId,
+      previousTenantUserId: existing[0]?.tenant_user_id ?? null
+    },
     correlationId: actor.correlationId
   });
 

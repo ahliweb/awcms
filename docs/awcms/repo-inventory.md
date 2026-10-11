@@ -12,8 +12,8 @@
 | `awcms_*` tables                    | 186   |
 | Tables with `FORCE` RLS             | 168   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 594   |
-| Route files                         | 478   |
+| Test files                          | 598   |
+| Route files                         | 484   |
 | ADR                                 | 280   |
 
 ### Modules
@@ -229,8 +229,8 @@
 | 173 | `sql/173_awcms_tax_permissions.sql`                                |
 | 174 | `sql/174_awcms_procurement_schema.sql`                             |
 | 175 | `sql/175_awcms_procurement_permissions.sql`                        |
-| 176 | `sql/180_awcms_hr_workforce_schema.sql`                            |
-| 177 | `sql/181_awcms_hr_workforce_permissions.sql`                       |
+| 176 | `sql/176_awcms_hr_workforce_schema.sql`                            |
+| 177 | `sql/177_awcms_hr_workforce_permissions.sql`                       |
 
 ### Tables & Row-Level Security
 
@@ -289,9 +289,9 @@
 | `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
 | `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
 | `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
-| `awcms_hr_employment_terms`              | `sql/180_awcms_hr_workforce_schema.sql`                    | yes | yes   |
-| `awcms_hr_employments`                   | `sql/180_awcms_hr_workforce_schema.sql`                    | yes | yes   |
-| `awcms_hr_workforce_settings`            | `sql/180_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_hr_employment_terms`              | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_hr_employments`                   | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_hr_workforce_settings`            | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_idempotency_keys`                 | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
 | `awcms_identities`                       | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
 | `awcms_identity_mfa_factors`             | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
@@ -427,7 +427,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 475        |
+| `(root)`      | 476        |
 | `e2e`         | 25         |
 | `integration` | 96         |
 | `unit`        | 1          |

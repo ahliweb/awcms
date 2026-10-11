@@ -11713,7 +11713,7 @@ Gated by `hr_workforce.employments.delete` (high-risk). For an employment entere
 - **operationId**: `hrWorkforceEmploymentAccountAssign`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid>"}` links the login that IS this employee; `null` unlinks. This is the basis of self-service ownership. One active employment per login. The audit row records THAT it happened, never which login. Requires an Idempotency-Key.
+Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid>"}` links the login that IS this employee; `null` unlinks. This is the basis of self-service ownership. One active employment per login. The audit row records the login UUID (not PII) and the previous one. Requires an Idempotency-Key.
 
 **Parameters**
 
