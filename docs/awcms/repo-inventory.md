@@ -7,13 +7,13 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 31    |
-| Migrations                          | 181   |
-| `awcms_*` tables                    | 201   |
-| Tables with `FORCE` RLS             | 183   |
+| Registered modules                  | 32    |
+| Migrations                          | 183   |
+| `awcms_*` tables                    | 202   |
+| Tables with `FORCE` RLS             | 184   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 603   |
-| Route files                         | 492   |
+| Test files                          | 607   |
+| Route files                         | 496   |
 | ADR                                 | 280   |
 
 ### Modules
@@ -51,6 +51,7 @@
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 | `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
+| `hr_commission`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
 
 ### Migrations
 
@@ -237,6 +238,8 @@
 | 179 | `sql/179_awcms_whatsapp_delivery_permissions.sql`                  |
 | 180 | `sql/180_awcms_booking_schema.sql`                                 |
 | 181 | `sql/181_awcms_booking_permissions.sql`                            |
+| 182 | `sql/182_awcms_hr_commission_rules_schema.sql`                     |
+| 183 | `sql/183_awcms_hr_commission_permissions.sql`                      |
 
 ### Tables & Row-Level Security
 
@@ -306,6 +309,7 @@
 | `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
 | `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
 | `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
+| `awcms_hr_commission_rules`              | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
 | `awcms_hr_employment_terms`              | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_hr_employments`                   | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
 | `awcms_hr_workforce_settings`            | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
@@ -448,16 +452,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 479        |
+| `(root)`      | 481        |
 | `e2e`         | 25         |
-| `integration` | 98         |
+| `integration` | 100        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 393   |
+| `/api/v1/**`    | 397   |
 | `/admin/**`     | 69    |
 | publik / anonim | 30    |
 

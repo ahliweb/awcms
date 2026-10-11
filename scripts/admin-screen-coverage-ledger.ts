@@ -196,5 +196,15 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "booking.reservations.reconcile",
   "booking.policy.read",
   "booking.policy.configure",
-  "booking.reports.read"
+  "booking.reports.read",
+
+  // hr_commission (5) — ADR-0132 / Issue #950. Phase 2 foundation ships API-first
+  // and `experimental` (flag off): the rule screens are the recorded follow-up
+  // that flips the module to `active`, so each permission is listed here until a
+  // screen claims it.
+  "hr_commission.rules.create",
+  "hr_commission.rules.publish",
+  "hr_commission.rules.read",
+  "hr_commission.rules.retire",
+  "hr_commission.rules.update"
 ];

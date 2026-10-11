@@ -446,6 +446,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // "HR Workforce" (hr_workforce, ADR-0132, Issue #945) — genuinely new
       // surface: the employment context (employments, effective-dated terms,
       // settings). Nothing here is anonymous.
+      // "HR Commission" (hr_commission, ADR-0132, Issue #950) — genuinely new
+      // surface: versioned commission rules (draft, publish, retire). Nothing
+      // here is anonymous.
+      "HR Commission",
       "HR Workforce",
       "Indonesia Regions",
       // "Inventory" (inventory, ADR-0126, Issue #887) — genuinely new surface:

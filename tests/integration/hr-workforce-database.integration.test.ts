@@ -713,7 +713,11 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         // Allowed by design: a soft-delete reason (operator text, never echoed to
         // audit) and the technical `employee_no`.
         .filter((c) => forbidden.test(c.split(".")[1]!))
-        .filter((c) => !c.endsWith(".delete_reason"));
+        .filter((c) => !c.endsWith(".delete_reason"))
+        // The label of a commission RULE (Issue #950): a tenant's name for its
+        // own scheme, not a person's name. hr-commission-database covers that
+        // table's own minimisation (no person or employment column at all).
+        .filter((c) => c !== "awcms_hr_commission_rules.name");
 
       expect(offenders).toEqual([]);
     });

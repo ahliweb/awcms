@@ -4117,6 +4117,9 @@ msgstr ""
 msgid "Booking"
 msgstr ""
 
+msgid "HR Commission"
+msgstr ""
+
 msgid "Who this site is, as a reader sees it: masthead, footer, editorial address and contact details."
 msgstr ""
 

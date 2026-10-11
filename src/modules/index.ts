@@ -30,6 +30,7 @@ import { procurementModule } from "./procurement/module";
 import { hrWorkforceModule } from "./hr-workforce/module";
 import { whatsappDeliveryModule } from "./whatsapp-delivery/module";
 import { bookingModule } from "./booking/module";
+import { hrCommissionModule } from "./hr-commission/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -213,7 +214,14 @@ const baseModules: ModuleDescriptor[] = [
   // Foundation slice only (`experimental`, no route or screen until #938-#941).
   // Depends on tenant_admin/identity_access/logging (all above), so the DAG
   // stays acyclic; nothing depends on it and it never imports commerce.
-  bookingModule
+  bookingModule,
+  // Admitted by ADR-0132 (Issue #950), phase 2 of the hr_* family: versioned,
+  // jurisdiction-neutral commission rules (draft / publish / retire, immutable
+  // once published) and their pure evaluation. Depends on tenant_admin and
+  // hr_workforce (both above), so the DAG stays acyclic; nothing depends on it.
+  // `experimental` (flag off): no admin screen yet. See
+  // src/modules/hr-commission/module.ts's `description`.
+  hrCommissionModule
 ];
 
 /**

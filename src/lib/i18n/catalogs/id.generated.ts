@@ -771,6 +771,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Ground for erasure": ["Dasar penghapusan"],
   "Group code": ["Kode grup"],
   "Group name": ["Nama grup"],
+  "HR Commission": ["Komisi HR"],
   "HR Workforce": ["Tenaga kerja HR"],
   "Half down": ["Setengah ke bawah"],
   "Half even (banker's)": ["Setengah ke genap (bankir)"],
