@@ -151,6 +151,10 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // module so its first screen lands with the people/identity screens rather
   // than silently in `general`.
   hr_workforce: "identity",
+  // ADR-0131 (Issue #937). Placed even though the module declares NO navigation
+  // yet (foundation slice, `experimental`): this map must cover every registered
+  // module so its first screen lands in the commerce section.
+  booking: "commerce",
   // Master reference data. This module DOES declare navigation now
   // (`/admin/idn-regions`, landed with ADR-0053/PR #332). The comment that used
   // to sit here said its operator screen lived in awcms-astro per ADR-0047 —

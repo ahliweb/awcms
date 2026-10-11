@@ -726,7 +726,21 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // as the second layer. Settings are upserted, never deleted.
   awcms_hr_employments: ["SELECT", "INSERT", "UPDATE"],
   awcms_hr_employment_terms: ["SELECT", "INSERT", "UPDATE"],
-  awcms_hr_workforce_settings: ["SELECT", "INSERT", "UPDATE"]
+  awcms_hr_workforce_settings: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0131 / `sql/180`. NOT retired -- nothing in `booking` is ever DELETEd (a
+  // reservation is cancelled, a resource soft-deleted, an allocation released),
+  // and a trigger refuses DELETE on the tables that matter as the second layer.
+  // Reservation items and events are append-only: INSERT and SELECT only.
+  awcms_booking_settings: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_resource_pools: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_resources: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_resource_units: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_service_offerings: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_schedules: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_reservations: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_resource_allocations: ["SELECT", "INSERT", "UPDATE"],
+  awcms_booking_reservation_items: ["SELECT", "INSERT"],
+  awcms_booking_reservation_events: ["SELECT", "INSERT"]
 };
 
 type RlsRow = {
@@ -1599,7 +1613,11 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_inventory_low_stock_signals: ["SELECT"],
   // Issue #888 (sql/174). SELECT only: the reporting engine's projection worker
   // reads the document-event log as `awcms_worker` (ADR-0128 §7).
-  awcms_procurement_document_events: ["SELECT"]
+  awcms_procurement_document_events: ["SELECT"],
+  // Issue #937 (sql/180). SELECT only: the reporting engine's projection worker
+  // will read the reservation-event log as `awcms_worker` (ADR-0131 section
+  // 7.2); it writes exclusively to its own `awcms_reporting_projection_*` tables.
+  awcms_booking_reservation_events: ["SELECT"]
 };
 
 /**

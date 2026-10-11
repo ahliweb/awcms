@@ -1,5 +1,5 @@
 {
-  "moduleCount": 30,
+  "moduleCount": 31,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -31,6 +31,22 @@
       "permissionCount": 47,
       "navigationCount": 8,
       "jobCount": 4,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "booking",
+      "name": "Booking",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": null,
+      "dependencies": ["tenant_admin", "identity_access", "logging"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 32,
+      "navigationCount": 0,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

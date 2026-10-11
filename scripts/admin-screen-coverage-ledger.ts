@@ -160,5 +160,41 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_workforce.employments.restore",
   "hr_workforce.employments.update",
   "hr_workforce.settings.configure",
-  "hr_workforce.settings.read"
+  "hr_workforce.settings.read",
+  // booking (32) — ADR-0131 / Issue #937. The foundation slice has no route and
+  // no screen: the schema, the permission catalogue and the pure state machine
+  // only. Every key is unbuilt work, and the list shrinks as the admin screens
+  // land with Issues #938 to #941 (the module is `experimental` until then).
+  "booking.resources.read",
+  "booking.resources.create",
+  "booking.resources.update",
+  "booking.resources.delete",
+  "booking.resources.restore",
+  "booking.offerings.read",
+  "booking.offerings.create",
+  "booking.offerings.update",
+  "booking.offerings.delete",
+  "booking.offerings.restore",
+  "booking.schedules.read",
+  "booking.schedules.create",
+  "booking.schedules.update",
+  "booking.schedules.delete",
+  "booking.blocks.read",
+  "booking.blocks.create",
+  "booking.blocks.release",
+  "booking.availability.read",
+  "booking.reservations.read",
+  "booking.reservation_notes.read",
+  "booking.reservations.create",
+  "booking.reservations.confirm",
+  "booking.reservations.cancel",
+  "booking.reservations.reschedule",
+  "booking.reservations.check_in",
+  "booking.reservations.complete",
+  "booking.reservations.no_show",
+  "booking.reservations.override",
+  "booking.reservations.reconcile",
+  "booking.policy.read",
+  "booking.policy.configure",
+  "booking.reports.read"
 ];

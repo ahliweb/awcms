@@ -106,6 +106,21 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0132 / Issue #945. One row per tenant holding a clock-skew bound (an integer) and a workflow key (a lower-case identifier). The only person-shaped column is the `updated_by` stamp on a configuration row, which is the tenant's own setting, not data it holds about someone."
   },
   {
+    table: "awcms_booking_resource_units",
+    reason:
+      "ADR-0131 / Issue #937. The capacity units of a resource: tenant, resource id, an ordinal, an optional short label of at most 100 characters and a status. No actor and no person column; it says how many rooms a room-type has, not who sleeps in them."
+  },
+  {
+    table: "awcms_booking_reservation_items",
+    reason:
+      "ADR-0131 / Issue #937. Immutable snapshot of what a reservation booked: offering code and name, duration, buffers, instants and stay dates. No actor stamp, no customer reference and no free text; the customer reference and note live on the parent reservation, which has its own descriptor."
+  },
+  {
+    table: "awcms_booking_resource_allocations",
+    reason:
+      "ADR-0131 / Issue #937. One row per claimed unit: item id, resource and unit ids, an interval or date range and a release stamp. No actor and no person column -- it records that a unit was occupied, never by whom; the reservation it hangs off has its own descriptor."
+  },
+  {
     table: "awcms_permissions",
     reason:
       "The global catalogue of permission NAMES, written only by migrations. Every row is a string an author chose; no column can be traced to a person, and none is scoped to a tenant."
