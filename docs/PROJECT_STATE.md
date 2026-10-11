@@ -409,8 +409,8 @@ pioneered directly here after the ADR-0047 freeze.)
   the packs where they bind: booking O8 and O12 (holds excluded from occupancy;
   commerce stays the customer authority, so no `customer_profile_id`); hr O4
   (Indonesian profile consumer-owned), O6 (geolocation only, off by default,
-  own ADR still needed) and O7 (SoD configurable per tenant; needs an ADR-0132
-  amendment and has an open sub-question O7a; payroll is additionally gated on
+  own ADR still needed) and O7 (SoD configurable per tenant, decided by ADR-0136 including
+  sub-question O7a, enforcement in #957; payroll is additionally gated on
   at-rest encryption plus security review). Delivery O10/O11: Telegram and
   orchestration are wanted by the owner but are still not admitted here; each
   needs its own ADR/issue. Booking O2 (first vertical hotel / villa / rental) is answered and admits day-granularity stays into v1 through ADR-0135 (Issue #931); O1, O3, O5 and
