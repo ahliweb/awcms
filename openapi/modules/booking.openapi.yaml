@@ -1,0 +1,786 @@
+# Source fragment for the "booking" module (Issue #938, ADR-0131, ADR-0135).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations.
+#
+# Time semantics (docs/awcms/booking.md section 2): every instant is RFC 3339
+# with an explicit offset or Z (a request without one is a 400); every interval
+# is half-open [start, end); a zone is an IANA name, never an offset or an
+# abbreviation; a stay is a half-open local DATE interval and its nights are date
+# arithmetic.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# only resolve after `bun run openapi:bundle` merges this file with the root
+# fragment and every sibling module fragment. Edit this file, never the bundle.
+paths:
+  /api/v1/booking/availability:
+    get:
+      operationId: bookingAvailabilityGet
+      tags:
+        - Booking
+      summary: Search availability
+      description: "Gated by `booking.availability.read`. READ-ONLY: persists and claims nothing, and the answer may be stale when read (the allocator's exclusion constraints prevent a double booking). A SLOT resource is asked with `from` and `to` (RFC 3339 with an explicit offset or Z, half-open, at most 31 days) and answers the bookable slots, ascending, each with the number of free units; slots are bounded by `limit` (500 at most) and `truncated` says whether more exist. A STAY resource is asked with `checkInDate` and `checkOutDate` (local dates in the resource's zone, half-open; an instant is never accepted) and answers `available`, the night count (date arithmetic, never hours), the derived arrival and departure instants, and the reasons it is not available, each flagged `overridable` (lead time, horizon and a soft closure can be lifted by `booking.reservations.override`; a block or an allocation conflict never can). Lead time and horizon come from the offering, then the tenant policy, then the module default. Rate limited per principal (`429 RATE_LIMITED`, `Retry-After`). Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: resourceId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: offeringId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: quantity
+          in: query
+          required: false
+          description: Units one booking claims at once; default 1.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: from
+          in: query
+          required: false
+          description: Slot resources. Start of the search window, RFC 3339 with an offset or Z.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Slot resources. Exclusive end of the search window; after `from`, at most 31 days later.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: Slot resources. Slots returned at most; default 100, at most 500.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: checkInDate
+          in: query
+          required: false
+          description: Stay resources. Local check-in date YYYY-MM-DD in the resource's zone.
+          schema:
+            type: string
+            format: date
+        - name: checkOutDate
+          in: query
+          required: false
+          description: Stay resources. Local check-out date, exclusive; after `checkInDate`, at most 366 nights.
+          schema:
+            type: string
+            format: date
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The slots of a slot resource, or the evaluation of a stay.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/BookingSlotAvailability"
+                      - $ref: "#/components/schemas/BookingStayAvailability"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND (the resource or the offering is not in this tenant, is inactive or is deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: BOOKING_MODE_MISMATCH (from/to sent for a stay resource or offering, or checkInDate/checkOutDate for a slot one).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: QUANTITY_EXCEEDS_UNITS.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: RATE_LIMITED.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/schedules:
+    get:
+      operationId: bookingSchedulesList
+      tags:
+        - Booking
+      summary: List schedules
+      description: "Gated by `booking.schedules.read`. Newest first, keyset paginated (`cursor`). `resourceId` narrows to one resource's schedules; `activeOnly=true` hides deactivated windows. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: resourceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: activeOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of schedules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      schedules:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BookingSchedule"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: bookingScheduleCreate
+      tags:
+        - Booking
+      summary: Create a schedule window
+      description: "Gated by `booking.schedules.create`. Weekly LOCAL windows in an IANA zone (an offset or an abbreviation is a 400). A new window SUPERSEDES rather than edits: it is `409 SCHEDULE_OVERLAP` against an active window of the same scope (one resource, or the tenant default) that overlaps its half-open `[effectiveFrom, effectiveTo)`. A schedule bound to a resource is written in that resource's zone (`409 SCHEDULE_TIMEZONE_MISMATCH`); a tenant-default schedule applies only to resources in its own zone. Changes FUTURE availability only; no reservation is touched. Audited."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingScheduleInput"
+      responses:
+        "201":
+          description: The schedule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingSchedule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: SCHEDULE_OVERLAP or SCHEDULE_TIMEZONE_MISMATCH.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/schedules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: bookingScheduleGet
+      tags:
+        - Booking
+      summary: Read a schedule
+      description: "Gated by `booking.schedules.read`. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The schedule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingSchedule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: bookingSchedulePatch
+      tags:
+        - Booking
+      summary: Shorten a schedule window
+      description: "Gated by `booking.schedules.update`. A window is superseded, not edited: the only change is a SHORTER `effectiveTo` (it can never be lengthened or reopened; create a new window instead) and `status: inactive`. `409 SCHEDULE_NOT_EDITABLE` otherwise. The database trigger holds the same rule for every writer. Audited."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingSchedulePatch"
+      responses:
+        "200":
+          description: The schedule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingSchedule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: SCHEDULE_NOT_EDITABLE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: bookingScheduleDeactivate
+      tags:
+        - Booking
+      summary: Deactivate a schedule
+      description: "Gated by `booking.schedules.delete`. DEACTIVATES the window (it is never removed; a confirmed reservation does not depend on it). `409 SCHEDULE_NOT_EDITABLE` when it is already inactive. Audited."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The deactivated schedule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingSchedule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: SCHEDULE_NOT_EDITABLE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/schedule-exceptions:
+    get:
+      operationId: bookingScheduleExceptionsList
+      tags:
+        - Booking
+      summary: List schedule exceptions
+      description: "Gated by `booking.schedules.read`. Closures and override hours, newest first, keyset paginated (`cursor`). `scheduleId` and `resourceId` narrow the list. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: scheduleId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: resourceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of exceptions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      exceptions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BookingScheduleException"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: bookingScheduleExceptionCreate
+      tags:
+        - Booking
+      summary: Create a schedule exception
+      description: "Gated by `booking.schedules.create`. A `closed` day range or replacement `override_hours` over a half-open range of LOCAL dates in the schedule's zone (at most 366 days), owned by exactly one of a schedule or a resource. The reason is a short code, never free text. A closure beats an override on the same date; an override only modifies a date a schedule covers. For a stay resource only `closed` applies, as a SOFT closure. Changes FUTURE availability only and never touches an existing reservation. An identical exception is `409 EXCEPTION_DUPLICATE`. Audited."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingScheduleExceptionInput"
+      responses:
+        "201":
+          description: The exception.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingScheduleException"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND (the schedule or the resource).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: EXCEPTION_DUPLICATE (an identical exception of the same owner, kind and range exists).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/schedule-exceptions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: bookingScheduleExceptionDelete
+      tags:
+        - Booking
+      summary: Delete a schedule exception
+      description: "Gated by `booking.schedules.delete`. Deletes one exception (configuration with no history value). Audited."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    BookingLocalWindow:
+      type: object
+      description: A local wall-clock window [from, to) in the schedule's zone; it never crosses midnight.
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          example: "09:00"
+        to:
+          type: string
+          description: HH:MM, or 24:00 for the end of the day.
+          example: "17:00"
+    BookingScheduleRules:
+      type: object
+      description: The closed rules schema. Only `weekly` is accepted; a weekday absent from it is closed.
+      required:
+        - weekly
+      properties:
+        weekly:
+          type: object
+          description: Weekday keys sun, mon, tue, wed, thu, fri, sat; at most 8 ascending, non-overlapping windows each.
+          additionalProperties:
+            type: array
+            maxItems: 8
+            items:
+              $ref: "#/components/schemas/BookingLocalWindow"
+    BookingScheduleInput:
+      type: object
+      required:
+        - timezone
+        - effectiveFrom
+        - rules
+      properties:
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null (or absent) is the tenant default schedule.
+        timezone:
+          type: string
+          description: An IANA zone name such as Asia/Pontianak; an offset or an abbreviation is refused.
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: string
+          format: date
+          nullable: true
+          description: Exclusive end; null for open-ended.
+        rules:
+          $ref: "#/components/schemas/BookingScheduleRules"
+    BookingSchedulePatch:
+      type: object
+      properties:
+        effectiveTo:
+          type: string
+          format: date
+          description: May only shorten the window.
+        status:
+          type: string
+          enum:
+            - inactive
+    BookingSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+        timezone:
+          type: string
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: string
+          format: date
+          nullable: true
+        rules:
+          $ref: "#/components/schemas/BookingScheduleRules"
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+        createdAt:
+          type: string
+    BookingScheduleExceptionInput:
+      type: object
+      required:
+        - localFrom
+        - localTo
+        - kind
+      properties:
+        scheduleId:
+          type: string
+          format: uuid
+          nullable: true
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+        localFrom:
+          type: string
+          format: date
+        localTo:
+          type: string
+          format: date
+          description: Exclusive end; after localFrom, at most 366 days.
+        kind:
+          type: string
+          enum:
+            - closed
+            - override_hours
+        windows:
+          type: array
+          maxItems: 8
+          description: Required for override_hours, forbidden for closed.
+          items:
+            $ref: "#/components/schemas/BookingLocalWindow"
+        reasonCode:
+          type: string
+          nullable: true
+          description: A short code, never free text.
+    BookingScheduleException:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scheduleId:
+          type: string
+          format: uuid
+          nullable: true
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+        localFrom:
+          type: string
+          format: date
+        localTo:
+          type: string
+          format: date
+        kind:
+          type: string
+          enum:
+            - closed
+            - override_hours
+        windows:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/BookingLocalWindow"
+        reasonCode:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+    BookingSlotAvailability:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - slot
+        resourceId:
+          type: string
+          format: uuid
+        offeringId:
+          type: string
+          format: uuid
+        timezone:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        slots:
+          type: array
+          items:
+            type: object
+            properties:
+              startsAt:
+                type: string
+                format: date-time
+              endsAt:
+                type: string
+                format: date-time
+              freeUnits:
+                type: integer
+        truncated:
+          type: boolean
+          description: True when more slots exist than `limit` returned.
+    BookingStayAvailability:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - stay
+        resourceId:
+          type: string
+          format: uuid
+        offeringId:
+          type: string
+          format: uuid
+        timezone:
+          type: string
+        checkInDate:
+          type: string
+          format: date
+        checkOutDate:
+          type: string
+          format: date
+        available:
+          type: boolean
+        nights:
+          type: integer
+          nullable: true
+          description: Date arithmetic (check-out minus check-in), never hours; null when the dates were invalid.
+        arrivalAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Derived from the configured check-in time; display, lead time and horizon only, never occupancy.
+        departureAt:
+          type: string
+          format: date-time
+          nullable: true
+        freeUnits:
+          type: integer
+          nullable: true
+          description: Units free for every night (not booked, not blocked).
+        reasons:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                enum:
+                  - STAY_DATES_INVALID
+                  - MIN_STAY_VIOLATION
+                  - MAX_STAY_EXCEEDED
+                  - LEAD_TIME_NOT_MET
+                  - BEYOND_HORIZON
+                  - OUTSIDE_SCHEDULE
+                  - BLOCKED
+                  - NO_UNIT_AVAILABLE
+              overridable:
+                type: boolean
+              detail:
+                type: string
