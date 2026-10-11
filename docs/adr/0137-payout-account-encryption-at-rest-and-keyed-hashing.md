@@ -81,6 +81,15 @@ We decided to **reuse the repository's existing mechanism (AES-256-GCM, 32-byte 
 
 **No payment-provider call, no bank file, no disbursement and no outbound transfer of an account number is decided or enabled here.** Any such integration is a later issue and goes through the outbox, outside a database transaction (AGENTS.md; hr-payroll.md §1 "Out of scope"). When it is built, the component that needs the clear value will decrypt it in memory for that one operation under its own high-risk permission and audit, never log it, and never place it in an outbox payload in clear (the outbox payload carries the account id; the dispatcher resolves it).
 
+### Implementation note (2026-10-12, Issue #986)
+
+The shared helper `src/lib/security/field-encryption.ts` landed and refines the wording above without changing the decision:
+
+- **AAD and hash input encoding.** Instead of the `|`- and NUL-joined strings written in sections 2 and 3, the helper uses a length-prefixed canonical encoding (a 4-byte big-endian length before each UTF-8 field, led by a fixed label), which is unambiguous across field boundaries. The AAD covers `purpose`, `tenant_id` and the row id; the hash input covers `purpose`, `tenant_id` and the value. The `scheme` of section 3 folds into `purpose` (for example `hr_payout_account:v1:bank`). Consumers pass a `purpose` string; the exact bytes are an implementation detail covered by the helper's tests.
+- **Key rules.** Encryption and hash rings resolved through `resolveKeyRing` require exactly 32 bytes of canonical base64; the legacy parser (at least 32 bytes) remains only for the WhatsApp recipient-hash ring.
+- **Encryption and hash keys must differ.** The helper cannot know a consumer's two variables, so each consumer's `scripts/validate-env.ts` entry must enforce that its encryption ring and hash ring share no key.
+- **Rotation limit.** AES-GCM with random 96-bit IVs is safe for roughly 2^32 encryptions under one key; rotate a key well before that many writes (not a concern at payroll or chat-id volumes, but the bound is the reason rotation exists).
+
 ## Consequences
 
 - **Positive:** an account number is protected by something other than RLS and discipline; a dump alone is useless; a copied ciphertext does not authenticate; rotation is possible without downtime because the key id travels with the value; the hash cannot be brute-forced from the table; the reveal path is audited, conditional-step-up and rate limited; the helper is reusable by the next sensitive field.

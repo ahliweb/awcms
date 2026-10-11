@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0137-payout-account-encryption-at-rest-and-keyed-hashing.md)
 
-<!-- i18n-source-hash: sha256:9159f9eb820857e7d1e317257333ec526117c90b909f1873115515886c62637f -->
+<!-- i18n-source-hash: sha256:7d3207db6a66f357f4a8b3bc42dc8a62ad8b83e051b8d5438dfc82dc25e776b5 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -84,6 +84,15 @@ Kami memutuskan **memakai ulang mekanisme yang sudah ada di repositori (AES-256-
 ### 7. Eksplisit di luar lingkup
 
 **Tidak ada panggilan penyedia pembayaran, berkas bank, pencairan, maupun transfer keluar nomor rekening yang diputuskan atau diaktifkan di sini.** Integrasi semacam itu adalah issue berikutnya dan lewat outbox, di luar transaksi database (AGENTS.md; hr-payroll.md §1 "Out of scope"). Saat dibangun, komponen yang butuh nilai polos akan mendekripsinya di memori untuk satu operasi itu di bawah izin high-risk dan audit-nya sendiri, tak pernah mencatatnya di log, dan tak pernah menaruhnya polos di payload outbox (payload membawa id rekening; dispatcher yang me-resolve-nya).
+
+### Catatan implementasi (2026-10-12, Issue #986)
+
+Helper bersama `src/lib/security/field-encryption.ts` sudah mendarat dan memperjelas redaksi di atas tanpa mengubah keputusan:
+
+- **Penyandian AAD dan masukan hash.** Alih-alih string yang digabung dengan `|` dan NUL di bagian 2 dan 3, helper memakai penyandian kanonik berawalan-panjang (panjang 4 byte big-endian sebelum tiap bidang UTF-8, diawali label tetap), yang tak ambigu di batas bidang. AAD mencakup `purpose`, `tenant_id` dan id baris; masukan hash mencakup `purpose`, `tenant_id` dan nilai. `scheme` pada bagian 3 dilebur ke `purpose` (misalnya `hr_payout_account:v1:bank`). Konsumen memberi string `purpose`; byte persisnya adalah detail implementasi yang dijaga uji helper.
+- **Aturan kunci.** Ring enkripsi dan hash yang di-resolve lewat `resolveKeyRing` mewajibkan tepat 32 byte base64 kanonik; parser lama (minimal 32 byte) hanya tersisa untuk ring hash penerima WhatsApp.
+- **Kunci enkripsi dan kunci hash harus berbeda.** Helper tak bisa tahu kedua variabel konsumen, sehingga entri `scripts/validate-env.ts` tiap konsumen wajib memastikan ring enkripsi dan ring hash-nya tak berbagi kunci.
+- **Batas rotasi.** AES-GCM dengan IV acak 96-bit aman untuk sekitar 2^32 enkripsi per kunci; rotasi kunci jauh sebelum sebanyak itu (bukan masalah pada volume payroll atau chat-id, tetapi batas itulah alasan rotasi ada).
 
 ## Konsekuensi
 

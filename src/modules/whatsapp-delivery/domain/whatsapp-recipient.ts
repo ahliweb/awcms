@@ -9,6 +9,12 @@
  */
 import { createHmac } from "node:crypto";
 
+import {
+  parseKeyRing,
+  type KeyRingKey,
+  type KeyRingResult
+} from "../../../lib/security/field-encryption";
+
 const E164_PATTERN = /^\+[1-9]\d{7,14}$/;
 
 export type NormalizedPhone =
@@ -79,72 +85,20 @@ export function normalizePhoneNumber(
  * while any consent or suppression row (or retained backup) still carries it,
  * because those rows hold no plaintext to re-hash from.
  */
-export type RecipientHashKey = { id: string; key: Buffer };
+export type RecipientHashKey = KeyRingKey;
 
-export type RecipientKeyRing =
-  { ok: true; keys: RecipientHashKey[] } | { ok: false; reason: string };
+export type RecipientKeyRing = KeyRingResult;
 
-const KEY_ID_PATTERN = /^[a-z0-9]{1,8}$/;
-const PLACEHOLDER_PATTERN = /change|example|placeholder|secret/i;
-
+/** The parsing and its rules live in the shared helper (ADR-0137, Issue #986); only the variable name is WhatsApp's. */
 export function parseRecipientHashKeys(
   env: NodeJS.ProcessEnv = process.env
 ): RecipientKeyRing {
-  const raw = env.WHATSAPP_RECIPIENT_HASH_KEYS?.trim() ?? "";
-
-  if (raw === "") {
-    return { ok: false, reason: "WHATSAPP_RECIPIENT_HASH_KEYS is not set." };
-  }
-
-  const keys: RecipientHashKey[] = [];
-
-  for (const entry of raw.split(",")) {
-    const separator = entry.indexOf(":");
-    const id = entry.slice(0, separator).trim();
-    const encoded = entry.slice(separator + 1).trim();
-
-    if (separator < 1 || !KEY_ID_PATTERN.test(id)) {
-      return {
-        ok: false,
-        reason:
-          "WHATSAPP_RECIPIENT_HASH_KEYS entries must be keyId:base64 with a keyId of 1-8 lower-case letters or digits."
-      };
-    }
-
-    const key = Buffer.from(encoded, "base64");
-
-    // Checked on the encoded text AND on the decoded bytes: a placeholder such
-    // as "changeme..." base64-encodes into something that no longer spells it.
-    if (
-      PLACEHOLDER_PATTERN.test(encoded) ||
-      PLACEHOLDER_PATTERN.test(key.toString("latin1"))
-    ) {
-      return {
-        ok: false,
-        reason: `WHATSAPP_RECIPIENT_HASH_KEYS key "${id}" looks like a placeholder.`
-      };
-    }
-
-    if (key.length < 32 || key.every((byte) => byte === key[0])) {
-      return {
-        ok: false,
-        reason: `WHATSAPP_RECIPIENT_HASH_KEYS key "${id}" must be at least 32 random bytes (openssl rand -base64 32).`
-      };
-    }
-
-    if (
-      keys.some((existing) => existing.id === id || existing.key.equals(key))
-    ) {
-      return {
-        ok: false,
-        reason: "WHATSAPP_RECIPIENT_HASH_KEYS has a duplicate key id or key."
-      };
-    }
-
-    keys.push({ id, key });
-  }
-
-  return { ok: true, keys };
+  // The literal `env.NAME` read stays here: the job env allow-list scanner
+  // finds variables by that spelling, and a dynamic lookup would drop it.
+  return parseKeyRing(
+    env.WHATSAPP_RECIPIENT_HASH_KEYS,
+    "WHATSAPP_RECIPIENT_HASH_KEYS"
+  );
 }
 
 /** What a caller keeps for one recipient: the hash new rows are WRITTEN under, and every hash an existing row may carry. */
