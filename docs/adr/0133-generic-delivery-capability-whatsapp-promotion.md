@@ -130,6 +130,8 @@ Phases (each its own PR; none starts until the previous merged):
 
 **Update (2026-10-10): owner answers recorded, this ADR unchanged.** The awcms-one owner answered O10 and O11. **O10:** Telegram is admitted as an optional, off-by-default adapter. **O11:** notification orchestration is wanted, subject to a written value case and an upstream ADR. Taken faithfully, this changes who decides, not what this repository has accepted: Telegram is still **not admitted here** until its own ADR/issue exists, and that ADR starts from the constraints recorded above (off by default, explicit chat authorization, never a fallback for payroll or personal data). Orchestration is still **not admitted** until the value case and its ADR exist; the WhatsApp-specific port (§8) and the rule that no module implements automatic fallback between channels stand until such an ADR amends them.
 
+**Update (2026-10-12): O11 resolved by ADR-0139.** The written value case for notification orchestration now exists and concludes **not admitted, for now**: no facade, no fallback engine, no second outbox. The rules above stand unchanged; ADR-0139 §3 lists the conditions under which the question reopens and §4 the smallest design that would then be acceptable.
+
 ### 8. The delivery port contract (what booking and hr call)
 
 Shape only; names are **provisional** and are fixed by the implementation ADR/PR (no code now). A capability port per ADR-0011, in `src/modules/_shared/ports/`, with the module's application layer as the adapter:

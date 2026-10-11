@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0133-generic-delivery-capability-whatsapp-promotion.md)
 
-<!-- i18n-source-hash: sha256:28f63d6a3bc575c75b4ca6e35c9f7c1af360fe9d2ab5180756995bae3e05a5cd -->
+<!-- i18n-source-hash: sha256:4e509e5113b8589c9e9f2cec6799167a32611155c543bbcef59443d6300d5516 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -133,6 +133,8 @@ Fase (masing-masing PR sendiri; tidak ada yang mulai sebelum yang sebelumnya mer
 **Orkestrasi notifikasi TIDAK diterima**, menunggu kasus nilai tertulis (O11): preferensi kanal per pengguna, fallback lintas kanal ("WhatsApp gagal, kirim e-mail"), dan status lintas kanal terpadu bukan bagian kapabilitas ini. Konsekuensi yang dinyatakan eksplisit agar tidak diselundupkan: port di §8 **spesifik WhatsApp** (`WhatsappDeliveryPort`), bukan fasad multikanal `MessageDeliveryPort(channel, …)` — fasad dengan parameter kanal adalah langkah pertama orkestrasi; pemanggil yang ingin e-mail memanggil port e-mail; dan tidak ada modul di repo ini yang boleh mengimplementasikan fallback otomatis antar kanal. Port notifikasi `workflow_approval` yang ada tidak terpengaruh.
 
 **Pembaruan (2026-10-10): jawaban pemilik dicatat, ADR ini tidak berubah.** Pemilik awcms-one menjawab O10 dan O11. **O10:** Telegram diterima sebagai adapter opsional yang mati secara default. **O11:** orkestrasi notifikasi diinginkan, dengan syarat kasus nilai tertulis dan ADR upstream. Dibaca secara setia, ini mengubah siapa yang memutuskan, bukan apa yang sudah diterima repo ini: Telegram tetap **belum diterima di sini** sampai ADR/isu sendiri ada, dan ADR itu berangkat dari batasan yang dicatat di atas (mati secara default, otorisasi chat eksplisit, tidak pernah menjadi fallback untuk payroll atau data pribadi). Orkestrasi tetap **belum diterima** sampai kasus nilai dan ADR-nya ada; port khusus WhatsApp (§8) dan aturan bahwa tak ada modul yang mengimplementasikan fallback otomatis antarkanal tetap berlaku sampai ADR semacam itu mengubahnya.
+
+**Pembaruan (2026-10-12): O11 diselesaikan oleh ADR-0139.** Kasus nilai tertulis untuk orkestrasi notifikasi kini ada dan menyimpulkan **tidak diterima, untuk saat ini**: tanpa fasad, tanpa mesin fallback, tanpa outbox kedua. Aturan di atas tetap tidak berubah; ADR-0139 §3 mendaftar kondisi pembukaan kembali dan §4 desain terkecil yang kemudian dapat diterima.
 
 ### 8. Kontrak port pengiriman (yang dipanggil booking dan hr)
 
