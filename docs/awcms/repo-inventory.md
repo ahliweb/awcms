@@ -7,13 +7,13 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 29    |
-| Migrations                          | 177   |
-| `awcms_*` tables                    | 186   |
-| Tables with `FORCE` RLS             | 168   |
+| Registered modules                  | 30    |
+| Migrations                          | 179   |
+| `awcms_*` tables                    | 190   |
+| Tables with `FORCE` RLS             | 172   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 598   |
-| Route files                         | 484   |
+| Test files                          | 601   |
+| Route files                         | 492   |
 | ADR                                 | 280   |
 
 ### Modules
@@ -49,6 +49,7 @@
 | `inventory`            | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`, `reporting`                                  |
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory` |
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
+| `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 
 ### Migrations
 
@@ -231,6 +232,8 @@
 | 175 | `sql/175_awcms_procurement_permissions.sql`                        |
 | 176 | `sql/176_awcms_hr_workforce_schema.sql`                            |
 | 177 | `sql/177_awcms_hr_workforce_permissions.sql`                       |
+| 178 | `sql/178_awcms_whatsapp_delivery_schema.sql`                       |
+| 179 | `sql/179_awcms_whatsapp_delivery_permissions.sql`                  |
 
 ### Tables & Row-Level Security
 
@@ -415,6 +418,10 @@
 | `awcms_visit_events`                     | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
 | `awcms_visitor_daily_rollups`            | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
 | `awcms_visitor_sessions`                 | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_consents`                | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_delivery_attempts`       | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_messages`                | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_suppressions`            | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_workflow_decisions`               | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_definitions`             | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_delegations`             | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
@@ -427,17 +434,17 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 476        |
+| `(root)`      | 478        |
 | `e2e`         | 25         |
-| `integration` | 96         |
+| `integration` | 97         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 386   |
-| `/admin/**`     | 68    |
+| `/api/v1/**`    | 393   |
+| `/admin/**`     | 69    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->

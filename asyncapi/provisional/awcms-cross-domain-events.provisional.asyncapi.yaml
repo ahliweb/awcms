@@ -6,8 +6,9 @@ info:
   x-awcms-emitted-by-code: false
   description: |-
     PROVISIONAL. NOT part of the live event contract and NOT emitted by any
-    code today. This document holds the event schemas that the booking,
-    hr_payroll and whatsapp_delivery design packs settled on, validated by
+    code today. This document holds the event schemas that the booking and
+    hr_payroll design packs settled on (the whatsapp_delivery events went live
+    with its implementation, Issue #963), validated by
     `bun run asyncapi:provisional:check`, so that the names and payloads are
     reviewed as data before any module exists.
 
@@ -160,69 +161,6 @@ channels:
     description: >-
       PROVISIONAL. A payroll run was reversed by a reversal run. Owner: hr_payroll (ADR-0132 / docs/awcms/hr-payroll.md section 10).
       Becomes live with: hr phase 3.
-  awcms.whatsapp.message.queued:
-    address: awcms.whatsapp.message.queued
-    x-awcms-status: provisional
-    messages:
-      WhatsappMessageQueued:
-        $ref: "#/components/messages/WhatsappMessageQueued"
-    description: >-
-      PROVISIONAL. A message was accepted into the WhatsApp outbox. Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
-  awcms.whatsapp.message.sent:
-    address: awcms.whatsapp.message.sent
-    x-awcms-status: provisional
-    messages:
-      WhatsappMessageSent:
-        $ref: "#/components/messages/WhatsappMessageSent"
-    description: >-
-      PROVISIONAL. The provider accepted the message. Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
-  awcms.whatsapp.message.failed:
-    address: awcms.whatsapp.message.failed
-    x-awcms-status: provisional
-    messages:
-      WhatsappMessageFailed:
-        $ref: "#/components/messages/WhatsappMessageFailed"
-    description: >-
-      PROVISIONAL. The message reached a terminal failure; carries a coarse failureCode. Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
-  awcms.whatsapp.message.expired:
-    address: awcms.whatsapp.message.expired
-    x-awcms-status: provisional
-    messages:
-      WhatsappMessageExpired:
-        $ref: "#/components/messages/WhatsappMessageExpired"
-    description: >-
-      PROVISIONAL. The message passed its expiry before it was sent. Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
-  awcms.whatsapp.consent.granted:
-    address: awcms.whatsapp.consent.granted
-    x-awcms-status: provisional
-    messages:
-      WhatsappConsentGranted:
-        $ref: "#/components/messages/WhatsappConsentGranted"
-    description: >-
-      PROVISIONAL. A recipient's consent for a purpose was recorded. Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
-  awcms.whatsapp.consent.withdrawn:
-    address: awcms.whatsapp.consent.withdrawn
-    x-awcms-status: provisional
-    messages:
-      WhatsappConsentWithdrawn:
-        $ref: "#/components/messages/WhatsappConsentWithdrawn"
-    description: >-
-      PROVISIONAL. A recipient's consent for a purpose was withdrawn. Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
-  awcms.whatsapp.dispatch.failed:
-    address: awcms.whatsapp.dispatch.failed
-    x-awcms-status: provisional
-    messages:
-      WhatsappDispatchFailed:
-        $ref: "#/components/messages/WhatsappDispatchFailed"
-    description: >-
-      PROVISIONAL. A dispatcher pass failed as a whole (job level, not one message). Owner: whatsapp_delivery (ADR-0133 section 8).
-      Becomes live with: whatsapp_delivery implementation.
 components:
   messages:
     BookingReservationCreated:
@@ -465,118 +403,6 @@ components:
               aggregateType: { const: payroll_run }
               payload:
                 $ref: "#/components/schemas/HrPayrollReversedPayload"
-    WhatsappMessageQueued:
-      name: WhatsappMessageQueued
-      title: awcms.whatsapp.message.queued
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.message.queued }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_message }
-              payload:
-                $ref: "#/components/schemas/WhatsappMessagePayload"
-    WhatsappMessageSent:
-      name: WhatsappMessageSent
-      title: awcms.whatsapp.message.sent
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.message.sent }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_message }
-              payload:
-                $ref: "#/components/schemas/WhatsappMessagePayload"
-    WhatsappMessageFailed:
-      name: WhatsappMessageFailed
-      title: awcms.whatsapp.message.failed
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.message.failed }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_message }
-              payload:
-                $ref: "#/components/schemas/WhatsappMessagePayload"
-    WhatsappMessageExpired:
-      name: WhatsappMessageExpired
-      title: awcms.whatsapp.message.expired
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.message.expired }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_message }
-              payload:
-                $ref: "#/components/schemas/WhatsappMessagePayload"
-    WhatsappConsentGranted:
-      name: WhatsappConsentGranted
-      title: awcms.whatsapp.consent.granted
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.consent.granted }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_consent }
-              payload:
-                $ref: "#/components/schemas/WhatsappConsentPayload"
-    WhatsappConsentWithdrawn:
-      name: WhatsappConsentWithdrawn
-      title: awcms.whatsapp.consent.withdrawn
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.consent.withdrawn }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_consent }
-              payload:
-                $ref: "#/components/schemas/WhatsappConsentPayload"
-    WhatsappDispatchFailed:
-      name: WhatsappDispatchFailed
-      title: awcms.whatsapp.dispatch.failed
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "whatsapp_delivery (ADR-0133 section 8)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.whatsapp.dispatch.failed }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: whatsapp_dispatch }
-              payload:
-                $ref: "#/components/schemas/WhatsappDispatchFailedPayload"
   schemas:
     DomainEventEnvelope:
       type: object
@@ -733,33 +559,3 @@ components:
         reversalRunId: { type: string, format: uuid }
         periodKey: { type: string }
         employeeCount: { type: integer, minimum: 0 }
-    WhatsappMessagePayload:
-      type: object
-      additionalProperties: false
-      required: [messageId, templateKey, purpose, recipientMasked, status]
-      description: >-
-        Never a phone number, message body or template variable. The caller's
-        record is joined through the envelope correlationId.
-      properties:
-        messageId: { type: string, format: uuid }
-        templateKey: { type: string }
-        purpose: { type: string, enum: [transactional, security, marketing] }
-        recipientMasked: { type: string }
-        status: { type: string, enum: [queued, sent, failed, expired] }
-        failureCode: { type: string }
-    WhatsappConsentPayload:
-      type: object
-      additionalProperties: false
-      required: [consentId, purpose, recipientMasked]
-      properties:
-        consentId: { type: string, format: uuid }
-        purpose: { type: string, enum: [transactional, security, marketing] }
-        recipientMasked: { type: string }
-    WhatsappDispatchFailedPayload:
-      type: object
-      additionalProperties: false
-      required: [failureCode, occurredAt]
-      properties:
-        failureCode: { type: string }
-        batchSize: { type: integer, minimum: 0 }
-        occurredAt: { type: string, format: date-time }

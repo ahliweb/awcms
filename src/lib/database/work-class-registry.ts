@@ -110,6 +110,16 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Scheduled retention purge (push:queue:purge, ADR-0074) — same tolerant-of-delay profile as form-draft-purge; purgePushQueue passes workClass: "maintenance" explicitly.'
   },
+  "scripts/whatsapp-dispatch.ts": {
+    workClass: "background_sync",
+    rationale:
+      'Outbox dispatcher (whatsapp:dispatch, ADR-0133), recommended every 1-2 minutes — the same profile as push/email dispatch, and every withTenantOrThrow call inside whatsapp-dispatch.ts already passes workClass: "background_sync" explicitly.'
+  },
+  "scripts/whatsapp-queue-purge.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled retention purge (whatsapp:queue:purge, ADR-0133) — same tolerant-of-delay profile as push:queue:purge; purgeWhatsappQueue passes workClass: "maintenance" explicitly.'
+  },
   "scripts/email-queue-purge.ts": {
     workClass: "maintenance",
     rationale:

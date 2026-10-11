@@ -158,6 +158,18 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # with the default 'manual' it makes no outbound call at all.
 */15 * * * * /usr/bin/flock -n $AWCMS_LOCK/tenant-domain-dns-sync.lock $AWCMS_RUN_JOB tenant-domain:dns:sync >> $AWCMS_JOB_LOG/tenant-domain-dns-sync.log 2>&1
 
+# whatsapp_delivery — Drain the due WhatsApp queue (claim-lease, expiry and
+# consent re-check, retry/backoff, circuit breaker, hard-failure suppression)
+# for every active tenant.
+*/2 * * * * /usr/bin/flock -n $AWCMS_LOCK/whatsapp-dispatch.lock $AWCMS_RUN_JOB whatsapp:dispatch >> $AWCMS_JOB_LOG/whatsapp-dispatch.log 2>&1
+
+# whatsapp_delivery — Expire non-terminal WhatsApp messages past their expiry
+# (clearing a secret-bearing body) for every tenant, then delete TERMINAL
+# queue rows and spent delivery attempts past their retention windows
+# (legal-hold gated, bounded batches). Never deletes a waiting message, a
+# consent or a suppression.
+55 3 * * * /usr/bin/flock -n $AWCMS_LOCK/whatsapp-queue-purge.lock $AWCMS_RUN_JOB whatsapp:queue:purge >> $AWCMS_JOB_LOG/whatsapp-queue-purge.log 2>&1
+
 # workflow — Escalate awcms_workflow_tasks rows past their due_at for every
 # active tenant (bounded batch, advisory lock, idempotent per escalation
 # step).

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:d83bd51e6e63f0d0b54867a730082c2c8e361661f4e13beecda652edd40e7764 -->
+<!-- i18n-source-hash: sha256:c8f5e4277a034ee1362cf7f2575b4baad7868ba19643906da7826c120457454a -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -28,8 +28,8 @@
 | ------------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Port booking (`quote`, `hold`, `confirm`, `cancel`, `reschedule`)                     | desain          | §3                                                                                                                                  |
 | Port ketersediaan staf (`getAvailability`)                                            | desain          | §4                                                                                                                                  |
-| Port pengiriman WhatsApp (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | desain          | §5                                                                                                                                  |
-| 22 skema event (9 booking, 6 hr, 7 whatsapp)                                          | **provisional** | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
+| Port pengiriman WhatsApp (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | **live** (#963) | §5                                                                                                                                  |
+| 15 skema event provisional (9 booking, 6 hr); 7 event whatsapp sudah **live**         | **provisional** | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
 | Registrasi consumer (`ModuleDescriptor.domainEventConsumers`)                         | ADR-0134        | tidak dinyatakan ulang; dokumen ini hanya _memakainya_                                                                              |
 | Idempotensi per consumer ber-efek-samping                                             | desain          | §6                                                                                                                                  |
 | Bagaimana sebuah event berpindah dari provisional ke live                             | proses          | §7                                                                                                                                  |
@@ -256,6 +256,13 @@ mengonsumsinya apa adanya dan tidak menambah persyaratan sendiri.
 
 ## 5. Port pengiriman WhatsApp
 
+- **Status:** **live sejak Issue #963** (ADR-0133 fase 1, nonaktif di balik
+  `WHATSAPP_ENABLED`). Signature di bawah adalah yang diimplementasikan, dengan
+  tiga tambahan pada sketsa provisional: alasan penolakan juga mencakup
+  `RECIPIENT_INVALID`, `RECIPIENT_UNRESOLVED`, dan `EXPIRY_REQUIRED`; input
+  menerima `createdBy` opsional; dan tipe transaksinya `Bun.TransactionSQL`
+  (`WhatsappTenantTx`). Ketujuh event-nya pindah dari dokumen provisional ke
+  `asyncapi/awcms-domain-events.asyncapi.yaml` dan `DOMAIN_EVENT_TYPE_REGISTRY`.
 - **Modul pemilik:** `whatsapp_delivery` (ADR-0133; `src/modules/_shared/ports/whatsapp-delivery-port.ts`).
 - **Consumer:** `booking` (pengingat, konfirmasi), `hr_payroll` (_pemberitahuan_
   shift dan payroll), adapter commerce downstream (OTP, order-paid, kampanye,

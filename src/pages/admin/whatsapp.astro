@@ -1,0 +1,917 @@
+---
+/**
+ * WhatsApp delivery console — the operator surface of `whatsapp_delivery`
+ * (Issue #963, ADR-0133 phase 1).
+ *
+ * One screen, four questions an operator actually asks:
+ *
+ * 1. Is anything sending, and if not, why? (the deployment flag, the queue)
+ * 2. Why did THIS message not arrive? (recent messages and delivery attempts)
+ * 3. May we message this person? (the consent store and the suppression list)
+ * 4. What may modules send, and under which rules? (the template registry)
+ *
+ * ## Nothing here can reveal a number
+ *
+ * Every projection this page reads returns the MASKED recipient, never the raw
+ * number, the rendered body or the template variables (a security-class body
+ * can hold an OTP until it is terminal). The lists are therefore not searchable
+ * by number, and the page says so. The way to ask "is THIS number suppressed?"
+ * is to try to add it: the endpoint answers `alreadySuppressed` rather than
+ * creating a duplicate, which is how this page surfaces it as the check it is.
+ *
+ * ## Consent is a list of people, not a segment
+ *
+ * The consent panel records and withdraws opt-ins per recipient. There is no
+ * segment, list or audience control on purpose: being in one never implies
+ * consent (ADR-0133 section 4).
+ *
+ * ## Each section is gated on its OWN permission
+ *
+ * The screen opens on `messages.read`; the consent, suppression and template
+ * panels each appear only for a caller who holds that panel's read permission,
+ * and the write controls only for the matching write permission. A page that
+ * gated everything on one key would show a narrower grant a console it cannot
+ * use, or hide a panel from the owner while looking correct.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  listConsents,
+  listSuppressions,
+  type ConsentEntry,
+  type SuppressionEntry
+} from "../../modules/whatsapp-delivery/application/whatsapp-consent-directory";
+import {
+  isWhatsappMessageStatus,
+  listRecentWhatsappAttempts,
+  listRecentWhatsappMessages,
+  summarizeWhatsappQueue,
+  WHATSAPP_MESSAGE_STATUSES,
+  type WhatsappAttemptView,
+  type WhatsappMessageStatusValue,
+  type WhatsappMessageView,
+  type WhatsappQueueSummary
+} from "../../modules/whatsapp-delivery/application/whatsapp-diagnostics";
+import {
+  isKnownWhatsappProvider,
+  isWhatsappEnabled
+} from "../../modules/whatsapp-delivery/domain/whatsapp-config";
+import { listWhatsappTemplates } from "../../modules/whatsapp-delivery/domain/whatsapp-templates";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const STATUS_LABEL: Record<WhatsappMessageStatusValue, string> = {
+  queued: t("Queued"),
+  retry_wait: t("Waiting to retry"),
+  sending: t("Sending"),
+  sent: t("Sent"),
+  failed: t("Failed"),
+  cancelled: t("Cancelled"),
+  expired: t("Expired")
+};
+
+const STATUS_TONE: Record<WhatsappMessageStatusValue, string> = {
+  queued: "info",
+  retry_wait: "warning",
+  sending: "info",
+  sent: "success",
+  failed: "danger",
+  cancelled: "warning",
+  expired: "warning"
+};
+
+const PURPOSE_LABEL: Record<string, string> = {
+  transactional: t("Transactional"),
+  security: t("Security"),
+  marketing: t("Marketing")
+};
+
+const SUPPRESSION_REASON_LABEL: Record<string, string> = {
+  hard_failure: t("Number cannot receive WhatsApp"),
+  stop_reply: t("Asked to stop"),
+  manual: t("Manual")
+};
+
+function formatTimestamp(value: string | null): string {
+  return value ? value.replace("T", " ").slice(0, 16) + " UTC" : "—";
+}
+
+const statusParam = (Astro.url.searchParams.get("status") ?? "").trim();
+const statusFilter = isWhatsappMessageStatus(statusParam)
+  ? statusParam
+  : undefined;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "whatsapp_delivery",
+    activityCode: "messages",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    const canCancel = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "messages",
+      action: "cancel"
+    });
+    const canReadConsents = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "consents",
+      action: "read"
+    });
+    const canGrantConsent = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "consents",
+      action: "create"
+    });
+    const canRestoreConsent = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "consents",
+      action: "restore"
+    });
+    const canWithdrawConsent = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "consents",
+      action: "withdraw"
+    });
+    const canReadSuppressions = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "suppressions",
+      action: "read"
+    });
+    const canCreateSuppression = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "suppressions",
+      action: "create"
+    });
+    const canDeleteSuppression = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "suppressions",
+      action: "delete"
+    });
+    const canReadTemplates = await can({
+      moduleKey: "whatsapp_delivery",
+      activityCode: "templates",
+      action: "read"
+    });
+
+    // One transaction, one awaited query at a time (`tx` is one connection).
+    const summary = await summarizeWhatsappQueue(tx, ssr.tenantId);
+    const list = await listRecentWhatsappMessages(tx, ssr.tenantId, {
+      ...(statusFilter ? { status: statusFilter } : {}),
+      limit: 50
+    });
+    const attempts = await listRecentWhatsappAttempts(tx, ssr.tenantId, {
+      limit: 25
+    });
+    const consents = canReadConsents
+      ? await listConsents(tx, ssr.tenantId, { limit: 50 })
+      : { entries: [] as ConsentEntry[], hasMore: false };
+    const suppressions = canReadSuppressions
+      ? await listSuppressions(tx, ssr.tenantId, { limit: 50 })
+      : { entries: [] as SuppressionEntry[], hasMore: false };
+
+    return {
+      summary,
+      messages: list.messages,
+      hasMoreMessages: list.hasMore,
+      attempts,
+      consents,
+      suppressions,
+      canCancel,
+      canReadConsents,
+      canGrantConsent,
+      canWithdrawConsent,
+      canRestoreConsent,
+      canReadSuppressions,
+      canCreateSuppression,
+      canDeleteSuppression,
+      canReadTemplates
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/whatsapp.astro: failed to load the WhatsApp console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : undefined;
+
+const summary: WhatsappQueueSummary | undefined = data?.summary;
+const messages: WhatsappMessageView[] = data?.messages ?? [];
+const attempts: WhatsappAttemptView[] = data?.attempts ?? [];
+const consents: ConsentEntry[] = data?.consents.entries ?? [];
+const suppressions: SuppressionEntry[] = data?.suppressions.entries ?? [];
+const templates = data?.canReadTemplates ? listWhatsappTemplates() : [];
+
+const enabled = isWhatsappEnabled();
+const provider = isKnownWhatsappProvider(process.env.WHATSAPP_PROVIDER)
+  ? process.env.WHATSAPP_PROVIDER
+  : null;
+---
+
+<AdminLayout
+  title={t("WhatsApp delivery")}
+  description={t(
+    "The tenant's WhatsApp queue, who may be messaged, and what modules are allowed to send. Phone numbers are masked everywhere on this page."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="whatsapp-denied">
+      {t("You do not have permission to view WhatsApp delivery.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="whatsapp-load-error">
+      {t("Could not load WhatsApp delivery. Please try again.")}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <>
+      <p id="whatsapp-action-error" class="state-notice" role="alert" hidden />
+      <p id="whatsapp-notice" class="state-notice" role="status" hidden />
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="whatsapp-status-title"
+      >
+        <h2 class="admin-section-title" id="whatsapp-status-title">
+          {t("Delivery status")}
+        </h2>
+
+        {!enabled && (
+          <p class="state-notice" id="whatsapp-disabled-notice">
+            {t(
+              "WhatsApp is switched off on this deployment, so nothing is being sent. Messages are refused at enqueue and the dispatcher claims nothing."
+            )}
+          </p>
+        )}
+        {enabled && !provider && (
+          <p class="state-notice" id="whatsapp-provider-notice">
+            {t(
+              "WhatsApp is switched on but no provider is configured, so every queued message will fail."
+            )}
+          </p>
+        )}
+        <p class="page-description">
+          {t("Provider:")} <strong>{provider ?? "—"}</strong>
+        </p>
+
+        <div class="admin-stat-grid">
+          {WHATSAPP_MESSAGE_STATUSES.map((status) => (
+            <div class="admin-stat-card">
+              <span class="admin-stat-card-label">{STATUS_LABEL[status]}</span>
+              <span class="admin-stat-card-value" data-whatsapp-count={status}>
+                {summary?.countsByStatus[status] ?? 0}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p class="page-description">
+          {t("Oldest still waiting:")}{" "}
+          <strong>{formatTimestamp(summary?.oldestPendingAt ?? null)}</strong>
+        </p>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="whatsapp-messages-title"
+        id="whatsapp-messages"
+      >
+        <h2 class="admin-section-title" id="whatsapp-messages-title">
+          {t("Recent messages")}
+          <span class="count-pill">{messages.length}</span>
+        </h2>
+
+        <form method="get" class="admin-filter-form">
+          <label class="admin-field">
+            <span>{t("Status")}</span>
+            <select name="status">
+              <option value="">{t("All")}</option>
+              {WHATSAPP_MESSAGE_STATUSES.map((status) => (
+                <option value={status} selected={statusFilter === status}>
+                  {STATUS_LABEL[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" class="btn btn-secondary">
+            {t("Filter")}
+          </button>
+        </form>
+
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="whatsapp-messages-title"
+        >
+          <table class="data-table data-table--stack">
+            <thead>
+              <tr>
+                <th scope="col">{t("Template")}</th>
+                <th scope="col">{t("Purpose")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Recipient")}</th>
+                <th scope="col">{t("Retries")}</th>
+                <th scope="col">{t("Last error")}</th>
+                <th scope="col">{t("Queued")}</th>
+                {data.canCancel && <th scope="col">{t("Actions")}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {messages.length === 0 && (
+                <tr>
+                  <td colspan={data.canCancel ? 8 : 7} class="table-empty">
+                    {t("No WhatsApp messages recorded.")}
+                  </td>
+                </tr>
+              )}
+              {messages.map((message) => (
+                <tr>
+                  <th scope="row" data-label={t("Template")}>
+                    <code>{message.templateKey}</code>
+                  </th>
+                  <td data-label={t("Purpose")}>
+                    {PURPOSE_LABEL[message.purpose] ?? message.purpose}
+                  </td>
+                  <td data-label={t("Status")} data-status={message.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={STATUS_TONE[message.status]}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {STATUS_LABEL[message.status]}
+                    </span>
+                  </td>
+                  <td data-label={t("Recipient")}>
+                    <code>{message.recipientMasked}</code>
+                  </td>
+                  <td data-label={t("Retries")}>{message.retryCount}</td>
+                  <td data-label={t("Last error")}>
+                    {message.lastError ?? "—"}
+                  </td>
+                  <td data-label={t("Queued")}>
+                    {formatTimestamp(message.createdAt)}
+                  </td>
+                  {data.canCancel && (
+                    <td data-label={t("Actions")}>
+                      {(message.status === "queued" ||
+                        message.status === "retry_wait") && (
+                        <button
+                          type="button"
+                          class="btn btn-secondary js-whatsapp-cancel"
+                          data-message-id={message.id}
+                        >
+                          {t("Cancel")}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {data.hasMoreMessages && (
+          <p class="page-description">
+            {t(
+              "Newest 50 shown; older messages are removed by retention, not browsed."
+            )}
+          </p>
+        )}
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="whatsapp-attempts-title"
+        id="whatsapp-attempts"
+      >
+        <h2 class="admin-section-title" id="whatsapp-attempts-title">
+          {t("Recent delivery attempts")}
+          <span class="count-pill">{attempts.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="whatsapp-attempts-title"
+        >
+          <table class="data-table data-table--stack">
+            <thead>
+              <tr>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("Attempt")}</th>
+                <th scope="col">{t("Outcome")}</th>
+                <th scope="col">{t("Provider")}</th>
+                <th scope="col">{t("Reply")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attempts.length === 0 && (
+                <tr>
+                  <td colspan={5} class="table-empty">
+                    {t("No delivery attempts recorded.")}
+                  </td>
+                </tr>
+              )}
+              {attempts.map((attempt) => (
+                <tr>
+                  <th scope="row" data-label={t("When")}>
+                    {formatTimestamp(attempt.createdAt)}
+                  </th>
+                  <td data-label={t("Attempt")}>{attempt.attemptNo}</td>
+                  <td data-label={t("Outcome")} data-outcome={attempt.outcome}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={
+                        attempt.outcome === "success" ? "success" : "danger"
+                      }
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {attempt.outcome === "success"
+                        ? t("Success")
+                        : t("Failure")}
+                    </span>
+                  </td>
+                  <td data-label={t("Provider")}>{attempt.providerName}</td>
+                  <td data-label={t("Reply")}>
+                    {attempt.errorMessage ??
+                      attempt.providerResponseSnippet ??
+                      "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {data.canReadConsents && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="whatsapp-consents-title"
+          id="whatsapp-consents"
+        >
+          <h2 class="admin-section-title" id="whatsapp-consents-title">
+            {t("Marketing consent")}
+            <span class="count-pill">{consents.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "A marketing message is sent only to a recipient with a recorded opt-in. Being in a segment, list or campaign audience never counts as consent."
+            )}
+          </p>
+
+          {data.canGrantConsent && (
+            <form id="whatsapp-consent-form" class="admin-form">
+              <label for="whatsapp-consent-phone">{t("Phone number")}</label>
+              <input
+                id="whatsapp-consent-phone"
+                name="phone"
+                type="tel"
+                required
+                autocomplete="off"
+                placeholder="+628123456789"
+              />
+              <label for="whatsapp-consent-source">
+                {t("Where the opt-in came from")}
+              </label>
+              <input
+                id="whatsapp-consent-source"
+                name="source"
+                type="text"
+                required
+                value="admin"
+                pattern="[a-z][a-z0-9_]{0,63}"
+              />
+              {data.canRestoreConsent && (
+                <fieldset id="whatsapp-reinstate-fieldset">
+                  <legend>{t("Reverse a recorded opt-out")}</legend>
+                  <p class="page-description">
+                    {t(
+                      "Only when this person opted out and has since given new, documented consent. The opt-out stays on the record."
+                    )}
+                  </p>
+                  <label>
+                    <input
+                      id="whatsapp-consent-reinstate"
+                      name="reinstate"
+                      type="checkbox"
+                    />
+                    {t("Reinstate over an opt-out")}
+                  </label>
+                  <label for="whatsapp-consent-evidence">
+                    {t("Evidence reference")}
+                  </label>
+                  <input
+                    id="whatsapp-consent-evidence"
+                    name="evidenceRef"
+                    type="text"
+                    maxlength="200"
+                  />
+                </fieldset>
+              )}
+              <button id="whatsapp-consent-submit" type="submit">
+                {t("Record opt-in")}
+              </button>
+            </form>
+          )}
+
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="whatsapp-consents-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Recipient")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Source")}</th>
+                  <th scope="col">{t("Opted in")}</th>
+                  <th scope="col">{t("Opted out")}</th>
+                  {data.canWithdrawConsent && (
+                    <th scope="col">{t("Actions")}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {consents.length === 0 && (
+                  <tr>
+                    <td
+                      colspan={data.canWithdrawConsent ? 6 : 5}
+                      class="table-empty"
+                    >
+                      {t("No consents recorded.")}
+                    </td>
+                  </tr>
+                )}
+                {consents.map((consent) => (
+                  <tr>
+                    <th scope="row" data-label={t("Recipient")}>
+                      <code>{consent.recipientMasked}</code>
+                    </th>
+                    <td
+                      data-label={t("Status")}
+                      data-consent-status={consent.status}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          consent.status === "granted" ? "success" : "warning"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {consent.status === "granted"
+                          ? t("Opted in")
+                          : t("Opted out")}
+                      </span>
+                    </td>
+                    <td data-label={t("Source")}>{consent.source}</td>
+                    <td data-label={t("Opted in")}>
+                      {formatTimestamp(consent.grantedAt)}
+                    </td>
+                    <td data-label={t("Opted out")}>
+                      {formatTimestamp(consent.withdrawnAt)}
+                    </td>
+                    {data.canWithdrawConsent && (
+                      <td data-label={t("Actions")}>
+                        {consent.status === "granted" && (
+                          <button
+                            type="button"
+                            class="btn btn-secondary js-whatsapp-withdraw"
+                            data-consent-id={consent.id}
+                          >
+                            {t("Record opt-out")}
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {data.canReadSuppressions && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="whatsapp-suppressions-title"
+          id="whatsapp-suppressions"
+        >
+          <h2 class="admin-section-title" id="whatsapp-suppressions-title">
+            {t("Suppressed numbers")}
+            <span class="count-pill">{suppressions.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "The list shows masked numbers only, so it cannot be searched. Submitting a number that is already suppressed does not add a second entry — it tells you it is already there."
+            )}
+          </p>
+
+          {data.canCreateSuppression && (
+            <form id="whatsapp-suppression-form" class="admin-form">
+              <label for="whatsapp-suppression-phone">
+                {t("Phone number")}
+              </label>
+              <input
+                id="whatsapp-suppression-phone"
+                name="phone"
+                type="tel"
+                required
+                autocomplete="off"
+                placeholder="+628123456789"
+              />
+              <label for="whatsapp-suppression-reason">{t("Reason")}</label>
+              <select id="whatsapp-suppression-reason" name="reason" required>
+                <option value="manual">
+                  {SUPPRESSION_REASON_LABEL.manual}
+                </option>
+                <option value="stop_reply">
+                  {SUPPRESSION_REASON_LABEL.stop_reply}
+                </option>
+              </select>
+              <button id="whatsapp-suppression-submit" type="submit">
+                {t("Suppress number")}
+              </button>
+            </form>
+          )}
+
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="whatsapp-suppressions-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Recipient")}</th>
+                  <th scope="col">{t("Reason")}</th>
+                  <th scope="col">{t("Added")}</th>
+                  {data.canDeleteSuppression && (
+                    <th scope="col">{t("Actions")}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {suppressions.length === 0 && (
+                  <tr>
+                    <td
+                      colspan={data.canDeleteSuppression ? 4 : 3}
+                      class="table-empty"
+                    >
+                      {t("Nothing is suppressed.")}
+                    </td>
+                  </tr>
+                )}
+                {suppressions.map((entry) => (
+                  <tr>
+                    <th scope="row" data-label={t("Recipient")}>
+                      <code>{entry.recipientMasked}</code>
+                    </th>
+                    <td data-label={t("Reason")} data-reason={entry.reason}>
+                      {SUPPRESSION_REASON_LABEL[entry.reason] ?? entry.reason}
+                    </td>
+                    <td data-label={t("Added")}>
+                      {formatTimestamp(entry.createdAt)}
+                    </td>
+                    {data.canDeleteSuppression && (
+                      <td data-label={t("Actions")}>
+                        <button
+                          type="button"
+                          class="btn btn-secondary js-whatsapp-unsuppress"
+                          data-suppression-id={entry.id}
+                        >
+                          {t("Allow again")}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p class="page-description">
+            {t(
+              "A number removed here can receive messages from the next send onwards; messages already cancelled are not resent."
+            )}
+          </p>
+        </section>
+      )}
+
+      {data.canReadTemplates && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="whatsapp-templates-title"
+          id="whatsapp-templates"
+        >
+          <h2 class="admin-section-title" id="whatsapp-templates-title">
+            {t("Registered templates")}
+            <span class="count-pill">{templates.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "Modules register their templates in code. Each has exactly one purpose, and a variable that is not on its list is dropped before sending."
+            )}
+          </p>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="whatsapp-templates-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Template")}</th>
+                  <th scope="col">{t("Purpose")}</th>
+                  <th scope="col">{t("Allowed variables")}</th>
+                  <th scope="col">{t("Provider approval")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((template) => (
+                  <tr>
+                    <th scope="row" data-label={t("Template")}>
+                      <code>{template.key}</code> v{template.version}
+                    </th>
+                    <td data-label={t("Purpose")}>
+                      {PURPOSE_LABEL[template.purpose] ?? template.purpose}
+                    </td>
+                    <td data-label={t("Allowed variables")}>
+                      {template.variables.length === 0
+                        ? "—"
+                        : template.variables.join(", ")}
+                    </td>
+                    <td data-label={t("Provider approval")}>
+                      {template.providerTemplate
+                        ? t("Approved template set")
+                        : t("None")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    field,
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("whatsapp-action-error");
+  const noticeBox = messageBox("whatsapp-notice");
+
+  onAction(".js-whatsapp-cancel", async (button) => {
+    const messageId = button.dataset.messageId;
+    if (!messageId) return;
+
+    noticeBox.clear();
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `/api/v1/whatsapp/messages/${messageId}/cancel`),
+      (errorCode) =>
+        errorCode === "WHATSAPP_MESSAGE_NOT_CANCELLABLE"
+          ? "That message is no longer waiting — it was sent, failed, or is being sent right now."
+          : "Could not cancel that message. Please try again."
+    );
+  });
+
+  onAction(".js-whatsapp-withdraw", async (button) => {
+    const consentId = button.dataset.consentId;
+    if (!consentId) return;
+
+    noticeBox.clear();
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `/api/v1/whatsapp/consents/${consentId}/withdraw`),
+      () => "Could not record the opt-out. Please try again."
+    );
+  });
+
+  onAction(".js-whatsapp-unsuppress", async (button) => {
+    const suppressionId = button.dataset.suppressionId;
+    if (!suppressionId) return;
+
+    noticeBox.clear();
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("DELETE", `/api/v1/whatsapp/suppressions/${suppressionId}`),
+      (errorCode) =>
+        errorCode === "RESOURCE_NOT_FOUND"
+          ? "That entry was already removed."
+          : "Could not remove that entry. Please try again."
+    );
+  });
+
+  onSubmit("whatsapp-consent-form", async ({ data, submit }) => {
+    if (!submit) return;
+    actionError.clear();
+    noticeBox.clear();
+
+    const unlock = lockElement(submit, "Please wait…");
+    const reinstate = data.get("reinstate") === "on";
+    const result = await sendJsonForData("POST", "/api/v1/whatsapp/consents", {
+      phone: field(data, "phone"),
+      source: field(data, "source"),
+      ...(reinstate
+        ? {
+            reinstateWithdrawn: true,
+            evidenceRef: field(data, "evidenceRef")
+          }
+        : {})
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "VALIDATION_ERROR"
+        ? "Check the phone number (+country code) and the source."
+        : result.errorCode === "CONSENT_WITHDRAWN"
+          ? "That person opted out. Use the reinstate option with an evidence reference."
+          : "Could not record the opt-in. Please try again."
+    );
+    unlock();
+  });
+
+  // NOT `mutateAndReload`: the endpoint answers 200 with `alreadySuppressed`, so
+  // the CHECK and the ADD are one request, and reloading on that answer would
+  // throw away the only thing the operator asked for.
+  onSubmit("whatsapp-suppression-form", async ({ data, submit }) => {
+    if (!submit) return;
+    actionError.clear();
+    noticeBox.clear();
+
+    const unlock = lockElement(submit, "Please wait…");
+    const result = await sendJsonForData<{ alreadySuppressed?: boolean }>(
+      "POST",
+      "/api/v1/whatsapp/suppressions",
+      {
+        phone: field(data, "phone"),
+        reason: String(data.get("reason") ?? "")
+      }
+    );
+
+    if (result.ok && result.data?.alreadySuppressed) {
+      noticeBox.show(
+        "That number is already suppressed — nothing was changed. It is in the list below, masked."
+      );
+      unlock();
+      return;
+    }
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "VALIDATION_ERROR"
+        ? "Check the phone number (+country code) and the reason."
+        : "Could not suppress that number. Please try again."
+    );
+    unlock();
+  });
+</script>

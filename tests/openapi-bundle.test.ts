@@ -489,7 +489,11 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "Tax",
       "Tenant Domains",
       "Theming",
-      "Visitor Analytics"
+      "Visitor Analytics",
+      // "WhatsApp Delivery" (whatsapp_delivery, ADR-0133, Issue #963) — genuinely
+      // new surface: queue diagnostics, cancel, templates, suppressions and the
+      // consent store. Nothing here is anonymous.
+      "WhatsApp Delivery"
     ]);
   });
 });

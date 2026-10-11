@@ -7456,3 +7456,132 @@ msgstr ""
 
 msgid "Partner access grants"
 msgstr ""
+
+msgid "Waiting to retry"
+msgstr ""
+
+msgid "Transactional"
+msgstr ""
+
+msgid "Security"
+msgstr ""
+
+msgid "Marketing"
+msgstr ""
+
+msgid "Number cannot receive WhatsApp"
+msgstr ""
+
+msgid "Asked to stop"
+msgstr ""
+
+msgid "WhatsApp delivery"
+msgstr ""
+
+msgid "The tenant's WhatsApp queue, who may be messaged, and what modules are allowed to send. Phone numbers are masked everywhere on this page."
+msgstr ""
+
+msgid "You do not have permission to view WhatsApp delivery."
+msgstr ""
+
+msgid "Could not load WhatsApp delivery. Please try again."
+msgstr ""
+
+msgid "WhatsApp is switched off on this deployment, so nothing is being sent. Messages are refused at enqueue and the dispatcher claims nothing."
+msgstr ""
+
+msgid "WhatsApp is switched on but no provider is configured, so every queued message will fail."
+msgstr ""
+
+msgid "Provider:"
+msgstr ""
+
+msgid "Template"
+msgstr ""
+
+msgid "Purpose"
+msgstr ""
+
+msgid "Recipient"
+msgstr ""
+
+msgid "No WhatsApp messages recorded."
+msgstr ""
+
+msgid "Newest 50 shown; older messages are removed by retention, not browsed."
+msgstr ""
+
+msgid "Marketing consent"
+msgstr ""
+
+msgid "A marketing message is sent only to a recipient with a recorded opt-in. Being in a segment, list or campaign audience never counts as consent."
+msgstr ""
+
+msgid "Phone number"
+msgstr ""
+
+msgid "Where the opt-in came from"
+msgstr ""
+
+msgid "Record opt-in"
+msgstr ""
+
+msgid "Opted in"
+msgstr ""
+
+msgid "Opted out"
+msgstr ""
+
+msgid "No consents recorded."
+msgstr ""
+
+msgid "Record opt-out"
+msgstr ""
+
+msgid "Suppressed numbers"
+msgstr ""
+
+msgid "The list shows masked numbers only, so it cannot be searched. Submitting a number that is already suppressed does not add a second entry — it tells you it is already there."
+msgstr ""
+
+msgid "Suppress number"
+msgstr ""
+
+msgid "Nothing is suppressed."
+msgstr ""
+
+msgid "A number removed here can receive messages from the next send onwards; messages already cancelled are not resent."
+msgstr ""
+
+msgid "Registered templates"
+msgstr ""
+
+msgid "Modules register their templates in code. Each has exactly one purpose, and a variable that is not on its list is dropped before sending."
+msgstr ""
+
+msgid "Allowed variables"
+msgstr ""
+
+msgid "Provider approval"
+msgstr ""
+
+msgid "Approved template set"
+msgstr ""
+
+msgid "None"
+msgstr ""
+
+msgid "WhatsApp Delivery"
+msgstr ""
+
+msgid "Reverse a recorded opt-out"
+msgstr ""
+
+msgid "Only when this person opted out and has since given new, documented consent. The opt-out stays on the record."
+msgstr ""
+
+msgid "Reinstate over an opt-out"
+msgstr ""
+
+msgid "Evidence reference"
+msgstr ""

@@ -1338,6 +1338,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_push_subscriptions: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   awcms_push_messages: ["DELETE", "INSERT", "SELECT", "UPDATE"],
   awcms_push_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
+  // ADR-0133 (sql/178) — `whatsapp:dispatch` claims/updates queue rows, writes
+  // attempts, and records a hard-failure suppression; it re-reads consents but
+  // never writes them. `whatsapp:queue:purge` deletes terminal rows (the DELETE
+  // is the one to notice, per sql/091). Consents and suppressions are never
+  // deleted by any job.
+  awcms_whatsapp_messages: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  awcms_whatsapp_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
+  awcms_whatsapp_consents: ["SELECT"],
+  awcms_whatsapp_suppressions: ["INSERT", "SELECT"],
   awcms_identities: ["SELECT"],
   awcms_sync_nodes: ["SELECT"],
   // Issue #180 — identity-access:business-scope:expiry (sql/027): SELECT the

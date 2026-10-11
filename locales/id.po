@@ -7444,3 +7444,132 @@ msgstr "Mutasi stok"
 
 msgid "Partner access grants"
 msgstr "Akses yang diberikan kepada mitra"
+
+msgid "Waiting to retry"
+msgstr "Menunggu percobaan ulang"
+
+msgid "Transactional"
+msgstr "Transaksional"
+
+msgid "Security"
+msgstr "Keamanan"
+
+msgid "Marketing"
+msgstr "Pemasaran"
+
+msgid "Number cannot receive WhatsApp"
+msgstr "Nomor tidak dapat menerima WhatsApp"
+
+msgid "Asked to stop"
+msgstr "Meminta berhenti"
+
+msgid "WhatsApp delivery"
+msgstr "Pengiriman WhatsApp"
+
+msgid "The tenant's WhatsApp queue, who may be messaged, and what modules are allowed to send. Phone numbers are masked everywhere on this page."
+msgstr "Antrean WhatsApp tenant, siapa yang boleh dihubungi, dan apa yang boleh dikirim modul. Nomor telepon disamarkan di seluruh halaman ini."
+
+msgid "You do not have permission to view WhatsApp delivery."
+msgstr "Anda tidak memiliki izin untuk melihat pengiriman WhatsApp."
+
+msgid "Could not load WhatsApp delivery. Please try again."
+msgstr "Pengiriman WhatsApp tidak dapat dimuat. Silakan coba lagi."
+
+msgid "WhatsApp is switched off on this deployment, so nothing is being sent. Messages are refused at enqueue and the dispatcher claims nothing."
+msgstr "WhatsApp dimatikan pada deployment ini, sehingga tidak ada yang terkirim. Pesan ditolak saat masuk antrean dan dispatcher tidak mengambil apa pun."
+
+msgid "WhatsApp is switched on but no provider is configured, so every queued message will fail."
+msgstr "WhatsApp diaktifkan tetapi tidak ada provider yang dikonfigurasi, sehingga setiap pesan dalam antrean akan gagal."
+
+msgid "Provider:"
+msgstr "Provider:"
+
+msgid "Template"
+msgstr "Templat"
+
+msgid "Purpose"
+msgstr "Tujuan"
+
+msgid "Recipient"
+msgstr "Penerima"
+
+msgid "No WhatsApp messages recorded."
+msgstr "Belum ada pesan WhatsApp yang tercatat."
+
+msgid "Newest 50 shown; older messages are removed by retention, not browsed."
+msgstr "50 terbaru ditampilkan; pesan yang lebih lama dihapus oleh retensi, bukan untuk dijelajahi."
+
+msgid "Marketing consent"
+msgstr "Persetujuan pemasaran"
+
+msgid "A marketing message is sent only to a recipient with a recorded opt-in. Being in a segment, list or campaign audience never counts as consent."
+msgstr "Pesan pemasaran hanya dikirim ke penerima yang opt-in-nya tercatat. Berada dalam segmen, daftar, atau audiens kampanye tidak pernah dianggap persetujuan."
+
+msgid "Phone number"
+msgstr "Nomor telepon"
+
+msgid "Where the opt-in came from"
+msgstr "Asal opt-in"
+
+msgid "Record opt-in"
+msgstr "Catat opt-in"
+
+msgid "Opted in"
+msgstr "Opt-in"
+
+msgid "Opted out"
+msgstr "Opt-out"
+
+msgid "No consents recorded."
+msgstr "Belum ada persetujuan yang tercatat."
+
+msgid "Record opt-out"
+msgstr "Catat opt-out"
+
+msgid "Suppressed numbers"
+msgstr "Nomor yang ditekan"
+
+msgid "The list shows masked numbers only, so it cannot be searched. Submitting a number that is already suppressed does not add a second entry — it tells you it is already there."
+msgstr "Daftar hanya menampilkan nomor yang disamarkan, sehingga tidak dapat dicari. Mengirim nomor yang sudah ditekan tidak menambah entri kedua — Anda akan diberi tahu bahwa nomor itu sudah ada."
+
+msgid "Suppress number"
+msgstr "Tekan nomor"
+
+msgid "Nothing is suppressed."
+msgstr "Tidak ada yang ditekan."
+
+msgid "A number removed here can receive messages from the next send onwards; messages already cancelled are not resent."
+msgstr "Nomor yang dihapus di sini dapat menerima pesan mulai pengiriman berikutnya; pesan yang sudah dibatalkan tidak dikirim ulang."
+
+msgid "Registered templates"
+msgstr "Templat terdaftar"
+
+msgid "Modules register their templates in code. Each has exactly one purpose, and a variable that is not on its list is dropped before sending."
+msgstr "Modul mendaftarkan templatnya di kode. Setiap templat memiliki tepat satu tujuan, dan variabel yang tidak ada dalam daftarnya dibuang sebelum dikirim."
+
+msgid "Allowed variables"
+msgstr "Variabel yang diizinkan"
+
+msgid "Provider approval"
+msgstr "Persetujuan provider"
+
+msgid "Approved template set"
+msgstr "Templat disetujui tersedia"
+
+msgid "None"
+msgstr "Tidak ada"
+
+msgid "WhatsApp Delivery"
+msgstr "Pengiriman WhatsApp"
+
+msgid "Reverse a recorded opt-out"
+msgstr "Membalik opt-out yang tercatat"
+
+msgid "Only when this person opted out and has since given new, documented consent. The opt-out stays on the record."
+msgstr "Hanya bila orang ini pernah opt-out dan kemudian memberi persetujuan baru yang terdokumentasi. Opt-out tetap tercatat."
+
+msgid "Reinstate over an opt-out"
+msgstr "Pulihkan di atas opt-out"
+
+msgid "Evidence reference"
+msgstr "Referensi bukti"

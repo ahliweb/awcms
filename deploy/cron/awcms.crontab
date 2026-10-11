@@ -132,6 +132,9 @@ AWCMS_LOG=/var/log/awcms
 # push_delivery — descriptor: "Every 1-2 minutes". No-op unless PUSH_ENABLED=true.
 * * * * * $AWCMS_RUN push:dispatch >> $AWCMS_LOG/push-dispatch.log 2>&1
 
+# whatsapp_delivery — descriptor: "Every 1-2 minutes". No-op unless WHATSAPP_ENABLED=true.
+* * * * * flock -n /var/lock/awcms-whatsapp-dispatch.lock $AWCMS_RUN whatsapp:dispatch >> $AWCMS_LOG/whatsapp-dispatch.log 2>&1
+
 # ===========================================================================
 # Every few minutes
 # ===========================================================================
@@ -223,6 +226,9 @@ AWCMS_LOG=/var/log/awcms
 
 # push_delivery — descriptor: "Daily, off-peak". Runs regardless of PUSH_ENABLED.
 40 3 * * * $AWCMS_RUN push:queue:purge >> $AWCMS_LOG/push-queue-purge.log 2>&1
+
+# whatsapp_delivery — descriptor: "Daily, off-peak". Runs regardless of WHATSAPP_ENABLED.
+55 3 * * * $AWCMS_RUN whatsapp:queue:purge >> $AWCMS_LOG/whatsapp-queue-purge.log 2>&1
 
 # comments — descriptor: "daily (off-peak)". No cross-instance lock yet (#291).
 50 3 * * * flock -n /var/lock/awcms-comments-retention.lock $AWCMS_RUN comments:retention >> $AWCMS_LOG/comments-retention.log 2>&1
