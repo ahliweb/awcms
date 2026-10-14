@@ -9,18 +9,24 @@
  * constraints on `awcms_booking_resource_allocations`, `sql/180`), a reservation
  * state machine enforced by trigger, and an append-only transition history.
  *
- * ## This is the FOUNDATION slice only
+ * ## What exists, and what does not (slices #937 to #939)
  *
- * What exists: the descriptor, the schema (`sql/180`), the permission catalogue
- * (`sql/181`), the PURE reservation state machine
+ * What exists: the descriptor, the schema (`sql/180`, `sql/186`), the permission
+ * catalogue (`sql/181`), the PURE reservation state machine
  * (`domain/booking-reservation-state.ts`), the guard literals and the audit
- * event names. What does NOT exist yet, deliberately: the allocator, availability
- * search, any HTTP route, OpenAPI path, AsyncAPI channel, admin screen or
- * reporting projection (Issues #938 to #941). The module therefore ships
- * `experimental`, declares no `navigation`, and no route reaches its tables: it
- * is the "feature flag off" the issue asks for -- a status ADR-0021 allows
- * without an admin screen, and the one a later PR flips to `active` together
- * with its first screen.
+ * event names; the availability read and the schedule routes (Issue #938); and
+ * the ALLOCATOR slice (Issue #939): `application/booking-allocator.ts` (units
+ * claimed all-or-none under the exclusion constraint), `booking-hold-expiry.ts`
+ * (lazy reclaim plus the reaper primitive), `booking-hold-service.ts`
+ * (`placeHold`, the claim a reservation route will call),
+ * `booking-reconciliation.ts` and the job `booking:holds:expire`. What does NOT
+ * exist yet, deliberately: stay claims and blocks as allocation rows (Issue
+ * #940), the reservation HTTP routes, OpenAPI paths for them, AsyncAPI channels,
+ * the admin screens and the reporting projections (Issues #941, #942). The module
+ * therefore ships `experimental`, declares no `navigation`, and no route reaches
+ * the allocator: it is the "feature flag off" the issue asks for -- a status
+ * ADR-0021 allows without an admin screen, and the one a later PR flips to
+ * `active` together with its first screen.
  *
  * ## No money, no product, no customer name
  *
@@ -132,11 +138,11 @@ export const bookingModule = defineModule({
   version: "0.1.0",
   // `experimental` is the feature flag: the module has no admin screen until
   // Issues #939 to #941 (Issue #938 added the availability read and the schedule
-  // routes), and ADR-0021's "every ACTIVE module declares a screen" would be
+  // routes, Issue #939 the allocator), and ADR-0021's "every ACTIVE module declares a screen" would be
   // false the other way round.
   status: "experimental",
   description:
-    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. No allocator yet. Holds no price, payment state, product id or customer name.",
+    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. Allocator slice (Issue #939): the slot allocator that wins capacity units all-or-none under the exclusion constraint, holds with expiry (lazy reclaim at write time plus the observable `booking:holds:expire` reaper, correctness independent of it), the claim service `placeHold`, and a read-only reconciliation. Holds no price, payment state, product id or customer name.",
   dependencies: ["tenant_admin", "identity_access", "logging"],
   api: {
     openApiPath: "openapi/modules/booking.openapi.yaml",
@@ -313,6 +319,22 @@ export const bookingModule = defineModule({
       activityCode: "reports",
       action: "read",
       description: "Read occupancy, utilization and reservation aggregates"
+    }
+  ],
+  jobs: [
+    {
+      command: "bun run booking:holds:expire",
+      schedule: {
+        mode: "cron",
+        expression: "* * * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Expires booking holds whose lifetime has elapsed on the database clock (reservation `expired`, units released, `expired` history row, one aggregate audit entry per tenant per pass). Housekeeping, not the gate: the allocator reclaims an elapsed hold on the units it claims, so a stopped sweep leaves stale `held` rows and never a double booking. Its lag is observable as `hold_overdue_unswept` in the booking reconciliation (booking.md section 7.1).",
+      recommendedSchedule: "Every minute via cron/systemd timer.",
+      environmentNotes:
+        "Database-only operation, no external network dependency. Runs as the application role under a per-tenant context (the `held -> expired` trigger refuses an expiry before the hold has elapsed). Bounded per-tenant passes in the maintenance work class; safe to run alongside request traffic (it never waits on a locked hold: SKIP LOCKED). `--dry-run` counts the elapsed holds per tenant.",
+      safeInOfflineLan: true
     }
   ],
   dataLifecycle: [

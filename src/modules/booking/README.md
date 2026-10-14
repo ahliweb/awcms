@@ -18,9 +18,40 @@ guard literals and the audit event names.
 Availability (Issue #938): schedules, closures and exceptions, blocked nights
 (`sql/186`), the pure availability calculation, and the routes under
 `/api/v1/booking/` (`availability`, `schedules`, `schedule-exceptions`).
-**Not present yet:** the allocator and any write of a reservation, blocks being
-written, AsyncAPI channels, an admin screen and the reporting projection
-(Issues #939 to #941).
+
+Allocator (Issue #939, **no migration**): the slot allocator, holds with expiry,
+the claim service `placeHold` and the read-only reconciliation, plus the
+`booking:holds:expire` job. **Not present yet:** the reservation routes and the
+transitions after creation (`confirm`, `cancel`, `reschedule`, ...), stays and
+blocks as allocation rows (Issue #940), AsyncAPI channels, an admin screen and
+the reporting projection (Issues #940 to #942).
+
+## The allocator, in one place
+
+- **The guarantee is the exclusion constraint**, not this code. The allocator
+  (`application/booking-allocator.ts`) claims a unit with `INSERT ... ON CONFLICT
+DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
+  then either absorbs the conflict (the loser gets no row, the transaction stays
+  usable) or lets the claim through when the other writer rolled back. It reads
+  the free units first as a **hint** (committed rows only) in a deterministic
+  order, claims the units chosen together in `(resource_id, ordinal)` order so
+  two writers cannot wait on each other in a cycle, and is all-or-none for `k`
+  units: `placeHold` runs the whole claim in a savepoint, so a refusal rolls back
+  the reservation, the item and any unit already won.
+- **Refusals are values** (`SLOT_UNAVAILABLE`, `HOLD_LIMIT_EXCEEDED`, ...), never
+  an error, and a refusal writes nothing. A residual deadlock (`40P01`) is
+  retried at most three times with jitter, then `CONTENTION_RETRY`.
+- **Holds expire in two cooperating ways** (`application/booking-hold-expiry.ts`).
+  **Lazy reclaim** expires, inside the claim's own transaction and under the
+  reservation row lock, the elapsed holds standing on the units being claimed.
+  The **reaper** (`bun run booking:holds:expire`, every minute) expires the rest.
+  Correctness depends on the first only: with the reaper stopped a late claim
+  still finds the unit free, and the reaper's lag is visible as
+  `hold_overdue_unswept` in `runReconciliation`.
+- **`placeHold` is the claim, not the create handler.** Opening hours, lead
+  time, horizon and `reservations.override` are the handler's (Issue #941) and
+  run before it. It never sees a customer name: the customer is the opaque
+  `externalCustomerRef`, kept out of the audit row and the event detail.
 
 ## Time semantics, in one place
 
@@ -56,27 +87,34 @@ written, AsyncAPI channels, an admin screen and the reporting projection
 
 ## Layout
 
-| Path                                   | What it is                                                                                      |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `module.ts`                            | Descriptor: 32 permissions, `dataLifecycle` and `subjectData` for the tables                    |
-| `domain/booking-reservation-state.ts`  | The reservation state machine as a pure function (no I/O, the caller passes the database clock) |
-| `domain/booking-permissions.ts`        | Literal guard objects for `authorizeInTransaction` (used from Issue #938)                       |
-| `domain/booking-audit.ts`              | Audit event names and severities                                                                |
-| `domain/booking-time.ts`               | Pure zone, date arithmetic and RFC 5545 gap/fold resolution                                     |
-| `domain/booking-schedule.ts`           | Pure closed rules schema, schedule selection, expansion to UTC windows, closures                |
-| `domain/booking-availability.ts`       | Pure slot availability and stay evaluation (no I/O, no clock)                                   |
-| `domain/booking-validation.ts`         | Strict request validation (RFC 3339 with offset, IANA zones)                                    |
-| `domain/booking-staff-availability.ts` | The no-op StaffAvailabilityConsumer seam that Issue #949 wires                                  |
-| `application/*-directory.ts`           | The only code that reads or writes rows (database clock, tenant-scoped, savepoints)             |
+| Path                                     | What it is                                                                                      |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `module.ts`                              | Descriptor: 32 permissions, `dataLifecycle` and `subjectData` for the tables                    |
+| `domain/booking-reservation-state.ts`    | The reservation state machine as a pure function (no I/O, the caller passes the database clock) |
+| `domain/booking-permissions.ts`          | Literal guard objects for `authorizeInTransaction` (used from Issue #938)                       |
+| `domain/booking-audit.ts`                | Audit event names and severities                                                                |
+| `domain/booking-time.ts`                 | Pure zone, date arithmetic and RFC 5545 gap/fold resolution                                     |
+| `domain/booking-schedule.ts`             | Pure closed rules schema, schedule selection, expansion to UTC windows, closures                |
+| `domain/booking-availability.ts`         | Pure slot availability and stay evaluation (no I/O, no clock)                                   |
+| `domain/booking-validation.ts`           | Strict request validation (RFC 3339 with offset, IANA zones)                                    |
+| `domain/booking-staff-availability.ts`   | The no-op StaffAvailabilityConsumer seam that Issue #949 wires                                  |
+| `application/*-directory.ts`             | The only code that reads or writes rows (database clock, tenant-scoped, savepoints)             |
+| `domain/booking-allocation.ts`           | Pure hold lifetime, slot window, unit ordering, SQLSTATE classification, retry backoff          |
+| `application/booking-allocator.ts`       | `claimUnits`: the units of one item, all-or-none, under the exclusion constraint                |
+| `application/booking-hold-expiry.ts`     | Lazy reclaim and the reaper pass: one statement per expiry (reservation, units, history)        |
+| `application/booking-hold-service.ts`    | `placeHold`: reservation, item snapshot, allocations, history, audit, in one savepoint          |
+| `application/booking-hold-expiry-job.ts` | The per-tenant sweep behind `scripts/booking-holds-expire.ts`                                   |
+| `application/booking-reconciliation.ts`  | Read-only proof that reservations and allocations agree; the reaper lag                         |
 
 Not in the schema yet and recorded as follow-ups: `service_requirements` and
 `staff_assignments` (booking.md section 4). `resource_blocks` arrived with
 Issue #938, but its allocation rows (so the stay exclusion constraint also holds
-a block against a reservation) and its writer arrive with the allocator (#939);
-until then availability reads blocks directly.
+a block against a reservation) and its writer arrive with the stay slice
+(#940, ADR-0135), which reuses this allocator; until then availability reads
+blocks directly.
 
 Follow-ups recorded by the security audit of the foundation: the transition
-handlers of #939 and #940 must write exactly one history event per transition
-(the database does not yet tie a status change to an event row), and the
-append-only tables should also refuse TRUNCATE by trigger (today only the
-revoked privilege stops the runtime role).
+handlers of #941 must write exactly one history event per transition (the
+database does not yet tie a status change to an event row; the expiry pass of
+#939 does, in one statement), and the append-only tables should also refuse
+TRUNCATE by trigger (today only the revoked privilege stops the runtime role).

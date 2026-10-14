@@ -283,6 +283,17 @@ export function getAppRoleSql(): Bun.SQL {
 }
 
 /**
+ * A NEW pool of `max` connections to the ephemeral database as the runtime role
+ * (`awcms_app`, else the non-superuser owner), for tests that must put MANY
+ * transactions in flight at once. `getRuntimeSql()` holds 4 connections, so a
+ * race of 20 contenders on it would run five at a time and prove nothing about
+ * real concurrency. The CALLER owns the pool and must `close()` it.
+ */
+export function createRuntimePool(max: number): Bun.SQL {
+  return new Bun.SQL(appRoleActivated ? appUrl() : ownerUrl(), { max });
+}
+
+/**
  * A DEDICATED connection to the ephemeral database as `awcms_worker`
  * (migration 022). Only valid when `workerRoleActivated`; callers MUST guard on
  * it. Use it to assert what a scheduled job CAN and — more often — CANNOT do:

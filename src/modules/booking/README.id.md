@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:87bee03b6a778add0c121aa0a6d51956d937f697cbfa9f169292c1539b505a15 -->
+<!-- i18n-source-hash: sha256:e6e944b91e4989fb1a0b1db68991709211c9e21689fa66bc70c9fd5ef15fb347 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -21,8 +21,42 @@ Fondasi (Issue #937): descriptor (`experimental`), skema (`sql/180`), katalog iz
 Ketersediaan (Issue #938): jadwal, penutupan, dan pengecualian, malam yang
 diblokir (`sql/186`), kalkulasi ketersediaan murni, dan route di
 `/api/v1/booking/` (`availability`, `schedules`, `schedule-exceptions`).
-**Belum ada:** allocator dan penulisan reservasi, penulisan blok, channel
-AsyncAPI, layar admin, dan proyeksi reporting (Issue #939 sampai #941).
+
+Allocator (Issue #939, **tanpa migrasi**): allocator slot, hold dengan
+kedaluwarsa, layanan klaim `placeHold`, dan rekonsiliasi read-only, ditambah job
+`booking:holds:expire`. **Belum ada:** route reservasi dan transisi setelah
+pembuatan (`confirm`, `cancel`, `reschedule`, ...), stay dan blok sebagai baris
+allocation (Issue #940), channel AsyncAPI, layar admin, dan proyeksi reporting
+(Issue #940 sampai #942).
+
+## Allocator, di satu tempat
+
+- **Jaminannya adalah exclusion constraint**, bukan kode ini. Allocator
+  (`application/booking-allocator.ts`) mengklaim satu unit dengan `INSERT ... ON
+CONFLICT DO NOTHING RETURNING id`: PostgreSQL menunggu baris konkuren yang
+  belum pasti lalu menyerap konflik (pihak yang kalah tidak mendapat baris,
+  transaksi tetap bisa dipakai) atau meloloskan klaim bila penulis lain
+  di-rollback. Ia membaca unit bebas lebih dulu sebagai **petunjuk** (hanya
+  baris yang sudah commit) dalam urutan deterministik, mengklaim unit yang
+  dipilih bersama dalam urutan `(resource_id, ordinal)` supaya dua penulis tidak
+  saling menunggu melingkar, dan semua-atau-tidak-sama-sekali untuk `k` unit:
+  `placeHold` menjalankan seluruh klaim dalam savepoint, sehingga penolakan
+  meng-rollback reservasi, item, dan unit yang sudah dimenangkan.
+- **Penolakan adalah nilai** (`SLOT_UNAVAILABLE`, `HOLD_LIMIT_EXCEEDED`, ...),
+  bukan error, dan penolakan tidak menulis apa pun. Deadlock sisa (`40P01`)
+  diulang paling banyak tiga kali dengan jitter, lalu `CONTENTION_RETRY`.
+- **Hold kedaluwarsa lewat dua cara yang bekerja sama**
+  (`application/booking-hold-expiry.ts`). **Reklamasi malas** mengakhiri, di
+  dalam transaksi klaim itu sendiri dan di bawah kunci baris reservasi, hold
+  yang sudah berakhir dan menempati unit yang diklaim. **Reaper**
+  (`bun run booking:holds:expire`, tiap menit) mengakhiri sisanya. Kebenaran
+  hanya bergantung pada yang pertama: dengan reaper berhenti, klaim yang
+  terlambat tetap menemukan unit bebas, dan keterlambatan reaper terlihat sebagai
+  `hold_overdue_unswept` di `runReconciliation`.
+- **`placeHold` adalah klaim, bukan handler pembuatan.** Jam buka, lead time,
+  horizon, dan `reservations.override` milik handler (Issue #941) dan berjalan
+  sebelumnya. Ia tak pernah melihat nama pelanggan: pelanggan adalah
+  `externalCustomerRef` yang opak, dijauhkan dari baris audit dan detail event.
 
 ## Semantik waktu, di satu tempat
 
@@ -59,27 +93,35 @@ AsyncAPI, layar admin, dan proyeksi reporting (Issue #939 sampai #941).
 
 ## Tata letak
 
-| Path                                   | Isinya                                                                                  |
-| -------------------------------------- | --------------------------------------------------------------------------------------- |
-| `module.ts`                            | Descriptor: 32 izin, `dataLifecycle` dan `subjectData` untuk tabel-tabelnya             |
-| `domain/booking-reservation-state.ts`  | Mesin status reservasi sebagai fungsi murni (tanpa I/O, pemanggil memberi jam database) |
-| `domain/booking-permissions.ts`        | Objek guard literal untuk `authorizeInTransaction` (dipakai mulai Issue #938)           |
-| `domain/booking-audit.ts`              | Nama dan severity audit event                                                           |
-| `domain/booking-time.ts`               | Zona, aritmetika tanggal, dan resolusi gap/fold RFC 5545 yang murni                     |
-| `domain/booking-schedule.ts`           | Skema rules tertutup, pemilihan jadwal, ekspansi ke jendela UTC, penutupan (murni)      |
-| `domain/booking-availability.ts`       | Ketersediaan slot dan evaluasi stay yang murni (tanpa I/O, tanpa jam)                   |
-| `domain/booking-validation.ts`         | Validasi request ketat (RFC 3339 beroffset, zona IANA)                                  |
-| `domain/booking-staff-availability.ts` | Seam StaffAvailabilityConsumer no-op yang dihubungkan Issue #949                        |
-| `application/*-directory.ts`           | Satu-satunya kode yang membaca atau menulis baris (jam database, per tenant, savepoint) |
+| Path                                     | Isinya                                                                                  |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| `module.ts`                              | Descriptor: 32 izin, `dataLifecycle` dan `subjectData` untuk tabel-tabelnya             |
+| `domain/booking-reservation-state.ts`    | Mesin status reservasi sebagai fungsi murni (tanpa I/O, pemanggil memberi jam database) |
+| `domain/booking-permissions.ts`          | Objek guard literal untuk `authorizeInTransaction` (dipakai mulai Issue #938)           |
+| `domain/booking-audit.ts`                | Nama dan severity audit event                                                           |
+| `domain/booking-time.ts`                 | Zona, aritmetika tanggal, dan resolusi gap/fold RFC 5545 yang murni                     |
+| `domain/booking-schedule.ts`             | Skema rules tertutup, pemilihan jadwal, ekspansi ke jendela UTC, penutupan (murni)      |
+| `domain/booking-availability.ts`         | Ketersediaan slot dan evaluasi stay yang murni (tanpa I/O, tanpa jam)                   |
+| `domain/booking-validation.ts`           | Validasi request ketat (RFC 3339 beroffset, zona IANA)                                  |
+| `domain/booking-staff-availability.ts`   | Seam StaffAvailabilityConsumer no-op yang dihubungkan Issue #949                        |
+| `application/*-directory.ts`             | Satu-satunya kode yang membaca atau menulis baris (jam database, per tenant, savepoint) |
+| `domain/booking-allocation.ts`           | Umur hold, jendela slot, urutan unit, klasifikasi SQLSTATE, backoff retry (murni)       |
+| `application/booking-allocator.ts`       | `claimUnits`: unit dari satu item, semua-atau-tidak, di bawah exclusion constraint      |
+| `application/booking-hold-expiry.ts`     | Reklamasi malas dan satu putaran reaper: satu statement per kedaluwarsa                 |
+| `application/booking-hold-service.ts`    | `placeHold`: reservasi, snapshot item, allocation, riwayat, audit, dalam satu savepoint |
+| `application/booking-hold-expiry-job.ts` | Sapuan per tenant di balik `scripts/booking-holds-expire.ts`                            |
+| `application/booking-reconciliation.ts`  | Bukti read-only bahwa reservasi dan allocation sepakat; keterlambatan reaper            |
 
 Belum ada di skema dan dicatat sebagai tindak lanjut: `service_requirements` dan
 `staff_assignments` (booking.md bagian 4). `resource_blocks` hadir bersama
 Issue #938, tetapi baris allocation-nya (agar exclusion constraint stay juga
-menahan blok terhadap reservasi) dan penulisnya hadir bersama allocator (#939);
-sampai saat itu ketersediaan membaca blok secara langsung.
+menahan blok terhadap reservasi) dan penulisnya hadir bersama irisan stay
+(#940, ADR-0135), yang memakai ulang allocator ini; sampai saat itu
+ketersediaan membaca blok secara langsung.
 
-Tindak lanjut yang dicatat audit keamanan fondasi: handler transisi pada #939
-dan #940 wajib menulis tepat satu event riwayat per transisi (database belum
-mengikat perubahan status ke baris event), dan tabel append-only sebaiknya juga
+Tindak lanjut yang dicatat audit keamanan fondasi: handler transisi pada #941
+wajib menulis tepat satu event riwayat per transisi (database belum mengikat
+perubahan status ke baris event; putaran kedaluwarsa #939 melakukannya dalam
+satu statement), dan tabel append-only sebaiknya juga
 menolak TRUNCATE lewat trigger (kini hanya privilege yang dicabut yang
 menahan role runtime).

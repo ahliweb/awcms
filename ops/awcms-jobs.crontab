@@ -40,6 +40,15 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # published, or still in the future, is a no-op on re-run.
 */5 * * * * /usr/bin/flock -n $AWCMS_LOCK/blog-publish-scheduled.lock $AWCMS_RUN_JOB blog:publish:scheduled >> $AWCMS_JOB_LOG/blog-publish-scheduled.log 2>&1
 
+# booking — Expires booking holds whose lifetime has elapsed on the database
+# clock (reservation `expired`, units released, `expired` history row, one
+# aggregate audit entry per tenant per pass). Housekeeping, not the gate: the
+# allocator reclaims an elapsed hold on the units it claims, so a stopped
+# sweep leaves stale `held` rows and never a double booking. Its lag is
+# observable as `hold_overdue_unswept` in the booking reconciliation
+# (booking.md section 7.1).
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/booking-holds-expire.lock $AWCMS_RUN_JOB booking:holds:expire >> $AWCMS_JOB_LOG/booking-holds-expire.log 2>&1
+
 # comments — Bounded, per-tenant retention/anonymization sweep: NULL author
 # identity fields on comments older than the retention cutoff (retaining row +
 # body + append-only moderation history), and delete unconfirmed reply

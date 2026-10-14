@@ -391,6 +391,20 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **BOOKING BUILD-OUT — slices #937 to #939 landed; next #940 (stays) and #941
+  (reservation routes).** #937 schema (`sql/180`, `sql/181`), #938 availability
+  and schedules (`sql/186`), #939 the slot allocator, holds with expiry and the
+  reconciliation, with **no migration** (the schema already held every
+  invariant). The map from the pack to the code is
+  [`awcms/booking.md`](awcms/booking.md) §13. Three things a continuer must
+  know: (1) `placeHold` is the claim, not the create handler: opening hours,
+  lead time, horizon and the `override` path are #941's and must run before it;
+  (2) correctness never depends on the `booking:holds:expire` job (lazy reclaim
+  covers every claim), its health is `hold_overdue_unswept` in the
+  reconciliation; (3) the concurrency evidence is
+  `tests/integration/booking-concurrency.integration.test.ts` (T2, T3, T6, T7),
+  driven through `placeHold` until #941 puts a route in front of it.
+
 - **AW BUSINESS PLATFORM WAVE A — 8 October 2026 (v10.7.0): #915–#918 done
   upstream, the same day downstream ADR-0040 was accepted (awcms-one#335, O0).**
 

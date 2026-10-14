@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1f9a65cde91106ba5ac5f8086caaa9d40c5ecd9c772963648746cf317f3e5dd3 -->
+<!-- i18n-source-hash: sha256:1a30b42f97a685bfde57f727bd0ba3f7a843ac406d2d9db13135d7a80925b0cb -->
 
 # AWCMS — Project State & Continuation
 
@@ -393,6 +393,20 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **PEMBANGUNAN BOOKING — irisan #937 sampai #939 sudah masuk; berikutnya #940
+  (stay) dan #941 (route reservasi).** #937 skema (`sql/180`, `sql/181`), #938
+  availability dan jadwal (`sql/186`), #939 alokator slot, hold dengan
+  kedaluwarsa, dan rekonsiliasi, **tanpa migrasi** (skema sudah memegang setiap
+  invarian). Peta dari paket ke kode ada di [`awcms/booking.md`](awcms/booking.id.md)
+  §13. Tiga hal yang harus diketahui penerus: (1) `placeHold` adalah klaim,
+  bukan handler pembuatan: jam buka, lead time, horizon, dan jalur `override`
+  milik #941 dan harus berjalan sebelumnya; (2) kebenaran tak pernah bergantung
+  pada job `booking:holds:expire` (reklamasi malas menutup setiap klaim),
+  kesehatannya adalah `hold_overdue_unswept` pada rekonsiliasi; (3) bukti
+  konkurensi ada di `tests/integration/booking-concurrency.integration.test.ts`
+  (T2, T3, T6, T7), dijalankan lewat `placeHold` sampai #941 memasang route di
+  depannya.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 Oktober 2026 (v10.7.0): #915–#918 selesai
   di hulu, pada hari yang sama ADR-0040 hilir diterima (awcms-one#335, O0).**

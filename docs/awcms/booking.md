@@ -3,10 +3,11 @@
 # Booking — resources, schedules and reservations (module doc pack)
 
 > **Status:** admitted by [ADR-0131](../adr/0131-generic-booking-module-admission.md)
-> (Issue #915). **Design only: no module code, migration, OpenAPI path or
-> AsyncAPI channel exists yet**, and none is to be written until this pack is
-> accepted downstream (`ahliweb/awcms-one` Wave A) and the schema-affecting open
-> questions in §11 are answered. PRD-lite, state machine, ERD and data
+> (Issue #915). **Built in slices: §13 says what exists in the code today**
+> (schema, permission catalogue, availability and schedule routes, and the
+> allocator with holds and expiry); the reservation routes, the AsyncAPI
+> channels, the admin screens and stay allocations are still design, and the
+> schema-affecting open questions in §11 still govern them. PRD-lite, state machine, ERD and data
 > dictionary, holds and idempotency, permissions/RLS matrix, reporting and
 > events, the double-booking strategy with its required regression test, threat
 > and privacy notes, the adapter/port contract and the open questions are in
@@ -483,7 +484,7 @@ de-duplicate on the envelope's event id; delivery is at-least-once.
    allocator picks units in `(resource.sort_order, unit.ordinal)` order and
    inserts with `INSERT … ON CONFLICT DO NOTHING RETURNING id` (an exclusion
    violation is a conflict `DO NOTHING` absorbs, so no savepoint per attempt);
-   no row returned → try the next unit; none left → `SLOT_UNAVAILABLE`. (That `DO NOTHING` waits for an in-doubt concurrent conflicting row and then skips it is the behaviour T3 proves at implementation; if it did not hold, the fallback is a savepoint per attempt catching `23P01`.) A party
+   no row returned → try the next unit; none left → `SLOT_UNAVAILABLE`. (That `DO NOTHING` waits for an in-doubt concurrent conflicting row and then skips it is the behaviour T3 proves, and Issue #939 observed it: the second INSERT blocks on the first's uncommitted row, and is absorbed when the first commits or takes the unit when it rolls back. A `23P01` that escapes anyway is mapped to `SLOT_UNAVAILABLE`.) A party
    or requirement of _k_ units inserts _k_ rows in one transaction, all-or-none.
    N is capped (500) because _k_ inserts are _k_ probes.
 3. **Multi-item and multi-resource reservations** insert in a fixed global order
@@ -531,6 +532,8 @@ The module **must not ship without** these, in
 PostgreSQL as the runtime role `awcms_app` (FORCE RLS in effect), on separate
 connections (not one pooled transaction). Use the repo's rejection helper, not
 `expect(...).rejects` (which hangs with Bun.SQL).
+
+**Status (§13).** T1 is in `booking-database.integration.test.ts` (#937). T2, T3 (with the `DO NOTHING` interleaving it rests on), T6 (a) and the reaper races of (b), and T7 are in `booking-concurrency.integration.test.ts` (#939), driven through `placeHold` on real concurrent transactions rather than through `POST /booking/reservations`, which arrives with #941; they move behind the route in #941 together with T4, T5 and the confirm-versus-job half of T6 (b). T8 needs `staff_assignments`, and T9 to T13 are the stay slice (#940).
 
 **T1 — database level, interleaving proven.** Fixture: one resource, capacity 1,
 one unit; window `[10:00, 11:00)`.
@@ -783,3 +786,68 @@ rows (would use §8.1 rule 4); partial-accept series; shared turnaround; waitlis
 iCal export; automatic no-show; a retention window with archive-then-purge; `profile_identity` harmonisation of the customer reference (own ADR; O12 kept commerce as the authority);
 `MONTHLY` recurrence (O2); the stay follow-ups O2a–O2h (§11); updating the provisional AsyncAPI payloads and `cross-domain-contracts.md` with the additive `stays` field when the events go live; keyed hashing and at-rest
 encryption are not applicable (no identifier is stored).
+
+## 13. Implementation status
+
+What is built, what is only specified, and where the next slice attaches. The
+design above is the contract; this section is the map from it to the code
+(module map: [`src/modules/booking/README.md`](../../src/modules/booking/README.md)).
+
+| Slice                | Issue | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation           | #937  | Schema `sql/180` (RLS FORCE, composite foreign keys, both exclusion constraints, the state machine as a trigger, append-only history), permission catalogue `sql/181`, the pure state machine. Test T1 (database-level interleaving).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Availability         | #938  | Schedules, exceptions, blocks table (`sql/186`), the pure slot and stay availability, `GET /availability`, schedule routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Allocator, holds** | #939  | The slot allocator (§8.1 rules 1 to 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, first free unit in `(sort_order, id, ordinal)` order, all-or-none for several units, units chosen together inserted in `(resource_id, ordinal)` order, `23P01` and `40P01` handled (bounded retry with jitter). Holds with expiry (§5.1): lazy reclaim at write time plus the `booking:holds:expire` reaper, correctness independent of the reaper. `placeHold`, the claim a reservation route will call. Hold caps (a sum, §8.1 rule 4). The read-only reconciliation of §7.1. Tests T2, T3 (and its `DO NOTHING` premise), T6 (a, b), T7, in `tests/integration/booking-concurrency.integration.test.ts`. No migration: the schema of `sql/180` already holds every invariant the allocator needs. |
+
+**Still design (not in the code):** the reservation routes and the transitions
+after creation (`confirm`, `cancel`, `reschedule`, `check_in`, `complete`,
+`no_show`, `extend`), `Idempotency-Key` on them and the `reservations.override`
+policy path (Issue #941); the nine events on the live AsyncAPI document (#941);
+stay claims and blocks as allocation rows, `BLOCK_CONFLICT`, and tests T9 to T13
+(#940); `service_requirements`, `staff_assignments` and test T8; the
+`reservations/reconciliation` route and the report routes; reporting
+projections; the admin screens (#942); the `BookingPort`.
+
+**Seams the next slices attach to**
+
+- `placeHold` (`application/booking-hold-service.ts`) is the CLAIM. It checks
+  claim integrity (offering and resources exist and are slot mode, party size,
+  unit count, derived interval, clamped hold on the database clock, hold caps)
+  and leaves **policy** to the create handler: opening hours
+  (`OUTSIDE_SCHEDULE`), lead time and horizon, and whether
+  `reservations.override` lifts them. The handler evaluates those with the same
+  engine the search uses (`answerAvailability`) before calling it.
+- `claimUnits` (`application/booking-allocator.ts`) takes a `UnitClaim` union with
+  one member (`kind: "time"`); stays (#940) add a `kind: "stay"` member that
+  inserts `stay_from`/`stay_to` rows into the same loop, and blocks insert rows
+  with `block_id` set under the same constraint.
+- `reclaimExpiredHolds` takes a `ReclaimWindow` union with one member; the stay
+  member probes `daterange` overlap.
+- Confirm, cancel and reschedule (#941) must write exactly one history row per
+  transition; the expiry primitive (`applyExpiry`) is the model: reservation,
+  allocations and `expired` event in one statement.
+
+**Decisions taken in the #939 slice**
+
+- **The reaper runs as the application role** under a per-tenant context, as
+  §4 says, not as `awcms_worker`: a worker with `UPDATE` on reservations could
+  also confirm and cancel, and the `held -> expired` trigger already refuses an
+  expiry before the hold has elapsed. It selects `FOR UPDATE SKIP LOCKED` and
+  never waits on a request; lazy reclaim waits (it must know the answer) and
+  locks in `reservation id` order.
+- **Lazy reclaim is scoped to the claim**: it expires only the elapsed holds
+  whose live allocations overlap the claim's occupied range on the target
+  resources, so a busy resource does not turn every new hold into a tenant-wide
+  sweep. It runs before the claim's savepoint, so the expiry stands even when
+  the claim is then refused.
+- **The free-unit read is a hint, the constraint is the authority**: a stale
+  read costs at most one extra round (bounded at 6, then `CONTENTION_RETRY`),
+  never a double booking. Refusals are values, and the whole claim runs in a
+  savepoint so a refusal leaves no reservation, item or allocation behind.
+- **Reaper health** is read from the data (`hold_overdue_unswept` and
+  `reaper.oldestOverdueSeconds` in the reconciliation, 300 second grace) and
+  from the shared job runner's telemetry; nothing depends on it.
+- **Hold caps default to unlimited** (`NULL` = module default): the numbers are
+  an open owner question (§11), and a cap that is configured is enforced under a
+  per-tenant transaction advisory lock so two requests cannot both read "one
+  below the cap".
