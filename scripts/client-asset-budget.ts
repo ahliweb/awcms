@@ -994,8 +994,19 @@ export const READER_BUDGET_BYTES = 24_000;
  * **Raised again for Issue #963's security audit** (F3): the same screen script
  * gains the reinstate-over-opt-out fields (two body keys and one refusal message).
  * Measured actual total, no added margin: 320,435 B (+203 B on 320,232).
+ *
+ * **Raised for the `astro` 7.3.5 -> 7.3.8 bump** (Dependabot #991), with no source
+ * change at all. The build is byte-for-byte the same source; the bundler that
+ * `astro` pins re-minified the output differently, so individual files moved
+ * both ways (most screen scripts shrank by 5-35 B, `AuthBrandPanel.css` grew 24 B,
+ * `mission-control` grew 322 B, `blog-*` scripts grew ~18 B each) and the net
+ * across all app assets is +208 B. This is toolchain noise, not feature growth
+ * and not per-screen duplication, so there is nothing to recover by
+ * deduplicating. The previous ceiling was set with no margin, which is why a
+ * 208 B swing from a patch bump trips it. Measured actual total, no added
+ * margin: 320,643 B (+208 B on 320,435).
  */
-export const APP_BUDGET_BYTES = 320_435;
+export const APP_BUDGET_BYTES = 320_643;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
