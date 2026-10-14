@@ -137,7 +137,8 @@ async function readFreeUnits(
       AND NOT EXISTS (
         SELECT 1
         FROM awcms_booking_resource_allocations a
-        WHERE a.resource_unit_id = u.id
+        WHERE a.tenant_id = it.tenant_id
+          AND a.resource_unit_id = u.id
           AND a.released_at IS NULL
           AND a.granularity = 'time'
           AND tstzrange(a.occupied_from, a.occupied_to, '[)')

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:e6e944b91e4989fb1a0b1db68991709211c9e21689fa66bc70c9fd5ef15fb347 -->
+<!-- i18n-source-hash: sha256:15d004094af4a426dc30ff7ad6d7556706ec7f07cd90a13950afede52ea1ffc1 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -22,9 +22,11 @@ Ketersediaan (Issue #938): jadwal, penutupan, dan pengecualian, malam yang
 diblokir (`sql/186`), kalkulasi ketersediaan murni, dan route di
 `/api/v1/booking/` (`availability`, `schedules`, `schedule-exceptions`).
 
-Allocator (Issue #939, **tanpa migrasi**): allocator slot, hold dengan
-kedaluwarsa, layanan klaim `placeHold`, dan rekonsiliasi read-only, ditambah job
-`booking:holds:expire`. **Belum ada:** route reservasi dan transisi setelah
+Allocator (Issue #939, `sql/200`): allocator slot, hold dengan kedaluwarsa,
+layanan klaim `placeHold`, dan rekonsiliasi read-only, ditambah job
+`booking:holds:expire`, yang berjalan sebagai `awcms_worker` lewat sapuan
+SECURITY DEFINER sempit `sql/200` (worker tak memegang privilege pada tabel
+booking). **Belum ada:** route reservasi dan transisi setelah
 pembuatan (`confirm`, `cancel`, `reschedule`, ...), stay dan blok sebagai baris
 allocation (Issue #940), channel AsyncAPI, layar admin, dan proyeksi reporting
 (Issue #940 sampai #942).

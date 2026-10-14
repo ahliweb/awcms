@@ -183,9 +183,16 @@ reference in `external_ref_*` (§4) and decides _when_ to ask for a confirm.
 Refusals and codes: `INVALID_STATE` (409), `SLOT_UNAVAILABLE` (409: exclusion
 conflict or no free unit), `OUTSIDE_SCHEDULE` (409, `override` lifts it),
 `HOLD_EXPIRED` (409), `HOLD_LIMIT_EXCEEDED` (429), `LEAD_TIME_VIOLATION`,
-`HORIZON_EXCEEDED`, `PARTY_SIZE_OUT_OF_RANGE`, `STAFF_UNAVAILABLE` (409),
+`HORIZON_EXCEEDED`, `PARTY_SIZE_OUT_OF_RANGE` (409), `STAFF_UNAVAILABLE` (409),
 `RECURRENCE_UNSUPPORTED`, `TIMEZONE_INVALID`, `IDEMPOTENCY_REQUIRED` (400),
-`IDEMPOTENCY_CONFLICT` (409), `PAYMENT_FIELD_NOT_ACCEPTED` (400).
+`IDEMPOTENCY_CONFLICT` (409), `PAYMENT_FIELD_NOT_ACCEPTED` (400). The claim
+(`placeHold`, Issue #939) adds the refusals only it can make:
+`CONTENTION_RETRY` (409: the claim kept losing races or deadlocked three times
+running; retry), `QUANTITY_EXCEEDS_UNITS` (422: more units asked than the target
+has at all), `BOOKING_MODE_MISMATCH` (409: a time offering on a stay resource,
+or the reverse), `EXTERNAL_REF_IN_USE` (409: a live reservation already holds
+that `external_ref`), `RESOURCE_NOT_FOUND` and `OFFERING_NOT_FOUND` (404,
+neutral: another tenant's id is the same answer as an unknown one).
 
 **Late cancellation.** An offering's `cancellation_cutoff_seconds` makes a
 cancellation inside the cutoff carry `late_cancellation = true` on the event and
@@ -250,8 +257,18 @@ final, names may be adjusted by the migration review.
 | `reservation_events`   | `reservation_id`, `seq` (per reservation), `kind`, `from_status`, `to_status`, `actor_user_id`, `correlation_id`, `reason_code`, `detail` jsonb (closed keys: ids, instants, counts — **no free text, no personal data**), `occurred_at` (DB clock); unique `(reservation_id, kind)` for the once-only kinds; generated `kind` columns for the projections                                                                                                                                                                                                                                                                                                                                                                                                              | SELECT, INSERT (**no UPDATE/DELETE**)                       |
 
 `awcms_worker` holds `SELECT` on `awcms_booking_reservation_events` only (the
-reporting engine reads the projection source as that role). The hold-expiry job
-runs as the application role under a per-tenant context, like `email:dispatch`.
+reporting engine reads the projection source as that role) and **no privilege on
+any other booking table**. The hold-expiry job (`booking:holds:expire`) runs as
+`awcms_worker` under a per-tenant context and reaches the tables only through
+two narrow SECURITY DEFINER functions of `sql/200` (the `sql/142` / ADR-0090
+pattern): `awcms_booking_expire_due_holds(tenant, batch)`, which can only expire
+an elapsed hold of the session's own tenant, and `awcms_booking_count_due_holds`
+for `--dry-run`. `UPDATE` on reservations granted to the worker would also have
+let a cron job confirm or cancel a booking; the owner role of the functions
+(`awcms_booking_expiry`, NOLOGIN, memberless) holds only the column-scoped
+privileges their literals need, and `EXECUTE` is the worker's alone. Lazy
+reclaim (§5.1) is not this job: it runs inside the claim's transaction as the
+application role.
 
 **The exclusion constraint** (on `resource_allocations`; the staff constraint is
 identical on `staff_ref`):
@@ -793,11 +810,11 @@ What is built, what is only specified, and where the next slice attaches. The
 design above is the contract; this section is the map from it to the code
 (module map: [`src/modules/booking/README.md`](../../src/modules/booking/README.md)).
 
-| Slice                | Issue | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundation           | #937  | Schema `sql/180` (RLS FORCE, composite foreign keys, both exclusion constraints, the state machine as a trigger, append-only history), permission catalogue `sql/181`, the pure state machine. Test T1 (database-level interleaving).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Availability         | #938  | Schedules, exceptions, blocks table (`sql/186`), the pure slot and stay availability, `GET /availability`, schedule routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Allocator, holds** | #939  | The slot allocator (§8.1 rules 1 to 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, first free unit in `(sort_order, id, ordinal)` order, all-or-none for several units, units chosen together inserted in `(resource_id, ordinal)` order, `23P01` and `40P01` handled (bounded retry with jitter). Holds with expiry (§5.1): lazy reclaim at write time plus the `booking:holds:expire` reaper, correctness independent of the reaper. `placeHold`, the claim a reservation route will call. Hold caps (a sum, §8.1 rule 4). The read-only reconciliation of §7.1. Tests T2, T3 (and its `DO NOTHING` premise), T6 (a, b), T7, in `tests/integration/booking-concurrency.integration.test.ts`. No migration: the schema of `sql/180` already holds every invariant the allocator needs. |
+| Slice                | Issue | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation           | #937  | Schema `sql/180` (RLS FORCE, composite foreign keys, both exclusion constraints, the state machine as a trigger, append-only history), permission catalogue `sql/181`, the pure state machine. Test T1 (database-level interleaving).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Availability         | #938  | Schedules, exceptions, blocks table (`sql/186`), the pure slot and stay availability, `GET /availability`, schedule routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **Allocator, holds** | #939  | The slot allocator (§8.1 rules 1 to 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, first free unit in `(sort_order, id, ordinal)` order, all-or-none for several units, units chosen together inserted in `(resource_id, ordinal)` order, `23P01` and `40P01` handled (bounded retry with jitter). Holds with expiry (§5.1): lazy reclaim at write time plus the `booking:holds:expire` reaper, correctness independent of the reaper. `placeHold`, the claim a reservation route will call. Hold caps (a sum, §8.1 rule 4). The read-only reconciliation of §7.1. Tests T2, T3 (and its `DO NOTHING` premise), T6 (a, b), T7, in `tests/integration/booking-concurrency.integration.test.ts`. One migration, `sql/200`, and only for the job's privilege: the narrow SECURITY DEFINER sweep that lets `booking:holds:expire` run as `awcms_worker`; the schema of `sql/180` already holds every invariant the allocator needs. |
 
 **Still design (not in the code):** the reservation routes and the transitions
 after creation (`confirm`, `cancel`, `reschedule`, `check_in`, `complete`,
@@ -829,17 +846,28 @@ projections; the admin screens (#942); the `BookingPort`.
 
 **Decisions taken in the #939 slice**
 
-- **The reaper runs as the application role** under a per-tenant context, as
-  §4 says, not as `awcms_worker`: a worker with `UPDATE` on reservations could
-  also confirm and cancel, and the `held -> expired` trigger already refuses an
-  expiry before the hold has elapsed. It selects `FOR UPDATE SKIP LOCKED` and
-  never waits on a request; lazy reclaim waits (it must know the answer) and
-  locks in `reservation id` order.
+- **The reaper runs as `awcms_worker`, through one narrow SECURITY DEFINER
+  function** (`sql/200`, the `sql/142` / ADR-0090 pattern), like the other
+  scheduled jobs. A worker with `UPDATE` on reservations could also confirm and
+  cancel, so it holds no privilege on the booking tables at all: it may
+  `EXECUTE` `awcms_booking_expire_due_holds(tenant, batch)`, whose statements
+  are fixed (only `status = 'expired'` on a hold that has run out on the
+  database clock, only the literal release reason, only the `expired` history
+  row, no actor) and which refuses a tenant that is not the session's. It
+  selects `FOR UPDATE SKIP LOCKED` and never waits on a request. Lazy reclaim
+  stays application SQL in the claim's own transaction (as the application
+  role), waits for the row lock (it must know the answer), and locks in
+  ascending `reservation id` order. The two implementations of one end state are
+  compared by an integration test.
 - **Lazy reclaim is scoped to the claim**: it expires only the elapsed holds
   whose live allocations overlap the claim's occupied range on the target
   resources, so a busy resource does not turn every new hold into a tenant-wide
   sweep. It runs before the claim's savepoint, so the expiry stands even when
-  the claim is then refused.
+  the claim is then refused. It works in batches until a batch locks nothing
+  (a `LIMIT ... FOR UPDATE` that waited on a row another transaction changed
+  drops it without back-filling, so "fewer rows than the limit" does not mean
+  done) and advances a keyset cursor, so it never truncates and the locks stay
+  in ascending id order.
 - **The free-unit read is a hint, the constraint is the authority**: a stale
   read costs at most one extra round (bounded at 6, then `CONTENTION_RETRY`),
   never a double booking. Refusals are values, and the whole claim runs in a
@@ -847,6 +875,14 @@ projections; the admin screens (#942); the `BookingPort`.
 - **Reaper health** is read from the data (`hold_overdue_unswept` and
   `reaper.oldestOverdueSeconds` in the reconciliation, 300 second grace) and
   from the shared job runner's telemetry; nothing depends on it.
+- **Left open (N4): hold caps default to unlimited, and that is not a safe
+  default for production.** #941 must set a sane default (or require the tenant
+  to configure one) before `booking` leaves `experimental`, and **every
+  hold-creating path must take the same per-tenant advisory lock**
+  (`pg_advisory_xact_lock(hashtextextended('awcms_booking.holds:' || tenant, 0))`
+  in `enforceHoldCaps`) before it counts live holds: `extend`, a reschedule that
+  creates a hold, a series, an adapter route. A path that creates a hold without
+  that lock reopens the race the cap test closes.
 - **Hold caps default to unlimited** (`NULL` = module default): the numbers are
   an open owner question (§11), and a cap that is configured is enforced under a
   per-tenant transaction advisory lock so two requests cannot both read "one

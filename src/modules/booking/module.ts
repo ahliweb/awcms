@@ -333,7 +333,7 @@ export const bookingModule = defineModule({
         "Expires booking holds whose lifetime has elapsed on the database clock (reservation `expired`, units released, `expired` history row, one aggregate audit entry per tenant per pass). Housekeeping, not the gate: the allocator reclaims an elapsed hold on the units it claims, so a stopped sweep leaves stale `held` rows and never a double booking. Its lag is observable as `hold_overdue_unswept` in the booking reconciliation (booking.md section 7.1).",
       recommendedSchedule: "Every minute via cron/systemd timer.",
       environmentNotes:
-        "Database-only operation, no external network dependency. Runs as the application role under a per-tenant context (the `held -> expired` trigger refuses an expiry before the hold has elapsed). Bounded per-tenant passes in the maintenance work class; safe to run alongside request traffic (it never waits on a locked hold: SKIP LOCKED). `--dry-run` counts the elapsed holds per tenant.",
+        "Database-only operation, no external network dependency. Runs as `awcms_worker` under a per-tenant context. The worker holds no privilege on the booking tables: the sweep goes through `awcms_booking_expire_due_holds` (sql/200), a narrow SECURITY DEFINER function (the sql/142 pattern, ADR-0090) that can only expire an elapsed hold of the session's own tenant, and the `held -> expired` trigger refuses an expiry before the hold has elapsed. Bounded per-tenant passes in the maintenance work class; safe to run alongside request traffic (it never waits on a locked hold: SKIP LOCKED). `--dry-run` counts the elapsed holds per tenant.",
       safeInOfflineLan: true
     }
   ],

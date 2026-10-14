@@ -21,14 +21,17 @@
  *   * `runReconciliation` reports `hold_overdue_unswept` and the reaper's
  *     `oldestOverdueSeconds` from the data itself.
  *
- * ## Role
+ * ## Role: `awcms_worker`, through one narrow function
  *
- * It runs as the APPLICATION role under a per-tenant context, like every other
- * tenant-scoped write here (booking.md section 4): it needs exactly the
- * privileges the reservation routes already hold, and a narrower worker role
- * would have needed `UPDATE` on reservations -- which can also confirm and cancel
- * -- for no gain over RLS FORCE plus the `held -> expired` trigger (which refuses
- * an expiry before the hold has elapsed, by the database clock).
+ * It runs as the background-job role under a per-tenant context, like the other
+ * scheduled jobs. The worker holds NO privilege on the booking tables
+ * (they carry the customer reference and the note, and `UPDATE` on reservations
+ * would also let a cron job confirm or cancel a booking). The sweep therefore
+ * goes through `awcms_booking_expire_due_holds` (`sql/200`), a SECURITY DEFINER
+ * function that can only expire an elapsed hold and only for the tenant the
+ * session is scoped to, following `sql/142` (ADR-0090). The same applies to the
+ * `--dry-run` count (`awcms_booking_count_due_holds`). The one table the job
+ * writes directly is `awcms_audit_events`, which every worker job already may.
  *
  * ## One audit row per tenant per pass, not one per hold
  *

@@ -31,15 +31,19 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
+  assertRejected as assertRejectedByDatabase,
   createRuntimePool,
   getAdminSql,
+  getWorkerRoleSql,
   integrationEnabled,
   resetDatabase,
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
 import {
+  countDueHolds,
   expireDueHolds,
+  reclaimExpiredHolds,
   type ExpiryOutcome
 } from "../../src/modules/booking/application/booking-hold-expiry";
 import {
@@ -64,6 +68,20 @@ function tenantTx<T>(
   fn: (tx: Bun.TransactionSQL) => Promise<T>
 ): Promise<T> {
   return pool.begin(async (tx) => {
+    await tx.unsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
+    return fn(tx);
+  });
+}
+
+/**
+ * The scheduled job's transaction shape: the BACKGROUND role `awcms_worker`
+ * under a per-tenant context. The reaper runs here, and only here.
+ */
+function workerTx<T>(
+  tenantId: string,
+  fn: (tx: Bun.TransactionSQL) => Promise<T>
+): Promise<T> {
+  return getWorkerRoleSql().begin(async (tx) => {
     await tx.unsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
     return fn(tx);
   });
@@ -891,7 +909,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         (fixture) => () => place(tenantId, claim(fixture))
       );
       const reapers = [0, 1].map(
-        () => () => tenantTx(tenantId, (tx) => expireDueHolds(tx, tenantId, 50))
+        () => () => workerTx(tenantId, (tx) => expireDueHolds(tx, tenantId, 50))
       );
       const outcomes = await race<PlaceHoldOutcome | ExpiryOutcome>([
         ...claims,
@@ -939,7 +957,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
 
       const fixture = await newFixture(tenantId);
       const hold = await placed(tenantId, fixture, { holdSeconds: 600 });
-      const swept = await tenantTx(tenantId, (tx) =>
+      const swept = await workerTx(tenantId, (tx) =>
         expireDueHolds(tx, tenantId)
       );
 
@@ -988,7 +1006,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
       await lockTaken;
 
       const started = Date.now();
-      const whileLocked = await tenantTx(tenantId, (tx) =>
+      const whileLocked = await workerTx(tenantId, (tx) =>
         expireDueHolds(tx, tenantId)
       );
 
@@ -998,7 +1016,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
       unlock();
       await holder;
 
-      const after = await tenantTx(tenantId, (tx) =>
+      const after = await workerTx(tenantId, (tx) =>
         expireDueHolds(tx, tenantId)
       );
 
@@ -1516,12 +1534,15 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         return rows.map((row) => row.status);
       };
 
-      const dry = await runBookingHoldExpiry(pool, context(true));
+      const dry = await runBookingHoldExpiry(getWorkerRoleSql(), context(true));
 
       expect(dry.holdsExpired).toBeGreaterThanOrEqual(6);
       expect(await statuses(overdue)).toEqual(Array(6).fill("held"));
 
-      const real = await runBookingHoldExpiry(pool, context(false));
+      const real = await runBookingHoldExpiry(
+        getWorkerRoleSql(),
+        context(false)
+      );
 
       expect(real.holdsExpired).toBeGreaterThanOrEqual(6);
       expect(real.allocationsReleased).toBe(real.holdsExpired);
@@ -1545,7 +1566,10 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
       ]);
 
       // A second run finds nothing: the sweep is idempotent.
-      const again = await runBookingHoldExpiry(pool, context(false));
+      const again = await runBookingHoldExpiry(
+        getWorkerRoleSql(),
+        context(false)
+      );
 
       expect(again.holdsExpired).toBe(0);
 
@@ -1568,7 +1592,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
 
       await backdateHold(hold.reservationId);
 
-      const swept = await tenantTx(tenantId, (tx) =>
+      const swept = await workerTx(tenantId, (tx) =>
         expireDueHolds(tx, tenantId)
       );
 
@@ -1582,8 +1606,469 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
     });
   });
 
+  describe("lazy reclaim never truncates (booking.md section 5.1)", () => {
+    test("more elapsed holds than one batch: every one is expired, and a hold outside the range is left alone", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000a1";
+
+      await seedTenant(tenantId, "alloc-a1");
+
+      const fixture = await newFixture(tenantId, { capacity: 8 });
+      const holds: string[] = [];
+
+      for (let index = 0; index < 8; index += 1) {
+        holds.push((await placed(tenantId, fixture)).reservationId);
+      }
+
+      const elsewhere = await placed(tenantId, fixture, {
+        startsAtMs: START + 6 * 3_600_000
+      });
+
+      for (const hold of holds) {
+        await backdateHold(hold);
+      }
+
+      // Batches of 3 against 8 elapsed holds: 3 + 3 + 2 + an empty batch.
+      const outcome = await tenantTx(tenantId, (tx) =>
+        reclaimExpiredHolds(
+          tx,
+          tenantId,
+          [fixture.resourceId],
+          { kind: "time", fromMs: START, toMs: START + 3_600_000 },
+          3
+        )
+      );
+
+      expect(outcome).toEqual({ expired: 8, releasedAllocations: 8 });
+
+      const rows = (await getAdminSql()`
+        SELECT status, count(*)::int AS n
+        FROM awcms_booking_reservations
+        WHERE tenant_id = ${tenantId}
+        GROUP BY status ORDER BY status
+      `) as { status: string; n: number }[];
+
+      expect(rows).toEqual([
+        { status: "expired", n: 8 },
+        { status: "held", n: 1 }
+      ]);
+      expect(elsewhere.status).toBe("held");
+      expect(await liveAllocations(fixture.resourceId)).toBe(1);
+
+      // The whole capacity is claimable in one request, through the real path.
+      const all = await place(
+        tenantId,
+        claim(fixture, { quantity: 8, startsAtMs: START })
+      );
+
+      expect(all.outcome).toBe("ok");
+
+      const report = await tenantTx(tenantId, (tx) =>
+        runReconciliation(tx, tenantId)
+      );
+
+      expect(report.drift).toBe(0);
+    });
+
+    test("the default batch is not a ceiling either: 150 elapsed holds on one unit's neighbours are all reclaimed", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000a2";
+
+      await seedTenant(tenantId, "alloc-a2");
+
+      // 150 holds, one unit each, all overlapping the claim; 150 > the 100 default.
+      const fixture = await newFixture(tenantId, { capacity: 150 });
+      const ids = (await getAdminSql()`
+        SELECT id FROM awcms_booking_resource_units
+        WHERE resource_id = ${fixture.resourceId} ORDER BY ordinal
+      `) as { id: string }[];
+
+      expect(ids).toHaveLength(150);
+
+      // One at a time: each claims the next free unit, no race to confuse the
+      // point of this test, which is the reclaim loop.
+      for (let index = 0; index < 150; index += 1) {
+        await placed(tenantId, fixture, { holdSeconds: 3600 });
+      }
+
+      await getAdminSql().begin(async (tx) => {
+        await tx.unsafe(
+          "ALTER TABLE awcms_booking_reservations DISABLE TRIGGER awcms_booking_reservations_update_guard"
+        );
+        await tx`
+          UPDATE awcms_booking_reservations
+          SET hold_expires_at = clock_timestamp() - interval '2 seconds'
+          WHERE tenant_id = ${tenantId} AND status = 'held'
+        `;
+        await tx.unsafe(
+          "ALTER TABLE awcms_booking_reservations ENABLE TRIGGER awcms_booking_reservations_update_guard"
+        );
+      });
+
+      const everything = await place(
+        tenantId,
+        claim(fixture, { quantity: 150, partySize: 1 })
+      );
+
+      expect(everything.outcome).toBe("ok");
+      expect(await liveAllocations(fixture.resourceId)).toBe(150);
+    }, 120_000);
+  });
+
+  describe("the sweep runs as awcms_worker through one narrow function (sql/200)", () => {
+    const denied = /permission denied/i;
+
+    async function rejectedMessage(promise: Promise<unknown>): Promise<string> {
+      const error = await assertRejectedByDatabase(promise, "the statement");
+
+      return `${error.message} ${String((error as { errno?: unknown }).errno ?? "")}`;
+    }
+
+    test("the worker expires an elapsed hold and writes the same facts a human could not forge", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000b1";
+
+      await seedTenant(tenantId, "alloc-b1");
+
+      const fixture = await newFixture(tenantId);
+      const hold = await placed(tenantId, fixture);
+      const live = await newFixture(tenantId);
+      const liveHold = await placed(tenantId, live, { holdSeconds: 3600 });
+
+      await backdateHold(hold.reservationId);
+
+      expect(
+        await workerTx(tenantId, (tx) => countDueHolds(tx, tenantId))
+      ).toBe(1);
+
+      const outcome = await workerTx(tenantId, (tx) =>
+        expireDueHolds(tx, tenantId)
+      );
+
+      expect(outcome).toEqual({ expired: 1, releasedAllocations: 1 });
+
+      const rows = (await getAdminSql()`
+        SELECT r.id, r.status, r.status_changed_by IS NULL AS system_actor,
+               (SELECT count(*) FROM awcms_booking_resource_allocations a
+                JOIN awcms_booking_reservation_items i ON i.id = a.item_id
+                WHERE i.reservation_id = r.id AND a.released_reason = 'expired'
+                  AND a.released_at IS NOT NULL)::int AS released,
+               (SELECT e.detail->>'trigger' FROM awcms_booking_reservation_events e
+                WHERE e.reservation_id = r.id AND e.kind = 'expired') AS via
+        FROM awcms_booking_reservations r
+        WHERE r.id IN (${hold.reservationId}, ${liveHold.reservationId})
+        ORDER BY r.status
+      `) as {
+        id: string;
+        status: string;
+        system_actor: boolean;
+        released: number;
+        via: string | null;
+      }[];
+      const byId = new Map(rows.map((row) => [row.id, row]));
+
+      expect(byId.get(hold.reservationId)).toMatchObject({
+        status: "expired",
+        system_actor: true,
+        released: 1,
+        via: "reaper"
+      });
+      // A hold that has not run out is none of its business.
+      expect(byId.get(liveHold.reservationId)).toMatchObject({
+        status: "held",
+        released: 0
+      });
+    });
+
+    test("the worker holds NO privilege on the booking tables: it cannot read, confirm, cancel, release or write history directly", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000b2";
+
+      await seedTenant(tenantId, "alloc-b2");
+
+      const fixture = await newFixture(tenantId);
+      const hold = await placed(tenantId, fixture);
+      const allocationId = hold.units[0]!.allocationId;
+      const attempts: [string, () => Promise<unknown>][] = [
+        [
+          "read reservations",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`SELECT id FROM awcms_booking_reservations`
+            )
+        ],
+        [
+          "read allocations",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`SELECT id FROM awcms_booking_resource_allocations`
+            )
+        ],
+        [
+          "confirm a hold",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`
+                UPDATE awcms_booking_reservations
+                SET status = 'confirmed', hold_expires_at = NULL
+                WHERE id = ${hold.reservationId}
+              `
+            )
+        ],
+        [
+          "cancel a reservation",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`
+                UPDATE awcms_booking_reservations
+                SET status = 'cancelled' WHERE id = ${hold.reservationId}
+              `
+            )
+        ],
+        [
+          "release an allocation",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`
+                UPDATE awcms_booking_resource_allocations
+                SET released_at = now(), released_reason = 'cancelled'
+                WHERE id = ${allocationId}
+              `
+            )
+        ],
+        [
+          "write a history row",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`
+                INSERT INTO awcms_booking_reservation_events
+                  (tenant_id, reservation_id, seq, kind, to_status)
+                VALUES (${tenantId}, ${hold.reservationId}, 99, 'cancelled', 'cancelled')
+              `
+            )
+        ],
+        [
+          "delete a reservation",
+          () =>
+            workerTx(
+              tenantId,
+              (tx) => tx`
+                DELETE FROM awcms_booking_reservations WHERE id = ${hold.reservationId}
+              `
+            )
+        ]
+      ];
+
+      for (const [what, attempt] of attempts) {
+        const message = await rejectedMessage(attempt());
+
+        expect({ what, denied: denied.test(message) }).toEqual({
+          what,
+          denied: true
+        });
+      }
+
+      // Nothing moved.
+      const status = (await getAdminSql()`
+        SELECT status FROM awcms_booking_reservations WHERE id = ${hold.reservationId}
+      `) as { status: string }[];
+
+      expect(status[0]!.status).toBe("held");
+      expect(await liveAllocations(fixture.resourceId)).toBe(1);
+    });
+
+    test("it can only expire: even a function call cannot confirm or touch a hold that has not run out", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000b3";
+
+      await seedTenant(tenantId, "alloc-b3");
+
+      const fixture = await newFixture(tenantId);
+      const hold = await placed(tenantId, fixture, { holdSeconds: 3600 });
+      const outcome = await workerTx(tenantId, (tx) =>
+        expireDueHolds(tx, tenantId, 1000)
+      );
+
+      expect(outcome).toEqual({ expired: 0, releasedAllocations: 0 });
+
+      const rows = (await getAdminSql()`
+        SELECT status, hold_expires_at IS NOT NULL AS still_a_hold
+        FROM awcms_booking_reservations WHERE id = ${hold.reservationId}
+      `) as { status: string; still_a_hold: boolean }[];
+
+      expect(rows[0]).toEqual({ status: "held", still_a_hold: true });
+    });
+
+    test("EXECUTE is the worker's alone: the runtime role cannot call the sweep or the count", async () => {
+      const message = await rejectedMessage(
+        tenantTx(TENANT_A, (tx) => expireDueHolds(tx, TENANT_A))
+      );
+
+      expect(message).toMatch(denied);
+
+      const countMessage = await rejectedMessage(
+        tenantTx(TENANT_A, (tx) => countDueHolds(tx, TENANT_A))
+      );
+
+      expect(countMessage).toMatch(denied);
+    });
+
+    test("the function refuses a tenant that is not the session's, and a session with no tenant at all", async () => {
+      const wrongTenant = await rejectedMessage(
+        workerTx(TENANT_A, (tx) => expireDueHolds(tx, TENANT_B))
+      );
+
+      expect(wrongTenant).toContain("session tenant context");
+
+      const wrongCount = await rejectedMessage(
+        workerTx(TENANT_A, (tx) => countDueHolds(tx, TENANT_B))
+      );
+
+      expect(wrongCount).toContain("session tenant context");
+
+      const noTenant = await rejectedMessage(
+        getWorkerRoleSql().begin((tx) => expireDueHolds(tx, TENANT_A))
+      );
+
+      expect(noTenant).toContain("session tenant context");
+    });
+
+    test("it sweeps only the session's tenant, however many other tenants have elapsed holds", async () => {
+      const tenantX = "b9390000-0000-4000-8000-0000000000b4";
+      const tenantY = "b9390000-0000-4000-8000-0000000000b5";
+
+      await seedTenant(tenantX, "alloc-b4");
+      await seedTenant(tenantY, "alloc-b5");
+
+      const x = await placed(tenantX, await newFixture(tenantX));
+      const y = await placed(tenantY, await newFixture(tenantY));
+
+      await backdateHold(x.reservationId);
+      await backdateHold(y.reservationId);
+
+      expect(
+        await workerTx(tenantX, (tx) => expireDueHolds(tx, tenantX))
+      ).toEqual({ expired: 1, releasedAllocations: 1 });
+
+      const rows = (await getAdminSql()`
+        SELECT id, status FROM awcms_booking_reservations
+        WHERE id IN (${x.reservationId}, ${y.reservationId})
+      `) as { id: string; status: string }[];
+      const byId = new Map(rows.map((row) => [row.id, row.status]));
+
+      expect(byId.get(x.reservationId)).toBe("expired");
+      expect(byId.get(y.reservationId)).toBe("held");
+      expect(await workerTx(tenantY, (tx) => countDueHolds(tx, tenantY))).toBe(
+        1
+      );
+    });
+
+    test("a batch size the caller invents is clamped, not obeyed", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000b6";
+
+      await seedTenant(tenantId, "alloc-b6");
+
+      for (let index = 0; index < 3; index += 1) {
+        const hold = await placed(tenantId, await newFixture(tenantId));
+
+        await backdateHold(hold.reservationId);
+      }
+
+      // 0 and negative clamp UP to one hold per call; the tenant has three.
+      const raw = (limit: number) =>
+        workerTx(
+          tenantId,
+          (tx) =>
+            tx`SELECT expired_count FROM awcms_booking_expire_due_holds(${tenantId}::uuid, ${limit}::integer)`
+        ) as Promise<{ expired_count: number }[]>;
+
+      expect((await raw(0))[0]!.expired_count).toBe(1);
+      expect((await raw(-5))[0]!.expired_count).toBe(1);
+      expect(
+        await workerTx(tenantId, (tx) => countDueHolds(tx, tenantId))
+      ).toBe(1);
+      expect((await raw(1_000_000))[0]!.expired_count).toBe(1);
+    });
+
+    test("the reaper and lazy reclaim leave the SAME rows (two implementations, one end state)", async () => {
+      const tenantId = "b9390000-0000-4000-8000-0000000000b7";
+
+      await seedTenant(tenantId, "alloc-b7");
+
+      const viaReclaim = await newFixture(tenantId);
+      const viaReaper = await newFixture(tenantId);
+      const a = await placed(tenantId, viaReclaim);
+      const b = await placed(tenantId, viaReaper);
+
+      await backdateHold(a.reservationId);
+
+      // Lazy reclaim first, so the reaper has exactly one hold left to take.
+      const reclaimed = await tenantTx(tenantId, (tx) =>
+        reclaimExpiredHolds(tx, tenantId, [viaReclaim.resourceId], {
+          kind: "time",
+          fromMs: START,
+          toMs: START + 3_600_000
+        })
+      );
+
+      await backdateHold(b.reservationId);
+
+      const swept = await workerTx(tenantId, (tx) =>
+        expireDueHolds(tx, tenantId)
+      );
+
+      expect(reclaimed).toEqual({ expired: 1, releasedAllocations: 1 });
+      expect(swept).toEqual({ expired: 1, releasedAllocations: 1 });
+
+      const footprint = async (reservationId: string) => {
+        const reservation = (await getAdminSql()`
+          SELECT status, status_changed_by IS NULL AS system_actor,
+                 hold_expires_at IS NOT NULL AS keeps_expiry
+          FROM awcms_booking_reservations WHERE id = ${reservationId}
+        `) as Record<string, unknown>[];
+        const allocations = (await getAdminSql()`
+          SELECT a.released_reason, a.released_at IS NOT NULL AS released
+          FROM awcms_booking_resource_allocations a
+          JOIN awcms_booking_reservation_items i ON i.id = a.item_id
+          WHERE i.reservation_id = ${reservationId}
+        `) as Record<string, unknown>[];
+        const events = (await getAdminSql()`
+          SELECT seq, kind, from_status, to_status,
+                 actor_user_id IS NULL AS system_actor,
+                 detail->>'trigger' AS via,
+                 (detail - 'trigger' - 'holdExpiredAt') AS rest,
+                 (detail ? 'holdExpiredAt') AS has_instant
+          FROM awcms_booking_reservation_events
+          WHERE reservation_id = ${reservationId} AND kind = 'expired'
+          ORDER BY seq
+        `) as Record<string, unknown>[];
+
+        return { reservation, allocations, events };
+      };
+
+      const left = await footprint(a.reservationId);
+      const right = await footprint(b.reservationId);
+
+      expect(left.events[0]!.via).toBe("lazy_reclaim");
+      expect(right.events[0]!.via).toBe("reaper");
+
+      const normalise = (value: Awaited<ReturnType<typeof footprint>>) => ({
+        ...value,
+        events: value.events.map((event) => ({ ...event, via: undefined }))
+      });
+
+      expect(normalise(left)).toEqual(normalise(right));
+      expect(left.reservation[0]).toEqual({
+        status: "expired",
+        system_actor: true,
+        keeps_expiry: true
+      });
+    });
+  });
+
   describe("T7 -- the test detects the defect", () => {
-    test("WITHOUT the exclusion constraint the same race double-allocates (so T2's assertion is not vacuous)", async () => {
+    test("WITHOUT the exclusion constraint two overlapping claims both commit (so T2's assertion is not vacuous)", async () => {
       const admin = getAdminSql();
       const definition = (await admin`
         SELECT pg_get_constraintdef(oid) AS def
@@ -1597,30 +2082,70 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
 
       await seedTenant(tenantId, "alloc-e1");
 
-      let maxLive = 0;
+      let live = 0;
+      let overlappingPairs = 0;
+      const fixture = await newFixture(tenantId);
 
       try {
         await admin.unsafe(
           "ALTER TABLE awcms_booking_resource_allocations DROP CONSTRAINT awcms_booking_resource_allocations_time_excl"
         );
 
-        for (let attempt = 0; attempt < 10 && maxLive < 2; attempt += 1) {
-          const fixture = await newFixture(tenantId);
+        // Deterministic, not a race: A claims the unit and stays UNCOMMITTED; B
+        // claims the overlapping range while A is open; then both commit. With
+        // the constraint B would block on A (proved above); without it B
+        // completes at once, so the await below returns instead of hanging.
+        let aClaimed!: () => void;
+        const claimed = new Promise<void>((resolve) => {
+          aClaimed = resolve;
+        });
+        let commitA!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          commitA = resolve;
+        });
+        const first = tenantTx(tenantId, async (tx) => {
+          const outcome = await placeHold(
+            tx,
+            { tenantId, actorTenantUserId: ACTORS.get(tenantId) ?? null },
+            claim(fixture)
+          );
 
-          await race(
-            Array.from(
-              { length: 20 },
-              () => () => place(tenantId, claim(fixture))
-            )
-          );
-          maxLive = Math.max(
-            maxLive,
-            await liveAllocations(fixture.resourceId)
-          );
-        }
+          aClaimed();
+          await gate;
+          return outcome;
+        });
+
+        await claimed;
+
+        const second = await place(
+          tenantId,
+          claim(fixture, { startsAtMs: START + 30 * 60_000 })
+        );
+
+        commitA();
+
+        const a = await first;
+
+        expect(a.outcome).toBe("ok");
+        expect(second.outcome).toBe("ok");
+        live = await liveAllocations(fixture.resourceId);
+
+        const pairs = (await admin`
+          SELECT count(*)::int AS n
+          FROM awcms_booking_resource_allocations a
+          JOIN awcms_booking_resource_allocations b
+            ON a.resource_unit_id = b.resource_unit_id AND a.id < b.id
+          WHERE a.resource_id = ${fixture.resourceId}
+            AND a.released_at IS NULL AND b.released_at IS NULL
+            AND tstzrange(a.occupied_from, a.occupied_to, '[)')
+                && tstzrange(b.occupied_from, b.occupied_to, '[)')
+        `) as { n: number }[];
+
+        overlappingPairs = pairs[0]!.n;
       } finally {
-        // Put the schema back EXACTLY: the rows the broken race wrote violate it,
-        // so the booking tables are emptied first (test database only).
+        // Put the schema back EXACTLY: the rows written without the constraint
+        // violate it, so the booking tables are emptied first (test database
+        // only).
         await admin.unsafe(`
           TRUNCATE awcms_booking_reservation_events, awcms_booking_resource_allocations,
                    awcms_booking_reservation_items, awcms_booking_reservations
@@ -1631,7 +2156,8 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         );
       }
 
-      expect(maxLive).toBeGreaterThan(1);
+      expect(live).toBe(2);
+      expect(overlappingPairs).toBe(1);
 
       const restored = (await admin`
         SELECT pg_get_constraintdef(oid) AS def

@@ -19,9 +19,11 @@ Availability (Issue #938): schedules, closures and exceptions, blocked nights
 (`sql/186`), the pure availability calculation, and the routes under
 `/api/v1/booking/` (`availability`, `schedules`, `schedule-exceptions`).
 
-Allocator (Issue #939, **no migration**): the slot allocator, holds with expiry,
-the claim service `placeHold` and the read-only reconciliation, plus the
-`booking:holds:expire` job. **Not present yet:** the reservation routes and the
+Allocator (Issue #939, `sql/200`): the slot allocator, holds with expiry, the
+claim service `placeHold` and the read-only reconciliation, plus the
+`booking:holds:expire` job, which runs as `awcms_worker` through the narrow
+SECURITY DEFINER sweep of `sql/200` (the worker holds no privilege on the
+booking tables). **Not present yet:** the reservation routes and the
 transitions after creation (`confirm`, `cancel`, `reschedule`, ...), stays and
 blocks as allocation rows (Issue #940), AsyncAPI channels, an admin screen and
 the reporting projection (Issues #940 to #942).

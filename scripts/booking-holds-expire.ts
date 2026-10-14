@@ -12,13 +12,16 @@
  * costs stale `held` rows, never a double booking; its health is read from the
  * data by the booking reconciliation (`hold_overdue_unswept`).
  *
- * Runs as the APPLICATION role (`getDatabaseClient`) under a per-tenant context:
- * it needs exactly the privileges the reservation routes hold, and the
- * `held -> expired` trigger refuses an expiry before the hold has elapsed.
+ * Runs as `awcms_worker` under a per-tenant context, like the other scheduled
+ * jobs. The worker holds no privilege on the booking tables; the sweep goes
+ * through the narrow SECURITY DEFINER function `awcms_booking_expire_due_holds`
+ * (`sql/200`, following `sql/142` / ADR-0090), which can only expire an elapsed
+ * hold of the session's own tenant. The `held -> expired` trigger refuses an
+ * expiry before the hold has elapsed, a second time, by the same clock.
  *
  * `--dry-run` counts the elapsed holds per tenant and mutates nothing.
  */
-import { getDatabaseClient } from "../src/lib/database/client";
+import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {
   applyJobExitCode,
   formatJobOutcomeLine,
@@ -31,7 +34,9 @@ import {
 import { runBookingHoldExpiry } from "../src/modules/booking/application/booking-hold-expiry-job";
 
 async function main() {
-  const sql = getDatabaseClient();
+  // Connects as the least-privilege worker role when configured, falling back to
+  // DATABASE_URL otherwise (the same posture as every other scheduled job).
+  const sql = getWorkerDatabaseClient();
   const cliOptions = parseJobCliArgs(process.argv.slice(2));
 
   try {
