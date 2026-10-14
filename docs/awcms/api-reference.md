@@ -11607,7 +11607,7 @@ The employment context (hr_workforce module, Issues #945 and #946, ADR-0132, pha
 - **operationId**: `hrWorkforceAttendanceCorrectionsList`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_workforce.corrections.read`, EXCEPT `mine=true` (your own employment's) and `reports=true` (your reports', through the manager chain), which need no permission (ownership grants, ADR-0063). Newest first, keyset paginated. The list NEVER carries the sensitive `reason`; read one correction for it. Tenant-scoped (withTenant + RLS FORCE).
+Gated by `hr_workforce.corrections.read`, EXCEPT `mine=true` (the corrections of every live employment of yours, a terminated one included) and `reports=true` (your reports', through the manager chain), which need no permission (ownership grants, ADR-0063). Newest first, keyset paginated. The list NEVER carries the sensitive `reason`; read one correction for it. Tenant-scoped (withTenant + RLS FORCE).
 
 **Parameters**
 
@@ -11634,7 +11634,7 @@ Gated by `hr_workforce.corrections.read`, EXCEPT `mine=true` (your own employmen
 - **operationId**: `hrWorkforceAttendanceCorrectionCreate`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_workforce.corrections.create`; the employment must be YOURS unless you also hold `hr_workforce.attendance.create`. Proposes adding a missing event (`kind: add`) or replacing one (`kind: replace` + `targetEventId`) with a mandatory `reason`. It NEVER edits the original: on approval a NEW event is appended that supersedes the old one. Approval is REQUIRED and fail-closed: with no published workflow under the tenant's correction workflow key (or `workflow` disabled for the tenant) -> 409 `APPROVAL_WORKFLOW_NOT_CONFIGURED` and nothing is created. The workflow instance is started with NO facts. The reason is sensitive: it is never written to an audit row, an event or the workflow store. Requires an Idempotency-Key. Audited without the reason.
+Gated by `hr_workforce.corrections.create`; the employment must be YOURS unless you also hold `hr_workforce.attendance.create`. Proposes adding a missing event (`kind: add`) or replacing one (`kind: replace` + `targetEventId`) with a mandatory `reason`. It NEVER edits the original: on approval a NEW event is appended that supersedes the old one. Approval is REQUIRED and fail-closed: with no published workflow under the tenant's correction workflow key (or `workflow` disabled for the tenant) -> 409 `APPROVAL_WORKFLOW_NOT_CONFIGURED` and nothing is created. A `proposedOccurredAt` further in the future than the tenant clock-skew bound is refused with 422 `ATTENDANCE_TIME_IN_FUTURE` and nothing is created (the event guard would refuse it at approval and the correction would stay pending for good). The workflow instance is started with NO facts. The reason is sensitive: it is never written to an audit row, an event or the workflow store. Requires an Idempotency-Key. Audited without the reason.
 
 **Parameters**
 
@@ -11654,7 +11654,7 @@ Gated by `hr_workforce.corrections.create`; the employment must be YOURS unless 
 | 401    | Missing or invalid session.                                                                                                                     | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                                                                                     | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT, CORRECTION_ALREADY_PENDING, TARGET_EVENT_SUPERSEDED, APPROVAL_WORKFLOW_NOT_CONFIGURED or APPROVAL_WORKFLOW_MISCONFIGURED. | [`ApiError`](#standard-error-envelope) |
-| 422    | EMPLOYMENT_NOT_FOUND or TARGET_EVENT_NOT_FOUND.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 422    | EMPLOYMENT_NOT_FOUND, TARGET_EVENT_NOT_FOUND or ATTENDANCE_TIME_IN_FUTURE.                                                                      | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/hr-workforce/attendance-corrections/{id}` — Get an attendance correction
 
@@ -11737,7 +11737,7 @@ Gated by `hr_workforce.corrections.cancel` (high-risk). The REQUESTER only withd
 - **operationId**: `hrWorkforceAttendanceEventsList`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_workforce.attendance.read` (every employee), EXCEPT `mine=true` (your OWN events) and `reports=true` (the events of the people who report to you through the current manager chain, at most ten levels; a soft-deleted employment is neither listed nor walked through), which need no permission (an ownership grant on the persisted login link / manager chain, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). `mine` and `reports` cannot be combined, and an `employmentId` outside the chosen basis is 403. Newest claimed instant first, keyset paginated (`cursor`); `from` (inclusive) and `to` (exclusive) bound the claimed instant; `effective=true` hides an event a later approved correction replaced. Confidential behavioural data: no location, photo, device or network value exists. Tenant-scoped (withTenant + RLS FORCE).
+Gated by `hr_workforce.attendance.read` (every employee), EXCEPT `mine=true` (your OWN events, across EVERY live employment of yours, a terminated one included: a rehired person reads the old and the new) and `reports=true` (the events of the people who report to you through the current manager chain, at most ten levels; a soft-deleted employment is neither listed nor walked through), which need no permission (an ownership grant on the persisted login link / manager chain, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). `mine` and `reports` cannot be combined, and an `employmentId` outside the chosen basis is 403. Newest claimed instant first, keyset paginated (`cursor`); `from` (inclusive) and `to` (exclusive) bound the claimed instant; `effective=true` hides an event a later approved correction replaced. Confidential behavioural data: no location, photo, device or network value exists. Tenant-scoped (withTenant + RLS FORCE).
 
 **Parameters**
 

@@ -971,6 +971,105 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       expect((await events("mine=true&reports=true")).status).toBe(400);
     });
 
+    test("mine covers EVERY live employment of the caller (a rehire reads the old and the new), never another person's or a deleted one", async () => {
+      if (!handlerReady) return;
+      const approver = await seedUser(env.tenantId, "approver", [
+        WORKFLOW_DECIDE
+      ]);
+      await publishWorkflow([approver.tenantUserId]);
+      const me = await employee("me", [
+        "hr_workforce.clock.create",
+        "hr_workforce.corrections.create"
+      ]);
+      const peer = await employee("peer", ["hr_workforce.clock.create"]);
+      const oldEvent = (await clock(me.employmentId, {}, me.token)).body.data!;
+      const oldCorrection = (
+        await requestCorrection({ employmentId: me.employmentId }, me.token)
+      ).body.data!;
+      const peerEvent = (await clock(peer.employmentId, {}, peer.token)).body
+        .data!;
+
+      // They leave, and are rehired under the SAME login: a second employment.
+      expect(
+        (
+          await call(changeTerms, {
+            method: "POST",
+            path: `/api/v1/hr-workforce/employments/${me.employmentId}/terms`,
+            params: { id: me.employmentId },
+            body: {
+              effectiveFrom: "2026-09-01",
+              employmentType: "permanent",
+              status: "terminated"
+            }
+          })
+        ).status
+      ).toBe(201);
+      const rehired = await hire("me-again");
+      await link(rehired, me.tenantUserId);
+      const newEvent = (await clock(rehired, {}, me.token)).body.data!;
+      const newCorrection = (
+        await requestCorrection({ employmentId: rehired }, me.token)
+      ).body.data!;
+
+      const own = await events("mine=true", me.token);
+      const ownIds = own.body.data!.events.map((e) => e.id);
+
+      expect(own.status).toBe(200);
+      expect(ownIds).toHaveLength(2);
+      expect(ownIds).toContain(oldEvent.id);
+      expect(ownIds).toContain(newEvent.id);
+      expect(ownIds).not.toContain(peerEvent.id);
+
+      const ownCorrections = await call<{ corrections: Correction[] }>(
+        listCorrections,
+        {
+          path: "/api/v1/hr-workforce/attendance-corrections",
+          query: "mine=true",
+          token: me.token
+        }
+      );
+      const correctionIds = ownCorrections.body.data!.corrections.map(
+        (c) => c.id
+      );
+
+      expect(correctionIds).toHaveLength(2);
+      expect(correctionIds).toContain(oldCorrection.id);
+      expect(correctionIds).toContain(newCorrection.id);
+
+      // The old employment is theirs to name as a filter; the peer's is not.
+      expect(
+        (
+          await events(`mine=true&employmentId=${me.employmentId}`, me.token)
+        ).body.data!.events.map((e) => e.id)
+      ).toEqual([oldEvent.id]);
+      expect(
+        (await events(`mine=true&employmentId=${peer.employmentId}`, me.token))
+          .status
+      ).toBe(403);
+      // ...and the other way: the peer never reads either of mine.
+      const theirs = await events("mine=true", peer.token);
+
+      expect(theirs.body.data!.events.map((e) => e.id)).toEqual([peerEvent.id]);
+      expect(
+        (await events(`mine=true&employmentId=${rehired}`, peer.token)).status
+      ).toBe(403);
+
+      // A soft-deleted employment is no longer anybody's to read.
+      expect(
+        (
+          await call(deleteEmployment, {
+            method: "DELETE",
+            path: `/api/v1/hr-workforce/employments/${rehired}`,
+            params: { id: rehired },
+            body: { reason: "entered by mistake" }
+          })
+        ).status
+      ).toBe(200);
+      expect(
+        (await events("mine=true", me.token)).body.data!.events.map((e) => e.id)
+      ).toEqual([oldEvent.id]);
+    });
+
     test("S4/S6: a supervisor reads their reports through the manager chain, not their peers or managers", async () => {
       if (!handlerReady) return;
       const boss = await employee("boss", []);
@@ -1697,6 +1796,124 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
 
       expect(await count("awcms_hr_attendance_corrections")).toBe(0);
       expect(await count("awcms_workflow_instances")).toBe(0);
+    });
+
+    test("a proposed instant beyond the tenant skew is refused at request (422, nothing created), by the same rule as an event; within the skew it is accepted", async () => {
+      if (!handlerReady) return;
+      const { worker } = await setup();
+      const before = await count("awcms_hr_attendance_corrections");
+
+      const future = await requestCorrection(
+        { employmentId: worker.employmentId, proposedOccurredAt: iso(900) },
+        worker.token
+      );
+
+      expect(future.status).toBe(422);
+      expect(future.body.error!.code).toBe("ATTENDANCE_TIME_IN_FUTURE");
+      expect(await count("awcms_hr_attendance_corrections")).toBe(before);
+      expect(await count("awcms_workflow_instances")).toBe(0);
+      // It is the same code, and the same verdict, as the event path's.
+      expect(
+        (
+          await clock(
+            worker.employmentId,
+            { occurredAt: iso(900) },
+            worker.token
+          )
+        ).body.error!.code
+      ).toBe("ATTENDANCE_TIME_IN_FUTURE");
+
+      // Inside the default skew (300 s) it is accepted, like an event would be.
+      const near = await requestCorrection(
+        { employmentId: worker.employmentId, proposedOccurredAt: iso(120) },
+        worker.token
+      );
+
+      expect(near.status).toBe(201);
+
+      // A stricter tenant skew bites a correction as it does an event.
+      expect(
+        (
+          await call(putSettings, {
+            method: "PUT",
+            path: "/api/v1/hr-workforce/settings",
+            body: { clockSkewSeconds: 5 }
+          })
+        ).status
+      ).toBe(200);
+      const strict = await requestCorrection(
+        { employmentId: worker.employmentId, proposedOccurredAt: iso(60) },
+        worker.token
+      );
+
+      expect(strict.status).toBe(422);
+      expect(strict.body.error!.code).toBe("ATTENDANCE_TIME_IN_FUTURE");
+      expect(await count("awcms_hr_attendance_corrections")).toBe(before + 1);
+    });
+
+    test("CORRECTION_NOT_APPLICABLE stays reachable only for what changes after the request: a deleted employment, or a skew lowered below the proposal; the correction stays pending and appends nothing", async () => {
+      if (!handlerReady) return;
+      const { approver, hr, worker } = await setup();
+
+      // (1) Approved, then the employment is soft-deleted before settle.
+      const first = await requestCorrection(
+        { employmentId: worker.employmentId },
+        worker.token
+      );
+      expect(first.status).toBe(201);
+      expect(
+        (await decide(first.body.data!.workflowInstanceId, approver.token))
+          .status
+      ).toBe(200);
+      expect(
+        (
+          await call(deleteEmployment, {
+            method: "DELETE",
+            path: `/api/v1/hr-workforce/employments/${worker.employmentId}`,
+            params: { id: worker.employmentId },
+            body: { reason: "entered by mistake" }
+          })
+        ).status
+      ).toBe(200);
+      const deleted = await settle(first.body.data!.id, hr.token);
+
+      expect(deleted.status).toBe(409);
+      expect(deleted.body.error!.code).toBe("CORRECTION_NOT_APPLICABLE");
+      expect(await count("awcms_hr_attendance_events")).toBe(0);
+      expect(
+        (await readCorrection(first.body.data!.id, hr.token)).body.data!.status
+      ).toBe("pending");
+
+      // (2) A proposal inside the skew at request, the skew lowered before settle.
+      const second = await employee("second", [
+        "hr_workforce.corrections.create"
+      ]);
+      const near = await requestCorrection(
+        { employmentId: second.employmentId, proposedOccurredAt: iso(120) },
+        second.token
+      );
+      expect(near.status).toBe(201);
+      expect(
+        (await decide(near.body.data!.workflowInstanceId, approver.token))
+          .status
+      ).toBe(200);
+      expect(
+        (
+          await call(putSettings, {
+            method: "PUT",
+            path: "/api/v1/hr-workforce/settings",
+            body: { clockSkewSeconds: 5 }
+          })
+        ).status
+      ).toBe(200);
+      const lowered = await settle(near.body.data!.id, hr.token);
+
+      expect(lowered.status).toBe(409);
+      expect(lowered.body.error!.code).toBe("CORRECTION_NOT_APPLICABLE");
+      expect(await count("awcms_hr_attendance_events")).toBe(0);
+      expect(
+        (await readCorrection(near.body.data!.id, hr.token)).body.data!.status
+      ).toBe("pending");
     });
 
     test("the reason never leaves the correction's own row: not in audit, the workflow store, domain events or any response but the permitted ones", async () => {

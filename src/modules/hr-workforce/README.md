@@ -148,6 +148,18 @@ superseded".
   (default `hr.attendance_correction`): `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` and
   nothing is created (no row, no instance). The instance is started with **no
   facts**, so neither the reason nor the proposed time enters the workflow store.
+- **A proposed instant that could never be applied is refused up front.** Approval
+  appends an event, and the event guard refuses a claimed time beyond the tenant's
+  skew in the future, so a correction proposing one would be approved and then stay
+  pending for good (`409 CORRECTION_NOT_APPLICABLE` at settle). Creating a correction
+  therefore applies the same bound to `proposedOccurredAt`: further than
+  `clock_skew_seconds` ahead of now is `422 ATTENDANCE_TIME_IN_FUTURE` (the event
+  path's code) and nothing is created. The employment's hire and termination dates
+  are not checked: the event guard checks neither the start date nor, for a
+  `correction`-sourced event, the termination (a terminated employment can still be
+  corrected), so neither does this. `CORRECTION_NOT_APPLICABLE` remains for what can
+  change between request and approval: the employment soft-deleted meanwhile, or the
+  tenant lowering its skew below the proposal.
   Approvers are the definition's assignees; the decision itself is a workflow
   decision (`POST /workflows/tasks/{id}/decisions`).
 - **`settle` applies the verdict (pull, like procurement).** `POST
@@ -169,7 +181,9 @@ superseded".
   re-reads the workflow's own decision rows. The correction's status can only follow
   the instance's verdict (`approved`/`rejected`/`cancelled`), and an `approved` row
   without its event cannot commit (deferred constraint trigger).
-- **Who sees what.** `?mine=true` (own employment, a terminated one included) and
+- **Who sees what.** `?mine=true` (every live employment of the caller, terminated ones included: a
+  rehired person reads the old employment's events and corrections and the current
+  one's, never anyone else's) and
   `?reports=true` (the **current manager chain** below the caller's own live,
   non-terminated employment) are `ownershipGrant`s on the READ routes only; the
   unrestricted list needs `attendance.read` / `corrections.read` ("HR sees all"). An

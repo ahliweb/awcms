@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:44c56fb8328a801c2c4bfaefc7a9d58cb87b4b7b46fe807e259c747aea055c28 -->
+<!-- i18n-source-hash: sha256:baf03759cb86d9462d284ebd51219a13a3b6162ac53547718d26f7d9cce0049d -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -197,8 +197,14 @@ hingga 7 hari dan ditandai `late` lewat 15 menit (lebih tua: ditolak). Baris kor
 hanya mengubah status dan status itu harus mengikuti putusan `workflow_approval`,
 pemohon tidak pernah boleh menjadi penyetuju (CHECK, trigger atas baris keputusan
 workflow termasuk delegat yang bertindak atas nama pemohon, dan chokepoint), dan
-instance workflow dimulai tanpa fakta. Menerapkan putusan adalah tarik: `POST
-.../attendance-corrections/{id}/settle`. Dasar baca: sendiri (`?mine=true`) dan
+instance workflow dimulai tanpa fakta. Koreksi yang instan usulannya lebih jauh ke
+masa depan daripada skew tenant ditolak saat dibuat dengan `422
+ATTENDANCE_TIME_IN_FUTURE` (guard event akan menolaknya saat persetujuan dan
+koreksi tertahan `pending` selamanya); tanggal masuk dan terminasi employment tidak
+diperiksa, karena guard event tidak memeriksa keduanya untuk event bersumber-koreksi.
+Menerapkan putusan adalah tarik: `POST
+.../attendance-corrections/{id}/settle`. Dasar baca: sendiri (`?mine=true`, setiap employment pemanggil yang hidup, jadi
+orang yang dipekerjakan kembali membaca yang lama dan yang baru) dan
 rantai atasan di bawah pemanggil (`?reports=true`) adalah ownership grant pada route
 BACA; employment yang di-soft-delete memutus rantai. Kunci permission yang ditambahkan
 adalah `clock.create`, `attendance.create`/`read`, dan

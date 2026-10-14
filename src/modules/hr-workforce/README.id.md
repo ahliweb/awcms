@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9c366a24a4e4dd0281d4863464b0df667aaaec97f88874e73a4c8de1f18714ca -->
+<!-- i18n-source-hash: sha256:230d8c418266a781aa08b1bb82477bd414ee53f220d9b61000f5049c3b3dfef0 -->
 
 # `hr_workforce`
 
@@ -153,7 +153,19 @@ digantikan".
   definisi terbit di bawah `correction_workflow_key` (bawaan
   `hr.attendance_correction`): `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` dan tidak ada
   yang dibuat (tanpa baris, tanpa instance). Instance dimulai **tanpa fakta**,
-  sehingga alasan maupun waktu usulan tidak masuk ke penyimpanan workflow. Penyetuju
+  sehingga alasan maupun waktu usulan tidak masuk ke penyimpanan workflow.
+  **Instan usulan yang tak pernah dapat diterapkan ditolak di muka.** Persetujuan
+  menambahkan sebuah event, dan guard event menolak waktu klaim yang melampaui skew
+  tenant ke masa depan, sehingga koreksi dengan usulan seperti itu akan disetujui
+  lalu tertahan `pending` selamanya (`409 CORRECTION_NOT_APPLICABLE` saat settle).
+  Karena itu pembuatan koreksi menerapkan batas yang sama pada `proposedOccurredAt`:
+  lebih jauh dari `clock_skew_seconds` ke depan adalah `422 ATTENDANCE_TIME_IN_FUTURE`
+  (kode jalur event) dan tidak ada yang dibuat. Tanggal masuk dan terminasi employment
+  tidak diperiksa: guard event tidak memeriksa tanggal mulai maupun, untuk event
+  bersumber-`correction`, terminasi (employment yang sudah terminasi tetap dapat
+  dikoreksi), jadi di sini pun tidak. `CORRECTION_NOT_APPLICABLE` tetap ada untuk yang
+  bisa berubah antara permintaan dan persetujuan: employment di-soft-delete di
+  antaranya, atau tenant menurunkan skew di bawah usulan. Penyetuju
   adalah assignee definisi; keputusannya sendiri adalah keputusan workflow
   (`POST /workflows/tasks/{id}/decisions`).
 - **`settle` menerapkan putusan (tarik, seperti procurement).** `POST
@@ -175,8 +187,9 @@ digantikan".
   yang membaca ulang baris keputusan workflow sendiri. Status koreksi hanya dapat
   mengikuti putusan instance (`approved`/`rejected`/`cancelled`), dan baris
   `approved` tanpa event-nya tidak dapat commit (constraint trigger tertunda).
-- **Siapa melihat apa.** `?mine=true` (employment sendiri, yang sudah terminasi
-  termasuk) dan `?reports=true` (**rantai atasan saat ini** di bawah employment
+- **Siapa melihat apa.** `?mine=true` (setiap employment pemanggil yang hidup, yang
+  sudah terminasi termasuk: orang yang dipekerjakan kembali membaca event dan koreksi
+  employment lamanya sekaligus yang sekarang, tak pernah milik orang lain) dan `?reports=true` (**rantai atasan saat ini** di bawah employment
   pemanggil yang hidup dan belum terminasi) adalah `ownershipGrant` pada route BACA
   saja; daftar tanpa batas butuh `attendance.read` / `corrections.read` ("HR melihat
   semua"). `employmentId` di luar dasar yang dipilih adalah `403`.

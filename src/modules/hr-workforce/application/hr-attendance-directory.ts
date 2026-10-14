@@ -17,8 +17,9 @@
  *
  *   * `all`     — the caller holds the read permission: every row in the tenant.
  *   * `mine`    — an `ownershipGrant` (ADR-0063) on the persisted login link: the
- *                 caller's OWN employment only (a terminated one included, so an
- *                 ex-employee can read their own history).
+ *                 caller's OWN employments (every live one, terminated ones
+ *                 included: an ex-employee, or a rehired one, reads their whole
+ *                 own history, the old employment and the current one alike).
  *   * `reports` — an `ownershipGrant` on the CURRENT manager chain: the live
  *                 employments below the caller's own live, non-terminated
  *                 employment (`awcms_hr_report_ids`, bounded to ten levels, and
@@ -85,24 +86,27 @@ export type ReadBasis =
   | { mode: "mine"; tenantUserId: string }
   | { mode: "reports"; tenantUserId: string };
 
-type EmploymentRef = { id: string; terminated: boolean };
-
-/** The caller's own live (not soft-deleted) employment, or `null`. A terminated one is returned, flagged. */
-export async function callerEmployment(
+/**
+ * Every live (not soft-deleted) employment of the caller, terminated ones
+ * included, newest first. A person who was rehired has an old, terminated
+ * employment and a current one, and `mine` covers BOTH: the ownership grant is
+ * the persisted login link, so an old employment stays theirs to read. Empty for
+ * a login linked to no employment.
+ */
+export async function callerEmploymentIds(
   tx: Bun.SQL,
   tenantId: string,
   tenantUserId: string
-): Promise<EmploymentRef | null> {
+): Promise<string[]> {
   const rows = (await tx`
-    SELECT id, (terminated_on IS NOT NULL) AS terminated
+    SELECT id
     FROM awcms_hr_employments
     WHERE tenant_id = ${tenantId} AND tenant_user_id = ${tenantUserId}
       AND deleted_at IS NULL
-    ORDER BY (terminated_on IS NULL) DESC, created_at DESC
-    LIMIT 1
-  `) as EmploymentRef[];
+    ORDER BY created_at DESC, id DESC
+  `) as { id: string }[];
 
-  return rows[0] ?? null;
+  return rows.map((row) => row.id);
 }
 
 /**
@@ -142,9 +146,9 @@ export async function employmentWithinBasis(
   }
 
   if (basis.mode === "mine") {
-    const own = await callerEmployment(tx, tenantId, basis.tenantUserId);
-
-    return own?.id === employmentId;
+    return (
+      await callerEmploymentIds(tx, tenantId, basis.tenantUserId)
+    ).includes(employmentId);
   }
 
   return (await reportIdsOf(tx, tenantId, basis.tenantUserId)).includes(
@@ -179,9 +183,7 @@ async function basisEmploymentIds(
   }
 
   if (basis.mode === "mine") {
-    const own = await callerEmployment(tx, tenantId, basis.tenantUserId);
-
-    return own ? [own.id] : [];
+    return callerEmploymentIds(tx, tenantId, basis.tenantUserId);
   }
 
   return reportIdsOf(tx, tenantId, basis.tenantUserId);
@@ -663,6 +665,7 @@ export async function listCorrections(
 export type CreateCorrectionOutcome =
   | { outcome: "ok"; correction: AttendanceCorrection }
   | { outcome: "employment_not_found" }
+  | { outcome: "proposed_in_future" }
   | { outcome: "target_not_found" }
   | { outcome: "target_superseded" }
   | { outcome: "target_already_pending" }
@@ -675,6 +678,13 @@ export type CreateCorrectionOutcome =
  * tenant, or no published definition under the tenant's correction workflow key,
  * nothing is created. The instance is started with NO facts, so neither the
  * reason nor the proposed time enters the workflow store.
+ *
+ * A proposed instant further in the future than the tenant's clock-skew bound is
+ * refused HERE (`proposed_in_future`), by the same rule the event guard applies
+ * (`sql/198`): otherwise approval could never append the event (the guard would
+ * refuse it at settle) and the correction would sit pending for good. The bound
+ * is checked against the request's `now`, and time only moves forward, so what
+ * passes here is not future at settle either.
  */
 export async function createCorrection(
   tx: Bun.TransactionSQL,
@@ -694,6 +704,15 @@ export async function createCorrection(
 
   if (!header[0] || header[0].deleted_at) {
     return { outcome: "employment_not_found" };
+  }
+
+  const settings = await readSettings(tx, tenantId);
+
+  if (
+    input.proposedOccurredAt.getTime() >
+    now.getTime() + settings.clockSkewSeconds * 1000
+  ) {
+    return { outcome: "proposed_in_future" };
   }
 
   if (input.targetEventId) {
@@ -731,7 +750,6 @@ export async function createCorrection(
     return { outcome: "approval_workflow_not_configured" };
   }
 
-  const settings = await readSettings(tx, tenantId);
   const correctionId = crypto.randomUUID();
 
   type Attempt =

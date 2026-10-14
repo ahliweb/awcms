@@ -188,8 +188,13 @@ minutes (older: refused). The correction row only changes status and that status
 must follow the `workflow_approval` verdict, the requester can never be the approver
 (CHECK, trigger over the workflow's decision rows including a delegate acting on the
 requester's behalf, and the chokepoint), and the workflow instance is started with no
-facts. Applying a verdict is a pull: `POST .../attendance-corrections/{id}/settle`.
-Read bases: own (`?mine=true`) and the manager chain below the caller (`?reports=true`)
+facts. A correction whose proposed instant is further in the future than the tenant
+skew is refused at creation with `422 ATTENDANCE_TIME_IN_FUTURE` (the event guard
+would refuse it at approval and leave the correction pending for good); the
+employment's hire and termination dates are not checked, as the event guard checks
+neither for a correction-sourced event. Applying a verdict is a pull: `POST .../attendance-corrections/{id}/settle`.
+Read bases: own (`?mine=true`, every live employment of the caller, so a rehired
+person reads the old and the new) and the manager chain below the caller (`?reports=true`)
 are ownership grants on the READ routes; a soft-deleted employment breaks the chain.
 The permission keys added are `clock.create`, `attendance.create`/`read` and
 `corrections.create`/`read`/`cancel`/`approve`. See the module README for the full

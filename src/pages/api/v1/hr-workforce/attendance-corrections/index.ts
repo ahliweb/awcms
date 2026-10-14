@@ -148,7 +148,9 @@ const SCOPE = "hr_workforce_attendance_correction_create";
  * for somebody else; the requester can never be the approver). Approval is
  * REQUIRED and fail-closed: with no published workflow under the tenant's
  * correction workflow key, 409 `APPROVAL_WORKFLOW_NOT_CONFIGURED` and nothing is
- * created. The reason is sensitive: it is never written to an audit row, an event
+ * created. A `proposedOccurredAt` further in the future than the tenant's
+ * clock-skew bound is 422 `ATTENDANCE_TIME_IN_FUTURE` (the event guard would
+ * refuse it at approval, stranding the correction). The reason is sensitive: it is never written to an audit row, an event
  * or the workflow store. Idempotent.
  */
 export const POST = defineTenantRoute<CreatePrepared>({
@@ -226,6 +228,12 @@ export const POST = defineTenantRoute<CreatePrepared>({
               422,
               "EMPLOYMENT_NOT_FOUND",
               "employmentId does not name a live employment in this tenant."
+            );
+          case "proposed_in_future":
+            return fail(
+              422,
+              "ATTENDANCE_TIME_IN_FUTURE",
+              "proposedOccurredAt is further in the future than the tenant's clock-skew bound allows; approval could never record it."
             );
           case "target_not_found":
             return fail(
