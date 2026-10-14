@@ -75,6 +75,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Scheduled expiry sweep (identity-access:delegated-access:expiry, ADR-0090) — the same tolerant-of-delay profile as identity-access:business-scope:expiry, and for the same reason: the authorization decision is already made at the chokepoint, so a late pass costs bookkeeping and never access. Both its sweep and its --dry-run count pass workClass: "maintenance" explicitly.'
   },
+  "scripts/booking-holds-expire.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled hold-expiry sweep (booking:holds:expire, Issue #939, ADR-0131), every minute — housekeeping, not the gate: the allocator reclaims an elapsed hold on the units it claims, so a late pass costs stale `held` rows and never a double booking. The sweep runs through the narrow SECURITY DEFINER function awcms_booking_expire_due_holds (sql/200) and both its pass and its --dry-run count pass workClass: "maintenance" explicitly.'
+  },
   "scripts/form-draft-purge.ts": {
     workClass: "maintenance",
     rationale:

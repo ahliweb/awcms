@@ -119,7 +119,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                          | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                          | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Base modules                      | **32** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrations                        | **189** (`sql/001`–`189`)                                                                                                           | `ls sql/`                                                                               |
+| Migrations                        | **190** (`sql/001`–`200`)                                                                                                           | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0140** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
 | Admin screens                     | **68** `.astro` files in `src/pages/admin/`; **3 of 32** modules without `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **85** (51.431 lines) — on typechecking see §6                                                                                      | `find src -name '*.astro'`                                                              |
@@ -390,6 +390,21 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
+
+- **BOOKING BUILD-OUT — slices #937 to #939 landed; next #940 (stays) and #941
+  (reservation routes).** #937 schema (`sql/180`, `sql/181`), #938 availability
+  and schedules (`sql/186`), #939 the slot allocator, holds with expiry and the
+  reconciliation (one migration, `sql/200`, only for the reaper's privilege:
+  `booking:holds:expire` runs as `awcms_worker` through a narrow SECURITY
+  DEFINER sweep; the schema already held every invariant). The map from the pack to the code is
+  [`awcms/booking.md`](awcms/booking.md) §13. Three things a continuer must
+  know: (1) `placeHold` is the claim, not the create handler: opening hours,
+  lead time, horizon and the `override` path are #941's and must run before it;
+  (2) correctness never depends on the `booking:holds:expire` job (lazy reclaim
+  covers every claim), its health is `hold_overdue_unswept` in the
+  reconciliation; (3) the concurrency evidence is
+  `tests/integration/booking-concurrency.integration.test.ts` (T2, T3, T6, T7),
+  driven through `placeHold` until #941 puts a route in front of it.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 October 2026 (v10.7.0): #915–#918 done
   upstream, the same day downstream ADR-0040 was accepted (awcms-one#335, O0).**

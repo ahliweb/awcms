@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1f9a65cde91106ba5ac5f8086caaa9d40c5ecd9c772963648746cf317f3e5dd3 -->
+<!-- i18n-source-hash: sha256:32dd504a58f95f00716fbd32983499f00c33955c78c7bd5fbb00768801bc79dd -->
 
 # AWCMS — Project State & Continuation
 
@@ -120,7 +120,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                 | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                 | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Modul base                         | **32** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **189** (`sql/001`–`189`)                                                                                                          | `ls sql/`                                                                               |
+| Migrasi                            | **190** (`sql/001`–`200`)                                                                                                          | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0140** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
 | Layar admin                        | **68** berkas `.astro` di `src/pages/admin/`; **3 dari 32** modul tanpa `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **85** (51.431 baris) — soal typecheck lihat §6                                                                                    | `find src -name '*.astro'`                                                              |
@@ -393,6 +393,21 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **PEMBANGUNAN BOOKING — irisan #937 sampai #939 sudah masuk; berikutnya #940
+  (stay) dan #941 (route reservasi).** #937 skema (`sql/180`, `sql/181`), #938
+  availability dan jadwal (`sql/186`), #939 alokator slot, hold dengan
+  kedaluwarsa, dan rekonsiliasi (satu migrasi, `sql/200`, hanya untuk privilege reaper:
+  `booking:holds:expire` berjalan sebagai `awcms_worker` lewat sapuan SECURITY
+  DEFINER sempit; skema sudah memegang setiap invarian). Peta dari paket ke kode ada di [`awcms/booking.md`](awcms/booking.id.md)
+  §13. Tiga hal yang harus diketahui penerus: (1) `placeHold` adalah klaim,
+  bukan handler pembuatan: jam buka, lead time, horizon, dan jalur `override`
+  milik #941 dan harus berjalan sebelumnya; (2) kebenaran tak pernah bergantung
+  pada job `booking:holds:expire` (reklamasi malas menutup setiap klaim),
+  kesehatannya adalah `hold_overdue_unswept` pada rekonsiliasi; (3) bukti
+  konkurensi ada di `tests/integration/booking-concurrency.integration.test.ts`
+  (T2, T3, T6, T7), dijalankan lewat `placeHold` sampai #941 memasang route di
+  depannya.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 Oktober 2026 (v10.7.0): #915–#918 selesai
   di hulu, pada hari yang sama ADR-0040 hilir diterima (awcms-one#335, O0).**

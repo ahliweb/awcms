@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 189   |
+| Migrations                          | 190   |
 | `awcms_*` tables                    | 207   |
 | Tables with `FORCE` RLS             | 189   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 620   |
+| Test files                          | 622   |
 | Route files                         | 512   |
 | ADR                                 | 282   |
 
@@ -246,6 +246,7 @@
 | 187 | `sql/187_awcms_hr_commission_rules_backdated.sql`                  |
 | 188 | `sql/188_awcms_hr_commission_accruals_schema.sql`                  |
 | 189 | `sql/189_awcms_hr_commission_accrual_permissions.sql`              |
+| 190 | `sql/200_awcms_booking_hold_expiry_sweep.sql`                      |
 
 ### Tables & Row-Level Security
 
@@ -463,9 +464,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 489        |
+| `(root)`      | 490        |
 | `e2e`         | 25         |
-| `integration` | 105        |
+| `integration` | 106        |
 | `unit`        | 1          |
 
 ### Routes
