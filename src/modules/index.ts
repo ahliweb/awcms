@@ -31,6 +31,7 @@ import { hrWorkforceModule } from "./hr-workforce/module";
 import { whatsappDeliveryModule } from "./whatsapp-delivery/module";
 import { bookingModule } from "./booking/module";
 import { hrCommissionModule } from "./hr-commission/module";
+import { telegramDeliveryModule } from "./telegram-delivery/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -221,7 +222,17 @@ const baseModules: ModuleDescriptor[] = [
   // hr_workforce (both above), so the DAG stays acyclic; nothing depends on it.
   // `experimental` (flag off): no admin screen yet. See
   // src/modules/hr-commission/module.ts's `description`.
-  hrCommissionModule
+  hrCommissionModule,
+  // Admitted by ADR-0140 (Issue #965): an optional, off-by-default Telegram
+  // adapter for OPERATIONAL AND STAFF ALERTS ONLY — one queue per deployment, a
+  // chat bound by an audited one-time-code handshake with confirmation in the
+  // staff member's own session, the chat id stored only as ciphertext, and the
+  // bot token redacted from every sink. Depends on tenant_admin/identity_access/
+  // logging (all above), so the DAG stays acyclic; nothing depends on it
+  // (consumers reach it through the capability port) and it is never a fallback
+  // for another channel (ADR-0139). Ships INERT: TELEGRAM_ENABLED is off by
+  // default. See src/modules/telegram-delivery/module.ts's `description`.
+  telegramDeliveryModule
 ];
 
 /**

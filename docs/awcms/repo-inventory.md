@@ -7,13 +7,13 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 32    |
-| Migrations                          | 194   |
-| `awcms_*` tables                    | 210   |
-| Tables with `FORCE` RLS             | 192   |
+| Registered modules                  | 33    |
+| Migrations                          | 197   |
+| `awcms_*` tables                    | 215   |
+| Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 639   |
-| Route files                         | 517   |
+| Test files                          | 644   |
+| Route files                         | 529   |
 | ADR                                 | 284   |
 
 ### Modules
@@ -52,6 +52,7 @@
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 | `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 | `hr_commission`        | 0.2.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
+| `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
 ### Migrations
 
@@ -250,7 +251,10 @@
 | 191 | `sql/199_awcms_hr_attendance_permissions.sql`                      |
 | 192 | `sql/200_awcms_booking_hold_expiry_sweep.sql`                      |
 | 193 | `sql/204_awcms_booking_stay_blocks.sql`                            |
-| 194 | `sql/224_awcms_sensitive_read_windows.sql`                         |
+| 194 | `sql/216_awcms_telegram_delivery_schema.sql`                       |
+| 195 | `sql/217_awcms_telegram_delivery_bootstrap.sql`                    |
+| 196 | `sql/218_awcms_telegram_delivery_permissions.sql`                  |
+| 197 | `sql/224_awcms_sensitive_read_windows.sql`                         |
 
 ### Tables & Row-Level Security
 
@@ -437,6 +441,11 @@
 | `awcms_sync_push_batches`                | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
 | `awcms_tax_rule_versions`                | `sql/171_awcms_tax_rule_versions_schema.sql`               | yes | yes   |
 | `awcms_tax_snapshots`                    | `sql/172_awcms_tax_snapshots_schema.sql`                   | yes | yes   |
+| `awcms_telegram_bindings`                | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_delivery_attempts`       | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_link_codes`              | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_messages`                | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_settings`                | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
 | `awcms_tenant_auth_policies`             | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
 | `awcms_tenant_domains`                   | `sql/046_awcms_tenant_domain_schema.sql`                   | yes | yes   |
 | `awcms_tenant_entitlements`              | `sql/109_awcms_entitlement_schema.sql`                     | yes | yes   |
@@ -471,17 +480,17 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 498        |
+| `(root)`      | 502        |
 | `e2e`         | 25         |
-| `integration` | 115        |
+| `integration` | 116        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 418   |
-| `/admin/**`     | 69    |
+| `/api/v1/**`    | 429   |
+| `/admin/**`     | 70    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->

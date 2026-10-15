@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:40322e68cad24b8914f43ece6223abd5e3509361e273482386f64f3f9c8571c3 -->
+<!-- i18n-source-hash: sha256:1bee6f2c2caca73727ff9be095372945d5f46e61795cfc200ee926aef8d87e79 -->
 
 # AWCMS — Project State & Continuation
 
@@ -119,13 +119,13 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Versi                              | **10.7.0**                                                                                                                         | `package.json`                                                                          |
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                 | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                 | `git rev-list --count v10.7.0..HEAD`                                                    |
-| Modul base                         | **32** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **194** (`sql/001`–`224`)                                                                                                          | `ls sql/`                                                                               |
+| Modul base                         | **33** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
+| Migrasi                            | **197** (`sql/001`–`224`)                                                                                                          | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0141** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
-| Layar admin                        | **68** berkas `.astro` di `src/pages/admin/`; **3 dari 32** modul tanpa `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **85** (51.431 baris) — soal typecheck lihat §6                                                                                    | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **65** di rantai `bun run check`                                                                                                   | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.3.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Layar admin                        | **69** berkas `.astro` di `src/pages/admin/`; **3 dari 33** modul tanpa `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **86** (52.320 baris) — soal typecheck lihat §6                                                                                    | `find src -name '*.astro'`                                                              |
+| Gerbang                            | **66** di rantai `bun run check`                                                                                                   | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.4.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -202,7 +202,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **32 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
+- **33 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection
@@ -431,7 +431,7 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   **Keputusan pemilik (dijawab 2026-10-10 di DoR awcms-one).** Dicatat di
   pack tempat ia mengikat: booking O8 dan O12 (hold tidak dihitung dalam
   occupancy; commerce tetap otoritas pelanggan, sehingga tanpa
-  `customer_profile_id`); hr O4 (profil Indonesia milik konsumen), O6 (geolokasi saja, mati secara default; diputuskan ADR-0138 sebagai bukti berupa verdict saja, implementasi #970) dan O7 (SoD dapat dikonfigurasi per tenant, diputuskan ADR-0136 termasuk sub-pertanyaan O7a, penegakan di #957; payroll juga digerbangi enkripsi rekening payout, diputuskan ADR-0137, serta review keamanan dan hukum #956). Delivery O10/O11: adaptor Telegram diterima hanya untuk notifikasi ops/staf oleh ADR-0140 (#964; implementasi #965, setelah helper enkripsi field ADR-0137); orkestrasi lintas kanal tidak diterima (ADR-0139, dengan pemicu pembukaan ulang). O2 booking (vertikal pertama hotel / vila / rental) terjawab dan memasukkan menginap berbasis hari ke v1 lewat ADR-0135 (Issue #931); O1, O3, O5, dan O9 belum direkonsiliasi ke pack. Baca tabel
+  `customer_profile_id`); hr O4 (profil Indonesia milik konsumen), O6 (geolokasi saja, mati secara default; diputuskan ADR-0138 sebagai bukti berupa verdict saja, implementasi #970) dan O7 (SoD dapat dikonfigurasi per tenant, diputuskan ADR-0136 termasuk sub-pertanyaan O7a, penegakan di #957; payroll juga digerbangi enkripsi rekening payout, diputuskan ADR-0137, serta review keamanan dan hukum #956). Delivery O10/O11: adaptor Telegram diterima hanya untuk notifikasi ops/staf oleh ADR-0140 (#964; diimplementasikan #965 sebagai modul `telegram_delivery`, tidak aktif di balik `TELEGRAM_ENABLED`, di atas helper enkripsi field ADR-0137); orkestrasi lintas kanal tidak diterima (ADR-0139, dengan pemicu pembukaan ulang). O2 booking (vertikal pertama hotel / vila / rental) terjawab dan memasukkan menginap berbasis hari ke v1 lewat ADR-0135 (Issue #931); O1, O3, O5, dan O9 belum direkonsiliasi ke pack. Baca tabel
   pertanyaan terbuka pack sebelum menulis migrasi.
 
   **Dua hal sebelum menyentuh registry consumer (#926).** Consumer berjalan

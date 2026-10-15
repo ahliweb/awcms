@@ -43,6 +43,17 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // all validate.
   "getAuthSsoStart",
   "getAuthSsoCallback",
+  // telegram_delivery (ADR-0140, Issue #965) — the bot webhook. It is called by
+  // Telegram, not by a person or a browser, so it can carry no session or
+  // tenant header; its authentication is a shared secret in
+  // `X-Telegram-Bot-Api-Secret-Token`, compared in constant time BEFORE the body
+  // is read or any database work is done (a missing or wrong header is a 401
+  // with a generic envelope). There is no tenant in the path (one bot per
+  // deployment) and none is trusted from the payload: it comes from the one-time
+  // code row or from the binding found by the chat's keyed hash. It does two
+  // idempotent things (`/start <code>`, `/stop`) from a private chat and answers
+  // 404 when TELEGRAM_ENABLED is not true.
+  "receiveTelegramWebhook",
   // visitor_analytics (ported from awcms-micro epic #617-#624) — the public
   // visit-ingest beacon is anonymous by design: it carries no session, resolves
   // the tenant from a public tenant code, records only privacy-preserving,

@@ -415,6 +415,8 @@ describe("the contract version records the addition", () => {
     // nothing about subject data changes, so this only tracks the live version.
     // 4.3.0 (ADR-0141) adds `ModulePermissionDescriptor.requiresMfaEnrolment`;
     // likewise nothing about subject data.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.3.0");
+    // 4.4.0 (ADR-0140) adds `handlesPayrollData` and
+    // `ModuleNavigationEntry.requiredAnyPermission`; likewise nothing here.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.4.0");
   });
 });

@@ -122,6 +122,8 @@ describe("fetchModuleJobs", () => {
         "bun run site-search:reconcile",
         "bun run sync:objects:dispatch",
         "bun run sync:objects:purge",
+        "bun run telegram:dispatch",
+        "bun run telegram:queue:purge",
         "bun run tenant-domain:dns:sync",
         "bun run whatsapp:dispatch",
         "bun run whatsapp:queue:purge",

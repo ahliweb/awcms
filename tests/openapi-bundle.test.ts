@@ -495,6 +495,13 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // jurisdiction-neutral calculator (quote, snapshot, reversal), rule-version
       // authoring and the reconciliation report. Nothing here is anonymous.
       "Tax",
+      // "Telegram Delivery" (telegram_delivery, ADR-0140, Issue #965) — genuinely
+      // new surface: self-service chat linking and confirmation, queue
+      // diagnostics, templates and the tenant switch. The ONE anonymous
+      // operation is the bot webhook (`receiveTelegramWebhook`), authenticated
+      // by its secret header and individually justified in
+      // ALLOWED_PUBLIC_OPERATIONS.
+      "Telegram Delivery",
       "Tenant Domains",
       "Theming",
       "Visitor Analytics",

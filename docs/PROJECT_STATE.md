@@ -118,13 +118,13 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Version                           | **10.7.0**                                                                                                                          | `package.json`                                                                          |
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                          | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                          | `git rev-list --count v10.7.0..HEAD`                                                    |
-| Base modules                      | **32** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrations                        | **194** (`sql/001`–`224`)                                                                                                           | `ls sql/`                                                                               |
+| Base modules                      | **33** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
+| Migrations                        | **197** (`sql/001`–`224`)                                                                                                           | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0141** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
-| Admin screens                     | **68** `.astro` files in `src/pages/admin/`; **3 of 32** modules without `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **85** (51.431 lines) — on typechecking see §6                                                                                      | `find src -name '*.astro'`                                                              |
-| Gates                             | **65** in the `bun run check` chain                                                                                                 | `scripts.check` in `package.json`, split on `&&`                                        |
-| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.3.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Admin screens                     | **69** `.astro` files in `src/pages/admin/`; **3 of 33** modules without `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| `.astro` files                    | **86** (52.320 lines) — on typechecking see §6                                                                                      | `find src -name '*.astro'`                                                              |
+| Gates                             | **66** in the `bun run check` chain                                                                                                 | `scripts.check` in `package.json`, split on `&&`                                        |
+| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.4.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -201,7 +201,7 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 3. What is already done (do not rebuild it)
 
-- **32 modules** registered with `FORCE` RLS, DB role separation
+- **33 modules** registered with `FORCE` RLS, DB role separation
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Advanced auth**: MFA TOTP + session-assurance/step-up (`sql/024`), tenant-aware
   OIDC/SSO + SSRF guard + break-glass (`sql/025`/`026`), profile-aware Turnstile bot
@@ -428,7 +428,7 @@ pioneered directly here after the ADR-0047 freeze.)
   **Owner decisions (answered 2026-10-10 in the awcms-one DoR).** Recorded in
   the packs where they bind: booking O8 and O12 (holds excluded from occupancy;
   commerce stays the customer authority, so no `customer_profile_id`); hr O4
-  (Indonesian profile consumer-owned), O6 (geolocation only, off by default; decided by ADR-0138 as verdict-only evidence, implementation #970) and O7 (SoD configurable per tenant, decided by ADR-0136 including sub-question O7a, enforcement in #957; payroll is additionally gated on payout-account encryption, decided by ADR-0137, plus the security and legal review of #956). Delivery O10/O11: the Telegram adapter is admitted for ops/staff alerts only by ADR-0140 (#964; implementation #965, after the ADR-0137 field-encryption helper); cross-channel orchestration is not admitted (ADR-0139, with reopening triggers). Booking O2 (first vertical hotel / villa / rental) is answered and admits day-granularity stays into v1 through ADR-0135 (Issue #931); O1, O3, O5 and
+  (Indonesian profile consumer-owned), O6 (geolocation only, off by default; decided by ADR-0138 as verdict-only evidence, implementation #970) and O7 (SoD configurable per tenant, decided by ADR-0136 including sub-question O7a, enforcement in #957; payroll is additionally gated on payout-account encryption, decided by ADR-0137, plus the security and legal review of #956). Delivery O10/O11: the Telegram adapter is admitted for ops/staff alerts only by ADR-0140 (#964; implemented by #965 as the `telegram_delivery` module, inert behind `TELEGRAM_ENABLED`, on the ADR-0137 field-encryption helper); cross-channel orchestration is not admitted (ADR-0139, with reopening triggers). Booking O2 (first vertical hotel / villa / rental) is answered and admits day-granularity stays into v1 through ADR-0135 (Issue #931); O1, O3, O5 and
   O9 are not yet reconciled into the packs. Read the pack's open-questions table
   before writing a migration.
 

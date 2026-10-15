@@ -134,6 +134,8 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // ADR-0133 (Issue #963). The sibling channel of push_delivery and email, so it
   // sits beside push in operations; the map must cover every registered module.
   whatsapp_delivery: "operations",
+  // ADR-0140 (Issue #965). The fourth delivery channel; beside the others.
+  telegram_delivery: "operations",
   // ADR-0122 (ahliweb/omes#196). Placed even though the module declares NO navigation yet:
   // this map must cover every registered module so its first screen lands in operations.
   omes_control: "operations",
@@ -271,6 +273,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_domain_events": "Domain events",
   "admin.layout.nav_push_notifications": "Push notifications",
   "admin.layout.nav_whatsapp": "WhatsApp delivery",
+  "admin.layout.nav_telegram": "Telegram delivery",
   "admin.layout.nav_sync": "Sync & storage",
   "admin.layout.nav_profiles": "Profiles",
   "admin.layout.nav_users": "Users",
@@ -368,6 +371,7 @@ export const DEFAULT_SIDEBAR_ICONS: Readonly<Record<string, string>> = {
   "admin.layout.nav_newsletter": "mail",
   "admin.layout.nav_push_notifications": "bell",
   "admin.layout.nav_whatsapp": "chat",
+  "admin.layout.nav_telegram": "chat",
   // Operations.
   "admin.layout.nav_visitor_analytics": "chart",
   "admin.layout.nav_data_lifecycle": "database",
@@ -444,6 +448,8 @@ export type SidebarDefaultEntry = {
   order: number;
   /** Exact permission key required to see the link, if any. */
   requiredPermission?: string;
+  /** See `ModuleNavigationEntry.requiredAnyPermission`: holding ANY of these also shows the link. */
+  requiredAnyPermission?: readonly string[];
   /** See `ModuleNavigationEntry.badgeCount` — carried through unchanged. */
   badgeCount?: number;
 };
@@ -522,6 +528,9 @@ export function buildDefaultSidebarModel(
         icon: nav.icon ?? resolveSidebarIcon(nav.labelKey),
         order: nav.order ?? 0,
         requiredPermission: nav.requiredPermission,
+        ...(nav.requiredAnyPermission
+          ? { requiredAnyPermission: nav.requiredAnyPermission }
+          : {}),
         badgeCount: nav.badgeCount
       });
     }
@@ -563,7 +572,10 @@ export function composeSidebarSections(
 
     return (
       !entry.requiredPermission ||
-      options.grantedPermissionKeys.has(entry.requiredPermission)
+      options.grantedPermissionKeys.has(entry.requiredPermission) ||
+      (entry.requiredAnyPermission ?? []).some((key) =>
+        options.grantedPermissionKeys.has(key)
+      )
     );
   });
 

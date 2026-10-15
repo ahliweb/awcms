@@ -1622,6 +1622,56 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/telegram/bindings/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/bindings/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/bindings/me/confirm.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/bindings/me/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/bindings/me/reject.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/bindings/me/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/diagnostics.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/links.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram/templates.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/tenant/domains/[id].ts",
       "workClass": "interactive",
       "source": "default"
@@ -2046,6 +2096,18 @@
       "workClass": "background_sync",
       "source": "registry",
       "rationale": "Recurring per-tenant search index reconciliation (site-search:reconcile, ADR-0040) — drives user-visible public search freshness, same dispatcher profile as domain-events-dispatch rather than a maintenance purge."
+    },
+    {
+      "path": "scripts/telegram-dispatch.ts",
+      "workClass": "background_sync",
+      "source": "registry",
+      "rationale": "Outbox dispatcher (telegram:dispatch, ADR-0140), recommended every minute — the same profile as push/email/whatsapp dispatch, and every withTenantOrThrow call inside telegram-dispatch.ts already passes workClass: \"background_sync\" explicitly."
+    },
+    {
+      "path": "scripts/telegram-queue-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge and expiry/erasure backstop (telegram:queue:purge, ADR-0140) — same tolerant-of-delay profile as whatsapp:queue:purge; purgeTelegramQueue passes workClass: \"maintenance\" explicitly."
     },
     {
       "path": "scripts/tenant-domain-dns-sync.ts",
