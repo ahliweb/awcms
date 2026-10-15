@@ -13,6 +13,12 @@
  */
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import type { ProjectionDescriptor } from "../../_shared/module-contract";
+import {
+  findPayrollTables,
+  isPayrollOwnerModule,
+  payrollBoundaryMessage,
+  payrollOwnerMessage
+} from "../../_shared/payroll-data-boundary";
 import { getProjectionMetrics } from "./projection-metric-store";
 import { recordExportRun, type ExportRunRow } from "./export-run-store";
 import {
@@ -43,11 +49,47 @@ export type GenerateExportInput = {
   correlationId?: string | null;
 };
 
+/**
+ * Issue #978 (PS-18). An export is a file that outlives the request, sits
+ * outside the per-route step-up and is opened in a spreadsheet, so it is the
+ * widest copy of a projection there is. The registry gate already refuses a
+ * projection that names a payroll table; this refuses again at write time so a
+ * descriptor that bypassed validation still cannot produce the file.
+ *
+ * Thrown BEFORE any read or write and NOT recorded as a failed run: a refusal
+ * is a programming error to fix, not an operational failure to retry.
+ */
+export function assertProjectionExportable(
+  descriptor: ProjectionDescriptor
+): void {
+  if (isPayrollOwnerModule(descriptor.ownerModuleKey)) {
+    throw new Error(
+      `reporting export: ${payrollOwnerMessage("report export", descriptor.ownerModuleKey)}`
+    );
+  }
+
+  const streams = [
+    ...(descriptor.source.strategy === "cursor_table"
+      ? descriptor.source.streams
+      : []),
+    ...descriptor.rebuildSource.streams
+  ];
+  const [table] = findPayrollTables(streams.map((stream) => stream.tableName));
+
+  if (table) {
+    throw new Error(
+      `reporting export: ${payrollBoundaryMessage("report export", table, `projection ${descriptor.key}`)}`
+    );
+  }
+}
+
 export async function generateProjectionExport(
   sql: Bun.SQL,
   input: GenerateExportInput,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ExportRunRow> {
+  assertProjectionExportable(input.descriptor);
+
   const metrics = await withTenantOrThrow(sql, input.tenantId, (tx) =>
     getProjectionMetrics(tx, input.tenantId, input.descriptor.key)
   );

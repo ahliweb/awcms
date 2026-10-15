@@ -89,7 +89,14 @@ export async function runIdempotent(
   idempotencyKey: string,
   actorTenantUserId: string,
   requestPayload: unknown,
-  produce: () => Promise<{ status: number; body: unknown } | Response>
+  produce: () => Promise<{ status: number; body: unknown } | Response>,
+  /**
+   * Called with the STORED body when the key is a replay, before it is
+   * returned. A replay hands back the same data as the original (amounts
+   * included) without running `produce`, so a read audit placed inside
+   * `produce` never sees it (#978 re-audit L-A).
+   */
+  onStoredReplay?: (storedBody: unknown) => Promise<void>
 ): Promise<Response> {
   // Binding the actor into the hash means a second user presenting the same key
   // does not get the first user's response replayed (it can carry a tenant's commercial terms).
@@ -112,6 +119,8 @@ export async function runIdempotent(
         "Idempotency-Key was already used with a different request."
       );
     }
+
+    await onStoredReplay?.(existing.responseBody);
 
     return jsonResponse(existing.responseBody, {
       status: existing.responseStatus

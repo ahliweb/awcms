@@ -20,6 +20,12 @@ import type {
   ProjectionCursorStream,
   ProjectionDescriptor
 } from "../../_shared/module-contract";
+import {
+  isPayrollOwnerModule,
+  isPayrollTable,
+  payrollBoundaryMessage,
+  payrollOwnerMessage
+} from "../../_shared/payroll-data-boundary";
 
 const TABLE_NAME_PATTERN = /^awcms_[a-z][a-z0-9_]*$/;
 const COLUMN_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -61,6 +67,17 @@ function validateCursorStream(
   if (!stream.tableName || !TABLE_NAME_PATTERN.test(stream.tableName)) {
     push(
       `${context}: tableName must start with "awcms_" and be snake_case (got ${JSON.stringify(stream.tableName)}).`
+    );
+  }
+  // Issue #978 (PS-18): a projection is readable by every holder of the report
+  // permission, which is a far wider audience than `compensation.read`.
+  if (stream.tableName && isPayrollTable(stream.tableName)) {
+    push(
+      payrollBoundaryMessage(
+        "reporting projection",
+        stream.tableName,
+        `${context}.tableName`
+      )
     );
   }
   const tenantColumn = stream.tenantColumn ?? "tenant_id";
@@ -125,6 +142,10 @@ function validateSingleDescriptor(
     push(
       `ownerModuleKey (${JSON.stringify(descriptor.ownerModuleKey)}) must equal the declaring module's own key (${JSON.stringify(ownerModule.key)}) — a module must not declare a descriptor it claims another module owns.`
     );
+  }
+
+  if (isPayrollOwnerModule(ownerModule.key)) {
+    push(payrollOwnerMessage("reporting projection", ownerModule.key));
   }
 
   if (descriptor.scope !== "tenant" && descriptor.scope !== "global") {

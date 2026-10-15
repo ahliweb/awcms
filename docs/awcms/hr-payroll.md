@@ -818,25 +818,27 @@ absent.
 
 ### 11.3 Audit and idempotency
 
-| Action                                    | `Idempotency-Key`        | Audit level                                             | Replay                                                           |
-| ----------------------------------------- | ------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------- |
-| employment create / terms change          | yes                      | info                                                    | unique `employee_no`                                             |
-| link or change `tenant_user_id`           | yes                      | warning                                                 | state check                                                      |
-| attendance event                          | yes + `client_event_key` | none (high volume; the event IS the record)             | returns the original                                             |
-| correction request / decision             | yes                      | info                                                    | state check; workflow decision is audited by `workflow_approval` |
-| shift publish / cancel                    | yes                      | info                                                    | state check                                                      |
-| commission accrue (adapter)               | yes                      | info                                                    | source identity returns the original                             |
-| accrual approve / release / pay / reverse | yes                      | warning (reverse: critical)                             | state check + unique reversal                                    |
-| compensation propose / approve            | yes                      | warning                                                 | state check                                                      |
-| payout account add / remove               | yes                      | warning                                                 | uniform acknowledgement (no oracle)                              |
-| payout account **reveal**                 | no (a read)              | warning, records THAT a disclosure happened, never what | —                                                                |
-| period lock                               | yes                      | critical                                                | state check                                                      |
-| run create / **calculate**                | yes                      | info / warning                                          | unique `(period, run_no)`; state check                           |
-| run **approve**                           | yes                      | warning                                                 | state check                                                      |
-| run **finalize**                          | yes                      | warning                                                 | state check; second finalize returns the first                   |
-| run **pay**                               | yes                      | warning                                                 | state check; unique payment per run                              |
-| run **reverse**                           | yes                      | critical                                                | once per run (partial unique index)                              |
-| rule publish / retire                     | yes                      | warning                                                 | state check                                                      |
+| Action                                    | `Idempotency-Key`        | Audit level                                                                      | Replay                                                           |
+| ----------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| employment create / terms change          | yes                      | info                                                                             | unique `employee_no`                                             |
+| link or change `tenant_user_id`           | yes                      | warning                                                                          | state check                                                      |
+| attendance event                          | yes + `client_event_key` | none (high volume; the event IS the record)                                      | returns the original                                             |
+| correction request / decision             | yes                      | info                                                                             | state check; workflow decision is audited by `workflow_approval` |
+| shift publish / cancel                    | yes                      | info                                                                             | state check                                                      |
+| commission accrue (adapter)               | yes                      | info                                                                             | source identity returns the original                             |
+| accrual approve / release / pay / reverse | yes                      | warning (reverse: critical)                                                      | state check + unique reversal                                    |
+| compensation propose / approve            | yes                      | warning                                                                          | state check                                                      |
+| payout account add / remove               | yes                      | warning                                                                          | uniform acknowledgement (no oracle)                              |
+| payout account **reveal**                 | no (a read)              | warning, records THAT a disclosure happened, never what                          | —                                                                |
+| sensitive **read** (§13.3)                | no (a read)              | info once per actor, kind and window; warning at each decade of reads or records | —                                                                |
+| **export** and export download (§13.3)    | no (a read)              | warning, every time, never coalesced                                             | —                                                                |
+| period lock                               | yes                      | critical                                                                         | state check                                                      |
+| run create / **calculate**                | yes                      | info / warning                                                                   | unique `(period, run_no)`; state check                           |
+| run **approve**                           | yes                      | warning                                                                          | state check                                                      |
+| run **finalize**                          | yes                      | warning                                                                          | state check; second finalize returns the first                   |
+| run **pay**                               | yes                      | warning                                                                          | state check; unique payment per run                              |
+| run **reverse**                           | yes                      | critical                                                                         | once per run (partial unique index)                              |
+| rule publish / retire                     | yes                      | warning                                                                          | state check                                                      |
 
 No audit row carries an amount, a name, an identifier, a note or a reason text; the
 correlation id joins the audit row, the outbox event and any ledger row. Replays
@@ -934,11 +936,166 @@ assessment.
 - **Security safeguards.** Encryption in transit; access control above; payout
   accounts encrypted at rest (design in ADR-0137, to be implemented before phase 3 ships); audit of reveals; backup handling
   follows the existing runbooks, and a restore requires the reconciliations in §14.
-- **Breach readiness.** Audit and the decision log answer "who read what"; the
-  notification duties follow the O5 outcome.
+- **Breach readiness.** Audit and the decision log answer "who read what": the
+  payout-account reveal has its own audit row, and reads of compensation, of
+  per-employee run lines and of other employees' payslips, and every export, are
+  recorded by the sensitive-read audit (§13.3, PS-18); the notification duties
+  follow the O5 outcome.
 - **Impact assessment.** Phase 1 (no evidence) is a routine employment-data
   processing; phase 3 and any evidence feature require a documented impact
   assessment before implementation.
+
+### 13.3 Reads, derived copies and exports (PS-18, Issue #978)
+
+Finding PS-18 had two halves: a read of salary left no trace, and nothing stopped
+a projection, a search index or an export from becoming a second, wider copy of
+payroll. Both controls are **generic and already in the repository**, so the first
+payroll route cannot be written without them. They are gates today; they bite on
+the day `hr_payroll` declares its first permission or route.
+
+**A. Audit of sensitive reads.** `recordSensitiveRead(tx, { permission, actorTenantUserId,
+itemCount, resourceIds })` (`src/modules/logging/application/sensitive-read-audit.ts`)
+is called by the route on the **same transaction** as the read, after
+authorisation and before data is returned. It records the actor, the kind, UUID
+record ids (20 per row; a longer list is split across rows, none dropped) and counts, **never an amount, a name or free
+text**: a non-UUID id is refused, the message is a constant, and the input type has
+no field for a value. It is **fail-closed**: if the counter or the audit insert
+fails, the read's transaction aborts.
+
+| Permission                                            | Kind (audit action)              | Opening severity | Window                 |
+| ----------------------------------------------------- | -------------------------------- | ---------------- | ---------------------- |
+| `hr_payroll.compensation.read`                        | `sensitive_read.compensation`    | info             | 300 s                  |
+| `hr_payroll.runs.read` (header and line reads alike)  | `sensitive_read.run_lines`       | info             | 300 s                  |
+| `hr_payroll.payslips.read` (not the owner's own read) | `sensitive_read.payslip`         | info             | 300 s                  |
+| `hr_payroll.<any>.export`                             | `sensitive_read.export`          | warning          | none: every call a row |
+| `hr_payroll.<any>.download` (a stored export file)    | `sensitive_read.export_download` | warning          | none: every call a row |
+
+_Rate-aware._ Browsing is coalesced per `(tenant, actor, module, kind)` in a fixed
+window: the first read opens it and writes one row; later reads only increment the
+counter in `awcms_sensitive_read_windows` (`sql/224`, one row per actor and kind,
+overwritten in place, so it is bounded and needs no purge); a further row at
+`warning` is written when the window's read count reaches 10, 100, 1000 ... or its
+record count reaches 100, 1000 ..., carrying the running totals; a single call that
+returns 100 records or more opens its window at `warning`. A reader who pages a
+thousand times costs three rows. The audit trail stays append-only: the counter
+lives in its own table. An employee reading their **own** released payslip (an
+ownership grant) is not recorded; the handler decides that, and the audit is for
+every other read. The payout-account `reveal` keeps its own warning row (§11.3).
+
+_Enforced._ `bun run sensitive-reads:check` (in `bun run check`) fails when (1) a
+file builds an `authorizeInTransaction` guard for a permission in
+`src/modules/_shared/sensitive-reads.ts` and does not call `recordSensitiveRead` with
+that permission; (2) `hr_payroll` declares a `read`, `list`, `export` or `download`
+permission with neither a policy nor an entry (with a reason) in
+`NOT_SENSITIVE_READS`: default-deny, so a NEW read permission cannot be unaudited by
+omission; (3) a policy or exemption names a permission the module does not declare.
+Today the exemptions are `periods.read`, `rules.read`, `sod_policy.read`, the
+masked `payout_accounts.read` and `payout_accounts.reveal` (its own warning row). The check is syntactic (the call is in the file that
+guards the permission, not proven on every path); the helper itself is proven by
+`tests/integration/sensitive-read-audit.integration.test.ts`.
+
+**B. Payroll data never leaves through a derived surface.**
+`src/modules/_shared/payroll-data-boundary.ts` is the single list of forbidden table
+names (`awcms_hr_payroll_*`, `awcms_hr_compensation`, `awcms_hr_payout_accounts`,
+`awcms_hr_payslips`, singular and plural, any schema or quoting) plus the owner
+module `hr_payroll`. Every registry that can name a table enforces it, and each also
+refuses at the point SQL is built: the reporting projection registry and its three
+engines, the site-search source registry, the comments resource registry,
+`edge-cache:surfaces:check` (by owner, payroll vocabulary in the key or pattern, and
+overlap with a route a payroll module serves), and report exports (an export is made
+from a projection, and `generateProjectionExport` refuses again at write time). A
+test reads `module-contract.ts` and fails when a **new** descriptor type that names
+a table appears, so the next registry has to decide. Two registries are exempt on
+purpose, each with its own control: `subjectData` (a subject's own rows, with
+`redactedColumns`; PS-17 requires every payroll table to have one) and
+`dataLifecycle` (retention and legal hold; PS-17 requires one too).
+
+_The route to a payroll report._ There is none today. A report over payroll data
+needs **all** of: its own permission (never `reporting.*` alone), a minimum cohort
+size below which a figure is withheld (an aggregate over a one-person cohort is that
+person's salary), its own ADR deciding both, the sensitive-read audit on every read
+and export, and a change to `payroll-data-boundary.ts` in the same PR, which makes
+`tests/payroll-data-boundary.test.ts` fail until the ADR exists.
+
+**C. Formula-neutral CSV.** Every CSV writer goes through
+`src/lib/security/csv-formula.ts`: a cell starting with `=`, `+`, `-`, `@`, TAB or CR
+gets a leading single quote (OWASP). The reporting export is lossy by design; the
+`data_lifecycle` archive is _reversible_ (a value that already starts with `'` plus
+a leader is prefixed too, and `read()` strips exactly one quote), so a restore
+returns the original bytes. A typed number is written as a number; a numeric
+string is not trusted. `tests/csv-formula-neutralisation.test.ts` scans `src/` and
+fails when a CSV writer does not use the helper.
+
+**D. Hardening after the security audit (Issue #978).** The first version of A to
+C passed review with conditions; the following are fixed and are part of the
+design above.
+
+- _Coalescing drops repeats, never identities._ The window row keeps the bounded
+  set (500) of record ids already audited in the window; a call that names an id
+  not in it writes an audit row listing exactly the new ids (`reason: new_ids`),
+  whatever the counts say. One decoy read followed by eight targeted
+  single-record reads leaves nine id-bearing rows. Only a repeat read of an
+  already-audited id and the counters are coalesced. A new window forgets the set:
+  the trail is per window. Past the bound an id is re-audited (more rows, never
+  fewer).
+- _The window comes from the database clock_ (`clock_timestamp()`), not the
+  application's; a test-only `now` input is honoured only when `NODE_ENV` is
+  `test`.
+- _The gate reads guards the way routes are written._ About 160 routes use
+  `authorize: GUARDS.x.y`, not an inline literal; the gate resolves those through
+  the guard definitions. Classification is default-deny over **all** actions of a
+  sensitive module: any action not on `WRITE_SHAPED_ACTIONS` (create, update,
+  approve, finalise, pay, ...) must have a policy or a reasoned exemption, so a
+  new `view`, `print` or `reveal` cannot slip past a list of read verbs. A file
+  that mentions a sensitive module and has an `authorize:` reference that
+  resolves to nothing, or a non-literal `activityCode`, fails. A source file that
+  names a payroll-boundary table must call `recordSensitiveRead` or be listed
+  with a reason in `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (a `module.ts` is
+  descriptor-only and exempt). **Known syntactic limit:** the call is proven to be
+  in the file, not on every path of the handler; a call in a dead branch, after an
+  early return, or under an always-false condition passes. The route-level tests
+  the #957 and #961 acceptance wording requires are what cover the next layer.
+- _Boundary patterns._ One pattern now matches any table with a whole pay-word
+  segment (`payroll`, `compensation`, `salary`, `wage`, `payslip`, `payout`,
+  singular or plural, any prefix), so `awcms_hr_compensations`, `awcms_hr_salary_history`
+  and `awcms_hr_employee_compensation` are inside. `bun run payroll:sql-boundary:check`
+  reads `sql/` and fails a view, materialised view or `CREATE TABLE ... AS` over a
+  forbidden table, and a trigger on an ordinary table whose function reads one,
+  unless the new relation is itself named in the payroll family (then every
+  registry gate refuses it).
+- _Commission is inside the boundary (owner decision)._ `awcms_hr_commission_accruals`
+  (with its transition log) and the module `hr_commission` are forbidden as
+  projection, search, comment, cache and export sources, and `hr_commission` is a
+  sensitive-read module: `accruals.read` is audited (both existing GET routes now
+  call `recordSensitiveRead`), `rules.read` is exempt (published rule terms, no
+  person). **Trade-off:** personal earnings carry the same small-cohort risk as
+  salary, which outweighs losing ad-hoc projections over accruals. Nothing
+  existing registered one, so nothing broke.
+- _A replay is a read._ An idempotent POST that returns a stored resource on a
+  replay (`POST /api/v1/hr-commission/accruals`, both the "replayed" outcome and an
+  `Idempotency-Key` replay that never runs the producer) calls the read audit
+  too; the gate also reports any `authorize:` value it cannot parse (ternary,
+  parentheses, bracket access, shorthand) in a sensitive file, and matches table
+  names case-insensitively.
+- _CSV._ Triggers also include leading whitespace or zero-width characters before
+  the ASCII trigger, and the full-width look-alikes (the formula characters
+  U+FF1D, U+FF0B, U+FF0D, U+FF20). A reversible archive starts with the marker line
+  `#awcms-csv-neutralised:v1`; `read()` strips a quote only from a file that
+  carries it, so an archive written before this change restores byte for byte.
+
+**Acceptance wording added to the implementing issues.**
+
+- **#957:** every `hr_payroll` read-shaped permission is classified in
+  `_shared/sensitive-reads.ts`; `compensation.read` and `runs.read` routes call
+  `recordSensitiveRead` on the read transaction; tests prove a read leaves one audit
+  row with ids and counts and no amount, that a salary amount never appears in a log
+  line or an error body (the canary extended from account numbers to salary), and
+  that `sensitive-reads:check` and the payroll-boundary gates stay green.
+- **#961:** a payslip read by anyone other than its owner calls
+  `recordSensitiveRead({ permission: "hr_payroll.payslips.read" })`; the owner's
+  read of their own released payslip does not; every export and export download
+  calls it with the exact `<activity>.export` / `.download` permission; any CSV is
+  written through `csvCellForWrite`.
 
 ## 14. Rollout, rollback and operations
 
@@ -1077,7 +1234,7 @@ for that area; it is not a claim about code.
 | **PS-15** | Required     | **Period lock preconditions are unspecified.** What happens to a locked period with a `draft`/`calculated` run; and where a reversal's adjustment lines go when no next open period exists; who may lock.                                                                                                                                                                                                                                                                                                                                                                                               | Lock refused while any run in the period is non-terminal; a defined behaviour when no open period exists (the next period must be created first, else the reversal is refused); `lock` stays `critical`, idempotent and never combined with C, A, F or P in one actor under strict mode.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | #960                                                                                  |
 | **PS-16** | Required     | **Large runs are unbounded.** Calculate over every employee and finalize creating one payslip per employee inside one request transaction hold locks and memory proportionally to headcount; list reads are not stated as paginated.                                                                                                                                                                                                                                                                                                                                                                    | Bounded batches or a lease-guarded job for calculate and payslip generation (resumable, idempotent, one active calculation per tenant), statement timeout, a maximum employees-per-run, keyset-paginated lists, per-actor rate limit on calculate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | #960, #961                                                                            |
 | **PS-17** | Required     | **Retention and subject-data coverage must exist when each table does.** The data-lifecycle doc still lists a different table (`awcms_payroll_records`) with retention "not yet set"; ADR-0094 coverage gates will fail late otherwise, and "retain for the life of the tenant" (§13.2) has no counsel-approved period.                                                                                                                                                                                                                                                                                 | Every phase-3 table ships with its `subjectData` entry and `data_lifecycle` descriptor in the same migration (retention class explicit, legal hold overrides; the retention value comes from counsel, §17.3); correct the stale row in `data-lifecycle.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | #957 and each table issue                                                             |
-| **PS-18** | Required     | **Reads and aggregates are invisible.** §13.2 claims the audit answers "who read what", but only reveal is audited; nothing forbids a reporting projection or export over payroll tables; the canary test covers account numbers, not salary.                                                                                                                                                                                                                                                                                                                                                           | Audit rows (ids, counts, never amounts) for compensation, line-level and other-employee payslip reads and for every export; a gate forbidding payroll tables as projection, search, comments, cache or export sources; canary tests for salary amounts in logs and error bodies; formula-neutral CSV.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | **#978** (new); canary in #957/#961                                                   |
+| **PS-18** | Required     | **Reads and aggregates are invisible.** §13.2 claims the audit answers "who read what", but only reveal is audited; nothing forbids a reporting projection or export over payroll tables; the canary test covers account numbers, not salary.                                                                                                                                                                                                                                                                                                                                                           | Audit rows (ids, counts, never amounts) for compensation, line-level and other-employee payslip reads and for every export, rate-aware; a gate forbidding payroll tables as projection, search, comments, cache or export sources; canary tests for salary amounts in logs and error bodies; formula-neutral CSV. **Built generically by #978 (§13.3):** `recordSensitiveRead` + `sensitive-reads:check` (default-deny over `hr_payroll` read, list, export, download permissions), `payroll-data-boundary.ts` enforced by every registry, `csv-formula.ts`. The future route to a payroll report (own permission, minimum cohort, own ADR) and the **#957 / #961 acceptance wording** are in §13.3.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | **#978** (built); #957/#961 call it                                                   |
 | **PS-19** | Required     | **An accrual must be paid by exactly one run, including after reversal.** Two runs (regular and off-cycle) can select the same payable accrual concurrently; a reversal that re-opens accruals while the first payment was real pays them again.                                                                                                                                                                                                                                                                                                                                                        | A claim table or partial unique index `(accrual_id) WHERE not reversed` taken atomically at calculate or finalize (`FOR UPDATE SKIP LOCKED`); reopening tied to PS-02's recovery decision.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | #962                                                                                  |
 | **PS-20** | Low          | **Scope of tests and sync.** Immutability and RLS proofs must run as `awcms_app` (an owner role bypasses triggers and policies); payroll tables must be explicitly excluded from the sync registry so they never replicate to an offline node.                                                                                                                                                                                                                                                                                                                                                          | Frozen-run, RLS and SoD tests as the runtime role; a registry assertion that no `awcms_hr_*` payroll table is a sync resource.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | #957                                                                                  |
 | **PS-21** | Low          | **Duplicated and contradictory text in this pack.** §16 repeats its question table, the second copy carrying superseded stances (O6 "still needs its own ADR"; O7 "blocks phase 3 gate"), and §15 repeats a bullet about the same follow-ups.                                                                                                                                                                                                                                                                                                                                                           | Remove the stale duplicates in a follow-up docs change (not done here to keep this review record atomic); the first §16 table and the ADRs are authoritative.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | docs follow-up                                                                        |

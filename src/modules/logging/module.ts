@@ -85,6 +85,25 @@ export const loggingModule = defineModule({
       // redaction-filtered on write; carrying it into an export would re-widen
       // a surface that was narrowed on purpose.
       redactedColumns: ["attributes"]
+    },
+    {
+      // Issue #978 (PS-18). The working counter behind the sensitive-read
+      // audit: how many sensitive reads of which kind this person made in the
+      // current window. It records ACTIVITY ABOUT the person, so it is named;
+      // it carries no amount, name or record id (counts only).
+      key: "logging.sensitive_read_windows",
+      tableName: "awcms_sensitive_read_windows",
+      ownerModuleKey: "logging",
+      subjectColumns: [
+        { column: "actor_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      // A stamp, like the audit trail it supports: anonymising the identity
+      // makes the actor stop resolving to a person, and the evidence of what
+      // they read is the audit row, not this counter.
+      erasure: "severed_with_subject_row",
+      rationale:
+        "How many sensitive records (for example salaries) this person has read in the current window, by kind: a count, never what was read. Theirs to see, and it stays when they are erased because the audit row it supports is the record that the reads happened."
     }
   ],
   dataLifecycle: [

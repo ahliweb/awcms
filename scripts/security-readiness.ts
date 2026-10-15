@@ -767,7 +767,12 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // NOT retired in the same way — a correction only ever changes its STATUS
   // (a trigger allows exactly the status moves and nothing else) and is never
   // deleted (privilege plus trigger).
-  awcms_hr_attendance_corrections: ["SELECT", "INSERT", "UPDATE"]
+  awcms_hr_attendance_corrections: ["SELECT", "INSERT", "UPDATE"],
+  // #978 / `sql/224`. NOT retired — one counter row per (tenant, actor, module,
+  // kind) is overwritten in place each window, so the table is bounded by its
+  // primary key and never needs a purge. DELETE is revoked so an actor cannot
+  // erase the window that is coalescing their reads.
+  awcms_sensitive_read_windows: ["SELECT", "INSERT", "UPDATE"]
 };
 
 type RlsRow = {

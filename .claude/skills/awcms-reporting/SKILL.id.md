@@ -5,7 +5,7 @@ description: Kelola modul reporting AWCMS — lima view management reporting liv
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:c157a6b080946eccb09f20964d74c27d9b598bb0bc74f06685c7dcb635cd0392 -->
+<!-- i18n-source-hash: sha256:a267ac6afa92ad5a6db3c8d1d95b687b78411d59294e0d6b4121d297736ebe33 -->
 
 # AWCMS — Reporting (live views + projections)
 
@@ -223,3 +223,11 @@ catalog projection/export), `awcms-idempotency` (rebuild/export mutation),
 (pola markup `projections.astro`), `awcms-module-management` (kontrak
 `ProjectionDescriptor`/`listModules()` yang sama dengan
 `dataLifecycle`/`sodRules`).
+
+## Payroll tidak dapat dilaporkan (Issue #978, PS-18)
+
+Proyeksi tidak boleh membaca tabel payroll atau dideklarasikan oleh `hr_payroll`,
+dan ekspor proyeksi menolak hal yang sama saat menulis. Lihat
+`src/modules/_shared/payroll-data-boundary.ts` dan
+`docs/awcms/hr-payroll.id.md` bagian 13.3 (termasuk jalan menuju laporan payroll
+mendatang). Ekspor CSV bebas-formula lewat `src/lib/security/csv-formula.ts`.

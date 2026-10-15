@@ -19,6 +19,13 @@ import type {
   ModuleDescriptor,
   SearchSourceDescriptor
 } from "../../_shared/module-contract";
+import {
+  assertNotPayrollTable,
+  isPayrollOwnerModule,
+  isPayrollTable,
+  payrollBoundaryMessage,
+  payrollOwnerMessage
+} from "../../_shared/payroll-data-boundary";
 
 export const SEARCH_SOURCE_CONTRACT_VERSION = "1.0.0";
 
@@ -67,7 +74,8 @@ export function assertSafeTableName(name: string): string {
       `site_search: unsafe table name ${JSON.stringify(name)} — must match ^awcms_[a-z][a-z0-9_]*$.`
     );
   }
-  return name;
+  // Issue #978 (PS-18): the public index must never read a payroll table.
+  return assertNotPayrollTable(name, "site_search");
 }
 
 /** Flattens every registered module's own `searchSources` array into one list — the aggregation half. Order follows `listModules()`, deterministic. */
@@ -192,6 +200,8 @@ function validateTermFacets(
         push(
           `${at}.${label} must start with "awcms_" and be snake_case (got ${JSON.stringify(value)}).`
         );
+      } else if (isPayrollTable(value)) {
+        push(payrollBoundaryMessage("search source", value, `${at}.${label}`));
       }
     }
 
@@ -250,6 +260,16 @@ function validateSingleDescriptor(
     push(
       `tableName must start with "awcms_" and be snake_case (got ${JSON.stringify(descriptor.tableName)}).`
     );
+  }
+
+  if (descriptor.tableName && isPayrollTable(descriptor.tableName)) {
+    push(
+      payrollBoundaryMessage("search source", descriptor.tableName, "tableName")
+    );
+  }
+
+  if (isPayrollOwnerModule(ownerModule.key)) {
+    push(payrollOwnerMessage("search source", ownerModule.key));
   }
 
   checkColumn(

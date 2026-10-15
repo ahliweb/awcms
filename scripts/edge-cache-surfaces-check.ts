@@ -24,6 +24,11 @@ import {
 } from "../src/lib/edge-cache/surface-registry";
 import { requiresPublicLocalePrefix } from "../src/lib/i18n/public-locale-path";
 import { listModules } from "../src/modules";
+import {
+  PAYROLL_OWNER_MODULE_KEYS,
+  PAYROLL_PATH_VOCABULARY,
+  isPayrollOwnerModule
+} from "../src/modules/_shared/payroll-data-boundary";
 
 /** Roots searched for `enqueueModuleContentPurge` call sites. */
 const PURGE_CALLER_ROOTS = ["src/pages", "src/modules"];
@@ -573,6 +578,78 @@ export function findSurfacesWithoutServingRoutes(
   return failures;
 }
 
+/**
+ * Issue #978 (PS-18): a shared cache must never hold a payroll response.
+ *
+ * A surface names no table, only a path pattern and an owner, so the rule is
+ * stated over those. A surface is refused when:
+ *
+ * - its OWNER is a payroll module (`hr_payroll`);
+ * - its key or its pattern source uses payroll vocabulary (`payroll`,
+ *   `payslip`, `compensation`, `payout`, `salary`, `wage`) - this is what
+ *   catches a surface declared under another module's name for a payroll path;
+ * - its literal path prefix is one a payroll module serves (`api.routes`, in
+ *   either direction of prefix-compatibility, the same test
+ *   `findSurfacesWithoutServingRoutes` uses).
+ *
+ * `purgedKeys` is checked as well: a purge enqueued for a payroll module key
+ * means something tagged `m:<module>` is in the cache.
+ */
+export function findPayrollSurfaces(
+  surfaces: readonly SurfaceLike[],
+  routesByModule: ReadonlyMap<string, readonly string[]>,
+  purgedKeys: ReadonlySet<string> = new Set()
+): string[] {
+  const failures: string[] = [];
+  const payrollRoutes = PAYROLL_OWNER_MODULE_KEYS.flatMap(
+    (moduleKey) => routesByModule.get(moduleKey) ?? []
+  );
+
+  for (const surface of surfaces) {
+    const reasons: string[] = [];
+
+    if (isPayrollOwnerModule(surface.moduleKey)) {
+      reasons.push(`it is owned by payroll module "${surface.moduleKey}"`);
+    }
+
+    if (
+      PAYROLL_PATH_VOCABULARY.test(surface.key) ||
+      PAYROLL_PATH_VOCABULARY.test(surface.pattern.source)
+    ) {
+      reasons.push("its key or pattern uses payroll vocabulary");
+    }
+
+    const prefixes = literalPathPrefixes(surface.pattern.source);
+
+    if (
+      payrollRoutes.some((route) =>
+        prefixes.some(
+          (prefix) => prefix.startsWith(route) || route.startsWith(prefix)
+        )
+      )
+    ) {
+      reasons.push("its path overlaps a route a payroll module serves");
+    }
+
+    if (reasons.length > 0) {
+      failures.push(
+        `Surface "${surface.key}" may not be cacheable: ${reasons.join("; ")}. ` +
+          "A shared cache would hold per-employee pay (hr-payroll.md section 13.2, PS-18)."
+      );
+    }
+  }
+
+  for (const moduleKey of PAYROLL_OWNER_MODULE_KEYS) {
+    if (purgedKeys.has(moduleKey)) {
+      failures.push(
+        `Code enqueues a content purge for payroll module "${moduleKey}", which means something tagged m:${moduleKey} is in the shared cache (PS-18).`
+      );
+    }
+  }
+
+  return failures;
+}
+
 async function main(): Promise<void> {
   const modules = listModules();
   const moduleKeys = new Set(modules.map((module) => module.key));
@@ -586,6 +663,7 @@ async function main(): Promise<void> {
     ...findCacheableForbiddenPaths(MUST_NEVER_MATCH, matchPublicCacheSurface),
     ...findOwnersWithoutPurges(PUBLIC_CACHE_SURFACES, purgedKeys),
     ...findSurfacesWithoutServingRoutes(PUBLIC_CACHE_SURFACES, routesByModule),
+    ...findPayrollSurfaces(PUBLIC_CACHE_SURFACES, routesByModule, purgedKeys),
     ...findSurfacesWithoutLocaleProbes(
       PUBLIC_CACHE_SURFACES,
       LOCALE_PREFIX_PROBES,

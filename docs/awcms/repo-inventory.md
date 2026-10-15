@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 193   |
-| `awcms_*` tables                    | 209   |
-| Tables with `FORCE` RLS             | 191   |
+| Migrations                          | 194   |
+| `awcms_*` tables                    | 210   |
+| Tables with `FORCE` RLS             | 192   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 633   |
+| Test files                          | 639   |
 | Route files                         | 517   |
 | ADR                                 | 284   |
 
@@ -250,6 +250,7 @@
 | 191 | `sql/199_awcms_hr_attendance_permissions.sql`                      |
 | 192 | `sql/200_awcms_booking_hold_expiry_sweep.sql`                      |
 | 193 | `sql/204_awcms_booking_stay_blocks.sql`                            |
+| 194 | `sql/224_awcms_sensitive_read_windows.sql`                         |
 
 ### Tables & Row-Level Security
 
@@ -410,6 +411,7 @@
 | `awcms_role_permissions`                 | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
 | `awcms_roles`                            | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
 | `awcms_schema_migrations`                | `sql/001_awcms_foundation_schema.sql`                      | no  | no    |
+| `awcms_sensitive_read_windows`           | `sql/224_awcms_sensitive_read_windows.sql`                 | yes | yes   |
 | `awcms_seo_not_found_observations`       | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
 | `awcms_seo_redirect_settings`            | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
 | `awcms_seo_redirects`                    | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
@@ -469,9 +471,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 493        |
+| `(root)`      | 498        |
 | `e2e`         | 25         |
-| `integration` | 114        |
+| `integration` | 115        |
 | `unit`        | 1          |
 
 ### Routes

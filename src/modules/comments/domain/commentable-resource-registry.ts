@@ -20,6 +20,13 @@ import type {
   CommentableResourceDescriptor,
   ModuleDescriptor
 } from "../../_shared/module-contract";
+import {
+  assertNotPayrollTable,
+  isPayrollOwnerModule,
+  isPayrollTable,
+  payrollBoundaryMessage,
+  payrollOwnerMessage
+} from "../../_shared/payroll-data-boundary";
 
 export const COMMENTABLE_RESOURCE_CONTRACT_VERSION = "1.0.0";
 
@@ -77,7 +84,8 @@ export function assertSafeTableName(name: string): string {
       `comments: unsafe table name ${JSON.stringify(name)} — must match ^awcms_[a-z][a-z0-9_]*$.`
     );
   }
-  return name;
+  // Issue #978 (PS-18): the public comment engine must never read a payroll table.
+  return assertNotPayrollTable(name, "comments");
 }
 
 /** Flattens every registered module's own `commentableResources` array into one list. Order follows `listModules()`, deterministic. */
@@ -137,6 +145,20 @@ function validateSingleDescriptor(
     push(
       `tableName must start with "awcms_" and be snake_case (got ${JSON.stringify(descriptor.tableName)}).`
     );
+  }
+
+  if (descriptor.tableName && isPayrollTable(descriptor.tableName)) {
+    push(
+      payrollBoundaryMessage(
+        "commentable resource",
+        descriptor.tableName,
+        "tableName"
+      )
+    );
+  }
+
+  if (isPayrollOwnerModule(ownerModule.key)) {
+    push(payrollOwnerMessage("commentable resource", ownerModule.key));
   }
 
   checkColumn(

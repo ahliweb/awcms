@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:f1dfc299f61c4dbbdaa5e7ecbd2286582aba5df3cf3b045e6bfdd5cd593573d6 -->
+<!-- i18n-source-hash: sha256:37896aef79982a5d1204ed5d5e44f14b60cb513a506cddb96b59ab640afdccec -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -842,25 +842,27 @@ tidak pernah ikut ekspor. Uang dalam respons adalah string desimal; di log tidak
 
 ### 11.3 Audit dan idempotensi
 
-| Aksi                                     | `Idempotency-Key`       | Level audit                                                    | Replay                                                                  |
-| ---------------------------------------- | ----------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| buat kepegawaian / ubah terms            | ya                      | info                                                           | `employee_no` unik                                                      |
-| tautkan atau ubah `tenant_user_id`       | ya                      | warning                                                        | pemeriksaan status                                                      |
-| event kehadiran                          | ya + `client_event_key` | tidak ada (volume tinggi; event ITU catatannya)                | mengembalikan yang asli                                                 |
-| permintaan / keputusan koreksi           | ya                      | info                                                           | pemeriksaan status; keputusan workflow diaudit oleh `workflow_approval` |
-| terbitkan / batalkan shift               | ya                      | info                                                           | pemeriksaan status                                                      |
-| akru komisi (adapter)                    | ya                      | info                                                           | identitas sumber mengembalikan yang asli                                |
-| setujui / rilis / bayar / reverse akrual | ya                      | warning (reverse: critical)                                    | pemeriksaan status + reversal unik                                      |
-| usul / setujui kompensasi                | ya                      | warning                                                        | pemeriksaan status                                                      |
-| tambah / hapus rekening pembayaran       | ya                      | warning                                                        | acknowledgement seragam (tanpa oracle)                                  |
-| **reveal** rekening pembayaran           | tidak (pembacaan)       | warning, mencatat BAHWA pengungkapan terjadi, tidak pernah apa | —                                                                       |
-| kunci periode                            | ya                      | critical                                                       | pemeriksaan status                                                      |
-| buat / **hitung** run                    | ya                      | info / warning                                                 | `(period, run_no)` unik; pemeriksaan status                             |
-| **setujui** run                          | ya                      | warning                                                        | pemeriksaan status                                                      |
-| **finalisasi** run                       | ya                      | warning                                                        | pemeriksaan status; finalisasi kedua mengembalikan yang pertama         |
-| **bayar** run                            | ya                      | warning                                                        | pemeriksaan status; pembayaran unik per run                             |
-| **reverse** run                          | ya                      | critical                                                       | sekali per run (unique index parsial)                                   |
-| terbitkan / pensiunkan aturan            | ya                      | warning                                                        | pemeriksaan status                                                      |
+| Aksi                                     | `Idempotency-Key`       | Level audit                                                                             | Replay                                                                  |
+| ---------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| buat kepegawaian / ubah terms            | ya                      | info                                                                                    | `employee_no` unik                                                      |
+| tautkan atau ubah `tenant_user_id`       | ya                      | warning                                                                                 | pemeriksaan status                                                      |
+| event kehadiran                          | ya + `client_event_key` | tidak ada (volume tinggi; event ITU catatannya)                                         | mengembalikan yang asli                                                 |
+| permintaan / keputusan koreksi           | ya                      | info                                                                                    | pemeriksaan status; keputusan workflow diaudit oleh `workflow_approval` |
+| terbitkan / batalkan shift               | ya                      | info                                                                                    | pemeriksaan status                                                      |
+| akru komisi (adapter)                    | ya                      | info                                                                                    | identitas sumber mengembalikan yang asli                                |
+| setujui / rilis / bayar / reverse akrual | ya                      | warning (reverse: critical)                                                             | pemeriksaan status + reversal unik                                      |
+| usul / setujui kompensasi                | ya                      | warning                                                                                 | pemeriksaan status                                                      |
+| tambah / hapus rekening pembayaran       | ya                      | warning                                                                                 | acknowledgement seragam (tanpa oracle)                                  |
+| **reveal** rekening pembayaran           | tidak (pembacaan)       | warning, mencatat BAHWA pengungkapan terjadi, tidak pernah apa                          | —                                                                       |
+| **pembacaan** sensitif (§13.3)           | tidak (pembacaan)       | info sekali per aktor, jenis, dan jendela; warning di tiap dekade pembacaan atau record | —                                                                       |
+| **ekspor** dan unduhan ekspor (§13.3)    | tidak (pembacaan)       | warning, setiap kali, tidak pernah digabung                                             | —                                                                       |
+| kunci periode                            | ya                      | critical                                                                                | pemeriksaan status                                                      |
+| buat / **hitung** run                    | ya                      | info / warning                                                                          | `(period, run_no)` unik; pemeriksaan status                             |
+| **setujui** run                          | ya                      | warning                                                                                 | pemeriksaan status                                                      |
+| **finalisasi** run                       | ya                      | warning                                                                                 | pemeriksaan status; finalisasi kedua mengembalikan yang pertama         |
+| **bayar** run                            | ya                      | warning                                                                                 | pemeriksaan status; pembayaran unik per run                             |
+| **reverse** run                          | ya                      | critical                                                                                | sekali per run (unique index parsial)                                   |
+| terbitkan / pensiunkan aturan            | ya                      | warning                                                                                 | pemeriksaan status                                                      |
 
 Tidak ada baris audit yang membawa jumlah, nama, identifier, catatan, atau teks
 alasan; correlation id menggabungkan baris audit, event outbox, dan baris ledger
@@ -961,11 +963,175 @@ deployment.
 - **Pengamanan.** Enkripsi in-transit; kontrol akses di atas; rekening pembayaran
   dienkripsi saat diam (desain di ADR-0137, diimplementasikan sebelum fase 3 dirilis); audit atas reveal; penanganan backup
   mengikuti runbook yang ada, dan restore membutuhkan rekonsiliasi di §14.
-- **Kesiapan pelanggaran.** Audit dan decision log menjawab "siapa membaca apa";
-  kewajiban notifikasi mengikuti hasil O5.
+- **Kesiapan pelanggaran.** Audit dan decision log menjawab "siapa membaca apa":
+  reveal rekening pembayaran punya baris auditnya sendiri, dan pembacaan
+  kompensasi, baris-baris per karyawan, dan slip gaji karyawan lain, serta setiap
+  ekspor, dicatat oleh audit pembacaan sensitif (§13.3, PS-18); kewajiban
+  notifikasi mengikuti hasil O5.
 - **Penilaian dampak.** Fase 1 (tanpa bukti) adalah pemrosesan data kepegawaian
   rutin; fase 3 dan fitur bukti apa pun membutuhkan penilaian dampak terdokumentasi
   sebelum implementasi.
+
+### 13.3 Pembacaan, salinan turunan, dan ekspor (PS-18, Issue #978)
+
+Temuan PS-18 punya dua sisi: pembacaan gaji tidak meninggalkan jejak, dan tidak ada
+yang mencegah proyeksi, indeks pencarian, atau ekspor menjadi salinan kedua yang
+lebih lebar dari payroll. Kedua kontrolnya **generik dan sudah ada di repositori**,
+sehingga route payroll pertama tidak bisa ditulis tanpa keduanya. Hari ini
+keduanya berupa gerbang; mereka mulai menggigit pada hari `hr_payroll`
+mendeklarasikan izin atau route pertamanya.
+
+**A. Audit pembacaan sensitif.** `recordSensitiveRead(tx, { permission, actorTenantUserId,
+itemCount, resourceIds })` (`src/modules/logging/application/sensitive-read-audit.ts`)
+dipanggil route pada **transaksi yang sama** dengan pembacaan, setelah otorisasi
+dan sebelum data dikembalikan. Ia mencatat aktor, jenis, id record berupa UUID
+(20 per baris; daftar lebih panjang dipecah ke beberapa baris, tidak ada yang dibuang), dan jumlah, **tidak pernah jumlah uang, nama, atau teks
+bebas**: id non-UUID ditolak, pesannya konstanta, dan tipe inputnya tidak punya
+kolom untuk nilai. Ia **fail-closed**: bila penghitung atau insert audit gagal,
+transaksi pembacaan dibatalkan.
+
+| Izin                                                      | Jenis (aksi audit)               | Severity pembukaan | Jendela                          |
+| --------------------------------------------------------- | -------------------------------- | ------------------ | -------------------------------- |
+| `hr_payroll.compensation.read`                            | `sensitive_read.compensation`    | info               | 300 dtk                          |
+| `hr_payroll.runs.read` (pembacaan header dan baris sama)  | `sensitive_read.run_lines`       | info               | 300 dtk                          |
+| `hr_payroll.payslips.read` (bukan pembacaan pemiliknya)   | `sensitive_read.payslip`         | info               | 300 dtk                          |
+| `hr_payroll.<apa pun>.export`                             | `sensitive_read.export`          | warning            | tanpa: tiap panggilan satu baris |
+| `hr_payroll.<apa pun>.download` (berkas ekspor tersimpan) | `sensitive_read.export_download` | warning            | tanpa: tiap panggilan satu baris |
+
+_Sadar-laju._ Penelusuran digabung per `(tenant, aktor, modul, jenis)` dalam
+jendela tetap: pembacaan pertama membukanya dan menulis satu baris; pembacaan
+berikutnya hanya menaikkan penghitung di `awcms_sensitive_read_windows` (`sql/224`,
+satu baris per aktor dan jenis, ditimpa di tempat, sehingga terbatas dan tidak
+butuh purge); baris lanjutan pada `warning` ditulis saat jumlah pembacaan
+jendela mencapai 10, 100, 1000 ... atau jumlah record-nya mencapai 100, 1000 ...,
+membawa total berjalan; satu panggilan yang mengembalikan 100 record atau lebih
+membuka jendelanya pada `warning`. Pembaca yang menelusuri seribu kali
+menghabiskan tiga baris. Jejak audit tetap append-only: penghitung hidup di
+tabelnya sendiri. Karyawan yang membaca slip gaji **miliknya sendiri** yang sudah
+dirilis (ownership grant) tidak dicatat; handler yang memutuskannya, dan audit
+berlaku untuk setiap pembacaan lain. `reveal` rekening pembayaran tetap punya
+baris warning-nya sendiri (§11.3).
+
+_Ditegakkan._ `bun run sensitive-reads:check` (di `bun run check`) gagal bila
+(1) sebuah berkas membangun guard `authorizeInTransaction` untuk izin di
+`src/modules/_shared/sensitive-reads.ts` dan tidak memanggil `recordSensitiveRead`
+dengan izin itu; (2) `hr_payroll` mendeklarasikan izin `read`, `list`, `export`,
+atau `download` tanpa kebijakan maupun entri (beralasan) di `NOT_SENSITIVE_READS`:
+default-deny, sehingga izin baca BARU tidak bisa tak-teraudit karena terlupa;
+(3) kebijakan atau pengecualian menyebut izin yang tidak dideklarasikan modul.
+Hari ini pengecualiannya `periods.read`, `rules.read`, `sod_policy.read`,
+`payout_accounts.read` yang ter-mask, dan `payout_accounts.reveal` (baris warning-nya sendiri). Pemeriksaannya sintaktis (panggilan ada di
+berkas yang menjaga izin, tidak dibuktikan di setiap jalur); helper itu sendiri
+dibuktikan oleh `tests/integration/sensitive-read-audit.integration.test.ts`.
+
+**B. Data payroll tidak pernah keluar lewat permukaan turunan.**
+`src/modules/_shared/payroll-data-boundary.ts` adalah satu-satunya daftar nama
+tabel terlarang (`awcms_hr_payroll_*`, `awcms_hr_compensation`,
+`awcms_hr_payout_accounts`, `awcms_hr_payslips`, tunggal dan jamak, skema atau
+kutipan apa pun) ditambah modul pemilik `hr_payroll`. Setiap registry yang dapat
+menyebut tabel menegakkannya, dan masing-masing menolak lagi saat SQL dibangun:
+registry proyeksi reporting beserta tiga enginenya, registry sumber site-search,
+registry resource comments, `edge-cache:surfaces:check` (berdasarkan pemilik,
+kosakata payroll di key atau pola, dan tumpang-tindih dengan route yang dilayani
+modul payroll), dan ekspor laporan (ekspor dibuat dari proyeksi, dan
+`generateProjectionExport` menolak lagi saat menulis). Sebuah tes membaca
+`module-contract.ts` dan gagal bila muncul tipe deskriptor **baru** yang menyebut
+tabel, sehingga registry berikutnya harus memutuskan. Dua registry dikecualikan
+dengan sengaja, masing-masing dengan kontrolnya sendiri: `subjectData` (baris
+milik subjek sendiri, dengan `redactedColumns`; PS-17 mewajibkan setiap tabel
+payroll punya satu) dan `dataLifecycle` (retensi dan legal hold; PS-17
+mewajibkannya juga).
+
+_Jalan menuju laporan payroll._ Hari ini tidak ada. Laporan atas data payroll
+membutuhkan **semua**: izinnya sendiri (bukan `reporting.*` saja), ukuran kohort
+minimum yang di bawahnya angka ditahan (agregat atas kohort satu orang adalah gaji
+orang itu), ADR-nya sendiri yang memutuskan keduanya, audit pembacaan sensitif
+pada setiap pembacaan dan ekspor, dan perubahan `payroll-data-boundary.ts` dalam PR
+yang sama, yang membuat `tests/payroll-data-boundary.test.ts` gagal sampai ADR itu
+ada.
+
+**C. CSV bebas-formula.** Setiap penulis CSV lewat
+`src/lib/security/csv-formula.ts`: sel yang diawali `=`, `+`, `-`, `@`, TAB, atau CR
+diberi satu tanda kutip tunggal di depan (OWASP). Ekspor reporting sengaja lossy;
+arsip `data_lifecycle` bersifat _reversible_ (nilai yang sudah diawali `'` plus
+pemimpin juga diberi awalan, dan `read()` membuang tepat satu kutip), sehingga
+restore mengembalikan byte aslinya. Angka bertipe ditulis sebagai angka; string
+numerik tidak dipercaya. `tests/csv-formula-neutralisation.test.ts` memindai `src/`
+dan gagal bila penulis CSV tidak memakai helper itu.
+
+**D. Pengerasan setelah audit keamanan (Issue #978).** Versi pertama A sampai C
+lulus tinjauan dengan syarat; yang berikut diperbaiki dan menjadi bagian desain di
+atas.
+
+- _Penggabungan membuang pengulangan, tidak pernah identitas._ Baris jendela
+  menyimpan himpunan terbatas (500) id record yang sudah diaudit di jendela itu;
+  panggilan yang menyebut id di luar himpunan menulis baris audit berisi tepat id
+  baru (`reason: new_ids`), apa pun hitungannya. Satu pembacaan umpan disusul
+  delapan pembacaan satu-record yang tertarget meninggalkan sembilan baris berisi
+  id. Hanya pembacaan ulang id yang sudah diaudit dan penghitung yang digabung.
+  Jendela baru melupakan himpunan itu: jejak berlaku per jendela. Di atas batas,
+  id diaudit ulang (lebih banyak baris, tidak pernah lebih sedikit).
+- _Jendela memakai jam database_ (`clock_timestamp()`), bukan jam aplikasi; input
+  `now` khusus uji hanya dihormati bila `NODE_ENV` adalah `test`.
+- _Gerbang membaca guard seperti route menulisnya._ Sekitar 160 route memakai
+  `authorize: GUARDS.x.y`, bukan literal inline; gerbang menyelesaikannya lewat
+  definisi guard. Klasifikasi default-deny atas **semua** aksi modul sensitif:
+  aksi yang tidak ada di `WRITE_SHAPED_ACTIONS` (create, update, approve,
+  finalise, pay, ...) harus punya kebijakan atau pengecualian beralasan, sehingga
+  `view`, `print`, atau `reveal` baru tidak lolos dari daftar kata kerja baca.
+  Berkas yang menyebut modul sensitif dan punya referensi `authorize:` yang tidak
+  terselesaikan, atau `activityCode` non-literal, gagal. Berkas sumber yang
+  menyebut tabel batas payroll harus memanggil `recordSensitiveRead` atau
+  terdaftar beralasan di `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (`module.ts` hanya
+  deskriptor dan dikecualikan). **Batas sintaktis yang diketahui:** panggilan
+  terbukti ada di berkas, bukan di setiap jalur handler; panggilan di cabang mati,
+  setelah return awal, atau di bawah kondisi yang selalu salah lolos. Tes tingkat
+  route yang diminta kata penerimaan #957 dan #961 yang menutup lapisan
+  berikutnya.
+- _Pola batas._ Satu pola kini mencocokkan tabel mana pun dengan segmen kata-gaji
+  utuh (`payroll`, `compensation`, `salary`, `wage`, `payslip`, `payout`, tunggal
+  atau jamak, prefiks apa pun), sehingga `awcms_hr_compensations`,
+  `awcms_hr_salary_history`, dan `awcms_hr_employee_compensation` termasuk.
+  `bun run payroll:sql-boundary:check` membaca `sql/` dan menggagalkan view,
+  materialized view, atau `CREATE TABLE ... AS` atas tabel terlarang, serta
+  trigger pada tabel biasa yang fungsinya membaca salah satunya, kecuali relasi
+  baru itu sendiri bernama di keluarga payroll (maka setiap gerbang registry
+  menolaknya).
+- _Komisi ada di dalam batas (keputusan pemilik)._ `awcms_hr_commission_accruals`
+  (beserta log transisinya) dan modul `hr_commission` dilarang sebagai sumber
+  proyeksi, pencarian, komentar, cache, dan ekspor, dan `hr_commission` adalah
+  modul pembacaan-sensitif: `accruals.read` diaudit (kedua route GET yang ada kini
+  memanggil `recordSensitiveRead`), `rules.read` dikecualikan (syarat aturan
+  terbit, tanpa orang). **Trade-off:** penghasilan pribadi membawa risiko kohort
+  kecil yang sama dengan gaji, yang lebih berat daripada kehilangan proyeksi
+  ad-hoc atas akrual. Tidak ada yang sudah ada mendaftarkan satu pun, jadi tidak
+  ada yang rusak.
+- _Replay adalah pembacaan._ POST idempoten yang mengembalikan resource tersimpan
+  saat replay (`POST /api/v1/hr-commission/accruals`, baik hasil "replayed"
+  maupun replay `Idempotency-Key` yang tidak menjalankan producer) juga memanggil
+  audit pembacaan; gerbang juga melaporkan nilai `authorize:` yang tidak dapat
+  di-parse (ternary, tanda kurung, akses bracket, shorthand) di berkas sensitif,
+  dan mencocokkan nama tabel tanpa membedakan huruf besar-kecil.
+- _CSV._ Pemicu juga mencakup spasi atau karakter lebar-nol di depan pemicu ASCII,
+  dan padanan lebar-penuh (karakter rumus U+FF1D, U+FF0B, U+FF0D, U+FF20). Arsip
+  reversible diawali baris penanda `#awcms-csv-neutralised:v1`; `read()` hanya
+  membuang kutip dari berkas yang membawanya, sehingga arsip yang ditulis sebelum
+  perubahan ini dipulihkan byte demi byte.
+
+**Kata penerimaan yang ditambahkan ke isu implementasi.**
+
+- **#957:** setiap izin `hr_payroll` berbentuk-baca diklasifikasikan di
+  `_shared/sensitive-reads.ts`; route `compensation.read` dan `runs.read` memanggil
+  `recordSensitiveRead` pada transaksi pembacaan; tes membuktikan satu pembacaan
+  meninggalkan satu baris audit dengan id dan jumlah tanpa nominal, bahwa nominal
+  gaji tidak pernah muncul di baris log atau badan error (canary diperluas dari
+  nomor rekening ke gaji), dan bahwa `sensitive-reads:check` serta gerbang batas
+  payroll tetap hijau.
+- **#961:** pembacaan slip gaji oleh siapa pun selain pemiliknya memanggil
+  `recordSensitiveRead({ permission: "hr_payroll.payslips.read" })`; pembacaan
+  pemilik atas slip gajinya sendiri yang sudah dirilis tidak; setiap ekspor dan
+  unduhan ekspor memanggilnya dengan izin `<aktivitas>.export` / `.download` yang
+  persis; CSV apa pun ditulis lewat `csvCellForWrite`.
 
 ## 14. Rollout, rollback, dan operasi
 
@@ -1109,7 +1275,7 @@ itu; bukan klaim tentang kode.
 | **PS-15** | Wajib         | **Prasyarat kunci periode belum ditentukan.** Apa yang terjadi pada periode terkunci dengan run `draft`/`calculated`; ke mana baris penyesuaian reversal pergi bila tidak ada periode terbuka berikutnya; siapa yang boleh mengunci.                                                                                                                                                                                                                                                                                                                                                                                      | Kunci ditolak selama ada run non-terminal di periode; perilaku terdefinisi bila tidak ada periode terbuka (periode berikutnya harus dibuat dulu, bila tidak reversal ditolak); `lock` tetap `critical`, idempoten, dan tidak pernah digabung dengan C, A, F, atau P pada satu aktor pada mode ketat.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | #960                                                                                          |
 | **PS-16** | Wajib         | **Run besar tidak terbatas.** Calculate atas semua karyawan dan finalize yang membuat satu slip per karyawan dalam satu transaksi request menahan kunci dan memori sebanding jumlah karyawan; pembacaan daftar tidak dinyatakan berpaginasi.                                                                                                                                                                                                                                                                                                                                                                              | Batch terbatas atau job berlease (dapat dilanjutkan, idempoten, satu penghitungan aktif per tenant) untuk calculate dan pembuatan slip, statement timeout, jumlah karyawan maksimum per run, daftar berpaginasi keyset, rate limit per aktor pada calculate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | #960, #961                                                                                    |
 | **PS-17** | Wajib         | **Retensi dan cakupan subject-data harus ada saat tiap tabel ada.** Dokumen data-lifecycle masih mencantumkan tabel lain (`awcms_payroll_records`) dengan retensi "belum ditetapkan"; gerbang cakupan ADR-0094 akan gagal terlambat bila tidak, dan "disimpan selama usia tenant" (§13.2) belum punya jangka yang disetujui penasihat hukum.                                                                                                                                                                                                                                                                              | Setiap tabel fase 3 dikirim dengan entri `subjectData` dan deskriptor `data_lifecycle` dalam migrasi yang sama (kelas retensi eksplisit, legal hold menimpa; nilai retensi dari penasihat hukum, §17.3); perbaiki baris usang di `data-lifecycle.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | #957 dan tiap issue tabel                                                                     |
-| **PS-18** | Wajib         | **Pembacaan dan agregat tidak terlihat.** §13.2 mengklaim audit menjawab "siapa membaca apa", tetapi hanya reveal yang diaudit; tidak ada yang melarang proyeksi pelaporan atau ekspor atas tabel payroll; uji canary mencakup nomor rekening, bukan gaji.                                                                                                                                                                                                                                                                                                                                                                | Baris audit (id, hitungan, tidak pernah jumlah) untuk pembacaan kompensasi, tingkat baris, dan slip karyawan lain serta setiap ekspor; gerbang yang melarang tabel payroll sebagai sumber proyeksi, pencarian, komentar, cache, atau ekspor; uji canary untuk jumlah gaji di log dan body error; CSV netral terhadap formula.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | **#978** (baru); canary di #957/#961                                                          |
+| **PS-18** | Wajib         | **Pembacaan dan agregat tidak terlihat.** §13.2 mengklaim audit menjawab "siapa membaca apa", tetapi hanya reveal yang diaudit; tidak ada yang melarang proyeksi pelaporan atau ekspor atas tabel payroll; uji canary mencakup nomor rekening, bukan gaji.                                                                                                                                                                                                                                                                                                                                                                | Baris audit (id, jumlah, tidak pernah nominal) untuk pembacaan kompensasi, tingkat-baris, dan slip gaji karyawan lain serta untuk setiap ekspor, sadar-laju; gerbang yang melarang tabel payroll sebagai sumber proyeksi, pencarian, komentar, cache, atau ekspor; uji canary untuk nominal gaji di log dan badan error; CSV bebas-formula. **Dibangun generik oleh #978 (§13.3):** `recordSensitiveRead` + `sensitive-reads:check` (default-deny atas izin read, list, export, download `hr_payroll`), `payroll-data-boundary.ts` ditegakkan semua registry, `csv-formula.ts`. Jalan menuju laporan payroll (izin sendiri, kohort minimum, ADR sendiri) dan **kata penerimaan #957 / #961** ada di §13.3.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **#978** (dibangun); #957/#961 memanggilnya                                                   |
 | **PS-19** | Wajib         | **Akrual harus dibayar tepat satu run, termasuk setelah reversal.** Dua run (reguler dan off-cycle) dapat memilih akrual terbayar yang sama bersamaan; reversal yang membuka kembali akrual sementara pembayaran pertama nyata membayarnya lagi.                                                                                                                                                                                                                                                                                                                                                                          | Tabel klaim atau indeks unik parsial `(accrual_id) WHERE not reversed` diambil atomik saat calculate atau finalize (`FOR UPDATE SKIP LOCKED`); pembukaan kembali dikaitkan dengan keputusan pemulihan PS-02.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | #962                                                                                          |
 | **PS-20** | Rendah        | **Cakupan uji dan sync.** Bukti immutability dan RLS harus dijalankan sebagai `awcms_app` (role pemilik melewati trigger dan policy); tabel payroll harus dikecualikan eksplisit dari registry sync agar tidak pernah direplikasi ke node offline.                                                                                                                                                                                                                                                                                                                                                                        | Uji run-beku, RLS, dan SoD sebagai role runtime; asersi registry bahwa tidak ada tabel payroll `awcms_hr_*` yang menjadi resource sync.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | #957                                                                                          |
 | **PS-21** | Rendah        | **Teks ganda dan saling bertentangan dalam paket ini.** §16 mengulang tabel pertanyaannya, salinan kedua membawa sikap usang (O6 "masih perlu ADR sendiri"; O7 "memblokir gerbang fase 3"), dan §15 mengulang satu butir tentang tindak lanjut yang sama.                                                                                                                                                                                                                                                                                                                                                                 | Hapus duplikat usang itu dalam perubahan dokumen lanjutan (tidak dilakukan di sini agar catatan tinjauan ini atomik); tabel §16 pertama dan ADR yang berwenang.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | tindak lanjut dokumen                                                                         |

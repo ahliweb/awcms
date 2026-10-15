@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:caa528673359d694dd352491f3ac50552d36764ae7ed4e29072bc8101d46378c -->
+<!-- i18n-source-hash: sha256:a355c8d4f0e6ca9ce2d2f25123b05889edc5f37d616ea22112995e142ec26d41 -->
 
 # Management Reporting
 
@@ -194,6 +194,20 @@ snapshot. Rather than silently ignore a submitted filter (a false sense
 of scoping), the create endpoint rejects a non-empty `filter` with `400
 NOT_IMPLEMENTED` until a follow-up issue defines its schema and wires it
 into generation (reviewer + security-auditor finding, PR #781).
+
+**Data payroll tidak pernah dapat diekspor (Issue #978, PS-18).** Ekspor adalah
+berkas yang hidup lebih lama dari request dan dibuka di spreadsheet, sehingga ia
+adalah salinan proyeksi yang paling lebar. Tidak ada proyeksi yang boleh membaca
+tabel `awcms_hr_payroll_*`, `awcms_hr_compensation`, `awcms_hr_payout_accounts`,
+atau `awcms_hr_payslips`, atau dideklarasikan oleh `hr_payroll`:
+`reporting:projections:registry:check` menolak deskriptornya, ketiga engine menolak
+membangun SQL untuk tabel itu, dan `generateProjectionExport` menolak lagi saat
+menulis (`assertProjectionExportable`). Daftar tunggal nama terlarang ada di
+`src/modules/_shared/payroll-data-boundary.ts`; jalan menuju laporan payroll
+mendatang (izin sendiri, ukuran kohort minimum, ADR sendiri) ada di
+`docs/awcms/hr-payroll.id.md` bagian 13.3. Sel CSV yang diawali `=`, `+`, `-`, `@`,
+TAB, atau CR diberi satu tanda kutip tunggal di depan lewat
+`src/lib/security/csv-formula.ts` bersama.
 
 ### API
 
