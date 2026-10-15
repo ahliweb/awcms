@@ -1,0 +1,430 @@
+---
+/**
+ * Booking blocked nights (Issue #942): nights of a STAY resource taken out of
+ * sale (maintenance, owner use), and the release that puts them back.
+ *
+ * Read server-side with the SAME functions the JSON routes use (`listBlocks`,
+ * `listResources`, `listUnits`) inside `loadAdminScreen`. Create is
+ * `POST /api/v1/booking/blocks` and release `POST /blocks/{id}/release`, both with
+ * an `Idempotency-Key`. The page holds no rule: a block is all-or-none, never
+ * cancels a reservation, and a night already taken is the route's
+ * `409 BLOCK_CONFLICT` (shown as a plain sentence; the page does not ask for the
+ * conflicting reservations). Every gate is UX-only: the endpoint guards are the
+ * authority.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../../lib/i18n";
+import { bookingMessages } from "../../../lib/booking-admin-messages";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import {
+  listBlocks,
+  type BlockView
+} from "../../../modules/booking/application/booking-block-directory";
+import {
+  listAllResources,
+  listStayUnits,
+  type ResourceDto,
+  type UnitDto
+} from "../../../modules/booking/application/booking-resource-admin";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t, tn } = getTranslatorFor(locale);
+
+const REASON_LABEL: Record<string, string> = {
+  maintenance: t("Maintenance"),
+  owner_use: t("Owner use"),
+  other: t("Other")
+};
+const STATUS_LABEL: Record<"active" | "released", string> = {
+  active: t("Blocked"),
+  released: t("Released")
+};
+
+const statusParam = Astro.url.searchParams.get("status");
+const status =
+  statusParam === "active" || statusParam === "released" ? statusParam : null;
+const cursorParam = Astro.url.searchParams.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "booking",
+    activityCode: "blocks",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    const canCreate = await can({
+      moduleKey: "booking",
+      activityCode: "blocks",
+      action: "create"
+    });
+    const canRelease = await can({
+      moduleKey: "booking",
+      activityCode: "blocks",
+      action: "release"
+    });
+    const canSeeResources = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "read"
+    });
+    const page = await listBlocks(
+      tx,
+      ssr.tenantId,
+      status ? { status } : {},
+      cursor ?? undefined
+    );
+    const resources: ResourceDto[] = canSeeResources
+      ? await listAllResources(tx, ssr.tenantId, { deleted: "include" })
+      : [];
+    // One read for the units of every stay resource (the picker's options).
+    const grouped = new Map<string, UnitDto[]>();
+
+    for (const { resourceId, unit } of canSeeResources
+      ? await listStayUnits(tx, ssr.tenantId)
+      : []) {
+      grouped.set(resourceId, [...(grouped.get(resourceId) ?? []), unit]);
+    }
+
+    const units = [...grouped].map(([resourceId, list]) => ({
+      resourceId,
+      units: list
+    }));
+
+    return {
+      blocks: page.blocks,
+      nextCursor: page.nextCursor,
+      resources,
+      units,
+      canCreate,
+      canRelease
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/booking/blocks.astro: failed to load the blocks",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const blocks: BlockView[] = data?.blocks ?? [];
+const resources: ResourceDto[] = data?.resources ?? [];
+const stayResources = resources.filter(
+  (resource) => resource.bookingMode === "stay" && resource.deletedAt === null
+);
+const resourceName = new Map(resources.map((r) => [r.id, r.name]));
+const unitLabel = new Map<string, string>();
+
+for (const group of data?.units ?? []) {
+  for (const unit of group.units) {
+    unitLabel.set(
+      unit.id,
+      unit.label ? `${unit.ordinal} (${unit.label})` : String(unit.ordinal)
+    );
+  }
+}
+
+const canCreate = data?.canCreate ?? false;
+const canRelease = data?.canRelease ?? false;
+const messages = {
+  ...bookingMessages(t),
+  confirmRelease: t("Release this block and put its nights back on sale?")
+};
+const filters: { value: string | null; label: string }[] = [
+  { value: null, label: t("All") },
+  { value: "active", label: STATUS_LABEL.active },
+  { value: "released", label: STATUS_LABEL.released }
+];
+---
+
+<AdminLayout
+  title={t("Blocked nights")}
+  description={t(
+    "Take nights of a stay resource out of sale for maintenance or owner use. A block never cancels a booking: nights that are already booked cannot be blocked."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="blocks-denied" role="alert">
+      {t("You do not have permission to view blocked nights.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="blocks-error" role="alert">
+      {t(
+        "Blocked nights could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <div id="booking-messages" hidden data-msgs={JSON.stringify(messages)} />
+  )}
+
+  {canRead && !loadError && canCreate && (
+    <form id="block-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Block nights")}</p>
+      <p id="block-form-error" class="admin-create-error" role="alert" hidden />
+
+      {stayResources.length === 0 ? (
+        <p class="form-hint" id="block-no-resources">
+          {t("Add a resource booked by night before blocking nights.")}
+        </p>
+      ) : (
+        <>
+          <label for="block-resource">{t("Resource")}</label>
+          <select id="block-resource" required>
+            {stayResources.map((resource) => (
+              <option value={resource.id}>{resource.name}</option>
+            ))}
+          </select>
+
+          <label for="block-unit">{t("Unit")}</label>
+          <select id="block-unit">
+            <option value="">{t("Every unit")}</option>
+            {(data?.units ?? []).flatMap((group) =>
+              group.units.map((unit) => (
+                <option value={unit.id} data-resource-id={group.resourceId}>
+                  {unitLabel.get(unit.id)}
+                </option>
+              ))
+            )}
+          </select>
+
+          <label for="block-from">{t("First blocked night")}</label>
+          <input id="block-from" type="date" required />
+
+          <label for="block-to">{t("Back on sale on")}</label>
+          <input id="block-to" type="date" required />
+
+          <label for="block-reason">{t("Reason")}</label>
+          <select id="block-reason">
+            {Object.entries(REASON_LABEL).map(([value, label]) => (
+              <option value={value}>{label}</option>
+            ))}
+          </select>
+
+          <button type="submit" id="block-submit">
+            {t("Block nights")}
+          </button>
+        </>
+      )}
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <>
+      <p
+        id="block-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+      <nav class="admin-segmented" aria-label={t("Block status")}>
+        {filters.map((filter) => (
+          <a
+            class="admin-segmented-option"
+            href={
+              filter.value
+                ? `/admin/booking/blocks?status=${filter.value}`
+                : "/admin/booking/blocks"
+            }
+            aria-current={status === filter.value ? "page" : undefined}
+          >
+            {filter.label}
+          </a>
+        ))}
+      </nav>
+      <div
+        class="data-table-scroll fade-in-up"
+        role="region"
+        tabindex="0"
+        aria-labelledby="blocks-table-caption"
+      >
+        <table class="data-table data-table--stack" id="blocks-table">
+          <caption id="blocks-table-caption">
+            {tn("{count} block", "{count} blocks", blocks.length, {
+              count: blocks.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Resource")}</th>
+              <th scope="col">{t("Unit")}</th>
+              <th scope="col">{t("From")}</th>
+              <th scope="col">{t("Back on sale")}</th>
+              <th scope="col">{t("Nights")}</th>
+              <th scope="col">{t("Reason")}</th>
+              <th scope="col">{t("Status")}</th>
+              {canRelease && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {blocks.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={canRelease ? 8 : 7}>
+                  <div class="empty-state">
+                    <span class="empty-state-title">
+                      {t("No blocked nights")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t("Nights you block will appear here.")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              blocks.map((block) => (
+                <tr data-block-row={block.id}>
+                  <td data-label={t("Resource")}>
+                    {resourceName.get(block.resourceId) ?? "—"}
+                  </td>
+                  <td data-label={t("Unit")}>
+                    {block.unitId
+                      ? (unitLabel.get(block.unitId) ?? "—")
+                      : t("Every unit")}
+                  </td>
+                  <td data-label={t("From")}>{block.fromDate}</td>
+                  <td data-label={t("Back on sale")}>{block.toDate}</td>
+                  <td data-label={t("Nights")}>{block.nights}</td>
+                  <td data-label={t("Reason")}>
+                    {REASON_LABEL[block.reasonCode] ?? block.reasonCode}
+                  </td>
+                  <td data-label={t("Status")} data-status={block.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={
+                        block.status === "active" ? "warning" : "neutral"
+                      }
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {STATUS_LABEL[block.status]}
+                    </span>
+                    {block.releasedAt && (
+                      <time class="cell-muted" datetime={block.releasedAt}>
+                        {formatDateTime(locale, block.releasedAt, "UTC")}
+                      </time>
+                    )}
+                  </td>
+                  {canRelease && (
+                    <td data-label={t("Actions")} class="stacked-block">
+                      {block.status === "active" && (
+                        <div class="row-actions">
+                          <button
+                            type="button"
+                            class="module-toggle block-release-btn"
+                            data-block-id={block.id}
+                          >
+                            {t("Release")}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )}
+
+  {canRead && !loadError && data?.nextCursor && (
+    <p>
+      <a
+        class="btn btn-secondary"
+        id="blocks-next"
+        href={`/admin/booking/blocks?${status ? `status=${status}&` : ""}cursor=${data.nextCursor}`}
+      >
+        {t("Next page")}
+      </a>
+    </p>
+  )}
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP: it makes Astro bundle this script as an
+  // external file (an import-free script is inlined, and inline is blocked).
+  import {
+    inputValue,
+    onAction,
+    onSubmit
+  } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    bookingMutate,
+    messageBox,
+    readMessages
+  } from "../../../lib/ui/booking-admin-client";
+  import { textOrNull } from "../../../lib/booking-admin-format";
+
+  const messages = readMessages();
+  const formError = messageBox("block-form-error");
+  const actionError = messageBox("block-action-error");
+
+  // Offer only the units of the chosen resource.
+  const resourceSelect = document.getElementById("block-resource");
+  const unitSelect = document.getElementById("block-unit");
+
+  function filterUnits(): void {
+    if (!(resourceSelect instanceof HTMLSelectElement)) return;
+    if (!(unitSelect instanceof HTMLSelectElement)) return;
+
+    for (const option of Array.from(unitSelect.options)) {
+      const owner = option.dataset.resourceId;
+      const visible = !owner || owner === resourceSelect.value;
+      option.hidden = !visible;
+      option.disabled = !visible;
+    }
+
+    if (unitSelect.selectedOptions[0]?.disabled) {
+      unitSelect.value = "";
+    }
+  }
+
+  resourceSelect?.addEventListener("change", filterUnits);
+  filterUnits();
+
+  onSubmit("block-form", async ({ submit }) => {
+    await bookingMutate(
+      submit,
+      formError,
+      messages,
+      "POST",
+      "/api/v1/booking/blocks",
+      {
+        resourceId: inputValue("block-resource"),
+        unitId: textOrNull(inputValue("block-unit")),
+        fromDate: inputValue("block-from"),
+        toDate: inputValue("block-to"),
+        reasonCode: inputValue("block-reason")
+      }
+    );
+  });
+
+  onAction(".block-release-btn", async (button) => {
+    const id = button.dataset.blockId;
+    if (!id) return;
+    if (!(await confirmAction(messages.confirmRelease ?? ""))) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "POST",
+      `/api/v1/booking/blocks/${id}/release`,
+      {}
+    );
+  });
+</script>

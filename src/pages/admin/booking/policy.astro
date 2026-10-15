@@ -1,0 +1,389 @@
+---
+/**
+ * Booking policy (Issue #942, over the #1030 admin APIs): how long a hold lasts,
+ * how many holds one customer or the whole tenant may have, lead time, horizon
+ * and the no-show grace.
+ *
+ * Read server-side with the SAME function the route uses (`getPolicy`,
+ * `GET /api/v1/booking/policy`) inside `loadAdminScreen`; the write is
+ * `PUT /api/v1/booking/policy` with an `Idempotency-Key`. The PUT REPLACES the
+ * policy, so the form always sends every field, and a blank field is `null` --
+ * the MODULE DEFAULT, not "unlimited" -- which this page says beside each field
+ * with the value in force. Every gate here is UX-only: the endpoint guard
+ * (`booking.policy.configure`, a high-risk action audited `critical`) is the
+ * authority.
+ *
+ * Times are typed in minutes and converted to the API's seconds here and nowhere
+ * else.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import SettingsSaveBar from "../../../components/SettingsSaveBar.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { bookingMessages } from "../../../lib/booking-admin-messages";
+import {
+  isInexactMinutes,
+  minutesDisplay
+} from "../../../lib/booking-admin-format";
+import { POLICY_FIELDS } from "../../../modules/booking/domain/booking-admin-validation";
+import {
+  effectivePolicy,
+  getPolicy
+} from "../../../modules/booking/application/booking-policy-admin";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "booking",
+    activityCode: "policy",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    policy: await getPolicy(tx, ssr.tenantId),
+    canConfigure: await can({
+      moduleKey: "booking",
+      activityCode: "policy",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/booking/policy.astro: failed to load the booking policy",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const canConfigure = data?.canConfigure ?? false;
+const set = data?.policy.policy;
+// What each blank field falls back to: the MODULE default, which is not the
+// "in force" value once the tenant has set one.
+const moduleDefaults = effectivePolicy(
+  Object.fromEntries(POLICY_FIELDS.map((key) => [key, null])) as never
+);
+const effective = data ? moduleDefaults : undefined;
+
+/**
+ * A control's value plus what the script needs to send it back unchanged: the
+ * displayed text (`data-initial`) and the API value it came from
+ * (`data-original`), so an unrelated edit re-sends every other value
+ * byte-identical (see `booking-admin-format.ts`).
+ */
+const field = (display: string, original: unknown) => ({
+  value: display,
+  "data-initial": display,
+  "data-original": JSON.stringify(original ?? null)
+});
+const minutesField = (seconds: number | null) =>
+  field(minutesDisplay(seconds), seconds);
+const countField = (value: number | null) =>
+  field(value === null ? "" : String(value), value);
+const textField = (value: string | null) => field(value ?? "", value);
+const timeField = (value: string | null) =>
+  field(value ? value.slice(0, 5) : "", value);
+const minutes = (seconds: number): string => minutesDisplay(seconds);
+const messages = bookingMessages(t);
+---
+
+<AdminLayout
+  title={t("Booking policy")}
+  description={t(
+    "The rules every booking follows. A blank field uses the built-in default shown beside it, which is not the same as unlimited."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="policy-denied" role="alert">
+      {t("You do not have permission to view the booking policy.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="policy-error" role="alert">
+      {t(
+        "The booking policy could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <div id="booking-messages" hidden data-msgs={JSON.stringify(messages)} />
+  )}
+
+  {canRead && !loadError && data && set && effective && (
+    <>
+      <p id="policy-error-box" class="admin-create-error" role="alert" hidden />
+      {!canConfigure && (
+        <p class="state-notice" id="policy-readonly" role="status">
+          {t("You can read the policy but not change it.")}
+        </p>
+      )}
+      <form id="policy-form" class="admin-form fade-in-up">
+        <fieldset class="admin-fieldset" disabled={!canConfigure}>
+          <legend>{t("Holds")}</legend>
+          <label for="policy-default-hold">
+            {t("Hold lasts (minutes)")}
+            <input
+              id="policy-default-hold"
+              type="number"
+              step="any"
+              {...minutesField(set.defaultHoldSeconds)}
+              aria-describedby="policy-default-hold-hint"
+            />
+            <span class="form-hint" id="policy-default-hold-hint">
+              {t("Default: {value} minutes", {
+                value: minutes(effective.defaultHoldSeconds)
+              })}
+            </span>
+            {isInexactMinutes(set.defaultHoldSeconds) && (
+              <span class="form-hint">
+                {t("Stored as {seconds} seconds.", {
+                  seconds: set.defaultHoldSeconds ?? 0
+                })}
+              </span>
+            )}
+          </label>
+          <label for="policy-max-hold">
+            {t("Longest hold (minutes)")}
+            <input
+              id="policy-max-hold"
+              type="number"
+              step="any"
+              {...minutesField(set.maxHoldSeconds)}
+              aria-describedby="policy-max-hold-hint"
+            />
+            <span class="form-hint" id="policy-max-hold-hint">
+              {t("Default: {value} minutes", {
+                value: minutes(effective.maxHoldSeconds)
+              })}
+            </span>
+            {isInexactMinutes(set.maxHoldSeconds) && (
+              <span class="form-hint">
+                {t("Stored as {seconds} seconds.", {
+                  seconds: set.maxHoldSeconds ?? 0
+                })}
+              </span>
+            )}
+          </label>
+          <label for="policy-cap-customer">
+            {t("Live holds per customer")}
+            <input
+              id="policy-cap-customer"
+              type="number"
+              min="1"
+              step="1"
+              {...countField(set.maxActiveHoldsPerCustomer)}
+              aria-describedby="policy-cap-customer-hint"
+            />
+            <span class="form-hint" id="policy-cap-customer-hint">
+              {t("Default: {value}", {
+                value: effective.maxActiveHoldsPerCustomer
+              })}
+            </span>
+          </label>
+          <label for="policy-cap-tenant">
+            {t("Live holds in total")}
+            <input
+              id="policy-cap-tenant"
+              type="number"
+              min="1"
+              step="1"
+              {...countField(set.maxActiveHoldsPerTenant)}
+              aria-describedby="policy-cap-tenant-hint"
+            />
+            <span class="form-hint" id="policy-cap-tenant-hint">
+              {t("Default: {value}", {
+                value: effective.maxActiveHoldsPerTenant
+              })}
+            </span>
+          </label>
+        </fieldset>
+
+        <fieldset class="admin-fieldset" disabled={!canConfigure}>
+          <legend>{t("When bookings can be made")}</legend>
+          <label for="policy-lead">
+            {t("Minimum notice (minutes)")}
+            <input
+              id="policy-lead"
+              type="number"
+              step="any"
+              {...minutesField(set.minLeadSeconds)}
+              aria-describedby="policy-lead-hint"
+            />
+            <span class="form-hint" id="policy-lead-hint">
+              {t("Default: {value} minutes", {
+                value: minutes(effective.minLeadSeconds)
+              })}
+            </span>
+            {isInexactMinutes(set.minLeadSeconds) && (
+              <span class="form-hint">
+                {t("Stored as {seconds} seconds.", {
+                  seconds: set.minLeadSeconds ?? 0
+                })}
+              </span>
+            )}
+          </label>
+          <label for="policy-horizon">
+            {t("Bookable up to (days ahead)")}
+            <input
+              id="policy-horizon"
+              type="number"
+              min="1"
+              max="3650"
+              step="1"
+              {...countField(set.maxHorizonDays)}
+              aria-describedby="policy-horizon-hint"
+            />
+            <span class="form-hint" id="policy-horizon-hint">
+              {t("Default: {value} days", { value: effective.maxHorizonDays })}
+            </span>
+          </label>
+          <label for="policy-grace">
+            {t("No-show grace (minutes)")}
+            <input
+              id="policy-grace"
+              type="number"
+              step="any"
+              {...minutesField(set.noShowGraceSeconds)}
+              aria-describedby="policy-grace-hint"
+            />
+            <span class="form-hint" id="policy-grace-hint">
+              {t("Default: {value} minutes", {
+                value: minutes(effective.noShowGraceSeconds)
+              })}
+            </span>
+            {isInexactMinutes(set.noShowGraceSeconds) && (
+              <span class="form-hint">
+                {t("Stored as {seconds} seconds.", {
+                  seconds: set.noShowGraceSeconds ?? 0
+                })}
+              </span>
+            )}
+          </label>
+        </fieldset>
+
+        <fieldset class="admin-fieldset" disabled={!canConfigure}>
+          <legend>{t("Defaults offered for new stay resources")}</legend>
+          <p class="form-hint">
+            {t(
+              "These are suggestions for the resource form; the server does not apply them by itself."
+            )}
+          </p>
+          <label for="policy-timezone">
+            {t("Time zone")}
+            <input
+              id="policy-timezone"
+              type="text"
+              autocomplete="off"
+              placeholder="Asia/Jakarta"
+              {...textField(set.defaultTimezone)}
+            />
+          </label>
+          <label for="policy-check-in">
+            {t("Check-in time")}
+            <input
+              id="policy-check-in"
+              type="time"
+              {...timeField(set.defaultCheckInTime)}
+            />
+          </label>
+          <label for="policy-check-out">
+            {t("Check-out time")}
+            <input
+              id="policy-check-out"
+              type="time"
+              {...timeField(set.defaultCheckOutTime)}
+            />
+          </label>
+        </fieldset>
+      </form>
+
+      {canConfigure && (
+        <SettingsSaveBar formId="policy-form" saveLabel={t("Save policy")} />
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  import { onSubmit } from "../../../lib/ui/admin-form-client";
+  import { initSettingsSaveBars } from "../../../lib/ui/settings-save-bar-client";
+  import {
+    bookingMutate,
+    collectBody,
+    messageBox,
+    readMessages,
+    type FormField
+  } from "../../../lib/ui/booking-admin-client";
+  import {
+    countOrNull,
+    localTimeOrNull,
+    minutesToSeconds,
+    textOrNull
+  } from "../../../lib/booking-admin-format";
+
+  const messages = readMessages();
+  const formError = messageBox("policy-error-box");
+
+  initSettingsSaveBars();
+
+  const fields: FormField[] = [
+    {
+      id: "policy-default-hold",
+      key: "defaultHoldSeconds",
+      convert: minutesToSeconds
+    },
+    { id: "policy-max-hold", key: "maxHoldSeconds", convert: minutesToSeconds },
+    {
+      id: "policy-cap-customer",
+      key: "maxActiveHoldsPerCustomer",
+      convert: countOrNull
+    },
+    {
+      id: "policy-cap-tenant",
+      key: "maxActiveHoldsPerTenant",
+      convert: countOrNull
+    },
+    { id: "policy-lead", key: "minLeadSeconds", convert: minutesToSeconds },
+    { id: "policy-horizon", key: "maxHorizonDays", convert: countOrNull },
+    {
+      id: "policy-grace",
+      key: "noShowGraceSeconds",
+      convert: minutesToSeconds
+    },
+    { id: "policy-timezone", key: "defaultTimezone", convert: textOrNull },
+    {
+      id: "policy-check-in",
+      key: "defaultCheckInTime",
+      convert: localTimeOrNull
+    },
+    {
+      id: "policy-check-out",
+      key: "defaultCheckOutTime",
+      convert: localTimeOrNull
+    }
+  ];
+
+  onSubmit("policy-form", async ({ submit }) => {
+    // The PUT replaces the whole policy, so every field is sent -- but an
+    // untouched one is sent as the exact value it was read as, never as the
+    // rounded text it was displayed with.
+    await bookingMutate(
+      submit,
+      formError,
+      messages,
+      "PUT",
+      "/api/v1/booking/policy",
+      collectBody(fields, { onlyChanged: false })
+    );
+  });
+</script>

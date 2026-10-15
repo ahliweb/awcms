@@ -111,6 +111,11 @@ export const READ_WAVE: readonly string[] = [
  */
 export const WRITE_WAVE: readonly string[] = [
   "admin-abac-policies.e2e.ts",
+  // Issue #942 — drives the six booking screens by keyboard and mutates
+  // tenant-wide booking configuration (a policy, an offering, a resource with
+  // units in a pool, schedules, a closure, a reservation placed through the
+  // route, its confirm and cancel, a block and its release, a resource delete).
+  "admin-booking.e2e.ts",
   // Nothing here mutates — every request it sends is refused by construction —
   // but it sends non-GET requests, and classifying by what a spec ATTEMPTS
   // rather than by what it happens to achieve is the rule that stays true when

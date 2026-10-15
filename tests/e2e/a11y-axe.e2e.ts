@@ -105,7 +105,18 @@ const ROUTES = [
     path: "/admin/procurement?view=documents",
     label: "procurement (documents + line editor)"
   },
-  { path: "/admin/procurement?view=policy", label: "procurement (policy form)" }
+  {
+    path: "/admin/procurement?view=policy",
+    label: "procurement (policy form)"
+  },
+  // Issue #942 — the six screens that flipped `booking` to `active`. Forms,
+  // stacked tables, segmented filters and a time/date-input-heavy schedule form.
+  { path: "/admin/booking/reservations", label: "booking reservations" },
+  { path: "/admin/booking/resources", label: "booking resources (+ pools)" },
+  { path: "/admin/booking/offerings", label: "booking offerings (form)" },
+  { path: "/admin/booking/schedules", label: "booking schedules + closures" },
+  { path: "/admin/booking/blocks", label: "booking blocked nights" },
+  { path: "/admin/booking/policy", label: "booking policy (SettingsSaveBar)" }
 ] as const;
 
 const tenantId = process.env.E2E_TENANT_ID;

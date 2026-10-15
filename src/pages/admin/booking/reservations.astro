@@ -1,0 +1,687 @@
+---
+/**
+ * Booking reservations (Issue #942): the list, with the hold pipeline and its
+ * expiry visible, filtered by status. Read server-side with the SAME function the
+ * JSON route uses (`listReservations`, `GET /api/v1/booking/reservations`) inside
+ * `loadAdminScreen`, so the entry decision and the read share one transaction.
+ *
+ * `?id=<uuid>` switches the same screen to ONE reservation: its items, hold expiry
+ * and append-only transition history, plus the single-call transitions the
+ * operator uses most (confirm, cancel, check in, complete, mark as no-show), each
+ * an existing route with an `Idempotency-Key`. It is a view of this page rather
+ * than a dynamic route so that it can never be an orphan of the sidebar. Which
+ * transitions are legal is the state machine's (a refusal reaches the operator as
+ * the route's `INVALID_STATE`); the buttons shown are only the ones the current
+ * status can take, and every gate is UX-only.
+ *
+ * The customer is an opaque reference at the commerce authority and is NOT shown
+ * (nor the note: `reservation_notes.read` is its own audited permission, and this
+ * page does not drive it). Reschedule and override are not on this screen.
+ *
+ * A hold is a reservation in `held` with `hold_expires_at`. A hold past its expiry
+ * that the sweep has not yet released is shown as overdue (judged on the
+ * DATABASE clock, `hold_expires_at <= clock_timestamp()`), because the allocator reclaims it on the next
+ * claim and the operator should not read it as a live promise.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../../lib/i18n";
+import { bookingMessages } from "../../../lib/booking-admin-messages";
+import {
+  RESERVATION_STATUSES,
+  reservationEventLabels,
+  reservationStatusLabels,
+  statusLabel,
+  statusTone
+} from "../../../lib/booking-admin-labels";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import {
+  getReservation,
+  listReservationEvents,
+  listReservations,
+  overdueHoldIds,
+  type ReservationEventView,
+  type ReservationView
+} from "../../../modules/booking/application/booking-reservation-directory";
+import { listAllResources } from "../../../modules/booking/application/booking-resource-admin";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t, tn } = getTranslatorFor(locale);
+const STATUS_LABEL = reservationStatusLabels(t);
+const EVENT_LABEL = reservationEventLabels(t);
+
+const statusParam = Astro.url.searchParams.get("status");
+const status = (RESERVATION_STATUSES as readonly string[]).includes(
+  statusParam ?? ""
+)
+  ? statusParam!
+  : null;
+const idParam = (Astro.url.searchParams.get("id") ?? "").toLowerCase();
+const detailId =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(idParam)
+    ? idParam
+    : null;
+const detailRequested = Astro.url.searchParams.has("id");
+const cursorParam = Astro.url.searchParams.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "booking",
+    activityCode: "reservations",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // Names for the resource ids a reservation references. Only a viewer who may
+    // read resources gets names; anyone else sees a neutral dash.
+    const canSeeResources = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "read"
+    });
+    const resources = canSeeResources
+      ? await listAllResources(tx, ssr.tenantId, { deleted: "include" })
+      : [];
+    const names = resources.map(
+      (resource) => [resource.id, resource.name] as const
+    );
+
+    if (detailRequested) {
+      const reservation = detailId
+        ? await getReservation(tx, ssr.tenantId, detailId)
+        : null;
+      const events = reservation
+        ? await listReservationEvents(tx, ssr.tenantId, reservation.id)
+        : [];
+      const allowed = {
+        confirm: await can({
+          moduleKey: "booking",
+          activityCode: "reservations",
+          action: "confirm"
+        }),
+        cancel: await can({
+          moduleKey: "booking",
+          activityCode: "reservations",
+          action: "cancel"
+        }),
+        checkIn: await can({
+          moduleKey: "booking",
+          activityCode: "reservations",
+          action: "check_in"
+        }),
+        complete: await can({
+          moduleKey: "booking",
+          activityCode: "reservations",
+          action: "complete"
+        }),
+        noShow: await can({
+          moduleKey: "booking",
+          activityCode: "reservations",
+          action: "no_show"
+        })
+      };
+
+      return {
+        reservations: [] as ReservationView[],
+        nextCursor: null as string | null,
+        names,
+        reservation,
+        events,
+        allowed,
+        overdue: [
+          ...(await overdueHoldIds(
+            tx,
+            ssr.tenantId,
+            reservation ? [reservation.id] : []
+          ))
+        ]
+      };
+    }
+
+    const page = await listReservations(
+      tx,
+      ssr.tenantId,
+      status ? { status } : {},
+      cursor ?? undefined
+    );
+
+    return {
+      reservations: page.reservations,
+      nextCursor: page.nextCursor,
+      names,
+      reservation: null as ReservationView | null,
+      events: [] as ReservationEventView[],
+      allowed: null,
+      overdue: [
+        ...(await overdueHoldIds(
+          tx,
+          ssr.tenantId,
+          page.reservations.map((row) => row.id)
+        ))
+      ]
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/booking/reservations.astro: failed to load the reservations",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const reservations: ReservationView[] = data?.reservations ?? [];
+const names = new Map(data?.names ?? []);
+// Judged on the DATABASE clock (`overdueHoldIds`), never the web server's.
+const overdueIds = new Set(data?.overdue ?? []);
+const reservation: ReservationView | null = data?.reservation ?? null;
+const events: ReservationEventView[] = data?.events ?? [];
+const allowed = data?.allowed ?? null;
+const listMode = !detailRequested;
+const overdue = reservation !== null && overdueIds.has(reservation.id);
+
+type Action = { key: string; verb: string; label: string; danger?: boolean };
+const actions: Action[] = [];
+
+if (reservation && allowed) {
+  const current = reservation.status;
+
+  if (current === "held" && allowed.confirm) {
+    actions.push({ key: "confirm", verb: "confirm", label: t("Confirm") });
+  }
+  if (current === "confirmed" && allowed.checkIn) {
+    actions.push({ key: "check-in", verb: "check-in", label: t("Check in") });
+  }
+  if (current === "checked_in" && allowed.complete) {
+    actions.push({ key: "complete", verb: "check-out", label: t("Complete") });
+  }
+  if (current === "confirmed" && allowed.noShow) {
+    actions.push({
+      key: "no-show",
+      verb: "no-show",
+      label: t("Mark as no-show"),
+      danger: true
+    });
+  }
+  if ((current === "held" || current === "confirmed") && allowed.cancel) {
+    actions.push({
+      key: "cancel",
+      verb: "cancel",
+      label: t("Cancel reservation"),
+      danger: true
+    });
+  }
+}
+
+const messages = {
+  ...bookingMessages(t),
+  confirmCancel: t("Cancel reservation {number}? Its resource is released.", {
+    number: "{number}"
+  }),
+  confirmNoShow: t("Mark reservation {number} as a no-show?", {
+    number: "{number}"
+  })
+};
+
+const when = (reservation: ReservationView): string => {
+  const item = reservation.items[0];
+
+  if (item?.stay) {
+    return tn(
+      "{checkIn} to {checkOut} ({nights} night)",
+      "{checkIn} to {checkOut} ({nights} nights)",
+      item.stay.nights,
+      {
+        checkIn: item.stay.checkInDate,
+        checkOut: item.stay.checkOutDate,
+        nights: item.stay.nights
+      }
+    );
+  }
+
+  return formatDateTime(locale, reservation.startsAt, "UTC");
+};
+const filters: { value: string | null; label: string }[] = [
+  { value: null, label: t("All") },
+  { value: "held", label: STATUS_LABEL.held },
+  { value: "confirmed", label: STATUS_LABEL.confirmed },
+  { value: "checked_in", label: STATUS_LABEL.checked_in },
+  { value: "completed", label: STATUS_LABEL.completed },
+  { value: "cancelled", label: STATUS_LABEL.cancelled },
+  { value: "rescheduled", label: STATUS_LABEL.rescheduled },
+  { value: "no_show", label: STATUS_LABEL.no_show },
+  { value: "expired", label: STATUS_LABEL.expired }
+];
+---
+
+<AdminLayout
+  title={
+    reservation
+      ? t("Reservation {number}", { number: reservation.reservationNo })
+      : t("Reservations")
+  }
+  description={
+    listMode
+      ? t(
+          "Every booking and hold, newest first. A hold is a reservation waiting for confirmation until its expiry."
+        )
+      : t("The booking, what it holds and every step it has been through.")
+  }
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="reservations-denied" role="alert">
+      {t("You do not have permission to view reservations.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="reservations-error" role="alert">
+      {listMode
+        ? t(
+            "Reservations could not be loaded right now. Please try again later."
+          )
+        : t(
+            "The reservation could not be loaded right now. Please try again later."
+          )}
+    </p>
+  )}
+
+  {listMode && canRead && !loadError && (
+    <>
+      <p class="form-hint">{t("Times are shown in UTC.")}</p>
+      <nav class="admin-segmented" aria-label={t("Reservation status")}>
+        {filters.map((filter) => (
+          <a
+            class="admin-segmented-option"
+            href={
+              filter.value
+                ? `/admin/booking/reservations?status=${filter.value}`
+                : "/admin/booking/reservations"
+            }
+            aria-current={status === filter.value ? "page" : undefined}
+          >
+            {filter.label}
+          </a>
+        ))}
+      </nav>
+    </>
+  )}
+
+  {listMode && canRead && !loadError && (
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="reservations-table-caption"
+    >
+      <table class="data-table data-table--stack" id="reservations-table">
+        <caption id="reservations-table-caption">
+          {tn(
+            "{count} reservation",
+            "{count} reservations",
+            reservations.length,
+            { count: reservations.length }
+          )}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Number")}</th>
+            <th scope="col">{t("Status")}</th>
+            <th scope="col">{t("Resource")}</th>
+            <th scope="col">{t("When")}</th>
+            <th scope="col">{t("Guests")}</th>
+            <th scope="col">{t("Hold expires")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {reservations.length === 0 ? (
+            <tr>
+              <td class="data-table-empty" colspan="6">
+                <div class="empty-state">
+                  <span class="empty-state-title">{t("No reservations")}</span>
+                  <span class="empty-state-text">
+                    {t("Reservations and holds appear here as they are made.")}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            reservations.map((reservation) => {
+              const overdue = overdueIds.has(reservation.id);
+
+              return (
+                <tr data-reservation-row={reservation.id}>
+                  <td data-label={t("Number")}>
+                    <a
+                      class="cell-code"
+                      href={`/admin/booking/reservations?id=${reservation.id}`}
+                    >
+                      {reservation.reservationNo}
+                    </a>
+                  </td>
+                  <td data-label={t("Status")} data-status={reservation.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={statusTone(reservation.status)}
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {statusLabel(STATUS_LABEL, reservation.status)}
+                    </span>
+                  </td>
+                  <td data-label={t("Resource")}>
+                    {reservation.resourceIds
+                      .map((id) => names.get(id) ?? "—")
+                      .join(", ") || "—"}
+                  </td>
+                  <td data-label={t("When")}>{when(reservation)}</td>
+                  <td data-label={t("Guests")}>{reservation.partySize}</td>
+                  <td data-label={t("Hold expires")}>
+                    {reservation.holdExpiresAt ? (
+                      <>
+                        <time datetime={reservation.holdExpiresAt}>
+                          {formatDateTime(
+                            locale,
+                            reservation.holdExpiresAt,
+                            "UTC"
+                          )}
+                        </time>
+                        {overdue && (
+                          <span
+                            class="admin-status-pill"
+                            data-tone="danger"
+                            data-overdue="true"
+                          >
+                            <span
+                              class="admin-status-pill-dot"
+                              aria-hidden="true"
+                            />
+                            {t("Overdue")}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {listMode && canRead && !loadError && data?.nextCursor && (
+    <p>
+      <a
+        class="btn btn-secondary"
+        id="reservations-next"
+        href={`/admin/booking/reservations?${status ? `status=${status}&` : ""}cursor=${data.nextCursor}`}
+      >
+        {t("Next page")}
+      </a>
+    </p>
+  )}
+
+  {!listMode && canRead && !loadError && !reservation && (
+    <p class="state-notice fade-in-up" id="reservation-missing" role="status">
+      {t("That reservation was not found.")}
+    </p>
+  )}
+
+  {!listMode && canRead && !loadError && reservation && (
+    <>
+      <div id="booking-messages" hidden data-msgs={JSON.stringify(messages)} />
+      <p
+        id="reservation-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+
+      <p>
+        <a
+          class="btn btn-secondary"
+          id="reservations-back"
+          href="/admin/booking/reservations"
+        >
+          {t("Back to reservations")}
+        </a>
+      </p>
+      <section class="admin-section fade-in-up" id="reservation-summary">
+        <h2 class="admin-section-title">{t("Summary")}</h2>
+        <dl class="admin-detail-list">
+          <dt>{t("Status")}</dt>
+          <dd data-status={reservation.status}>
+            <span
+              class="admin-status-pill"
+              data-tone={statusTone(reservation.status)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true" />
+              {statusLabel(STATUS_LABEL, reservation.status)}
+            </span>
+          </dd>
+          <dt>{t("Hold expires")}</dt>
+          <dd id="reservation-hold-expiry">
+            {reservation.holdExpiresAt ? (
+              <>
+                <time datetime={reservation.holdExpiresAt}>
+                  {formatDateTime(locale, reservation.holdExpiresAt, "UTC")}
+                </time>
+                {overdue && (
+                  <span
+                    class="admin-status-pill"
+                    data-tone="danger"
+                    data-overdue="true"
+                  >
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
+                    {t("Overdue")}
+                  </span>
+                )}
+              </>
+            ) : (
+              "—"
+            )}
+          </dd>
+          <dt>{t("Resource")}</dt>
+          <dd>
+            {reservation.resourceIds
+              .map((rid) => names.get(rid) ?? "—")
+              .join(", ") || "—"}
+          </dd>
+          <dt>{t("Guests")}</dt>
+          <dd>{reservation.partySize}</dd>
+          <dt>{t("Source")}</dt>
+          <dd>{reservation.source}</dd>
+          <dt>{t("Created")}</dt>
+          <dd>
+            <time datetime={reservation.createdAt}>
+              {formatDateTime(locale, reservation.createdAt, "UTC")}
+            </time>
+          </dd>
+          {reservation.rescheduledFromId && (
+            <>
+              <dt>{t("Rescheduled from")}</dt>
+              <dd>
+                <a
+                  href={`/admin/booking/reservations?id=${reservation.rescheduledFromId}`}
+                >
+                  {t("The previous reservation")}
+                </a>
+              </dd>
+            </>
+          )}
+          {reservation.supersededById && (
+            <>
+              <dt>{t("Replaced by")}</dt>
+              <dd>
+                <a
+                  href={`/admin/booking/reservations?id=${reservation.supersededById}`}
+                >
+                  {t("The new reservation")}
+                </a>
+              </dd>
+            </>
+          )}
+        </dl>
+        <p class="form-hint">{t("Times are shown in UTC.")}</p>
+
+        {actions.length > 0 && (
+          <div
+            class="row-actions"
+            id="reservation-actions"
+            data-reservation-id={reservation.id}
+            data-reservation-number={reservation.reservationNo}
+          >
+            {actions.map((action) => (
+              <button
+                type="button"
+                class={
+                  action.danger
+                    ? "module-toggle reservation-action-btn danger"
+                    : "module-toggle reservation-action-btn"
+                }
+                data-verb={action.verb}
+                data-action={action.key}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section class="admin-section fade-in-up" id="reservation-items">
+        <h2 class="admin-section-title">{t("What is booked")}</h2>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="items-caption"
+        >
+          <table class="data-table data-table--stack" id="items-table">
+            <caption id="items-caption">
+              {tn("{count} item", "{count} items", reservation.items.length, {
+                count: reservation.items.length
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Offering")}</th>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("Units")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reservation.items.map((item) => (
+                <tr>
+                  <td data-label={t("Offering")}>
+                    <span class="cell-code">{item.offeringCode}</span>{" "}
+                    {item.offeringName}
+                  </td>
+                  <td data-label={t("When")}>
+                    {item.stay
+                      ? tn(
+                          "{checkIn} to {checkOut} ({nights} night)",
+                          "{checkIn} to {checkOut} ({nights} nights)",
+                          item.stay.nights,
+                          {
+                            checkIn: item.stay.checkInDate,
+                            checkOut: item.stay.checkOutDate,
+                            nights: item.stay.nights
+                          }
+                        )
+                      : `${formatDateTime(locale, item.startsAt, "UTC")} – ${formatDateTime(locale, item.endsAt, "UTC")}`}
+                  </td>
+                  <td data-label={t("Units")}>{item.quantity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-section fade-in-up" id="reservation-history">
+        <h2 class="admin-section-title">
+          {t("History")}
+          <span class="count-pill">{events.length}</span>
+        </h2>
+        <ol class="admin-timeline">
+          {events.map((event) => (
+            <li class="admin-timeline-item" data-event-kind={event.kind}>
+              <div class="admin-timeline-label">
+                <span
+                  class="admin-status-pill"
+                  data-tone={statusTone(event.toStatus)}
+                >
+                  <span class="admin-status-pill-dot" aria-hidden="true" />
+                  {EVENT_LABEL[event.kind] ?? event.kind}
+                </span>
+              </div>
+              <div class="admin-timeline-meta">
+                <time datetime={event.occurredAt}>
+                  {formatDateTime(locale, event.occurredAt, "UTC")}
+                </time>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP: it makes Astro bundle this script as an
+  // external file (an import-free script is inlined, and inline is blocked).
+  import { onAction } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    bookingMutate,
+    messageBox,
+    readMessages
+  } from "../../../lib/ui/booking-admin-client";
+
+  const messages = readMessages();
+  const actionError = messageBox("reservation-action-error");
+
+  onAction(".reservation-action-btn", async (button) => {
+    const host = button.closest<HTMLElement>("#reservation-actions");
+    const id = host?.dataset.reservationId;
+    const verb = button.dataset.verb;
+    if (!id || !verb) return;
+
+    const number = host?.dataset.reservationNumber ?? "";
+    const question =
+      button.dataset.action === "cancel"
+        ? messages.confirmCancel
+        : button.dataset.action === "no-show"
+          ? messages.confirmNoShow
+          : null;
+
+    if (
+      question &&
+      !(await confirmAction(question.replace("{number}", number)))
+    ) {
+      return;
+    }
+
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "POST",
+      `/api/v1/booking/reservations/${id}/${verb}`,
+      {}
+    );
+  });
+</script>

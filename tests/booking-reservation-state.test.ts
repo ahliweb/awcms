@@ -274,15 +274,27 @@ describe("creation", () => {
 });
 
 describe("module descriptor, guards and audit names stay in step", () => {
-  test("the module is experimental, declares its API fragment and no navigation", () => {
+  test("the module is active, declares its API fragment and one screen per read permission", () => {
     expect(bookingModule.key).toBe(BOOKING_MODULE_KEY);
-    expect(bookingModule.status).toBe("experimental");
-    // Issue #938 added the availability and schedule routes; there is still no
-    // admin screen, so no navigation entry.
+    // Issue #942 shipped the admin screens, so ADR-0021 criterion 1 (every
+    // ACTIVE module declares a screen) holds and the module left `experimental`.
+    expect(bookingModule.status).toBe("active");
     expect(bookingModule.api?.openApiPath).toBe(
       "openapi/modules/booking.openapi.yaml"
     );
-    expect(bookingModule.navigation ?? []).toEqual([]);
+    expect(
+      (bookingModule.navigation ?? []).map((entry) => [
+        entry.path,
+        entry.requiredPermission
+      ])
+    ).toEqual([
+      ["/admin/booking/reservations", "booking.reservations.read"],
+      ["/admin/booking/resources", "booking.resources.read"],
+      ["/admin/booking/offerings", "booking.offerings.read"],
+      ["/admin/booking/schedules", "booking.schedules.read"],
+      ["/admin/booking/blocks", "booking.blocks.read"],
+      ["/admin/booking/policy", "booking.policy.read"]
+    ]);
   });
 
   test("it does not depend on commerce or any ERP module", () => {

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1afff1911f16774eec3f5c369327e637e4c8741b27611270d2252687db935416 -->
+<!-- i18n-source-hash: sha256:ce2916d9cf602bfa85b130028e00b18b7dc01586cb0a48e03d8938cc2dbdc16e -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -15,7 +15,7 @@ berkas ini adalah peta kodenya.
 
 ## Irisan yang sudah ada
 
-Fondasi (Issue #937): descriptor (`experimental`), skema (`sql/180`), katalog izin
+Fondasi (Issue #937): descriptor (`experimental` sampai Issue #942; kini `active`), skema (`sql/180`), katalog izin
 (`sql/181`), mesin status reservasi murni, literal guard, dan nama audit event.
 
 Ketersediaan (Issue #938): jadwal, penutupan, dan pengecualian, malam yang
@@ -42,9 +42,20 @@ komponen bersama, `BookingPort` (`application/booking-port-adapter.ts`), sembila
 event reservasi di dokumen AsyncAPI live, dan default aman untuk batas hold.
 Route blok (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
 `POST /blocks/{id}/release`) memakai `Idempotency-Key` dengan replay dan tidak
-menerbitkan event. **Belum ada:** route rekonsiliasi, dan layar admin (#942,
-yang memungkinkan modul keluar dari `experimental`).
+menerbitkan event. **Belum ada:** route rekonsiliasi.
 
+Layar admin (Issue #942, tanpa migrasi, tanpa perubahan API; modul `active`): enam
+layar -- `/admin/booking/reservations` (daftar, hold dan
+kedaluwarsanya; `?id=` adalah satu reservasi dengan riwayat dan aksi confirm /
+cancel / check-in / complete / no-show), `/admin/booking/resources` (dengan unit dan pool), `/admin/booking/offerings`,
+`/admin/booking/schedules` (jam buka dan penutupan), `/admin/booking/blocks`, dan `/admin/booking/policy` --
+masing-masing satu entri `navigation` yang izinnya di-seed dan ditegakkan.
+Mereka hanya memanggil route di atas, mengirim setiap mutasi lewat satu pengirim
+bersama (`src/lib/ui/booking-admin-client.ts`) dengan `Idempotency-Key`,
+menampilkan penolakan sebagai kalimat terjemahan
+(`src/lib/booking-admin-messages.ts`, `locales/`), dan tanpa dialog browser.
+Membuat, menjadwalkan ulang, dan meng-override reservasi tidak ada di layar mana
+pun; lihat [`booking.md` §3.0.3](../../../docs/awcms/booking.id.md).
 Konfigurasi admin (Issue #1030, tanpa migrasi; prasyarat #942): resource beserta unit
 dan keanggotaan pool-nya, pool resource, offering layanan dan kebijakan tenant, di
 bawah `/api/v1/booking/` (`resources`, `resource-pools`, `offerings`, `policy`).

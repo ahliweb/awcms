@@ -1,0 +1,655 @@
+---
+/**
+ * Booking schedules and closures (Issue #942): the weekly opening hours of a
+ * resource (or of the whole tenant), and the closed days and special hours that
+ * override them.
+ *
+ * Read server-side with the SAME functions the JSON routes use (`listSchedules`,
+ * `listExceptions`, `listResources`) inside `loadAdminScreen`. Every mutation is
+ * an existing route with an `Idempotency-Key`: `POST /schedules`,
+ * `PATCH /schedules/{id}` (shorten the end date), `DELETE /schedules/{id}`
+ * (deactivate), `POST /schedule-exceptions`, `DELETE /schedule-exceptions/{id}`.
+ * A schedule is superseded, never edited, so a window's hours are not editable
+ * here: create a new window. The weekly hours form builds the route's `rules`
+ * from one opening window applied to the ticked weekdays; a richer split-day
+ * pattern is an API call. Stay resources ignore weekly hours (booking.md section
+ * 2.5), so a closure is the useful tool for them. Every gate is UX-only: the
+ * endpoint guards are the authority.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import { bookingMessages } from "../../../lib/booking-admin-messages";
+import {
+  listExceptions,
+  listSchedules,
+  type ExceptionDto,
+  type ScheduleDto
+} from "../../../modules/booking/application/booking-schedule-directory";
+import {
+  listAllResources,
+  type ResourceDto
+} from "../../../modules/booking/application/booking-resource-admin";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+const DAY_LABEL: Record<string, string> = {
+  mon: t("Mon"),
+  tue: t("Tue"),
+  wed: t("Wed"),
+  thu: t("Thu"),
+  fri: t("Fri"),
+  sat: t("Sat"),
+  sun: t("Sun")
+};
+const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const KIND_LABEL: Record<"closed" | "override_hours", string> = {
+  closed: t("Closed"),
+  override_hours: t("Special hours")
+};
+const STATUS_LABEL: Record<"active" | "inactive", string> = {
+  active: t("Active"),
+  inactive: t("Inactive")
+};
+const EXCEPTION_REASON_LABEL: Record<string, string> = {
+  holiday: t("Holiday"),
+  maintenance: t("Maintenance"),
+  private_event: t("Private event"),
+  other: t("Other")
+};
+
+const scheduleCursorParam = Astro.url.searchParams.get("schedules");
+const exceptionCursorParam = Astro.url.searchParams.get("exceptions");
+const scheduleCursor = scheduleCursorParam
+  ? decodeKeysetCursor(scheduleCursorParam)
+  : null;
+const exceptionCursor = exceptionCursorParam
+  ? decodeKeysetCursor(exceptionCursorParam)
+  : null;
+
+type Rules = { weekly?: Record<string, { from: string; to: string }[]> };
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "booking",
+    activityCode: "schedules",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    const canCreate = await can({
+      moduleKey: "booking",
+      activityCode: "schedules",
+      action: "create"
+    });
+    const canUpdate = await can({
+      moduleKey: "booking",
+      activityCode: "schedules",
+      action: "update"
+    });
+    const canDelete = await can({
+      moduleKey: "booking",
+      activityCode: "schedules",
+      action: "delete"
+    });
+    const canSeeResources = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "read"
+    });
+    const schedules = await listSchedules(
+      tx,
+      ssr.tenantId,
+      { activeOnly: false },
+      scheduleCursor ?? undefined
+    );
+    const exceptions = await listExceptions(
+      tx,
+      ssr.tenantId,
+      {},
+      exceptionCursor ?? undefined
+    );
+    const resources: ResourceDto[] = canSeeResources
+      ? await listAllResources(tx, ssr.tenantId, { deleted: "include" })
+      : [];
+
+    return {
+      schedules: schedules.schedules,
+      nextSchedules: schedules.nextCursor,
+      exceptions: exceptions.exceptions,
+      nextExceptions: exceptions.nextCursor,
+      resources,
+      canCreate,
+      canUpdate,
+      canDelete
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/booking/schedules.astro: failed to load the schedules",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const schedules: ScheduleDto[] = data?.schedules ?? [];
+const exceptions: ExceptionDto[] = data?.exceptions ?? [];
+const resources: ResourceDto[] = data?.resources ?? [];
+const liveResources = resources.filter(
+  (resource) => resource.deletedAt === null
+);
+const resourceName = new Map(resources.map((r) => [r.id, r.name]));
+const canCreate = data?.canCreate ?? false;
+const canUpdate = data?.canUpdate ?? false;
+const canDelete = data?.canDelete ?? false;
+const showScheduleActions = canUpdate || canDelete;
+
+/** "Mon–Fri 09:00–17:00" style summary, one clause per distinct window. */
+function hoursSummary(rules: unknown): string {
+  const weekly = (rules as Rules | null)?.weekly ?? {};
+  const byWindow = new Map<string, string[]>();
+
+  for (const day of DAY_ORDER) {
+    for (const window of weekly[day] ?? []) {
+      const key = `${window.from}–${window.to}`;
+      byWindow.set(key, [...(byWindow.get(key) ?? []), DAY_LABEL[day] ?? day]);
+    }
+  }
+
+  return (
+    [...byWindow.entries()]
+      .map(([window, days]) => `${days.join(", ")} ${window}`)
+      .join("; ") || "—"
+  );
+}
+
+const messages = {
+  ...bookingMessages(t),
+  confirmDeactivate: t(
+    "Deactivate this schedule? Existing bookings are not changed."
+  ),
+  confirmDeleteException: t("Remove this closure or special-hours entry?")
+};
+---
+
+<AdminLayout
+  title={t("Schedules and closures")}
+  description={t(
+    "When each resource can be booked, and the days it is closed or opens at different hours. Changes affect future availability only; no existing booking is touched."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="schedules-denied" role="alert">
+      {t("You do not have permission to view schedules.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="schedules-error" role="alert">
+      {t("Schedules could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <div id="booking-messages" hidden data-msgs={JSON.stringify(messages)} />
+  )}
+
+  {canRead && !loadError && canCreate && (
+    <form id="schedule-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Add weekly opening hours")}</p>
+      <p
+        id="schedule-form-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+
+      <label for="schedule-resource">{t("Applies to")}</label>
+      <select id="schedule-resource">
+        <option value="" data-timezone="">
+          {t("Every resource without its own hours")}
+        </option>
+        {liveResources.map((resource) => (
+          <option value={resource.id} data-timezone={resource.timezone}>
+            {resource.name}
+          </option>
+        ))}
+      </select>
+
+      <label for="schedule-timezone">{t("Time zone")}</label>
+      <input
+        id="schedule-timezone"
+        type="text"
+        required
+        autocomplete="off"
+        placeholder="Asia/Jakarta"
+      />
+
+      <label for="schedule-from">{t("Effective from")}</label>
+      <input id="schedule-from" type="date" required />
+
+      <label for="schedule-to">
+        {t("Effective until (optional, exclusive)")}
+      </label>
+      <input id="schedule-to" type="date" />
+
+      <fieldset class="admin-fieldset">
+        <legend>{t("Open on")}</legend>
+        {DAY_ORDER.map((day) => (
+          <label class="checkbox-label" for={`schedule-day-${day}`}>
+            <input
+              id={`schedule-day-${day}`}
+              type="checkbox"
+              class="schedule-day"
+              value={day}
+              checked={day !== "sat" && day !== "sun"}
+            />
+            {DAY_LABEL[day]}
+          </label>
+        ))}
+      </fieldset>
+
+      <label for="schedule-open">{t("Opens at")}</label>
+      <input id="schedule-open" type="time" required value="09:00" />
+      <label for="schedule-close">{t("Closes at")}</label>
+      <input id="schedule-close" type="time" required value="17:00" />
+
+      <button type="submit" id="schedule-submit">
+        {t("Add opening hours")}
+      </button>
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <>
+      <p
+        id="schedule-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+      <div
+        class="data-table-scroll fade-in-up"
+        role="region"
+        tabindex="0"
+        aria-labelledby="schedules-table-caption"
+      >
+        <table class="data-table data-table--stack" id="schedules-table">
+          <caption id="schedules-table-caption">
+            {tn("{count} schedule", "{count} schedules", schedules.length, {
+              count: schedules.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Applies to")}</th>
+              <th scope="col">{t("Time zone")}</th>
+              <th scope="col">{t("Effective")}</th>
+              <th scope="col">{t("Hours")}</th>
+              <th scope="col">{t("Status")}</th>
+              {showScheduleActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {schedules.length === 0 ? (
+              <tr>
+                <td
+                  class="data-table-empty"
+                  colspan={showScheduleActions ? 6 : 5}
+                >
+                  <div class="empty-state">
+                    <span class="empty-state-title">
+                      {t("No schedules yet")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t(
+                        "Add weekly opening hours so slot resources can be booked."
+                      )}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              schedules.map((schedule) => (
+                <tr data-schedule-row={schedule.id}>
+                  <td data-label={t("Applies to")}>
+                    {schedule.resourceId
+                      ? (resourceName.get(schedule.resourceId) ?? "—")
+                      : t("Every resource without its own hours")}
+                  </td>
+                  <td data-label={t("Time zone")}>{schedule.timezone}</td>
+                  <td data-label={t("Effective")}>
+                    {schedule.effectiveFrom} →{" "}
+                    {schedule.effectiveTo ?? t("open-ended")}
+                  </td>
+                  <td data-label={t("Hours")}>
+                    {hoursSummary(schedule.rules)}
+                  </td>
+                  <td data-label={t("Status")} data-status={schedule.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={
+                        schedule.status === "active" ? "success" : "neutral"
+                      }
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {STATUS_LABEL[schedule.status]}
+                    </span>
+                  </td>
+                  {showScheduleActions && (
+                    <td data-label={t("Actions")} class="stacked-block">
+                      {schedule.status === "active" && (
+                        <div class="row-actions">
+                          {canUpdate && (
+                            <>
+                              <input
+                                type="date"
+                                class="schedule-end-input"
+                                data-schedule-end={schedule.id}
+                                aria-label={t("New end date, exclusive")}
+                              />
+                              <button
+                                type="button"
+                                class="module-toggle schedule-end-btn"
+                                data-schedule-id={schedule.id}
+                              >
+                                {t("End on")}
+                              </button>
+                            </>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              class="module-toggle schedule-deactivate-btn"
+                              data-schedule-id={schedule.id}
+                            >
+                              {t("Deactivate")}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )}
+
+  {canRead && !loadError && canCreate && (
+    <form id="exception-form" class="admin-create-form fade-in-up">
+      <p class="form-legend">{t("Add a closure or special hours")}</p>
+      <p
+        id="exception-form-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+
+      <label for="exception-resource">{t("Resource")}</label>
+      <select id="exception-resource" required>
+        {liveResources.map((resource) => (
+          <option value={resource.id}>{resource.name}</option>
+        ))}
+      </select>
+
+      <label for="exception-kind">{t("Type")}</label>
+      <select id="exception-kind">
+        <option value="closed">{KIND_LABEL.closed}</option>
+        <option value="override_hours">{KIND_LABEL.override_hours}</option>
+      </select>
+
+      <label for="exception-from">{t("First day")}</label>
+      <input id="exception-from" type="date" required />
+      <label for="exception-to">{t("Back to normal on")}</label>
+      <input id="exception-to" type="date" required />
+
+      <div id="exception-hours" hidden>
+        <label for="exception-open">{t("Opens at")}</label>
+        <input id="exception-open" type="time" value="09:00" />
+        <label for="exception-close">{t("Closes at")}</label>
+        <input id="exception-close" type="time" value="13:00" />
+      </div>
+
+      <label for="exception-reason">{t("Reason")}</label>
+      <select id="exception-reason">
+        <option value="">{t("No reason")}</option>
+        {Object.entries(EXCEPTION_REASON_LABEL).map(([value, label]) => (
+          <option value={value}>{label}</option>
+        ))}
+      </select>
+
+      <button type="submit" id="exception-submit">
+        {t("Add")}
+      </button>
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" id="exceptions-section">
+      <h2 class="admin-section-title">
+        {t("Closures and special hours")}
+        <span class="count-pill">{exceptions.length}</span>
+      </h2>
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="exceptions-table-caption"
+      >
+        <table class="data-table data-table--stack" id="exceptions-table">
+          <caption id="exceptions-table-caption">
+            {tn("{count} entry", "{count} entries", exceptions.length, {
+              count: exceptions.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Resource")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Dates")}</th>
+              <th scope="col">{t("Reason")}</th>
+              {canDelete && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {exceptions.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={canDelete ? 5 : 4}>
+                  <div class="empty-state">
+                    <span class="empty-state-title">{t("No closures")}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              exceptions.map((entry) => (
+                <tr data-exception-row={entry.id}>
+                  <td data-label={t("Resource")}>
+                    {entry.resourceId
+                      ? (resourceName.get(entry.resourceId) ?? "—")
+                      : t("Through a schedule")}
+                  </td>
+                  <td data-label={t("Type")} data-kind={entry.kind}>
+                    {KIND_LABEL[entry.kind]}
+                  </td>
+                  <td data-label={t("Dates")}>
+                    {entry.localFrom} → {entry.localTo}
+                  </td>
+                  <td data-label={t("Reason")}>
+                    {entry.reasonCode
+                      ? (EXCEPTION_REASON_LABEL[entry.reasonCode] ??
+                        entry.reasonCode)
+                      : "—"}
+                  </td>
+                  {canDelete && (
+                    <td data-label={t("Actions")} class="stacked-block">
+                      <div class="row-actions">
+                        <button
+                          type="button"
+                          class="module-toggle exception-delete-btn"
+                          data-exception-id={entry.id}
+                        >
+                          {t("Remove")}
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP: it makes Astro bundle this script as an
+  // external file (an import-free script is inlined, and inline is blocked).
+  import {
+    inputValue,
+    onAction,
+    onSubmit
+  } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    bookingMutate,
+    messageBox,
+    readMessages
+  } from "../../../lib/ui/booking-admin-client";
+  import { textOrNull } from "../../../lib/booking-admin-format";
+
+  const messages = readMessages();
+  const scheduleError = messageBox("schedule-form-error");
+  const exceptionError = messageBox("exception-form-error");
+  const actionError = messageBox("schedule-action-error");
+
+  // A schedule bound to a resource is written in that resource's zone.
+  const scheduleResource = document.getElementById("schedule-resource");
+  const scheduleZone = document.getElementById("schedule-timezone");
+  scheduleResource?.addEventListener("change", () => {
+    const option = (scheduleResource as HTMLSelectElement).selectedOptions[0];
+    if (scheduleZone instanceof HTMLInputElement && option?.dataset.timezone) {
+      scheduleZone.value = option.dataset.timezone;
+    }
+  });
+
+  const kind = document.getElementById("exception-kind");
+  const hours = document.getElementById("exception-hours");
+  kind?.addEventListener("change", () => {
+    if (hours)
+      hours.hidden = (kind as HTMLSelectElement).value !== "override_hours";
+  });
+
+  onSubmit("schedule-form", async ({ submit }) => {
+    const open = inputValue("schedule-open");
+    const close = inputValue("schedule-close");
+    const weekly: Record<string, { from: string; to: string }[]> = {};
+
+    for (const box of Array.from(
+      document.querySelectorAll<HTMLInputElement>(".schedule-day")
+    )) {
+      if (box.checked) weekly[box.value] = [{ from: open, to: close }];
+    }
+
+    await bookingMutate(
+      submit,
+      scheduleError,
+      messages,
+      "POST",
+      "/api/v1/booking/schedules",
+      {
+        resourceId: textOrNull(inputValue("schedule-resource")),
+        timezone: inputValue("schedule-timezone"),
+        effectiveFrom: inputValue("schedule-from"),
+        effectiveTo: textOrNull(inputValue("schedule-to")),
+        rules: { weekly }
+      }
+    );
+  });
+
+  onSubmit("exception-form", async ({ submit }) => {
+    const isHours =
+      (kind as HTMLSelectElement | null)?.value === "override_hours";
+
+    await bookingMutate(
+      submit,
+      exceptionError,
+      messages,
+      "POST",
+      "/api/v1/booking/schedule-exceptions",
+      {
+        resourceId: inputValue("exception-resource"),
+        localFrom: inputValue("exception-from"),
+        localTo: inputValue("exception-to"),
+        kind: isHours ? "override_hours" : "closed",
+        ...(isHours
+          ? {
+              windows: [
+                {
+                  from: inputValue("exception-open"),
+                  to: inputValue("exception-close")
+                }
+              ]
+            }
+          : {}),
+        reasonCode: textOrNull(inputValue("exception-reason"))
+      }
+    );
+  });
+
+  onAction(".schedule-end-btn", async (button) => {
+    const id = button.dataset.scheduleId;
+    if (!id) return;
+    const input = document.querySelector<HTMLInputElement>(
+      `[data-schedule-end="${id}"]`
+    );
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "PATCH",
+      `/api/v1/booking/schedules/${id}`,
+      { effectiveTo: input?.value ?? "" }
+    );
+  });
+
+  onAction(".schedule-deactivate-btn", async (button) => {
+    const id = button.dataset.scheduleId;
+    if (!id) return;
+    if (!(await confirmAction(messages.confirmDeactivate ?? ""))) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "DELETE",
+      `/api/v1/booking/schedules/${id}`
+    );
+  });
+
+  onAction(".exception-delete-btn", async (button) => {
+    const id = button.dataset.exceptionId;
+    if (!id) return;
+    if (!(await confirmAction(messages.confirmDeleteException ?? ""))) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "DELETE",
+      `/api/v1/booking/schedule-exceptions/${id}`
+    );
+  });
+</script>

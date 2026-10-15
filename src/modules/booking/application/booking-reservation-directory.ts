@@ -340,3 +340,30 @@ export async function listReservations(
         : null
   };
 }
+
+/**
+ * Which of these reservations are HELD with a hold that has run out on the
+ * DATABASE clock (`hold_expires_at <= clock_timestamp()`, the rule of
+ * `booking-hold-expiry.ts`). The sweep has not released them yet, and the
+ * allocator will reclaim them on the next claim, so an operator must not read
+ * them as live promises. The clock is the database's, never the web server's.
+ */
+export async function overdueHoldIds(
+  tx: Sql,
+  tenantId: string,
+  reservationIds: readonly string[]
+): Promise<Set<string>> {
+  if (reservationIds.length === 0) {
+    return new Set();
+  }
+
+  const rows = (await tx`
+    SELECT id FROM awcms_booking_reservations
+    WHERE tenant_id = ${tenantId}
+      AND id = ANY(${tx.array([...new Set(reservationIds)], "uuid")})
+      AND status = 'held'
+      AND hold_expires_at <= clock_timestamp()
+  `) as { id: string }[];
+
+  return new Set(rows.map((row) => row.id));
+}
