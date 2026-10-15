@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1da2e0e30b9b5a584bc8d6e2f7328e8d0ae3e0c072a5ce21c05ad1d0096194be -->
+<!-- i18n-source-hash: sha256:a3de8cbea3fce07c1e43d1512408f5ec18d32ada914f91b8a690ab0e71fc3481 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-134 target menjalankan berkas di `scripts/`; 59 di antaranya
+136 target menjalankan berkas di `scripts/`; 61 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -139,6 +139,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `news-media:reconcile`                    | `news-media-r2-reconcile.ts`                   | —    |
 | `omes:repository-progress:poll`           | `omes-repository-progress-poll.ts`             | —    |
 | `openapi:bundle`                          | `openapi-bundle.ts`                            | —    |
+| `payroll:sql-boundary:check`              | `payroll-sql-boundary-check.ts`                | ✅   |
 | `project-state:inventory:check`           | `project-state-inventory.ts`                   | ✅   |
 | `project-state:inventory:generate`        | `project-state-inventory.ts`                   | —    |
 | `push:dispatch`                           | `push-dispatch.ts`                             | —    |
@@ -154,6 +155,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `scripts:inventory:check`                 | `scripts-inventory.ts`                         | ✅   |
 | `scripts:inventory:generate`              | `scripts-inventory.ts`                         | —    |
 | `security:readiness`                      | `security-readiness.ts`                        | —    |
+| `sensitive-reads:check`                   | `sensitive-reads-check.ts`                     | ✅   |
 | `site-origin:check`                       | `site-origin-check.ts`                         | ✅   |
 | `site-search:reconcile`                   | `site-search-reconcile.ts`                     | —    |
 | `site-search:sources:check`               | `site-search-sources-check.ts`                 | ✅   |

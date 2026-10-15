@@ -182,6 +182,11 @@ export const BOUNDED_BY_DESIGN: readonly {
     table: "awcms_partner_managed_tenants",
     reason:
       "ADR-0089, and bounded by the table above rather than independently — the `awcms_user_group_members` shape, one entry class rather than a new one. At most one row per (tenant, partner) by unique index, and the partner side is FK-bound to a registry that is itself operator-authored, so the ceiling is tenants x registered partners with both factors human-authored. It is not a log: severing an engagement is a DELETE (ADR-0089 chose hard delete precisely so no dead mapping can be resurrected by a bug), so the table holds the present, and 'who reached into this tenant last March' is answered by `awcms_audit_events` with its own retention. An age-based purge would delete LIVE engagements, which for the partner surface PR 8.4 builds means access disappearing mid-support-case with no revocation anybody performed."
+  },
+  {
+    table: "awcms_sensitive_read_windows",
+    reason:
+      "Issue #978 / hr-payroll.md PS-18. At most ONE row per (tenant, actor, module, kind), by primary key, and a later window OVERWRITES the row in place rather than adding one: the ceiling is actors x registered sensitive-read kinds (a handful), never a function of how many reads happen. It is a working counter, not evidence - the evidence is the audit row the same call writes to `awcms_audit_events`, which has its own retention - and it holds no amount, no name and no record id, only a count. An age-based purge would be actively WRONG rather than merely unnecessary: `executionMode: 'generic'` deletes by age with no status predicate, so it would delete the counter of an actor who is reading RIGHT NOW, the next read would see no window and write a fresh opening audit row, and the coalescing that stops the log flooding would break exactly for the heaviest readers. The application role holds no DELETE on it (sql/224)."
   }
 ];
 

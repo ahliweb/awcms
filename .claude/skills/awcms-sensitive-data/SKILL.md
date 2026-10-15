@@ -64,3 +64,17 @@ flowchart LR
 - Any new sensitive column has been weighed against the `redactedColumns`
   of the owning module's `subjectData` descriptor (skill `awcms-data-lifecycle`
   §Data subject rights), then `bun run subject-data:registry:check` is green.
+
+## Payroll data and CSV (Issue #978, PS-18)
+
+- No reporting projection, site-search source, comments resource, edge-cache
+  surface or report export may name `awcms_hr_payroll_*`, `awcms_hr_compensation`,
+  `awcms_hr_payout_accounts` or `awcms_hr_payslips`, or be declared by
+  `hr_payroll`. One list, `src/modules/_shared/payroll-data-boundary.ts`, enforced
+  by every registry gate and again where SQL is built. A future payroll report
+  needs its own permission, a minimum cohort size and its own ADR
+  (`docs/awcms/hr-payroll.md` section 13.3). `subjectData` and `dataLifecycle` are
+  the two deliberate exceptions.
+- Every CSV writer goes through `src/lib/security/csv-formula.ts`
+  (`csvCellForWrite`): a cell starting with `=`, `+`, `-`, `@`, TAB or CR gets a
+  leading single quote. Use `{ reversible: true }` for a file that is parsed back.

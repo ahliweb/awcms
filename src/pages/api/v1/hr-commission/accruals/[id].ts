@@ -1,3 +1,4 @@
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import { getAccrual } from "../../../../../modules/hr-commission/application/hr-commission-accrual-ledger";
@@ -18,8 +19,21 @@ export const GET = defineTenantRoute<IdPrepared>({
     return id ? { id } : badId();
   },
   authorize: HR_COMMISSION_GUARDS.accruals.read,
-  handler: async ({ tx, tenantId, prepared }) => {
+  handler: async ({ tx, tenantId, auth, prepared, locals }) => {
     const found = await getAccrual(tx, tenantId, prepared.id);
+
+    // PS-18: a read of one person's earnings is an audited event (ids and
+    // counts only), on this transaction so a failed audit returns nothing.
+    if (found) {
+      await recordSensitiveRead(tx, {
+        tenantId,
+        actorTenantUserId: auth.context.tenantUserId,
+        permission: "hr_commission.accruals.read",
+        itemCount: 1,
+        resourceIds: [found.accrual.id],
+        correlationId: locals.correlationId
+      });
+    }
 
     return found
       ? ok(found)

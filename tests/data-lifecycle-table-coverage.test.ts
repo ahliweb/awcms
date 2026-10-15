@@ -537,7 +537,12 @@ describe("the real repository", () => {
       // says so and names the generic-purge hazard (it would delete accruals still
       // payable). The recorded follow-up is a reviewed archive-then-purge, which
       // replaces both entries with a real descriptor.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(18);
+      // 19 since Issue #978: `awcms_sensitive_read_windows`, the one entry
+      // bounded by a PRIMARY KEY on (tenant, actor, module, kind) that a later
+      // window overwrites in place, not by authorship. A generic age purge would
+      // delete the counter of an actor reading right now and re-open the audit
+      // flood the table exists to prevent.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(19);
     });
 
     test("every entry names a table that really exists in sql/", () => {

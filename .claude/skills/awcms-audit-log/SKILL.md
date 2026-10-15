@@ -70,3 +70,19 @@ details and operator-safe troubleshooting guidance.
 ## Correlation ID & extension point
 
 Since Issue #447: the `correlationId` on `AuditEventInput` just needs to be filled from `context.locals.correlationId` (do not generate a new UUID yourself); and every successful `recordAuditEvent` automatically calls the `AuditExportHook` extension point if one is installed (no-op by default) — see `awcms-observability` for the full rules before installing/implementing a consumer at that point.
+
+## Sensitive reads (Issue #978, PS-18)
+
+A READ of data that is harmful in the wrong hands (salary, line-level pay,
+another employee's payslip, any export) is itself an auditable event. Call
+`recordSensitiveRead(tx, { tenantId, actorTenantUserId, permission, itemCount,
+resourceIds })` (`src/modules/logging/application/sensitive-read-audit.ts`) on the
+SAME transaction as the read, after authorisation and before data is returned.
+It takes a PERMISSION KEY and looks the kind, severity and window up in
+`src/modules/_shared/sensitive-reads.ts`, so a route cannot understate itself. It
+records ids (UUIDs only) and counts, never an amount; browsing is coalesced per
+actor, kind and window (`awcms_sensitive_read_windows`, `sql/224`); an export is
+never coalesced; and it is fail-closed. `bun run sensitive-reads:check` fails a
+route that guards a covered permission without calling it, and an `hr_payroll`
+read, list, export or download permission with no policy and no reason in
+`NOT_SENSITIVE_READS`. Full design: `docs/awcms/hr-payroll.md` section 13.3.

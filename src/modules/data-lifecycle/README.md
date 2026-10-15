@@ -195,6 +195,15 @@ SHA-256 checksummed, one manifest row per artifact
 `archive.port` value a descriptor can declare (forward-compatible typing) but has
 no concrete adapter yet.
 
+CSV archives are formula-neutral (Issue #978, PS-18) through the shared
+`src/lib/security/csv-formula.ts`, in its **reversible** mode: a cell beginning
+with `=`, `+`, `-`, `@`, TAB or CR is written with a leading single quote, a cell
+that already begins with `'` plus one of those is prefixed too, and
+`ArchivePort.read()` strips exactly one quote, so the restore procedure below gets
+the original bytes back. This module is deliberately NOT bound by the payroll data
+boundary (`src/modules/_shared/payroll-data-boundary.ts`): retention and legal
+hold must name every payroll table (PS-17).
+
 ### Restore procedure (local/offline archive)
 
 `ArchivePort.read()` reads an artifact back for reconciliation/testing; it

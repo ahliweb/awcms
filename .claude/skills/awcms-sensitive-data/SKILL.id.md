@@ -5,7 +5,7 @@ description: Tangani data sensitif AWCMS (email, phone, WhatsApp, NPWP, NIK, NIT
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:1759a7ba251aec9174cf7f91f7b4a067f1eabeb1a5e87178e8d79576613f4012 -->
+<!-- i18n-source-hash: sha256:ae7f30f571574d6203a800296b305a9ce3d9d9b1e838f237e17f0d96f64f6d49 -->
 
 # AWCMS — Sensitive Data Handling
 
@@ -66,3 +66,18 @@ flowchart LR
 - Kolom sensitif baru sudah dipertimbangkan terhadap `redactedColumns`
   descriptor `subjectData` modul pemiliknya (skill `awcms-data-lifecycle`
   §Hak subjek data), lalu `bun run subject-data:registry:check` hijau.
+
+## Data payroll dan CSV (Issue #978, PS-18)
+
+- Tidak ada proyeksi reporting, sumber site-search, resource comments, surface
+  edge-cache, atau ekspor laporan yang boleh menyebut `awcms_hr_payroll_*`,
+  `awcms_hr_compensation`, `awcms_hr_payout_accounts`, atau `awcms_hr_payslips`,
+  atau dideklarasikan oleh `hr_payroll`. Satu daftar,
+  `src/modules/_shared/payroll-data-boundary.ts`, ditegakkan setiap gerbang
+  registry dan lagi saat SQL dibangun. Laporan payroll mendatang membutuhkan izin
+  sendiri, ukuran kohort minimum, dan ADR sendiri
+  (`docs/awcms/hr-payroll.id.md` bagian 13.3). `subjectData` dan `dataLifecycle`
+  adalah dua pengecualian yang disengaja.
+- Setiap penulis CSV lewat `src/lib/security/csv-formula.ts` (`csvCellForWrite`):
+  sel yang diawali `=`, `+`, `-`, `@`, TAB, atau CR diberi satu tanda kutip tunggal
+  di depan. Pakai `{ reversible: true }` untuk berkas yang di-parse kembali.

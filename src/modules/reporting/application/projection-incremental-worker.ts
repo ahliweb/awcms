@@ -89,6 +89,8 @@ import {
 } from "./projection-state-store";
 import { findRunningRebuild } from "./rebuild-run-store";
 
+import { assertNotPayrollTable } from "../../_shared/payroll-data-boundary";
+
 const TABLE_NAME_PATTERN = /^awcms_[a-z][a-z0-9_]*$/;
 const COLUMN_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -99,6 +101,12 @@ function assertSafeIdentifier(name: string, kind: "table" | "column"): string {
     throw new Error(
       `reporting projection engine: refusing to build SQL from an unsafe ${kind} identifier: ${JSON.stringify(name)}.`
     );
+  }
+
+  // Issue #978 (PS-18): defence in depth behind the registry gate — an engine
+  // must not read a payroll table even if a descriptor bypassed validation.
+  if (kind === "table") {
+    assertNotPayrollTable(name, "reporting projection engine");
   }
 
   return name;

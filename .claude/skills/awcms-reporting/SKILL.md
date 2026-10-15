@@ -221,3 +221,11 @@ projection/export permission catalog), `awcms-idempotency` (rebuild/export mutat
 (the `projections.astro` markup patterns), `awcms-module-management` (the same
 `ProjectionDescriptor`/`listModules()` contract as
 `dataLifecycle`/`sodRules`).
+
+## Payroll is not reportable (Issue #978, PS-18)
+
+A projection may not read a payroll table or be declared by `hr_payroll`, and a
+projection export refuses the same at write time. See
+`src/modules/_shared/payroll-data-boundary.ts` and
+`docs/awcms/hr-payroll.md` section 13.3 (including the route to a future payroll
+report). CSV exports are formula-neutral through `src/lib/security/csv-formula.ts`.

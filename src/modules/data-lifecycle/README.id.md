@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b81432901f8d3bd70d081b837dcdc071e6fdc6246fae7d343f9b352ab1a79726 -->
+<!-- i18n-source-hash: sha256:f45af4e3bcfc9909dcd50ed2ec31dfff3b24d10db5a982c77b8b0995ffeddc93 -->
 
 # Data Lifecycle
 
@@ -214,6 +214,15 @@ manifest per artefak (`awcms_data_lifecycle_archive_manifests`).
 `external_object_storage` adalah nilai `archive.port` valid yang boleh
 dideklarasikan sebuah deskriptor (pengetikan kompatibel-ke-depan) tetapi belum
 punya adapter konkret.
+
+Arsip CSV bebas-formula (Issue #978, PS-18) lewat `src/lib/security/csv-formula.ts`
+bersama, dalam mode **reversible**-nya: sel yang diawali `=`, `+`, `-`, `@`, TAB,
+atau CR ditulis dengan satu tanda kutip tunggal di depan, sel yang sudah diawali
+`'` plus salah satunya juga diberi awalan, dan `ArchivePort.read()` membuang tepat
+satu kutip, sehingga prosedur restore di bawah mendapat byte aslinya kembali.
+Modul ini dengan sengaja TIDAK terikat batas data payroll
+(`src/modules/_shared/payroll-data-boundary.ts`): retensi dan legal hold harus
+menyebut setiap tabel payroll (PS-17).
 
 ### Prosedur restore (archive lokal/offline)
 
