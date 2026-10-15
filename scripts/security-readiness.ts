@@ -1693,7 +1693,23 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // in `sql/284` (status, outcome_code, message_id, settled_at, attempts,
   // reconciled_at, updated_at; never the identity of the debt), so the
   // table-level matrix records SELECT only.
-  awcms_booking_reminder_intents: ["SELECT"]
+  awcms_booking_reminder_intents: ["SELECT"],
+  // Issue #998 (sql/280). The domain-event dispatcher runs the
+  // `hr_workforce.attendance_correction_settler` consumer as `awcms_worker`:
+  // it applies a finished approval's verdict to an attendance correction
+  // exactly as `POST .../settle` does. Table-level verbs only here; the UPDATE
+  // it needs is COLUMN-scoped (corrections: status/decided_by/decided_at/
+  // updated_at; employments and workflow instances: updated_at, purely so
+  // `SELECT ... FOR SHARE` in the guard triggers is permitted) and column
+  // privileges are invisible to `has_table_privilege`. The events table is
+  // append-only (no UPDATE/DELETE); the database guard, not this grant, is what
+  // refuses a move the workflow's verdict does not support.
+  // The corrections and workflow-decisions grants are COLUMN-scoped SELECTs
+  // (neither `reason` nor `override_reason` is readable), so those two tables
+  // are deliberately absent from this table-level map.
+  awcms_hr_attendance_events: ["SELECT", "INSERT"],
+  awcms_hr_workforce_settings: ["SELECT"],
+  awcms_hr_employments: ["SELECT"]
 };
 
 /**

@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 213   |
+| Migrations                          | 215   |
 | `awcms_*` tables                    | 216   |
 | Tables with `FORCE` RLS             | 198   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 675   |
+| Test files                          | 676   |
 | Route files                         | 559   |
 | ADR                                 | 292   |
 
@@ -48,7 +48,7 @@
 | `omes_control`         | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`                                                                                  |
 | `inventory`            | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`, `reporting`                                  |
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory` |
-| `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
+| `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`, `domain_event_runtime`                                                         |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 | `booking`              | 0.3.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
 | `hr_commission`        | 0.2.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
@@ -269,8 +269,10 @@
 | 209 | `sql/261_awcms_principal_other_tenant_identity.sql`                |
 | 210 | `sql/262_awcms_mfa_enrollment_grant_origin.sql`                    |
 | 211 | `sql/276_awcms_idempotency_keys_worker_purge_grant.sql`            |
-| 212 | `sql/284_awcms_booking_reminder_intents.sql`                       |
-| 213 | `sql/285_awcms_booking_reminder_functions.sql`                     |
+| 212 | `sql/280_awcms_hr_attendance_settle_worker_grants.sql`             |
+| 213 | `sql/281_awcms_hr_attendance_correction_decider_nullable.sql`      |
+| 214 | `sql/284_awcms_booking_reminder_intents.sql`                       |
+| 215 | `sql/285_awcms_booking_reminder_functions.sql`                     |
 
 ### Tables & Row-Level Security
 
@@ -499,7 +501,7 @@
 | ------------- | ---------- |
 | `(root)`      | 518        |
 | `e2e`         | 26         |
-| `integration` | 130        |
+| `integration` | 131        |
 | `unit`        | 1          |
 
 ### Routes

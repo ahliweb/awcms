@@ -757,6 +757,93 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       expect(await count("awcms_hr_attendance_events")).toBe(1);
     });
 
+    test("#998: an event recorded for somebody else leaves an audit row (a supervisor always; a kiosk or import only when late); self never; a replay adds none", async () => {
+      if (!handlerReady) return;
+      const me = await employee("me", ["hr_workforce.clock.create"]);
+      const hr = await seedUser(env.tenantId, "hr-audit", [
+        "hr_workforce.attendance.create"
+      ]);
+      const target = await hire("audited");
+      const audited = async () =>
+        (await admin()`
+          SELECT resource_id, severity, attributes::text AS attributes,
+                 actor_tenant_user_id
+          FROM awcms_audit_events
+          WHERE tenant_id = ${env.tenantId}
+            AND action = 'hr_workforce.attendance_event.recorded_for_other'
+          ORDER BY created_at`) as {
+          resource_id: string;
+          severity: string;
+          attributes: string;
+          actor_tenant_user_id: string;
+        }[];
+
+      // self: never audited.
+      expect((await clock(me.employmentId, {}, me.token)).status).toBe(201);
+      expect(await audited()).toHaveLength(0);
+
+      // A punctual kiosk tap: not audited (the event is the record).
+      const punctual = await clock(
+        target,
+        { source: "kiosk", occurredAt: iso(-5) },
+        hr.token
+      );
+      expect(punctual.status).toBe(201);
+      expect(punctual.body.data!.late).toBe(false);
+      expect(await audited()).toHaveLength(0);
+
+      // A supervisor event: always audited, with the actor and no free text.
+      const key = nextKey();
+      // Pinned: a default instant is "now" at second precision, so a second
+      // boundary between the call and its replay would change the request hash.
+      const supervisedAt = iso(-2);
+      const supervised = await clock(
+        target,
+        {
+          source: "supervisor",
+          clientEventKey: "sup-1",
+          occurredAt: supervisedAt
+        },
+        hr.token,
+        key
+      );
+      expect(supervised.status).toBe(201);
+      const rows = await audited();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.resource_id).toBe(supervised.body.data!.id);
+      expect(rows[0]!.actor_tenant_user_id).toBe(hr.tenantUserId);
+      expect(rows[0]!.severity).toBe("info");
+      expect(rows[0]!.attributes).toContain(target);
+      expect(rows[0]!.attributes).toContain("supervisor");
+
+      // A replay of the same request adds no second row.
+      const replay = await clock(
+        target,
+        {
+          source: "supervisor",
+          clientEventKey: "sup-1",
+          occurredAt: supervisedAt
+        },
+        hr.token,
+        key
+      );
+      expect(replay.body).toEqual(supervised.body);
+      expect(await audited()).toHaveLength(1);
+
+      // A stale offline replay (past fifteen minutes): audited, as a warning.
+      const late = await clock(
+        target,
+        { source: "import", occurredAt: iso(-3600) },
+        hr.token
+      );
+      expect(late.status).toBe(201);
+      expect(late.body.data!.late).toBe(true);
+      const afterLate = await audited();
+      expect(afterLate).toHaveLength(2);
+      expect(afterLate[1]!.resource_id).toBe(late.body.data!.id);
+      expect(afterLate[1]!.severity).toBe("warning");
+    });
+
     test("a holder of attendance.create records for others but can never use source self", async () => {
       if (!handlerReady) return;
       const supervisor = await seedUser(env.tenantId, "sup", [
@@ -1549,6 +1636,68 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       expect(await count("awcms_hr_attendance_events")).toBe(0);
     });
 
+    test("#998: the requester can settle their OWN rejected or cancelled correction (nothing is applied); approving stays refused", async () => {
+      if (!handlerReady) return;
+      const { approver } = await setup();
+      const requester = await employee("self-closer", [
+        "hr_workforce.corrections.create",
+        "hr_workforce.corrections.approve"
+      ]);
+      const request = async () =>
+        (
+          await requestCorrection(
+            { employmentId: requester.employmentId },
+            requester.token
+          )
+        ).body.data!;
+
+      const rejected = await request();
+      expect(
+        (await decide(rejected.workflowInstanceId, approver.token, "reject"))
+          .status
+      ).toBe(200);
+      const closed = await settle(rejected.id, requester.token);
+
+      expect(closed.status).toBe(200);
+      expect(closed.body.data!.status).toBe("rejected");
+      expect(closed.body.data!.decidedBy).toBe(approver.tenantUserId);
+
+      const cancelled = await request();
+      await admin()`
+        UPDATE awcms_workflow_instances
+        SET status = 'cancelled', cancelled_at = now(),
+            cancelled_by_tenant_user_id = ${env.ownerTenantUserId}
+        WHERE id = ${cancelled.workflowInstanceId}`;
+      const withdrawn = await settle(cancelled.id, requester.token);
+
+      expect(withdrawn.status).toBe(200);
+      expect(withdrawn.body.data!.status).toBe("withdrawn");
+
+      // Still pending in the engine: the guard applies, 403 (not 409).
+      const stillPending = await request();
+      expect((await settle(stillPending.id, requester.token)).status).toBe(403);
+      // Approved by somebody else: the guard still applies to the requester.
+      const approved = await request();
+      expect(
+        (await decide(approved.workflowInstanceId, approver.token)).status
+      ).toBe(200);
+      expect((await settle(approved.id, requester.token)).status).toBe(403);
+      expect(await count("awcms_hr_attendance_events")).toBe(0);
+
+      // The permission itself is still required.
+      const noApprove = await employee("no-approve", [
+        "hr_workforce.corrections.create"
+      ]);
+      const mine = (
+        await requestCorrection(
+          { employmentId: noApprove.employmentId },
+          noApprove.token
+        )
+      ).body.data!;
+      await decide(mine.workflowInstanceId, approver.token, "reject");
+      expect((await settle(mine.id, noApprove.token)).status).toBe(403);
+    });
+
     test("withdraw: the REQUESTER only, while pending; the instance is cancelled; a replay is idempotent", async () => {
       if (!handlerReady) return;
       const { approver, worker } = await setup();
@@ -1768,13 +1917,16 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       if (!handlerReady) return;
       const { worker } = await setup();
       const key = nextKey();
+      // A pinned instant: the default is "now - 1h" at second precision, so a
+      // second boundary between the two calls changed the request hash.
+      const proposedOccurredAt = iso(-3600);
       const first = await requestCorrection(
-        { employmentId: worker.employmentId },
+        { employmentId: worker.employmentId, proposedOccurredAt },
         worker.token,
         key
       );
       const replay = await requestCorrection(
-        { employmentId: worker.employmentId },
+        { employmentId: worker.employmentId, proposedOccurredAt },
         worker.token,
         key
       );

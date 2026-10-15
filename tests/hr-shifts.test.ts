@@ -475,7 +475,8 @@ describe("StaffAvailabilityPort contract (a FAKE consumer and a FAKE provider)",
 
     expect(hrWorkforceModule.dependencies).toEqual([
       "tenant_admin",
-      "profile_identity"
+      "profile_identity",
+      "domain_event_runtime"
     ]);
   });
 });

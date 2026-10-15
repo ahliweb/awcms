@@ -163,16 +163,42 @@ superseded".
   tenant lowering its skew below the proposal.
   Approvers are the definition's assignees; the decision itself is a workflow
   decision (`POST /workflows/tasks/{id}/decisions`).
-- **`settle` applies the verdict (pull, like procurement).** `POST
-.../attendance-corrections/{id}/settle` (`corrections.approve`, high-risk) reads the
-  instance: pending -> `409 CORRECTION_STILL_PENDING`; approved -> the status moves
-  to `approved` **and** the superseding event is appended in one savepoint; rejected
-  -> `rejected`; cancelled elsewhere -> `withdrawn`. Calling it is a step somebody
-  with `corrections.approve` takes (a domain-event consumer that settles
-  automatically is a recorded follow-up).
+- **Settlement is automatic; `settle` is the manual fallback (#998).** The verdict
+  is applied by `settleCorrection`: approved -> the status moves to `approved`
+  **and** the superseding event is appended in one savepoint; rejected ->
+  `rejected`; cancelled -> `withdrawn`. A domain-event consumer,
+  `hr_workforce.attendance_correction_settler` (ADR-0134, declared in `module.ts`),
+  calls it as soon as `workflow_approval` publishes
+  `awcms.workflow.instance.approved` / `.rejected` / `.cancelled` (one event per
+  finished instance, on every path: a decision, a force-decision, an
+  administrator's cancel, an escalation timeout), so nobody has to remember and no
+  one needs `corrections.approve` for it to happen. It runs in the dispatcher
+  (`bun run domain-events:dispatch`) as `awcms_worker` with the narrow grants of
+  `sql/280`, so **a tenant must run the dispatcher** for settlement to follow the
+  decision (without it the correction waits, exactly as before). The consumer has
+  **no acting user**: the audit row has no actor and carries `trigger =
+workflow_event`; `decided_by` is the human who approved or rejected (NULL for a rejection or cancellation nobody decided: it names who decided, never who settled, `sql/281`; the settler is on the audit row); the
+  superseding event has no `recorded_by`. A **refusal is not an error and is not
+  retried**: an approval with no human approver, one the requester or the employee
+  took part in, a superseded target or an event the guard refuses leaves the correction `pending`, writes one
+  `warning` audit row (`hr_workforce.attendance_correction.auto_settle_skipped`,
+  outcome only, never the reason) and waits for a person. An instance that is not a
+  correction's, an event whose aggregate is not a workflow instance, or an instance still pending matches nothing and is ignored quietly;
+  the worker role reads neither the correction `reason` nor the workflow decisions'
+  `reason` / `override_reason` (column-scoped SELECT, `sql/280`), and may insert only
+  `correction`-sourced events (any member of `awcms_worker` is held to that); an instance finished before this
+  consumer shipped has no delivery and is settled by hand once.
+  The manual route `POST .../attendance-corrections/{id}/settle`
+  (`corrections.approve`, high-risk) reads the instance: pending -> `409
+CORRECTION_STILL_PENDING`, then the same application. There is **no push
+  notification** to the requester yet: that needs a notification template and
+  recipient policy, a separate decision.
 - **Segregation of duties, four layers.** (1) the workflow engine's own guard stops
   the requester deciding; (2) the chokepoint's self-approval guard refuses the
-  requester **settling** (`403`); (3) the handler refuses an approved instance that
+  requester **settling an approved (or still pending) correction** (`403`); it is
+  skipped for a `rejected` / `cancelled` verdict, which applies nothing, so the
+  requester can close their own refused request (#998; the `corrections.approve`
+  permission is still required); (3) the handler refuses an approved instance that
   has no human approving decision (`409 CORRECTION_NO_APPROVER`: a graph with no
   approval node would make the requester their own approver) or in which the
   requester **or the employee the correction is about** took part **directly or as
@@ -214,8 +240,16 @@ superseded".
   by `awcms_app` (no `UPDATE` privilege), which is why the supersession target is
   read plainly: the table is immutable.
 - **Audit and idempotency.** Request, withdraw and settle are audited with ids and
-  statuses only (`info`; settle `warning` when approved); recording an event is not
-  audited (high volume: the event is the record). Every write requires an
+  statuses only (`info`; settle `warning` when approved). Recording an event is
+  audited **when it is recorded for somebody else** (#998): every `supervisor` event
+  (`info`) and a `kiosk` / `import` event flagged `late` (`warning`), as
+  `hr_workforce.attendance_event.recorded_for_other` with the employment, kind,
+  source and `late` (the claimed instant is on the event the row names), and the recorder as the actor; a `self`
+  event and a punctual kiosk/import tap are not (high volume: the event is the
+  record), and a replay adds no second row. `attendance.create` is tenant-wide and
+  seeded to no role by default; the seven-day kiosk/import replay window **bypasses
+  correction approval** by design (it exists for offline queues), which is exactly
+  why a stale one is audited. Every write requires an
   `Idempotency-Key`. Recording, requesting, withdrawing and settling are idempotent
   on top of that.
 - **No domain event yet.** `awcms.hr.attendance.recorded` stays provisional until a
@@ -272,8 +306,9 @@ Open (tracked, not hidden):
   with no replacement) yet: a ghost clock-in is replaced by the true event; no
   sequence validation (a `clock_out` with no `clock_in` is recorded as claimed; the
   effective record is read, not enforced); the 7-day replay window and the 15-minute
-  `late` threshold are constants, not tenant settings; **settle is a pull** (no
-  consumer applies an approval automatically); the manager chain gives read access
+  `late` threshold are constants, not tenant settings; **settlement is automatic** (a
+  domain-event consumer, #998) with `settle` as the manual fallback, and the
+  requester is not notified of the outcome; the manager chain gives read access
   only, so a supervisor still cannot record for a report without
   `attendance.create`; **no per-office scope** on `attendance.read`/`create` (the
   scope adapter is a later issue, as for employments); no domain event; no admin

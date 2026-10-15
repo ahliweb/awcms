@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:2d8d934c706ea94a2bee717efe0a77c4e03a340ee0253688efbb8ddeed1707b5 -->
+<!-- i18n-source-hash: sha256:21a83685bce294f9efe88a16b4cb00cbd7f2ed68641552636d395c2f52bbbf91 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -206,8 +206,7 @@ masa depan daripada skew tenant ditolak saat dibuat dengan `422
 ATTENDANCE_TIME_IN_FUTURE` (guard event akan menolaknya saat persetujuan dan
 koreksi tertahan `pending` selamanya); tanggal masuk dan terminasi employment tidak
 diperiksa, karena guard event tidak memeriksa keduanya untuk event bersumber-koreksi.
-Menerapkan putusan adalah tarik: `POST
-.../attendance-corrections/{id}/settle`. Dasar baca: sendiri (`?mine=true`, setiap employment pemanggil yang hidup, jadi
+Putusan diterapkan otomatis: consumer domain-event `hr_workforce.attendance_correction_settler` (#998, ADR-0134) memanggil `settleCorrection` yang sama dengan `POST .../attendance-corrections/{id}/settle` saat `workflow_approval` menerbitkan event `approved` / `rejected` / `cancelled` milik instance-nya (dispatcher berjalan sebagai `awcms_worker` dengan grant sempit `sql/280`); penolakan membiarkan koreksi `pending` dengan baris audit `auto_settle_skipped` dan route manual tetap ada. Pemohon boleh menyelesaikan koreksinya sendiri yang rejected / cancelled (tidak ada yang diterapkan); persetujuan tetap dipisahkan. Mencatat event untuk orang lain diaudit (setiap event `supervisor`, dan event `kiosk`/`import` yang ditandai `late`). Dasar baca: sendiri (`?mine=true`, setiap employment pemanggil yang hidup, jadi
 orang yang dipekerjakan kembali membaca yang lama dan yang baru) dan
 rantai atasan di bawah pemanggil (`?reports=true`) adalah ownership grant pada route
 BACA; employment yang di-soft-delete memutus rantai. Kunci permission yang ditambahkan

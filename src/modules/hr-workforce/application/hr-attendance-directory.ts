@@ -50,6 +50,7 @@ import {
 } from "../../workflow-approval/application/workflow-recovery";
 import { HR_WORKFORCE_MODULE_KEY } from "../domain/hr-workforce-permissions";
 import {
+  attendanceEventIsAudited,
   CORRECTION_RESOURCE_TYPE,
   type AttendanceKind,
   type AttendanceSource,
@@ -456,11 +457,34 @@ export async function recordEvent(
     return winner ? replayOutcome(winner, input) : { outcome: "key_conflict" };
   }
 
-  return {
-    outcome: "ok",
-    event: (await getEvent(tx, tenantId, attempt.value))!,
-    replayed: false
-  };
+  const event = (await getEvent(tx, tenantId, attempt.value))!;
+
+  // A person recording FOR someone else, or a stale replay, leaves a trace
+  // (ADR-0132 follow-up, #998). `self` and a punctual kiosk/import tap stay
+  // un-audited: high volume, and the event is the record. NEVER a location,
+  // device or free text: ids and classifications only (the claimed instant is on
+  // the event row the audit row names; the audit stays free of any instant).
+  if (attendanceEventIsAudited(event.source, event.late)) {
+    await recordAuditEvent(tx, {
+      tenantId,
+      actorTenantUserId: actor.actorTenantUserId ?? undefined,
+      moduleKey: HR_WORKFORCE_MODULE_KEY,
+      action: "hr_workforce.attendance_event.recorded_for_other",
+      resourceType: "hr_attendance_event",
+      resourceId: event.id,
+      severity: event.late ? "warning" : "info",
+      message: "Attendance event recorded on behalf of an employment.",
+      attributes: {
+        employmentId: event.employmentId,
+        kind: event.kind,
+        source: event.source,
+        late: event.late
+      },
+      correlationId: actor.correlationId
+    });
+  }
+
+  return { outcome: "ok", event, replayed: false };
 }
 
 async function findByKey(
@@ -608,9 +632,14 @@ export async function correctionAccessFacts(
   employmentId: string;
   requestedBy: string;
   isAssignee: boolean;
+  /** The approval instance's own status (`pending`, `approved`, `rejected`, `cancelled`), or null when the row is not visible. */
+  instanceStatus: string | null;
 } | null> {
   const rows = (await tx`
     SELECT c.employment_id, c.requested_by,
+           (SELECT i.status FROM awcms_workflow_instances i
+             WHERE i.tenant_id = c.tenant_id AND i.id = c.workflow_instance_id
+           ) AS instance_status,
            EXISTS (
              SELECT 1
              FROM awcms_workflow_tasks t
@@ -623,13 +652,19 @@ export async function correctionAccessFacts(
            ) AS is_assignee
     FROM awcms_hr_attendance_corrections c
     WHERE c.tenant_id = ${tenantId} AND c.id = ${correctionId}
-  `) as { employment_id: string; requested_by: string; is_assignee: boolean }[];
+  `) as {
+    employment_id: string;
+    requested_by: string;
+    is_assignee: boolean;
+    instance_status: string | null;
+  }[];
 
   return rows[0]
     ? {
         employmentId: rows[0].employment_id,
         requestedBy: rows[0].requested_by,
-        isAssignee: rows[0].is_assignee
+        isAssignee: rows[0].is_assignee,
+        instanceStatus: rows[0].instance_status
       }
     : null;
 }
@@ -1155,8 +1190,11 @@ export async function settleCorrection(
     const rejecter =
       decisions.find(
         (d) => d.decision === "reject" || d.decision === "force_reject"
-      )?.decided_by_tenant_user_id ?? actorId;
+      )?.decided_by_tenant_user_id ?? null;
 
+    // `decided_by` names who DECIDED, never who settled it: a rejection nobody
+    // decided (a graph with a reject node) stores NULL there (`sql/281`), and the
+    // audit row below records who settled it (#998).
     await tx`
       UPDATE awcms_hr_attendance_corrections
       SET status = 'rejected', decided_by = ${rejecter},
@@ -1166,10 +1204,12 @@ export async function settleCorrection(
   } else {
     // `cancelled`: the instance was ended elsewhere (an administrator's recovery
     // action). The correction can no longer be approved.
+    const canceller = instance.cancelled_by_tenant_user_id;
+
     await tx`
       UPDATE awcms_hr_attendance_corrections
       SET status = 'withdrawn',
-          decided_by = ${instance.cancelled_by_tenant_user_id ?? actorId},
+          decided_by = ${canceller},
           decided_at = ${now.toISOString()}::timestamptz, updated_at = now()
       WHERE tenant_id = ${tenantId} AND id = ${correctionId}
     `;
@@ -1193,7 +1233,10 @@ export async function settleCorrection(
       employmentId: row.employment_id,
       status: settled.status,
       appliedEventId: settled.appliedEventId,
-      workflowInstanceId: row.workflow_instance_id
+      workflowInstanceId: row.workflow_instance_id,
+      // `user`: somebody called `settle`; `workflow_event`: the domain-event
+      // consumer applied the verdict (no acting user, so no actor on the row).
+      trigger: actorId === null ? "workflow_event" : "user"
     },
     correlationId: actor.correlationId
   });

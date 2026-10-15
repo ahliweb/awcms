@@ -275,7 +275,7 @@ var (e.g. `AUDIT_LOG_RETENTION_DAYS`) — never re-declared here.
 
 - **Delegated snapshots the worker cannot read (Issue #1040).** Per tenant,
   `data-lifecycle:archive-purge` records a dry-run backlog snapshot for every
-  `delegated` descriptor, which `SELECT`s that table as `awcms_worker`. 29
+  `delegated` descriptor, which `SELECT`s that table as `awcms_worker`. 25
   inventory, procurement, HR and booking tables are deliberately NOT readable by
   the worker (the payroll boundary keeps worker roles away from that data), so
   their snapshots fail. A failing descriptor is isolated: it is logged
