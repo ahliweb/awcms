@@ -43,6 +43,8 @@ Changing the mode is the permission **`hr_payroll.sod_policy.configure`** (resou
 
 Changing the mode requires an `Idempotency-Key`, a reason code, a conditional step-up (ADR-0058 §E) when **relaxing** (tightening is audited and idempotent but does not demand step-up), and writes an audit row at `critical` severity with the actor and the before/after mode and no free text. Every audit row of a run calculated in relaxed mode carries `sodMode: "relaxed"`.
 
+> **Update, ADR-0141 (Issue #977, finding PS-13).** The conditional step-up here only bites a person who has an enrolled factor. `hr_payroll` sets `requiresMfaEnrolment: true` on `sod_policy.configure`, so a holder with no factor is refused `403 MFA_ENROLMENT_REQUIRED` instead of changing the mode on a password alone.
+
 ### 4. Which rules are database CHECKs and which are role-level rules
 
 Unconditional in both modes, as CHECKs **and** role-level rules: A ≠ C and A ≠ P. Conditional on the run's `sod_mode = 'strict'`: `finalized_by <> calculated_by` and `paid_by` differing from `calculated_by` and `finalized_by`. SoD rule descriptors are static code-only data (ADR-0031) and cannot read a tenant setting, so C × P, C × F and F × P are **enforced per instance only**, not as role-level rules: otherwise relaxed mode could never assign C and P to one person. The cost is stated: in strict mode a person who holds both C and P is refused when the second action is taken, not when the role is assigned. The time-bound C × P exception of ADR-0132's proposed matrix is **withdrawn**: the per-instance CHECK would refuse it, and relaxing the tenant is the sanctioned route.

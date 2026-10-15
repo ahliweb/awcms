@@ -17,8 +17,11 @@ import { recordDecisionLog } from "../../../../modules/identity-access/applicati
 import { loadActivePolicies } from "../../../../modules/identity-access/application/policy-cache";
 import {
   evaluateAccess,
+  permissionKey,
   type AccessRequest
 } from "../../../../modules/identity-access/domain/access-control";
+import { MFA_ENROLMENT_REQUIRED_POLICY } from "../../../../modules/identity-access/domain/mfa-enrolment-refusal";
+import { checkMfaEnrolmentRequirement } from "../../../../modules/identity-access/application/mfa-enrolment-gate";
 
 type EvaluateBody = Partial<AccessRequest>;
 
@@ -97,19 +100,48 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       { policies, env: { now, ipTrusted: false } }
     );
 
+    // ADR-0141 — "what the real guard would decide" includes the enrolment
+    // requirement, applied to the CALLER'S OWN enrolment (this endpoint never
+    // evaluates anyone else). Without it a flagged permission reads `allowed:
+    // true` here while the endpoint behind it refuses, which is a preview that
+    // lies in the direction that wastes an administrator's afternoon. Session
+    // only: `resolveTenantContext` finds no machine credential.
+    const mfaRefusal = decision.allowed
+      ? await checkMfaEnrolmentRequirement(
+          tx,
+          tenantId,
+          context,
+          permissionKey(
+            accessRequest.moduleKey,
+            accessRequest.activityCode,
+            accessRequest.action
+          ),
+          { viaMachineCredential: false }
+        )
+      : null;
+
+    const reported = mfaRefusal
+      ? {
+          allowed: false,
+          reason: mfaRefusal.message,
+          matchedPolicy: MFA_ENROLMENT_REQUIRED_POLICY,
+          matchedPolicyVersion: undefined
+        }
+      : decision;
+
     await recordDecisionLog(
       tx,
       tenantId,
       context.tenantUserId,
       accessRequest,
-      decision
+      reported
     );
 
     return ok({
-      allowed: decision.allowed,
-      reason: decision.reason,
-      matchedPolicy: decision.matchedPolicy,
-      matchedPolicyVersion: decision.matchedPolicyVersion
+      allowed: reported.allowed,
+      reason: reported.reason,
+      matchedPolicy: reported.matchedPolicy,
+      matchedPolicyVersion: reported.matchedPolicyVersion
     });
   });
 };

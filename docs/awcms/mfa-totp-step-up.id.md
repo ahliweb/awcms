@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](mfa-totp-step-up.md)
 
-<!-- i18n-source-hash: sha256:0ff11488fe1f49bacf9e57b0722a288530fa90a220b90ff6a594406fc569cc90 -->
+<!-- i18n-source-hash: sha256:68c9904e4efcda2e10d1ef65caf525c520d6d333f9e82b19f279928df9f87d3b -->
 
 # MFA TOTP, recovery codes, dan step-up authentication
 
@@ -113,6 +113,31 @@ tanpa enroll ulang.
 Selain rate limit per-sumber dan cap `failed_attempts` per-challenge, tiap factor punya `failed_verify_count`/`locked_until` kumulatif (independen source IP dan rotasi challenge, meniru lockout password). Setelah `AUTH_MFA_MAX_VERIFY_ATTEMPTS` verify gagal, factor terkunci `AUTH_MFA_LOCKOUT_MINUTES` menit; verify sukses mereset. Pada login challenge, factor terkunci kolaps ke `MFA_CHALLENGE_INVALID`; pada step-up, mengembalikan `MFA_LOCKED` (429).
 
 **Sejak ADR-0087 lockout itu GLOBAL**, karena penghitungnya menempel pada faktor dan faktornya pindah — konsekuensi yang sama yang ADR-0086 ambil untuk password: penyerang yang tahu password seseorang bisa mengunci authenticator orang itu di semua tenant sekaligus. Aturan ADR-0086 berlaku penuh, jadi trade-off itu diambil bersama **ketiga** tuas pemulihannya yang kini juga global: recovery code, `disable` mandiri + enroll ulang, dan reset administratif. Sebelumnya lockout faktor di tenant A tidak bisa dibatalkan admin tenant B; sesudahnya siapa pun dari ketiga jalur itu memulihkan orangnya sepenuhnya — pemulihannya lebih baik dari sebelumnya, bukan lebih buruk.
+
+### 1.7 Izin yang mewajibkan faktor terdaftar (ADR-0141)
+
+Step-up bersifat **bersyarat** (§1.3): orang tanpa faktor tidak dimintai faktor, karena `requireStepUp` tanpa syarat akan mengunci semua orang yang belum mendaftar. Akibatnya orang tanpa faktor melakukan aksi berisiko tinggi tanpa faktor kedua sama sekali. Modul menutupnya untuk izin yang penting dengan mendeklarasikannya di descriptor:
+
+```ts
+permissions: [
+  {
+    activityCode: "runs",
+    action: "approve",
+    description: "…",
+    requiresMfaEnrolment: true
+  }
+];
+```
+
+`authorizeInTransaction` lalu menolak izin itu, **setelah** allow biasa dan hanya sebagai penolakan, dengan `403 MFA_ENROLMENT_REQUIRED` (`details.reason`: `not_enrolled`, `enrolment_unavailable`, atau `machine_credential`) bagi siapa pun tanpa faktor **aktif**. Ia menanyakan apakah faktor ada; tidak pernah menuntut bukti baru. Modul tetap memegang step-up bersyaratnya sendiri di atasnya, yang kini selalu berlaku bagi orang yang diloloskan gerbang.
+
+**Bootstrap — tenant tanpa pemegang terdaftar tidak terkunci.** Pendaftaran (`POST /auth/mfa/totp/enroll/start` lalu `/verify`) butuh sesi dan tanpa izin, dan berada di luar chokepoint. Jadi: owner (atau pemegang mana pun) membuka `/admin/account`, mendaftar, dan permintaan berikutnya langsung dilayani — tanpa restart, tanpa tindakan administrator, tanpa perubahan kebijakan tenant. Semua yang tak bertanda berfungsi sepanjang waktu, itulah yang membuat mereka dapat mencapai layar itu. Prasyarat: `AUTH_MFA_ENABLED=true` dan `AUTH_MFA_SECRET_ENCRYPTION_KEY`; tanpanya penolakannya `enrolment_unavailable` untuk **semua orang** (fail-closed) dan `security:readiness` gagal pada pemeriksaan `critical` "Pendaftaran MFA tersedia saat sebuah izin mewajibkan faktor terdaftar". Pemegang tunggal yang kehilangan perangkatnya memakai kode pemulihan (§4), lalu mendaftar ulang.
+
+**Menemukan orangnya sebelum mereka menemukan penolakannya.** `bun run security:readiness` mendaftar, per tenant yang modulnya dapat dipakai, pemegang (dari sumber grant mana pun) yang tak punya faktor aktif — hanya id dan jumlah. Ini `warning`: mereka ditolak, bukan kerentanan, dan masing-masing diminta mendaftar sekali.
+
+**Yang tidak dibuktikan gerbang.** Ia membuktikan faktor ada pada akun, bukan bahwa pemilik akun yang memegangnya: pendaftaran hanya butuh sesi, sehingga pemegang kata sandi pemegang yang belum terdaftar dapat mendaftarkan authenticator miliknya lebih dulu. Jalankan laporan pemegang **sebelum mengaktifkan modul yang menandai izin** agar pemegang yang sah mendaftar lebih dulu; pengerasan pendaftaran itu sendiri (verifikasi ulang kata sandi atau `aal2` untuk memulainya bagi pemegang izin bertanda, dan notifikasi saat faktor pertama didaftarkan) dilacak di ahliweb/awcms#1004.
+
+Ini tuas yang berbeda dari §1.5. Kebijakan tenant menentukan siapa yang harus mendaftar **untuk login**; ini menentukan **izin** mana yang tidak dapat dijalankan tanpa pendaftaran. Keduanya berpadu dan tidak saling menggantikan.
 
 ## 2. Referensi konfigurasi / environment
 

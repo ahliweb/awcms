@@ -56,6 +56,7 @@ import { grantRolePolicy } from "../../src/modules/identity-access/application/a
 import { introspectSession } from "../../src/modules/identity-access/application/session-introspection";
 import { setTenantUserStatus } from "../../src/modules/identity-access/application/user-admin";
 import { resolveBoundedAnnouncementTargets } from "../../src/modules/email/application/announcement-directory";
+import { reportMfaRequiredPermissionHolders } from "../../src/modules/identity-access/application/mfa-required-holders";
 
 const TENANT = "d4444444-4444-4444-8444-444444444444";
 const OWNER_USER = "d4000000-0000-4000-8000-000000000001";
@@ -221,6 +222,22 @@ suite("every grant reader sees what the grant writer wrote", () => {
     ]);
   });
 
+  test("the ADR-0141 holders listing finds the holder, from the same grant source", async () => {
+    // `blog_content.posts.read` stands in for a flagged key: the listing takes
+    // the keys as a parameter, so this asks only whether it agrees with the
+    // other readers about WHO holds the role. The second owner holds nothing.
+    const report = await withTenantOrThrow(getRuntimeSql(), TENANT, (tx) =>
+      reportMfaRequiredPermissionHolders(tx, TENANT, new Date(), {
+        requiredKeys: new Set([GRANTED_KEY])
+      })
+    );
+
+    expect(report.unenrolled.map((holder) => holder.tenantUserId)).toEqual([
+      OWNER_USER
+    ]);
+    expect(report.unenrolled[0]!.permissionKeys).toEqual([GRANTED_KEY]);
+  });
+
   test("the last administrator cannot be deactivated", async () => {
     // The failure direction that matters: a guard that cannot see the grant
     // permits the deactivation, and the tenant is left with no administrator and
@@ -268,8 +285,15 @@ suite("every grant reader sees what the grant writer wrote", () => {
       ]
     );
 
+    const holders = await withTenantOrThrow(runtime, TENANT, (tx) =>
+      reportMfaRequiredPermissionHolders(tx, TENANT, new Date(), {
+        requiredKeys: new Set([GRANTED_KEY])
+      })
+    );
+
     expect(principal?.context.roles).toEqual([]);
     expect(users.find((user) => user.id === OWNER_USER)?.roles).toEqual([]);
     expect(facts.map((fact) => fact.permissionKey)).not.toContain(GRANTED_KEY);
+    expect(holders.holderCount).toBe(0);
   });
 });

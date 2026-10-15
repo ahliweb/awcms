@@ -119,3 +119,48 @@ describe("the allowed result handed back is an ALLOWED one", () => {
     );
   });
 });
+
+describe("an enrolment refusal outranks a sibling's generic denial (ADR-0141, audit F-4)", () => {
+  /** A candidate that was ALLOWED on the merits and refused only for want of an enrolled factor. */
+  function mfaRefused(): AuthorizeResult {
+    return {
+      allowed: false,
+      code: "MFA_ENROLMENT_REQUIRED",
+      denied: new Response(
+        JSON.stringify({ error: { code: "MFA_ENROLMENT_REQUIRED" } }),
+        { status: 403 }
+      )
+    } as unknown as AuthorizeResult;
+  }
+
+  test("whichever order the candidates are listed in", () => {
+    // An any-of route that told an unenrolled approver "forbidden" because its
+    // OTHER candidate happened to be listed first would send them to an
+    // administrator when one click on the enrolment screen would let them in.
+    for (const results of [
+      [deny(403), mfaRefused()],
+      [mfaRefused(), deny(403)]
+    ]) {
+      const outcome = selectAnyAllowed(results);
+
+      expect(outcome.allowed).toBe(false);
+      expect(outcome.allowed === false && outcome.code).toBe(
+        "MFA_ENROLMENT_REQUIRED"
+      );
+    }
+  });
+
+  test("an allow still wins over an enrolment refusal", () => {
+    // The refusal is a fallback for when nothing allowed, never a veto over a
+    // candidate that did.
+    expect(selectAnyAllowed([mfaRefused(), allow()]).allowed).toBe(true);
+    expect(selectAnyAllowed([allow(), mfaRefused()]).allowed).toBe(true);
+  });
+
+  test("with no enrolment refusal among them the FIRST denial is still reported", () => {
+    const first = deny(429);
+    const outcome = selectAnyAllowed([first, deny(403)]);
+
+    expect(outcome).toBe(first);
+  });
+});
