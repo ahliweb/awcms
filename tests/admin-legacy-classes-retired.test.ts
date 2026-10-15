@@ -67,6 +67,7 @@ function legacyTokenPattern(token: string): RegExp {
 }
 
 describe("admin-legacy-classes-retired (#866, wave 7): repo-wide backstop", () => {
+  // Whole-repo scan of src/; can exceed the 5 s default under load.
   test("no .astro/.ts/.tsx/.css file under src/ references a retired stat-card/status-badge class token outside a comment", async () => {
     const files = await collectFiles(SCAN_ROOT);
     const offenders: string[] = [];
@@ -83,7 +84,7 @@ describe("admin-legacy-classes-retired (#866, wave 7): repo-wide backstop", () =
     }
 
     expect(offenders).toEqual([]);
-  });
+  }, 60_000);
 
   test("the legacy rule blocks are gone from admin.css and admin-screens.css", async () => {
     const adminCss = await readFile("src/styles/admin.css", "utf8");

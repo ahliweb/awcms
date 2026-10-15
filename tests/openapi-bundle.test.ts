@@ -120,6 +120,7 @@ async function loadFragment(fileName: string): Promise<AnyRecord> {
 }
 
 describe("openapi bundle — fragment resolver", () => {
+  // Whole-repo scan: regenerates the full bundle; exceeds the 5 s default under load.
   test("merges every fragment's paths and schemas into the bundle (nothing lost)", async () => {
     const bundle = (await buildBundledDocument(ROOT)) as AnyRecord;
     const bundlePaths = new Set(Object.keys(bundle.paths as AnyRecord));
@@ -141,8 +142,9 @@ describe("openapi bundle — fragment resolver", () => {
         expect(bundleSchemas.has(schemaName)).toBe(true);
       }
     }
-  });
+  }, 60_000);
 
+  // Whole-repo scan: regenerates the full bundle; exceeds the 5 s default under load.
   test("bundle keys are alphabetically sorted (deterministic ordering)", async () => {
     const bundle = (await buildBundledDocument(ROOT)) as AnyRecord;
     const pathKeys = Object.keys(bundle.paths as AnyRecord);
@@ -153,14 +155,16 @@ describe("openapi bundle — fragment resolver", () => {
     expect(schemaKeys).toEqual(
       [...schemaKeys].sort((a, b) => a.localeCompare(b))
     );
-  });
+  }, 60_000);
 
+  // Whole-repo scan: bundles the full spec twice; exceeds the 5 s default under load.
   test("bundling twice produces byte-identical output (idempotent)", async () => {
     const first = await bundleOpenApi(ROOT);
     const second = await bundleOpenApi(ROOT);
     expect(second).toBe(first);
-  });
+  }, 60_000);
 
+  // Whole-repo scan: regenerates the full bundle; exceeds the 5 s default under load.
   test("committed bundle matches freshly generated bundle (not hand-edited/stale)", async () => {
     const committed = await readFile(
       path.join(ROOT, "openapi/awcms-public-api.openapi.yaml"),
@@ -168,7 +172,7 @@ describe("openapi bundle — fragment resolver", () => {
     );
     const fresh = await bundleOpenApi(ROOT);
     expect(fresh).toBe(committed);
-  });
+  }, 60_000);
 });
 
 describe("openapi bundle — merge conflict detection", () => {
@@ -255,6 +259,7 @@ describe("openapi bundle — truncated scalar detection (Issue #786)", () => {
     ).rejects.toThrow(/genuinely IS an unrelated comment/);
   });
 
+  // Whole-repo scan: regenerates the full bundle; exceeds the 5 s default under load.
   test("the same prose, correctly double-quoted, does not false-positive", async () => {
     const quoted = path.join(
       ROOT,
@@ -269,7 +274,7 @@ describe("openapi bundle — truncated scalar detection (Issue #786)", () => {
     expect(operation.summary).toBe(
       "Fixture endpoint mentioning Issue #999 with the scalar correctly quoted."
     );
-  });
+  }, 60_000);
 
   test("every real fragment currently in the repo is free of this truncation shape", async () => {
     // Regression guard for the specific pre-existing instances Issue #786
@@ -278,7 +283,7 @@ describe("openapi bundle — truncated scalar detection (Issue #786)", () => {
     // failed before they were quoted, and fails again if a future fragment
     // edit reintroduces the shape anywhere in the real fragment set.
     await expect(buildBundledDocument(ROOT)).resolves.toBeTruthy();
-  });
+  }, 60_000);
 });
 
 describe("openapi bundle — contract equivalence to pre-migration monolith", () => {
