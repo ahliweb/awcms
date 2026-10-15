@@ -12324,6 +12324,81 @@ Gated by `booking.availability.read`. READ-ONLY: persists and claims nothing, an
 | 422    | QUANTITY_EXCEEDS_UNITS.                                                                                           | [`ApiError`](#standard-error-envelope) |
 | 429    | RATE_LIMITED.                                                                                                     | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/booking/reports/occupancy` — Occupancy of stay resources
+
+- **operationId**: `bookingReportsOccupancy`
+- **Security**: bearerAuth + tenantHeader
+
+Occupied unit-nights of STAY resources per local night: one unit-night per unit and night (two nights on one unit are two, the same stay on three units is six). Occupied means a confirmed, checked-in or completed reservation claims the night; a no-show keeps its allocation but is not occupied. `heldUnitNights` is the hold PIPELINE for the same nights (live holds only), reported beside occupancy and never inside it; `blockedUnitNights` are the nights under an active block. The rate's denominator is all units active now (whether maintenance closures leave the denominator is still open under O8, hence `blockedUnitNights`). Gated by `booking.reports.read`. READ-ONLY and tenant-scoped (withTenant + RLS FORCE); never cached. Day windows are Asia/Jakarta, half-open. Holds are never part of occupancy (owner decision O8). No customer reference, note or amount is read or returned; there is no revenue figure (booking holds no price). A ratio or mean over fewer than five reservations is withheld (`suppressed: true`, `value: null`); counts are the tenant's own operational figures and are not anonymised (the reader already holds `booking.reports.read` on that tenant's data). The `booking.*` projections on the reporting engine are the all-time dashboard counters; this is the live, windowed detail they point at.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                      |
+| ------------------ | ------ | -------- | ------------- | ---------------------------------------------------------------- |
+| `from`             | query  | yes      | string (date) | First local date (Asia/Jakarta), inclusive.                      |
+| `to`               | query  | yes      | string (date) | Last local date, exclusive; after `from`, at most 92 days later. |
+| `resourceId`       | query  | no       | string (uuid) | Narrow the report to one resource.                               |
+| `X-Correlation-ID` | header | no       | string        |                                                                  |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The report.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/reports/reservations` — Hold pipeline, lead time, cancellation and no-show
+
+- **operationId**: `bookingReportsReservations`
+- **Security**: bearerAuth + tenantHeader
+
+For a window of Asia/Jakarta days: the HOLD PIPELINE (holds placed, converted, expired, cancelled while held, plus the holds and units open right now), the LEAD TIME of the reservations confirmed in the window (starts_at minus the confirmation instant, in buckets and a mean) and the CANCELLATION and NO-SHOW outcomes of that same confirmation cohort. A reservation later rescheduled is left out of the cohort (its replacement has its own). The no-show rate is no_show over resolved arrivals (no_show + checked_in + completed). Gated by `booking.reports.read`. READ-ONLY and tenant-scoped (withTenant + RLS FORCE); never cached. Day windows are Asia/Jakarta, half-open. Holds are never part of occupancy (owner decision O8). No customer reference, note or amount is read or returned; there is no revenue figure (booking holds no price). A ratio over fewer than five reservations is withheld (`suppressed: true`, `value: null`). The `booking.*` projections on the reporting engine are the all-time dashboard counters; this is the live, windowed detail they point at.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                      |
+| ------------------ | ------ | -------- | ------------- | ---------------------------------------------------------------- |
+| `from`             | query  | yes      | string (date) | First local date (Asia/Jakarta), inclusive.                      |
+| `to`               | query  | yes      | string (date) | Last local date, exclusive; after `from`, at most 92 days later. |
+| `resourceId`       | query  | no       | string (uuid) | Narrow the report to one resource.                               |
+| `X-Correlation-ID` | header | no       | string        |                                                                  |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The report.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/reports/utilization` — Utilization of slot resources
+
+- **operationId**: `bookingReportsUtilization`
+- **Security**: bearerAuth + tenantHeader
+
+Net-booked service seconds of SLOT resources over the seconds the schedule leaves open (times the active units), per Asia/Jakarta day. Buffers (setup/cleanup) and holds are excluded from booked; the denominator is the schedule expansion availability uses. A separate metric from occupancy, never averaged with it. Whether the denominator should exclude maintenance closures, and whether booked should be actual rather than booked time, are still open under O8. Gated by `booking.reports.read`. READ-ONLY and tenant-scoped (withTenant + RLS FORCE); never cached. Day windows are Asia/Jakarta, half-open. Holds are never part of occupancy (owner decision O8). No customer reference, note or amount is read or returned; there is no revenue figure (booking holds no price). A ratio over fewer than five reservations is withheld (`suppressed: true`, `value: null`). The `booking.*` projections on the reporting engine are the all-time dashboard counters; this is the live, windowed detail they point at.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                      |
+| ------------------ | ------ | -------- | ------------- | ---------------------------------------------------------------- |
+| `from`             | query  | yes      | string (date) | First local date (Asia/Jakarta), inclusive.                      |
+| `to`               | query  | yes      | string (date) | Last local date, exclusive; after `from`, at most 92 days later. |
+| `resourceId`       | query  | no       | string (uuid) | Narrow the report to one resource.                               |
+| `X-Correlation-ID` | header | no       | string        |                                                                  |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The report.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/booking/reservations` — List reservations
 
 - **operationId**: `bookingReservationsList`

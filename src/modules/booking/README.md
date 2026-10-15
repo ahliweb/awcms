@@ -37,9 +37,12 @@ Reservations (Issue #941, `sql/208`, `sql/209`): the routes `POST/GET
 (`application/booking-reservation-service.ts`), `Idempotency-Key` through the
 shared component, the `BookingPort` (`application/booking-port-adapter.ts`), the
 nine reservation events on the live AsyncAPI document, and a safe default for the
-hold caps. **Not present yet:** the block routes (#1012), the report and
-reconciliation routes, the reporting projection and the admin screens (#942,
-which is what lets the module leave `experimental`).
+hold caps. **Not present yet:** the block routes (#1012), the reconciliation
+route and the admin screens (#942, which is what lets the module leave
+`experimental`).
+
+Reporting (Issue #944, `sql/244`): three projections on the existing `reporting`
+engine and three live report routes; see "Reporting, in one place".
 
 ## The allocator, in one place
 
@@ -133,6 +136,32 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
   customer is an opaque token at the commerce authority, not a tenant user; the
   creator of a reservation is not entitled to read it for having created it.
 
+## Reporting, in one place
+
+- **No second analytics engine.** `domain/booking-reporting.ts` declares three
+  `ProjectionDescriptor`s (`booking.reservations`, `booking.time`,
+  `booking.nights`) in `module.ts`'s `reportingProjections`; the `reporting`
+  module's worker, rebuild and reconciliation run them. Read permission
+  `booking.reports.read`.
+- **The source is the append-only event table, not the live domain events.** A
+  rebuild is always a table re-scan, so the steady state and the rebuild are the
+  same scan (trade-off in the header of `domain/booking-reporting.ts`). `sql/244`
+  puts the quantities on the row at write time: booked/released seconds (service
+  interval, buffers excluded) and booked/released unit-nights (one per unit and
+  night), plus the generated `projection_kind` (`late_cancelled` is a subset of
+  `cancelled`). Every metric only increases; net is `booked - released`.
+- **Reports are live and windowed:** `GET /booking/reports/occupancy`
+  (stay, per unit-night), `/utilization` (slot, booked over open seconds) and
+  `/reservations` (hold pipeline, lead time, cancellation, no-show), all with
+  Asia/Jakarta day windows. Pure rules in `domain/booking-report.ts`, the only
+  SQL in `application/booking-report-directory.ts`.
+- **Owner decision O8:** occupancy excludes holds (a hold is `heldUnitNights` and
+  the pipeline, beside the rate, never in it); utilization is a separate report.
+- **No revenue, no person.** Booking holds no price; no projection or report reads
+  a customer reference, note, reason or actor. A ratio over fewer than 5
+  reservations is withheld (counts are not anonymised: the reader holds
+  `booking.reports.read` on that tenant).
+
 ## Time semantics, in one place
 
 - Every instant is UTC and every interval half-open `[start, end)`; a request
@@ -196,6 +225,9 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
 | `application/booking-event-emit.ts`            | Outbox events from the one facts function, in the transition's transaction                      |
 | `application/booking-port-adapter.ts`          | The `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule   |
 | `application/booking-transition-route.ts`      | The handler body shared by the five in-place transition routes                                  |
+| `domain/booking-reporting.ts`                  | The three reporting projection descriptors and why the event table is their source              |
+| `domain/booking-report.ts`                     | Pure report rules: Jakarta day windows, clipping, O8 statuses, small-group suppression          |
+| `application/booking-report-directory.ts`      | The only SQL of the report routes: aggregates only, tenant-scoped, no person                    |
 
 Not in the schema yet and recorded as follow-ups: `service_requirements` and
 `staff_assignments` (booking.md section 4). `resource_blocks` arrived with

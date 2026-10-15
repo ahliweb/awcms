@@ -162,6 +162,35 @@ endpoint already established). A mismatch while a projection is merely
 `delayed` is EXPECTED, not a bug — read freshness alongside reconcile,
 never instead of it.
 
+### Quantities and page boundaries (Issue #944)
+
+Two small extensions that let a domain module put a real figure through this
+engine instead of a second one (the first user is `booking`, whose three
+`booking.*` projections count transition kinds and sum booked seconds and
+unit-nights):
+
+- **`sumColumn`** on a metric rule (`ProjectionCursorMetricRule`, contract 4.5.0):
+  add up a non-negative integer column over the matching rows instead of counting
+  them. `domain/projection-metric-delta.ts`'s `computeRuleDelta` is the one place
+  the worker and the rebuild turn a batch into a delta; the reconciliation
+  computes the same quantity as `SUM(col)`. A value that is not a non-negative
+  integer throws and the pass rolls back, and the registry refuses a decrementing
+  quantity (the store clamps at zero, so a decrement would desync silently).
+- **A page never ends inside a millisecond** (`trimIncompleteTail`,
+  `domain/cursor-boundary.ts`). A source that writes several rows in one
+  transaction (`created_at DEFAULT now()` is the transaction start) used to lose
+  the rows of a tie group cut by `LIMIT`, because the resume bound is `cursor +
+1 ms`. The engine now reads `limit + 1` rows; when that lookahead row shares the
+  page's last millisecond the page drops its rows of that millisecond and the next
+  pass reads them whole. A source with distinct timestamps behaves as before.
+  If `limit + 1` rows share ONE millisecond the pass fails loudly (rolls back and
+  records a projection failure): raise the descriptor's `batchLimit`.
+  **After deploying this change, rebuild the existing `cursor_table` projections
+  over a source that writes several rows per transaction (`procurement.*`,
+  `inventory.*`, ...)** (`POST /api/v1/reports/projections/{key}/rebuild`): before
+  it they may have lost rows at page boundaries, and a reconciliation mismatch is
+  the sign. Decision record: ADR-0143.
+
 ### Scheduled exports
 
 Minimal, self-contained (not built on Issue #752 `data_exchange`, which

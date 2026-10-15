@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:a355c8d4f0e6ca9ce2d2f25123b05889edc5f37d616ea22112995e142ec26d41 -->
+<!-- i18n-source-hash: sha256:57c9c6a06fe98168cf30f0b1e236361ae08c0f74207fb1f9a0729d3cb861bceb -->
 
 # Management Reporting
 
@@ -163,6 +163,37 @@ only appends a history row, same posture `data_lifecycle`'s dry-run
 endpoint already established). A mismatch while a projection is merely
 `delayed` is EXPECTED, not a bug — read freshness alongside reconcile,
 never instead of it.
+
+### Kuantitas dan batas halaman (Issue #944)
+
+Dua perluasan kecil yang memungkinkan modul domain melewatkan angka nyata lewat
+engine ini alih-alih engine kedua (pengguna pertama adalah `booking`, yang tiga
+proyeksi `booking.*`-nya menghitung jenis transisi dan menjumlah detik terpesan
+serta unit-malam):
+
+- **`sumColumn`** pada aturan metrik (`ProjectionCursorMetricRule`, kontrak 4.5.0):
+  menjumlah kolom integer non-negatif atas baris yang cocok alih-alih
+  menghitungnya. `computeRuleDelta` di `domain/projection-metric-delta.ts` adalah
+  satu-satunya tempat worker dan rebuild mengubah batch menjadi delta;
+  rekonsiliasi menghitung kuantitas yang sama sebagai `SUM(col)`. Nilai yang bukan
+  integer non-negatif melempar error dan pass di-rollback, dan registry menolak
+  kuantitas yang mengurangi (store menjepit di nol, sehingga decrement akan
+  menyimpang diam-diam).
+- **Halaman tak pernah berakhir di tengah satu milidetik**
+  (`trimIncompleteTail`, `domain/cursor-boundary.ts`). Sumber yang menulis
+  beberapa baris dalam satu transaksi (`created_at DEFAULT now()` adalah awal
+  transaksi) dulu kehilangan baris dari kelompok seri yang terpotong `LIMIT`,
+  karena batas lanjutan adalah `cursor + 1 ms`. Engine kini membaca `limit + 1`
+  baris; bila baris pengintip itu sebaya milidetiknya dengan baris terakhir
+  halaman, halaman membuang baris milidetik itu dan pass berikutnya membacanya
+  utuh. Sumber dengan timestamp berbeda berperilaku seperti sebelumnya.
+  Bila `limit + 1` baris sebaya dalam SATU milidetik, pass gagal keras (rollback
+  dan mencatat kegagalan proyeksi): naikkan `batchLimit` deskriptor.
+  **Setelah men-deploy perubahan ini, rebuild proyeksi `cursor_table` yang ada atas
+  sumber yang menulis beberapa baris per transaksi (`procurement.*`,
+  `inventory.*`, ...)** (`POST /api/v1/reports/projections/{key}/rebuild`):
+  sebelumnya mereka mungkin kehilangan baris di batas halaman, dan
+  ketidakcocokan rekonsiliasi adalah tandanya. Catatan keputusan: ADR-0143.
 
 ### Scheduled exports
 

@@ -65,16 +65,21 @@ async function computeSourceTotals(
     );
 
     for (const rule of stream.metrics) {
+      // The same quantity the engine adds per row: 1, or `sumColumn`.
+      const quantity =
+        rule.sumColumn === undefined
+          ? "COUNT(*)"
+          : `COALESCE(SUM(${assertSafeIdentifier(rule.sumColumn, "column")}), 0)`;
       let rows: { total: string | number }[];
       if (rule.matchColumn === undefined) {
         rows = (await tx.unsafe(
-          `SELECT COUNT(*) AS total FROM ${tableName} WHERE ${tenantColumn} = $1`,
+          `SELECT ${quantity} AS total FROM ${tableName} WHERE ${tenantColumn} = $1`,
           [tenantId]
         )) as { total: string | number }[];
       } else {
         const matchColumn = assertSafeIdentifier(rule.matchColumn, "column");
         rows = (await tx.unsafe(
-          `SELECT COUNT(*) AS total FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${matchColumn} = $2`,
+          `SELECT ${quantity} AS total FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${matchColumn} = $2`,
           [tenantId, rule.matchValue]
         )) as { total: string | number }[];
       }

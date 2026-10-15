@@ -1054,6 +1054,181 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/reports/occupancy:
+    get:
+      operationId: bookingReportsOccupancy
+      tags:
+        - Booking
+      summary: Occupancy of stay resources
+      description: "Occupied unit-nights of STAY resources per local night: one unit-night per unit and night (two nights on one unit are two, the same stay on three units is six). Occupied means a confirmed, checked-in or completed reservation claims the night; a no-show keeps its allocation but is not occupied. `heldUnitNights` is the hold PIPELINE for the same nights (live holds only), reported beside occupancy and never inside it; `blockedUnitNights` are the nights under an active block. The rate's denominator is all units active now (whether maintenance closures leave the denominator is still open under O8, hence `blockedUnitNights`). Gated by `booking.reports.read`. READ-ONLY and tenant-scoped (withTenant + RLS FORCE); never cached. Day windows are Asia/Jakarta, half-open. Holds are never part of occupancy (owner decision O8). No customer reference, note or amount is read or returned; there is no revenue figure (booking holds no price). A ratio or mean over fewer than five reservations is withheld (`suppressed: true`, `value: null`); counts are the tenant's own operational figures and are not anonymised (the reader already holds `booking.reports.read` on that tenant's data). The `booking.*` projections on the reporting engine are the all-time dashboard counters; this is the live, windowed detail they point at."
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First local date (Asia/Jakarta), inclusive.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last local date, exclusive; after `from`, at most 92 days later.
+          schema:
+            type: string
+            format: date
+        - name: resourceId
+          in: query
+          required: false
+          description: Narrow the report to one resource.
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The report.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - private, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingOccupancyReport"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/booking/reports/utilization:
+    get:
+      operationId: bookingReportsUtilization
+      tags:
+        - Booking
+      summary: Utilization of slot resources
+      description: "Net-booked service seconds of SLOT resources over the seconds the schedule leaves open (times the active units), per Asia/Jakarta day. Buffers (setup/cleanup) and holds are excluded from booked; the denominator is the schedule expansion availability uses. A separate metric from occupancy, never averaged with it. Whether the denominator should exclude maintenance closures, and whether booked should be actual rather than booked time, are still open under O8. Gated by `booking.reports.read`. READ-ONLY and tenant-scoped (withTenant + RLS FORCE); never cached. Day windows are Asia/Jakarta, half-open. Holds are never part of occupancy (owner decision O8). No customer reference, note or amount is read or returned; there is no revenue figure (booking holds no price). A ratio over fewer than five reservations is withheld (`suppressed: true`, `value: null`). The `booking.*` projections on the reporting engine are the all-time dashboard counters; this is the live, windowed detail they point at."
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First local date (Asia/Jakarta), inclusive.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last local date, exclusive; after `from`, at most 92 days later.
+          schema:
+            type: string
+            format: date
+        - name: resourceId
+          in: query
+          required: false
+          description: Narrow the report to one resource.
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The report.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - private, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingUtilizationReport"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/booking/reports/reservations:
+    get:
+      operationId: bookingReportsReservations
+      tags:
+        - Booking
+      summary: Hold pipeline, lead time, cancellation and no-show
+      description: "For a window of Asia/Jakarta days: the HOLD PIPELINE (holds placed, converted, expired, cancelled while held, plus the holds and units open right now), the LEAD TIME of the reservations confirmed in the window (starts_at minus the confirmation instant, in buckets and a mean) and the CANCELLATION and NO-SHOW outcomes of that same confirmation cohort. A reservation later rescheduled is left out of the cohort (its replacement has its own). The no-show rate is no_show over resolved arrivals (no_show + checked_in + completed). Gated by `booking.reports.read`. READ-ONLY and tenant-scoped (withTenant + RLS FORCE); never cached. Day windows are Asia/Jakarta, half-open. Holds are never part of occupancy (owner decision O8). No customer reference, note or amount is read or returned; there is no revenue figure (booking holds no price). A ratio over fewer than five reservations is withheld (`suppressed: true`, `value: null`). The `booking.*` projections on the reporting engine are the all-time dashboard counters; this is the live, windowed detail they point at."
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First local date (Asia/Jakarta), inclusive.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last local date, exclusive; after `from`, at most 92 days later.
+          schema:
+            type: string
+            format: date
+        - name: resourceId
+          in: query
+          required: false
+          description: Narrow the report to one resource.
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The report.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - private, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingReservationsReport"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
 components:
   schemas:
     BookingLocalWindow:
@@ -1610,3 +1785,295 @@ components:
           type: string
           nullable: true
           description: A short lowercase code, never free text.
+    BookingSuppressedNumber:
+      type: object
+      description: A figure over a group of reservations; withheld (value null, suppressed true) when the group has fewer than five.
+      required:
+        - suppressed
+        - value
+      properties:
+        suppressed:
+          type: boolean
+        value:
+          type: number
+          nullable: true
+    BookingOccupancyDay:
+      type: object
+      required:
+        - date
+        - units
+        - occupiedUnitNights
+        - heldUnitNights
+        - blockedUnitNights
+        - occupancyRate
+      properties:
+        date:
+          type: string
+          format: date
+        units:
+          type: integer
+        occupiedUnitNights:
+          type: integer
+        heldUnitNights:
+          type: integer
+          description: The hold pipeline for this night. Never part of occupiedUnitNights or occupancyRate (O8).
+        blockedUnitNights:
+          type: integer
+        occupancyRate:
+          type: number
+          nullable: true
+    BookingOccupancyReport:
+      type: object
+      required:
+        - timezone
+        - from
+        - to
+        - resources
+        - truncated
+      properties:
+        timezone:
+          type: string
+          enum:
+            - Asia/Jakarta
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        truncated:
+          type: boolean
+          description: More than 200 resources matched; the first 200 are returned.
+        resources:
+          type: array
+          items:
+            type: object
+            required:
+              - resourceId
+              - code
+              - name
+              - units
+              - days
+              - totals
+            properties:
+              resourceId:
+                type: string
+                format: uuid
+              code:
+                type: string
+              name:
+                type: string
+              units:
+                type: integer
+              days:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingOccupancyDay"
+              totals:
+                type: object
+                required:
+                  - unitNights
+                  - occupiedUnitNights
+                  - heldUnitNights
+                  - blockedUnitNights
+                  - occupancyRate
+                properties:
+                  unitNights:
+                    type: integer
+                  occupiedUnitNights:
+                    type: integer
+                  heldUnitNights:
+                    type: integer
+                  blockedUnitNights:
+                    type: integer
+                  occupancyRate:
+                    type: number
+                    nullable: true
+    BookingUtilizationDay:
+      type: object
+      required:
+        - date
+        - bookedSeconds
+        - availableSeconds
+        - utilization
+      properties:
+        date:
+          type: string
+          format: date
+        bookedSeconds:
+          type: integer
+        availableSeconds:
+          type: integer
+        utilization:
+          type: number
+          nullable: true
+    BookingUtilizationReport:
+      type: object
+      required:
+        - timezone
+        - from
+        - to
+        - resources
+        - truncated
+      properties:
+        timezone:
+          type: string
+          enum:
+            - Asia/Jakarta
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        truncated:
+          type: boolean
+        resources:
+          type: array
+          items:
+            type: object
+            required:
+              - resourceId
+              - code
+              - name
+              - units
+              - days
+              - totals
+            properties:
+              resourceId:
+                type: string
+                format: uuid
+              code:
+                type: string
+              name:
+                type: string
+              units:
+                type: integer
+              days:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingUtilizationDay"
+              totals:
+                type: object
+                required:
+                  - bookedSeconds
+                  - availableSeconds
+                  - utilization
+                properties:
+                  bookedSeconds:
+                    type: integer
+                  availableSeconds:
+                    type: integer
+                  utilization:
+                    type: number
+                    nullable: true
+    BookingReservationsReport:
+      type: object
+      required:
+        - timezone
+        - from
+        - to
+        - windowStartsAt
+        - windowEndsAt
+        - pipeline
+        - leadTime
+        - outcomes
+      properties:
+        timezone:
+          type: string
+          enum:
+            - Asia/Jakarta
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        windowStartsAt:
+          type: string
+          format: date-time
+        windowEndsAt:
+          type: string
+          format: date-time
+        pipeline:
+          type: object
+          required:
+            - placed
+            - converted
+            - expired
+            - cancelledHeld
+            - conversionRate
+            - openHoldsNow
+            - heldUnitsNow
+          properties:
+            placed:
+              type: integer
+            converted:
+              type: integer
+            expired:
+              type: integer
+            cancelledHeld:
+              type: integer
+            conversionRate:
+              $ref: "#/components/schemas/BookingSuppressedNumber"
+            openHoldsNow:
+              type: integer
+            heldUnitsNow:
+              type: integer
+        leadTime:
+          type: object
+          required:
+            - reservations
+            - meanDays
+            - buckets
+          properties:
+            reservations:
+              type: integer
+            meanDays:
+              $ref: "#/components/schemas/BookingSuppressedNumber"
+            buckets:
+              type: array
+              items:
+                type: object
+                required:
+                  - key
+                  - reservations
+                properties:
+                  key:
+                    type: string
+                    enum:
+                      - same_day
+                      - 1_3_days
+                      - 4_7_days
+                      - 8_30_days
+                      - 31_plus_days
+                  reservations:
+                    type: integer
+        outcomes:
+          type: object
+          required:
+            - confirmed
+            - cancelled
+            - lateCancelled
+            - noShow
+            - arrived
+            - cancellationRate
+            - lateCancellationRate
+            - noShowRate
+          properties:
+            confirmed:
+              type: integer
+            cancelled:
+              type: integer
+            lateCancelled:
+              type: integer
+            noShow:
+              type: integer
+            arrived:
+              type: integer
+            cancellationRate:
+              $ref: "#/components/schemas/BookingSuppressedNumber"
+            lateCancellationRate:
+              $ref: "#/components/schemas/BookingSuppressedNumber"
+            noShowRate:
+              $ref: "#/components/schemas/BookingSuppressedNumber"

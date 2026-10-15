@@ -90,3 +90,74 @@ export function resolveProjectionLagSeconds(
 
   return Math.min(raw, MAX_PROJECTION_LAG_SECONDS);
 }
+
+/**
+ * Tie-safe batch boundary (Issue #944).
+ *
+ * The resume bound is `cursorColumn >= cursor + 1ms` (see above), so a row that
+ * shares the last processed row's millisecond but was cut off by `LIMIT` is
+ * excluded from the NEXT pass too -- and never counted. For the sources the
+ * engine first wrapped (decision logs, identities, sync nodes) every row has its
+ * own timestamp, so that needed a pathological coincidence. A source that writes
+ * SEVERAL rows in one transaction does not need one: `created_at DEFAULT now()`
+ * is the transaction's start, so the `created` and `held` history rows of one
+ * reservation carry the identical instant, and a page boundary lands between
+ * them often.
+ *
+ * The caller fetches `limit + 1` rows. The extra row is a LOOKAHEAD: it is never
+ * processed, it only says whether the page's last millisecond continues past the
+ * cut. When it does, the page drops its trailing rows that share that
+ * millisecond; the kept rows are then strictly earlier than every dropped one,
+ * so the dropped rows sit at `>= cursor + 1ms` and the next pass reads them
+ * whole. When it does not (or there is no lookahead because the source ran out)
+ * the page is exactly the `limit` rows it always was -- behaviour for a source
+ * with distinct timestamps is unchanged.
+ *
+ * The one case it cannot help is a page whose rows ALL share one millisecond with
+ * the lookahead (`limit + 1` rows with one timestamp): there is nothing earlier
+ * to end on, and the engine FAILS LOUDLY (throws; the pass rolls back and the
+ * projection records the failure) instead of skipping the rest of the
+ * millisecond silently or stalling the cursor. ADR-0143 section 2.
+ */
+export function trimIncompleteTail<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  cursorColumn: string,
+  limit: number
+): T[] {
+  if (rows.length <= limit) {
+    return [...rows];
+  }
+
+  const msOf = (row: T): number => {
+    const value = row[cursorColumn];
+
+    return (
+      value instanceof Date ? value : new Date(value as string)
+    ).getTime();
+  };
+  const page = rows.slice(0, limit);
+  const lastMs = msOf(page[page.length - 1]!);
+
+  if (msOf(rows[limit]!) !== lastMs) {
+    return page;
+  }
+
+  let keep = page.length;
+
+  while (keep > 0 && msOf(page[keep - 1]!) === lastMs) {
+    keep -= 1;
+  }
+
+  if (keep === 0) {
+    // `limit + 1` rows inside one millisecond: nothing earlier to end on. Keeping
+    // the page would silently skip the rest of the millisecond and dropping all
+    // of it would stall the cursor, so fail loudly (ADR-0143 section 2). The
+    // pass's transaction rolls back and the projection records the failure; the
+    // fix is a `batchLimit` above the tie group.
+    throw new Error(
+      `reporting projection engine: more than ${limit} source rows share one millisecond of "${cursorColumn}"; raise the descriptor's batchLimit above the tie group (a keyset cursor is the structural fix, ADR-0143).`
+    );
+  }
+
+  return page.slice(0, keep);
+}

@@ -465,6 +465,13 @@ export type ProjectionCursorMetricRule = {
   effect: "increment" | "decrement";
   matchColumn?: string;
   matchValue?: string;
+  /**
+   * Add up this column over the matching rows instead of counting them (Issue
+   * #944): a projection that carries a QUANTITY (booked unit-nights, booked
+   * seconds) rather than an event count. The column must hold a non-negative
+   * integer on every source row; the engine refuses a row that does not.
+   */
+  sumColumn?: string;
 };
 
 /**
@@ -1323,8 +1330,14 @@ export type SubjectDataDescriptor = {
  * `handlesPayrollData` replaces a name-pattern guess in the Telegram registry
  * with a declaration; `requiredAnyPermission` lets a multi-panel screen be
  * linked from the menu for a holder of any of its panels' keys.
+ *
+ * `4.5.0` (Issue #944, ADR-0143) — added the optional `ProjectionCursorMetricRule.sumColumn`.
+ * MINOR: purely additive, and omitting it means "count the matching rows", which
+ * is what every existing rule already meant. It lets a projection carry a
+ * quantity (the first user is `booking`: unit-nights and seconds booked) through
+ * the same `cursor_table` engine instead of a second one.
  */
-export const MODULE_CONTRACT_VERSION = "4.4.0";
+export const MODULE_CONTRACT_VERSION = "4.5.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

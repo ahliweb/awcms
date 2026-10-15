@@ -57,6 +57,7 @@ import {
   type SubjectDataDescriptor
 } from "../_shared/module-contract";
 import { BOOKING_MODULE_KEY } from "./domain/booking-permissions";
+import { BOOKING_REPORTING_PROJECTIONS } from "./domain/booking-reporting";
 import { BOOKING_EVENT_TYPES } from "./domain/booking-reservation-events";
 
 /**
@@ -360,6 +361,12 @@ export const bookingModule = defineModule({
       safeInOfflineLan: true
     }
   ],
+  // Issue #944: three projections on the existing `reporting` engine (no second
+  // analytics engine). The trade-off for a table source over the live domain
+  // events is in `domain/booking-reporting.ts`. No `reporting` dependency is
+  // declared: the engine reads descriptors through `listModules()`, and a tenant
+  // without `reporting` simply never refreshes them.
+  reportingProjections: BOOKING_REPORTING_PROJECTIONS,
   dataLifecycle: [
     retained({
       key: "booking.settings",

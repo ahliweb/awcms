@@ -121,6 +121,19 @@ function validateCursorStream(
         `${context}: metric "${metric.metricKey}" matchColumn is not a valid column name.`
       );
     }
+    if (
+      metric.sumColumn !== undefined &&
+      !COLUMN_NAME_PATTERN.test(metric.sumColumn)
+    ) {
+      push(
+        `${context}: metric "${metric.metricKey}" sumColumn is not a valid column name.`
+      );
+    }
+    if (metric.sumColumn !== undefined && metric.effect !== "increment") {
+      push(
+        `${context}: metric "${metric.metricKey}" declares sumColumn with effect "decrement" -- a quantity is added, never subtracted (the store clamps at zero, so a decrement would desync silently).`
+      );
+    }
   }
 }
 

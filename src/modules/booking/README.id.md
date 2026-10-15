@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2bfb7b6e53555d19a405f66f73ebeaefe3d48239b69bd4a13672d956053bb981 -->
+<!-- i18n-source-hash: sha256:8b2eb6984af6dda6f894b75ed0bfdb9d8546306de3958267fa97e812484b6c43 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -40,9 +40,11 @@ Reservasi (Issue #941, `sql/208`, `sql/209`): route `POST/GET /reservations`,
 (`application/booking-reservation-service.ts`), `Idempotency-Key` lewat
 komponen bersama, `BookingPort` (`application/booking-port-adapter.ts`), sembilan
 event reservasi di dokumen AsyncAPI live, dan default aman untuk batas hold.
-**Belum ada:** route blok (#1012), route laporan dan rekonsiliasi, proyeksi
-reporting, dan layar admin (#942, yang memungkinkan modul keluar dari
-`experimental`).
+**Belum ada:** route blok (#1012), route rekonsiliasi, dan layar admin (#942,
+yang memungkinkan modul keluar dari `experimental`).
+
+Pelaporan (Issue #944, `sql/244`): tiga proyeksi pada engine `reporting` yang ada
+dan tiga route laporan langsung; lihat "Pelaporan, di satu tempat".
 
 ## Allocator, di satu tempat
 
@@ -142,6 +144,33 @@ checkOutDate }` (`YYYY-MM-DD` lokal pada zona resource, setengah-terbuka)
   pembacaan, dan pelanggan adalah token opak di otoritas commerce, bukan tenant
   user; pembuat reservasi tidak berhak membacanya hanya karena membuatnya.
 
+## Pelaporan, di satu tempat
+
+- **Tanpa engine analitik kedua.** `domain/booking-reporting.ts` mendeklarasikan
+  tiga `ProjectionDescriptor` (`booking.reservations`, `booking.time`,
+  `booking.nights`) pada `reportingProjections` di `module.ts`; worker, rebuild,
+  dan rekonsiliasi modul `reporting` yang menjalankannya. Izin baca
+  `booking.reports.read`.
+- **Sumbernya tabel event append-only, bukan event domain live.** Rebuild selalu
+  re-scan tabel, sehingga keadaan tunak dan rebuild adalah scan yang sama
+  (trade-off di header `domain/booking-reporting.ts`). `sql/244` menaruh kuantitas
+  pada baris saat tulis: detik terpesan/terlepas (interval layanan, buffer
+  dikecualikan) dan unit-malam terpesan/terlepas (satu per unit dan malam), plus
+  `projection_kind` ter-generate (`late_cancelled` subset `cancelled`). Setiap
+  metrik hanya naik; neto adalah `booked - released`.
+- **Laporan langsung dan berjendela:** `GET /booking/reports/occupancy` (stay,
+  per unit-malam), `/utilization` (slot, terpesan atas detik terbuka), dan
+  `/reservations` (pipeline hold, lead time, pembatalan, no-show), semuanya dengan
+  jendela hari Asia/Jakarta. Aturan murni di `domain/booking-report.ts`, satu-satunya
+  SQL di `application/booking-report-directory.ts`.
+- **Keputusan pemilik O8:** occupancy tidak menghitung hold (hold adalah
+  `heldUnitNights` dan pipeline, di samping rate, tak pernah di dalamnya);
+  utilization laporan terpisah.
+- **Tanpa pendapatan, tanpa orang.** Booking tidak memegang harga; tak ada
+  proyeksi atau laporan yang membaca referensi pelanggan, catatan, alasan, atau
+  aktor. Rasio atas kurang dari 5 reservasi ditahan (hitungan tidak dianonimkan:
+  pembaca memegang `booking.reports.read` atas tenant itu).
+
 ## Semantik waktu, di satu tempat
 
 - Setiap instan berupa UTC dan setiap interval setengah-terbuka `[start, end)`;
@@ -198,6 +227,9 @@ checkOutDate }` (`YYYY-MM-DD` lokal pada zona resource, setengah-terbuka)
 | `domain/booking-stay.ts`                       | Tanggal stay, batas malam, syarat pool, dan validasi blok yang murni (tanpa I/O/jam)            |
 | `application/booking-block-service.ts`         | `createBlock` / `releaseBlock`: malam terblokir sebagai allocation, `BLOCK_CONFLICT`, audit     |
 | `domain/booking-policy.ts`                     | Kebijakan murni: jam/lead/horizon slot, pembatalan terlambat, grace no-show, batas hold default |
+| `domain/booking-reporting.ts`                  | Tiga deskriptor proyeksi reporting dan alasan tabel event menjadi sumbernya                     |
+| `domain/booking-report.ts`                     | Aturan laporan murni: jendela hari Jakarta, pemotongan, status O8, penahanan kelompok kecil     |
+| `application/booking-report-directory.ts`      | Satu-satunya SQL route laporan: hanya agregat, tenant-scoped, tanpa orang                       |
 | `domain/booking-reservation-events.ts`         | Sembilan tipe event dan pembangun payload tertutup (tanpa orang, alasan, atau jumlah)           |
 | `domain/booking-reservation-validation.ts`     | Body reservasi ketat; field pembayaran ditolak dengan menyebut namanya                          |
 | `application/booking-reservation-service.ts`   | `createReservation`, `transitionReservation`, `rescheduleReservation`                           |

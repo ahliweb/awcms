@@ -63,6 +63,10 @@
  *    pass and both paths would apply the same delta. See
  *    `projection-lock.ts`'s header for the full argument.
  */
+import {
+  computeRuleDelta,
+  ruleColumns
+} from "../domain/projection-metric-delta";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   fetchActiveTenants,
@@ -72,7 +76,10 @@ import type {
   ProjectionCursorStream,
   ProjectionDescriptor
 } from "../../_shared/module-contract";
-import { applyCursorBoundarySafetyMargin } from "../domain/cursor-boundary";
+import {
+  applyCursorBoundarySafetyMargin,
+  trimIncompleteTail
+} from "../domain/cursor-boundary";
 import {
   getStreamCursor,
   resetProjectionCursors,
@@ -232,13 +239,8 @@ async function runRebuildStreamPass(
     "column"
   );
   const cursorColumn = assertSafeIdentifier(stream.cursorColumn, "column");
-  const matchColumns = Array.from(
-    new Set(
-      stream.metrics
-        .map((rule) => rule.matchColumn)
-        .filter((column): column is string => column !== undefined)
-        .map((column) => assertSafeIdentifier(column, "column"))
-    )
+  const matchColumns = ruleColumns(stream.metrics).map((column) =>
+    assertSafeIdentifier(column, "column")
   );
   const selectColumns = Array.from(new Set([cursorColumn, ...matchColumns]));
 
@@ -270,38 +272,38 @@ async function runRebuildStreamPass(
         ? applyCursorBoundarySafetyMargin(cursor)
         : null;
 
-      const rows = (
+      const fetched = (
         resumeAfterBound
           ? await tx.unsafe(
               `SELECT ${selectColumns.join(", ")} FROM ${tableName}
                WHERE ${tenantColumn} = $1 AND ${cursorColumn} >= $2
                ORDER BY ${cursorColumn} ASC LIMIT $3`,
-              [tenantId, resumeAfterBound, descriptor.batchLimit]
+              [tenantId, resumeAfterBound, descriptor.batchLimit + 1]
             )
           : await tx.unsafe(
               `SELECT ${selectColumns.join(", ")} FROM ${tableName}
                WHERE ${tenantColumn} = $1
                ORDER BY ${cursorColumn} ASC LIMIT $2`,
-              [tenantId, descriptor.batchLimit]
+              [tenantId, descriptor.batchLimit + 1]
             )
       ) as Record<string, unknown>[];
 
-      if (rows.length === 0) {
+      if (fetched.length === 0) {
         return { count: 0, cancelled: false };
       }
 
-      const deltas: MetricDelta[] = stream.metrics.map((rule) => {
-        const matchingCount =
-          rule.matchColumn === undefined
-            ? rows.length
-            : rows.filter(
-                (row) => String(row[rule.matchColumn!]) === rule.matchValue
-              ).length;
-        return {
-          metricKey: rule.metricKey,
-          delta: rule.effect === "increment" ? matchingCount : -matchingCount
-        };
-      });
+      // Never end a page inside a millisecond (Issue #944); the `limit + 1`th
+      // row is a lookahead. See `trimIncompleteTail`.
+      const rows = trimIncompleteTail(
+        fetched,
+        cursorColumn,
+        descriptor.batchLimit
+      );
+
+      const deltas: MetricDelta[] = stream.metrics.map((rule) => ({
+        metricKey: rule.metricKey,
+        delta: computeRuleDelta(rows, rule)
+      }));
 
       await applyMetricDeltas(tx, tenantId, descriptor.key, deltas);
 
