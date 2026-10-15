@@ -223,15 +223,15 @@ superseded".
 
 ## Subject-rights decision (ADR-0094 coverage)
 
-| Table                             | `subjectData`                                                     | Why                                                                                                                                                                                                                                                                                                                             |
-| --------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `awcms_hr_employments`            | covered: `profile_id`, `tenant_user_id` + stamps; exported        | The subject's own employment record. Retained under the employer's labour/tax/social-security obligations (`retain_under_obligation`); the link stays and resolves to the anonymised profile.                                                                                                                                   |
-| `awcms_hr_employment_terms`       | covered: actor stamp only; **not exported**; retained             | Reaches the person only through `employment_id`, which a direct subject column cannot express. The subject reads their own history through the ownership-granted `GET .../terms`. Append-only, so an erasure could not rewrite it. A direct employment-to-subject join in the export is a recorded follow-up (see Limitations). |
-| `awcms_hr_shift_assignments`      | covered: actor stamps only; **not exported**; retained            | When a person was scheduled and when away (coarse category, never a reason). Reaches the person only through `employment_id`, the same open item as the terms (below). The subject reads their own published schedule through `?mine=true`. Never deleted, published rows immutable.                                            |
-| `awcms_hr_attendance_events`      | covered: `recorded_by` stamp only; **not exported**; retained     | When a person clocked in and out (behavioural data), reaching the person only through `employment_id` (issue 985, as for terms and shifts). Append-only. The subject reads their own through `?mine=true`. Holds no location, photo, device or network value.                                                                   |
-| `awcms_hr_attendance_corrections` | covered: `requested_by`, `decided_by`; **not exported**; retained | A request to change when a person is recorded as having worked, with a sensitive reason. Reaches the employee only through `employment_id` (issue 985). Exporting the reason to the subject is a recorded follow-up with that join.                                                                                             |
-| `awcms_hr_shift_templates`        | `NO_SUBJECT_DATA` (reason recorded)                               | A pattern with no person; only actor stamps.                                                                                                                                                                                                                                                                                    |
-| `awcms_hr_workforce_settings`     | `NO_SUBJECT_DATA` (reason recorded)                               | A tenant configuration row; only an `updated_by` stamp.                                                                                                                                                                                                                                                                         |
+| Table                             | `subjectData`                                                          | Why                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `awcms_hr_employments`            | covered: `profile_id`, `tenant_user_id` + stamps; exported             | The subject's own employment record. Retained under the employer's labour/tax/social-security obligations (`retain_under_obligation`); the link stays and resolves to the anonymised profile.                                                                                                                                                            |
+| `awcms_hr_employment_terms`       | covered: through the employment (`subjectVia`); **exported**; retained | The employee's own whole history, reached through `employment_id` -> `awcms_hr_employments` (`profile_id` / `tenant_user_id`), the indirect path of ADR-0142. The recorder's `created_by` is deliberately NOT a subject column, so an HR user's export never carries other people's history. Erasure does not follow the join; append-only and retained. |
+| `awcms_hr_shift_assignments`      | covered: through the employment (`subjectVia`); **exported**; retained | When a person was scheduled and when away (coarse category, never a reason), drafts included, reached through the employment (ADR-0142). The scheduler's stamps are not subject columns. Never deleted, published rows immutable; erasure does not follow the join.                                                                                      |
+| `awcms_hr_attendance_events`      | covered: `recorded_by` stamp only; **not exported**; retained          | When a person clocked in and out (behavioural data), reaching the person only through `employment_id` (a recorded follow-up of issue 985: the join now exists, ADR-0142, and flipping it is one descriptor edit). Append-only. The subject reads their own through `?mine=true`. Holds no location, photo, device or network value.                      |
+| `awcms_hr_attendance_corrections` | covered: `requested_by`, `decided_by`; **not exported**; retained      | A request to change when a person is recorded as having worked, with a sensitive reason. Reaches the employee only through `employment_id` (a recorded follow-up of issue 985; the join exists since ADR-0142). Exporting the reason to the subject is a recorded follow-up with that join.                                                              |
+| `awcms_hr_shift_templates`        | `NO_SUBJECT_DATA` (reason recorded)                                    | A pattern with no person; only actor stamps.                                                                                                                                                                                                                                                                                                             |
+| `awcms_hr_workforce_settings`     | `NO_SUBJECT_DATA` (reason recorded)                                    | A tenant configuration row; only an `updated_by` stamp.                                                                                                                                                                                                                                                                                                  |
 
 All seven tables are registered with `data_lifecycle` as `delegated`, with no
 purge: HR history is retained for the employer's legal periods (counsel's, not
@@ -262,11 +262,12 @@ asserted here); archive-then-purge for HR rows is a recorded follow-up.
 
 Open (tracked, not hidden):
 
-- **Shift assignments, attendance events and corrections are not joined into the
-  subject export** either (issue 985 covers all of them), for the same reason as the
-  terms (`exportable: false`; the employee reads their own published schedule and
-  attendance through `?mine=true`). The same follow-up closes all of them, and adds
-  the reason of a correction to the subject's own export.
+- **Attendance events and corrections are not yet exported** to the subject
+  (`exportable: false`; issue 985 delivered the employment join for the terms and
+  the shift assignments only, ADR-0142). The employee reads their own through
+  `?mine=true`. Flipping them is one descriptor edit now; it is held back because a
+  correction carries a sensitive free-text reason and exposing it is its own
+  decision.
 - **Attendance, deferred and recorded:** no `void` (a correction removing an event
   with no replacement) yet: a ghost clock-in is replaced by the true event; no
   sequence validation (a `clock_out` with no `clock_in` is recorded as claimed; the
@@ -287,13 +288,10 @@ Open (tracked, not hidden):
   until Booking consumes it), **no admin screen**, **no template restore** (a
   deleted template frees its code; recreate), and **no assignment on or after a
   termination is refused** (the port simply ignores terms that are not `active`).
-- **Terms are not joined into the subject export.** `awcms_hr_employment_terms`
-  is `exportable: false` because a subject descriptor cannot express the
-  `employment_id` join to a person. A subject-access export today carries the
-  employment header only; the employee reads their own terms through
-  `GET /employments/{id}/terms`. This is an **open item**: a direct
-  employment-to-subject join in the export must land before the module leaves
-  `experimental`.
+- **Terms and shifts are exported through the employment** (issue 985, ADR-0142):
+  a subject-access export carries the employee's own terms history and shift
+  assignments, and nothing of a colleague's or of the HR user who recorded them.
+  Erasure does not follow the join; the rows are retained.
 - **No purge exists.** The `data_lifecycle` descriptors state the intended
   lifecycle (soft delete, then a purge after the employer's retention period) but
   nothing purges; archive-then-purge for HR rows is a follow-up.

@@ -20,9 +20,17 @@ import {
   readMigrations
 } from "../scripts/subject-data-registry-check";
 import { listModules } from "../src/modules";
+import {
+  buildSubjectPlan,
+  erasureTargets
+} from "../src/modules/data-lifecycle/domain/subject-data-plan";
 import type { SubjectDataDescriptor } from "../src/modules/_shared/module-contract";
 
 const COLUMNS = new Map<string, Set<string>>([
+  [
+    "awcms_child_things",
+    new Set(["id", "tenant_id", "thing_id", "created_by"])
+  ],
   [
     "awcms_things",
     new Set(["id", "tenant_id", "tenant_user_id", "identity_id", "token_hash"])
@@ -37,10 +45,12 @@ const ALL_PRIVILEGES = new Set(["SELECT", "INSERT", "UPDATE", "DELETE"]);
 const PRIVILEGES = new Map<string, Set<string>>([
   ["awcms_things", ALL_PRIVILEGES],
   ["awcms_global_things", ALL_PRIVILEGES],
+  ["awcms_child_things", ALL_PRIVILEGES],
   ["awcms_identities", ALL_PRIVILEGES]
 ]);
 
 const FOREIGN_KEYS = new Map<string, string>([
+  ["awcms_child_things.thing_id", "awcms_things"],
   ["awcms_things.tenant_user_id", "awcms_tenant_users"],
   ["awcms_things.identity_id", "awcms_identities"],
   ["awcms_global_things.principal_id", "awcms_principals"]
@@ -448,6 +458,160 @@ describe("ownership and uniqueness", () => {
     expect(run([{ ...VALID, rationale: "because" }]).join(" ")).toContain(
       "beralasan sungguhan"
     );
+  });
+});
+
+/**
+ * ADR-0142, Issue #985. A table that reaches the subject through a parent row.
+ * Every defect below is silent at runtime: a join over a column that is not a
+ * foreign key to the parent reads zero rows (or the wrong ids), and the report
+ * still signs as complete.
+ */
+describe("`subjectVia` (ADR-0142) is proved, not trusted", () => {
+  const CHILD: SubjectDataDescriptor = {
+    key: "m.child_things",
+    tableName: "awcms_child_things",
+    ownerModuleKey: "m",
+    subjectColumns: [],
+    subjectVia: {
+      column: "thing_id",
+      parentKey: "m.things",
+      parentColumns: ["tenant_user_id"]
+    },
+    exportable: true,
+    erasure: "retain_under_obligation",
+    rationale:
+      "rows of a thing, reached through the parent row that names the person"
+  };
+
+  test("a correct join passes", () => {
+    expect(run([VALID, CHILD])).toEqual([]);
+  });
+
+  test("subjectVia together with subjectColumns is refused (the stamp leak)", () => {
+    const problems = run([
+      VALID,
+      {
+        ...CHILD,
+        subjectColumns: [{ column: "created_by", references: "tenant_user" }]
+      }
+    ]);
+    expect(problems.join("\n")).toContain("`subjectVia` DAN `subjectColumns`");
+  });
+
+  test("erasure may not follow the join", () => {
+    for (const erasure of [
+      "anonymize",
+      "hard_delete",
+      "severed_with_subject_row"
+    ] as const) {
+      expect(
+        run([
+          VALID,
+          { ...CHILD, erasure, anonymizedColumns: ["created_by"] }
+        ]).join("\n")
+      ).toContain("TIDAK mengikuti join");
+    }
+  });
+
+  test("a join column that is not a foreign key to the parent is refused", () => {
+    const problems = run([
+      VALID,
+      { ...CHILD, subjectVia: { ...CHILD.subjectVia!, column: "created_by" } }
+    ]);
+    expect(problems.join("\n")).toContain("harus berupa foreign key ke");
+  });
+
+  test("a join column the table does not have is refused", () => {
+    const problems = run([
+      VALID,
+      { ...CHILD, subjectVia: { ...CHILD.subjectVia!, column: "nope_id" } }
+    ]);
+    expect(problems.join("\n")).toContain("tidak ada di");
+  });
+
+  test("an unknown parent is refused", () => {
+    const problems = run([
+      VALID,
+      { ...CHILD, subjectVia: { ...CHILD.subjectVia!, parentKey: "m.ghost" } }
+    ]);
+    expect(problems.join("\n")).toContain("bukan deskriptor subjek");
+  });
+
+  test("a parent column the parent did not declare as a subject column is refused", () => {
+    const problems = run([
+      VALID,
+      {
+        ...CHILD,
+        subjectVia: { ...CHILD.subjectVia!, parentColumns: ["identity_id"] }
+      }
+    ]);
+    expect(problems.join("\n")).toContain("tidak dideklarasikan");
+  });
+
+  test("an empty parentColumns list is refused", () => {
+    const problems = run([
+      VALID,
+      { ...CHILD, subjectVia: { ...CHILD.subjectVia!, parentColumns: [] } }
+    ]);
+    expect(problems.join("\n")).toContain("parentColumns");
+  });
+
+  test("the path is one hop: a parent that itself uses subjectVia is refused", () => {
+    const grandchild: SubjectDataDescriptor = {
+      ...CHILD,
+      key: "m.grandchild_things",
+      tableName: "awcms_things",
+      subjectVia: { ...CHILD.subjectVia!, parentKey: "m.child_things" }
+    };
+    const problems = run([
+      CHILD,
+      { ...grandchild, key: "m.grandchild_things" }
+    ]);
+    expect(problems.join("\n")).toContain("satu lompatan");
+  });
+
+  describe("the planner", () => {
+    const parent: SubjectDataDescriptor = {
+      ...VALID,
+      subjectColumns: [
+        { column: "tenant_user_id", references: "tenant_user" },
+        { column: "created_by", references: "tenant_user" }
+      ]
+    };
+    const ids = {
+      tenantId: "t",
+      tenantUserId: "tu",
+      identityId: "id",
+      profileId: "pr"
+    };
+
+    test("binds ONLY the named parent columns, never the parent's actor stamps", () => {
+      const plan = buildSubjectPlan([parent, CHILD], ids);
+      const entry = plan.entries.find((e) => e.key === "m.child_things");
+
+      expect(entry?.matches).toEqual([]);
+      expect(entry?.via?.parentMatches).toEqual([
+        { column: "tenant_user_id", value: "tu", match: "equals" }
+      ]);
+      expect(plan.exportEntries.map((e) => e.key)).toContain("m.child_things");
+    });
+
+    test("an unresolvable parent drops the entry rather than reading the whole table", () => {
+      const plan = buildSubjectPlan([CHILD], ids);
+      expect(plan.entries).toEqual([]);
+    });
+
+    test("erasureTargets never contains a join entry, even if one claimed to anonymise", () => {
+      const planted: SubjectDataDescriptor = {
+        ...CHILD,
+        erasure: "hard_delete"
+      };
+      const plan = buildSubjectPlan([parent, planted], ids);
+      expect(erasureTargets(plan).map((e) => e.key)).not.toContain(
+        "m.child_things"
+      );
+    });
   });
 });
 

@@ -50,17 +50,30 @@ export type SubjectIdentifiers = {
   profileId: string;
 };
 
+export type SubjectPlanMatch = {
+  column: string;
+  value: string;
+  match: "equals" | "jsonb_array_contains";
+};
+
 export type SubjectPlanEntry = {
   key: string;
   tableName: string;
   ownerModuleKey: string;
   tenantColumn: string;
-  /** One per subject column, already resolved to the VALUE it must be bound to. */
-  matches: readonly {
+  /** One per subject column, already resolved to the VALUE it must be bound to. Empty for a `via` entry. */
+  matches: readonly SubjectPlanMatch[];
+  /**
+   * ADR-0142 - the row reaches the person through a parent row, not a column of
+   * its own: `<column> IN (SELECT id FROM <parentTable> WHERE <parent matches>)`.
+   * Mutually exclusive with `matches`.
+   */
+  via?: {
     column: string;
-    value: string;
-    match: "equals" | "jsonb_array_contains";
-  }[];
+    parentTableName: string;
+    parentTenantColumn: string;
+    parentMatches: readonly SubjectPlanMatch[];
+  };
   exportable: boolean;
   erasure: SubjectDataErasure;
   /** Never exported. */
@@ -164,28 +177,57 @@ export function buildSubjectPlan(
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 
+  const byKey = new Map(descriptors.map((d) => [d.key, d]));
+
+  const bindColumns = (
+    columns: readonly SubjectDataColumn[]
+  ): SubjectPlanMatch[] =>
+    columns
+      // `principal` is global-only (`subject-data:registry:check` enforces
+      // it) and there is no principal id in `SubjectIdentifiers` to bind -
+      // ADR-0094 Decision 1. Dropped rather than defaulted: falling through
+      // to `tenantUserId`, as a two-branch ternary silently would, binds a
+      // tenant-user id to a principal column and reads zero rows forever.
+      .filter(isBindableColumn)
+      .map((subjectColumn) => ({
+        column: subjectColumn.column,
+        value: SUBJECT_ID_OF[subjectColumn.references](subject),
+        match: subjectColumn.match ?? ("equals" as const)
+      }));
+
   const entries = descriptors
     .filter((descriptor) => !isUnanswered(descriptor))
     .map((descriptor): SubjectPlanEntry => {
-      const matches = descriptor.subjectColumns
-        // `principal` is global-only (`subject-data:registry:check` enforces
-        // it) and there is no principal id in `SubjectIdentifiers` to bind —
-        // ADR-0094 Decision 1. Dropped rather than defaulted: falling through
-        // to `tenantUserId`, as a two-branch ternary silently would, binds a
-        // tenant-user id to a principal column and reads zero rows forever.
-        .filter(isBindableColumn)
-        .map((subjectColumn) => ({
-          column: subjectColumn.column,
-          value: SUBJECT_ID_OF[subjectColumn.references](subject),
-          match: subjectColumn.match ?? ("equals" as const)
-        }));
+      const join = descriptor.subjectVia;
+      const parent = join ? byKey.get(join.parentKey) : undefined;
+      // The parent columns the join names, and ONLY those: the parent's actor
+      // stamps are not "this row is about the person" (ADR-0142).
+      const parentMatches =
+        join && parent && parent.tenantColumn !== null && !parent.subjectVia
+          ? bindColumns(
+              parent.subjectColumns.filter((column) =>
+                join.parentColumns.includes(column.column)
+              )
+            )
+          : [];
 
       return {
         key: descriptor.key,
         tableName: descriptor.tableName,
         ownerModuleKey: descriptor.ownerModuleKey,
         tenantColumn: descriptor.tenantColumn ?? TENANT_COLUMN_DEFAULT,
-        matches,
+        matches: join ? [] : bindColumns(descriptor.subjectColumns),
+        ...(join && parent
+          ? {
+              via: {
+                column: join.column,
+                parentTableName: parent.tableName,
+                parentTenantColumn:
+                  parent.tenantColumn ?? TENANT_COLUMN_DEFAULT,
+                parentMatches
+              }
+            }
+          : {}),
         exportable: descriptor.exportable,
         erasure: descriptor.erasure,
         redactedColumns: descriptor.redactedColumns ?? [],
@@ -195,9 +237,12 @@ export function buildSubjectPlan(
     })
     // A descriptor with no subject column joins to nobody, so it would produce
     // a table in the report with every row of the tenant in it. Dropped rather
-    // than trusted — the registry gate is what should have caught it, and this
-    // is the second line.
-    .filter((entry) => entry.matches.length > 0)
+    // than trusted - the registry gate is what should have caught it, and this
+    // is the second line. A `via` entry whose parent could not be resolved or
+    // bound is dropped for the same reason: no match, no read.
+    .filter((entry) =>
+      entry.via ? entry.via.parentMatches.length > 0 : entry.matches.length > 0
+    )
     .sort((a, b) => a.key.localeCompare(b.key));
 
   return {
@@ -227,6 +272,11 @@ export function buildSubjectPlan(
 export function erasureTargets(plan: SubjectPlan): readonly SubjectPlanEntry[] {
   return plan.entries.filter(
     (entry) =>
+      // ADR-0142: erasure does not follow a join. The registry gate refuses a
+      // `subjectVia` descriptor that answers anything but retention; this is
+      // the second line, so a planted one writes nothing rather than erasing a
+      // parent-matched row.
+      !entry.via &&
       entry.erasure !== "retain_under_obligation" &&
       entry.erasure !== "severed_with_subject_row"
   );

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4426217a125e671efe1d20f550088557becb666529c24125c3d6e420333bc8e4 -->
+<!-- i18n-source-hash: sha256:89abef973371ed7df5913cf8a7cd6276b5104e49a1244faf1acc69e03ae4eb41 -->
 
 # `hr_workforce`
 
@@ -227,15 +227,15 @@ digantikan".
 
 ## Keputusan hak subjek data (cakupan ADR-0094)
 
-| Tabel                             | `subjectData`                                                             | Alasan                                                                                                                                                                                                                                                                                                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `awcms_hr_employments`            | tercakup: `profile_id`, `tenant_user_id` + stempel; diekspor              | Catatan kepegawaian milik subjek sendiri. Dipertahankan di bawah kewajiban ketenagakerjaan/pajak/jaminan sosial pemberi kerja (`retain_under_obligation`); tautannya tetap dan mengarah ke profil yang sudah dianonimkan.                                                                                                                              |
-| `awcms_hr_employment_terms`       | tercakup: hanya stempel aktor; **tidak diekspor**; dipertahankan          | Mencapai orangnya hanya lewat `employment_id`, yang tidak bisa dinyatakan kolom subjek langsung. Subjek membaca riwayatnya sendiri lewat `GET .../terms` yang diberi hak kepemilikan. Hanya-tambah, sehingga penghapusan tidak bisa menulis ulangnya. Join employment-ke-subjek langsung di ekspor adalah tindak lanjut tercatat (lihat Keterbatasan). |
-| `awcms_hr_shift_assignments`      | tercakup: hanya stempel aktor; **tidak diekspor**; dipertahankan          | Kapan seseorang dijadwalkan dan kapan berhalangan (kategori kasar, tak pernah alasan). Mencapai orangnya hanya lewat `employment_id`, butir terbuka yang sama dengan terms (di bawah). Subjek membaca jadwal terbit miliknya lewat `?mine=true`. Tak pernah dihapus, baris terbit tak dapat diubah.                                                    |
-| `awcms_hr_attendance_events`      | tercakup: hanya stempel `recorded_by`; **tidak diekspor**; dipertahankan  | Kapan seseorang clock-in dan clock-out (data perilaku), mencapai orangnya hanya lewat `employment_id` (issue 985, seperti terms dan shift). Hanya-tambah. Subjek membaca miliknya lewat `?mine=true`. Tidak memuat nilai lokasi, foto, perangkat, atau jaringan.                                                                                       |
-| `awcms_hr_attendance_corrections` | tercakup: `requested_by`, `decided_by`; **tidak diekspor**; dipertahankan | Permintaan mengubah kapan seseorang tercatat bekerja, dengan alasan sensitif. Mencapai karyawan hanya lewat `employment_id` (issue 985). Mengekspor alasan ke subjek adalah tindak lanjut tercatat bersama join itu.                                                                                                                                   |
-| `awcms_hr_shift_templates`        | `NO_SUBJECT_DATA` (alasan tercatat)                                       | Pola tanpa orang; hanya stempel aktor.                                                                                                                                                                                                                                                                                                                 |
-| `awcms_hr_workforce_settings`     | `NO_SUBJECT_DATA` (alasan tercatat)                                       | Baris konfigurasi tenant; hanya stempel `updated_by`.                                                                                                                                                                                                                                                                                                  |
+| Tabel                             | `subjectData`                                                             | Alasan                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `awcms_hr_employments`            | tercakup: `profile_id`, `tenant_user_id` + stempel; diekspor              | Catatan kepegawaian milik subjek sendiri. Dipertahankan di bawah kewajiban ketenagakerjaan/pajak/jaminan sosial pemberi kerja (`retain_under_obligation`); tautannya tetap dan mengarah ke profil yang sudah dianonimkan.                                                                                                                           |
+| `awcms_hr_employment_terms`       | tercakup: lewat employment (`subjectVia`); **diekspor**; dipertahankan    | Seluruh riwayat karyawan itu sendiri, dicapai lewat `employment_id` -> `awcms_hr_employments` (`profile_id` / `tenant_user_id`), jalur tak langsung ADR-0142. `created_by` pencatat sengaja BUKAN kolom subjek, sehingga ekspor pengguna HR tak pernah memuat riwayat orang lain. Penghapusan tidak mengikuti join; hanya-tambah dan dipertahankan. |
+| `awcms_hr_shift_assignments`      | tercakup: lewat employment (`subjectVia`); **diekspor**; dipertahankan    | Kapan seseorang dijadwalkan dan kapan berhalangan (kategori kasar, tak pernah alasan), termasuk draf, dicapai lewat employment (ADR-0142). Stempel penjadwal bukan kolom subjek. Tak pernah dihapus, baris terbit tak dapat diubah; penghapusan tidak mengikuti join.                                                                               |
+| `awcms_hr_attendance_events`      | tercakup: hanya stempel `recorded_by`; **tidak diekspor**; dipertahankan  | Kapan seseorang clock-in dan clock-out (data perilaku), mencapai orangnya hanya lewat `employment_id` (tindak lanjut tercatat issue 985: join-nya kini ada, ADR-0142, dan membukanya satu suntingan deskriptor). Hanya-tambah. Subjek membaca miliknya lewat `?mine=true`. Tidak memuat nilai lokasi, foto, perangkat, atau jaringan.               |
+| `awcms_hr_attendance_corrections` | tercakup: `requested_by`, `decided_by`; **tidak diekspor**; dipertahankan | Permintaan mengubah kapan seseorang tercatat bekerja, dengan alasan sensitif. Mencapai karyawan hanya lewat `employment_id` (tindak lanjut tercatat issue 985; join ada sejak ADR-0142). Mengekspor alasan ke subjek adalah tindak lanjut tercatat bersama join itu.                                                                                |
+| `awcms_hr_shift_templates`        | `NO_SUBJECT_DATA` (alasan tercatat)                                       | Pola tanpa orang; hanya stempel aktor.                                                                                                                                                                                                                                                                                                              |
+| `awcms_hr_workforce_settings`     | `NO_SUBJECT_DATA` (alasan tercatat)                                       | Baris konfigurasi tenant; hanya stempel `updated_by`.                                                                                                                                                                                                                                                                                               |
 
 Ketujuh tabel didaftarkan ke `data_lifecycle` sebagai `delegated`, tanpa purge:
 riwayat HR dipertahankan selama masa hukum pemberi kerja (menurut penasihat
@@ -267,11 +267,11 @@ lanjut tercatat.
 
 Terbuka (dilacak, tidak disembunyikan):
 
-- **Penugasan shift, event kehadiran, dan koreksi juga belum di-join ke ekspor
-  subjek** (issue 985 mencakup semuanya), karena alasan yang sama dengan terms
-  (`exportable: false`; karyawan membaca jadwal terbit dan kehadiran miliknya lewat
-  `?mine=true`). Tindak lanjut yang sama menutup semuanya, dan menambahkan alasan
-  koreksi ke ekspor milik subjek sendiri.
+- **Event kehadiran dan koreksi belum diekspor** ke subjek
+  (`exportable: false`; issue 985 mengantarkan join employment hanya untuk terms dan
+  penugasan shift, ADR-0142). Karyawan membaca miliknya lewat `?mine=true`. Membukanya
+  kini satu suntingan deskriptor; ditahan karena koreksi memuat alasan teks bebas yang
+  sensitif dan membukanya adalah keputusan tersendiri.
 - **Kehadiran, ditunda dan tercatat:** belum ada `void` (koreksi yang menghapus
   event tanpa pengganti): clock-in hantu diganti dengan event yang benar; tanpa
   validasi urutan (`clock_out` tanpa `clock_in` dicatat sebagaimana diklaim; catatan
@@ -293,13 +293,10 @@ Terbuka (dilacak, tidak disembunyikan):
   restore template** (template yang dihapus membebaskan kodenya; buat ulang), dan
   **penugasan pada atau setelah terminasi tidak ditolak** (port cukup mengabaikan
   terms yang bukan `active`).
-- **Terms belum di-join ke ekspor subjek.** `awcms_hr_employment_terms` bernilai
-  `exportable: false` karena deskriptor subjek tidak bisa menyatakan join
-  `employment_id` ke seseorang. Ekspor akses-subjek saat ini hanya membawa header
-  employment; karyawan membaca terms-nya sendiri lewat
-  `GET /employments/{id}/terms`. Ini **butir terbuka**: join langsung
-  employment-ke-subjek di ekspor harus mendarat sebelum modul keluar dari
-  `experimental`.
+- **Terms dan shift diekspor lewat employment** (issue 985, ADR-0142): ekspor
+  akses-subjek memuat riwayat terms dan penugasan shift milik karyawan itu sendiri,
+  dan tak ada milik rekan kerja atau pengguna HR yang mencatatnya. Penghapusan tidak
+  mengikuti join; barisnya dipertahankan.
 - **Belum ada purge.** Deskriptor `data_lifecycle` menyatakan siklus yang
   dimaksud (soft delete, lalu purge setelah masa retensi pemberi kerja) tetapi
   belum ada yang mem-purge; archive-then-purge untuk baris HR adalah tindak lanjut.

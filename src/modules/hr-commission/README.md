@@ -241,10 +241,11 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test remove
   permission: the "employee sees their own accruals" path (an ownership grant on
   the employment's login) and the `office` business scope are follow-ups with the
   self-service surface.
-- **Exporting a person's accrual history** (tracked in issue #985) needs an employment-to-subject join the
-  registry's direct subject columns cannot express (the limit
-  `hr_workforce.employment_terms` records); the descriptor names only the actor
-  stamps and is `exportable: false` until that join exists.
+- **Exporting a person's accrual history** (tracked in issue #985) needs an employment-to-subject join; the registry now has one
+  (`subjectVia`, ADR-0142, first used by `hr_workforce.employment_terms`), but the
+  commission descriptor still names only the actor stamps and is
+  `exportable: false`: adopting it is this module's own decision, because earnings
+  sit on the payroll boundary.
 - **Retention: retained for the life of the tenant, no period asserted.** There is
   deliberately NO `dataLifecycle` descriptor for any of the three tables (a
   descriptor must assert a period and a purge mode, and nothing purges): the ledger
