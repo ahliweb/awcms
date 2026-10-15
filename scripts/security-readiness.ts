@@ -760,7 +760,12 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // DELETE as the second layer. The transition log is append-only and written
   // only by the accrual's own triggers: INSERT and SELECT only.
   awcms_hr_commission_accruals: ["SELECT", "INSERT", "UPDATE"],
-  awcms_hr_commission_transitions: ["SELECT", "INSERT"]
+  awcms_hr_commission_transitions: ["SELECT", "INSERT"],
+  // #978 / `sql/224`. NOT retired — one counter row per (tenant, actor, module,
+  // kind) is overwritten in place each window, so the table is bounded by its
+  // primary key and never needs a purge. DELETE is revoked so an actor cannot
+  // erase the window that is coalescing their reads.
+  awcms_sensitive_read_windows: ["SELECT", "INSERT", "UPDATE"]
 };
 
 type RlsRow = {
