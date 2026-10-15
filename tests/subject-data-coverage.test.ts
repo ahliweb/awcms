@@ -417,6 +417,7 @@ describe("the contract version records the addition", () => {
     // likewise nothing about subject data.
     // 4.4.0 (ADR-0140) adds `handlesPayrollData` and
     // `ModuleNavigationEntry.requiredAnyPermission`; likewise nothing here.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.4.0");
+    // 4.5.0 (Issue #944) adds `ProjectionCursorMetricRule.sumColumn`; likewise.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.5.0");
   });
 });

@@ -432,6 +432,21 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/booking/reports/occupancy.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/reports/reservations.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/reports/utilization.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/booking/reservations/[id].ts",
       "workClass": "interactive",
       "source": "factory"
