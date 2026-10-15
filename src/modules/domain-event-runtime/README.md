@@ -162,6 +162,28 @@ The same migration also introduces the generic `awcms_idempotency_keys`
 store, since this module's replay endpoint is the first high-risk mutation in
 this repo to require the standard `Idempotency-Key` wrapper.
 
+### Retention of `awcms_idempotency_keys` (Issue #1034)
+
+Rows are a replay cache, not a record, and since ADR-0145 each carries a
+pseudonymous `actor_key` (`user:<tenant_user_id>`) plus a cached
+`response_body` that can echo personal data. They are therefore purged:
+
+- Descriptor `domain_event_runtime.idempotency_keys` (hard delete by
+  `created_at`), run by the generic engine behind
+  `bun run data-lifecycle:archive-purge` (daily, already in the crontab).
+  `sql/276` grants `awcms_worker` `SELECT, DELETE` on the table.
+- **Default 30 days**, tenant-configurable between 7 and 90. The floor is well
+  above the 24-hour deploy-straddle guard on `legacy:unscoped` rows (ADR-0145),
+  and 30 days is the longest retry window that is still sensible. The first run
+  after upgrade deletes the accumulated backlog in bounded batches; preview with
+  `bun run data-lifecycle:archive-purge --dry-run`.
+- Subject data: the table is classified `unreachableBySubject`
+  (`exportable: false`, `retain_under_obligation`). `actor_key` is a prefixed
+  text value the uuid-equality planner cannot match, and erasing a row would let
+  a retry run the mutation twice, so the exposure is bounded by the retention
+  window instead. The personal data a response echoes is exported and erased
+  from its own table. `actor_key` and `response_body` are never exported.
+
 ## Dispatcher operations
 
 `bun run domain-events:dispatch` — claim/execute/finalize due deliveries for

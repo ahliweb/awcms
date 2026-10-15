@@ -1,0 +1,35 @@
+-- Retention for `awcms_idempotency_keys` (Issue #1034, follow-up to #1000 /
+-- ADR-0145).
+--
+-- The table had no retention: nothing deleted a row, and since #1000 each row
+-- carries `actor_key` (`user:<tenant_user_id>`) next to a cached
+-- `response_body` that can echo personal data. `domain_event_runtime` now
+-- declares a `dataLifecycle` descriptor for it
+-- (`domain_event_runtime.idempotency_keys`, hard delete by `created_at`,
+-- default 30 days, floor 7, ceiling 90), executed by the generic engine behind
+-- `bun run data-lifecycle:archive-purge`.
+--
+-- That engine runs as `awcms_worker` and issues, per descriptor,
+--
+--   SELECT ... FROM <table> WHERE tenant_id = $1 AND created_at < $2 ...
+--   DELETE FROM <table> WHERE id IN (SELECT id FROM <table> ...)
+--
+-- so the worker needs SELECT + DELETE on the table (see `sql/129`, which found
+-- the same gap for two other tables by running the job). Without this grant the
+-- purge fails with `permission denied` the first time it is scheduled.
+--
+-- Only those two verbs. INSERT and UPDATE stay with `awcms_app`: a worker that
+-- could write idempotency records could plant a replay for a key a real caller
+-- has not used yet. `scripts/security-readiness.ts` (WORKER_ROLE_GRANTS) lists
+-- exactly this pair.
+--
+-- No row is changed here, so the FORCE ROW LEVEL SECURITY policy on `tenant_id`
+-- needs no special handling (the sql/103 pattern is for DML in a migration;
+-- this migration is a GRANT only). The job opens `withTenant(...)` per tenant
+-- like every other lifecycle purge.
+--
+-- The 24-hour deploy-straddle guard on `legacy:unscoped` rows (ADR-0145) is
+-- unaffected: the minimum retention is 7 days, and the first purge removes the
+-- legacy rows along with everything else past the window.
+
+GRANT SELECT, DELETE ON awcms_idempotency_keys TO awcms_worker;

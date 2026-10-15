@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:88f5bc955845ec2afaf19aa29d856d40994efd19b6c6aacac93b75389ba23d7f -->
+<!-- i18n-source-hash: sha256:320310bc8b5d66ad14f7d8e083db5707861734dcea69a2875719103e65834607 -->
 
 # Domain Event Runtime
 
@@ -172,6 +172,30 @@ Migrasi yang sama juga memperkenalkan penyimpanan generik
 `awcms_idempotency_keys`, karena endpoint replay modul ini adalah mutasi
 berisiko-tinggi pertama di repo ini yang membutuhkan pembungkus
 `Idempotency-Key` standar.
+
+### Retensi `awcms_idempotency_keys` (Issue #1034)
+
+Baris-barisnya adalah cache replay, bukan catatan, dan sejak ADR-0145 setiap
+baris memuat `actor_key` pseudonim (`user:<tenant_user_id>`) serta
+`response_body` tersimpan yang dapat menggemakan data pribadi. Karena itu baris
+dipurge:
+
+- Deskriptor `domain_event_runtime.idempotency_keys` (hard delete menurut
+  `created_at`), dijalankan engine generik di balik
+  `bun run data-lifecycle:archive-purge` (harian, sudah ada di crontab).
+  `sql/276` memberi `awcms_worker` `SELECT, DELETE` pada tabel ini.
+- **Default 30 hari**, dapat diatur per tenant antara 7 dan 90. Batas bawahnya
+  jauh di atas guard deploy-straddle 24 jam untuk baris `legacy:unscoped`
+  (ADR-0145), dan 30 hari adalah jendela retry terpanjang yang masih masuk akal.
+  Run pertama setelah upgrade menghapus tumpukan lama dalam batch terbatas;
+  pratinjau dengan `bun run data-lifecycle:archive-purge --dry-run`.
+- Data subjek: tabel diklasifikasi `unreachableBySubject`
+  (`exportable: false`, `retain_under_obligation`). `actor_key` adalah nilai
+  teks berawalan yang tak dapat dicocokkan planner berbasis kesetaraan uuid, dan
+  menghapus satu baris akan membiarkan retry menjalankan mutasi dua kali, jadi
+  paparannya dibatasi oleh jendela retensi. Data pribadi yang digemakan sebuah
+  respons diekspor dan dihapus dari tabelnya sendiri. `actor_key` dan
+  `response_body` tidak pernah diekspor.
 
 ## Operasi dispatcher
 
