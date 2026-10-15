@@ -1377,6 +1377,12 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // which runs as `awcms_worker`, can actually delete. Without it the purge ran,
   // reported success, and removed nothing.
   awcms_abac_decision_logs: ["DELETE", "SELECT"],
+  // Issue #1034 (sql/276) - the generic data_lifecycle purge hard-deletes
+  // idempotency records past their retention window. SELECT to find them,
+  // DELETE to remove them; never INSERT/UPDATE (records are written on the
+  // request path as `awcms_app`, and a worker that could write them could
+  // plant a replay).
+  awcms_idempotency_keys: ["DELETE", "SELECT"],
   // ADR-0084 (sql/110) — `identity-access:subscription-lifecycle` reads each
   // tenant's subscription and moves it one rung down the ladder. SELECT and
   // UPDATE only: INSERT would let a cron job put any tenant on any plan (the

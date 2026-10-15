@@ -166,11 +166,6 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0042. A queue of surrogate keys the edge cache must invalidate. A surrogate key names a CONTENT surface, never a visitor, and the rows are written by infrastructure in `src/lib/` that no module owns."
   },
   {
-    table: "awcms_idempotency_keys",
-    reason:
-      "The replay guard for high-risk mutations: a scope, a key, a request hash and the response that was returned. The only identity on a row is `actor_key` (ADR-0145), the acting tenant user id (or `machine:`/`anonymous`) that scopes the key; the key itself is chosen by the CALLER, and the request hash is an HMAC, so no subject request can find the rows by content, and the id is a pseudonym. The cached `response_body` can echo personal data from the mutation it replays. No retention job exists for this table today, so rows currently persist; retention and a subject-data classification are tracked in ahliweb/awcms#1034 and this entry must be revisited when that lands."
-  },
-  {
     table: "awcms_omes_servers",
     reason:
       "ADR-0122 (Issue ahliweb/omes#196). One row per enrolled OMES host server machine. Records hardware specs, OS version, kernel, and machine public key. Holds no personal data about natural persons or visitors."

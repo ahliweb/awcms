@@ -126,9 +126,12 @@ describe("the dry run counts what the delete would remove", () => {
 describe("the descriptor, the ledger, and the scope statement", () => {
   const descriptors = domainEventRuntimeModule.dataLifecycle ?? [];
 
-  test("exactly one table is described, and it is delegated", () => {
+  test("the deliveries table is described, and it is delegated", () => {
+    // `awcms_idempotency_keys` is the module's second descriptor (Issue #1034,
+    // generic engine); this file is about the delegated one.
     expect(descriptors.map((d) => d.tableName)).toEqual([
-      "awcms_domain_event_deliveries"
+      "awcms_domain_event_deliveries",
+      "awcms_idempotency_keys"
     ]);
     expect(descriptors[0]!.executionMode).toBe("delegated");
     expect(descriptors[0]!.cursorColumn).toBe("updated_at");

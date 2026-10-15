@@ -233,7 +233,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_email_suppression_list",
   "awcms_email_templates",
   "awcms_external_identities",
-  "awcms_idempotency_keys",
   "awcms_identities",
   "awcms_idn_admin_regions",
   "awcms_idn_region_datasets",
