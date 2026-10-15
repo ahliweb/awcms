@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](procurement.md)
 
-<!-- i18n-source-hash: sha256:f222233bcd9d00eec4781edd7c2fbb58b18cc6df0b0f25276a9306e1540feb36 -->
+<!-- i18n-source-hash: sha256:9dad49b0f67da0a71962830888421ce1f2e51f199deae9b723f6bfac68bf2e0d -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -195,7 +195,7 @@ Untuk memberi tenant lama izin baru jalankan `bun run identity-access:permission
 
 Batasan yang dinyatakan eksplisit (ADR-0128):
 
-- **Reveal tanpa step-up dan tanpa rate limit.** Tak ada reveal saudara yang bisa ditiru (`profile_identity` tak punya reveal teks-polos; tak ada reveal lain yang membawa perlindungan itu), dan `requireStepUp` tanpa syarat adalah jebakan ADR-0058 §E. Reveal hanya diaudit, `no-store`, dan berizin sendiri.
+- **Reveal tanpa step-up dan tanpa rate limit.** Tak ada reveal saudara yang bisa ditiru (`profile_identity` tak punya reveal teks-polos; tak ada reveal lain yang membawa perlindungan itu), dan `requireStepUp` tanpa syarat adalah jebakan ADR-0141 §4. Reveal hanya diaudit, `no-store`, dan berizin sendiri.
 - **Ambang persetujuan berbasis biaya.** Dokumen berbiaya nol atau tak diisi, serta semua requisition dan transfer, melewatinya.
 - **Tanpa ABAC per-lokasi dan tanpa maker/checker bawaan.** Memisahkan `documents.submit` dari `documents.finalise` adalah kewajiban operator: tulis aturan SoD atas kedua aksi high-risk itu.
 - Saat anonimisasi, tautan `profile_id` pemasok **dipertahankan** (menunjuk profil teranonimkan); nama dagang dipertahankan di bawah kewajiban financial_tax.

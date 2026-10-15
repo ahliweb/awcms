@@ -316,7 +316,7 @@ describe("the wiring in the chokepoint", () => {
   });
 });
 
-describe("never an unconditional step-up (ADR-0058 section E)", () => {
+describe("never an unconditional step-up (ADR-0141 §4)", () => {
   test("the gate asks whether a factor EXISTS and never demands a step-up proof", async () => {
     const gate = await Bun.file(GATE).text();
 

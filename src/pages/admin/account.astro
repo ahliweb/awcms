@@ -119,7 +119,7 @@ const ssoFeatureEnabled = isSsoEnabled();
  * `loadSelfServiceScreen`, not `loadAdminScreen` (ADR-0096 §1).
  *
  * This screen has no entry permission to evaluate, and inventing one would be
- * the ADR-0058 §E trap: an action no migration seeds denies EVERYONE, tenant
+ * the trap in the `awcms-abac-guard` skill: an action no migration seeds denies EVERYONE, tenant
  * owner included, while this file would read as correctly guarded. `authorize:
  * []` is not an option either — `selectEntryOutcome` denies an empty list, on
  * purpose and fail-closed.

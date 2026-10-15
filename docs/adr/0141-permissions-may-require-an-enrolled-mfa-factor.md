@@ -17,7 +17,7 @@ The consequence was finding PS-13: **a holder with no enrolled factor performs r
 - `required_for_privileged` classifies "privileged" as holding **any** permission whose action is not `read`/`analyze`/`check`. It is enforced **at login** (an enrolment grant instead of a full session), so it asks every non-read holder in the tenant to enrol — a heavy lever for "the six permissions that move money" — and it says nothing at the moment of exercise.
 - Nothing, anywhere, connects "this permission" to "its holder must be able to give a second factor". No issue built that, so the sentence in the ADRs described a control that did not exist.
 
-> **A note on the citation.** The repository (ADR-0136, ADR-0137, `password-change.ts`) cites "ADR-0058 §E" for the rule _step-up must be conditional_. ADR-0058 as written is about four permissions with no enforcer, and its §E is the revocation migration; what it contributes is the **class** of trap — a requirement that nothing can satisfy denies everyone, while the call site reads as correctly guarded. The rule is correct; this ADR states it in its own words (§4) so that it no longer rests on a section that does not say it.
+> **A note on the citation.** The repository (ADR-0136, ADR-0137, `password-change.ts`) cited "ADR-0058 §E" for the rule _step-up must be conditional_. ADR-0058 as written is about four permissions with no enforcer, and its §E is the revocation migration; what it contributes is the **class** of trap — a requirement that nothing can satisfy denies everyone, while the call site reads as correctly guarded. The rule is correct; this ADR states it in its own words (§4) so that it no longer rests on a section that does not say it.
 
 ## Decision
 

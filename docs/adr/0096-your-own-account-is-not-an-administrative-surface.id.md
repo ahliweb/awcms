@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0096-your-own-account-is-not-an-administrative-surface.md)
 
-<!-- i18n-source-hash: sha256:272eea65f6f41f9fd89628d902605703c635b12d9a342f1ec96e81230be7f9c0 -->
+<!-- i18n-source-hash: sha256:4794ff9c74e99f718d241e0a31135a82f9a843dc1eb7700f7ae9b3471f110b37 -->
 
 # ADR-0096 — Akun ANDA SENDIRI bukan permukaan administratif
 
@@ -13,7 +13,7 @@
   `auth/me`) dan **NOL** berkas di `src/pages` atau `src/components` yang
   memanggil satu pun di antaranya. Semuanya hanya bisa dijangkau dengan `curl`.
 - **Membangun di atas:**
-  [ADR-0058](0058-unenforced-permissions-disposition.md) §E (jebakan latent-authz —
+  [skill awcms-abac-guard](../../.claude/skills/awcms-abac-guard/SKILL.id.md) (jebakan latent-authz —
   aksi yang tak di-seed menolak SEMUA ORANG),
   [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md) (gerbang per-handler,
   kepemilikan masuk sebagai `ownershipGrant` yang MELEBARKAN),
@@ -43,7 +43,7 @@ SERVER-side dari sesi yang memanggil, jadi tidak ada yang perlu diotorisasi di
 luar "apakah sesi ini hidup".
 
 Menciptakan izin untuk itu bukan sekadar berlebihan, melainkan **merusak**:
-ADR-0058 §E mencatat bahwa aksi yang tidak di-seed menolak semua orang termasuk
+skill `awcms-abac-guard` mencatat bahwa aksi yang tidak di-seed menolak semua orang termasuk
 pemilik tenant, sementara kodenya terbaca seolah dijaga dengan benar. Sebuah
 `identity_access.own_profile.update` akan mendarat sebagai 403 universal di
 halaman yang justru paling tidak boleh punya tembok — dan

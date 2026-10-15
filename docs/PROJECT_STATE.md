@@ -6043,7 +6043,7 @@ scope_id = tenant_id)`. This is the answer to a limit ADR-0080 wrote
      refuses every session that is not currently `aal2`, and somebody with no enrolled
      factor can never reach it — unconditionally, every user
      without MFA is permanently unable to change their password, and the ones who need it most
-     are exactly the ones who just learned their password leaked. The ADR-0058 §E trap in another costume.
+     are exactly the ones who just learned their password leaked. The ADR-0141 §4 trap in another costume.
      The mutation `if (mfa.enabled)` → `if (true)` turns 4 tests red.
 
   **A finding about #430 that changes its value.** The temporary mitigation
@@ -6295,7 +6295,7 @@ scope_id = tenant_id)`. This is the answer to a limit ADR-0080 wrote
   - **A `push_delivery.subscriptions.*` permission** — registering your own device
     is self-service; a permission for it is a wall in front of
     the feature, and an action that is not seeded refuses everybody including the owner
-    (the latent-authz trap, ADR-0058 §E).
+    (the latent-authz trap, `awcms-abac-guard` skill).
   - **Assigning `awcms_edge_cache_purges` to one of the three modules that
     write it** so that its gate turns green — a descriptor naming the wrong
     owner is a false claim that reads as a decision.

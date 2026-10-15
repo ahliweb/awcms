@@ -4,7 +4,7 @@
  *
  * ## The gap this closes
  *
- * ADR-0027 gave the tenant an MFA policy and ADR-0058 §E taught every caller to
+ * ADR-0027 gave the tenant an MFA policy and ADR-0141 §4 taught every caller to
  * apply step-up CONDITIONALLY — only to a person who has a factor, because an
  * unconditional `requireStepUp` permanently locks out everyone without one.
  * Both are right, and together they leave a hole: a holder with no factor is

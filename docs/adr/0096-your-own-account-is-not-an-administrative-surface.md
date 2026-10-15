@@ -12,7 +12,7 @@
   `src/components` calling any one of them. All of them can only be reached
   with `curl`.
 - **Builds on:**
-  [ADR-0058](0058-unenforced-permissions-disposition.md) §E (the latent-authz
+  [awcms-abac-guard skill](../../.claude/skills/awcms-abac-guard/SKILL.md) (the latent-authz
   trap — an action that is not seeded denies EVERYONE),
   [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md) (per-handler gate,
   ownership enters as an `ownershipGrant` that WIDENS),
@@ -42,7 +42,7 @@ SERVER-side from the calling session, so there is nothing to authorize beyond
 "is this session alive".
 
 Creating a permission for that is not merely excessive, it is **damaging**:
-ADR-0058 §E records that an action which is not seeded denies everyone including
+the `awcms-abac-guard` skill records that an action which is not seeded denies everyone including
 the tenant owner, while the code reads as though it were guarded correctly. An
 `identity_access.own_profile.update` would land as a universal 403 on the page
 that of all pages must not have a wall — and

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:b25cf4511401233ebc90c6eb3ff9785c97810ad1236e82ffb8356fb81502b700 -->
+<!-- i18n-source-hash: sha256:e3c96df02ec73861494d2a3ea86e1dfb84ac6f42f7da1b6c8a1ce34f1928c47f -->
 
 # AWCMS — Project State & Continuation
 
@@ -6230,7 +6230,7 @@ scope_id = tenant_id)`. Ini jawaban atas batas yang ADR-0080 tulis
      menolak setiap sesi yang tidak sedang `aal2`, dan orang tanpa faktor
      terdaftar tak akan pernah bisa mencapainya — tanpa syarat, setiap pengguna
      tanpa MFA permanen tak bisa mengganti passwordnya, dan yang paling butuh
-     justru yang baru tahu passwordnya bocor. Jebakan ADR-0058 §E berbaju lain.
+     justru yang baru tahu passwordnya bocor. Jebakan ADR-0141 §4 berbaju lain.
      Mutasi `if (mfa.enabled)` → `if (true)` memerahkan 4 test.
 
   **Temuan tentang #430 yang mengubah nilainya.** Mitigasi sementara yang
@@ -6482,7 +6482,7 @@ scope_id = tenant_id)`. Ini jawaban atas batas yang ADR-0080 tulis
   - **Permission `push_delivery.subscriptions.*`** — mendaftarkan perangkat
     sendiri adalah self-service; permission untuknya adalah tembok di depan
     fiturnya, dan aksi yang tak di-seed menolak semua orang termasuk owner
-    (jebakan latent-authz, ADR-0058 §E).
+    (jebakan latent-authz, skill `awcms-abac-guard`).
   - **Menetapkan `awcms_edge_cache_purges` ke salah satu dari tiga modul yang
     menulisnya** supaya gerbangnya hijau — deskriptor yang menyebut pemilik yang
     salah adalah klaim palsu yang terbaca sebagai keputusan.
