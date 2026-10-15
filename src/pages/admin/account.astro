@@ -278,6 +278,12 @@ const themeOptions = [
       "Two-factor authentication is already switched on for your account."
     )}
     data-mfa-start-failed={t("Could not start setup. Please try again.")}
+    data-mfa-password-required={t(
+      "Enter your current password to set up two-factor authentication."
+    )}
+    data-mfa-reauth-required={t(
+      "Sign in again through your identity provider, then set up two-factor authentication."
+    )}
     data-mfa-bad-code={t("That code is not right. Try the next one.")}
     data-mfa-verify-failed={t("Could not confirm the code. Please try again.")}
     data-mfa-disable-failed={t(
@@ -569,6 +575,30 @@ const themeOptions = [
         )}
       </>
     )}
+
+    {/* Re-authentication before enrolment (#1004). Revealed by the button above;
+        the password is posted to `enroll/start` and never stored client-side.
+        Not `required`: a person who signs in through an identity provider has no
+        password to type and the server answers what they need to do instead. */}
+    <form id="account-mfa-start-form" class="admin-form" hidden>
+      <p class="admin-card-hint">
+        {t(
+          "For your security, confirm your current password before setting up two-factor authentication. You will get an email telling you it was added."
+        )}
+      </p>
+      <div class="admin-field">
+        <label for="account-mfa-start-password">{t("Current password")}</label>
+        <input
+          type="password"
+          id="account-mfa-start-password"
+          name="currentPassword"
+          autocomplete="current-password"
+        />
+      </div>
+      <button type="submit" class="btn-primary">
+        {t("Continue")}
+      </button>
+    </form>
 
     {/* Filled in by the client script after enrolment starts. The secret is
         rendered into the DOM only for the person enrolling, on a `no-store`

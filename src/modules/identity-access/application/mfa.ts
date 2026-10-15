@@ -168,6 +168,28 @@ export async function getMfaStatus(
   };
 }
 
+/**
+ * How long a pending enrolment may wait for its confirming code (#1004). Long
+ * enough to install an authenticator app and type six digits; short enough that
+ * an abandoned secret on a screen is not a standing credential.
+ */
+export const PENDING_ENROLLMENT_TTL_SEC = 600;
+
+/** Wrong codes a pending enrolment survives before it is deleted (#1004). */
+export const PENDING_ENROLLMENT_MAX_FAILURES = 5;
+
+/**
+ * What a pending enrolment is bound to: a derived hash of the session or login
+ * grant that STARTED it, so `verify` can refuse a different one. `key` is the
+ * session token hash, or `grant:<challengeId>` for the login-forced path. The
+ * prefix keeps this value from ever equalling a stored session hash.
+ */
+export function enrollmentBindingHash(key: string): string {
+  return new Bun.CryptoHasher("sha256")
+    .update(`awcms:mfa-enroll-binding:v1:${key}`)
+    .digest("hex");
+}
+
 export type StartEnrollmentResult =
   | { ok: true; secretBase32: string; otpauthUri: string }
   | { ok: false; code: "MFA_ALREADY_ACTIVE" | "MFA_MISCONFIGURED" };
@@ -184,7 +206,10 @@ export async function startTotpEnrollment(
   identityId: string,
   loginIdentifier: string,
   env: NodeJS.ProcessEnv,
-  now: Date
+  // Kept for signature stability: the pending row is stamped by the database
+  // clock (`insertPendingFactor`), so the application clock is no longer read.
+  _now: Date,
+  bindingHash: string
 ): Promise<StartEnrollmentResult> {
   const key = resolveMfaEncryptionKey(env);
 
@@ -217,7 +242,12 @@ export async function startTotpEnrollment(
   const periodSec = resolveTotpPeriodSec(env);
   const issuer = resolveTotpIssuer(env);
 
-  await factorStore.insertPendingFactor(tx, principalId, ciphertext, now);
+  await factorStore.insertPendingFactor(
+    tx,
+    principalId,
+    ciphertext,
+    bindingHash
+  );
 
   return {
     ok: true,
@@ -237,7 +267,10 @@ export type VerifyEnrollmentResult =
   | {
       ok: false;
       code:
-        "MFA_ENROLLMENT_NOT_FOUND" | "MFA_INVALID_CODE" | "MFA_MISCONFIGURED";
+        | "MFA_ENROLLMENT_NOT_FOUND"
+        | "MFA_ENROLLMENT_EXHAUSTED"
+        | "MFA_INVALID_CODE"
+        | "MFA_MISCONFIGURED";
     };
 
 export async function verifyTotpEnrollment(
@@ -246,7 +279,8 @@ export async function verifyTotpEnrollment(
   identityId: string,
   code: string,
   env: NodeJS.ProcessEnv,
-  now: Date
+  now: Date,
+  bindingHash: string
 ): Promise<VerifyEnrollmentResult> {
   const key = resolveMfaEncryptionKey(env);
 
@@ -260,10 +294,30 @@ export async function verifyTotpEnrollment(
     return { ok: false, code: "MFA_ENROLLMENT_NOT_FOUND" };
   }
 
-  const row = await factorStore.findPendingFactor(tx, principalId);
+  const row = await factorStore.findPendingFactor(
+    tx,
+    principalId,
+    PENDING_ENROLLMENT_TTL_SEC
+  );
 
   if (!row) {
     return { ok: false, code: "MFA_ENROLLMENT_NOT_FOUND" };
+  }
+
+  // Expired, or started by a different session/grant (a NULL binding - a row
+  // from before #1004 - is never confirmable). Reported as "not found", the same
+  // answer as no enrolment at all, so a wrong session learns nothing about
+  // whether one is pending; the next `start` replaces the row.
+  if (!row.fresh || row.enrollment_binding_hash !== bindingHash) {
+    return { ok: false, code: "MFA_ENROLLMENT_NOT_FOUND" };
+  }
+
+  // Refuse BEFORE evaluating a code once the cap is reached (the row is locked,
+  // so this count is the committed one): no guess beyond the cap is ever tested.
+  if (row.failed_verify_count >= PENDING_ENROLLMENT_MAX_FAILURES) {
+    await factorStore.deletePendingFactorById(tx, row.id);
+
+    return { ok: false, code: "MFA_ENROLLMENT_EXHAUSTED" };
   }
 
   let matchedStep: number | null;
@@ -280,6 +334,16 @@ export async function verifyTotpEnrollment(
   }
 
   if (matchedStep === null) {
+    // Counted in the database; at the cap the pending secret is destroyed, so a
+    // six-digit code cannot be ground out against one displayed secret.
+    const failures = await factorStore.recordPendingFailure(tx, row.id);
+
+    if (failures >= PENDING_ENROLLMENT_MAX_FAILURES) {
+      await factorStore.deletePendingFactorById(tx, row.id);
+
+      return { ok: false, code: "MFA_ENROLLMENT_EXHAUSTED" };
+    }
+
     return { ok: false, code: "MFA_INVALID_CODE" };
   }
 
@@ -400,12 +464,20 @@ export async function createMfaChallenge(
  * completes. This makes `required_for_*` genuinely enforced AND self-recoverable
  * (no admin lockout): a required user without a factor can always still enroll.
  */
+export type EnrollmentGrantOrigin = "login" | "switch";
+
 export async function createEnrollmentGrant(
   tx: Bun.SQL,
   tenantId: string,
   identityId: string,
   ttlSec: number,
-  now: Date
+  now: Date,
+  /**
+   * Who is minting it (#1004, H-A). `login` ONLY for a flow that just verified
+   * the password; `switch` for anything reached with a bearer session alone.
+   * `enroll/start` waives re-authentication for `login` and for nothing else.
+   */
+  origin: EnrollmentGrantOrigin
 ): Promise<{ token: string; expiresAt: Date }> {
   const rawToken = generateChallengeToken();
   const tokenHash = hashChallengeToken(rawToken);
@@ -420,14 +492,20 @@ export async function createEnrollmentGrant(
   `;
 
   await tx`
-    INSERT INTO awcms_mfa_challenges (tenant_id, identity_id, challenge_token_hash, purpose, expires_at)
-    VALUES (${tenantId}, ${identityId}, ${tokenHash}, 'enrollment', ${expiresAt})
+    INSERT INTO awcms_mfa_challenges
+      (tenant_id, identity_id, challenge_token_hash, purpose, expires_at, enrollment_origin)
+    VALUES (${tenantId}, ${identityId}, ${tokenHash}, 'enrollment', ${expiresAt}, ${origin})
   `;
 
   return { token: rawToken, expiresAt };
 }
 
-export type EnrollmentGrant = { challengeId: string; identityId: string };
+export type EnrollmentGrant = {
+  challengeId: string;
+  identityId: string;
+  /** NULL in the database (a grant from before sql/262) reads as `switch`: fail closed. */
+  origin: EnrollmentGrantOrigin;
+};
 
 /**
  * Resolves an unconsumed, unexpired enrollment grant to its identity WITHOUT
@@ -443,7 +521,7 @@ export async function resolveEnrollmentGrant(
 ): Promise<EnrollmentGrant | null> {
   const tokenHash = hashChallengeToken(token);
   const rows = (await tx`
-    SELECT id, identity_id, expires_at, consumed_at
+    SELECT id, identity_id, expires_at, consumed_at, enrollment_origin
     FROM awcms_mfa_challenges
     WHERE tenant_id = ${tenantId} AND challenge_token_hash = ${tokenHash}
       AND purpose = 'enrollment'
@@ -452,6 +530,7 @@ export async function resolveEnrollmentGrant(
     identity_id: string;
     expires_at: Date;
     consumed_at: Date | null;
+    enrollment_origin: EnrollmentGrantOrigin | null;
   }[];
   const row = rows[0];
 
@@ -459,7 +538,11 @@ export async function resolveEnrollmentGrant(
   if (row.consumed_at !== null) return null;
   if (new Date(row.expires_at).getTime() <= now.getTime()) return null;
 
-  return { challengeId: row.id, identityId: row.identity_id };
+  return {
+    challengeId: row.id,
+    identityId: row.identity_id,
+    origin: row.enrollment_origin === "login" ? "login" : "switch"
+  };
 }
 
 /** Burns an enrollment grant once enrollment completes so it can never mint a second session. */
@@ -479,6 +562,14 @@ export type EnrollAuth = {
   identityId: string;
   viaEnrollment: boolean;
   enrollmentChallengeId: string | null;
+  /** Hash a pending enrolment is bound to: the session, or the login grant. */
+  bindingHash: string;
+  /**
+   * Whether `enroll/start` must re-authenticate this caller (#1004): true for a
+   * session and for a `switch`-minted grant; false only for a grant minted by a
+   * login that just verified the password.
+   */
+  requiresReauthentication: boolean;
 };
 
 /**
@@ -506,7 +597,9 @@ export async function resolveEnrollAuth(
       return {
         identityId: session.identity_id,
         viaEnrollment: false,
-        enrollmentChallengeId: null
+        enrollmentChallengeId: null,
+        bindingHash: enrollmentBindingHash(sessionTokenHash),
+        requiresReauthentication: true
       };
     }
   }
@@ -522,7 +615,9 @@ export async function resolveEnrollAuth(
       return {
         identityId: grant.identityId,
         viaEnrollment: true,
-        enrollmentChallengeId: grant.challengeId
+        enrollmentChallengeId: grant.challengeId,
+        bindingHash: enrollmentBindingHash(`grant:${grant.challengeId}`),
+        requiresReauthentication: grant.origin !== "login"
       };
     }
   }

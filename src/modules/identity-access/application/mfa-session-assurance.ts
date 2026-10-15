@@ -36,6 +36,10 @@ export type SessionAssurance = {
   assuranceLevel: SessionAssuranceLevel;
   steppedUpAt: Date | null;
   expiresAt: Date;
+  /** How the session came to exist (`sql/117`). Needed to decide what counts as re-authentication (#1004). */
+  originAuth: SessionOriginAuth;
+  /** When the credential behind this session was last presented: sign-in, or a step-up. */
+  lastAuthenticatedAt: Date | null;
 };
 
 /** Resolves the active session with its assurance columns, or null if invalid/expired/revoked. */
@@ -47,7 +51,7 @@ export async function resolveSessionAssurance(
 ): Promise<SessionAssurance | null> {
   const rows = (await tx`
     SELECT s.id, s.identity_id, s.assurance_level, s.stepped_up_at,
-           s.expires_at, s.revoked_at
+           s.expires_at, s.revoked_at, s.origin_auth, s.last_authenticated_at
     FROM awcms_sessions s
     WHERE s.tenant_id = ${tenantId} AND s.token_hash = ${tokenHash}
       AND ${sessionCredentialCurrent(tx)}
@@ -58,6 +62,8 @@ export async function resolveSessionAssurance(
     stepped_up_at: Date | null;
     expires_at: Date;
     revoked_at: Date | null;
+    origin_auth: SessionOriginAuth;
+    last_authenticated_at: Date | null;
   }[];
   const row = rows[0];
 
@@ -70,7 +76,11 @@ export async function resolveSessionAssurance(
     identityId: row.identity_id,
     assuranceLevel: row.assurance_level,
     steppedUpAt: row.stepped_up_at ? new Date(row.stepped_up_at) : null,
-    expiresAt: new Date(row.expires_at)
+    expiresAt: new Date(row.expires_at),
+    originAuth: row.origin_auth,
+    lastAuthenticatedAt: row.last_authenticated_at
+      ? new Date(row.last_authenticated_at)
+      : null
   };
 }
 

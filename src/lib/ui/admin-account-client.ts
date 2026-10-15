@@ -216,13 +216,27 @@ function renderRecoveryCodes(codes: readonly string[]): void {
   show("account-mfa-recovery");
 }
 
+// Starting setup asks for the current password (#1004): a signed-in session on
+// its own can no longer begin enrolment, so a stolen session cannot enrol the
+// thief's authenticator on this account. The button only reveals the form.
 onAction("#account-mfa-enrol", async (button) => {
   mfaError.clear();
+  show("account-mfa-start-form");
+  button.hidden = true;
+});
+
+onSubmit("account-mfa-start-form", async ({ data, submit }) => {
+  mfaError.clear();
+
+  if (submit) submit.disabled = true;
 
   const result = await sendJsonForData<{ secret: string; otpauthUri: string }>(
     "POST",
-    "/api/v1/auth/mfa/totp/enroll/start"
+    "/api/v1/auth/mfa/totp/enroll/start",
+    { currentPassword: field(data, "currentPassword") }
   );
+
+  if (submit) submit.disabled = false;
 
   if (!result.ok || !result.data) {
     mfaError.show(
@@ -231,7 +245,27 @@ onAction("#account-mfa-enrol", async (button) => {
             "mfaAlreadyActive",
             "Two-factor authentication is already switched on for your account."
           )
-        : message("mfaStartFailed", "Could not start setup. Please try again.")
+        : result.errorCode === "INVALID_CREDENTIALS"
+          ? message("passwordWrong", "Your current password is not correct.")
+          : result.errorCode === "PASSWORD_REQUIRED"
+            ? message(
+                "mfaPasswordRequired",
+                "Enter your current password to set up two-factor authentication."
+              )
+            : result.errorCode === "REAUTHENTICATION_REQUIRED"
+              ? message(
+                  "mfaReauthRequired",
+                  "Sign in again through your identity provider, then set up two-factor authentication."
+                )
+              : result.errorCode === "RATE_LIMITED"
+                ? message(
+                    "rateLimited",
+                    "Too many attempts. Please wait a moment and try again."
+                  )
+                : message(
+                    "mfaStartFailed",
+                    "Could not start setup. Please try again."
+                  )
     );
     return;
   }
@@ -239,8 +273,10 @@ onAction("#account-mfa-enrol", async (button) => {
   const secret = document.getElementById("account-mfa-secret");
   if (secret) secret.textContent = result.data.secret;
 
+  const startForm = document.getElementById("account-mfa-start-form");
+  if (startForm) startForm.hidden = true;
+
   show("account-mfa-enrolment");
-  button.hidden = true;
 });
 
 onSubmit("account-mfa-verify-form", async ({ data, submit }) => {

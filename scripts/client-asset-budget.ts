@@ -1045,8 +1045,15 @@ export const READER_BUDGET_BYTES = 24_000;
  * (resources 3,311 B, offerings 2,080 B, policy 938 B) and the shared sender
  * (1,153 B); nothing is duplicated per screen. No stylesheet grew. Measured
  * actual total, no added margin.
+ *
+ * **Raised for Issue #1004**: starting two-factor setup from a signed-in session
+ * now asks for the current password first, so the account screen script gains
+ * one small form handler and the error-code-to-message strings for it (wrong
+ * password, password missing, sign in again, rate limited). Not duplication:
+ * these words exist nowhere else. +722 B, measured on its own base
+ * (322,819 -> 323,541); stacked on #942: 334,800 B.
  */
-export const APP_BUDGET_BYTES = 334_078;
+export const APP_BUDGET_BYTES = 334_800;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

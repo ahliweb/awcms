@@ -20,7 +20,9 @@ Implementation reference for Issue #184 (epic #177). Module: `identity-access`. 
 ### 1.1 Enrollment
 
 ```
-POST /api/v1/auth/mfa/totp/enroll/start   (valid session; AUTH_MFA_ENABLED=true)
+POST /api/v1/auth/mfa/totp/enroll/start   { currentPassword }   (valid session + re-authentication, or an enrollment grant; AUTH_MFA_ENABLED=true)
+  -> a SESSION must re-authenticate (#1004): the CURRENT password (principal credential, else identity hash - the login rule), or an SSO session minted <= 5 min ago when the person works in no other tenant
+  -> the pending factor is bound to this session/grant and lives 10 minutes
   -> generate a 20-byte secret (CSPRNG), store a `pending` factor (encrypted secret)
   -> respond { secret (base32), otpauthUri }   # shown ONCE
 POST /api/v1/auth/mfa/totp/enroll/verify  { code }
@@ -28,6 +30,8 @@ POST /api/v1/auth/mfa/totp/enroll/verify  { code }
   -> generate 10 recovery codes, store hash-only
   -> respond { activated, recoveryCodes }       # shown ONCE
 ```
+
+**Re-authentication before enrolment (#1004, ADR-0141 §7).** A session alone cannot start enrolment: `currentPassword` is required (`400 PASSWORD_REQUIRED` / `INVALID_CREDENTIALS`, `403 REAUTHENTICATION_REQUIRED` for a stale SSO-only session, rate limited per source). The login-forced enrollment-grant path is unchanged. On activation the account owner is emailed a `system.security_notice` (needs the default templates seeded: `bun run email:templates:seed-defaults`) and a `critical` `mfa_enrolled` audit event is written; disabling a factor notifies too. A password holder can still enrol (they present the same password) but can no longer do so silently. `enroll/verify` is rate limited (per source and per session/grant), accepts only the session or grant that started the enrolment, and destroys the pending secret after 5 wrong codes (`429 MFA_ENROLLMENT_EXHAUSTED`). The notice goes to the mailbox of the account in the enrolling tenant only.
 
 Restarting `enroll/start` before verify discards the previous pending secret — only the last QR is valid once confirmed. `enroll/start` refuses when an `active` factor already exists (`409 MFA_ALREADY_ACTIVE`).
 
@@ -133,7 +137,7 @@ permissions: [
 
 **Finding the people before they find the refusal.** `bun run security:readiness` lists, per tenant where the module is usable, the holders (any grant source) who have no active factor — ids and counts only. It is a `warning`: those people are refused, not a vulnerability, and each of them is asked to enrol once.
 
-**What the gate does not prove.** It proves a factor exists on the account, not that the account's owner holds it: enrolment needs only a session, so someone holding an unenrolled holder's password can enrol their own authenticator first. Run the holders report **before enabling a module that flags permissions** so legitimate holders enrol first; hardening enrolment itself (re-verify the password or `aal2` to start it for holders of flagged permissions, and notify on first-factor enrolment) is tracked in ahliweb/awcms#1004.
+**What the gate does not prove.** It proves a factor exists on the account, not that the account's owner holds it: someone holding an unenrolled holder's password can still enrol their own authenticator first (a session alone no longer can, and the owner is notified out of band; see §1.1 and ADR-0141 §7). Run the holders report **before enabling a module that flags permissions** so legitimate holders enrol first.
 
 This is a different lever from §1.5. The tenant policy decides who must enrol **to log in**; this decides which **permissions** cannot be exercised without enrolment. They compose and neither replaces the other.
 

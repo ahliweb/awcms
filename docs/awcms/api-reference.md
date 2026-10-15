@@ -1303,15 +1303,20 @@ Authorized by EITHER a live session OR an enrollment grant (X-AWCMS-MFA-Enrollme
 | ------------------------------ | ------ | -------- | ------ | ------------------------------------------------------------------------------------------------------ |
 | `X-AWCMS-MFA-Enrollment-Token` | header | no       | string | Enrollment grant token from a login that returned MFA_ENROLLMENT_REQUIRED; used in place of a session. |
 
+**Request body** (optional): object
+
 **Responses**
 
-| Status | Description                                            | Schema                                 |
-| ------ | ------------------------------------------------------ | -------------------------------------- |
-| 200    | Pending factor created; secret shown once.             | object                                 |
-| 401    | Missing or invalid session.                            | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                            | [`ApiError`](#standard-error-envelope) |
-| 409    | MFA already active for this account.                   | [`ApiError`](#standard-error-envelope) |
-| 500    | MFA encryption key is missing/invalid (misconfigured). | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                       | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Pending factor created; secret shown once.                                                                                                                                                        | object                                 |
+| 400    | PASSWORD_REQUIRED (a session, or a grant minted by a tenant switch or with no recorded origin, started without currentPassword), INVALID_CREDENTIALS (wrong currentPassword) or VALIDATION_ERROR. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | MFA already active for this account.                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many enrolment attempts for this session/grant or source, or the person is locked out after failed password attempts (they count toward the same lockout as a failed login).                  | [`ApiError`](#standard-error-envelope) |
+| 500    | MFA encryption key is missing/invalid (misconfigured).                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/auth/mfa/totp/enroll/verify` — Confirm a pending TOTP enrollment; activates the factor and returns recovery codes.
 
@@ -1330,14 +1335,15 @@ Authorized by EITHER a live session OR an enrollment grant. When authorized via 
 
 **Responses**
 
-| Status | Description                                                                                                                         | Schema                                 |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Factor activated; recovery codes shown once. token/expiresAt/assuranceLevel are present only when enrolled via an enrollment grant. | object                                 |
-| 400    | Validation error.                                                                                                                   | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                         | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                         | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                                                 | [`ApiError`](#standard-error-envelope) |
-| 500    | MFA misconfigured.                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                                                                 | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Factor activated; recovery codes shown once. token/expiresAt/assuranceLevel are present only when enrolled via an enrollment grant.                                                                                                                                         | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate limited per source and per session/grant, or MFA_ENROLLMENT_EXHAUSTED - five wrong codes destroyed the pending secret (a pending enrolment is also bound to the session or grant that started it, expires after 10 minutes, and is then reported as 404; start again). | [`ApiError`](#standard-error-envelope) |
+| 500    | MFA misconfigured.                                                                                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/auth/mfa/totp/verify` — Complete a login paused with MFA_REQUIRED by submitting a TOTP or recovery code.
 

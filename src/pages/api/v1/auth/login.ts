@@ -794,7 +794,8 @@ export const POST: APIRoute = async ({
             tenantId,
             identityRow!.id,
             resolveChallengeTtlSec(),
-            now
+            now,
+            "login"
           );
 
           await recordAuditEvent(tx, {

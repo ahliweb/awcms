@@ -81,18 +81,72 @@ export async function findActiveFactorSummary(
     : null;
 }
 
-/** The pending (not yet confirmed) factor. Keyed on `principal_id =`. */
+export type PendingFactor = {
+  id: string;
+  secret_ciphertext: string;
+  /** Derived hash of the session/grant that started this enrolment; NULL on rows that predate #1004. */
+  enrollment_binding_hash: string | null;
+  failed_verify_count: number;
+  /** Whether the row is within its time-to-live, judged by the DATABASE clock. */
+  fresh: boolean;
+};
+
+/**
+ * The pending (not yet confirmed) factor, LOCKED for the rest of the transaction
+ * (`FOR UPDATE`). The lock is what makes the wrong-code cap real: parallel
+ * guesses queue here, each reads the failure count its predecessors committed,
+ * and a destroyed row is gone for the next one. Without it thirty parallel
+ * requests all read count 0 and each evaluated a code (#1004 re-audit M-A).
+ * Keyed on `principal_id =`.
+ *
+ * `fresh` is computed by PostgreSQL (`now()` against `created_at`, which
+ * `insertPendingFactor` also stamps from the database clock), never from the
+ * application clock: a skewed app node must not stretch or shrink the window.
+ */
 export async function findPendingFactor(
   tx: Bun.SQL,
-  principalId: string
-): Promise<{ id: string; secret_ciphertext: string } | null> {
+  principalId: string,
+  ttlSec: number
+): Promise<PendingFactor | null> {
   const rows = (await tx`
-    SELECT id, secret_ciphertext
+    SELECT id, secret_ciphertext, enrollment_binding_hash, failed_verify_count,
+           (created_at > now() - make_interval(secs => ${ttlSec})) AS fresh
     FROM awcms_principal_mfa_factors
     WHERE principal_id = ${principalId} AND status = 'pending'
-  `) as { id: string; secret_ciphertext: string }[];
+    FOR UPDATE
+  `) as PendingFactor[];
 
   return rows[0] ?? null;
+}
+
+/** Deletes one pending factor. Keyed on `id =` and refuses anything not pending. */
+export async function deletePendingFactorById(
+  tx: Bun.SQL,
+  factorId: string
+): Promise<void> {
+  await tx`
+    DELETE FROM awcms_principal_mfa_factors
+    WHERE id = ${factorId} AND status = 'pending'
+  `;
+}
+
+/**
+ * Counts one wrong code against a pending enrolment and returns the new total,
+ * computed in the database so concurrent guesses cannot lose an increment.
+ * Keyed on `id =`.
+ */
+export async function recordPendingFailure(
+  tx: Bun.SQL,
+  factorId: string
+): Promise<number> {
+  const rows = (await tx`
+    UPDATE awcms_principal_mfa_factors
+    SET failed_verify_count = failed_verify_count + 1, updated_at = now()
+    WHERE id = ${factorId} AND status = 'pending'
+    RETURNING failed_verify_count
+  `) as { failed_verify_count: number }[];
+
+  return rows[0]?.failed_verify_count ?? 0;
 }
 
 /** Ids of every factor that is not yet disabled. Keyed on `principal_id =`. */
@@ -126,12 +180,16 @@ export async function insertPendingFactor(
   tx: Bun.SQL,
   principalId: string,
   ciphertext: string,
-  now: Date
+  bindingHash: string
 ): Promise<void> {
+  // `now()` and not an application timestamp: the pending time-to-live is judged
+  // by the database clock in `findPendingFactor`, so both ends must use it.
   await tx`
     INSERT INTO awcms_principal_mfa_factors
-      (principal_id, factor_type, secret_ciphertext, status, created_at, updated_at)
-    VALUES (${principalId}, 'totp', ${ciphertext}, 'pending', ${now}, ${now})
+      (principal_id, factor_type, secret_ciphertext, status,
+       enrollment_binding_hash, created_at, updated_at)
+    VALUES (${principalId}, 'totp', ${ciphertext}, 'pending', ${bindingHash},
+            now(), now())
   `;
 }
 
@@ -149,12 +207,21 @@ export async function activateFactor(
   matchedStep: number,
   now: Date
 ): Promise<void> {
-  await tx`
+  const activated = await tx`
     UPDATE awcms_principal_mfa_factors
     SET status = 'active', activated_at = ${now}, updated_at = ${now},
-        last_used_step = ${matchedStep}
-    WHERE id = ${factorId}
+        last_used_step = ${matchedStep}, failed_verify_count = 0,
+        enrollment_binding_hash = NULL
+    WHERE id = ${factorId} AND status = 'pending'
+    RETURNING id
   `;
+
+  // A factor that was not pending (already active, disabled, or deleted by a
+  // racing request) must never be "activated" again: fail loudly so the
+  // transaction rolls back instead of minting recovery codes for it.
+  if (activated.length !== 1) {
+    throw new Error("activateFactor: the factor is no longer pending");
+  }
 }
 
 /**
