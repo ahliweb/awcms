@@ -30,8 +30,14 @@ const SCOPE = "hr_workforce_attendance_correction_settle";
  *                                is never edited);
  *   * rejected / cancelled    -> `rejected` / `withdrawn`.
  *
- * Segregation of duties: the requester cannot settle their own correction, an
- * approved instance with no human approving decision is refused, and so is one the
+ * Normally the settlement is AUTOMATIC: a domain-event consumer
+ * (`hr_workforce.attendance_correction_settler`) applies the verdict as soon as
+ * the workflow instance finishes. This route is the manual fallback (a consumer
+ * that is behind, or a verdict it declined to apply).
+ *
+ * Segregation of duties: the requester cannot settle their own APPROVED
+ * correction (a rejected or cancelled one they may close themselves: nothing is
+ * applied), an approved instance with no human approving decision is refused, and so is one the
  * requester OR THE EMPLOYEE THE CORRECTION IS ABOUT approved directly or as the
  * delegator whose standing a delegate used, or one that employee settles (409
  * `CORRECTION_SELF_APPROVED`; the employee is the login linked when it was
@@ -76,16 +82,34 @@ export const POST = defineTenantRoute<Prepared>({
     }
 
     // The self-approval guard of the chokepoint, now that the requester is
-    // known: a caller may never approve a request they filed themselves.
-    const guarded = await authorizeInTransaction(tx, tenantId, tokenHash, now, {
-      ...HR_WORKFORCE_GUARDS.corrections.approve,
-      resourceType: "hr_attendance_correction",
-      resourceId: prepared.id,
-      resourceAttributes: { requestedByTenantUserId: facts.requestedBy }
-    });
+    // known: a caller may never approve a request they filed themselves. It
+    // guards APPROVING, so it is skipped for a verdict that approves nothing: a
+    // `rejected` or `cancelled` instance only moves the correction to
+    // `rejected` / `withdrawn` (nothing is applied), and the requester must be
+    // able to close their own refused request (#998). Those verdicts are
+    // terminal, so the status read here cannot change before the handler runs.
+    // `pending` and `approved` keep the guard.
+    const settlesWithoutApproving =
+      facts.instanceStatus === "rejected" ||
+      facts.instanceStatus === "cancelled";
 
-    if (!guarded.allowed) {
-      return guarded.denied;
+    if (!settlesWithoutApproving) {
+      const guarded = await authorizeInTransaction(
+        tx,
+        tenantId,
+        tokenHash,
+        now,
+        {
+          ...HR_WORKFORCE_GUARDS.corrections.approve,
+          resourceType: "hr_attendance_correction",
+          resourceId: prepared.id,
+          resourceAttributes: { requestedByTenantUserId: facts.requestedBy }
+        }
+      );
+
+      if (!guarded.allowed) {
+        return guarded.denied;
+      }
     }
 
     return runIdempotent(

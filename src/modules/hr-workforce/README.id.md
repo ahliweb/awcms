@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:89abef973371ed7df5913cf8a7cd6276b5104e49a1244faf1acc69e03ae4eb41 -->
+<!-- i18n-source-hash: sha256:d15c94ff59cd0474adea6ee32184defafff36572205955b5a48a1d123926110c -->
 
 # `hr_workforce`
 
@@ -169,16 +169,39 @@ digantikan".
   antaranya, atau tenant menurunkan skew di bawah usulan. Penyetuju
   adalah assignee definisi; keputusannya sendiri adalah keputusan workflow
   (`POST /workflows/tasks/{id}/decisions`).
-- **`settle` menerapkan putusan (tarik, seperti procurement).** `POST
-.../attendance-corrections/{id}/settle` (`corrections.approve`, berisiko tinggi)
-  membaca instance: pending -> `409 CORRECTION_STILL_PENDING`; approved -> status
-  pindah ke `approved` **dan** event pengganti ditambahkan dalam satu savepoint;
-  rejected -> `rejected`; dibatalkan di tempat lain -> `withdrawn`. Memanggilnya
-  adalah langkah yang diambil pemegang `corrections.approve` (consumer domain-event
-  yang menyelesaikan otomatis adalah tindak lanjut tercatat).
+- **Penyelesaian berjalan otomatis; `settle` adalah jalur manual cadangan (#998).**
+  Putusan diterapkan oleh `settleCorrection`: approved -> status pindah ke `approved`
+  **dan** event pengganti ditambahkan dalam satu savepoint; rejected -> `rejected`;
+  dibatalkan -> `withdrawn`. Sebuah consumer domain-event,
+  `hr_workforce.attendance_correction_settler` (ADR-0134, dideklarasikan di
+  `module.ts`), memanggilnya begitu `workflow_approval` menerbitkan
+  `awcms.workflow.instance.approved` / `.rejected` / `.cancelled` (satu event per
+  instance yang selesai, di setiap jalur: keputusan, force-decision, pembatalan
+  administrator, timeout eskalasi), sehingga tak ada yang perlu mengingat dan tak
+  perlu `corrections.approve` agar hal itu terjadi. Ia berjalan di dispatcher
+  (`bun run domain-events:dispatch`) sebagai `awcms_worker` dengan grant sempit
+  `sql/280`, jadi **tenant harus menjalankan dispatcher** agar penyelesaian
+  mengikuti keputusan (tanpanya koreksi menunggu, persis seperti sebelumnya).
+  Consumer **tidak punya pengguna yang bertindak**: baris audit tanpa aktor dan
+  membawa `trigger = workflow_event`; `decided_by` adalah manusia yang menyetujui
+  atau menolak (NULL untuk penolakan/pembatalan yang tak diputuskan siapa pun: ia menyebut siapa yang memutuskan, bukan yang menyelesaikan, `sql/281`; penyelesai ada di baris audit); event pengganti tanpa `recorded_by`. **Penolakan bukan error dan
+  tidak diulang**: persetujuan tanpa penyetuju manusia, yang diikuti pemohon atau
+  pegawai, target yang sudah diganti, atau event yang ditolak guard membiarkan koreksi
+  `pending`, menulis satu baris audit `warning`
+  (`hr_workforce.attendance_correction.auto_settle_skipped`, hanya hasilnya, tak
+  pernah alasan) dan menunggu seseorang. Instance yang bukan milik koreksi, event yang agregatnya bukan instance workflow, atau instance yang masih pending tidak cocok dengan apa pun dan diabaikan diam-diam;
+  role worker tidak membaca `reason` koreksi maupun `reason` / `override_reason` keputusan workflow (SELECT per kolom, `sql/280`), dan hanya boleh menyisipkan event bersumber `correction` (setiap anggota `awcms_worker` dibatasi demikian); instance yang selesai sebelum consumer
+  ini dirilis tidak punya delivery dan diselesaikan manual sekali.
+  Route manual `POST .../attendance-corrections/{id}/settle` (`corrections.approve`,
+  berisiko tinggi) membaca instance: pending -> `409 CORRECTION_STILL_PENDING`,
+  lalu penerapan yang sama. Belum ada **notifikasi** ke pemohon: itu butuh template
+  notifikasi dan kebijakan penerima, keputusan tersendiri.
 - **Pemisahan tugas, empat lapis.** (1) guard milik engine workflow mencegah
   pemohon memutuskan; (2) guard self-approval chokepoint menolak pemohon
-  **menyelesaikan** (`403`); (3) handler menolak instance approved yang tidak punya
+  **menyelesaikan koreksi yang approved (atau masih pending)** (`403`); ia dilewati
+  untuk putusan `rejected` / `cancelled` yang tidak menerapkan apa pun, sehingga
+  pemohon dapat menutup permintaannya sendiri yang ditolak (#998; izin
+  `corrections.approve` tetap dibutuhkan); (3) handler menolak instance approved yang tidak punya
   keputusan setuju manusia (`409 CORRECTION_NO_APPROVER`: graf tanpa node persetujuan
   akan menjadikan pemohon penyetuju dirinya) atau yang diikuti pemohon **atau pegawai yang
   dikoreksi** **langsung atau sebagai pemberi delegasi yang kedudukannya dipakai
@@ -220,8 +243,17 @@ digantikan".
   `FOR SHARE` oleh `awcms_app` (tanpa hak `UPDATE`), karenanya target pergantian
   dibaca biasa: tabelnya tak dapat diubah.
 - **Audit dan idempotensi.** Request, withdraw, dan settle diaudit hanya dengan id
-  dan status (`info`; settle `warning` bila approved); mencatat event tidak diaudit
-  (volume tinggi: event adalah catatannya). Setiap tulis butuh `Idempotency-Key`.
+  dan status (`info`; settle `warning` bila approved). Mencatat event diaudit
+  **bila dicatat untuk orang lain** (#998): setiap event `supervisor` (`info`) dan
+  event `kiosk` / `import` yang ditandai `late` (`warning`), sebagai
+  `hr_workforce.attendance_event.recorded_for_other` berisi employment, jenis,
+  sumber dan `late` (instan yang diklaim ada pada event yang disebut baris itu), dengan pencatat sebagai aktor; event
+  `self` dan ketukan kiosk/import yang tepat waktu tidak (volume tinggi: event
+  adalah catatannya), dan replay tidak menambah baris kedua. `attendance.create`
+  berlaku seluruh tenant dan tidak di-seed ke peran mana pun secara default;
+  jendela putar ulang kiosk/import tujuh hari **melewati persetujuan koreksi**
+  secara sengaja (untuk antrean offline), itulah sebabnya yang basi diaudit.
+  Setiap tulis butuh `Idempotency-Key`.
 - **Belum ada domain event.** `awcms.hr.attendance.recorded` tetap provisional
   sampai ada consumer (seperti shift).
 
@@ -276,8 +308,9 @@ Terbuka (dilacak, tidak disembunyikan):
   event tanpa pengganti): clock-in hantu diganti dengan event yang benar; tanpa
   validasi urutan (`clock_out` tanpa `clock_in` dicatat sebagaimana diklaim; catatan
   efektif dibaca, tidak ditegakkan); jendela putar ulang 7 hari dan ambang `late` 15
-  menit adalah konstanta, bukan setelan tenant; **settle adalah tarik** (tidak ada
-  consumer yang menerapkan persetujuan otomatis); rantai atasan hanya memberi akses
+  menit adalah konstanta, bukan setelan tenant; **penyelesaian berjalan otomatis**
+  (consumer domain-event, #998) dengan `settle` sebagai jalur manual cadangan, dan
+  pemohon tidak diberi tahu hasilnya; rantai atasan hanya memberi akses
   baca, sehingga atasan tetap tidak bisa mencatat untuk bawahan tanpa
   `attendance.create`; **tanpa scope per kantor** pada `attendance.read`/`create`
   (adapter scope adalah issue berikutnya, seperti employments); tanpa domain event;

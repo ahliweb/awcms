@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2196360a3ccc4ffda300164ff935159fdb3c86e96eab8187e1cf1c934f39c1c0 -->
+<!-- i18n-source-hash: sha256:8037cfc9038f3eed9e9de99f5e9dc58f093c19a5887d8d7f8f4acf8ed73c26e9 -->
 
 # Data Lifecycle
 
@@ -297,7 +297,7 @@ di sini.
 
 - **Snapshot delegated yang tak bisa dibaca worker (Issue #1040).** Per tenant,
   `data-lifecycle:archive-purge` mencatat snapshot backlog dry-run untuk setiap
-  deskriptor `delegated`, yang men-`SELECT` tabelnya sebagai `awcms_worker`. 29
+  deskriptor `delegated`, yang men-`SELECT` tabelnya sebagai `awcms_worker`. 25
   tabel inventori, procurement, HR, dan booking sengaja TIDAK dapat dibaca worker
   (batas payroll menjauhkan role worker dari data itu), sehingga snapshot-nya
   gagal. Deskriptor yang gagal diisolasi: dicatat di log

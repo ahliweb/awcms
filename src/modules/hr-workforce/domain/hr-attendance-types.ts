@@ -61,3 +61,24 @@ export function isCorrectionKind(value: unknown): value is CorrectionKind {
 export function isCorrectionStatus(value: unknown): value is CorrectionStatus {
   return (CORRECTION_STATUSES as readonly unknown[]).includes(value);
 }
+
+/**
+ * Whether recording an event leaves an audit row (#998). Pure.
+ *
+ * `supervisor` always: a person writes for ANOTHER employment, up to the replay
+ * window back, with no approval, so the trace is the control. `kiosk`/`import`
+ * only when the database flagged the event `late` (a stale offline replay):
+ * a punctual device tap is the high-volume case where the event is the record.
+ * `self` and `correction` never: the first is the employee's own tap, the second
+ * is already audited as the settlement that wrote it.
+ */
+export function attendanceEventIsAudited(
+  source: AttendanceSource,
+  late: boolean
+): boolean {
+  if (source === "supervisor") {
+    return true;
+  }
+
+  return (source === "kiosk" || source === "import") && late;
+}

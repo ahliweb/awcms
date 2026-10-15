@@ -170,7 +170,11 @@
       "version": "0.1.0",
       "status": "experimental",
       "type": "domain",
-      "dependencies": ["tenant_admin", "profile_identity"],
+      "dependencies": [
+        "tenant_admin",
+        "profile_identity",
+        "domain_event_runtime"
+      ],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 23,

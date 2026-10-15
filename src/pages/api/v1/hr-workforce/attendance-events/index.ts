@@ -190,7 +190,9 @@ const SCOPE = "hr_workforce_attendance_event_create";
  * a correction); a `kiosk`/`import` replay is accepted up to seven days old and
  * flagged `late` past fifteen minutes. A replay of the same `clientEventKey`
  * returns the ORIGINAL with 200 (a different event under a used key is 409).
- * There is no location, photo or device field. Idempotent; not audited (high
+ * There is no location, photo or device field. Idempotent; audited when recorded
+ * for somebody else (every `supervisor` event, a `kiosk`/`import` one flagged
+ * `late`; `self` and punctual taps are not: high
  * volume: the event is the record).
  */
 export const POST = defineTenantRoute<CreatePrepared>({

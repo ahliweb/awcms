@@ -200,9 +200,10 @@ describe("small validators", () => {
 });
 
 describe("the descriptor", () => {
-  test("is experimental (flag off) and depends only on tenant_admin and profile_identity", () => {
+  test("is experimental (flag off) and depends only on tenant_admin, profile_identity and domain_event_runtime", () => {
     expect(hrWorkforceModule.status).toBe("experimental");
     expect([...hrWorkforceModule.dependencies].sort()).toEqual([
+      "domain_event_runtime",
       "profile_identity",
       "tenant_admin"
     ]);

@@ -243,12 +243,13 @@ describe("buildDomainEventConsumerRegistry", () => {
     expect(built!.maxAttempts).toBe(8);
   });
 
-  test("the real composed registry builds and keeps the three shipped names", () => {
+  test("the real composed registry builds and keeps the four shipped names", () => {
     const names = buildDomainEventConsumerRegistry(listModules()).map(
       (c) => c.name
     );
     expect(names).toEqual([
       "domain_event_runtime.activity_rollup_projector",
+      "hr_workforce.attendance_correction_settler",
       "logging.sample_event_audit_projector",
       "reporting.event_activity_projector"
     ]);
