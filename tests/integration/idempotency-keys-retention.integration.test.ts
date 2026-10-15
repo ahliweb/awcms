@@ -7,6 +7,11 @@
  * only rows past the 30-day default, leaves recent rows (and the 24 hour
  * `legacy:unscoped` window) alone, and never crosses tenants.
  *
+ * No extra grants are made (Issue #1040): the worker cannot SELECT the delegated
+ * tables (inventory, procurement, HR, booking) and must not be able to, so their
+ * dry-run snapshots fail, are recorded as `failed` runs, and the generic purge
+ * still runs.
+ *
  * Gated on `DATABASE_URL` (harness section Gating).
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -19,8 +24,11 @@ import {
   teardownIntegrationDatabase,
   workerRoleActivated
 } from "./harness";
-import { listModules } from "../../src/modules";
-import { runDataLifecycleArchivePurge } from "../../src/modules/data-lifecycle/application/archive-purge-job";
+import {
+  runDataLifecycleArchivePurge,
+  summarizeArchivePurgeOutcome
+} from "../../src/modules/data-lifecycle/application/archive-purge-job";
+import { KNOWN_UNREADABLE_DELEGATED_TABLES } from "../../src/modules/data-lifecycle/domain/known-unreadable-delegated";
 import type { ArchivePort } from "../../src/modules/data-lifecycle/domain/archive-port";
 
 const suite = integrationEnabled ? describe : describe.skip;
@@ -76,31 +84,6 @@ suite("idempotency keys retention (integration)", () => {
         VALUES (${id}, ${code}, ${code})
       `;
     }
-
-    // PRE-EXISTING GAP, deliberately worked around here and NOT fixed by #1034:
-    // `runDataLifecycleArchivePurge` records a dry-run snapshot for every
-    // DELEGATED descriptor first, which needs SELECT as `awcms_worker`, and no
-    // migration grants it on the inventory/procurement/hr/booking tables. In
-    // production that makes the scheduled job abort per tenant before it
-    // reaches any generic descriptor, this one included. The grants are added
-    // to this throwaway database only, so the test can prove the part #1034
-    // owns (the SELECT + DELETE grant and the purge semantics). Remove this
-    // block when a migration closes the gap.
-    if (workerRoleActivated) {
-      const delegated = new Set<string>();
-
-      for (const module of listModules()) {
-        for (const descriptor of module.dataLifecycle ?? []) {
-          if (descriptor.executionMode === "delegated") {
-            delegated.add(descriptor.tableName);
-          }
-        }
-      }
-
-      for (const table of delegated) {
-        await admin.unsafe(`GRANT SELECT ON ${table} TO awcms_worker`);
-      }
-    }
   });
 
   afterAll(async () => {
@@ -130,6 +113,33 @@ suite("idempotency keys retention (integration)", () => {
     );
 
     expect(result.totalPurged).toBeGreaterThanOrEqual(3);
+
+    // The delegated snapshots failed with 42501 on baseline tables: they are
+    // EXPECTED, counted as known-unreadable, and do not make the job partial.
+    expect(result.descriptorFailures).toEqual([]);
+    expect(result.knownUnreadableDelegated).toContain(
+      `${TENANT_A}:inventory.movements`
+    );
+    expect(result.knownUnreadableDelegated.length).toBe(
+      KNOWN_UNREADABLE_DELEGATED_TABLES.length * 2
+    );
+    expect(summarizeArchivePurgeOutcome(result).status).toBe("success");
+    // Each is still recorded, as a failed dry-run with errorCount 1.
+    const failed = (await getAdminSql()`
+      SELECT descriptor_key, run_type, error_count
+      FROM awcms_data_lifecycle_runs
+      WHERE tenant_id = ${TENANT_A} AND status = 'failed'
+    `) as { descriptor_key: string; run_type: string; error_count: number }[];
+    expect(failed.length).toBe(KNOWN_UNREADABLE_DELEGATED_TABLES.length);
+    expect(failed.every((r) => r.run_type === "dry_run")).toBe(true);
+    expect(failed.every((r) => r.error_count === 1)).toBe(true);
+    // The generic idempotency purge ran and is recorded as completed.
+    const completed = (await getAdminSql()`
+      SELECT 1 FROM awcms_data_lifecycle_runs
+      WHERE tenant_id = ${TENANT_A} AND status = 'completed'
+        AND descriptor_key = 'domain_event_runtime.idempotency_keys'
+    `) as unknown[];
+    expect(completed.length).toBe(1);
     expect(await keysOf(TENANT_A)).toEqual(["recent-legacy", "recent-user"]);
     expect(await keysOf(TENANT_B)).toEqual(["recent-b"]);
   });

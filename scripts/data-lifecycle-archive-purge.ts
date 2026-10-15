@@ -23,7 +23,10 @@ import {
   runJob,
   writeJobTelemetry
 } from "../src/lib/jobs/job-runner";
-import { runDataLifecycleArchivePurge } from "../src/modules/data-lifecycle/application/archive-purge-job";
+import {
+  runDataLifecycleArchivePurge,
+  summarizeArchivePurgeOutcome
+} from "../src/modules/data-lifecycle/application/archive-purge-job";
 import { resolveDataLifecycleConfig } from "../src/modules/data-lifecycle/domain/data-lifecycle-config";
 import { createLocalArchiveAdapter } from "../src/modules/data-lifecycle/infrastructure/local-archive-adapter";
 
@@ -45,6 +48,9 @@ async function main() {
             archivePort
           });
           const hitPassLimit = purgeResult.tenantsHitPassLimit.length > 0;
+          const failures = purgeResult.descriptorFailures.length;
+          const outcome = summarizeArchivePurgeOutcome(purgeResult);
+          const knownUnreadable = purgeResult.knownUnreadableDelegated.length;
 
           console.log(
             `data-lifecycle:archive-purge complete — correlationId=${ctx.correlationId} ` +
@@ -52,23 +58,29 @@ async function main() {
               `delegated=${purgeResult.descriptorsDelegated} archived=${purgeResult.totalArchived} ` +
               `purged=${purgeResult.totalPurged} dryRunEligible=${purgeResult.totalDryRunEligible}` +
               (ctx.dryRun ? " (dry-run: nothing was archived/purged)" : "") +
+              (knownUnreadable > 0
+                ? ` knownUnreadableDelegated=${knownUnreadable} (expected: delegated snapshot of a table awcms_worker may not read; not a failure)`
+                : "") +
+              (failures > 0
+                ? ` (WARNING: ${failures} descriptor pass(es) failed and were recorded as failed runs; see data_lifecycle.descriptor_failed log lines)`
+                : "") +
               (hitPassLimit
                 ? ` (WARNING: ${purgeResult.tenantsHitPassLimit.length} tenant(s) still had backlog remaining after the pass-count safety bound)`
                 : "")
           );
 
           return {
-            status: hitPassLimit ? "partial" : "success",
+            status: outcome.status,
             itemCounts: {
               tenantsChecked: purgeResult.tenantsChecked,
               archived: purgeResult.totalArchived,
               purged: purgeResult.totalPurged,
               dryRunEligible: purgeResult.totalDryRunEligible,
-              tenantsHitPassLimit: purgeResult.tenantsHitPassLimit.length
+              tenantsHitPassLimit: purgeResult.tenantsHitPassLimit.length,
+              descriptorFailures: failures,
+              knownUnreadableDelegated: knownUnreadable
             },
-            detail: hitPassLimit
-              ? `Backlog not fully drained for: ${purgeResult.tenantsHitPassLimit.join(", ")}`
-              : undefined
+            detail: outcome.detail
           };
         }
       },
