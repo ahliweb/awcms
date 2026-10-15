@@ -58,6 +58,7 @@
     "telegram:webhook:register": "bun scripts/telegram-webhook-register.ts",
     "telegram:templates:check": "bun scripts/telegram-templates-check.ts",
     "booking:holds:expire": "bun scripts/booking-holds-expire.ts",
+    "booking:reminders:dispatch": "bun scripts/booking-reminders-dispatch.ts",
     "identity-access:business-scope:expiry": "bun scripts/identity-access-business-scope-expiry.ts",
     "identity-access:delegated-access:expiry": "bun scripts/identity-access-delegated-access-expiry.ts",
     "identity-access:subscription-lifecycle": "bun scripts/identity-access-subscription-lifecycle.ts",

@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 211   |
-| `awcms_*` tables                    | 215   |
-| Tables with `FORCE` RLS             | 197   |
+| Migrations                          | 213   |
+| `awcms_*` tables                    | 216   |
+| Tables with `FORCE` RLS             | 198   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 673   |
+| Test files                          | 675   |
 | Route files                         | 559   |
 | ADR                                 | 292   |
 
@@ -50,7 +50,7 @@
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory` |
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
-| `booking`              | 0.2.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
+| `booking`              | 0.3.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
 | `hr_commission`        | 0.2.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
@@ -269,6 +269,8 @@
 | 209 | `sql/261_awcms_principal_other_tenant_identity.sql`                |
 | 210 | `sql/262_awcms_mfa_enrollment_grant_origin.sql`                    |
 | 211 | `sql/276_awcms_idempotency_keys_worker_purge_grant.sql`            |
+| 212 | `sql/284_awcms_booking_reminder_intents.sql`                       |
+| 213 | `sql/285_awcms_booking_reminder_functions.sql`                     |
 
 ### Tables & Row-Level Security
 
@@ -299,6 +301,7 @@
 | `awcms_blog_terms`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
 | `awcms_blog_theme_settings`              | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
 | `awcms_blog_widgets`                     | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_booking_reminder_intents`         | `sql/284_awcms_booking_reminder_intents.sql`               | yes | yes   |
 | `awcms_booking_reservation_events`       | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_reservation_items`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_reservations`             | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
@@ -494,9 +497,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 517        |
+| `(root)`      | 518        |
 | `e2e`         | 26         |
-| `integration` | 129        |
+| `integration` | 130        |
 | `unit`        | 1          |
 
 ### Routes

@@ -17,6 +17,7 @@
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { registerBookingWhatsappTemplates } from "../src/modules/booking/infrastructure/booking-whatsapp-templates";
 import {
   dispatchWhatsappQueue,
   recordWhatsappDispatchFailure
@@ -28,6 +29,10 @@ type TenantRow = { id: string };
 
 async function main() {
   const sql = getWorkerDatabaseClient();
+  // The template registry is process-local: a consumer's templates (booking's
+  // reminders, Issue #943) must be registered here too, or a queued message
+  // fails terminally as `template_unknown` at send time.
+  registerBookingWhatsappTemplates();
   const correlationId = crypto.randomUUID();
 
   try {

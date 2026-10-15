@@ -48,6 +48,15 @@
  * declares a screen) is therefore met and the module is `active`: it was
  * `experimental` only because it had none.
  *
+ * ## Reminders (Issue #943)
+ *
+ * Confirmation and reminder INTENTS (`awcms_booking_reminder_intents`, once per
+ * reservation, kind and occurrence) are created and handed to the one WhatsApp
+ * queue through the `WhatsappDeliveryPort` by the job `booking:reminders:
+ * dispatch`; nothing on the reservation path changes. Booking holds no contact:
+ * a `BookingReminderRecipientPort` the deployment registers resolves the opaque
+ * customer reference, and without one the job is inert (booking.md section 7.5).
+ *
  * ## No money, no product, no customer name
  *
  * No table of this module stores a price, deposit, balance, payment state,
@@ -157,7 +166,7 @@ function stamps(input: {
 export const bookingModule = defineModule({
   key: BOOKING_MODULE_KEY,
   name: "Booking",
-  version: "0.2.0",
+  version: "0.3.0",
   // `active` since Issue #942: the module was `experimental` while it had no
   // admin screen (ADR-0021 criterion 1: every ACTIVE module declares one), and it
   // now declares six.
@@ -171,7 +180,17 @@ export const bookingModule = defineModule({
     "domain_event_runtime"
   ],
   capabilities: {
-    provides: ["booking"]
+    provides: ["booking"],
+    // Issue #943: reminders and confirmations are handed to the one WhatsApp
+    // queue through its port (ADR-0133). Optional: with the capability absent or
+    // switched off the intents stay pending and booking itself is unaffected.
+    consumes: [
+      {
+        capability: "whatsapp_delivery",
+        providedBy: "whatsapp_delivery",
+        optional: true
+      }
+    ]
   },
   events: {
     asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",
@@ -407,6 +426,20 @@ export const bookingModule = defineModule({
       environmentNotes:
         "Database-only operation, no external network dependency. Runs as `awcms_worker` under a per-tenant context. The worker holds no privilege on the booking tables: the sweep goes through `awcms_booking_expire_due_holds` (sql/200, returning what it expired since sql/209 so the job can publish the event without reading the tables), a narrow SECURITY DEFINER function (the sql/142 pattern, ADR-0090) that can only expire an elapsed hold of the session's own tenant, and the `held -> expired` trigger refuses an expiry before the hold has elapsed. Bounded per-tenant passes in the maintenance work class; safe to run alongside request traffic (it never waits on a locked hold: SKIP LOCKED). `--dry-run` counts the elapsed holds per tenant.",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run booking:reminders:dispatch",
+      schedule: {
+        mode: "cron",
+        expression: "* * * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Creates the confirmation and reminder intents owed for CONFIRMED reservations (once per reservation, kind and occurrence) and hands each to the WhatsApp delivery queue through the `WhatsappDeliveryPort`; cancels the queued message of a reservation that was cancelled, expired, rescheduled or marked no-show; expires an intent whose reservation began. Database-only: `enqueue` is one INSERT, the provider is called by `whatsapp:dispatch` in another process. Inert (creates and sends nothing) until a deployment registers a `BookingReminderRecipientPort`, because booking holds only the opaque customer reference and never a contact. Consent, opt-out, templating and the provider are the delivery module's decisions (booking.md section 7.5).",
+      recommendedSchedule: "Every minute via cron/systemd timer.",
+      environmentNotes:
+        "Database-only operation, no external network dependency and no credential: booking holds none. Runs as `awcms_worker` under a per-tenant context. The worker holds no privilege on the reservation tables: it reads through three narrow SECURITY DEFINER functions (sql/285, the sql/200 pattern) and settles intents with UPDATE on `awcms_booking_reminder_intents` alone (sql/284). Bounded per-tenant passes in the maintenance work class; safe alongside request traffic (SKIP LOCKED; a reservation being cancelled is skipped). Whether WhatsApp is on is `WHATSAPP_ENABLED` (a disabled capability answers DISABLED and the intents wait). `--dry-run` counts the intents due now.",
+      safeInOfflineLan: true
     }
   ],
   // Issue #944: three projections on the existing `reporting` engine (no second
@@ -530,6 +563,17 @@ export const bookingModule = defineModule({
         "Not performed. A released allocation is retained as history; awcms_app is denied DELETE and a trigger rejects it.",
       indexColumns: ["tenant_id", "item_id"],
       indexPurpose: "awcms_booking_resource_allocations_item_idx (sql/180)."
+    }),
+    retained({
+      key: "booking.reminder_intents",
+      tableName: "awcms_booking_reminder_intents",
+      retentionClass: "system_event",
+      why: "At most two rows per reservation (one confirmation, one reminder, a unique key), so volume is bounded by reservations, not by traffic.",
+      deletionWhy:
+        "Not performed and not permitted: awcms_app is denied DELETE and a trigger rejects it. An intent is settled (enqueued, suppressed, refused, skipped, cancelled, expired), never removed; it is the record that a notice was or was not owed.",
+      indexColumns: ["tenant_id", "created_at"],
+      indexPurpose:
+        "awcms_booking_reminder_intents_unreconciled_idx (sql/284) leads with tenant_id and created_at; nothing scans this table by age otherwise."
     }),
     retained({
       key: "booking.reservation_events",

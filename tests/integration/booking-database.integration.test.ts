@@ -74,7 +74,9 @@ const BOOKING_TABLES = [
   "awcms_booking_reservation_items",
   "awcms_booking_resource_allocations",
   "awcms_booking_resource_blocks",
-  "awcms_booking_reservation_events"
+  "awcms_booking_reservation_events",
+  // Issue #943 (sql/284).
+  "awcms_booking_reminder_intents"
 ] as const;
 
 const ACTORS = new Map<string, string>();
@@ -377,6 +379,11 @@ suite("booking database invariants (Issue #937, ADR-0131)", () => {
         INSERT INTO awcms_booking_reservation_events
           (tenant_id, reservation_id, seq, kind, to_status)
         VALUES (${TENANT_A}, ${booking.reservationId}, 1, 'created', 'held')
+      `;
+      await getAdminSql()`
+        INSERT INTO awcms_booking_reminder_intents
+          (tenant_id, reservation_id, kind, occurrence, due_at)
+        VALUES (${TENANT_A}, ${booking.reservationId}, 'reminder', 1, now())
       `;
 
       for (const table of BOOKING_TABLES) {

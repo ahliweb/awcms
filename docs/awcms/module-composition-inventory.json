@@ -38,7 +38,7 @@
     {
       "key": "booking",
       "name": "Booking",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "status": "active",
       "type": null,
       "dependencies": [
@@ -48,10 +48,16 @@
         "domain_event_runtime"
       ],
       "capabilitiesProvided": ["booking"],
-      "capabilitiesConsumed": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "whatsapp_delivery",
+          "providedBy": "whatsapp_delivery",
+          "optional": true
+        }
+      ],
       "permissionCount": 32,
       "navigationCount": 6,
-      "jobCount": 1,
+      "jobCount": 2,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

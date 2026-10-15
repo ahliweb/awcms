@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:523fb7512be3b5df0d4ae0b13193a1eee36a378cd51007a588e2aa5743827b79 -->
+<!-- i18n-source-hash: sha256:92904b6d63b8adc47c5c13a79684eec20f5b46153910e1c3ec49fc9711fa1ccd -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -720,6 +720,120 @@ pengganti; untuk reservasi dengan item stay juga `stays` (`resourceId`, `checkIn
 kontak, catatan, atau teks alasan pelanggan. Konsumen menghilangkan duplikat
 pada event id envelope; pengiriman at-least-once.
 
+### 7.5 Pengingat dan konfirmasi (Issue #943)
+
+Booking memiliki **utang**-nya ("sebuah konfirmasi atau pengingat harus dikirim
+untuk reservasi ini"); `whatsapp_delivery` memiliki **pesan**-nya (consent,
+templating, provider, antrean;
+[ADR-0133](../adr/0133-generic-delivery-capability-whatsapp-promotion.md)
+bagian 3 dan 8). Tidak ada antrean, outbox, atau panggilan provider milik booking.
+
+**Alur.** Tidak ada yang berubah di jalur transaksi reservasi: mengonfirmasi atau
+membatalkan booking tidak menulis apa pun soal pengingat, sehingga kapabilitas
+delivery yang lambat atau rusak tidak pernah memperlambat atau menggagalkan
+booking. Job terjadwal `booking:reminders:dispatch` (tiap menit, `awcms_worker`,
+per tenant) menjalankan satu pass terbatas per tenant, berurutan:
+
+1. **Sapuan basi.** Intent `pending` yang reservasinya tak lagi confirmed
+   di-settle `cancelled` (atau `expired` bila reservasi sudah dimulai). Pada intent
+   `enqueued` yang reservasinya dibatalkan, kedaluwarsa, dijadwal ulang, atau
+   ditandai no-show, pesan yang masih mengantre dibatalkan lewat
+   `WhatsappDeliveryPort.cancelByCorrelation` (no-op bila pesan sudah keluar dari
+   antrean, sesuai janji port).
+2. **Materialisasi.** Intent dibuat untuk reservasi **confirmed**, sekali per
+   `(reservasi, kind, occurrence)` (unique key, `ON CONFLICT DO NOTHING`):
+   `confirmation` (occurrence 0) untuk reservasi yang dikonfirmasi dalam 6 jam
+   terakhir (menyalakan fitur tidak membanjiri katalog lama), dan `reminder`
+   (occurrence 1) begitu jendela lead 24 jam terbuka dan sebelum reservasi mulai.
+   Walk-in (tanpa `external_customer_ref`) dan booking yang dikonfirmasi _di dalam_
+   jendela lead dibuat langsung ter-settle `skipped` (`no_customer_ref`,
+   `booked_inside_lead`): konfirmasi sudah menjadi pemberitahuannya.
+3. **Dispatch.** Tiap intent yang jatuh tempo di-resolve ke penerima lalu
+   diserahkan ke port; jawabannya men-settle intent (di bawah).
+
+**Idempoten per (reservasi, kind, occurrence), tiga lapis**: unique key
+`awcms_booking_reminder_intents` (`sql/284`); sebuah intent meninggalkan `pending`
+tepat sekali dan hanya intent `pending` yang sampai ke port (`FOR UPDATE SKIP
+LOCKED`); serta unique key `(tenant, idempotency_key)` milik modul delivery,
+dengan kunci `booking:{reservationId}:{kind}:{occurrence}` (sekaligus correlation
+id). Crash antara enqueue dan settle di-replay sebagai `duplicate` dan men-settle
+`enqueued` dengan id pesan asli; dua worker, atau job yang diulang, hanya
+mengantrekan satu pesan. (Idempotency key
+[ADR-0145](../adr/0145-idempotency-keys-are-scoped-per-actor-and-the-request-hash-is-keyed.md)
+bersifat per aktor dan milik route request; job ini tidak punya aktor maupun
+route, jadi kunci alami di atas adalah mekanismenya.)
+
+**Reservasi yang dibatalkan tidak mengeluarkan apa pun, dan tidak ada yang
+dikirim terlambat.** Pembacaan dispatch hanya mengembalikan reservasi selama
+`confirmed` dan menahan share lock sampai transaksi selesai (`FOR SHARE ... SKIP
+LOCKED`): pembatalan terjadi sebelumnya (tidak ada yang diantrekan) atau menunggu
+sampai pass selesai. Pesan yang diantrekan pass sebelumnya dibatalkan sapuan basi
+lewat `cancelByCorrelation`, yang hanya menyentuh pesan `queued` dan
+`retry_wait`. Pesan yang sedang di-lease (`sending`) pada saat itu tidak dapat
+dibatalkan, dan timeout provider akan memindahkannya ke `retry_wait` lalu
+mengirimnya ulang setelah backoff. Karena itu sapuan menandai intent
+terekonsiliasi **hanya bila setiap pesan di bawah kuncinya sudah terminal**
+(`sent`, `failed`, `cancelled`, `expired`); bila belum, intent dibiarkan dan
+diperiksa lagi pada pass berikutnya sampai pesan dibatalkan atau terminal. Sebagai
+lapisan kedua, setiap pesan diantrekan dengan kedaluwarsa: waktu mulai reservasi
+untuk pengingat, yang lebih awal antara waktu mulai dan jendela kesegaran 6 jam
+untuk konfirmasi, sehingga gangguan delivery pun tidak dapat mengirim keduanya
+setelah booking dimulai. Sapuan juga memeriksa kembali intent enqueued yang
+reservasinya sudah dimulai. Intent pending yang reservasinya sudah dimulai atau
+selesai (confirmed, checked in, completed) di-settle `expired`; yang reservasinya
+dibatalkan atau dipindah di-settle `cancelled`. Jendela sisa adalah satu interval
+job (semenit) antara pembatalan dan pembatalan pesan yang masih mengantre.
+
+**Kerja dan waktu lock yang dibatasi.** Sapuan dan langkah materialisasi
+menangani 100 intent per pass, dan job mengulang pass satu tenant sampai habis
+(kerja sapuan dihitung sebagai kemajuan), paling lama 45 detik per run, sehingga
+pembatalan massal ratusan reservasi selesai dalam satu run. Langkah dispatch
+menahan share lock pada setiap reservasi yang dibacanya sampai pass commit, dan
+lock itu memblokir pembatalan atau konfirmasi pelanggan; maka ia membaca paling
+banyak 25 intent, berhenti mengambil yang baru setelah 5 detik (sisanya tetap
+pending, lock dilepas saat commit), dan berjalan dengan `lock_timeout` 2 dtk dan
+`statement_timeout` 10 dtk, sehingga lock atau query yang macet menggagalkan pass
+alih-alih menahan lock itu. Kegagalan resolver atau enqueue dicatat sebagai
+`booking.reminder.dispatch_failed` dengan id intent, kelas error, dan kode, tidak
+pernah teks pesan atau kontak apa pun.
+
+**Tidak ada kontak di booking.** Pelanggan tetap hanya `external_customer_ref`
+yang opak (commerce otoritasnya, O12). Deployment menyediakan
+`BookingReminderRecipientPort` (`_shared/ports/`) yang mengubah referensi menjadi
+`WhatsappRecipient` di dalam transaksi job (hanya baca database, tanpa jaringan);
+kontak dipakai untuk satu `enqueue` dan tidak pernah disimpan, di-log, atau
+dimasukkan ke event. **Tidak ada implementasi di repo ini, sehingga job inert**
+(tidak membuat dan tidak mengirim apa pun) sampai deployment mendaftarkannya
+dengan `registerBookingReminderRecipients` dari entry point job-nya sendiri. Hanya
+dua variabel template yang keluar dari skema booking: nomor reservasi dan waktu
+mulai lokal (template `booking.confirmation` dan `booking.reminder`, keduanya
+`transactional`, redaksi bahasa Inggris).
+
+**Settlement.** `queued`/`duplicate` menjadi `enqueued`; `suppressed` (opt-out,
+hard failure) menjadi `suppressed`; penolakan berupa vonis (`CONSENT_REQUIRED`,
+`TEMPLATE_UNKNOWN`, `RECIPIENT_INVALID`, ...) menjadi `refused`; resolver yang tak
+bisa menjangkau pelanggan menjadi `skipped` (`recipient_unresolved`). `DISABLED`,
+`MISCONFIGURED`, dan `RATE_LIMITED` adalah sifat deployment, bukan pesan: intent
+tetap `pending`, pass untuk tenant itu berhenti, dan dicoba lagi menit berikutnya
+(rate limit ditinggalkan setelah 30 percobaan). Resolver atau enqueue yang
+melempar error hanya menghabiskan satu percobaan intent itu (savepoint per
+intent) dan tidak menghentikan yang lain. Consent sepenuhnya milik modul
+delivery: pesan `transactional` tidak butuh opt-in marketing dan tetap terkirim
+setelah penarikan consent marketing; opt-out menghentikannya; keduanya tidak
+menyentuh reservasi.
+
+**Hak akses.** Worker tidak punya hak apa pun atas tabel reservasi. Ia membaca
+lewat tiga fungsi `SECURITY DEFINER` yang sempit (`sql/285`, pola `sql/200`, owner
+`awcms_booking_reminders`, argumen tenant harus sama dengan tenant sesi, `EXECUTE`
+hanya untuk `awcms_worker`) dan men-settle intent dengan `UPDATE` pada
+`awcms_booking_reminder_intents` saja. Role runtime hanya boleh membaca; tidak ada
+baris yang pernah dihapus (trigger dan hak yang dicabut).
+
+**Operasi.** Pass hanya menyentuh database, sehingga aman di profil offline/LAN.
+WhatsApp sendiri mati kecuali `WHATSAPP_ENABLED=true`; `whatsapp:dispatch`
+mendaftarkan template booking di prosesnya sendiri (sudah), atau pesan yang
+mengantre gagal terminal sebagai `template_unknown`.
+
 ## 8. Pencegahan double-booking dan tes regresi wajib
 
 ### 8.1 Strateginya
@@ -1039,6 +1153,7 @@ menyatakan apa di paket ini yang tak bisa difinalkan sampai jawabannya dicatat.
 - **O2f — aturan bergantung tanggal.** Tarif per malam dan rate plan, minimum menginap bergantung tanggal, pembatasan hari kedatangan atau keberangkatan di luar v1 (minimum per offering, §2.5).
 - **O2g — no-show untuk stay.** Apakah grace per offering (dan apakah no-show melepas sisa malam setelah yang pertama) — pertanyaan terbuka yang sudah ada, kini konkret.
 - **O2h — event blok.** Apakah hilir (channel manager) butuh event `awcms.booking.block.*`; v1 tidak memancarkan apa pun.
+- **O13 — kebijakan pengingat (Issue #943).** Dicatat, belum diputuskan: (a) lead tetap 24 jam dan satu pengingat per reservasi; apakah per tenant (kolom `reminder_lead_seconds` dan field kebijakan) atau per offering, dan apakah ada pengingat kedua; (b) konfirmasi dikirim pada pass job berikutnya setelah `confirm`; apakah tenant boleh mematikan konfirmasi atau pengingat secara terpisah; (c) redaksi berupa bahasa Inggris netral dan hanya memuat nomor reservasi serta waktu mulai lokal; redaksi dan locale per tenant, serta nama template provider yang disetujui Meta, adalah keputusan pemilik; (d) e-mail tidak dirutekan (modul e-mail juga tidak bisa menerima referensi pelanggan yang opak); apakah pelanggan tanpa WhatsApp harus jatuh ke e-mail; (e) adapter hilir mana yang mengimplementasikan `BookingReminderRecipientPort` (commerce, menurut O12).
 
 Juga terbuka dan _tidak_ ada di tracker hilir (diusulkan untuknya): angka
 default dan maksimum TTL hold (§5.1, 900 dan 86 400 detik, adalah bawaan modul,
@@ -1089,6 +1204,7 @@ dari desain ke kode (peta modul:
 | **Pelaporan**         | #944  | Tiga proyeksi pada engine `reporting` (`booking.reservations`, `booking.time`, `booking.nights`; §7.2.1), field aturan `sumColumn` dan batas halaman aman-ikatan di engine, laporan langsung `GET /booking/reports/{occupancy,utilization,reservations}` dengan jendela hari Asia/Jakarta dan penahanan kelompok kecil. Satu migrasi, `sql/244` (kolom kuantitas, `projection_kind`, trigger pengisi, backfill). Tes: `tests/booking-report.test.ts`, `tests/reporting-projection-metric-delta.test.ts`, `tests/integration/booking-reporting.integration.test.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | **Konfigurasi admin** | #1030 | Route §3.0.2 di atas `booking-resource-admin.ts` (resource, unit, pool), `booking-offering-admin.ts`, `booking-policy-admin.ts` dan `booking-admin-routes.ts` / `booking-admin-support.ts` bersama (savepoint yang memetakan guard database ke 409, halaman keyset, pembungkus mutasi idempoten) dengan aturan murni di `domain/booking-admin-validation.ts`; event audit `booking.pool.*` dan `booking.offering.restored`, serta `booking.policy.configured` dinaikkan ke `critical`. Tanpa migrasi: setiap invarian yang dipakainya ada di `sql/180`, `186`, `204` dan `240`. Tes: `tests/booking-admin-validation.test.ts` dan `tests/integration/booking-admin-api.integration.test.ts` (matriks akses dua arah, replay, penolakan guard, soft delete, isolasi tenant).                                                                                                                                                                                                                                                                                      |
 | **Layar admin**       | #942  | Enam layar §3.0.3 (`src/pages/admin/booking/*.astro`), pengirim bersama `src/lib/ui/booking-admin-client.ts`, pesan terjemahan `src/lib/booking-admin-messages.ts` dan label `src/lib/booking-admin-labels.ts`, enam entri `navigation` dan perubahan status ke `active`, 218 entri katalog di `locales/en.po` / `id.po`, ledger cakupan turun menjadi tujuh kunci, dan `APP_BUDGET_BYTES` dinaikkan sebesar 11.259 B tujuh berkas skrip baru. Tanpa migrasi, tanpa perubahan API. Tes: `tests/admin-booking-page-contract.test.ts`, registry navigasi, `tests/e2e/admin-booking.e2e.ts` (hanya keyboard, setiap aksi), dan layar booking di `a11y-axe.e2e.ts` serta sapuan 360 px.                                                                                                                                                                                                                                                                                                                                                                              |
+| **Pengingat**         | #943  | Job `booking:reminders:dispatch` (§7.5) di atas `booking-reminder-dispatch.ts` / `booking-reminder-job.ts`, tabel intent `sql/284` dan tiga pembacaan sempit `sql/285`, `BookingReminderRecipientPort`, template `booking.confirmation` / `booking.reminder`, diserahkan ke `whatsapp_delivery` lewat `WhatsappDeliveryPort`. Inert sampai deployment mendaftarkan resolver penerima.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 **Masih desain (belum ada di kode):** route `extend` §5.1; `service_requirements`, `staff_assignments`
 dan tes T8; route `reservations/reconciliation`; layar untuk create / reschedule / override reservasi, ketersediaan, catatan, dan laporan (§3.0.3 menjelaskan mengapa masing-masing tidak ada).

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:aea4c22292ce9e9148504e2665d6a3a1d5ca364fee75d81a628411729aace959 -->
+<!-- i18n-source-hash: sha256:f54ab8274e519d23d0f39b68ce6cf8943fc47bef8bfef010f715bd77208acad9 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-141 target menjalankan berkas di `scripts/`; 62 di antaranya
+142 target menjalankan berkas di `scripts/`; 62 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -60,6 +60,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `blog:portable-text:backfill`             | `blog-portable-text-backfill.ts`               | —    |
 | `blog:publish:scheduled`                  | `blog-scheduled-publish.ts`                    | —    |
 | `booking:holds:expire`                    | `booking-holds-expire.ts`                      | —    |
+| `booking:reminders:dispatch`              | `booking-reminders-dispatch.ts`                | —    |
 | `build:asset-budget:check`                | `client-asset-budget.ts`                       | —    |
 | `build:inline-scripts:check`              | `build-inline-script-check.ts`                 | —    |
 | `build:preview-overlay`                   | `build-preview-overlay.ts`                     | —    |

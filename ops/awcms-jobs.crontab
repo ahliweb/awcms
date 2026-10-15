@@ -50,6 +50,19 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # (booking.md section 7.1).
 * * * * * /usr/bin/flock -n $AWCMS_LOCK/booking-holds-expire.lock $AWCMS_RUN_JOB booking:holds:expire >> $AWCMS_JOB_LOG/booking-holds-expire.log 2>&1
 
+# booking — Creates the confirmation and reminder intents owed for CONFIRMED
+# reservations (once per reservation, kind and occurrence) and hands each to
+# the WhatsApp delivery queue through the `WhatsappDeliveryPort`; cancels the
+# queued message of a reservation that was cancelled, expired, rescheduled or
+# marked no-show; expires an intent whose reservation began. Database-only:
+# `enqueue` is one INSERT, the provider is called by `whatsapp:dispatch` in
+# another process. Inert (creates and sends nothing) until a deployment
+# registers a `BookingReminderRecipientPort`, because booking holds only the
+# opaque customer reference and never a contact. Consent, opt-out, templating
+# and the provider are the delivery module's decisions (booking.md section
+# 7.5).
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/booking-reminders-dispatch.lock $AWCMS_RUN_JOB booking:reminders:dispatch >> $AWCMS_JOB_LOG/booking-reminders-dispatch.log 2>&1
+
 # comments — Bounded, per-tenant retention/anonymization sweep: NULL author
 # identity fields on comments older than the retention cutoff (retaining row +
 # body + append-only moderation history), and delete unconfirmed reply

@@ -744,6 +744,11 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // and a trigger refuses it as the second layer.
   awcms_booking_resource_blocks: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_reservations: ["SELECT", "INSERT", "UPDATE"],
+  // Issue #943 (`sql/284`): reminder/confirmation intents. The runtime role only
+  // READS; the one writer of new rows is the SECURITY DEFINER function of
+  // `sql/285` (as the memberless `awcms_booking_reminders`), and the worker
+  // settles them. Never deleted: a trigger refuses it as the second layer.
+  awcms_booking_reminder_intents: ["SELECT"],
   awcms_booking_resource_allocations: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_reservation_items: ["SELECT", "INSERT"],
   awcms_booking_reservation_events: ["SELECT", "INSERT"],
@@ -1680,7 +1685,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // Issue #937 (sql/180). SELECT only: the reporting engine's projection worker
   // will read the reservation-event log as `awcms_worker` (ADR-0131 section
   // 7.2); it writes exclusively to its own `awcms_reporting_projection_*` tables.
-  awcms_booking_reservation_events: ["SELECT"]
+  awcms_booking_reservation_events: ["SELECT"],
+  // Issue #943 (`sql/284`). `booking:reminders:dispatch` settles intents (UPDATE)
+  // and reads them; it does not INSERT (the DEFINER function of `sql/285` does)
+  // and it holds NO privilege on the reservation tables, which it reads only
+  // through the three narrow functions of `sql/285`. The UPDATE is COLUMN-scoped
+  // in `sql/284` (status, outcome_code, message_id, settled_at, attempts,
+  // reconciled_at, updated_at; never the identity of the debt), so the
+  // table-level matrix records SELECT only.
+  awcms_booking_reminder_intents: ["SELECT"]
 };
 
 /**
