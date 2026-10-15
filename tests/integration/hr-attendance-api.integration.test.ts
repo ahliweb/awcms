@@ -471,6 +471,25 @@ async function taskOf(instanceId: string): Promise<string> {
   return rows[0]!.id;
 }
 
+/**
+ * Simulates a delegate's decision by rewriting the recorded decision. The
+ * decision log is append-only (`sql/252`, #999) -- no role can UPDATE it -- so
+ * this fixture steps outside the guard the way a superuser maintenance session
+ * would (`session_replication_role = replica`), for this one statement only.
+ */
+async function forgeDecisionOnBehalfOf(
+  taskId: string,
+  onBehalfOf: string
+): Promise<void> {
+  await admin().begin(async (tx) => {
+    await tx.unsafe("SET LOCAL session_replication_role = replica");
+    await tx`
+      UPDATE awcms_workflow_decisions
+      SET on_behalf_of_tenant_user_id = ${onBehalfOf}
+      WHERE workflow_task_id = ${taskId}`;
+  });
+}
+
 /** The approver decides in the REAL workflow engine. */
 async function decide(
   instanceId: string,
@@ -1411,10 +1430,10 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
 
       // A delegate who acted on the requester's behalf: refused with a named 409,
       // and the correction stays pending.
-      await admin()`
-        UPDATE awcms_workflow_decisions
-        SET on_behalf_of_tenant_user_id = ${requester.tenantUserId}
-        WHERE workflow_task_id = ${await taskOf(created.workflowInstanceId)}`;
+      await forgeDecisionOnBehalfOf(
+        await taskOf(created.workflowInstanceId),
+        requester.tenantUserId
+      );
       const viaDelegate = await settle(created.id, hr.token);
 
       expect(viaDelegate.status).toBe(409);
@@ -2000,10 +2019,10 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       expect(
         (await decide(delegated.workflowInstanceId, other.token)).status
       ).toBe(200);
-      await admin()`
-        UPDATE awcms_workflow_decisions
-        SET on_behalf_of_tenant_user_id = ${subject.tenantUserId}
-        WHERE workflow_task_id = ${await taskOf(delegated.workflowInstanceId)}`;
+      await forgeDecisionOnBehalfOf(
+        await taskOf(delegated.workflowInstanceId),
+        subject.tenantUserId
+      );
       await refusedAndPending(delegated.id, hr.token);
 
       // (3) Another approved it, but the SUBJECT tries to settle it.

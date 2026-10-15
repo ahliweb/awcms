@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:041170d005a7b2432a53a62b6dbe894fa00314e9ead901e1c0aa8c9b716c25d1 -->
+<!-- i18n-source-hash: sha256:e6f02efb5670fa681918dbcc06aeab0b35cbc78b61c04c5637f2431111d73a60 -->
 
 # Workflow Approval
 
@@ -59,6 +59,12 @@ Sebuah registry kode-sumber statis yang sudah ditinjau — mencerminkan `DOMAIN_
 **Gerbang status terminal (Issue #152)** — UPDATE node `end` dikondisikan dengan `AND status = 'pending'` (gerbang yang sama dipakai `cancelWorkflowInstance`) dan di-rollback bila tidak mencocokkan apa pun, sehingga keputusan yang sedang berlangsung tidak pernah bisa menghidupkan kembali instance yang telah dibatalkan.
 
 Tercakup oleh `tests/workflow-approval-concurrency.test.ts`, yang menggerakkan transaksi bertumpang tindih sungguhan terhadap PostgreSQL sungguhan (opt-in lewat `WORKFLOW_TEST_DATABASE_URL`; dilewati bila tidak).
+
+## Imutabilitas (Issue #999, `sql/252`, ADR-0144)
+
+`awcms_workflow_decisions` bersifat append-only, baris `awcms_workflow_instances` terminal final, dan baris `awcms_workflow_tasks` final tetap final, ditegakkan dua lapis bila ada privilege. **Privilege:** `awcms_app` hanya memegang `SELECT, INSERT` pada keputusan dan `SELECT, INSERT, UPDATE` pada instance (tanpa `DELETE`/`TRUNCATE`); verb yang dipersempit dideklarasikan di `scripts/security-readiness.ts`. `TRUNCATE` dihentikan oleh `REVOKE` itu saja, bukan trigger (harness tes dan tooling operator melakukan truncate sebagai role berprivilege). **Trigger:** keputusan menolak `UPDATE`/`DELETE` apa pun; instance menolak `DELETE`, menolak setiap `UPDATE` setelah `approved`/`rejected`/`cancelled`, membekukan identitas, pemohon, resource, versi terpaku, dan fakta, serta hanya mengizinkan stempel pembatalan bersama `status = 'cancelled'`; task membekukan instance, node, dan quorum-nya serta menolak `UPDATE` setelah `completed`/`skipped`/`cancelled` (pencarian pemisahan tugas mencapai keputusan lewat `workflow_instance_id`, jadi task yang bisa diarahkan ulang akan menyembunyikan persetujuan-diri). Perpindahan sah engine tidak berubah. Fixture tes dan purge tenant yang perlu melewati trigger memakai superuser `SET LOCAL session_replication_role = replica`.
+
+**Belum ditegakkan (dilacak di #1032, sengaja bukan bagian perubahan ini):** bahwa instance hanya mencapai `approved`/`rejected` bila keputusannya membenarkan, dan bahwa INSERT keputusan terikat pada task, assignee, dan tenant user yang diklaimnya. Bug pada role runtime masih dapat mencatat keputusan atau menyelesaikan instance yang tidak akan dilakukan engine; perubahan ini menutup pengubahan dan penghapusan riwayat, bukan penambahan palsu.
 
 ## Delegasi (`domain/workflow-delegation.ts`)
 

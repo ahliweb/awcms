@@ -8,13 +8,13 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 205   |
+| Migrations                          | 206   |
 | `awcms_*` tables                    | 215   |
 | Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 659   |
+| Test files                          | 660   |
 | Route files                         | 543   |
-| ADR                                 | 288   |
+| ADR                                 | 290   |
 
 ### Modules
 
@@ -263,6 +263,7 @@
 | 203 | `sql/240_awcms_booking_block_unit_coverage.sql`                    |
 | 204 | `sql/241_awcms_booking_block_release_one_timestamp.sql`            |
 | 205 | `sql/244_awcms_booking_reporting_facts.sql`                        |
+| 206 | `sql/252_awcms_workflow_approval_immutability.sql`                 |
 
 ### Tables & Row-Level Security
 
@@ -490,7 +491,7 @@
 | ------------- | ---------- |
 | `(root)`      | 509        |
 | `e2e`         | 25         |
-| `integration` | 124        |
+| `integration` | 125        |
 | `unit`        | 1          |
 
 ### Routes

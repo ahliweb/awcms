@@ -101,10 +101,17 @@ describeOrSkip("workflow approval concurrency (real PostgreSQL)", () => {
       await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
       await sql`DELETE FROM awcms_domain_event_deliveries WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_domain_events WHERE tenant_id = ${tenantId}`;
-      await sql`DELETE FROM awcms_workflow_decisions WHERE tenant_id = ${tenantId}`;
-      await sql`DELETE FROM awcms_workflow_task_assignments WHERE tenant_id = ${tenantId}`;
-      await sql`DELETE FROM awcms_workflow_tasks WHERE tenant_id = ${tenantId}`;
-      await sql`DELETE FROM awcms_workflow_instances WHERE tenant_id = ${tenantId}`;
+      // The decision log and instances are immutable (sql/252, #999); a test
+      // teardown is a superuser maintenance session, so it steps outside the
+      // guard for this transaction only.
+      await sql.begin(async (tx) => {
+        await tx.unsafe("SET LOCAL session_replication_role = replica");
+        await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+        await tx`DELETE FROM awcms_workflow_decisions WHERE tenant_id = ${tenantId}`;
+        await tx`DELETE FROM awcms_workflow_task_assignments WHERE tenant_id = ${tenantId}`;
+        await tx`DELETE FROM awcms_workflow_tasks WHERE tenant_id = ${tenantId}`;
+        await tx`DELETE FROM awcms_workflow_instances WHERE tenant_id = ${tenantId}`;
+      });
       await sql`DELETE FROM awcms_workflow_definitions WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_tenants WHERE id = ${tenantId}`;
     }
