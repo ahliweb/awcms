@@ -36,7 +36,7 @@ const SCREENS_ROOT = "src/pages/admin";
  */
 const SELF_SERVICE_SCREENS: Readonly<Record<string, string>> = {
   "account.astro":
-    "ADR-0096 — every row it reads is the caller's own: their profile, their sessions, their MFA factor, their stored preferences. It accepts no id, so there is nothing it could be pointed at. An entry permission here would have to be an action no migration seeds, which denies everyone including the tenant owner (ADR-0058 §E) — on the screen a person reaches for when they think their password leaked."
+    "ADR-0096 — every row it reads is the caller's own: their profile, their sessions, their MFA factor, their stored preferences. It accepts no id, so there is nothing it could be pointed at. An entry permission here would have to be an action no migration seeds, which denies everyone including the tenant owner (`awcms-abac-guard` skill) — on the screen a person reaches for when they think their password leaked."
 };
 
 async function listScreens(): Promise<string[]> {

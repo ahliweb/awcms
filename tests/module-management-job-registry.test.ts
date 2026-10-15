@@ -94,6 +94,7 @@ describe("fetchModuleJobs", () => {
         "bun run blog:ads:ingest",
         "bun run blog:portable-text:backfill",
         "bun run blog:publish:scheduled",
+        "bun run booking:holds:expire",
         "bun run comments:retention",
         "bun run config:validate",
         "bun run data-lifecycle:archive-purge",

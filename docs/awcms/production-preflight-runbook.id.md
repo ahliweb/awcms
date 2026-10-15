@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](production-preflight-runbook.md)
 
-<!-- i18n-source-hash: sha256:43ef708ddb3c41a285a47582d665f99b0c6453f8e0db82b4bdf55b2c74cb9ca7 -->
+<!-- i18n-source-hash: sha256:38cc1ebaf0ace00893246b5dcc1fb53dd054170411ea4d9cb4862dfc33f7f4bd -->
 
 # Preflight Produksi — Runbook Gladi, Apply, dan Rollback
 
@@ -228,6 +228,27 @@ Opsional, tangkap salinan laporan yang terbaca-mesin untuk catatan deploy:
 APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight \
   --json-output=/var/log/awcms/preflight-$(date +%Y%m%d_%H%M%S).json
 ```
+
+### Pra-cek ekstensi — `btree_gist` (modul `booking`, `sql/180`)
+
+`sql/180` menjalankan `CREATE EXTENSION IF NOT EXISTS btree_gist;` (kesetaraan
+uuid di dalam exclusion constraint anti double-booking,
+[`booking.md`](booking.id.md) §8.2). Ia adalah **ekstensi tepercaya**
+(PostgreSQL 13+), sehingga peran migrasi yang memiliki database dan memegang
+`CREATE` padanya bisa membuatnya tanpa superuser, dan `postgres:18.4` sudah
+menyertakannya. Database **terkelola** yang peran migrasinya tidak bisa membuat
+ekstensi tepercaya akan menggagalkan migrasi sebelum tabel booking mana pun ada,
+jadi periksa di target SEBELUM Tahap 4:
+
+```sql
+SELECT name, default_version, installed_version
+FROM pg_available_extensions WHERE name = 'btree_gist';
+-- installed_version NULL tidak apa-apa (migrasi yang membuatnya); barisnya harus ada.
+-- Atau buat lebih dulu, sebagai peran migrasi: CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
+
+Bila ekstensi tidak bisa dibuat, berhenti dan catat pengecualiannya (booking.md
+§8.2) — jangan terapkan, dan jangan edit `sql/180`.
 
 ## Tahap 4 — Apply (produksi)
 

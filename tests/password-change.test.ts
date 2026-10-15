@@ -308,7 +308,7 @@ describe("the route is self-service and leaks no password anywhere", () => {
   );
 
   test("it uses the self-service seam and names no permission", () => {
-    // ADR-0049 §7 and ADR-0058 §E: a permission for "change your own password"
+    // ADR-0049 §7 and the `awcms-abac-guard` skill: a permission for "change your own password"
     // would be a wall in front of the feature AND an action nothing seeds,
     // which denies everyone including the tenant owner.
     expect(source).toContain("defineSelfServiceTenantRoute");

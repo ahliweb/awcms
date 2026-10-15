@@ -57,6 +57,9 @@ import {
   getTenantAuthPolicy
 } from "../src/modules/identity-access/application/tenant-auth-policy";
 import { evaluateBreakGlassRequirement } from "../src/modules/identity-access/domain/tenant-sso-policy";
+import { mfaRequiredPermissionKeys } from "../src/modules/identity-access/domain/mfa-required-permissions";
+import { reportMfaRequiredPermissionHolders } from "../src/modules/identity-access/application/mfa-required-holders";
+import { isMfaFeatureEnabled } from "../src/lib/auth/mfa-config";
 import {
   evaluateAccess,
   isHighRiskAction
@@ -2600,6 +2603,173 @@ export async function checkSsoBreakGlassReady(): Promise<SecurityCheckResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Permissions that require an enrolled MFA factor (ADR-0141, finding PS-13)
+// ---------------------------------------------------------------------------
+
+/**
+ * ADR-0141 — if any module flags a permission `requiresMfaEnrolment`, a person
+ * can only exercise it after enrolling, and the chokepoint refuses everyone
+ * otherwise. With `AUTH_MFA_ENABLED` off nobody on the deployment CAN enrol, so
+ * every flagged action is refused for every person, permanently — by design
+ * (fail-closed; see `evaluateMfaEnrolmentRequirement`), and therefore a thing
+ * to find out before go-live and not from the first payroll approver.
+ *
+ * `critical` when it applies, because the control the module declared it needs
+ * cannot work at all; `pass` loudly when no module flags anything, which is the
+ * state this base ships in, so a silent pass cannot be mistaken for a check
+ * that stopped looking.
+ *
+ * Takes the flagged keys and env as parameters so the DEFECTIVE case is
+ * testable in a base that flags nothing.
+ */
+export function checkMfaEnrolmentAvailableForRequiredPermissions(
+  requiredKeys: ReadonlySet<string> = mfaRequiredPermissionKeys(),
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name =
+    "MFA enrolment is available when a permission requires an enrolled factor";
+  const severity: CheckSeverity = "critical";
+
+  if (requiredKeys.size === 0) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence:
+        "No module declares `requiresMfaEnrolment`, so no permission needs an enrolled factor (ADR-0141: the mechanism ships inert). The moment a descriptor flags one — hr_payroll's payroll-critical permissions are the first expected user — this check requires AUTH_MFA_ENABLED=true, because with it off nobody can enrol and every flagged action is refused."
+    };
+  }
+
+  if (!isMfaFeatureEnabled(env)) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `${requiredKeys.size} permission(s) require an enrolled MFA factor but AUTH_MFA_ENABLED is not "true", so no person on this deployment can enrol and every one of them is refused for everyone (403 MFA_ENROLMENT_REQUIRED). Set AUTH_MFA_ENABLED=true and AUTH_MFA_SECRET_ENCRYPTION_KEY (see the MFA key check), then have the holders enrol.`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence: `${requiredKeys.size} permission(s) require an enrolled MFA factor and AUTH_MFA_ENABLED=true, so a holder can enrol (the TOTP key itself is verified by its own check).`
+  };
+}
+
+/**
+ * ADR-0141 — the READINESS half of the requirement: which tenants have people
+ * who hold a flagged permission and have no active factor, and are therefore
+ * about to be refused. This is the early warning the grant-time refusal ADR-0141
+ * §2 declined to build would have been; it reports, it does not decide.
+ *
+ * ## `warning`, never `critical`
+ *
+ * An unenrolled holder is not a vulnerability — the chokepoint already refuses
+ * them, which is the whole point — it is a person who will be told to enrol, and
+ * during a rollout every holder is in that state at least once. A gate that
+ * blocked go-live on it would make enrolment a precondition of deploying, which
+ * is the lockout ADR-0141 exists to avoid. It names the tenants so an operator
+ * can ask those people to enrol first.
+ *
+ * ## One transaction per tenant, every active tenant, uncapped
+ *
+ * The reasons are `checkSsoBreakGlassReady`'s and are not repeated: tenant RLS
+ * means no cross-tenant read for the app role, a cap would let a tenant past the
+ * limit go unreported under a PASS, and a `withTenant` that returns a `Response`
+ * on an open circuit breaker must be treated as "cannot verify".
+ *
+ * Passes loudly when nothing is flagged, so a silent pass cannot be mistaken for
+ * a check that stopped looking.
+ */
+export async function checkMfaRequiredPermissionHolders(
+  options: { requiredKeys?: ReadonlySet<string> } = {}
+): Promise<SecurityCheckResult> {
+  const name =
+    "Holders of permissions that require an enrolled MFA factor are enrolled";
+  const severity: CheckSeverity = "warning";
+  const requiredKeys = options.requiredKeys ?? mfaRequiredPermissionKeys();
+
+  if (requiredKeys.size === 0) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence:
+        "No module declares `requiresMfaEnrolment`, so there is no holder to report (ADR-0141: the mechanism ships inert). The moment a descriptor flags a permission, this lists every tenant where a holder has no enrolled factor — run it BEFORE the module is enabled for tenants, not after the first refusal."
+    };
+  }
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const tenants = (await sql`
+      SELECT id FROM awcms_tenants WHERE status = 'active' ORDER BY id
+    `) as { id: string }[];
+    const now = new Date();
+
+    const flaggedTenants: string[] = [];
+    let unenrolledTotal = 0;
+    let holderTotal = 0;
+
+    for (const tenant of tenants) {
+      const report = await withTenantOrThrow(
+        sql,
+        tenant.id,
+        (tx) =>
+          reportMfaRequiredPermissionHolders(tx, tenant.id, now, {
+            requiredKeys
+          }),
+        { workClass: "maintenance" }
+      );
+
+      // `withTenantOrThrow` THROWS when the circuit breaker is open, which the
+      // catch below reports as "could not verify" — never as a clean tenant.
+      holderTotal += report.holderCount;
+
+      if (report.unenrolled.length > 0) {
+        unenrolledTotal += report.unenrolled.length;
+        flaggedTenants.push(
+          `${tenant.id} (${report.unenrolled.length} of ${report.holderCount} holder(s) not enrolled)`
+        );
+      }
+    }
+
+    if (flaggedTenants.length > 0) {
+      const shown = flaggedTenants.slice(0, 20);
+      const more =
+        flaggedTenants.length > shown.length
+          ? `; …and ${flaggedTenants.length - shown.length} more`
+          : "";
+
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${unenrolledTotal} holder(s) across ${flaggedTenants.length} of ${tenants.length} active tenant(s) hold a permission that requires an enrolled MFA factor and have none: ${shown.join("; ")}${more}. They are refused with 403 MFA_ENROLMENT_REQUIRED until they enrol in their account settings (/admin/account); they are not locked out of anything else. A tenant with NO enrolled holder yet is bootstrapped the same way — its owner enrols first (docs/awcms/mfa-totp-step-up.md). This check reports, it does not decide.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `${tenants.length} active tenant(s) scanned; ${holderTotal} holder(s) of the ${requiredKeys.size} flagged permission(s) in tenants where the module is usable, and every one has an active factor (holders re-derived from the live grant sources, not from a stored list).`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify MFA enrolment of permission holders: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cloudflare Turnstile configuration is complete when enabled (Issue #186) —
 // critical when misconfigured, informational when disabled intentionally
 // ---------------------------------------------------------------------------
@@ -3160,6 +3330,8 @@ export async function runSecurityReadinessChecks(): Promise<
     checkEdgeCacheConfigured(),
     checkOnlineAuthSecurityReady(),
     await checkSsoBreakGlassReady(),
+    checkMfaEnrolmentAvailableForRequiredPermissions(),
+    await checkMfaRequiredPermissionHolders(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt(),

@@ -11,7 +11,7 @@
  * ## Step-up is required only when the person HAS a second factor
  *
  * The program plan said "step-up aal2 + old password". Shipping the aal2 half
- * unconditionally would have been the ADR-0058 §E trap wearing different
+ * unconditionally would have been the ADR-0141 §4 trap wearing different
  * clothes: `requireStepUp` denies any session that is not currently `aal2`, and
  * a person with no enrolled factor can never reach `aal2` — so every user
  * without MFA would be permanently unable to change their password, and the

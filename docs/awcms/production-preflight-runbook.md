@@ -218,6 +218,26 @@ APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight \
   --json-output=/var/log/awcms/preflight-$(date +%Y%m%d_%H%M%S).json
 ```
 
+### Extension pre-flight — `btree_gist` (the `booking` module, `sql/180`)
+
+`sql/180` runs `CREATE EXTENSION IF NOT EXISTS btree_gist;` (the uuid equality
+inside the double-booking exclusion constraints,
+[`booking.md`](booking.md) §8.2). It is a **trusted extension** (PostgreSQL 13+),
+so a migration role that owns the database and holds `CREATE` on it can create
+it without superuser, and `postgres:18.4` ships it. A **managed** database
+whose migration role cannot create trusted extensions fails the migration
+before any booking table exists, so check it on the target BEFORE Stage 4:
+
+```sql
+SELECT name, default_version, installed_version
+FROM pg_available_extensions WHERE name = 'btree_gist';
+-- installed_version NULL is fine (the migration creates it); the row must exist.
+-- Or create it ahead of time, as the migration role: CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
+
+If the extension cannot be created, stop and record the exception (booking.md
+§8.2) — do not apply, and do not edit `sql/180`.
+
 ## Stage 4 — Apply (production)
 
 Only after Stage 3 reports `GO-LIVE DIIZINKAN`:

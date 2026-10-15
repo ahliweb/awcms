@@ -185,6 +185,11 @@ export const GRANT_READERS: readonly GrantReaderEntry[] = [
       "THE writer, since ADR-0078. Every path that used to INSERT a grant calls `grantRolePolicy`, and removal goes through `revokeRoleGrants`. It no longer touches the legacy table: `sql/103` made that table history, and a DELETE against it would now fail the whole revocation with 42501."
   },
   {
+    file: "src/modules/identity-access/application/mfa-required-holders.ts",
+    reason:
+      "ADR-0141 / PS-13 readiness listing: which people hold a permission flagged `requiresMfaEnrolment` and have no active factor. A pure READER — it embeds `activeRoleGrants` (so it cannot disagree with the chokepoint about who holds a key) and names `awcms_role_permissions` only to resolve a role's keys. It returns tenant-user ids and permission keys, never a name or address, and writes nothing."
+  },
+  {
     file: "src/modules/identity-access/application/owner-permission-backfill-job.ts",
     reason:
       "The backfill writer. Grants only catalogue rows NEWER than the role, so it cannot resurrect a deliberate removal (`owner-permission-backfill.ts`)."

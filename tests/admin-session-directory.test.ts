@@ -301,7 +301,7 @@ describe("the two permissions are declared, and separately", () => {
   });
 
   test("both are seeded by a migration, or the owner is denied by default", () => {
-    // ADR-0058 §E — an action nothing seeds denies everyone including the
+    // `awcms-abac-guard` skill — an action nothing seeds denies everyone including the
     // tenant owner, while the calling code reads as correctly guarded.
     const migration = readFileSync(
       "sql/101_awcms_identity_user_sessions_permissions.sql",

@@ -110,26 +110,92 @@ async function seed(): Promise<void> {
 
 type Plan = { text: string; scan: string; rowsRead: number };
 
+/**
+ * One node of `EXPLAIN (FORMAT JSON)`. Only the keys this file reads are typed;
+ * the rest of PostgreSQL's node is left alone.
+ */
+type PlanNode = {
+  "Node Type": string;
+  "Relation Name"?: string;
+  "Index Name"?: string;
+  "Sort Method"?: string;
+  "Actual Rows"?: number;
+  Plans?: PlanNode[];
+};
+
+/**
+ * Node types the text parser matched. `Bitmap Index Scan` is included on
+ * purpose: the text regex's `Index Scan` alternative also matched inside the
+ * line `Bitmap Index Scan on …`, so the old parser treated it as a scan node.
+ */
+const SCAN_NODE_TYPES = new Set([
+  "Seq Scan",
+  "Index Scan",
+  "Index Only Scan",
+  "Bitmap Heap Scan",
+  "Bitmap Index Scan"
+]);
+
+/**
+ * Plan nodes in the order the text output printed them: pre-order, parent
+ * before children, children in plan order.
+ */
+function flattenPlan(node: PlanNode, out: PlanNode[] = []): PlanNode[] {
+  out.push(node);
+  for (const child of node.Plans ?? []) flattenPlan(child, out);
+  return out;
+}
+
+/**
+ * Renders each node as the one-line form the text plan used, so the rest of
+ * the file keeps asserting against the same kind of string: `Seq Scan on
+ * awcms_blog_posts`, `Index Scan using <index> on …`, `Sort Method: …`.
+ */
+function renderPlan(nodes: PlanNode[]): string {
+  const lines: string[] = [];
+  for (const node of nodes) {
+    let line = node["Node Type"];
+    if (node["Index Name"]) line += ` using ${node["Index Name"]}`;
+    if (node["Relation Name"]) line += ` on ${node["Relation Name"]}`;
+    lines.push(line);
+    if (node["Sort Method"]) lines.push(`Sort Method: ${node["Sort Method"]}`);
+  }
+  return lines.join("\n");
+}
+
 async function explain(
   sqlText: string,
   params: unknown[],
   on: Bun.SQL = getAdminSql()
 ): Promise<Plan> {
   const rows = (await on.unsafe(
-    `EXPLAIN (ANALYZE, FORMAT TEXT) ${sqlText}`,
+    `EXPLAIN (ANALYZE, FORMAT JSON) ${sqlText}`,
     params as never[]
-  )) as Record<string, string>[];
+  )) as { "QUERY PLAN": unknown }[];
 
-  const text = rows.map((row) => Object.values(row)[0]).join("\n");
-  const scan =
-    text.match(
-      /(Seq Scan|Index Scan|Index Only Scan|Bitmap Heap Scan)[^\n]*/
-    )?.[0] ?? "(no scan node)";
+  // The driver may hand back the json column parsed or as its text.
+  const raw = rows[0]!["QUERY PLAN"];
+  const document = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
+    Plan: PlanNode;
+  }[];
+
+  const nodes = flattenPlan(document[0]!.Plan);
+  const first = nodes.find((node) => SCAN_NODE_TYPES.has(node["Node Type"]));
+
+  let scan = "(no scan node)";
+  let rowsRead = -1;
+  if (first) {
+    scan = first["Node Type"];
+    if (first["Index Name"]) scan += ` using ${first["Index Name"]}`;
+    if (first["Relation Name"]) scan += ` on ${first["Relation Name"]}`;
+    // `Actual Rows` is per loop, as the text's `rows=` was.
+    rowsRead = first["Actual Rows"] ?? -1;
+  }
 
   return {
-    text,
+    text: renderPlan(nodes),
     scan: scan.trim(),
-    rowsRead: Number(scan.match(/rows=([\d.]+)\.00 loops/)?.[1] ?? -1)
+    rowsRead
   };
 }
 

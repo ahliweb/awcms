@@ -53,6 +53,7 @@
     "push:vapid:generate": "bun scripts/push-vapid-generate.ts",
     "whatsapp:dispatch": "bun scripts/whatsapp-dispatch.ts",
     "whatsapp:queue:purge": "bun scripts/whatsapp-queue-purge.ts",
+    "booking:holds:expire": "bun scripts/booking-holds-expire.ts",
     "identity-access:business-scope:expiry": "bun scripts/identity-access-business-scope-expiry.ts",
     "identity-access:delegated-access:expiry": "bun scripts/identity-access-delegated-access-expiry.ts",
     "identity-access:subscription-lifecycle": "bun scripts/identity-access-subscription-lifecycle.ts",
@@ -190,7 +191,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@changesets/cli": "^3.0.3",
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.0",
     "@types/bun": "^1.4.2",
     "prettier": "^3.9.9",
     "prettier-plugin-astro": "^1.1.0",
@@ -211,7 +212,7 @@
     "undici": "^8.10.2"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.6",
-    "astro": "^7.3.5"
+    "@astrojs/node": "^11.1.7",
+    "astro": "^7.3.8"
   }
 }

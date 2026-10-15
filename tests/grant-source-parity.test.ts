@@ -85,6 +85,11 @@ const GRANT_CONSUMERS: { file: string; wouldBreak: string }[] = [
       "Announcement targeting by role. A silently empty recipient set is a send that reports success and reaches nobody."
   },
   {
+    file: "src/modules/identity-access/application/mfa-required-holders.ts",
+    wouldBreak:
+      "The ADR-0141 readiness listing of people who hold a permission requiring an enrolled MFA factor. A holder set computed from its own join disagrees with the chokepoint about who is about to be refused, so the report either misses people who will be told to enrol or lists people nobody will ever refuse."
+  },
+  {
     file: "src/pages/api/v1/access/policies/simulate.ts",
     wouldBreak:
       "The ABAC simulator. A grant set computed differently from the real path simulates a different system, so a policy can behave in production unlike its preview."

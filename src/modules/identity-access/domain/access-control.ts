@@ -46,6 +46,19 @@ export type TenantContext = {
    * runs for everyone.
    */
   delegatedGrantId?: string;
+  /**
+   * ADR-0141 — `true` when the request was authenticated by a MACHINE
+   * credential rather than a person's session. Stamped by
+   * `authorizeInTransaction` on the context it RETURNS, so a field-level check
+   * that receives `auth.context` learns it from the authorised context itself
+   * and not from an optional argument a caller has to remember.
+   *
+   * Absent reads as a session, which is only safe because the one producer that
+   * can see a credential (`authorizeInTransaction`) always sets it, and the
+   * other builders of this type (the SSR session resolvers) are cookie-session
+   * only and can never carry a machine bearer.
+   */
+  viaMachineCredential?: boolean;
   correlationId?: string;
 };
 

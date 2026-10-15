@@ -1,16 +1,17 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:0baa2258e6949d05a554885bfcfae3a1abc0fb2ffbce29957e76182dd41d44b9 -->
+<!-- i18n-source-hash: sha256:a17dbf69007a909fededaa8f6fea72123ceff21072181a4d5720bbe00aaae476 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
 # Booking — resource, jadwal, dan reservasi (paket dokumen modul)
 
 > **Status:** diterima lewat [ADR-0131](../adr/0131-generic-booking-module-admission.id.md)
-> (Issue #915). **Hanya desain: belum ada kode modul, migrasi, path OpenAPI,
-> maupun channel AsyncAPI**, dan tak satu pun boleh ditulis sampai paket ini
-> diterima di hilir (`ahliweb/awcms-one` Wave A) dan pertanyaan terbuka yang
-> memengaruhi skema di §11 dijawab. PRD-lite, state machine, ERD dan kamus
+> (Issue #915). **Dibangun per irisan: §13 menyebut apa yang sudah ada di kode
+> hari ini** (skema, katalog izin, route availability dan jadwal, alokator
+> dengan hold dan kedaluwarsa, serta stay dan malam terblokir lewat alokator yang
+> sama); route reservasi, route blok, channel AsyncAPI, dan layar admin masih
+> desain, dan pertanyaan terbuka di §11 tetap mengaturnya. PRD-lite, state machine, ERD dan kamus
 > data, hold dan idempotensi, matriks izin/RLS, pelaporan dan event, strategi
 > double-booking beserta tes regresi wajibnya, catatan ancaman dan privasi,
 > kontrak adapter/port, dan pertanyaan terbuka ada dalam satu tempat. Keputusan
@@ -77,7 +78,7 @@ tanpa baris unit; turnaround bersama antar booking berurutan; akuntansi.
   eksplisit atau `Z`. Request tanpa offset adalah `400`, tak pernah "lokal server".
 - **Setiap interval setengah-terbuka `[start, end)`**: awal inklusif, akhir
   eksklusif. Booking 10:00–11:00 dan 11:00–12:00 berbagi batas dan tidak
-  tumpang tindih. `start < end` dan `end − start ≤ 366 hari` adalah CHECK (menginap membatasi 366 yang sama dalam tanggal, §2.5).
+  tumpang tindih. `start < end` adalah CHECK, begitu pula `end − start ≤ 368 hari` pada reservasi dan item (`sql/204`). Stay membatasi 366 yang sama dalam TANGGAL (§2.5), tetapi instant stay 366 malam yang jam check-out-nya lebih siang daripada jam check-in-nya, melintasi perubahan daylight saving, bisa membentang sehari dan satu jam lebih dari 366 hari, dan CHECK atas instant tak boleh menolak stay yang diizinkan aturan tanggal; untuk slot batasnya karena itu 368 hari, bukan 366.
 - Ekspresi rentang di database selalu `tstzrange(a, b, '[)')`.
 
 ### 2.2 Zona waktu
@@ -188,10 +189,17 @@ meminta confirm.
 Penolakan dan kodenya: `INVALID_STATE` (409), `SLOT_UNAVAILABLE` (409: bentrok
 eksklusi atau tak ada unit kosong), `OUTSIDE_SCHEDULE` (409, `override`
 mengangkatnya), `HOLD_EXPIRED` (409), `HOLD_LIMIT_EXCEEDED` (429),
-`LEAD_TIME_VIOLATION`, `HORIZON_EXCEEDED`, `PARTY_SIZE_OUT_OF_RANGE`,
+`LEAD_TIME_VIOLATION`, `HORIZON_EXCEEDED`, `PARTY_SIZE_OUT_OF_RANGE` (409),
 `STAFF_UNAVAILABLE` (409), `RECURRENCE_UNSUPPORTED`, `TIMEZONE_INVALID`,
 `IDEMPOTENCY_REQUIRED` (400), `IDEMPOTENCY_CONFLICT` (409),
-`PAYMENT_FIELD_NOT_ACCEPTED` (400).
+`PAYMENT_FIELD_NOT_ACCEPTED` (400). Klaim (`placeHold`, Issue #939) menambah
+penolakan yang hanya bisa dibuatnya: `CONTENTION_RETRY` (409: klaim terus kalah
+balapan atau deadlock tiga kali berturut-turut; ulangi), `QUANTITY_EXCEEDS_UNITS`
+(422: unit yang diminta lebih banyak daripada yang dimiliki target),
+`BOOKING_MODE_MISMATCH` (409: offering waktu pada resource stay, atau
+sebaliknya), `EXTERNAL_REF_IN_USE` (409: sudah ada reservasi hidup dengan
+`external_ref` itu), `RESOURCE_NOT_FOUND` dan `OFFERING_NOT_FOUND` (404, netral:
+id milik tenant lain dijawab sama dengan id yang tak dikenal). Irisan stay (Issue #940) menambah: `STAY_DATES_INVALID` (400: tanggal salah bentuk atau terbalik, instant sebagai ganti tanggal, tanggal yang tidak ada di zona itu, tanggal check-in yang sudah lewat di zonanya), `MIN_STAY_VIOLATION` dan `MAX_STAY_EXCEEDED` (409: batas malam offering), `STAY_POOL_INCONSISTENT` (409: resource stay dalam satu pool tidak berbagi satu zona dan satu pasang jam check-in dan check-out, sehingga tak ada satu snapshot yang bisa diambil), dan, untuk blok, `BLOCK_CONFLICT` (409: stay hidup atau blok lain memegang satu malam dari rentang itu; tak ada yang dibatalkan), `UNIT_NOT_FOUND` dan `BLOCK_NOT_FOUND` (404). Booking yang kehilangan satu malam kepada blok, atau kepada stay lain, adalah `SLOT_UNAVAILABLE`, seperti pada slot.
 
 **Pembatalan terlambat.** `cancellation_cutoff_seconds` pada offering membuat
 pembatalan di dalam batas membawa `late_cancellation = true` pada event dan
@@ -256,9 +264,18 @@ final, nama boleh disesuaikan oleh review migrasi.
 | `reservation_events`   | `reservation_id`, `seq` (per reservasi), `kind`, `from_status`, `to_status`, `actor_user_id`, `correlation_id`, `reason_code`, `detail` jsonb (kunci tertutup: id, instant, hitungan — **tanpa teks bebas, tanpa data pribadi**), `occurred_at` (jam DB); unik `(reservation_id, kind)` untuk jenis sekali-saja; kolom `kind` ter-generate untuk proyeksi                                                                                                                                                                                                                                                                                                                                                                                                                        | SELECT, INSERT (**tanpa UPDATE/DELETE**)                    |
 
 `awcms_worker` memegang `SELECT` hanya pada `awcms_booking_reservation_events`
-(engine reporting membaca sumber proyeksi sebagai peran itu). Job kedaluwarsa
-hold berjalan sebagai peran aplikasi dengan konteks per-tenant, seperti
-`email:dispatch`.
+(engine reporting membaca sumber proyeksi sebagai peran itu) dan **tidak ada
+privilege pada tabel booking lain**. Job kedaluwarsa
+hold (`booking:holds:expire`) berjalan sebagai `awcms_worker` dengan konteks
+per-tenant dan menjangkau tabel hanya lewat dua fungsi SECURITY DEFINER sempit
+dari `sql/200` (pola `sql/142` / ADR-0090): `awcms_booking_expire_due_holds(tenant,
+batch)`, yang hanya bisa mengakhiri hold berakhir milik tenant sesi itu sendiri,
+dan `awcms_booking_count_due_holds` untuk `--dry-run`. `UPDATE` pada reservasi
+yang diberikan ke worker juga akan membuat job cron bisa confirm atau cancel
+booking; peran pemilik fungsi (`awcms_booking_expiry`, NOLOGIN, tanpa anggota)
+hanya memegang privilege per-kolom yang dibutuhkan literal-literalnya, dan
+`EXECUTE` hanya milik worker. Reklamasi malas (§5.1) bukan job ini: ia berjalan
+di dalam transaksi klaim sebagai peran aplikasi.
 
 **Constraint eksklusi** (pada `resource_allocations`; constraint staf identik
 pada `staff_ref`):
@@ -285,6 +302,8 @@ EXCLUDE USING gist (
 ```
 
 Constraint pertama juga dibatasi pada `granularity = 'time'`. Karena trigger memaksa granularitas alokasi sama dengan `booking_mode` resource-nya, kedua constraint mempartisi ruang unit dan tak pernah perlu direkonsiliasi. `daterange` bersifat diskret, sehingga `[tgl 10, tgl 12)` dan `[tgl 12, tgl 14)` bersebelahan, bukan tumpang tindih. **Mengapa constraint rentang dan bukan buku besar unit-malam** (satu baris per `(unit, malam)` di bawah indeks unik biasa): bentuk rentang adalah mekanisme yang sama dengan slot (satu bentuk tes, satu alokator, satu penanganan `23P01`), berbiaya satu baris dan satu probe GiST per klaim alih-alih hingga 366 baris untuk disisipkan, dilepas, dan dijadwal ulang, dan tidak butuh invariant kedua untuk menjaga baris sama dengan tanggal item; keunggulan buku besar, agregat per malam, dipenuhi `generate_series` atas stay atau counter §7.2. Keduanya deklaratif dan tak terpengaruh RLS; pilihan dibuat atas konsistensi dan biaya tulis (ADR-0135 §4).
+
+**Dibangun (`sql/204`, Issue #940).** `block_id`, dan CHECK bahwa tepat satu dari `item_id` / `block_id` terisi; `starts_at` dan `ends_at` boleh NULL dan NULL pada baris blok; `block_released` adalah alasan rilis, hanya untuk baris blok. Guard insert alokasi punya bentuk blok: baris harus sama dengan resource, unit (bila disebut), dan tanggal blok-nya, dan blok harus aktif; status unit sengaja **tidak** diperiksa, sehingga unit yang dikembalikan beroperasi kelak tetap terblokir. Baris blok dilepas hanya dengan melepas blok-nya, dan trigger AFTER UPDATE pada blok melepas barisnya dalam statement yang sama, sehingga "blok dilepas <=> malamnya dilepas" adalah invarian database. Dua blok yang tumpang tindih pada satu unit bentrok seperti dua baris hidup mana pun pada unit itu (lepas atau persingkat yang pertama). Blok seluruh resource (tanpa `resource_unit_id`) mencakup unit yang ada saat blok dipasang; unit yang ditambahkan kemudian tidak tercakup, dan rekonsiliasi melaporkan blok itu (`block_missing_allocation`). Batas instant pada `reservations` dan `reservation_items` adalah 368 hari (§2.1). Perubahan booking_mode di bawah alokasi atau blok hidup adalah `BOOKING_MODE_IN_USE` (perubahan zona waktu, `TIMEZONE_IN_USE`).
 
 **Jawaban subjek data (ADR-0094).** `reservations.external_customer_ref` mengidentifikasi seseorang (nilainya buram; otoritas pelanggan adalah commerce di hilir, O12); `customer_note` mungkin memuatnya; aktor adalah pengguna tenant. Saat penghapusan atau anonimisasi pelanggan di otoritasnya, modul memutus `external_customer_ref` dan men-null `customer_note`, dan mempertahankan fakta non-pribadi (resource, interval,
 status) sebagai catatan operasional tenant. `reservation_events.detail` tidak
@@ -406,7 +425,7 @@ sebagai aturan SoD atas aksi berisiko tinggi.
 persis unit dan interval item-nya; mendaftar alokasi hidup yang reservasinya
 terminal atau terlepas, reservasi `held` yang melewati kedaluwarsanya lebih dari
 grace (job macet), alokasi dengan buffer tak cocok, reservasi dengan rantai
-`lineage_id` putus, dan reservasi tanpa event `created`. Untuk stay ia juga mendaftar alokasi stay hidup yang `[stay_from, stay_to)`-nya berbeda dari `[check_in_date, check_out_date)` item-nya, alokasi blok tanpa blok aktif (dan sebaliknya), dan alokasi yang granularitasnya berbeda dari `booking_mode` resource-nya. Ia tidak memperbaiki
+`lineage_id` putus, dan reservasi tanpa event `created`. Untuk stay ia juga mendaftar alokasi stay hidup yang `[stay_from, stay_to)`-nya berbeda dari `[check_in_date, check_out_date)` item-nya, baris blok hidup yang bloknya sudah dilepas (`block_allocation_orphan`), blok aktif yang tidak memiliki tepat satu baris hidup per unit yang dicakupnya (`block_missing_allocation`, yang juga terpicu oleh unit yang ditambahkan ke resource sesudahnya), baris blok yang resource, unit, atau tanggalnya berbeda dari blok-nya (`block_allocation_mismatch`), dan alokasi yang granularitasnya berbeda dari `booking_mode` resource-nya. Ia tidak memperbaiki
 apa pun; cacat dikoreksi dengan transisi kompensasi, tak pernah edit.
 
 ### 7.2 Proyeksi occupancy dan utilization (engine reporting, dimiliki di sini)
@@ -499,8 +518,10 @@ RETURNING id` (pelanggaran eksklusi adalah konflik yang diserap `DO NOTHING`,
    jadi tak perlu savepoint per percobaan); tak ada baris kembali → coba unit
    berikutnya; tak ada tersisa → `SLOT_UNAVAILABLE`. (Bahwa `DO NOTHING` itu
    menunggu baris konflik konkuren yang belum pasti lalu melewatinya adalah
-   perilaku yang dibuktikan T3 saat implementasi; bila tidak berlaku, cadangannya
-   savepoint per percobaan yang menangkap `23P01`.) Rombongan atau requirement
+   perilaku yang dibuktikan T3, dan Issue #939 mengamatinya: INSERT kedua
+   terblokir pada baris pertama yang belum commit, lalu diserap bila yang
+   pertama commit atau mengambil unit bila ia rollback. `23P01` yang tetap lolos
+   dipetakan ke `SLOT_UNAVAILABLE`.) Rombongan atau requirement
    _k_ unit menyisipkan _k_ baris dalam satu transaksi, semua-atau-tidak-sama-sekali.
    N dibatasi (500) karena _k_ insert adalah _k_ probe.
 3. **Reservasi multi-item dan multi-resource** menyisipkan dalam urutan global
@@ -521,7 +542,7 @@ RETURNING id` (pelanggaran eksklusi adalah konflik yang diserap `DO NOTHING`,
 6. **Kedaluwarsa hold** tak pernah melemahkan ini: hold kedaluwarsa yang belum
    disapu direklamasi secara lazy di bawah kunci baris (§5.1), sehingga
    constraint hanya pernah memblokir baris yang benar-benar hidup.
-7. **Stay dan blok** (ADR-0135). Alokasi stay adalah satu baris per unit di bawah constraint kedua §4 (`daterange(stay_from, stay_to, '[)')` per unit, hanya baris hidup). Alokator, urutan kunci, penyerapan `ON CONFLICT DO NOTHING`, reklamasi malas, dan retry deadlock terbatas dari aturan 1–6 berlaku tanpa perubahan. **Blok** adalah baris alokasi dengan `block_id` terisi dan tanpa `item_id`, sehingga blok dan stay berebut satu constraint: siapa yang commit lebih dulu menang dan yang lain menerima `23P01`, dipetakan ke `SLOT_UNAVAILABLE` untuk booking dan `BLOCK_CONFLICT` untuk blok. Blok atas beberapa unit menyisipkan barisnya dalam urutan global aturan 3, semua-atau-tidak-sama-sekali. Membuat blok tak pernah membatalkan reservasi. Trigger menolak alokasi yang granularitasnya berbeda dari `booking_mode` resource-nya, sehingga constraint waktu dan stay tak pernah berlaku bersama pada satu unit.
+7. **Stay dan blok** (ADR-0135). Alokasi stay adalah satu baris per unit di bawah constraint kedua §4 (`daterange(stay_from, stay_to, '[)')` per unit, hanya baris hidup). Alokator, urutan kunci, penyerapan `ON CONFLICT DO NOTHING`, reklamasi malas, dan retry deadlock terbatas dari aturan 1–6 berlaku tanpa perubahan. **Blok** adalah baris alokasi dengan `block_id` terisi dan tanpa `item_id`, sehingga blok dan stay berebut satu constraint: siapa yang commit lebih dulu menang dan yang lain menerima `23P01`, dipetakan ke `SLOT_UNAVAILABLE` untuk booking dan `BLOCK_CONFLICT` untuk blok. Blok atas beberapa unit menyisipkan barisnya dalam urutan global aturan 3, semua-atau-tidak-sama-sekali. Membuat blok tak pernah membatalkan reservasi. Trigger menolak alokasi yang granularitasnya berbeda dari `booking_mode` resource-nya, sehingga constraint waktu dan stay tak pernah berlaku bersama pada satu unit. Dua blok yang tumpang tindih bentrok satu sama lain dengan cara yang sama (keduanya baris di bawah constraint yang sama), dan blok atas beberapa unit mencakup unit nonaktif juga, sehingga unit yang diaktifkan kembali kelak tetap terblokir.
 
 ### 8.2 Biaya ekstensi dan deployment
 
@@ -549,6 +570,8 @@ Modul **tidak boleh dikirim tanpa** ini, di
 PostgreSQL nyata sebagai peran runtime `awcms_app` (FORCE RLS berlaku), pada
 koneksi terpisah (bukan satu transaksi ter-pool). Pakai helper penolakan repo,
 bukan `expect(...).rejects` (yang menggantung dengan Bun.SQL).
+
+**Status (§13).** T1 ada di `booking-database.integration.test.ts` (#937). T2, T3 (beserta interleaving `DO NOTHING` yang menjadi dasarnya), T6 (a) dan balapan reaper pada (b), serta T7 ada di `booking-concurrency.integration.test.ts` (#939), dijalankan lewat `placeHold` pada transaksi konkuren sungguhan dan bukan lewat `POST /booking/reservations` yang baru dibangun di #941; semuanya pindah ke belakang route di #941 bersama T4, T5, dan separuh confirm-melawan-job dari T6 (b). T9 sampai T13 ada di `booking-stay.integration.test.ts` (#940), dijalankan lewat `placeHold` dan `createBlock` dan bukan lewat `POST /booking/reservations` serta API blok yang baru dibangun di #941 dan #942; mereka pindah ke belakang route itu kelak. T8 butuh `staff_assignments`.
 
 **T1 — tingkat database, interleaving terbukti.** Fixture: satu resource,
 kapasitas 1, satu unit; jendela `[10:00, 11:00)`.
@@ -758,15 +781,15 @@ Dipetakan ke tracker hilir
 ADR-0040 hanya menetapkan penempatan. Pemilik menjawab O1–O12 pada 2026-10-10 (tercatat di hilir pada DoR awcms-one); baris di bawah menyatakan jawaban mana yang tercatat di sini (**Terjawab**) dan mana yang masih terbuka di sini (O1, O3, O5, dan O9 dijawab di hilir pada hari yang sama tetapi tidak mengubah apa pun di paket ini dan belum direkonsiliasi ke dalamnya; O2 ditangani Issue #931). "Memblokir"
 menyatakan apa di paket ini yang tak bisa difinalkan sampai jawabannya dicatat.
 
-| #       | Pertanyaan                                                                                                                                    | Yang diasumsikan paket ini sementara                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Memblokir                                                                       |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **O1**  | Persona dalam cakupan                                                                                                                         | Daftar provisional di §1 (resepsionis, manajer, pemilik resource, adapter, auditor)                                                                                                                                                                                                                                                                                                                                                                                                                  | Bundel peran §6 dan seed grant; UAT                                             |
-| **O2**  | Vertikal mana yang pertama (hotel/vila, salon, klinik, rental, fasilitas, bengkel, pelatihan), dan apakah konsumen membangun lokal lebih dulu | **Terjawab 2026-10-10 (DoR awcms-one):** vertikal pertama hotel / vila / rental; tak ada repositori konsumen yang ada. Pemilik menyelesaikan konflik dengan asumsi paket ini sebelumnya dengan meminta perubahan cakupan di upstream: **menginap berbasis hari masuk v1** (ADR-0135, §2.5, §3.1). Tetap generik: tanpa field vertikal. Rekurensi `MONTHLY` tetap di luar v1 (tidak diminta). Kebijakan catatan kesehatan tetap defaultnya (mati untuk tenant yang menyatakan vertikal kesehatan, §9) | Layar admin pertama (bentuk akhir migrasi); sub-pertanyaan di bawah             |
-| **O3**  | MoSCoW lintas CRM, Booking, Workforce, Payroll, Notification, Analytics                                                                       | Booking Wave A/B; job no-show otomatis dan waitlist tetap _Could_                                                                                                                                                                                                                                                                                                                                                                                                                                    | Hanya urutan; tanpa skema                                                       |
-| **O5**  | Peran hukum operator (pengendali/prosesor/keduanya)                                                                                           | Tak satu pun ditegaskan; desain netral (§9)                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Teks analisis privasi, bukan skema                                              |
-| **O8**  | Occupancy vs utilization, **apakah hold dihitung**, waktu terpesan vs aktual, aturan penyebut                                                 | **Terjawab 2026-10-10 (DoR awcms-one):** occupancy tidak menghitung hold (hold adalah angka pipeline terpisah); utilization metrik terpisah; jendela retensi pelanggan 90 hari (KPI lintas-domain, bukan periode retensi data); net revenue angka utama (§7.2). **Masih terbuka:** apakah penyebut mengecualikan penutupan pemeliharaan; waktu terpesan vs aktual                                                                                                                                    | Hanya _definisi_ yang tersisa; tanpa tabel                                      |
-| **O9**  | Non-tujuan eksplisit                                                                                                                          | Daftar §1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Redaksi cakupan                                                                 |
-| **O12** | Identitas pelanggan: commerce tetap otoritas pelanggan, atau harmonisasi `profile_identity`                                                   | **Terjawab 2026-10-10 (DoR awcms-one): commerce tetap otoritas pelanggan.** `reservations` v1 hanya membawa `external_customer_ref` yang buram dan nullable (null = walk-in); tanpa `customer_profile_id`, tanpa dependensi `profile_identity`. Harmonisasi, bila pernah diinginkan, adalah kolom tambahan di bawah ADR sendiri                                                                                                                                                                      | Tidak ada: kolom pelanggan dan jalur penghapusan (§4) sudah tetap untuk migrasi |
+| #       | Pertanyaan                                                                                                                                    | Yang diasumsikan paket ini sementara                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Memblokir                                                                        |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **O1**  | Persona dalam cakupan                                                                                                                         | Daftar provisional di §1 (resepsionis, manajer, pemilik resource, adapter, auditor)                                                                                                                                                                                                                                                                                                                                                                                                                  | Bundel peran §6 dan seed grant; UAT                                              |
+| **O2**  | Vertikal mana yang pertama (hotel/vila, salon, klinik, rental, fasilitas, bengkel, pelatihan), dan apakah konsumen membangun lokal lebih dulu | **Terjawab 2026-10-10 (DoR awcms-one):** vertikal pertama hotel / vila / rental; tak ada repositori konsumen yang ada. Pemilik menyelesaikan konflik dengan asumsi paket ini sebelumnya dengan meminta perubahan cakupan di upstream: **menginap berbasis hari masuk v1** (ADR-0135, §2.5, §3.1). Tetap generik: tanpa field vertikal. Rekurensi `MONTHLY` tetap di luar v1 (tidak diminta). Kebijakan catatan kesehatan tetap defaultnya (mati untuk tenant yang menyatakan vertikal kesehatan, §9) | Layar admin pertama (skema sudah final sejak `sql/204`); sub-pertanyaan di bawah |
+| **O3**  | MoSCoW lintas CRM, Booking, Workforce, Payroll, Notification, Analytics                                                                       | Booking Wave A/B; job no-show otomatis dan waitlist tetap _Could_                                                                                                                                                                                                                                                                                                                                                                                                                                    | Hanya urutan; tanpa skema                                                        |
+| **O5**  | Peran hukum operator (pengendali/prosesor/keduanya)                                                                                           | Tak satu pun ditegaskan; desain netral (§9)                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Teks analisis privasi, bukan skema                                               |
+| **O8**  | Occupancy vs utilization, **apakah hold dihitung**, waktu terpesan vs aktual, aturan penyebut                                                 | **Terjawab 2026-10-10 (DoR awcms-one):** occupancy tidak menghitung hold (hold adalah angka pipeline terpisah); utilization metrik terpisah; jendela retensi pelanggan 90 hari (KPI lintas-domain, bukan periode retensi data); net revenue angka utama (§7.2). **Masih terbuka:** apakah penyebut mengecualikan penutupan pemeliharaan; waktu terpesan vs aktual                                                                                                                                    | Hanya _definisi_ yang tersisa; tanpa tabel                                       |
+| **O9**  | Non-tujuan eksplisit                                                                                                                          | Daftar §1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Redaksi cakupan                                                                  |
+| **O12** | Identitas pelanggan: commerce tetap otoritas pelanggan, atau harmonisasi `profile_identity`                                                   | **Terjawab 2026-10-10 (DoR awcms-one): commerce tetap otoritas pelanggan.** `reservations` v1 hanya membawa `external_customer_ref` yang buram dan nullable (null = walk-in); tanpa `customer_profile_id`, tanpa dependensi `profile_identity`. Harmonisasi, bila pernah diinginkan, adalah kolom tambahan di bawah ADR sendiri                                                                                                                                                                      | Tidak ada: kolom pelanggan dan jalur penghapusan (§4) sudah tetap untuk migrasi  |
 
 **Sub-pertanyaan terbuka yang diangkat desain stay** (belum dijawab pemilik; dicatat, tidak diputuskan; diusulkan untuk tracker hilir):
 
@@ -809,3 +832,138 @@ yang pertama); ABAC ber-scope lokasi/resource; kapasitas terhitung tanpa baris
 unit (memakai aturan §8.1 butir 4); seri terima-sebagian; turnaround bersama;
 waitlist; ekspor iCal; no-show otomatis; jendela retensi dengan archive-then-purge; harmonisasi `profile_identity` atas referensi pelanggan (ADR sendiri; O12 mempertahankan commerce sebagai otoritas); rekurensi `MONTHLY` (O2); tindak lanjut stay O2a–O2h (§11); memperbarui payload AsyncAPI provisional dan `cross-domain-contracts.md` dengan field aditif `stays` saat event hidup; keyed hashing dan enkripsi at-rest tidak berlaku (tak ada identifier yang
 disimpan).
+
+## 13. Status implementasi
+
+Apa yang sudah dibangun, apa yang baru dispesifikasikan, dan ke mana irisan
+berikutnya menempel. Desain di atas adalah kontraknya; bagian ini adalah peta
+dari desain ke kode (peta modul:
+[`src/modules/booking/README.id.md`](../../src/modules/booking/README.id.md)).
+
+| Irisan             | Issue | Sudah dibangun                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fondasi            | #937  | Skema `sql/180` (RLS FORCE, foreign key komposit, kedua exclusion constraint, state machine sebagai trigger, riwayat append-only), katalog izin `sql/181`, state machine murni. Tes T1 (interleaving tingkat database).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Availability       | #938  | Jadwal, pengecualian, tabel blok (`sql/186`), availability slot dan stay yang murni, `GET /availability`, route jadwal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Alokator, hold** | #939  | Alokator slot (§8.1 butir 1 sampai 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, unit bebas pertama dalam urutan `(sort_order, id, ordinal)`, semua-atau-tidak-sama-sekali untuk beberapa unit, unit yang dipilih bersama disisipkan dalam urutan `(resource_id, ordinal)`, `23P01` dan `40P01` ditangani (retry terbatas dengan jitter). Hold dengan kedaluwarsa (§5.1): reklamasi malas saat menulis ditambah reaper `booking:holds:expire`, kebenaran tidak bergantung pada reaper. `placeHold`, klaim yang akan dipanggil route reservasi. Batas hold (sebuah jumlah, §8.1 butir 4). Rekonsiliasi read-only §7.1. Tes T2, T3 (dan premis `DO NOTHING`-nya), T6 (a, b), T7, di `tests/integration/booking-concurrency.integration.test.ts`. Satu migrasi, `sql/200`, hanya untuk privilege job: sapuan SECURITY DEFINER sempit yang membuat `booking:holds:expire` berjalan sebagai `awcms_worker`; skema `sql/180` sudah memegang setiap invarian yang dibutuhkan alokator.                                         |
+| **Stay, blok**     | #940  | Klaim stay lewat `placeHold` (`stay: { checkInDate, checkOutDate }`: tanggal divalidasi pada zona resource, malam sebagai aritmetika tanggal, instant kedatangan dan keberangkatan serta zona dan jam lokal disnapshot ke item, `min_nights` / `max_nights` offering) dan lewat alokator yang sama (`UnitClaim` `kind: "stay"`, probe `daterange`); reklamasi malas untuk hold stay (`ReclaimWindow` `kind: "stay"`); malam terblokir sebagai baris alokasi (`booking-block-service.ts`: `createBlock`, `releaseBlock`, `BLOCK_CONFLICT`, `UnitClaim` `kind: "block"`); tiga pemeriksaan rekonsiliasi blok; tes T9 sampai T13 di `tests/integration/booking-stay.integration.test.ts` dan aturan murninya di `tests/booking-stay.test.ts`. Satu migrasi, `sql/204` (baris blok dan guard-nya, `BOOKING_MODE_IN_USE`, batas instant 368 hari). `sql/200` tidak perlu diubah: hold stay berakhir pada kolom yang sama dan dilepas lewat join item yang sama. Tanpa route HTTP, termasuk route blok: datang bersama #941 dan #942. |
+
+**Masih desain (belum ada di kode):** route reservasi dan transisi setelah
+pembuatan (`confirm`, `cancel`, `reschedule`, `check_in`, `complete`, `no_show`,
+`extend`), `Idempotency-Key` padanya dan jalur kebijakan
+`reservations.override` (Issue #941); kesembilan event pada dokumen AsyncAPI
+live (#941); route HTTP untuk blok (`blocks.read` / `.create` / `.release` di-seed `sql/181` dan
+ditegakkan route itu, yang belum ada); `service_requirements`, `staff_assignments` dan tes
+T8; route `reservations/reconciliation` dan route laporan; proyeksi pelaporan;
+layar admin (#942); `BookingPort`.
+
+**Sambungan tempat irisan berikutnya menempel**
+
+- `placeHold` (`application/booking-hold-service.ts`) adalah KLAIM. Ia memeriksa
+  integritas klaim (offering dan resource ada dan bermode sesuai klaim (slot, atau stay bila tanggal `stay` dikirim), ukuran
+  rombongan, jumlah unit, interval turunan, hold terjepit pada jam database,
+  batas hold) dan menyerahkan **kebijakan** kepada handler pembuatan: jam buka
+  (`OUTSIDE_SCHEDULE`), lead time dan horizon, serta apakah
+  `reservations.override` mengangkatnya. Handler mengevaluasinya dengan mesin
+  yang sama dengan pencarian (`answerAvailability`) sebelum memanggilnya.
+- `claimUnits` (`application/booking-allocator.ts`) menerima union `UnitClaim`
+  dengan tiga anggota: `time` dan `stay` berbagi loop unit bebas (anggota stay
+  membaca dan menyisipkan `stay_from` / `stay_to`), dan `block` menyisipkan
+  unit TETAP milik sebuah blok, dalam urutan `(resource_id, ordinal)`,
+  semua-atau-tidak-sama-sekali, di bawah constraint stay yang sama.
+- `reclaimExpiredHolds` menerima union `ReclaimWindow` dengan dua anggota:
+  `time` memeriksa overlap `tstzrange`, `stay` memeriksa overlap `daterange`
+  (dipakai untuk stay dan untuk blok).
+- Confirm, cancel dan reschedule (#941) wajib menulis tepat satu baris riwayat
+  per transisi; primitif kedaluwarsa (`applyExpiry`) adalah modelnya:
+  reservasi, alokasi dan event `expired` dalam satu statement.
+
+**Keputusan yang diambil di irisan #939**
+
+- **Reaper berjalan sebagai `awcms_worker`, lewat satu fungsi SECURITY DEFINER
+  sempit** (`sql/200`, pola `sql/142` / ADR-0090), seperti job terjadwal lain.
+  Worker dengan `UPDATE` pada reservasi juga bisa confirm dan cancel, sehingga ia
+  sama sekali tak memegang privilege pada tabel booking: ia boleh `EXECUTE`
+  `awcms_booking_expire_due_holds(tenant, batch)`, yang statement-nya tetap
+  (hanya `status = 'expired'` pada hold yang berakhir menurut jam database, hanya
+  alasan rilis literal, hanya baris riwayat `expired`, tanpa aktor) dan yang
+  menolak tenant yang bukan milik sesi. Ia memilih `FOR UPDATE SKIP LOCKED` dan
+  tak pernah menunggu request. Reklamasi malas tetap SQL aplikasi di dalam
+  transaksi klaim itu sendiri (sebagai peran aplikasi), menunggu kunci baris (ia
+  harus tahu jawabannya), dan mengunci menurut urutan naik `reservation id`. Dua
+  implementasi untuk satu keadaan akhir dibandingkan oleh tes integrasi.
+- **Reklamasi malas dibatasi pada klaim**: hanya hold berakhir yang alokasi
+  hidupnya beririsan dengan rentang terpakai klaim pada resource target, jadi
+  resource yang sibuk tidak mengubah setiap hold baru menjadi sapuan seluruh
+  tenant. Ia berjalan sebelum savepoint klaim, sehingga kedaluwarsa tetap
+  berlaku walau klaim sesudahnya ditolak. Ia bekerja per batch sampai satu batch
+  tidak mengunci apa pun (`LIMIT ... FOR UPDATE` yang menunggu baris yang diubah
+  transaksi lain membuang baris itu tanpa mengisi ulang, sehingga "kurang dari
+  batas" tidak berarti selesai) dan memajukan kursor keyset, sehingga tak pernah
+  memotong dan kunci tetap berurutan naik menurut id.
+- **Pembacaan unit bebas adalah petunjuk, constraint adalah otoritas**: bacaan
+  basi paling banyak menambah satu putaran (dibatasi 6, lalu
+  `CONTENTION_RETRY`), tak pernah double-booking. Penolakan adalah nilai, dan
+  seluruh klaim berjalan dalam savepoint sehingga penolakan tidak meninggalkan
+  reservasi, item, atau alokasi.
+- **Kesehatan reaper** dibaca dari data (`hold_overdue_unswept` dan
+  `reaper.oldestOverdueSeconds` pada rekonsiliasi, masa tenggang 300 detik) dan
+  dari telemetri job runner bersama; tak ada yang bergantung padanya.
+- **Tetap terbuka (N4): batas hold bawaannya tak terbatas, dan itu bukan
+  bawaan yang aman untuk produksi.** #941 harus menetapkan bawaan yang masuk akal
+  (atau mewajibkan tenant mengaturnya) sebelum `booking` keluar dari
+  `experimental`, dan **setiap jalur pembuat hold harus mengambil advisory lock
+  per tenant yang sama**
+  (`pg_advisory_xact_lock(hashtextextended('awcms_booking.holds:' || tenant, 0))`
+  di `enforceHoldCaps`) sebelum menghitung hold hidup: `extend`, reschedule yang
+  membuat hold, seri, route adapter. Jalur yang membuat hold tanpa kunci itu
+  membuka kembali balapan yang ditutup tes batas.
+- **Batas hold bawaannya tak terbatas** (`NULL` = bawaan modul): angkanya
+  pertanyaan terbuka pemilik (§11), dan batas yang dikonfigurasi ditegakkan di
+  bawah advisory lock transaksi per tenant sehingga dua request tak bisa sama-sama
+  membaca "satu di bawah batas".
+
+**Keputusan yang diambil di irisan #940**
+
+- **Stay diklaim lewat `placeHold` yang sama**, dengan `stay: { checkInDate,
+checkOutDate }` sebagai ganti `startsAtMs` (tepat salah satu). Klien tak
+  pernah mengirim instant, akhir, atau buffer untuk stay. `deriveStay`
+  (`domain/booking-stay.ts`) menerapkan pemeriksaan `evaluateStay` dalam urutan
+  yang sama dan sebuah tes menegaskan keduanya sepakat pada tabel kasus, sehingga
+  stay yang ditawarkan availability adalah stay yang diterima klaim. "Hari ini"
+  adalah tanggal lokal jam database pada zona resource (kode zona JS yang sama
+  dengan availability, sehingga modul punya satu pembacaan zona).
+- **Pool resource stay harus sepakat pada satu zona dan satu pasang jam check-in
+  / check-out** (`STAY_POOL_INCONSISTENT`), karena item men-snapshot satu set;
+  alternatifnya, men-snapshot milik resource pertama secara tak sengaja, membuat
+  tanggal bermakna lain pada unit yang berbeda.
+- **Blok mengambil satu baris per unit, termasuk unit nonaktif**, dalam urutan
+  `(resource_id, ordinal)` di dalam savepoint: unit yang tak berhasil dimenangkan
+  adalah `BLOCK_CONFLICT` untuk seluruh blok dan savepoint membatalkan baris
+  blok beserta unit yang sudah dimenangkan. Trade-off: blok atas seluruh resource
+  ditolak karena satu kamar yang terbooking (operator memblokir kamar lain dengan
+  menyebutnya), sebagai imbalan blok yang tak pernah parsial.
+- **Blok yang tumpang tindih ditolak**, karena keduanya baris di bawah constraint
+  yang sama. Alternatifnya (membebaskan blok-terhadap-blok) butuh constraint
+  ketiga atau trigger, dan dua alasan tumpang tindih untuk satu malam dapat
+  dipulihkan dengan melepas lalu memasang ulang.
+- **Melepas blok adalah invarian database, bukan langkah handler**: trigger AFTER
+  UPDATE `sql/204` melepas barisnya dalam statement yang men-stempel blok, dan
+  guard update alokasi menolak melepas baris blok dengan cara lain. Melepas blok
+  yang sudah dilepas adalah replay dan tidak menulis apa pun.
+- **`BLOCK_CONFLICT` tidak membatalkan dan tidak menulis apa pun** (tanpa baris
+  blok, tanpa alokasi, tanpa baris audit). Reservasi yang bentrok (nomor, status,
+  tanggal; tak pernah referensi pelanggan) dikembalikan hanya bila pemanggil
+  memintanya (`revealConflicts`, yang diatur route dari `reservations.read`),
+  sehingga pemanggil tanpa izin itu tahu bahwa malam terpakai, bukan oleh siapa.
+- **Availability tetap membaca tabel blok** agar jawabannya dapat menyebut
+  `BLOCKED`; pembacaan stay karena itu mengecualikan baris blok (`block_id IS
+NULL`), kalau tidak setiap blok dihitung sebagai booking dan alasannya turun
+  menjadi `NO_UNIT_AVAILABLE`.
+- **Reklamasi malas sadar-jenis.** Klaim slot tak pernah mereklamasi hold stay
+  dan sebaliknya; blok mereklamasi hold stay yang beririsan dengan malamnya,
+  sehingga hold berakhir yang belum disapu tidak menolak blok dan reaper yang
+  berhenti tidak berpengaruh. Reaper (`sql/200`) tidak perlu diubah.
+- **Tidak diputuskan di sini (dan tak diperlukan):** blok boleh dimulai di masa
+  lalu (tak ada aturan "hari ini" untuk blok); route blok beserta
+  `Idempotency-Key`-nya milik irisan route, di mana pemeriksaan state (rilis
+  kedua adalah replay) dan constraint sudah membuat retry tidak berbahaya.

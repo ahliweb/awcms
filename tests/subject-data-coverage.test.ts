@@ -413,6 +413,8 @@ describe("the contract version records the addition", () => {
     // `anonymize` descriptor was updated in the same change.
     // 4.2.0 (ADR-0134) adds another OPTIONAL field, `domainEventConsumers`;
     // nothing about subject data changes, so this only tracks the live version.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.2.0");
+    // 4.3.0 (ADR-0141) adds `ModulePermissionDescriptor.requiresMfaEnrolment`;
+    // likewise nothing about subject data.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.3.0");
   });
 });

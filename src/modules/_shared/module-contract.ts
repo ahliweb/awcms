@@ -91,6 +91,32 @@ export type ModulePermissionDescriptor = {
    * the migration that seeds it, so the two cannot drift apart silently.
    */
   scope?: ModulePermissionScope;
+  /**
+   * `true` declares that exercising this permission requires the acting PERSON
+   * to have an enrolled MFA factor (ADR-0141, finding PS-13).
+   *
+   * Omitted means `false`, which is what every existing descriptor already
+   * meant. It is a REFUSAL condition on an otherwise-allowed decision, enforced
+   * at the `authorizeInTransaction` chokepoint: a holder with no active factor
+   * is refused `403 MFA_ENROLMENT_REQUIRED` with the way to enrol, and a machine
+   * credential — which can never hold a factor — is refused outright. It is
+   * NOT a step-up: it does not demand a fresh second-factor proof, it demands
+   * that one CAN be given. Step-up stays the owning module's own conditional
+   * call (ADR-0141 §4), and once this flag has been satisfied that call is
+   * always applicable, because an enrolled holder is exactly who it applies to.
+   *
+   * Declared here, in code, and never read from the database: a flag a row
+   * could clear would be a requirement a single UPDATE removes while every check
+   * stays green (the argument ADR-0053 §3 makes for `scope`). There is
+   * accordingly no column and no migration.
+   *
+   * Mark only a permission whose misuse by an account protected by a password
+   * alone is unacceptable — money movement, disclosure of a recoverable secret,
+   * and the authority to change the rules those depend on. Every flag removes
+   * that permission from anyone who has not enrolled, so a flag on a routine
+   * permission is a lockout the tenant did not choose.
+   */
+  requiresMfaEnrolment?: boolean;
 };
 
 export type ModuleNavigationEntry = {
@@ -1254,8 +1280,16 @@ export type SubjectDataDescriptor = {
  * rather than what `redactedColumns` named, so every `anonymize` descriptor was
  * updated in the same change, and `subject-data:registry:check` refuses an
  * `anonymize` that names nothing so the omission cannot be silent.
+ *
+ * `4.3.0` (ADR-0141, Issue #977) — added the optional
+ * `ModulePermissionDescriptor.requiresMfaEnrolment` field. MINOR: purely
+ * additive, and omitting it means "no enrolment requirement", which is what
+ * every existing descriptor already meant. No base module sets it, so the
+ * in-repo blast radius is zero by construction; the first user is the
+ * `hr_payroll` module (#957), whose payroll-critical permissions are named in
+ * `docs/awcms/hr-payroll.md` §17 (PS-13).
  */
-export const MODULE_CONTRACT_VERSION = "4.2.0";
+export const MODULE_CONTRACT_VERSION = "4.3.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

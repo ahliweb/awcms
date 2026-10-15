@@ -64,6 +64,7 @@ import {
   type AuthorizeResult
 } from "../../modules/identity-access/application/access-guard";
 import type { AccessRequest } from "../../modules/identity-access/domain/access-control";
+import { MFA_ENROLMENT_REQUIRED_CODE } from "../../modules/identity-access/domain/mfa-enrolment-refusal";
 import type { BusinessScopeHierarchyPort } from "../../modules/_shared/ports/business-scope-hierarchy-port";
 import type { SoDRuleDescriptor } from "../../modules/_shared/module-contract";
 import type { SsrContext } from "./ssr-session";
@@ -112,7 +113,16 @@ export type AdminScreenOutcome<TData> =
    * refusal, and NOT flattened, because a screen that wants to say something
    * more specific later should not have to re-derive it.
    */
-  | { state: "denied"; status: number }
+  | {
+      state: "denied";
+      status: number;
+      /**
+       * The refusal's own error code when a caller can act on it — today only
+       * `MFA_ENROLMENT_REQUIRED` (ADR-0141), so a screen can say "enrol" instead
+       * of "forbidden". Absent for every other refusal.
+       */
+      code?: string;
+    }
   /** The transaction never ran, or `load` threw. NOT a denial. */
   | { state: "error" };
 
@@ -170,7 +180,7 @@ export function selectEntryOutcome(
   results: readonly AuthorizeResult[]
 ):
   | { allowed: true; auth: AuthorizedScreenAccess; entry: readonly boolean[] }
-  | { allowed: false; status: number } {
+  | { allowed: false; status: number; code?: string } {
   // An empty list authorizes nothing. `Array.prototype.some` on `[]` is false
   // and `every` is TRUE — writing this rule as "not every request denied" would
   // hand a screen with no entry request to everyone, which is why it is stated
@@ -186,6 +196,23 @@ export function selectEntryOutcome(
     // status describes the refusal an operator is most likely asking about, and
     // it does not shift with the caller's grant shape.
     const first = results[0]!;
+
+    // A candidate refused for want of an enrolled factor (ADR-0141) was ALLOWED
+    // on the merits, which makes it the refusal the caller can fix. It wins over
+    // a sibling's plain `ACCESS_DENIED`, whatever order they were listed in —
+    // otherwise an any-of screen would tell an unenrolled approver "forbidden"
+    // when one click on the enrolment screen would let them in.
+    const enrolment = results.find(
+      (result) => !result.allowed && result.code === MFA_ENROLMENT_REQUIRED_CODE
+    );
+
+    if (enrolment && !enrolment.allowed) {
+      return {
+        allowed: false,
+        status: enrolment.denied.status,
+        code: enrolment.code
+      };
+    }
 
     return {
       allowed: false,
@@ -255,7 +282,11 @@ export async function loadAdminScreen<TData>(
           // The refusals are already recorded — `authorizeInTransaction` writes
           // the decision log itself, which is most of the point of routing
           // screens through it. Nothing is re-derived here.
-          return { state: "denied", status: outcome.status };
+          return {
+            state: "denied",
+            status: outcome.status,
+            ...(outcome.code ? { code: outcome.code } : {})
+          };
         }
 
         const { auth, entry } = outcome;
@@ -304,7 +335,7 @@ export async function loadAdminScreen<TData>(
  *
  * ## Why not just invent a permission
  *
- * That is the trap ADR-0058 §E names. `identity_access.own_account.read` would
+ * That is the trap the `awcms-abac-guard` skill names. `identity_access.own_account.read` would
  * be an action no migration seeds, so it would deny EVERYONE — tenant owner
  * included — while the call site read as correctly guarded. A person locked out
  * of their own password-change screen is the worst possible place to discover

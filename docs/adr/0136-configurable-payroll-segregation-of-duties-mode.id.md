@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0136-configurable-payroll-segregation-of-duties-mode.md)
 
-<!-- i18n-source-hash: sha256:67be47914deb1fbe83fc8a6ce2a3a5f294a37b0a52a8c7a7b53ec71e1a67142c -->
+<!-- i18n-source-hash: sha256:a5277be352e790179b69eda29acf0ba931fd92123839762c715f7738eaf07869 -->
 
 # ADR-0136 — Pemisahan tugas payroll dapat dikonfigurasi per tenant (ketat secara default, dapat dilonggarkan ke siapkan ≠ setujui)
 
@@ -8,7 +8,7 @@
 - **Tanggal:** 2026-10-12
 - **Pengambil keputusan:** ahliweb
 - **Mengubah:** [ADR-0132](0132-hr-payroll-module-family-admission.id.md) (pernyataan bahwa aturan SoD per-instance di database "tidak bisa dikonfigurasi hilang", dan status "diusulkan, belum diputuskan" untuk matriks peran) — amandemen, bukan pengganti; semua isi ADR-0132 yang tidak disebut di sini tetap berlaku
-- **Terkait:** Issue #954; Issue implementasi #957 (ADR ini tidak membangun apa pun); keputusan pemilik DoR hilir `ahliweb/awcms-one` O7, dijawab 10 Okt 2026 ([`aw-business-platform-dor.md`](https://github.com/ahliweb/awcms-one/blob/main/docs/aw-business-platform-dor.md)); [ADR-0031](0031-segregation-of-duties-conflict-enforcement.id.md) (deskriptor aturan SoD, penegakan saat penugasan dan saat aksi, pengecualian); [ADR-0058](0058-unenforced-permissions-disposition.id.md) §E (step-up bersyarat); [`docs/awcms/hr-payroll.md`](../awcms/hr-payroll.id.md) §7.5 (matriks dan daftar tes), §11.1, §12, §16
+- **Terkait:** Issue #954; Issue implementasi #957 (ADR ini tidak membangun apa pun); keputusan pemilik DoR hilir `ahliweb/awcms-one` O7, dijawab 10 Okt 2026 ([`aw-business-platform-dor.md`](https://github.com/ahliweb/awcms-one/blob/main/docs/aw-business-platform-dor.md)); [ADR-0031](0031-segregation-of-duties-conflict-enforcement.id.md) (deskriptor aturan SoD, penegakan saat penugasan dan saat aksi, pengecualian); [ADR-0141](0141-permissions-may-require-an-enrolled-mfa-factor.id.md) §4 (step-up bersyarat); [`docs/awcms/hr-payroll.md`](../awcms/hr-payroll.id.md) §7.5 (matriks dan daftar tes), §11.1, §12, §16
 
 ## Konteks
 
@@ -43,7 +43,9 @@ Keamanan: A dan B berbeda tajam pada independensi penyetuju, dan B ditolak atas 
 
 Mengubah mode adalah izin **`hr_payroll.sod_policy.configure`** (resource `sod_policy`, aksi `configure` yang sudah ada, berisiko tinggi; `read` terpisah). Aturan SoD (ADR-0031), `critical`, tanpa pengecualian, melarang satu orang memegangnya bersama C, A, F, atau P. Penyiap tidak boleh bisa melonggarkan pemeriksaan yang mengikatnya, dan penyetuju tidak boleh bisa menentukan cakupan pemeriksaan atas keputusannya sendiri. Ia dipegang administrator tenant yang tidak mengerjakan tugas payroll. Tenant payroll dua orang karenanya butuh principal ketiga **hanya untuk konfigurasi, bukan per run**; tenant tanpa itu tetap ketat. Dukungan platform tidak memegangnya atas nama tenant.
 
-Mengubah mode memerlukan `Idempotency-Key`, kode alasan, step-up bersyarat (ADR-0058 §E) saat **melonggarkan** (mengetatkan diaudit dan idempoten tetapi tidak menuntut step-up), dan menulis baris audit berseverity `critical` dengan aktor serta mode sebelum/sesudah tanpa teks bebas. Setiap baris audit run yang dihitung pada mode longgar memuat `sodMode: "relaxed"`.
+Mengubah mode memerlukan `Idempotency-Key`, kode alasan, step-up bersyarat (ADR-0141 §4) saat **melonggarkan** (mengetatkan diaudit dan idempoten tetapi tidak menuntut step-up), dan menulis baris audit berseverity `critical` dengan aktor serta mode sebelum/sesudah tanpa teks bebas. Setiap baris audit run yang dihitung pada mode longgar memuat `sodMode: "relaxed"`.
+
+> **Pembaruan, ADR-0141 (Issue #977, temuan PS-13).** Step-up bersyarat di sini hanya menggigit orang yang punya faktor terdaftar. `hr_payroll` menyetel `requiresMfaEnrolment: true` pada `sod_policy.configure`, sehingga pemegang tanpa faktor ditolak `403 MFA_ENROLMENT_REQUIRED` alih-alih mengubah mode hanya dengan kata sandi.
 
 ### 4. Aturan mana yang CHECK database dan mana yang tingkat peran
 

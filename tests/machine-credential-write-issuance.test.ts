@@ -434,7 +434,7 @@ describe("izin terpisah, dan ia benar-benar ada", () => {
     // matching. Percobaan pertama menulis guard ini sebagai SATU literal dengan
     // ternary pada `activityCode`; `collectGuardTriples` tidak bisa membacanya
     // dan melaporkan KEDUA izin "enforced by nothing" — alibi palsu yang sama
-    // yang ADR-0058 §E catat untuk `visitor_analytics`. Sebuah rute yang tak
+    // yang ADR-0058 §1 catat untuk `visitor_analytics`. Sebuah rute yang tak
     // terbaca gerbang ini adalah rute yang izinnya bisa dicabut orang lain
     // tanpa ada yang memerah.
     const source = await Bun.file(ROUTE).text();

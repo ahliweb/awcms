@@ -142,10 +142,11 @@ async function claimEligibleEntries(
     sql,
     tenantId,
     async (tx) => {
+      // `MATERIALIZED` is load-bearing: an inlined locking sub-select can be
+      // re-run per outer row on stale statistics and claim more than `limit`
+      // (Issue #1007). The CTE computes the locked, limited id set once.
       const rows = await tx`
-        UPDATE awcms_email_messages
-        SET status = 'sending', next_attempt_at = ${leaseExpiry}
-        WHERE id IN (
+        WITH due AS MATERIALIZED (
           SELECT id FROM awcms_email_messages
           WHERE tenant_id = ${tenantId}
             AND (
@@ -159,7 +160,13 @@ async function claimEligibleEntries(
           LIMIT ${limit}
           FOR UPDATE SKIP LOCKED
         )
-        RETURNING id, correlation_id, category, template_key, to_address, to_address_hash, subject, variables, retry_count
+        UPDATE awcms_email_messages AS t
+        SET status = 'sending', next_attempt_at = ${leaseExpiry}
+        FROM due
+        WHERE t.id = due.id
+        RETURNING t.id, t.correlation_id, t.category, t.template_key,
+                  t.to_address, t.to_address_hash, t.subject, t.variables,
+                  t.retry_count
       `;
 
       return rows as unknown as ClaimedRow[];

@@ -3,10 +3,12 @@
 # Booking — resources, schedules and reservations (module doc pack)
 
 > **Status:** admitted by [ADR-0131](../adr/0131-generic-booking-module-admission.md)
-> (Issue #915). **Design only: no module code, migration, OpenAPI path or
-> AsyncAPI channel exists yet**, and none is to be written until this pack is
-> accepted downstream (`ahliweb/awcms-one` Wave A) and the schema-affecting open
-> questions in §11 are answered. PRD-lite, state machine, ERD and data
+> (Issue #915). **Built in slices: §13 says what exists in the code today**
+> (schema, permission catalogue, availability and schedule routes, the
+> allocator with holds and expiry, and stays and blocked nights through the same
+> allocator); the reservation routes, the block routes, the AsyncAPI channels
+> and the admin screens are still design, and the open questions in §11 still
+> govern them. PRD-lite, state machine, ERD and data
 > dictionary, holds and idempotency, permissions/RLS matrix, reporting and
 > events, the double-booking strategy with its required regression test, threat
 > and privacy notes, the adapter/port contract and the open questions are in
@@ -72,7 +74,7 @@ rows; shared turnaround between consecutive bookings; accounting.
   offset or `Z`. A request without an offset is `400`, never "server local".
 - **Every interval is half-open `[start, end)`**: inclusive start, exclusive
   end. A booking 10:00–11:00 and one 11:00–12:00 share a boundary and do not
-  overlap. `start < end` and `end − start ≤ 366 days` are CHECKs (a stay bounds the same 366 in dates, §2.5).
+  overlap. `start < end` is a CHECK, and so is `end − start ≤ 368 days` on a reservation and an item (`sql/204`). A stay bounds the same 366 in DATES (§2.5), but the instants of a 366-night stay whose check-out time is later in the day than its check-in time, across a daylight-saving change, can span a day and an hour more than 366 days, and a CHECK on instants must not refuse a stay the date rule admits; for a slot the bound is therefore 368 days, not 366.
 - Database range expressions always use `tstzrange(a, b, '[)')`.
 
 ### 2.2 Timezones
@@ -182,9 +184,16 @@ reference in `external_ref_*` (§4) and decides _when_ to ask for a confirm.
 Refusals and codes: `INVALID_STATE` (409), `SLOT_UNAVAILABLE` (409: exclusion
 conflict or no free unit), `OUTSIDE_SCHEDULE` (409, `override` lifts it),
 `HOLD_EXPIRED` (409), `HOLD_LIMIT_EXCEEDED` (429), `LEAD_TIME_VIOLATION`,
-`HORIZON_EXCEEDED`, `PARTY_SIZE_OUT_OF_RANGE`, `STAFF_UNAVAILABLE` (409),
+`HORIZON_EXCEEDED`, `PARTY_SIZE_OUT_OF_RANGE` (409), `STAFF_UNAVAILABLE` (409),
 `RECURRENCE_UNSUPPORTED`, `TIMEZONE_INVALID`, `IDEMPOTENCY_REQUIRED` (400),
-`IDEMPOTENCY_CONFLICT` (409), `PAYMENT_FIELD_NOT_ACCEPTED` (400).
+`IDEMPOTENCY_CONFLICT` (409), `PAYMENT_FIELD_NOT_ACCEPTED` (400). The claim
+(`placeHold`, Issue #939) adds the refusals only it can make:
+`CONTENTION_RETRY` (409: the claim kept losing races or deadlocked three times
+running; retry), `QUANTITY_EXCEEDS_UNITS` (422: more units asked than the target
+has at all), `BOOKING_MODE_MISMATCH` (409: a time offering on a stay resource,
+or the reverse), `EXTERNAL_REF_IN_USE` (409: a live reservation already holds
+that `external_ref`), `RESOURCE_NOT_FOUND` and `OFFERING_NOT_FOUND` (404,
+neutral: another tenant's id is the same answer as an unknown one). The stay slice (Issue #940) adds: `STAY_DATES_INVALID` (400: malformed or out-of-order dates, an instant instead of a date, a date the zone does not have, a check-in date already past in the zone), `MIN_STAY_VIOLATION` and `MAX_STAY_EXCEEDED` (409: the offering's night limits), `STAY_POOL_INCONSISTENT` (409: the stay resources of a pool do not share one zone and one pair of check-in and check-out times, so there is no single snapshot to take), and, for a block, `BLOCK_CONFLICT` (409: a live stay or another block holds a night of the range; nothing was cancelled), `UNIT_NOT_FOUND` and `BLOCK_NOT_FOUND` (404). A booking that loses a night to a block, or to another stay, is `SLOT_UNAVAILABLE`, as for slots.
 
 **Late cancellation.** An offering's `cancellation_cutoff_seconds` makes a
 cancellation inside the cutoff carry `late_cancellation = true` on the event and
@@ -249,8 +258,18 @@ final, names may be adjusted by the migration review.
 | `reservation_events`   | `reservation_id`, `seq` (per reservation), `kind`, `from_status`, `to_status`, `actor_user_id`, `correlation_id`, `reason_code`, `detail` jsonb (closed keys: ids, instants, counts — **no free text, no personal data**), `occurred_at` (DB clock); unique `(reservation_id, kind)` for the once-only kinds; generated `kind` columns for the projections                                                                                                                                                                                                                                                                                                                                                                                                              | SELECT, INSERT (**no UPDATE/DELETE**)                       |
 
 `awcms_worker` holds `SELECT` on `awcms_booking_reservation_events` only (the
-reporting engine reads the projection source as that role). The hold-expiry job
-runs as the application role under a per-tenant context, like `email:dispatch`.
+reporting engine reads the projection source as that role) and **no privilege on
+any other booking table**. The hold-expiry job (`booking:holds:expire`) runs as
+`awcms_worker` under a per-tenant context and reaches the tables only through
+two narrow SECURITY DEFINER functions of `sql/200` (the `sql/142` / ADR-0090
+pattern): `awcms_booking_expire_due_holds(tenant, batch)`, which can only expire
+an elapsed hold of the session's own tenant, and `awcms_booking_count_due_holds`
+for `--dry-run`. `UPDATE` on reservations granted to the worker would also have
+let a cron job confirm or cancel a booking; the owner role of the functions
+(`awcms_booking_expiry`, NOLOGIN, memberless) holds only the column-scoped
+privileges their literals need, and `EXECUTE` is the worker's alone. Lazy
+reclaim (§5.1) is not this job: it runs inside the claim's transaction as the
+application role.
 
 **The exclusion constraint** (on `resource_allocations`; the staff constraint is
 identical on `staff_ref`):
@@ -276,6 +295,8 @@ EXCLUDE USING gist (
 ```
 
 The first constraint is likewise limited to `granularity = 'time'`. Because a trigger forces an allocation's granularity to equal its resource's `booking_mode`, the two constraints partition the unit space and never need reconciling. A `daterange` is discrete, so `[10th, 12th)` and `[12th, 14th)` are adjacent, not overlapping. **Why a range constraint and not a unit-night ledger** (one row per `(unit, night)` under a plain unique index): the range form is the same mechanism as slots (one test shape, one allocator, one `23P01` handling), costs one row and one GiST probe per claim instead of up to 366 rows to insert, release and reschedule, and needs no second invariant to keep rows equal to the item's dates; the ledger's advantage, per-night aggregates, is met by `generate_series` over the stay or the §7.2 counters. Both are declarative and unaffected by RLS; the choice is made on consistency and write cost (ADR-0135 §4).
+
+**Built (`sql/204`, Issue #940).** `block_id`, and a CHECK that exactly one of `item_id` / `block_id` is set; `starts_at` and `ends_at` are nullable and NULL on a block row; `block_released` is a release reason, allowed on block rows only. The allocation insert guard has a block form: the row must equal its block's resource, unit (when named) and dates, and the block must be active; the unit's status is deliberately **not** checked, so a unit put back in service later is still blocked. A block row is released only by releasing its block, and an AFTER UPDATE trigger on the block releases its rows in the same statement, so "block released <=> its nights released" is a database invariant. Two blocks that overlap on one unit conflict like any two live rows on it (release or shorten the first). A resource-wide block (no `resource_unit_id`) covers the units that exist when it is placed; a unit added to the resource later is not covered, and the reconciliation reports that block (`block_missing_allocation`). The instant bound on `reservations` and `reservation_items` is 368 days (§2.1). A booking_mode change under live allocations or blocks is `BOOKING_MODE_IN_USE` (a timezone change, `TIMEZONE_IN_USE`).
 
 **Data-subject answers (ADR-0094).** `reservations.external_customer_ref` identifies a person (it is opaque; the customer authority is the downstream commerce, O12); `customer_note` may contain one; actors are tenant users. On erasure or anonymisation of the customer at the authority the module severs `external_customer_ref` and nulls `customer_note`,
 and keeps the non-personal facts (resource, interval, status) as the tenant's
@@ -395,7 +416,7 @@ actions.
 exactly its items' units and intervals; lists a live allocation whose
 reservation is terminal or released, a `held` reservation past its expiry beyond
 a grace (a stuck job), an allocation with a mismatching buffer, a reservation
-whose `lineage_id` chain is broken, and a reservation with no `created` event. For stays it also lists a live stay allocation whose `[stay_from, stay_to)` differs from its item's `[check_in_date, check_out_date)`, a block allocation without an active block (and the reverse), and an allocation whose granularity differs from its resource's `booking_mode`.
+whose `lineage_id` chain is broken, and a reservation with no `created` event. For stays it also lists a live stay allocation whose `[stay_from, stay_to)` differs from its item's `[check_in_date, check_out_date)`, a live block row whose block is released (`block_allocation_orphan`), an active block that does not own exactly one live row per unit it covers (`block_missing_allocation`, which a unit added to the resource afterwards also trips), a block row whose resource, unit or dates differ from its block's (`block_allocation_mismatch`), and an allocation whose granularity differs from its resource's `booking_mode`.
 It repairs nothing; a defect is corrected by a compensating transition, never an
 edit.
 
@@ -483,7 +504,7 @@ de-duplicate on the envelope's event id; delivery is at-least-once.
    allocator picks units in `(resource.sort_order, unit.ordinal)` order and
    inserts with `INSERT … ON CONFLICT DO NOTHING RETURNING id` (an exclusion
    violation is a conflict `DO NOTHING` absorbs, so no savepoint per attempt);
-   no row returned → try the next unit; none left → `SLOT_UNAVAILABLE`. (That `DO NOTHING` waits for an in-doubt concurrent conflicting row and then skips it is the behaviour T3 proves at implementation; if it did not hold, the fallback is a savepoint per attempt catching `23P01`.) A party
+   no row returned → try the next unit; none left → `SLOT_UNAVAILABLE`. (That `DO NOTHING` waits for an in-doubt concurrent conflicting row and then skips it is the behaviour T3 proves, and Issue #939 observed it: the second INSERT blocks on the first's uncommitted row, and is absorbed when the first commits or takes the unit when it rolls back. A `23P01` that escapes anyway is mapped to `SLOT_UNAVAILABLE`.) A party
    or requirement of _k_ units inserts _k_ rows in one transaction, all-or-none.
    N is capped (500) because _k_ inserts are _k_ probes.
 3. **Multi-item and multi-resource reservations** insert in a fixed global order
@@ -502,7 +523,7 @@ de-duplicate on the envelope's event id; delivery is at-least-once.
    availability read (§10.3) is advisory input, the constraint is the authority.
 6. **Hold expiry** never weakens this: an unswept expired hold is reclaimed
    lazily under the row lock (§5.1), so the constraint only ever blocks on rows that are genuinely live.
-7. **Stays and blocks** (ADR-0135). A stay allocation is one row per unit under the second constraint of §4 (`daterange(stay_from, stay_to, '[)')` per unit, live rows only). The allocator, lock order, `ON CONFLICT DO NOTHING` absorption, lazy reclaim and bounded deadlock retry of rules 1–6 apply unchanged. A **block** is an allocation row with `block_id` set and no `item_id`, so a block and a stay contend on one constraint: whichever commits first wins and the other receives `23P01`, mapped to `SLOT_UNAVAILABLE` for the booking and `BLOCK_CONFLICT` for the block. A block over several units inserts its rows in the global order of rule 3, all-or-none. Creating a block never cancels a reservation. A trigger rejects an allocation whose granularity differs from its resource's `booking_mode`, so the time and stay constraints never both apply to one unit.
+7. **Stays and blocks** (ADR-0135). A stay allocation is one row per unit under the second constraint of §4 (`daterange(stay_from, stay_to, '[)')` per unit, live rows only). The allocator, lock order, `ON CONFLICT DO NOTHING` absorption, lazy reclaim and bounded deadlock retry of rules 1–6 apply unchanged. A **block** is an allocation row with `block_id` set and no `item_id`, so a block and a stay contend on one constraint: whichever commits first wins and the other receives `23P01`, mapped to `SLOT_UNAVAILABLE` for the booking and `BLOCK_CONFLICT` for the block. A block over several units inserts its rows in the global order of rule 3, all-or-none. Creating a block never cancels a reservation. A trigger rejects an allocation whose granularity differs from its resource's `booking_mode`, so the time and stay constraints never both apply to one unit. Two overlapping blocks conflict with each other the same way (they are rows under the same constraint), and a block over several units covers inactive units too, so a unit reactivated later is still blocked.
 
 ### 8.2 Extension and deployment cost
 
@@ -531,6 +552,8 @@ The module **must not ship without** these, in
 PostgreSQL as the runtime role `awcms_app` (FORCE RLS in effect), on separate
 connections (not one pooled transaction). Use the repo's rejection helper, not
 `expect(...).rejects` (which hangs with Bun.SQL).
+
+**Status (§13).** T1 is in `booking-database.integration.test.ts` (#937). T2, T3 (with the `DO NOTHING` interleaving it rests on), T6 (a) and the reaper races of (b), and T7 are in `booking-concurrency.integration.test.ts` (#939), driven through `placeHold` on real concurrent transactions rather than through `POST /booking/reservations`, which arrives with #941; they move behind the route in #941 together with T4, T5 and the confirm-versus-job half of T6 (b). T9 to T13 are in `booking-stay.integration.test.ts` (#940), driven through `placeHold` and `createBlock` rather than through `POST /booking/reservations` and the block API, which arrive with #941 and #942; they move behind the routes then. T8 needs `staff_assignments`.
 
 **T1 — database level, interleaving proven.** Fixture: one resource, capacity 1,
 one unit; window `[10:00, 11:00)`.
@@ -732,15 +755,15 @@ Mapped to the downstream tracker
 ADR-0040 settled placement only. The owner answered O1–O12 on 2026-10-10 (recorded downstream in the awcms-one DoR); the rows below say which answers are recorded here (**Answered**) and which are still open here (O1, O3, O5 and O9 were answered downstream the same day but change nothing in this pack and are not yet reconciled into it; O2 is handled by Issue #931). "Blocks" says what in this
 pack cannot be finalised until the answer is recorded.
 
-| #       | Question                                                                                                                                   | What this pack assumes meanwhile                                                                                                                                                                                                                                                                                                                                                                                                                                               | Blocks                                                                              |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| **O1**  | Personas in scope                                                                                                                          | The provisional list in §1 (receptionist, manager, resource owner, adapter, auditor)                                                                                                                                                                                                                                                                                                                                                                                           | §6 role bundles and the seed grants; UAT                                            |
-| **O2**  | Which verticals come first (hotel/villa, salon, clinic, rental, facility, workshop, training), and whether a consumer builds locally first | **Answered 2026-10-10 (awcms-one DoR):** first vertical hotel / villa / rental; no existing consumer repository. The owner resolved the conflict with this pack's earlier assumption by asking for an upstream scope change: **day-granularity stays are in v1** (ADR-0135, §2.5, §3.1). Still generic: no vertical field. `MONTHLY` recurrence stays out of v1 (not requested). The health-note policy keeps its default (off for tenants that declare a health vertical, §9) | The first admin screens (the migration's final shape); the sub-questions below      |
-| **O3**  | MoSCoW across CRM, Booking, Workforce, Payroll, Notification, Analytics                                                                    | Booking is Wave A/B; automatic no-show job and waitlist stay _Could_                                                                                                                                                                                                                                                                                                                                                                                                           | Ordering only; no schema                                                            |
-| **O5**  | Legal role of the operator (controller/processor/both)                                                                                     | Neither asserted; design is neutral (§9)                                                                                                                                                                                                                                                                                                                                                                                                                                       | The privacy analysis text, not the schema                                           |
-| **O8**  | Occupancy vs utilization, **do holds count**, booked vs actual time, denominator rules                                                     | **Answered 2026-10-10 (awcms-one DoR):** occupancy excludes holds (a hold is a separate pipeline figure); utilization is a separate metric; customer-retention window 90 days (a cross-domain KPI, not a data-retention period); net revenue is the headline (§7.2). **Still open:** whether the denominator excludes maintenance closures; booked vs actual time                                                                                                              | Only the remaining _definitions_; no table                                          |
-| **O9**  | Explicit non-goals                                                                                                                         | The §1 list                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Scope wording                                                                       |
-| **O12** | Customer identity: commerce stays the customer authority, or `profile_identity` harmonisation                                              | **Answered 2026-10-10 (awcms-one DoR): commerce stays the customer authority.** v1 `reservations` carries only the opaque, nullable `external_customer_ref` (null = walk-in); no `customer_profile_id`, no `profile_identity` dependency. A harmonisation, if ever wanted, is an additive column under its own ADR                                                                                                                                                             | Nothing: the customer columns and the erasure path (§4) are fixed for the migration |
+| #       | Question                                                                                                                                   | What this pack assumes meanwhile                                                                                                                                                                                                                                                                                                                                                                                                                                               | Blocks                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| **O1**  | Personas in scope                                                                                                                          | The provisional list in §1 (receptionist, manager, resource owner, adapter, auditor)                                                                                                                                                                                                                                                                                                                                                                                           | §6 role bundles and the seed grants; UAT                                               |
+| **O2**  | Which verticals come first (hotel/villa, salon, clinic, rental, facility, workshop, training), and whether a consumer builds locally first | **Answered 2026-10-10 (awcms-one DoR):** first vertical hotel / villa / rental; no existing consumer repository. The owner resolved the conflict with this pack's earlier assumption by asking for an upstream scope change: **day-granularity stays are in v1** (ADR-0135, §2.5, §3.1). Still generic: no vertical field. `MONTHLY` recurrence stays out of v1 (not requested). The health-note policy keeps its default (off for tenants that declare a health vertical, §9) | The first admin screens (the schema is final since `sql/204`); the sub-questions below |
+| **O3**  | MoSCoW across CRM, Booking, Workforce, Payroll, Notification, Analytics                                                                    | Booking is Wave A/B; automatic no-show job and waitlist stay _Could_                                                                                                                                                                                                                                                                                                                                                                                                           | Ordering only; no schema                                                               |
+| **O5**  | Legal role of the operator (controller/processor/both)                                                                                     | Neither asserted; design is neutral (§9)                                                                                                                                                                                                                                                                                                                                                                                                                                       | The privacy analysis text, not the schema                                              |
+| **O8**  | Occupancy vs utilization, **do holds count**, booked vs actual time, denominator rules                                                     | **Answered 2026-10-10 (awcms-one DoR):** occupancy excludes holds (a hold is a separate pipeline figure); utilization is a separate metric; customer-retention window 90 days (a cross-domain KPI, not a data-retention period); net revenue is the headline (§7.2). **Still open:** whether the denominator excludes maintenance closures; booked vs actual time                                                                                                              | Only the remaining _definitions_; no table                                             |
+| **O9**  | Explicit non-goals                                                                                                                         | The §1 list                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Scope wording                                                                          |
+| **O12** | Customer identity: commerce stays the customer authority, or `profile_identity` harmonisation                                              | **Answered 2026-10-10 (awcms-one DoR): commerce stays the customer authority.** v1 `reservations` carries only the opaque, nullable `external_customer_ref` (null = walk-in); no `customer_profile_id`, no `profile_identity` dependency. A harmonisation, if ever wanted, is an additive column under its own ADR                                                                                                                                                             | Nothing: the customer columns and the erasure path (§4) are fixed for the migration    |
 
 **Open sub-questions raised by the stay design** (not answered by the owner; recorded, not decided; proposed for the downstream tracker):
 
@@ -783,3 +806,135 @@ rows (would use §8.1 rule 4); partial-accept series; shared turnaround; waitlis
 iCal export; automatic no-show; a retention window with archive-then-purge; `profile_identity` harmonisation of the customer reference (own ADR; O12 kept commerce as the authority);
 `MONTHLY` recurrence (O2); the stay follow-ups O2a–O2h (§11); updating the provisional AsyncAPI payloads and `cross-domain-contracts.md` with the additive `stays` field when the events go live; keyed hashing and at-rest
 encryption are not applicable (no identifier is stored).
+
+## 13. Implementation status
+
+What is built, what is only specified, and where the next slice attaches. The
+design above is the contract; this section is the map from it to the code
+(module map: [`src/modules/booking/README.md`](../../src/modules/booking/README.md)).
+
+| Slice                | Issue | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation           | #937  | Schema `sql/180` (RLS FORCE, composite foreign keys, both exclusion constraints, the state machine as a trigger, append-only history), permission catalogue `sql/181`, the pure state machine. Test T1 (database-level interleaving).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Availability         | #938  | Schedules, exceptions, blocks table (`sql/186`), the pure slot and stay availability, `GET /availability`, schedule routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Allocator, holds** | #939  | The slot allocator (§8.1 rules 1 to 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, first free unit in `(sort_order, id, ordinal)` order, all-or-none for several units, units chosen together inserted in `(resource_id, ordinal)` order, `23P01` and `40P01` handled (bounded retry with jitter). Holds with expiry (§5.1): lazy reclaim at write time plus the `booking:holds:expire` reaper, correctness independent of the reaper. `placeHold`, the claim a reservation route will call. Hold caps (a sum, §8.1 rule 4). The read-only reconciliation of §7.1. Tests T2, T3 (and its `DO NOTHING` premise), T6 (a, b), T7, in `tests/integration/booking-concurrency.integration.test.ts`. One migration, `sql/200`, and only for the job's privilege: the narrow SECURITY DEFINER sweep that lets `booking:holds:expire` run as `awcms_worker`; the schema of `sql/180` already holds every invariant the allocator needs.                                                                                                         |
+| **Stays, blocks**    | #940  | Stay claims through `placeHold` (`stay: { checkInDate, checkOutDate }`: dates validated in the resource's zone, nights as date arithmetic, the arrival and departure instants and the zone and local times snapshotted onto the item, the offering's `min_nights` / `max_nights`) and through the same allocator (`UnitClaim` `kind: "stay"`, the `daterange` probe); lazy reclaim of stay holds (`ReclaimWindow` `kind: "stay"`); blocked nights as allocation rows (`booking-block-service.ts`: `createBlock`, `releaseBlock`, `BLOCK_CONFLICT`, `UnitClaim` `kind: "block"`); three block reconciliation checks; tests T9 to T13 in `tests/integration/booking-stay.integration.test.ts` and the pure rules in `tests/booking-stay.test.ts`. One migration, `sql/204` (the block rows and their guards, `BOOKING_MODE_IN_USE`, the 368-day instant bound). `sql/200` needs no change: a stay hold expires on the same column and releases through the same item join. No HTTP route, block routes included: they arrive with #941 and #942. |
+
+**Still design (not in the code):** the reservation routes and the transitions
+after creation (`confirm`, `cancel`, `reschedule`, `check_in`, `complete`,
+`no_show`, `extend`), `Idempotency-Key` on them and the `reservations.override`
+policy path (Issue #941); the nine events on the live AsyncAPI document (#941);
+the HTTP routes for blocks (`blocks.read` / `.create` / `.release` are seeded by `sql/181` and enforced by those routes, which do not exist yet); `service_requirements`, `staff_assignments` and test T8; the
+`reservations/reconciliation` route and the report routes; reporting
+projections; the admin screens (#942); the `BookingPort`.
+
+**Seams the next slices attach to**
+
+- `placeHold` (`application/booking-hold-service.ts`) is the CLAIM. It checks
+  claim integrity (offering and resources exist and are in the claim's mode (slot, or stay when `stay` dates are sent), party size,
+  unit count, derived interval, clamped hold on the database clock, hold caps)
+  and leaves **policy** to the create handler: opening hours
+  (`OUTSIDE_SCHEDULE`), lead time and horizon, and whether
+  `reservations.override` lifts them. The handler evaluates those with the same
+  engine the search uses (`answerAvailability`) before calling it.
+- `claimUnits` (`application/booking-allocator.ts`) takes a `UnitClaim` union
+  with three members: `time` and `stay` share the free-unit loop (the stay
+  member reads and inserts `stay_from` / `stay_to`), and `block` inserts the
+  FIXED units of a block, in `(resource_id, ordinal)` order, all-or-none, under
+  the same stay constraint.
+- `reclaimExpiredHolds` takes a `ReclaimWindow` union with two members: `time`
+  probes `tstzrange` overlap, `stay` probes `daterange` overlap (used for stays
+  and for blocks).
+- Confirm, cancel and reschedule (#941) must write exactly one history row per
+  transition; the expiry primitive (`applyExpiry`) is the model: reservation,
+  allocations and `expired` event in one statement.
+
+**Decisions taken in the #939 slice**
+
+- **The reaper runs as `awcms_worker`, through one narrow SECURITY DEFINER
+  function** (`sql/200`, the `sql/142` / ADR-0090 pattern), like the other
+  scheduled jobs. A worker with `UPDATE` on reservations could also confirm and
+  cancel, so it holds no privilege on the booking tables at all: it may
+  `EXECUTE` `awcms_booking_expire_due_holds(tenant, batch)`, whose statements
+  are fixed (only `status = 'expired'` on a hold that has run out on the
+  database clock, only the literal release reason, only the `expired` history
+  row, no actor) and which refuses a tenant that is not the session's. It
+  selects `FOR UPDATE SKIP LOCKED` and never waits on a request. Lazy reclaim
+  stays application SQL in the claim's own transaction (as the application
+  role), waits for the row lock (it must know the answer), and locks in
+  ascending `reservation id` order. The two implementations of one end state are
+  compared by an integration test.
+- **Lazy reclaim is scoped to the claim**: it expires only the elapsed holds
+  whose live allocations overlap the claim's occupied range on the target
+  resources, so a busy resource does not turn every new hold into a tenant-wide
+  sweep. It runs before the claim's savepoint, so the expiry stands even when
+  the claim is then refused. It works in batches until a batch locks nothing
+  (a `LIMIT ... FOR UPDATE` that waited on a row another transaction changed
+  drops it without back-filling, so "fewer rows than the limit" does not mean
+  done) and advances a keyset cursor, so it never truncates and the locks stay
+  in ascending id order.
+- **The free-unit read is a hint, the constraint is the authority**: a stale
+  read costs at most one extra round (bounded at 6, then `CONTENTION_RETRY`),
+  never a double booking. Refusals are values, and the whole claim runs in a
+  savepoint so a refusal leaves no reservation, item or allocation behind.
+- **Reaper health** is read from the data (`hold_overdue_unswept` and
+  `reaper.oldestOverdueSeconds` in the reconciliation, 300 second grace) and
+  from the shared job runner's telemetry; nothing depends on it.
+- **Left open (N4): hold caps default to unlimited, and that is not a safe
+  default for production.** #941 must set a sane default (or require the tenant
+  to configure one) before `booking` leaves `experimental`, and **every
+  hold-creating path must take the same per-tenant advisory lock**
+  (`pg_advisory_xact_lock(hashtextextended('awcms_booking.holds:' || tenant, 0))`
+  in `enforceHoldCaps`) before it counts live holds: `extend`, a reschedule that
+  creates a hold, a series, an adapter route. A path that creates a hold without
+  that lock reopens the race the cap test closes.
+- **Hold caps default to unlimited** (`NULL` = module default): the numbers are
+  an open owner question (§11), and a cap that is configured is enforced under a
+  per-tenant transaction advisory lock so two requests cannot both read "one
+  below the cap".
+
+**Decisions taken in the #940 slice**
+
+- **A stay is claimed through the same `placeHold`**, with `stay: { checkInDate,
+checkOutDate }` instead of `startsAtMs` (exactly one of them). A client never
+  sends an instant, an end or a buffer for a stay. `deriveStay`
+  (`domain/booking-stay.ts`) applies the checks of `evaluateStay` in the same
+  order and a test asserts the two agree on a table of cases, so a stay that
+  availability offered is one the claim accepts. "Today" is the database clock's
+  local date in the resource's zone (the same JS zone code availability uses, so
+  the module has one reading of a zone).
+- **A pool of stay resources must agree on one zone and one pair of check-in /
+  check-out times** (`STAY_POOL_INCONSISTENT`), because an item snapshots a
+  single set; the alternative, snapshotting the first resource's by accident,
+  would make the dates mean different things on different units.
+- **A block takes one row per unit, including inactive units**, in
+  `(resource_id, ordinal)` order inside a savepoint: a unit that is not won is
+  `BLOCK_CONFLICT` for the whole block and the savepoint rolls back the block row
+  and the units already won. Trade-off: a block over a whole resource is refused
+  because of one booked room (the operator blocks the other rooms by naming
+  them), in exchange for a block that is never partial.
+- **Overlapping blocks are refused**, because they are rows under the same
+  constraint. The alternative (exempting block-against-block) needs a third
+  constraint or a trigger, and two overlapping reasons for one night are
+  recoverable by releasing and re-placing.
+- **Releasing a block is a database invariant, not a handler step**: the AFTER
+  UPDATE trigger of `sql/204` releases its rows in the statement that stamps the
+  block, and the allocation update guard refuses to release a block row any other
+  way. Releasing a released block is a replay and writes nothing.
+- **`BLOCK_CONFLICT` cancels nothing and writes nothing** (no block row, no
+  allocation, no audit row). The conflicting reservations (number, status, dates;
+  never a customer reference) are returned only when the caller asks
+  (`revealConflicts`, which a route sets from `reservations.read`), so a caller
+  without it learns that nights are taken, not by whom.
+- **Availability keeps reading the blocks table** so its answer can say
+  `BLOCKED`; the stay read therefore excludes block rows (`block_id IS NULL`),
+  otherwise every block would be counted as a booking and the reason would
+  degrade to `NO_UNIT_AVAILABLE`.
+- **Lazy reclaim is kind-aware.** A slot claim never reclaims a stay hold and
+  the reverse; a block reclaims the stay holds that overlap its nights, so an
+  elapsed unswept hold does not refuse a block and the reaper being stopped does
+  not matter. The reaper (`sql/200`) needed no change.
+- **Not decided here (and not needed):** a block may begin in the past (there is
+  no "today" rule for a block); the block routes and their `Idempotency-Key`
+  belong to the route slices, where the state check (a second release is a
+  replay) and the constraint already make a retry harmless.

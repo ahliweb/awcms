@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:937eefcddee68d52ac46cf65ec5f70ccef725a9dd1058c3dd1db5e448182636e -->
+<!-- i18n-source-hash: sha256:824ff4639b1d85f4f281393aa3ef36149f916daeed0c71078e2069c8afbdd515 -->
 
 # AWCMS — Project State & Continuation
 
@@ -120,12 +120,12 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                 | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                 | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Modul base                         | **32** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **191** (`sql/001`–`199`)                                                                                                          | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0140** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
+| Migrasi                            | **193** (`sql/001`–`204`)                                                                                                          | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0141** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
 | Layar admin                        | **68** berkas `.astro` di `src/pages/admin/`; **3 dari 32** modul tanpa `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **85** (51.431 baris) — soal typecheck lihat §6                                                                                    | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **63** di rantai `bun run check`                                                                                                   | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.2.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.3.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -393,6 +393,26 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **PEMBANGUNAN BOOKING — irisan #937 sampai #940 sudah masuk; berikutnya #941
+  (route reservasi, dan route blok bersamanya atau dengan #942).** #937 skema
+  (`sql/180`, `sql/181`), #938 availability dan jadwal (`sql/186`), #939 alokator
+  slot, hold dengan kedaluwarsa, dan rekonsiliasi (satu migrasi, `sql/200`, hanya
+  untuk privilege reaper: `booking:holds:expire` berjalan sebagai `awcms_worker`
+  lewat sapuan SECURITY DEFINER sempit; skema sudah memegang setiap invarian),
+  #940 stay dan malam terblokir lewat alokator yang sama (satu migrasi, `sql/204`:
+  baris blok di bawah exclusion constraint stay beserta guard-nya; `sql/200`
+  tidak perlu diubah; tes T9 sampai T13 di
+  `tests/integration/booking-stay.integration.test.ts`). Peta dari paket ke kode ada di [`awcms/booking.md`](awcms/booking.id.md)
+  §13. Tiga hal yang harus diketahui penerus: (1) `placeHold` adalah klaim,
+  bukan handler pembuatan: jam buka, lead time, horizon, dan jalur `override`
+  milik #941 dan harus berjalan sebelumnya; (2) kebenaran tak pernah bergantung
+  pada job `booking:holds:expire` (reklamasi malas menutup setiap klaim),
+  kesehatannya adalah `hold_overdue_unswept` pada rekonsiliasi; (3) bukti
+  konkurensi ada di `tests/integration/booking-concurrency.integration.test.ts`
+  (T2, T3, T6, T7) dan `booking-stay.integration.test.ts` (T9 sampai T13),
+  dijalankan lewat `placeHold` dan `createBlock` sampai #941 dan #942 memasang
+  route di depannya.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 Oktober 2026 (v10.7.0): #915–#918 selesai
   di hulu, pada hari yang sama ADR-0040 hilir diterima (awcms-one#335, O0).**
@@ -6215,7 +6235,7 @@ scope_id = tenant_id)`. Ini jawaban atas batas yang ADR-0080 tulis
      menolak setiap sesi yang tidak sedang `aal2`, dan orang tanpa faktor
      terdaftar tak akan pernah bisa mencapainya — tanpa syarat, setiap pengguna
      tanpa MFA permanen tak bisa mengganti passwordnya, dan yang paling butuh
-     justru yang baru tahu passwordnya bocor. Jebakan ADR-0058 §E berbaju lain.
+     justru yang baru tahu passwordnya bocor. Jebakan ADR-0141 §4 berbaju lain.
      Mutasi `if (mfa.enabled)` → `if (true)` memerahkan 4 test.
 
   **Temuan tentang #430 yang mengubah nilainya.** Mitigasi sementara yang
@@ -6467,7 +6487,7 @@ scope_id = tenant_id)`. Ini jawaban atas batas yang ADR-0080 tulis
   - **Permission `push_delivery.subscriptions.*`** — mendaftarkan perangkat
     sendiri adalah self-service; permission untuknya adalah tembok di depan
     fiturnya, dan aksi yang tak di-seed menolak semua orang termasuk owner
-    (jebakan latent-authz, ADR-0058 §E).
+    (jebakan latent-authz, skill `awcms-abac-guard`).
   - **Menetapkan `awcms_edge_cache_purges` ke salah satu dari tiga modul yang
     menulisnya** supaya gerbangnya hijau — deskriptor yang menyebut pemilik yang
     salah adalah klaim palsu yang terbaca sebagai keputusan.

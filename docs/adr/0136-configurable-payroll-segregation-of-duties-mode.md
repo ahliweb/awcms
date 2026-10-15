@@ -6,7 +6,7 @@
 - **Date:** 2026-10-12
 - **Decision maker:** ahliweb
 - **Amends:** [ADR-0132](0132-hr-payroll-module-family-admission.md) (the statement that the per-instance database SoD rule "cannot be configured away", and the "proposed, not decided" status of the role matrix) — an amendment, not a supersession; everything in ADR-0132 not named here stands
-- **Related:** Issue #954; implementation Issue #957 (nothing is built by this ADR); downstream `ahliweb/awcms-one` DoR owner decision O7, answered 10 Oct 2026 ([`aw-business-platform-dor.md`](https://github.com/ahliweb/awcms-one/blob/main/docs/aw-business-platform-dor.md)); [ADR-0031](0031-segregation-of-duties-conflict-enforcement.md) (SoD rule descriptors, assignment-time and action-time enforcement, exceptions); [ADR-0058](0058-unenforced-permissions-disposition.md) §E (conditional step-up); [`docs/awcms/hr-payroll.md`](../awcms/hr-payroll.md) §7.5 (matrix and test list), §11.1, §12, §16
+- **Related:** Issue #954; implementation Issue #957 (nothing is built by this ADR); downstream `ahliweb/awcms-one` DoR owner decision O7, answered 10 Oct 2026 ([`aw-business-platform-dor.md`](https://github.com/ahliweb/awcms-one/blob/main/docs/aw-business-platform-dor.md)); [ADR-0031](0031-segregation-of-duties-conflict-enforcement.md) (SoD rule descriptors, assignment-time and action-time enforcement, exceptions); [ADR-0141](0141-permissions-may-require-an-enrolled-mfa-factor.md) §4 (conditional step-up); [`docs/awcms/hr-payroll.md`](../awcms/hr-payroll.md) §7.5 (matrix and test list), §11.1, §12, §16
 
 ## Context
 
@@ -41,7 +41,9 @@ Security: A and B differ decisively on approver independence, and B is rejected 
 
 Changing the mode is the permission **`hr_payroll.sod_policy.configure`** (resource `sod_policy`, the existing `configure` action, high-risk; `read` is separate). A SoD rule (ADR-0031), `critical`, with no exception, forbids one person from holding it together with any of C, A, F or P. The preparer must not be able to relax the check that binds them, and the approver must not be able to set the scope of the check on their own decisions. It is held by a tenant administrator who performs no payroll duty. A two-person payroll tenant therefore needs a third principal **for configuration only, not per run**; a tenant without one stays strict. Platform support does not hold it on a tenant's behalf.
 
-Changing the mode requires an `Idempotency-Key`, a reason code, a conditional step-up (ADR-0058 §E) when **relaxing** (tightening is audited and idempotent but does not demand step-up), and writes an audit row at `critical` severity with the actor and the before/after mode and no free text. Every audit row of a run calculated in relaxed mode carries `sodMode: "relaxed"`.
+Changing the mode requires an `Idempotency-Key`, a reason code, a conditional step-up (ADR-0141 §4) when **relaxing** (tightening is audited and idempotent but does not demand step-up), and writes an audit row at `critical` severity with the actor and the before/after mode and no free text. Every audit row of a run calculated in relaxed mode carries `sodMode: "relaxed"`.
+
+> **Update, ADR-0141 (Issue #977, finding PS-13).** The conditional step-up here only bites a person who has an enrolled factor. `hr_payroll` sets `requiresMfaEnrolment: true` on `sod_policy.configure`, so a holder with no factor is refused `403 MFA_ENROLMENT_REQUIRED` instead of changing the mode on a password alone.
 
 ### 4. Which rules are database CHECKs and which are role-level rules
 

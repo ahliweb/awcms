@@ -119,12 +119,12 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                          | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                          | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Base modules                      | **32** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrations                        | **191** (`sql/001`–`199`)                                                                                                           | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0140** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
+| Migrations                        | **193** (`sql/001`–`204`)                                                                                                           | `ls sql/`                                                                               |
+| ADR                               | **0000**–**0141** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
 | Admin screens                     | **68** `.astro` files in `src/pages/admin/`; **3 of 32** modules without `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **85** (51.431 lines) — on typechecking see §6                                                                                      | `find src -name '*.astro'`                                                              |
 | Gates                             | **63** in the `bun run check` chain                                                                                                 | `scripts.check` in `package.json`, split on `&&`                                        |
-| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.2.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.3.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -390,6 +390,26 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
+
+- **BOOKING BUILD-OUT — slices #937 to #940 landed; next #941 (reservation
+  routes, and the block routes with them or with #942).** #937 schema (`sql/180`,
+  `sql/181`), #938 availability and schedules (`sql/186`), #939 the slot
+  allocator, holds with expiry and the reconciliation (one migration, `sql/200`,
+  only for the reaper's privilege: `booking:holds:expire` runs as `awcms_worker`
+  through a narrow SECURITY DEFINER sweep; the schema already held every
+  invariant), #940 stays and blocked nights through the same allocator (one
+  migration, `sql/204`: block rows under the stay exclusion constraint and their
+  guards; `sql/200` needed no change; tests T9 to T13 in
+  `tests/integration/booking-stay.integration.test.ts`). The map from the pack to the code is
+  [`awcms/booking.md`](awcms/booking.md) §13. Three things a continuer must
+  know: (1) `placeHold` is the claim, not the create handler: opening hours,
+  lead time, horizon and the `override` path are #941's and must run before it;
+  (2) correctness never depends on the `booking:holds:expire` job (lazy reclaim
+  covers every claim), its health is `hold_overdue_unswept` in the
+  reconciliation; (3) the concurrency evidence is
+  `tests/integration/booking-concurrency.integration.test.ts` (T2, T3, T6, T7)
+  and `booking-stay.integration.test.ts` (T9 to T13), driven through `placeHold`
+  and `createBlock` until #941 and #942 put a route in front of them.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 October 2026 (v10.7.0): #915–#918 done
   upstream, the same day downstream ADR-0040 was accepted (awcms-one#335, O0).**
@@ -6028,7 +6048,7 @@ scope_id = tenant_id)`. This is the answer to a limit ADR-0080 wrote
      refuses every session that is not currently `aal2`, and somebody with no enrolled
      factor can never reach it — unconditionally, every user
      without MFA is permanently unable to change their password, and the ones who need it most
-     are exactly the ones who just learned their password leaked. The ADR-0058 §E trap in another costume.
+     are exactly the ones who just learned their password leaked. The ADR-0141 §4 trap in another costume.
      The mutation `if (mfa.enabled)` → `if (true)` turns 4 tests red.
 
   **A finding about #430 that changes its value.** The temporary mitigation
@@ -6280,7 +6300,7 @@ scope_id = tenant_id)`. This is the answer to a limit ADR-0080 wrote
   - **A `push_delivery.subscriptions.*` permission** — registering your own device
     is self-service; a permission for it is a wall in front of
     the feature, and an action that is not seeded refuses everybody including the owner
-    (the latent-authz trap, ADR-0058 §E).
+    (the latent-authz trap, `awcms-abac-guard` skill).
   - **Assigning `awcms_edge_cache_purges` to one of the three modules that
     write it** so that its gate turns green — a descriptor naming the wrong
     owner is a false claim that reads as a decision.

@@ -211,7 +211,7 @@ tenant the new permissions run `bun run identity-access:permissions:backfill`.
 
 Known limits, stated explicitly (ADR-0128):
 
-- **Reveal has no step-up and no rate limit.** No sibling reveal exists to mirror (`profile_identity` has no clear-text reveal; no other reveal carries those protections), and an unconditional `requireStepUp` is the ADR-0058 §E trap. Reveal is audited, `no-store` and behind its own permission only.
+- **Reveal has no step-up and no rate limit.** No sibling reveal exists to mirror (`profile_identity` has no clear-text reveal; no other reveal carries those protections), and an unconditional `requireStepUp` is the ADR-0141 §4 trap. Reveal is audited, `no-store` and behind its own permission only.
 - **The approval threshold is cost-based.** A document with zero or omitted cost, and every requisition and transfer, bypasses it.
 - **No location-scoped ABAC and no default maker/checker.** Separating `documents.submit` from `documents.finalise` is an operator duty: author a SoD rule over those two high-risk actions.
 - On anonymisation the supplier's `profile_id` link is **retained** (it resolves to an anonymised profile); the trading name is retained under the financial_tax obligation.

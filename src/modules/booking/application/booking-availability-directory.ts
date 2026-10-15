@@ -402,6 +402,10 @@ export async function answerAvailability(
     FROM awcms_booking_resource_allocations
     WHERE tenant_id = ${tenantId} AND resource_id = ${resource.id}
       AND released_at IS NULL AND granularity = 'stay'
+      -- A block's rows are read from the blocks table below (so the answer can
+      -- say BLOCKED rather than NO_UNIT_AVAILABLE); counting them here too would
+      -- turn every block into a booking.
+      AND block_id IS NULL
       AND stay_from < ${queryTo}::date AND stay_to > ${queryFrom}::date
   `) as { resource_unit_id: string; stay_from: string; stay_to: string }[];
   const staysByUnit = new Map<string, OccupiedStay[]>();

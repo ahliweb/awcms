@@ -97,7 +97,7 @@ export const POST = defineTenantRoute<IssueMachineCredentialInput>({
   // the `activityCode` position makes the whole guard unreadable to it — the
   // first attempt here reported BOTH `machine_credentials.create` and
   // `machine_credentials_write.create` as "enforced by nothing", which is the
-  // exact false alibi ADR-0058 §E records for `visitor_analytics`.
+  // exact false alibi ADR-0058 §1 records for `visitor_analytics`.
   //
   // The scanner already accommodates a ternary in the `action` position. Rather
   // than widen a security gate to fit a formatting preference, the route says
