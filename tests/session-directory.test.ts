@@ -281,7 +281,7 @@ describe("the routes carry no permission, on purpose", () => {
   test("all three use the self-service seam and never call the chokepoint", () => {
     // ADR-0049 §7. A permission for "your own sessions" would be a wall in
     // front of the feature AND a latent-authz trap: an action nothing seeds
-    // denies everyone including the tenant owner (ADR-0058 §E).
+    // denies everyone including the tenant owner (`awcms-abac-guard` skill).
     for (const source of [list, revoke, revokeAll]) {
       expect(source).toContain("defineSelfServiceTenantRoute");
       expect(source).not.toContain("authorizeInTransaction");

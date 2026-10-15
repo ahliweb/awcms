@@ -335,7 +335,7 @@ export async function loadAdminScreen<TData>(
  *
  * ## Why not just invent a permission
  *
- * That is the trap ADR-0058 §E names. `identity_access.own_account.read` would
+ * That is the trap the `awcms-abac-guard` skill names. `identity_access.own_account.read` would
  * be an action no migration seeds, so it would deny EVERYONE — tenant owner
  * included — while the call site read as correctly guarded. A person locked out
  * of their own password-change screen is the worst possible place to discover

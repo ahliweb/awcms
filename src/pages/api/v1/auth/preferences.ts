@@ -7,7 +7,7 @@
  * Self-service, on the same reasoning as `GET /api/v1/auth/sessions`: the subject
  * IS the caller, and neither verb accepts a `tenantUserId` to act on. Inventing
  * an `identity_access.preferences.update` permission would install the
- * latent-authz trap ADR-0058 §E describes — an action nothing seeds denies
+ * latent-authz trap the `awcms-abac-guard` skill describes — an action nothing seeds denies
  * everyone, tenant owner included, while the route reads as correctly guarded.
  *
  * Changing somebody ELSE's language is not a feature, so there is no permissioned

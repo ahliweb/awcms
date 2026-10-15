@@ -18,7 +18,7 @@
  * Unpermissioned for the reason the sibling self-service routes state
  * (`GET /api/v1/auth/sessions`, `POST /api/v1/auth/preferences`): inventing
  * `identity_access.own_profile.update` would install the latent-authz trap of
- * ADR-0058 §E — an action nothing seeds denies everyone, tenant owner included,
+ * the `awcms-abac-guard` skill — an action nothing seeds denies everyone, tenant owner included,
  * while the route reads as correctly guarded.
  *
  * ## What it deliberately cannot change

@@ -15,7 +15,7 @@
  *   contradicting deny).
  * - An enrolled holder is ALLOWED, and the module's own conditional step-up
  *   composes on top of it: a stale session is asked for a step-up, a fresh one
- *   is not. That is the pair ADR-0058 §E requires — conditional, never
+ *   is not. That is the pair ADR-0141 §4 requires — conditional, never
  *   unconditional — and the enrolled/unenrolled split is the condition.
  * - Nobody is locked out: the unenrolled holder is still ALLOWED on every
  *   unflagged permission, and the enrolment routes sit outside the chokepoint,

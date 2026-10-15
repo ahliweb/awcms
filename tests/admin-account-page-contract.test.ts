@@ -16,7 +16,7 @@
  * 3. **The display-name ceiling agrees** between the route's validation and the
  *    page's `maxlength`, since the route restates a constant it cannot import.
  * 4. **The page stays unpermissioned**, so a future edit cannot quietly install
- *    the latent-authz trap ADR-0058 §E describes on a self-service screen.
+ *    the latent-authz trap the `awcms-abac-guard` skill describes on a self-service screen.
  *
  * Pure — reads source text. No database, no network.
  */

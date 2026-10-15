@@ -102,7 +102,7 @@ export type ModulePermissionDescriptor = {
    * credential — which can never hold a factor — is refused outright. It is
    * NOT a step-up: it does not demand a fresh second-factor proof, it demands
    * that one CAN be given. Step-up stays the owning module's own conditional
-   * call (ADR-0058 §E), and once this flag has been satisfied that call is
+   * call (ADR-0141 §4), and once this flag has been satisfied that call is
    * always applicable, because an enrolled holder is exactly who it applies to.
    *
    * Declared here, in code, and never read from the database: a flag a row

@@ -64,7 +64,7 @@ Konsekuensi yang disengaja: `MEMORY.md` dan beberapa memory lain **tetap** meruj
 - [Retensi outbox SELESAI — dua registry](awcms-lifecycle-two-registries-and-bounded-list.md) — #468: 5 deskriptor + `BOUNDED_BY_DESIGN`; ADR-0076 registry KEDUA
 - [Satu outbox + cursor sequence TIDAK aman](awcms-one-outbox-and-cursor-visibility.md) — ADR-0077: identity terlihat saat COMMIT, `sequence >` bisa melewati event
 - [Sesi self-service + jebakan hash IP](awcms-session-self-service-and-ip-hash.md) — `hashClientIp` berkunci per-proses TIDAK boleh dipersistenkan
-- [Gelombang 2 SELESAI + 3 koreksi rencana](awcms-gelombang-2-session-surface-complete.md) — `requireStepUp` tanpa syarat = jebakan ADR-0058 §E; asersi source WAJIB buang komentar dulu
+- [Gelombang 2 SELESAI + 3 koreksi rencana](awcms-gelombang-2-session-surface-complete.md) — `requireStepUp` tanpa syarat = jebakan ADR-0141 §4; asersi source WAJIB buang komentar dulu
 - [Grant ber-scope mendarat (ADR-0078)](awcms-access-policies-scoped-grant.md) — BUKAN dual write tapi pencabutan cari di DUA tempat; FK komposit memerahkan teardown e2e
 - [Penulis pindah, pembacanya TIDAK](awcms-writer-moved-readers-did-not.md) — 5 cacat senyap lolos 38 gerbang; ADR-0079: `activeRoleGrants` satu-satunya definisi
 - [Gerbang privilege memeriksa MATRIKSNYA](awcms-gate-checks-matrix-not-need.md) — bukan kebutuhan kode; setup wizard rusak berminggu sambil gate hijau
@@ -3667,7 +3667,7 @@ Gelombang 2 dari [[awcms-jualanku-porting]]-nya program model keanggotaan (#423)
 
 **Rencana program BUKAN spesifikasi — tiga koreksinya penting dan berulang:**
 
-1. **`requireStepUp` tanpa syarat = jebakan ADR-0058 §E berbaju lain.** Ia menolak tiap sesi yang tak sedang `aal2`, dan orang **tanpa faktor terdaftar tak akan pernah** bisa mencapai `aal2`. Rencana menulis "step-up aal2 + password lama" untuk ganti password; tanpa syarat itu mengunci setiap pengguna non-MFA dari mengganti passwordnya selamanya. Pola: **gerbang yang terbaca benar sambil menolak semua orang** — cek `getMfaStatus().enabled` dulu. Lihat [[awcms-mfa-port-notes]].
+1. **`requireStepUp` tanpa syarat = jebakan ADR-0141 §4 berbaju lain.** Ia menolak tiap sesi yang tak sedang `aal2`, dan orang **tanpa faktor terdaftar tak akan pernah** bisa mencapai `aal2`. Rencana menulis "step-up aal2 + password lama" untuk ganti password; tanpa syarat itu mengunci setiap pengguna non-MFA dari mengganti passwordnya selamanya. Pola: **gerbang yang terbaca benar sambil menolak semua orang** — cek `getMfaStatus().enabled` dulu. Lihat [[awcms-mfa-port-notes]].
 2. **Arah split izin harus diturunkan ulang, bukan disalin.** `sql/083` memisah `create`/`revoke` karena hanya satu MENCIPTAKAN kapabilitas. Untuk sesi orang lain sumbunya terbalik: hanya satu MENGUNGKAPKAN sesuatu, jadi `read` yang mahal. Menyalin alasan lama menghasilkan pemecahan yang benar secara bentuk dan salah secara arah.
 3. **Flag boolean yang satu nilainya menduplikasi endpoint lain = tak usah ada.** `?exceptCurrent=false` adalah `POST /auth/logout` yang lebih buruk (tak bisa bersihkan cookie).
 
@@ -5997,7 +5997,7 @@ PR #491 (10 Agu 2026) — `GET`/`DELETE /api/v1/auth/sessions`, **nol permission
 
 **`hashClientIp` memakai kunci ACAK PER-PROSES** bila `AUTH_IP_HASH_SECRET` tak diset (`src/lib/security/client-fingerprint.ts`). Dapat ditoleransi untuk atribut audit; **TIDAK** untuk kolom yang dipersistenkan — sesudah restart perangkat yang sama menghasilkan hash berbeda, dan daftar sesi menampilkan satu perangkat sebagai beberapa, ke arah yang menghasilkan **pencabutan yang salah**. Pakai `persistableClientIpHash()` yang mengembalikan `null` bila kunci tak stabil.
 
-**Pola self-service yang harus dipertahankan** (sama dengan perangkat push, ADR-0049 §7): subjek = pemanggil, rute tak menerima `tenantUserId`, `defineSelfServiceTenantRoute`, identitas di-resolve dari `tokenHash` DI DALAM transaksi. Permission untuk "lihat sesi sendiri" = tembok + jebakan latent-authz ADR-0058 §E. Efek samping yang berharga: `access:permissions:enforcement:check` (208/208, EXCEPTIONS kosong) dan `admin:screen-coverage:check` tak tersentuh.
+**Pola self-service yang harus dipertahankan** (sama dengan perangkat push, ADR-0049 §7): subjek = pemanggil, rute tak menerima `tenantUserId`, `defineSelfServiceTenantRoute`, identitas di-resolve dari `tokenHash` DI DALAM transaksi. Permission untuk "lihat sesi sendiri" = tembok + jebakan latent-authz ADR-0141 §4. Efek samping yang berharga: `access:permissions:enforcement:check` (208/208, EXCEPTIONS kosong) dan `admin:screen-coverage:check` tak tersentuh.
 
 **Dua invarian ber-test:** `origin_auth` tanpa default di kode (kompiler menyebut keempat penerbit sesi satu per satu); rotasi step-up **MEMBAWA** asal aslinya — menaikkan assurance bukan mengautentikasi ulang.
 

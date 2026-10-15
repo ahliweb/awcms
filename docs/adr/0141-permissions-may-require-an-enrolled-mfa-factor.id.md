@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0141-permissions-may-require-an-enrolled-mfa-factor.md)
 
-<!-- i18n-source-hash: sha256:6189484d40d200662bdcebe6705f235ee04c717ca99020d12cecb363577eaced -->
+<!-- i18n-source-hash: sha256:6bba2ee1ffda09c34e89d2a6ca8105faa9a20f2f7c3fbae5f571c677238ad9e4 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -21,7 +21,7 @@ Akibatnya adalah temuan PS-13: **pemegang tanpa faktor terdaftar melakukan revea
 - `required_for_privileged` mengklasifikasikan "berhak istimewa" sebagai memegang izin **apa pun** yang aksinya bukan `read`/`analyze`/`check`. Ia ditegakkan **saat login** (grant pendaftaran, bukan sesi penuh), sehingga meminta setiap pemegang izin non-baca di tenant untuk mendaftar — tuas yang berat untuk "enam izin yang memindahkan uang" — dan tidak berkata apa pun pada saat izin dijalankan.
 - Tidak ada apa pun yang menghubungkan "izin ini" dengan "pemegangnya harus mampu memberikan faktor kedua". Tidak ada issue yang membangunnya, jadi kalimat di ADR-ADR itu menggambarkan kontrol yang tidak ada.
 
-> **Catatan tentang kutipan.** Repositori (ADR-0136, ADR-0137, `password-change.ts`) mengutip "ADR-0058 §E" untuk aturan _step-up harus bersyarat_. ADR-0058 yang tertulis membahas empat izin tanpa penegak, dan §E-nya adalah migrasi pencabutan; yang disumbangkannya adalah **kelas** jebakan — persyaratan yang tidak dapat dipenuhi siapa pun menolak semua orang, sementara tempat pemanggilnya terbaca terjaga benar. Aturannya benar; ADR ini menyatakannya dengan kata-katanya sendiri (§4) agar tidak lagi bertumpu pada bagian yang tidak mengatakannya.
+> **Catatan tentang kutipan.** Repositori (ADR-0136, ADR-0137, `password-change.ts`) pernah mengutip "ADR-0058 §E" untuk aturan _step-up harus bersyarat_. ADR-0058 yang tertulis membahas empat izin tanpa penegak, dan §E-nya adalah migrasi pencabutan; yang disumbangkannya adalah **kelas** jebakan — persyaratan yang tidak dapat dipenuhi siapa pun menolak semua orang, sementara tempat pemanggilnya terbaca terjaga benar. Aturannya benar; ADR ini menyatakannya dengan kata-katanya sendiri (§4) agar tidak lagi bertumpu pada bagian yang tidak mengatakannya.
 
 ## Keputusan
 

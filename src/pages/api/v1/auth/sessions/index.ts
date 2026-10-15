@@ -19,7 +19,7 @@ import { listOwnSessions } from "../../../../../modules/identity-access/applicat
  * endpoints: the subject is the caller, and the route never accepts a
  * `tenantUserId` to act on. Inventing a permission for "see your own sessions"
  * would put a wall in front of the feature and, worse, install the latent-authz
- * trap ADR-0058 §E describes — an action nothing seeds denies everyone,
+ * trap the `awcms-abac-guard` skill describes — an action nothing seeds denies everyone,
  * including the tenant owner, while the calling code reads as correctly
  * guarded.
  *

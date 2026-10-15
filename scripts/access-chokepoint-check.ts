@@ -172,7 +172,7 @@ export function sliceScreen(
     //
     // Without it, a screen whose subject IS the caller — with no entry
     // permission that could honestly be evaluated — would have to invent one,
-    // which is the ADR-0058 §E latent-authz trap: an action nothing seeds denies
+    // which is the latent-authz trap in the `awcms-abac-guard` skill: an action nothing seeds denies
     // everyone including the tenant owner, while the call site reads as guarded.
     usesChokepoint:
       /loadAdminScreen\(/.test(code) ||
