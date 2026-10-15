@@ -1052,8 +1052,25 @@ export const READER_BUDGET_BYTES = 24_000;
  * password, password missing, sign in again, rate limited). Not duplication:
  * these words exist nowhere else. +722 B, measured on its own base
  * (322,819 -> 323,541); stacked on #942: 334,800 B.
+ *
+ * **Raised for Issue #1008** (telegram_delivery post-merge hardening): +455 B
+ * (on its own base), all in the one `/admin/telegram` screen script. The
+ * confirm control now reads the 6-digit verification PIN from its own input,
+ * validates its shape and sends it with the `bindingId`, words the two new
+ * refusals (wrong PIN, too many wrong PINs), and the administrator revoke and
+ * the tenant switch send a fresh `Idempotency-Key` per click. One small markup
+ * block for the PIN field, no new stylesheet rule (it reuses `form-row`).
+ * Measured actual total, no added margin.
+ *
+ * **Raised again for Issue #1008's security audit**: +171 B.
+ * The same screen script now draws its `Idempotency-Key` from the repo's
+ * `createIdempotencyKeySource` (one key per distinct method + url + body, so a
+ * retry replays) instead of a fresh UUID per click; the import is the already
+ * shared `admin-idempotency-key.ts`. Measured actual total, no added margin.
+ *
+ * Stacked on #1004 (334,800 B): +626 B for #1008 in all, 335,426 B.
  */
-export const APP_BUDGET_BYTES = 334_800;
+export const APP_BUDGET_BYTES = 335_426;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

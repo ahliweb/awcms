@@ -14069,23 +14069,25 @@ Newest first: the staff member (login masked), the state, when it was linked or 
 - **operationId**: `revokeTelegramBinding`
 - **Security**: bearerAuth + tenantHeader
 
-High-risk and audited at `warning`: it removes a person's alert channel. The stored chat id is erased and the binding's queue cancelled at once. Naturally idempotent rather than `Idempotency-Key`-ed: revoking an ended binding finds nothing live and answers 404. One answer for "no such binding" and "already ended". Requires `telegram_delivery.bindings.revoke`.
+High-risk and audited at `warning`: it removes a person's alert channel. The stored chat id is erased and the binding's queue cancelled at once. `Idempotency-Key` required (Issue #1008): a retry with the same key replays the stored 200 instead of answering 404 for a binding the first call already ended; the same key with a different binding is a 409; a refusal is not stored. Without a key, revoking an ended binding finds nothing live and answers 404, one answer for "no such binding" and "already ended". A machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`): the key is filed per acting person, and deactivating the principal ends its binding on the next sweep. Requires `telegram_delivery.bindings.revoke`.
 
 **Parameters**
 
-| Name | In   | Required | Type          | Description     |
-| ---- | ---- | -------- | ------------- | --------------- |
-| `id` | path | yes      | string (uuid) | The binding id. |
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`              | path   | yes      | string (uuid) | The binding id.                                                                                                                                                                                                 |
 
 **Responses**
 
-| Status | Description                 | Schema                                 |
-| ------ | --------------------------- | -------------------------------------- |
-| 200    | The binding was revoked.    | object                                 |
-| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | The binding was revoked.                                       | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/telegram/bindings/me` — Your own Telegram binding.
 
@@ -14107,19 +14109,21 @@ The caller's live binding or `null`. While it is `pending_confirmation` it carri
 - **operationId**: `confirmOwnTelegramBinding`
 - **Security**: bearerAuth + tenantHeader
 
-The ONLY transition to `active`, reachable only from the staff member's own authenticated session. A link code that was forwarded, phished or shoulder-surfed binds an attacker's chat at most to `pending_confirmation`. Confirming replaces any binding the person already had (audited as a re-bind, and one notice is queued to the new chat naming the tenant). The body names the chat the person was shown; a different pending chat is a 409 (`TELEGRAM_BINDING_MISMATCH`). With nothing pending the answer is 404, so a double click cannot confirm twice. A machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires `telegram_delivery.links.create`.
+The ONLY transition to `active`, reachable only from the staff member's own authenticated session. A link code that was forwarded, phished or shoulder-surfed binds an attacker's chat at most to `pending_confirmation`. Confirming replaces any binding the person already had (audited as a re-bind, and one notice is queued to the new chat naming the tenant). The body names the chat the person was shown and carries the 6-digit PIN the bot sent to THAT chat when it received `/start` (proof of possession: the person has to read the PIN in the chat they are binding, Issue #1008). A different pending chat is a 409 (`TELEGRAM_BINDING_MISMATCH`). A wrong PIN is a 422 (`TELEGRAM_PIN_INVALID`, `details.attemptsLeft`) and is counted in the database; the fifth wrong PIN ends the pending binding and erases its chat id (423 `TELEGRAM_PIN_LOCKED`) and the person requests a new link. A pending binding created before PINs existed has none and cannot be confirmed. With nothing pending the answer is 404, so a double click cannot confirm twice. A machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires `telegram_delivery.links.create`.
 
 **Request body** (required): object
 
 **Responses**
 
-| Status | Description                                                                           | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The binding is active.                                                                | object                                 |
-| 401    | Missing or invalid session.                                                           | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                           | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                   | [`ApiError`](#standard-error-envelope) |
-| 409    | The chat waiting for confirmation is not the one named (`TELEGRAM_BINDING_MISMATCH`). | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The binding is active.                                                                                        | object                                 |
+| 401    | Missing or invalid session.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | The chat waiting for confirmation is not the one named (`TELEGRAM_BINDING_MISMATCH`).                         | [`ApiError`](#standard-error-envelope) |
+| 422    | The PIN is not right (`TELEGRAM_PIN_INVALID`); `error.details.attemptsLeft` is how many wrong answers remain. | [`ApiError`](#standard-error-envelope) |
+| 423    | Too many wrong PINs: the pending binding was ended (`TELEGRAM_PIN_LOCKED`).                                   | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/telegram/bindings/me/reject` — Reject the Telegram chat that used your code ("not me").
 
@@ -14217,18 +14221,25 @@ The tenant setting plus the two other reasons nothing might be sent: Module Mana
 - **operationId**: `setTelegramSettings`
 - **Security**: bearerAuth + tenantHeader
 
-High-risk (`configure`) and audited at `warning`. Turning it OFF ends every binding in the same transaction (the stored chat ids are erased and the queue cancelled), so a tenant that switches the channel off is not left holding encrypted chat ids. Idempotent by construction (it sets a value; repeating it changes nothing and writes no second audit row), so no `Idempotency-Key`. The body is validated strictly: an unknown key is a 400. Requires `telegram_delivery.settings.configure`.
+High-risk (`configure`) and audited at `warning`. Turning it OFF ends every binding in the same transaction (the stored chat ids are erased and the queue cancelled), so a tenant that switches the channel off is not left holding encrypted chat ids. `Idempotency-Key` required (Issue #1008): the state is idempotent (it sets a value and writes no second audit row), but a retry's ANSWER (`changed`, `revokedBindings`) would differ from the first; with a key the retry replays the stored response, and the same key with a different `enabled` is a 409. A machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`). The body is validated strictly: an unknown key is a 400. Requires `telegram_delivery.settings.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
 **Request body** (required): object
 
 **Responses**
 
-| Status | Description                 | Schema                                 |
-| ------ | --------------------------- | -------------------------------------- |
-| 200    | The new state.              | object                                 |
-| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | The new state.                                                 | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/telegram/templates` — The registered Telegram templates.
 
@@ -14252,9 +14263,9 @@ Key, version, the ONE purpose (`staff_ops`) and the typed variable allow-list. T
 
 The ONLY route of this module that is not authenticated by a session or machine credential, and it is not meant to be called by a browser or by a person. Telegram calls it after an operator registered it with `bun run telegram:webhook:register` (`allowed_updates=["message"]`). There is no tenant in the path (one bot per deployment); the tenant is resolved from the one-time code or from the binding found by the chat's keyed hash, never from the payload.
 
-Order of work: (1) `404` when `TELEGRAM_ENABLED` is not `true`; (2) the `X-Telegram-Bot-Api-Secret-Token` header is compared in constant time with `TELEGRAM_WEBHOOK_SECRET`, and a missing or wrong header (or an unset server secret) is a `401` with NO body, before any body is read or any database work is done; (3) a per-address rate limit and the request-body limit; (4) two commands from a PRIVATE chat only, `/start <code>` and `/stop`. Everything else (any other text or command, media, edits, callback queries, groups, supergroups, channels) is `200` with no reply.
+Order of work: (1) `404` when `TELEGRAM_ENABLED` is not `true`; (2) the `X-Telegram-Bot-Api-Secret-Token` header is compared in constant time with `TELEGRAM_WEBHOOK_SECRET`, and a missing or wrong header (or an unset server secret) is a `401` with NO body, before any body is read or any database work is done; (3) the request-body limit, then a per-CHAT rate limit (an over-limit chat gets `200` with no reply, never `429`, and spends nothing else, so one noisy user cannot cause `429`s for everyone behind Telegram's few addresses), then a per-address rate limit; (4) two commands from a PRIVATE chat only, `/start <code>` and `/stop`. Everything else (any other text or command, media, edits, callback queries, groups, supergroups, channels) is `200` with no reply. The shared limiter fails OPEN when Redis is configured but unreachable, so the per-chat bucket is a fairness control, not a security boundary.
 
-A reply to `/start` and `/stop` is the HTTP response to this request (the Bot API's webhook-reply form: a JSON `sendMessage` method object), not an outbound call. Both commands are idempotent by construction, so no update id is stored.
+A reply to `/start` and `/stop` is the HTTP response to this request (the Bot API's webhook-reply form: a JSON `sendMessage` method object), not an outbound call. The reply to a valid `/start` carries the one-time verification PIN (Issue #1008) that the staff member must type into the admin to confirm; only its keyed hash is stored. Both commands are idempotent by construction (a code is consumed atomically, so a replayed `/start` cannot mint a second PIN or binding), so no update id is stored.
 
 **Parameters**
 

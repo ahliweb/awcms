@@ -82,6 +82,14 @@ import {
   resetWebhookRejectionsForTests
 } from "../../src/modules/telegram-delivery/application/telegram-webhook-guard";
 import {
+  runTelegramIdempotent,
+  TELEGRAM_BINDING_REVOKE_IDEMPOTENCY_SCOPE
+} from "../../src/modules/telegram-delivery/application/telegram-idempotency";
+import {
+  resolveTelegramEncryptionRing,
+  resolveTelegramHashRing
+} from "../../src/modules/telegram-delivery/domain/telegram-config";
+import {
   TELEGRAM_REPLY_CODE_NOT_VALID,
   telegramReplyAlreadyLinked,
   telegramReplyLinked,
@@ -176,8 +184,41 @@ const stopUpdate = (chatId: number) => ({
   }
 });
 
-function webhook(update: unknown, env: NodeJS.ProcessEnv = ENV) {
-  return handleTelegramWebhookUpdate(() => runtime(), update, { env });
+/** The PIN in the last `/start` reply (Issue #1008): what the person would read in their chat. */
+let lastPin = "";
+
+async function webhook(update: unknown, env: NodeJS.ProcessEnv = ENV) {
+  const result = await handleTelegramWebhookUpdate(() => runtime(), update, {
+    env
+  });
+  const pin = /PIN is (\d{6})/.exec(result.reply ?? "")?.[1];
+
+  if (pin) {
+    lastPin = pin;
+  }
+
+  return result;
+}
+
+const HASH_RING = (() => {
+  const ring = resolveTelegramHashRing(ENV);
+
+  if (!ring.ok) {
+    throw new Error("test hash ring must resolve");
+  }
+
+  return ring;
+})();
+
+/** `confirmOwnBinding` with the PIN the bot last sent, unless the test says otherwise. */
+function confirmWithPin(
+  tx: Bun.SQL,
+  tenantId: string,
+  userId: string,
+  bindingId: string,
+  pin: string = lastPin
+) {
+  return confirmOwnBinding(tx, tenantId, userId, bindingId, pin, HASH_RING);
 }
 
 async function requestCode(tenantId: string, userId: string): Promise<string> {
@@ -221,7 +262,7 @@ async function activate(
   expect(linked.outcome).toBe("linked");
 
   const confirmed = await inTenant(tenantId, async (tx) =>
-    confirmOwnBinding(
+    confirmWithPin(
       tx,
       tenantId,
       userId,
@@ -525,7 +566,7 @@ suite("telegram_delivery against PostgreSQL", () => {
       const result = await webhook(startUpdate(code, CHAT_1));
 
       expect(result).toMatchObject({
-        reply: telegramReplyLinked("tg965-a"),
+        reply: telegramReplyLinked("tg965-a", lastPin),
         replyChatId: String(CHAT_1),
         outcome: "linked"
       });
@@ -761,7 +802,7 @@ suite("telegram_delivery against PostgreSQL", () => {
     test("a confirmation that was never requested, or has expired, is refused", async () => {
       expect(
         await inTenant(TENANT_A, (tx) =>
-          confirmOwnBinding(tx, TENANT_A, USER_1, crypto.randomUUID())
+          confirmWithPin(tx, TENANT_A, USER_1, crypto.randomUUID())
         )
       ).toEqual({ outcome: "none" });
 
@@ -778,7 +819,7 @@ suite("telegram_delivery against PostgreSQL", () => {
 
       expect(
         await inTenant(TENANT_A, (tx) =>
-          confirmOwnBinding(tx, TENANT_A, USER_1, pendingId)
+          confirmWithPin(tx, TENANT_A, USER_1, pendingId)
         )
       ).toEqual({ outcome: "none" });
     });
@@ -2113,7 +2154,7 @@ suite("telegram_delivery against PostgreSQL", () => {
       const code = await requestCode(TENANT_A, USER_1);
       await webhook(startUpdate(code, CHAT_1));
       await inTenant(TENANT_A, async (tx) =>
-        confirmOwnBinding(
+        confirmWithPin(
           tx,
           TENANT_A,
           USER_1,
@@ -2167,7 +2208,7 @@ suite("telegram_delivery against PostgreSQL", () => {
 
       expect(
         await inTenant(TENANT_A, (tx) =>
-          confirmOwnBinding(tx, TENANT_A, USER_1, other)
+          confirmWithPin(tx, TENANT_A, USER_1, other)
         )
       ).toEqual({ outcome: "mismatch" });
       expect(
@@ -2180,7 +2221,7 @@ suite("telegram_delivery against PostgreSQL", () => {
       expect(
         (
           await inTenant(TENANT_A, (tx) =>
-            confirmOwnBinding(tx, TENANT_A, USER_1, shown)
+            confirmWithPin(tx, TENANT_A, USER_1, shown)
           )
         ).outcome
       ).toBe("confirmed");
@@ -2349,7 +2390,7 @@ suite("telegram_delivery against PostgreSQL", () => {
 
         // The app role confirms through the real path.
         await inTenant(TENANT_A, (tx) =>
-          confirmOwnBinding(tx, TENANT_A, USER_1, pending)
+          confirmWithPin(tx, TENANT_A, USER_1, pending)
         );
         expect((await bindingRow(pending)).status).toBe("active");
 
@@ -2605,6 +2646,327 @@ suite("telegram_delivery against PostgreSQL", () => {
       ).toBe("INTERACTIVE_SESSION_REQUIRED");
       // A person's own session is not refused.
       expect(refuseNonInteractive({})).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe("Issue #1008: proof of possession, runtime ring check, idempotency", () => {
+    /** Starts a handshake and returns the binding id the screen would show plus the PIN the chat received. */
+    async function pending(chat = CHAT_1, user = USER_1) {
+      const code = await requestCode(TENANT_A, user);
+      const result = await webhook(startUpdate(code, chat));
+      const pin = /PIN is (\d{6})/.exec(result.reply ?? "")?.[1];
+
+      if (!pin) {
+        throw new Error("the /start reply carried no PIN");
+      }
+
+      return { bindingId: await pendingBindingId(TENANT_A, user), pin, code };
+    }
+
+    const wrongPin = (pin: string) => (pin === "000000" ? "000001" : "000000");
+
+    test("M5: /start answers with a PIN; only its keyed hash is stored, nowhere in the clear", async () => {
+      const { bindingId, pin, code } = await pending();
+      const row = await bindingRow(bindingId);
+
+      expect(String(row.pin_hash)).toMatch(/^k1:[0-9a-f]{64}$/);
+      expect(Number(row.pin_attempts)).toBe(0);
+      expect(String(row.pin_hash)).not.toContain(pin);
+
+      const stored = await everythingStored();
+
+      expect(stored).not.toContain(`"${pin}"`);
+      expect(stored).not.toContain(`PIN is ${pin}`);
+      expect(stored).not.toContain(code);
+    });
+
+    test("M5: confirming needs the PIN; a wrong one is refused, counted and the binding stays pending", async () => {
+      const { bindingId, pin } = await pending();
+      const refused = await inTenant(TENANT_A, (tx) =>
+        confirmWithPin(tx, TENANT_A, USER_1, bindingId, wrongPin(pin))
+      );
+
+      expect(refused).toEqual({ outcome: "pin_invalid", attemptsLeft: 4 });
+      expect((await bindingRow(bindingId)).status).toBe("pending_confirmation");
+      // The count survives the transaction: it is what bounds guessing.
+      expect(Number((await bindingRow(bindingId)).pin_attempts)).toBe(1);
+      expect(await auditActions(TENANT_A)).toContain(
+        "telegram_binding.pin_failed"
+      );
+
+      const accepted = await inTenant(TENANT_A, (tx) =>
+        confirmWithPin(tx, TENANT_A, USER_1, bindingId, pin)
+      );
+
+      expect(accepted.outcome).toBe("confirmed");
+      expect(await bindingRow(bindingId)).toMatchObject({
+        status: "active",
+        pin_hash: null,
+        pin_attempts: 1
+      });
+    });
+
+    test("M5: the fifth wrong PIN ends the pending binding and erases the chat; even the right PIN is then refused", async () => {
+      const { bindingId, pin } = await pending();
+      let last: unknown;
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        last = await inTenant(TENANT_A, (tx) =>
+          confirmWithPin(tx, TENANT_A, USER_1, bindingId, wrongPin(pin))
+        );
+      }
+
+      expect(last).toEqual({ outcome: "pin_locked" });
+      expect(await bindingRow(bindingId)).toMatchObject({
+        status: "revoked",
+        revoke_cause: "rejected",
+        chat_ciphertext: null,
+        pin_hash: null
+      });
+      expect(await auditActions(TENANT_A)).toEqual(
+        expect.arrayContaining([
+          "telegram_binding.pin_failed",
+          "telegram_binding.pin_locked"
+        ])
+      );
+      expect(
+        (
+          await inTenant(TENANT_A, (tx) =>
+            confirmWithPin(tx, TENANT_A, USER_1, bindingId, pin)
+          )
+        ).outcome
+      ).toBe("none");
+    });
+
+    test("M5: the attempt bound is the database's, so parallel guesses cannot exceed it", async () => {
+      const { bindingId, pin } = await pending();
+      const results = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          inTenant(TENANT_A, (tx) =>
+            confirmWithPin(tx, TENANT_A, USER_1, bindingId, wrongPin(pin))
+          )
+        )
+      );
+
+      expect(results.filter((r) => r.outcome === "pin_invalid")).toHaveLength(
+        4
+      );
+      expect(results.filter((r) => r.outcome === "pin_locked")).toHaveLength(1);
+      expect(results.filter((r) => r.outcome === "none")).toHaveLength(7);
+      expect((await bindingRow(bindingId)).status).toBe("revoked");
+    });
+
+    test("M5: a PIN belongs to ONE binding: the earlier chat's PIN does not confirm the one that superseded it", async () => {
+      const first = await pending(CHAT_1);
+      const second = await pending(CHAT_2);
+
+      expect(second.bindingId).not.toBe(first.bindingId);
+
+      const attempt = await inTenant(TENANT_A, (tx) =>
+        confirmWithPin(tx, TENANT_A, USER_1, second.bindingId, first.pin)
+      );
+
+      // Only by a 1-in-a-million coincidence of two random PINs is this not refused.
+      if (first.pin !== second.pin) {
+        expect(attempt.outcome).toBe("pin_invalid");
+      }
+    });
+
+    test("M5: a pending binding that predates the PIN (no hash) can never be confirmed", async () => {
+      const { bindingId, pin } = await pending();
+
+      await getAdminSql()`
+        UPDATE awcms_telegram_bindings SET pin_hash = NULL WHERE id = ${bindingId}
+      `;
+
+      expect(
+        (
+          await inTenant(TENANT_A, (tx) =>
+            confirmWithPin(tx, TENANT_A, USER_1, bindingId, pin)
+          )
+        ).outcome
+      ).toBe("pin_invalid");
+      expect((await bindingRow(bindingId)).status).toBe("pending_confirmation");
+    });
+
+    test("M5: confirm, reject, expiry and revoke all clear the PIN hash", async () => {
+      const rejected = await pending(CHAT_1, USER_1);
+
+      await inTenant(TENANT_A, (tx) =>
+        rejectOwnBinding(tx, TENANT_A, USER_1, rejected.bindingId)
+      );
+      expect((await bindingRow(rejected.bindingId)).pin_hash).toBeNull();
+
+      const expired = await pending(CHAT_2, USER_2);
+
+      await inTenant(
+        TENANT_A,
+        (tx) => tx`
+          UPDATE awcms_telegram_bindings
+          SET pending_expires_at = now() - interval '1 minute'
+          WHERE id = ${expired.bindingId}
+        `
+      );
+      await inTenant(TENANT_A, (tx) =>
+        endBindings(
+          tx,
+          TENANT_A,
+          { pendingExpiredBefore: new Date() },
+          "confirmation_expired"
+        )
+      );
+      expect((await bindingRow(expired.bindingId)).pin_hash).toBeNull();
+    });
+
+    workerTest(
+      "M5: the worker may CLEAR a PIN hash but can neither plant one nor give a pending binding fresh attempts",
+      async () => {
+        const { bindingId } = await pending();
+        const asWorker = <T>(fn: (tx: Bun.TransactionSQL) => Promise<T>) =>
+          withTenantOrThrow(getWorkerRoleSql(), TENANT_A, fn);
+
+        await inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_telegram_bindings SET pin_attempts = 3
+            WHERE id = ${bindingId}
+          `
+        );
+
+        await expect(
+          asWorker(
+            (tx) => tx`
+              UPDATE awcms_telegram_bindings
+              SET pin_hash = 'k1:planted' WHERE id = ${bindingId}
+            `
+          )
+        ).rejects.toThrow(/verification PIN hash/);
+        // pin_attempts is not a column the worker may write at all.
+        await expect(
+          asWorker(
+            (tx) => tx`
+              UPDATE awcms_telegram_bindings SET pin_attempts = 0
+              WHERE id = ${bindingId}
+            `
+          )
+        ).rejects.toThrow();
+
+        await asWorker((tx) =>
+          endBindings(tx, TENANT_A, { bindingId }, "admin")
+        );
+        expect(await bindingRow(bindingId)).toMatchObject({
+          status: "revoked",
+          pin_hash: null
+        });
+      }
+    );
+
+    test("the schema refuses a PIN hash on a row that is not pending", async () => {
+      const { bindingId } = await pending();
+
+      await inTenant(TENANT_A, (tx) =>
+        confirmWithPin(tx, TENANT_A, USER_1, bindingId)
+      );
+      await assertRejected(
+        getAdminSql()`
+          UPDATE awcms_telegram_bindings SET pin_hash = 'k1:abc'
+          WHERE id = ${bindingId}
+        `,
+        "a PIN hash on an active binding"
+      );
+    });
+
+    test("subject-data erasure may overwrite the PIN hash with the sentinel", async () => {
+      const { bindingId } = await pending();
+
+      await getAdminSql()`
+        UPDATE awcms_telegram_bindings SET pin_hash = '[erased]'
+        WHERE id = ${bindingId}
+      `;
+      expect((await bindingRow(bindingId)).pin_hash).toBe("[erased]");
+    });
+
+    test("L11: overlapping encryption and hash rings are refused at RUNTIME, not only by config:validate", async () => {
+      const overlapping = {
+        ...ENV,
+        TELEGRAM_CHAT_HASH_KEYS: `k9:${KEY_ENC}`
+      } as NodeJS.ProcessEnv;
+      const code = await requestCode(TENANT_A, USER_1);
+      const result = await webhook(startUpdate(code, CHAT_1), overlapping);
+
+      expect(result).toMatchObject({ reply: null, outcome: "misconfigured" });
+      expect(await count("awcms_telegram_bindings")).toBe(0);
+      expect(resolveTelegramEncryptionRing(overlapping).ok).toBe(false);
+      expect(resolveTelegramHashRing(overlapping).ok).toBe(false);
+      expect(resolveTelegramEncryptionRing(ENV).ok).toBe(true);
+      expect(resolveTelegramHashRing(ENV).ok).toBe(true);
+    });
+
+    test("L12: the revoke and the switch replay under the same key, conflict on a different request, and do not store refusals", async () => {
+      const bindingId = await activate(TENANT_A, USER_1, CHAT_1);
+      const revoke = (key: string, id: string = bindingId) =>
+        inTenant(TENANT_A, (tx) =>
+          runTelegramIdempotent(
+            tx,
+            TENANT_A,
+            TELEGRAM_BINDING_REVOKE_IDEMPOTENCY_SCOPE,
+            key,
+            USER_2,
+            { bindingId: id },
+            async () => {
+              const ended = await endBindings(
+                tx,
+                TENANT_A,
+                { bindingId: id },
+                "admin",
+                { actorTenantUserId: USER_2 }
+              );
+
+              return ended.ended.length === 0
+                ? new Response(null, { status: 404 })
+                : { body: { revoked: true } };
+            }
+          )
+        );
+
+      const first = await revoke("revoke-key-1");
+
+      expect(first.status).toBe(200);
+      expect(await bindingRow(bindingId)).toMatchObject({ status: "revoked" });
+
+      // The retry of a lost response replays the 200 instead of answering 404.
+      const retry = await revoke("revoke-key-1");
+
+      expect(retry.status).toBe(200);
+      expect(await retry.json()).toEqual(await first.clone().json());
+
+      // A NEW key against the now-ended binding is the honest 404, and it is
+      // not stored: the same key retried is still a 404, not a replay.
+      expect((await revoke("revoke-key-2")).status).toBe(404);
+      expect((await revoke("revoke-key-2")).status).toBe(404);
+
+      // The same key for a different binding is a conflict.
+      expect((await revoke("revoke-key-1", crypto.randomUUID())).status).toBe(
+        409
+      );
+
+      // Another person with the same key value gets no replay of this one.
+      const other = await inTenant(TENANT_A, (tx) =>
+        runTelegramIdempotent(
+          tx,
+          TENANT_A,
+          TELEGRAM_BINDING_REVOKE_IDEMPOTENCY_SCOPE,
+          "revoke-key-1",
+          USER_3,
+          { bindingId },
+          async () => ({ body: { revoked: "again" } })
+        )
+      );
+
+      expect(((await other.json()) as { data: unknown }).data).toEqual({
+        revoked: "again"
+      });
     });
   });
 });

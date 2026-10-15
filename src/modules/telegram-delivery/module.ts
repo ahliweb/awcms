@@ -210,14 +210,20 @@ export const telegramDeliveryModule = defineModule({
       exportable: true,
       erasure: "anonymize",
       rationale:
-        "The person's own Telegram chat binding: its state, when it was confirmed or revoked and why, and a masked reference to the chat. The ciphertext and the keyed hash are never exported; on erasure they are overwritten with the erasure sentinel, so the stored chat id can no longer be decrypted (messages to it fail, nothing is sent) and a replayed link is inert.",
-      redactedColumns: ["chat_ciphertext", "chat_hash", "hash_key_id"],
+        "The person's own Telegram chat binding: its state, when it was confirmed or revoked and why, and a masked reference to the chat. The ciphertext, the keyed hashes (chat and verification PIN) are never exported; on erasure they are overwritten with the erasure sentinel, so the stored chat id can no longer be decrypted (messages to it fail, nothing is sent) and a replayed link is inert.",
+      redactedColumns: [
+        "chat_ciphertext",
+        "chat_hash",
+        "hash_key_id",
+        "pin_hash"
+      ],
       anonymizedColumns: [
         "chat_ciphertext",
         "chat_hash",
         "chat_masked",
         "display_name",
-        "username_masked"
+        "username_masked",
+        "pin_hash"
       ]
     },
     {

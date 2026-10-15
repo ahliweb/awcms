@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:f8204eb10703fa23f3ca15a0eaaa9174907b2d219adc0cc3e491533ba8c877dc -->
+<!-- i18n-source-hash: sha256:e09b72efe291d7ddd07fafc0dc640edcb2c3cd32061828d2b1bdc6f9da36101e -->
 
 # Deploy Coolify
 
@@ -306,6 +306,10 @@ docker run --rm --network container:<container-db> \
 Runner itulah yang dijadwalkan lewat **Scheduled Task** Coolify (bila plan/versi mendukung) atau cron di VPS host setiap 1-2 menit — pola yang sama persis dipakai worker purge cache tepi (`environments.md` §Cache tepi (ADR-0042)). Sama seperti backup, pada topologi multi-app setiap aplikasi punya checkout, `.env.jobs`, dan jadwal sendiri — tidak ada dispatcher bersama lintas aplikasi. Bila fitur terkait `false`, perintah ini no-op (exit 0) sehingga aman dijadwalkan meski belum diaktifkan.
 
 Job lain (audit purge, sync objects, dsb.) dijadwalkan dengan pola container one-shot yang sama persis, hanya beda nama command — lihat [`deployment-profiles.md`](deployment-profiles.md) §Job registry untuk daftar lengkap job dan mana yang on-demand (bukan cron berulang).
+
+## Webhook Telegram: jangan mencatat body respons
+
+Bila `TELEGRAM_ENABLED=true`, PIN verifikasi (Issue #1008) dikembalikan **di body respons HTTP** `POST /api/v1/telegram/webhook` (bentuk webhook-reply Bot API). Reverse proxy, WAF, API gateway, atau agen APM di depan aplikasi karena itu **tidak boleh mencatat atau menangkap body respons untuk `/api/v1/telegram/webhook`** (juga body request, yang membawa chat id). Aplikasi sendiri tidak pernah mencatatnya. PIN berumur pendek (10 menit), di-hash saat disimpan, dan dibatasi lima jawaban salah, tetapi log body akan menyerahkannya kepada siapa pun yang membaca log.
 
 ## Rollback
 

@@ -173,7 +173,8 @@ describe("the properties this screen exists to keep", () => {
   });
 
   test("the mutations call the real endpoints with the right verbs", async () => {
-    const page = await readFile(PAGE, "utf8");
+    // Whitespace-normalised: prettier wraps the calls that now pass headers.
+    const page = (await readFile(PAGE, "utf8")).replace(/\s+/g, " ");
 
     expect(page).toContain('"POST", "/api/v1/telegram/bindings/me/revoke"');
     expect(page).toContain(
@@ -232,12 +233,62 @@ describe("audit M1 and L1: the handshake routes", () => {
     expect(page).toContain("/api/v1/telegram/bindings/me/confirm");
     expect(page).toContain("{ bindingId }");
 
-    for (const route of ["confirm", "reject"] as const) {
+    for (const [route, parser] of [
+      ["confirm", "parseConfirmBody"],
+      ["reject", "parseBindingIdBody"]
+    ] as const) {
       const source = await readFile(ROUTES[route], "utf8");
 
-      expect(source).toContain("parseBindingIdBody");
+      expect(source).toContain(parser);
       expect(source).toContain("409");
     }
+  });
+});
+
+describe("Issue #1008: proof of possession and idempotency on the routes", () => {
+  test("confirm needs the PIN, verifies it against the hash ring, and fails closed without one", async () => {
+    const source = await readFile(ROUTES.confirm, "utf8");
+    const page = await readFile(PAGE, "utf8");
+
+    expect(source).toContain("parseConfirmBody(prepared.payload)");
+    expect(source).toContain("resolveTelegramHashRing()");
+    expect(source).toContain("TELEGRAM_PIN_INVALID");
+    expect(source).toContain("TELEGRAM_PIN_LOCKED");
+    // The screen asks for the PIN and sends it with the chat it was shown.
+    expect(page).toContain('id="telegram-pin"');
+    expect(page).toContain("bindingId,\n          pin");
+  });
+
+  test("the administrator revoke and the switch require an Idempotency-Key, are person-only, and are keyed per actor", async () => {
+    for (const route of ["revoke", "settings"] as const) {
+      const source = await readFile(ROUTES[route], "utf8");
+
+      expect(source).toContain("readIdempotencyKey(request)");
+      expect(source).toContain("runTelegramIdempotent(");
+      expect(source).toContain("refuseMachineCredential(auth.context)");
+      expect(source.indexOf("authorize:")).toBeLessThan(
+        source.indexOf("refuseMachineCredential(auth.context)")
+      );
+      // The refusal comes before any work, the key before the mutation.
+      expect(
+        source.indexOf("refuseMachineCredential(auth.context)")
+      ).toBeLessThan(source.indexOf("runTelegramIdempotent("));
+    }
+
+    const page = await readFile(PAGE, "utf8");
+
+    expect(page.match(/idempotency\(/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("the mutations are registered as idempotent in OpenAPI", async () => {
+    const spec = await readFile(
+      "openapi/modules/telegram-delivery.openapi.yaml",
+      "utf8"
+    );
+
+    expect(spec).toContain("IdempotencyKey");
+    expect(spec).toContain("TELEGRAM_PIN_INVALID");
+    expect(spec).toContain("TELEGRAM_PIN_LOCKED");
   });
 });
 

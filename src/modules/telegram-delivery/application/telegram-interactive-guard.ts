@@ -11,6 +11,7 @@
  * learns nothing about this rule) and before any work.
  */
 import { fail } from "../../_shared/api-response";
+import { isWellFormedPin } from "../domain/telegram-pin";
 
 export function refuseNonInteractive(context: {
   viaMachineCredential?: boolean;
@@ -44,4 +45,30 @@ export function parseBindingIdBody(payload: unknown): string | null {
   return typeof value === "string" && UUID.test(value)
     ? value.toLowerCase()
     : null;
+}
+
+/** `{ "bindingId": "<uuid>", "pin": "<6 digits>" }` and nothing else, or `null` (Issue #1008). */
+export function parseConfirmBody(
+  payload: unknown
+): { bindingId: string; pin: string } | null {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    Array.isArray(payload) ||
+    Object.keys(payload).some((key) => key !== "bindingId" && key !== "pin")
+  ) {
+    return null;
+  }
+
+  const { bindingId, pin } = payload as { bindingId?: unknown; pin?: unknown };
+
+  if (
+    typeof bindingId !== "string" ||
+    !UUID.test(bindingId) ||
+    !isWellFormedPin(pin)
+  ) {
+    return null;
+  }
+
+  return { bindingId: bindingId.toLowerCase(), pin };
 }

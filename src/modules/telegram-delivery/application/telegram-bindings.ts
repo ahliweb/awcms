@@ -33,6 +33,12 @@ import {
   type TelegramRevokeCause
 } from "../domain/telegram-constants";
 import { PENDING_CONFIRMATION_TTL_MS } from "../domain/telegram-link-code";
+import {
+  generateVerificationPin,
+  hashVerificationPin,
+  PIN_MAX_ATTEMPTS,
+  verifyVerificationPin
+} from "../domain/telegram-pin";
 
 export type TelegramBindingView = {
   id: string;
@@ -185,7 +191,8 @@ export async function endBindings(
     ended AS (
       UPDATE awcms_telegram_bindings b
       SET status = ${status}, chat_ciphertext = NULL, display_name = NULL,
-          username_masked = NULL, pending_expires_at = NULL, revoked_at = now(),
+          username_masked = NULL, pending_expires_at = NULL, pin_hash = NULL,
+          revoked_at = now(),
           revoke_cause = ${cause}, revoked_by = ${options.actorTenantUserId ?? null},
           updated_at = now()
       FROM target t
@@ -282,7 +289,12 @@ export type CreatePendingBindingInput = {
 };
 
 export type CreatePendingBindingResult =
-  | { outcome: "created"; bindingId: string }
+  /**
+   * `pin` is the plaintext verification PIN (Issue #1008), returned ONCE so the
+   * webhook can hand it back to the chat that sent `/start`. Only its keyed hash
+   * is stored; the caller must not log, audit or persist it.
+   */
+  | { outcome: "created"; bindingId: string; pin: string }
   /** The chat is already live in another principal in this tenant, or won a race. */
   | { outcome: "chat_in_use" }
   /** The same principal already has this chat active. Nothing to confirm. */
@@ -352,16 +364,23 @@ export async function createPendingBinding(
   const pendingExpiresAt = new Date(
     input.now.getTime() + PENDING_CONFIRMATION_TTL_MS
   );
+  const pin = generateVerificationPin();
+  const pinHash = hashVerificationPin(
+    pin,
+    input.tenantId,
+    bindingId,
+    input.hashRing
+  );
 
   const inserted = (await tx`
     INSERT INTO awcms_telegram_bindings
       (id, tenant_id, principal_id, status, chat_ciphertext, chat_hash,
        hash_key_id, chat_masked, display_name, username_masked,
-       pending_expires_at)
+       pending_expires_at, pin_hash)
     VALUES (${bindingId}, ${input.tenantId}, ${input.principalId},
             'pending_confirmation', ${ciphertext}, ${chatHash}, ${hashKeyId},
             ${chatMasked}, ${displayName}, ${usernameMasked},
-            ${pendingExpiresAt})
+            ${pendingExpiresAt}, ${pinHash})
     ON CONFLICT DO NOTHING
     RETURNING id
   `) as { id: string }[];
@@ -387,7 +406,7 @@ export async function createPendingBinding(
     ...(input.correlationId ? { correlationId: input.correlationId } : {})
   });
 
-  return { outcome: "created", bindingId };
+  return { outcome: "created", bindingId, pin };
 }
 
 /** The caller's own current binding (a live one, else the latest ended one for context), with the captured name while pending. */
@@ -471,29 +490,48 @@ export type ConfirmOwnBindingResult =
     }
   | { outcome: "none" }
   /** The caller named a binding that is not the one now waiting for them (they may be answering a stale prompt). */
-  | { outcome: "mismatch" };
+  | { outcome: "mismatch" }
+  /** The PIN was wrong (or the row has none). `attemptsLeft` is how many wrong answers remain before the binding is ended. */
+  | { outcome: "pin_invalid"; attemptsLeft: number }
+  /** Too many wrong PINs: the pending binding was ended and its chat id erased. */
+  | { outcome: "pin_locked" };
 
 /**
- * The staff member answers "is this you?" in their own authenticated session.
- * Only here does a binding become `active`: a code that was forwarded, phished
- * or shoulder-surfed binds an attacker's chat at most to `pending_confirmation`,
- * and the prompt appears only in the victim's session. An existing active
- * binding of the same principal is replaced (audited as a re-bind).
+ * The staff member answers "is this you?" in their own authenticated session,
+ * WITH the PIN the bot sent to the chat (Issue #1008). Only here does a binding
+ * become `active`: a code that was forwarded, phished or shoulder-surfed binds
+ * an attacker's chat at most to `pending_confirmation`, the prompt appears only
+ * in the victim's session, and answering it needs something only the holder of
+ * the chat saw. An existing active binding of the same principal is replaced
+ * (audited as a re-bind).
+ *
+ * A wrong PIN is counted in the same transaction (`pin_attempts`, a database
+ * column, so Redis being down changes nothing); the `PIN_MAX_ATTEMPTS`-th wrong
+ * answer ends the binding. The caller must COMMIT after a `pin_invalid` or
+ * `pin_locked` outcome: the tenant route does, because it returns a response
+ * rather than throwing.
  */
 export async function confirmOwnBinding(
   tx: Bun.SQL,
   tenantId: string,
   principalId: string,
   bindingId: string,
+  pin: string,
+  hashRing: KeyRing,
   context: { correlationId?: string } = {}
 ): Promise<ConfirmOwnBindingResult> {
   const pending = (await tx`
-    SELECT id, chat_masked
+    SELECT id, chat_masked, pin_hash, pin_attempts
     FROM awcms_telegram_bindings
     WHERE tenant_id = ${tenantId} AND principal_id = ${principalId}
       AND status = 'pending_confirmation' AND pending_expires_at > now()
     FOR UPDATE
-  `) as { id: string; chat_masked: string }[];
+  `) as {
+    id: string;
+    chat_masked: string;
+    pin_hash: string | null;
+    pin_attempts: number;
+  }[];
 
   const target = pending[0];
 
@@ -506,6 +544,79 @@ export async function confirmOwnBinding(
   // activate a chat they never looked at.
   if (target.id !== bindingId) {
     return { outcome: "mismatch" };
+  }
+
+  const verified =
+    Number(target.pin_attempts) < PIN_MAX_ATTEMPTS &&
+    verifyVerificationPin(pin, target.pin_hash, tenantId, target.id, hashRing);
+
+  if (!verified) {
+    const attempts = Number(target.pin_attempts) + 1;
+
+    await tx`
+      UPDATE awcms_telegram_bindings
+      SET pin_attempts = ${attempts}, updated_at = now()
+      WHERE tenant_id = ${tenantId} AND id = ${target.id}
+        AND status = 'pending_confirmation'
+    `;
+
+    if (attempts < PIN_MAX_ATTEMPTS) {
+      await recordAuditEvent(tx, {
+        tenantId,
+        actorTenantUserId: principalId,
+        moduleKey: TELEGRAM_MODULE_KEY,
+        action: "telegram_binding.pin_failed",
+        resourceType: "telegram_binding",
+        resourceId: target.id,
+        severity: "warning",
+        message: "A wrong Telegram verification PIN was entered.",
+        attributes: {
+          chatMasked: target.chat_masked,
+          principalId,
+          attempts
+        },
+        ...(context.correlationId
+          ? { correlationId: context.correlationId }
+          : {})
+      });
+
+      return {
+        outcome: "pin_invalid",
+        attemptsLeft: PIN_MAX_ATTEMPTS - attempts
+      };
+    }
+
+    const ended = await endBindings(
+      tx,
+      tenantId,
+      { bindingId: target.id, onlyStatus: "pending_confirmation" },
+      "rejected",
+      { actorTenantUserId: principalId }
+    );
+
+    await recordAuditEvent(tx, {
+      tenantId,
+      actorTenantUserId: principalId,
+      moduleKey: TELEGRAM_MODULE_KEY,
+      action: "telegram_binding.pin_locked",
+      resourceType: "telegram_binding",
+      resourceId: target.id,
+      severity: "warning",
+      message:
+        "A pending Telegram binding was ended after too many wrong verification PINs.",
+      attributes: {
+        chatMasked: target.chat_masked,
+        principalId,
+        attempts
+      },
+      ...(context.correlationId ? { correlationId: context.correlationId } : {})
+    });
+    await auditEndedBindings(tx, tenantId, ended, "rejected", {
+      actorTenantUserId: principalId,
+      ...(context.correlationId ? { correlationId: context.correlationId } : {})
+    });
+
+    return { outcome: "pin_locked" };
   }
 
   // The unique index allows one ACTIVE binding per principal, so the previous
@@ -526,7 +637,8 @@ export async function confirmOwnBinding(
   await tx`
     UPDATE awcms_telegram_bindings
     SET status = 'active', confirmed_at = now(), display_name = NULL,
-        username_masked = NULL, pending_expires_at = NULL, updated_at = now()
+        username_masked = NULL, pending_expires_at = NULL, pin_hash = NULL,
+        updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${target.id}
       AND status = 'pending_confirmation'
   `;
@@ -541,7 +653,7 @@ export async function confirmOwnBinding(
     resourceType: "telegram_binding",
     resourceId: target.id,
     severity: "info",
-    message: "Staff member confirmed their Telegram chat.",
+    message: "Staff member confirmed their Telegram chat with its PIN.",
     attributes: { chatMasked: target.chat_masked, principalId },
     ...(context.correlationId ? { correlationId: context.correlationId } : {})
   });

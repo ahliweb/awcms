@@ -68,6 +68,9 @@ export const TELEGRAM_CHAT_ENCRYPTION_PURPOSE = "telegram_chat:v1";
 /** The hash domain of `chat_hash` (ADR-0137 section 3): `telegram:chat`. */
 export const TELEGRAM_CHAT_HASH_PURPOSE = "telegram:chat";
 
+/** The hash domain of `pin_hash` (Issue #1008): `telegram:pin`, separate from `telegram:chat` so one value never hashes alike under both. */
+export const TELEGRAM_PIN_HASH_PURPOSE = "telegram:pin";
+
 /** The key the adapter FEEDS and the dispatcher READS. One constant so the two cannot drift. */
 export const TELEGRAM_CIRCUIT_BREAKER_KEY = "telegram-delivery";
 
