@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0137-payout-account-encryption-at-rest-and-keyed-hashing.md)
 
-<!-- i18n-source-hash: sha256:7d3207db6a66f357f4a8b3bc42dc8a62ad8b83e051b8d5438dfc82dc25e776b5 -->
+<!-- i18n-source-hash: sha256:1fe7dd94c9ac65267eadd57bcf3dd673da6858a4c1706d6575dd5fa4df7e40ae -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -63,6 +63,9 @@ Kami memutuskan **memakai ulang mekanisme yang sudah ada di repositori (AES-256-
 - Setiap daftar, detail, dan ekspor menampilkan **hanya** `account_mask`. Baca ter-mask membutuhkan `payout_accounts.read`.
 - **Reveal** adalah `POST …/payout-accounts/{id}/reveal`, izin tersendiri `payout_accounts.reveal` dan `AccessAction` HIGH-RISK (pola `reveal` procurement; hr-payroll.md §11), diotorisasi lewat `authorizeInTransaction` (ADR-0063), **tidak** diberikan ke role mana pun oleh migrasi. Respons `Cache-Control: no-store`. Handler menulis baris audit `warning` yang mencatat **bahwa** pengungkapan terjadi, siapa, dan id rekening mana, **tak pernah** nilainya, hash-nya, atau teks turunan mask-nya.
 - **Step-up bersyarat, bukan tanpa syarat** (ADR-0058 §E; hr-payroll.md §15 membiarkannya "diputuskan secara bersyarat"). Gerbangnya `requireStepUp` (`mfa-session-assurance.ts`), diterapkan persis seperti `password-change.ts`: **wajib bila principal yang bertindak punya faktor MFA terdaftar** (`getMfaStatus`), tidak dituntut dari orang yang tak punya. Reveal oleh aktor tanpa MFA karena itu diizinkan hanya dengan izin dan dicatat di baris audit dengan `stepUp: "not_enrolled"` agar peninjau melihat reveal mana yang tak dilindungi faktor kedua. Tenant yang ingin reveal mustahil tanpa MFA menegakkannya lewat kebijakan MFA yang ada (`src/pages/api/v1/auth/mfa/policy.ts`), bukan lewat aturan di sini. Step-up dievaluasi **sebelum** dekripsi, sehingga penolakan tak mengungkap apa pun.
+
+> **Pembaruan, ADR-0141 (Issue #977, temuan PS-13).** "Dapat ditegakkan lewat kebijakan MFA tenant" di atas belum benar untuk apa pun yang ada. Kini ia dibangun, per izin dan bukan per tenant: `hr_payroll` menyetel `requiresMfaEnrolment: true` pada `payout_accounts.reveal` (dan izin kritis payroll lainnya), dan chokepoint menolak `403 MFA_ENROLMENT_REQUIRED` bagi pemegang tanpa faktor aktif. Step-up ini tetap bersyarat seperti diputuskan di sini; field audit `stepUp: "not_enrolled"` karena itu hanya mencatat pemakaian yang mendahului kewajiban pendaftaran atau izin yang tidak bertanda.
+
 - **Rate limit:** reveal dibatasi per aktor dan per tenant per jendela (hitungan baris audit `reveal` terkini atau mekanisme rate-limit yang ada, dipilih issue implementasi), sehingga pemegang izin tak dapat mengenumerasi rekening semua karyawan secepat API, yang dicatat ADR-0128 sebagai tindak lanjut terbuka untuk pemasok. Melebihinya `429`, juga diaudit.
 - **Pemisahan:** `payout_accounts.update` (tambah/hapus, melihat mask) dan `payout_accounts.reveal` adalah izin berbeda yang secara bawaan dipegang role berbeda; matriks SoD (hr-payroll.md §7.5, amandemen ADR-0132) memutuskan apakah pemegang reveal boleh juga menjalankan payroll.
 

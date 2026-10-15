@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0136-configurable-payroll-segregation-of-duties-mode.md)
 
-<!-- i18n-source-hash: sha256:67be47914deb1fbe83fc8a6ce2a3a5f294a37b0a52a8c7a7b53ec71e1a67142c -->
+<!-- i18n-source-hash: sha256:cbe208563b8a34cc50f57ae69d060560ee161bd5382022f8443d58302a1f865f -->
 
 # ADR-0136 — Pemisahan tugas payroll dapat dikonfigurasi per tenant (ketat secara default, dapat dilonggarkan ke siapkan ≠ setujui)
 
@@ -44,6 +44,8 @@ Keamanan: A dan B berbeda tajam pada independensi penyetuju, dan B ditolak atas 
 Mengubah mode adalah izin **`hr_payroll.sod_policy.configure`** (resource `sod_policy`, aksi `configure` yang sudah ada, berisiko tinggi; `read` terpisah). Aturan SoD (ADR-0031), `critical`, tanpa pengecualian, melarang satu orang memegangnya bersama C, A, F, atau P. Penyiap tidak boleh bisa melonggarkan pemeriksaan yang mengikatnya, dan penyetuju tidak boleh bisa menentukan cakupan pemeriksaan atas keputusannya sendiri. Ia dipegang administrator tenant yang tidak mengerjakan tugas payroll. Tenant payroll dua orang karenanya butuh principal ketiga **hanya untuk konfigurasi, bukan per run**; tenant tanpa itu tetap ketat. Dukungan platform tidak memegangnya atas nama tenant.
 
 Mengubah mode memerlukan `Idempotency-Key`, kode alasan, step-up bersyarat (ADR-0058 §E) saat **melonggarkan** (mengetatkan diaudit dan idempoten tetapi tidak menuntut step-up), dan menulis baris audit berseverity `critical` dengan aktor serta mode sebelum/sesudah tanpa teks bebas. Setiap baris audit run yang dihitung pada mode longgar memuat `sodMode: "relaxed"`.
+
+> **Pembaruan, ADR-0141 (Issue #977, temuan PS-13).** Step-up bersyarat di sini hanya menggigit orang yang punya faktor terdaftar. `hr_payroll` menyetel `requiresMfaEnrolment: true` pada `sod_policy.configure`, sehingga pemegang tanpa faktor ditolak `403 MFA_ENROLMENT_REQUIRED` alih-alih mengubah mode hanya dengan kata sandi.
 
 ### 4. Aturan mana yang CHECK database dan mana yang tingkat peran
 

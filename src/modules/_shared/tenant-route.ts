@@ -18,6 +18,7 @@ import {
 import { resolveTenantContext } from "../identity-access/application/auth-context";
 import { createAuthorizationReadCache } from "../identity-access/application/authorization-read-cache";
 import type { AccessRequest } from "../identity-access/domain/access-control";
+import { MFA_ENROLMENT_REQUIRED_CODE } from "../identity-access/domain/mfa-enrolment-refusal";
 import {
   isSuspensionExemptTenant,
   isTenantServiceStopped
@@ -786,7 +787,19 @@ export function selectAnyAllowed(
   // permission first, so the response describes the refusal a caller is most
   // likely asking about, and it does not shift with which permission a given
   // caller happens to be missing.
-  return results.find((result) => result.allowed) ?? results[0]!;
+  const allowed = results.find((result) => result.allowed);
+
+  if (allowed) return allowed;
+
+  // Unless one candidate was refused ONLY for want of an enrolled MFA factor
+  // (ADR-0141): it was allowed on the merits, so it is the refusal the caller
+  // can act on, and it outranks a sibling's generic `ACCESS_DENIED` whatever
+  // order they were listed in.
+  return (
+    results.find(
+      (result) => !result.allowed && result.code === MFA_ENROLMENT_REQUIRED_CODE
+    ) ?? results[0]!
+  );
 }
 
 /**

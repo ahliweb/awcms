@@ -111,3 +111,44 @@ describe("the authorized half handed to `load` is an ALLOWED one", () => {
     );
   });
 });
+
+describe("an enrolment refusal is carried to the screen (ADR-0141, audit F-4)", () => {
+  function mfaRefused(): AuthorizeResult {
+    return {
+      allowed: false,
+      code: "MFA_ENROLMENT_REQUIRED",
+      denied: new Response(null, { status: 403 })
+    } as unknown as AuthorizeResult;
+  }
+
+  test("it is reported with its code, whichever entry request was listed first", () => {
+    for (const results of [
+      [deny(403), mfaRefused()],
+      [mfaRefused(), deny(403)]
+    ]) {
+      const outcome = selectEntryOutcome(results);
+
+      expect(outcome.allowed).toBe(false);
+      expect(outcome.allowed === false && outcome.status).toBe(403);
+      expect(outcome.allowed === false && outcome.code).toBe(
+        "MFA_ENROLMENT_REQUIRED"
+      );
+    }
+  });
+
+  test("an ordinary refusal carries no code, and an allow is not affected", () => {
+    const refused = selectEntryOutcome([deny(403), deny(403)]);
+
+    expect(refused.allowed === false && refused.code).toBeUndefined();
+    expect(selectEntryOutcome([mfaRefused(), allow()]).allowed).toBe(true);
+  });
+
+  test("`loadAdminScreen` forwards the code into the `denied` state", async () => {
+    // A source pairing: the pure function above is only useful if the screen
+    // loader hands its code on instead of rebuilding a bare `{ status }`.
+    const source = await Bun.file("src/lib/auth/admin-screen.ts").text();
+
+    expect(source).toContain("outcome.code");
+    expect(source).toMatch(/state: "denied",\s*status: outcome\.status,/);
+  });
+});
