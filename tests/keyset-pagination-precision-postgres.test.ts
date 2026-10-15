@@ -62,8 +62,14 @@ describeOrSkip(
     afterAll(async () => {
       for (const tenantId of createdTenantIds) {
         await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
-        await sql`DELETE FROM awcms_workflow_tasks WHERE tenant_id = ${tenantId}`;
-        await sql`DELETE FROM awcms_workflow_instances WHERE tenant_id = ${tenantId}`;
+        // Instances are never deleted by the runtime (sql/252, #999); a test
+        // teardown is a superuser maintenance session.
+        await sql.begin(async (tx) => {
+          await tx.unsafe("SET LOCAL session_replication_role = replica");
+          await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+          await tx`DELETE FROM awcms_workflow_tasks WHERE tenant_id = ${tenantId}`;
+          await tx`DELETE FROM awcms_workflow_instances WHERE tenant_id = ${tenantId}`;
+        });
         await sql`DELETE FROM awcms_workflow_definitions WHERE tenant_id = ${tenantId}`;
         await sql`DELETE FROM awcms_email_messages WHERE tenant_id = ${tenantId}`;
         await sql`DELETE FROM awcms_tenants WHERE id = ${tenantId}`;

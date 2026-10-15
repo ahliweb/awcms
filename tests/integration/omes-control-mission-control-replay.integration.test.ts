@@ -211,11 +211,17 @@ async function seedApproval(seed: Seed): Promise<void> {
     )
   );
   expect(outcome.outcome).toBe("created");
-  await getAdminSql()`
-    UPDATE awcms_workflow_instances
-       SET created_at = ${at(300)}, updated_at = ${at(600)}, status = 'approved'
-     WHERE tenant_id = ${tenantId}
-  `;
+  // Back-dating an instance is a fixture, not a runtime move: instances are
+  // immutable after creation (sql/252, #999), so step outside the guard the way
+  // a superuser maintenance session would, for this statement only.
+  await getAdminSql().begin(async (tx) => {
+    await tx.unsafe("SET LOCAL session_replication_role = replica");
+    await tx`
+      UPDATE awcms_workflow_instances
+         SET created_at = ${at(300)}, updated_at = ${at(600)}, status = 'approved'
+       WHERE tenant_id = ${tenantId}
+    `;
+  });
 }
 
 function canFor(tenantId: string, sessionToken: string, tx: Bun.SQL) {
