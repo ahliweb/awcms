@@ -18,6 +18,8 @@
  * it is what makes the loser's answer a named refusal rather than a raw database
  * error, and what keeps the common case to one INSERT per unit.
  */
+import { isLocalDate } from "./booking-time";
+import { STAY_REFUSALS } from "./booking-stay";
 
 /** Hold lifetime, in seconds (booking.md section 5.1: clamped to `[60, max_hold_seconds]`, default 900, max 86 400). */
 export const HOLD_LIMITS = {
@@ -170,7 +172,10 @@ export const PLACEMENT_REFUSALS = {
   BOOKING_MODE_MISMATCH: 409,
   EXTERNAL_REF_IN_USE: 409,
   RESOURCE_NOT_FOUND: 404,
-  OFFERING_NOT_FOUND: 404
+  OFFERING_NOT_FOUND: 404,
+  // The stay refusals (Issue #940, ADR-0135): dates the zone does not have,
+  // the offering's night limits, a pool that mixes zones.
+  ...STAY_REFUSALS
 } as const;
 
 export type PlacementRefusalCode = keyof typeof PLACEMENT_REFUSALS;
@@ -250,7 +255,12 @@ export const REAPER_GRACE_SECONDS = 300;
 // Placing a hold: the typed input and its structural validation
 // ---------------------------------------------------------------------------
 
-export type ValidationIssue = { field: string; message: string };
+export type ValidationIssue = {
+  field: string;
+  message: string;
+  /** A refusal code the issue maps to, when it has one (a malformed stay date is `STAY_DATES_INVALID`, booking.md section 2.5). */
+  code?: string;
+};
 
 /**
  * What a caller (the reservation route of Issue #941, an adapter through the
@@ -265,7 +275,13 @@ export type PlaceHoldInput = {
   /** Exactly one of `resourceId` / `poolId`. */
   resourceId?: string;
   poolId?: string;
-  startsAtMs: number;
+  /**
+   * Exactly one of `startsAtMs` (a slot: an instant) and `stay` (a night range:
+   * local dates in the resource's zone, ADR-0135). A client never sends an end,
+   * a buffer or an instant for a stay: the server derives them.
+   */
+  startsAtMs?: number;
+  stay?: { checkInDate: string; checkOutDate: string };
   partySize: number;
   /** Units claimed at once (all-or-none), 1..500. */
   quantity: number;
@@ -309,7 +325,33 @@ export function validatePlaceHold(input: PlaceHoldInput): ValidationIssue[] {
     add("poolId", "poolId must be a UUID.");
   }
 
-  if (!Number.isSafeInteger(input.startsAtMs)) {
+  if (input.stay !== undefined) {
+    if (input.startsAtMs !== undefined) {
+      add(
+        "startsAt",
+        "Send either startsAt (a slot) or stay (check-in and check-out dates), not both."
+      );
+    }
+
+    if (!isLocalDate(input.stay.checkInDate)) {
+      issues.push({
+        field: "stay.checkInDate",
+        message: "checkInDate must be a calendar date YYYY-MM-DD.",
+        code: "STAY_DATES_INVALID"
+      });
+    }
+
+    if (!isLocalDate(input.stay.checkOutDate)) {
+      issues.push({
+        field: "stay.checkOutDate",
+        message: "checkOutDate must be a calendar date YYYY-MM-DD.",
+        code: "STAY_DATES_INVALID"
+      });
+    }
+  } else if (
+    input.startsAtMs === undefined ||
+    !Number.isSafeInteger(input.startsAtMs)
+  ) {
     add("startsAt", "startsAt must be a valid instant.");
   }
 

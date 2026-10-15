@@ -28,6 +28,16 @@
  * nobody ever tried to claim over -- and its health is observable
  * (`runReconciliation` reports a hold past expiry beyond a grace as a stuck job).
  *
+ * ## Stay holds expire the same way (Issue #940, ADR-0135)
+ *
+ * A hold on a stay carries the same `hold_expires_at` and releases through the
+ * same item join, so `sql/200` and `applyExpiry` need no stay-specific code: they
+ * release every live row of the reservation's items, whatever their granularity.
+ * Only the lazy-reclaim PROBE differs -- it finds the elapsed holds whose live
+ * rows overlap the claim, by `tstzrange` overlap for a slot and by `daterange`
+ * overlap for a stay or a block (`ReclaimWindow`). A block's own rows have no
+ * item and no hold, so neither entry point ever touches them.
+ *
  * ## Two implementations of one end state
  *
  * (1) is SQL inside `sql/200` (a worker cannot run application SQL against the
@@ -95,12 +105,15 @@ export const RECLAIM_BATCH_LIMIT = 100;
 /** The nil uuid: sorts before every other, the start of the keyset cursor. */
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
-/** The occupied range a claim is about to take, in epoch milliseconds. */
-export type ReclaimWindow = {
-  kind: "time";
-  fromMs: number;
-  toMs: number;
-};
+/**
+ * What a claim is about to take: an occupied range in epoch milliseconds (a
+ * slot), or a half-open night range of local dates (a stay or a block, Issue
+ * #940). The reclaim probes the matching kind of live allocation row, so a slot
+ * claim never reclaims a stay hold and the reverse.
+ */
+export type ReclaimWindow =
+  | { kind: "time"; fromMs: number; toMs: number }
+  | { kind: "stay"; fromDate: string; toDate: string };
 
 function asList(ids: readonly string[]): string {
   // Bun.SQL does not bind a JS array as a Postgres array; the ids are uuids
@@ -216,6 +229,79 @@ export async function expireDueHolds(
 }
 
 /**
+ * One batch of the elapsed holds whose LIVE rows overlap `window`, locked
+ * `FOR UPDATE` in ascending id order after `cursor`. Two statements, not one
+ * `OR`: each probes the live rows of its own granularity in the shape of its own
+ * exclusion constraint (`tstzrange` overlap for a slot, `daterange` overlap for
+ * a stay or a block), so the planner has a plain predicate to work with.
+ */
+async function lockElapsedHoldsOver(
+  tx: Sql,
+  tenantId: string,
+  resources: string,
+  window: ReclaimWindow,
+  cursor: string,
+  batch: number
+): Promise<{ id: string }[]> {
+  if (window.kind === "stay") {
+    return (await tx`
+      SELECT r.id
+      FROM awcms_booking_reservations r
+      WHERE r.tenant_id = ${tenantId}
+        AND r.id > ${cursor}::uuid
+        AND r.status = 'held'
+        AND r.hold_expires_at <= statement_timestamp()
+        AND r.hold_expires_at <= clock_timestamp()
+        AND EXISTS (
+          SELECT 1
+          FROM awcms_booking_reservation_items i
+          JOIN awcms_booking_resource_allocations a
+            ON a.tenant_id = i.tenant_id AND a.item_id = i.id
+          WHERE i.tenant_id = r.tenant_id
+            AND i.reservation_id = r.id
+            AND a.released_at IS NULL
+            AND a.granularity = 'stay'
+            AND a.resource_id = ANY(string_to_array(${resources}::text, ',')::uuid[])
+            AND daterange(a.stay_from, a.stay_to, '[)')
+                && daterange(${window.fromDate}::date, ${window.toDate}::date, '[)')
+        )
+      ORDER BY r.id
+      LIMIT ${batch}
+      FOR UPDATE OF r
+    `) as { id: string }[];
+  }
+
+  const fromIso = new Date(window.fromMs).toISOString();
+  const toIso = new Date(window.toMs).toISOString();
+
+  return (await tx`
+    SELECT r.id
+    FROM awcms_booking_reservations r
+    WHERE r.tenant_id = ${tenantId}
+      AND r.id > ${cursor}::uuid
+      AND r.status = 'held'
+      AND r.hold_expires_at <= statement_timestamp()
+      AND r.hold_expires_at <= clock_timestamp()
+      AND EXISTS (
+        SELECT 1
+        FROM awcms_booking_reservation_items i
+        JOIN awcms_booking_resource_allocations a
+          ON a.tenant_id = i.tenant_id AND a.item_id = i.id
+        WHERE i.tenant_id = r.tenant_id
+          AND i.reservation_id = r.id
+          AND a.released_at IS NULL
+          AND a.granularity = 'time'
+          AND a.resource_id = ANY(string_to_array(${resources}::text, ',')::uuid[])
+          AND tstzrange(a.occupied_from, a.occupied_to, '[)')
+              && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz, '[)')
+      )
+    ORDER BY r.id
+    LIMIT ${batch}
+    FOR UPDATE OF r
+  `) as { id: string }[];
+}
+
+/**
  * Lazy reclaim: expires the elapsed holds whose LIVE allocations on
  * `resourceIds` overlap `window`, so the claim that follows does not collide
  * with a row whose hold has already run out. Waits for the row lock (a
@@ -245,39 +331,20 @@ export async function reclaimExpiredHolds(
   }
 
   const resources = asList(resourceIds);
-  const fromIso = new Date(window.fromMs).toISOString();
-  const toIso = new Date(window.toMs).toISOString();
   const batch = Math.max(1, Math.floor(batchLimit));
   let cursor = NIL_UUID;
   let expired = 0;
   let released = 0;
 
   for (;;) {
-    const locked = (await tx`
-      SELECT r.id
-      FROM awcms_booking_reservations r
-      WHERE r.tenant_id = ${tenantId}
-        AND r.id > ${cursor}::uuid
-        AND r.status = 'held'
-        AND r.hold_expires_at <= statement_timestamp()
-        AND r.hold_expires_at <= clock_timestamp()
-        AND EXISTS (
-          SELECT 1
-          FROM awcms_booking_reservation_items i
-          JOIN awcms_booking_resource_allocations a
-            ON a.tenant_id = i.tenant_id AND a.item_id = i.id
-          WHERE i.tenant_id = r.tenant_id
-            AND i.reservation_id = r.id
-            AND a.released_at IS NULL
-            AND a.granularity = 'time'
-            AND a.resource_id = ANY(string_to_array(${resources}::text, ',')::uuid[])
-            AND tstzrange(a.occupied_from, a.occupied_to, '[)')
-                && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz, '[)')
-        )
-      ORDER BY r.id
-      LIMIT ${batch}
-      FOR UPDATE OF r
-    `) as { id: string }[];
+    const locked = await lockElapsedHoldsOver(
+      tx,
+      tenantId,
+      resources,
+      window,
+      cursor,
+      batch
+    );
 
     if (locked.length === 0) {
       return { expired, releasedAllocations: released };

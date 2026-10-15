@@ -12,10 +12,16 @@
  *
  * It decides everything that is about the CLAIM's integrity:
  *
- *   * the offering and the resources exist, are active and are in slot mode;
+ *   * the offering and the resources exist, are active, and agree on the mode:
+ *     a time offering on slot resources, or a stay offering on stay resources
+ *     (ADR-0135; `BOOKING_MODE_MISMATCH` otherwise);
  *   * the party fits the offering, and the pool has enough units at all;
- *   * the interval is DERIVED from the offering (the server owns the interval,
- *     booking.md section 9: a client names a start, never an end or a buffer);
+ *   * the interval is DERIVED (the server owns the interval, booking.md section
+ *     9): a slot from the offering and a start instant, never an end or a
+ *     buffer; a stay from two local DATES in the resource's zone, never an
+ *     instant -- the night count is date arithmetic, the arrival and departure
+ *     instants come from the resource's check-in / check-out times and are
+ *     SNAPSHOTTED onto the item, with the zone and the times, as facts;
  *   * the hold lifetime is clamped and measured on the DATABASE clock;
  *   * the per-customer / per-tenant caps on live holds (hold flooding);
  *   * elapsed holds on the target units are reclaimed first (lazy reclaim);
@@ -73,6 +79,12 @@ import {
   initialReservationStatus
 } from "../domain/booking-reservation-state";
 import {
+  agreedStayTerms,
+  checkNightLimits,
+  deriveStay
+} from "../domain/booking-stay";
+import { parseLocalTime } from "../domain/booking-time";
+import {
   ContentionError,
   SlotUnavailableError,
   claimUnits,
@@ -98,11 +110,21 @@ export type PlacedReservation = {
   offeringId: string;
   startsAt: string;
   endsAt: string;
-  occupiedFrom: string;
-  occupiedTo: string;
+  /** The occupied range a slot claims; `null` for a stay (a stay is dates, ADR-0135). */
+  occupiedFrom: string | null;
+  occupiedTo: string | null;
+  /** The stay snapshot (dates, nights, zone); absent for a slot. `startsAt` / `endsAt` are then the derived arrival and departure instants. */
+  stay?: PlacedStay;
   partySize: number;
   quantity: number;
   units: ClaimedUnit[];
+};
+
+export type PlacedStay = {
+  checkInDate: string;
+  checkOutDate: string;
+  nights: number;
+  timezone: string;
 };
 
 export type PlaceHoldOutcome =
@@ -123,6 +145,8 @@ type OfferingRow = {
   duration_seconds: number | null;
   setup_seconds: number | null;
   cleanup_seconds: number | null;
+  min_nights: number | null;
+  max_nights: number | null;
   min_party: number;
   max_party: number;
   confirmation_mode: "immediate" | "hold_then_confirm";
@@ -131,7 +155,32 @@ type OfferingRow = {
 type ResourceRow = {
   id: string;
   booking_mode: "slot" | "stay";
+  timezone: string;
+  /** `HH:MM:SS` for a stay resource, `null` for a slot resource. */
+  stay_check_in_time: string | null;
+  stay_check_out_time: string | null;
 };
+
+/** What a placement claims, derived once: the interval, and for a stay the snapshot the item records. */
+type Window =
+  | {
+      kind: "time";
+      startsIso: string;
+      endsIso: string;
+      occupiedFromMs: number;
+      occupiedToMs: number;
+    }
+  | {
+      kind: "stay";
+      startsIso: string;
+      endsIso: string;
+      checkInDate: string;
+      checkOutDate: string;
+      nights: number;
+      timezone: string;
+      checkInTime: string;
+      checkOutTime: string;
+    };
 
 type SettingsRow = {
   default_hold_seconds: number | null;
@@ -174,7 +223,8 @@ async function loadOffering(
 ): Promise<OfferingRow | null> {
   const rows = (await tx`
     SELECT id, code, name, granularity, duration_seconds, setup_seconds,
-           cleanup_seconds, min_party, max_party, confirmation_mode
+           cleanup_seconds, min_nights, max_nights, min_party, max_party,
+           confirmation_mode
     FROM awcms_booking_service_offerings
     WHERE tenant_id = ${tenantId} AND id = ${offeringId}
       AND deleted_at IS NULL AND status = 'active'
@@ -191,7 +241,9 @@ async function loadTargetResources(
 ): Promise<ResourceRow[]> {
   if (input.resourceId !== undefined) {
     return (await tx`
-      SELECT id, booking_mode
+      SELECT id, booking_mode, timezone,
+             to_char(stay_check_in_time, 'HH24:MI:SS') AS stay_check_in_time,
+             to_char(stay_check_out_time, 'HH24:MI:SS') AS stay_check_out_time
       FROM awcms_booking_resources
       WHERE tenant_id = ${tenantId} AND id = ${input.resourceId}
         AND deleted_at IS NULL AND status = 'active'
@@ -199,7 +251,9 @@ async function loadTargetResources(
   }
 
   return (await tx`
-    SELECT r.id, r.booking_mode
+    SELECT r.id, r.booking_mode, r.timezone,
+           to_char(r.stay_check_in_time, 'HH24:MI:SS') AS stay_check_in_time,
+           to_char(r.stay_check_out_time, 'HH24:MI:SS') AS stay_check_out_time
     FROM awcms_booking_resources r
     JOIN awcms_booking_resource_pools p
       ON p.tenant_id = r.tenant_id AND p.id = r.pool_id
@@ -312,7 +366,7 @@ async function writeClaim(
   input: PlaceHoldInput,
   offering: OfferingRow,
   resourceIds: readonly string[],
-  window: { startsIso: string; endsIso: string },
+  window: Window,
   status: "held" | "confirmed",
   holdSeconds: number,
   settings: SettingsRow
@@ -350,7 +404,9 @@ async function writeClaim(
   }[];
   const reservation = reservations[0]!;
 
-  const items = (await tx`
+  const items = (
+    window.kind === "time"
+      ? await tx`
     INSERT INTO awcms_booking_reservation_items
       (tenant_id, reservation_id, line_no, offering_id, offering_code,
        offering_name, granularity, duration_seconds, setup_seconds,
@@ -363,10 +419,27 @@ async function writeClaim(
       ${input.quantity}
     )
     RETURNING id
-  `) as { id: string }[];
+  `
+      : await tx`
+    INSERT INTO awcms_booking_reservation_items
+      (tenant_id, reservation_id, line_no, offering_id, offering_code,
+       offering_name, granularity, starts_at, ends_at, check_in_date,
+       check_out_date, nights, check_in_local_time, check_out_local_time,
+       timezone, quantity)
+    VALUES (
+      ${ctx.tenantId}, ${reservation.id}, 1, ${offering.id}, ${offering.code},
+      ${offering.name}, 'stay',
+      ${window.startsIso}::timestamptz, ${window.endsIso}::timestamptz,
+      ${window.checkInDate}::date, ${window.checkOutDate}::date,
+      ${window.nights}::int, ${window.checkInTime}::time,
+      ${window.checkOutTime}::time, ${window.timezone}, ${input.quantity}
+    )
+    RETURNING id
+  `
+  ) as { id: string }[];
 
   const units = await claimUnits(tx, {
-    kind: "time",
+    kind: window.kind,
     tenantId: ctx.tenantId,
     itemId: items[0]!.id,
     resourceIds,
@@ -379,7 +452,16 @@ async function writeClaim(
     quantity: input.quantity,
     startsAt: window.startsIso,
     endsAt: window.endsIso,
-    resourceIds: [...new Set(units.map((unit) => unit.resourceId))]
+    resourceIds: [...new Set(units.map((unit) => unit.resourceId))],
+    // Additive, stay only (booking.md section 3.1): dates and zone, no person.
+    ...(window.kind === "stay"
+      ? {
+          checkInDate: window.checkInDate,
+          checkOutDate: window.checkOutDate,
+          nights: window.nights,
+          timezone: window.timezone
+        }
+      : {})
   };
 
   for (const [index, kind] of kinds.entries()) {
@@ -459,9 +541,131 @@ function isDeadlock(error: unknown): boolean {
   );
 }
 
+type DerivedWindow =
+  | { outcome: "ok"; window: Window }
+  | { outcome: "stop"; result: PlaceHoldOutcome };
+
+function stop(result: PlaceHoldOutcome): DerivedWindow {
+  return { outcome: "stop", result };
+}
+
+/** A slot: the service interval and the occupied range from the offering and the requested start. */
+function deriveTimeWindow(
+  input: PlaceHoldInput,
+  offering: OfferingRow
+): DerivedWindow {
+  const slot = deriveSlotWindow({
+    startsAtMs: input.startsAtMs!,
+    durationSeconds: offering.duration_seconds!,
+    setupSeconds: offering.setup_seconds!,
+    cleanupSeconds: offering.cleanup_seconds!
+  });
+
+  if (!slot) {
+    return stop({
+      outcome: "invalid",
+      errors: [{ field: "startsAt", message: "startsAt cannot form a slot." }]
+    });
+  }
+
+  return {
+    outcome: "ok",
+    window: {
+      kind: "time",
+      startsIso: new Date(slot.startsAtMs).toISOString(),
+      endsIso: new Date(slot.endsAtMs).toISOString(),
+      occupiedFromMs: slot.occupiedFromMs,
+      occupiedToMs: slot.occupiedToMs
+    }
+  };
+}
+
+/**
+ * A stay: the nights are date arithmetic in the resource's zone; the arrival and
+ * departure instants come from the resource's check-in and check-out times
+ * (RFC 5545 gap and fold rules) and are SNAPSHOTTED onto the item with the zone
+ * and the times, so a later configuration or tzdata change never moves a stay
+ * that was claimed. "Today" is the DATABASE clock's local date in the zone.
+ */
+async function deriveStayWindow(
+  tx: Sql,
+  input: PlaceHoldInput,
+  offering: OfferingRow,
+  resources: readonly ResourceRow[]
+): Promise<DerivedWindow> {
+  const terms = agreedStayTerms(
+    resources.map((resource) => ({
+      timezone: resource.timezone,
+      checkInTime: resource.stay_check_in_time ?? "",
+      checkOutTime: resource.stay_check_out_time ?? ""
+    }))
+  );
+
+  if (!terms) {
+    return stop(
+      refused(
+        "STAY_POOL_INCONSISTENT",
+        "The target resources do not share one time zone and one pair of check-in and check-out times; a stay snapshots a single set."
+      )
+    );
+  }
+
+  const checkInSeconds = parseLocalTime(terms.checkInTime);
+  const checkOutSeconds = parseLocalTime(terms.checkOutTime);
+
+  if (checkInSeconds === null || checkOutSeconds === null) {
+    // CHECK `awcms_booking_resources_stay_times_check` makes this unreachable.
+    throw new Error(
+      "booking: a stay resource has no check-in / check-out time"
+    );
+  }
+
+  const clock = (await tx`
+    SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now_ms
+  `) as { now_ms: number }[];
+  const stay = deriveStay({
+    checkInDate: input.stay!.checkInDate,
+    checkOutDate: input.stay!.checkOutDate,
+    timezone: terms.timezone,
+    checkInSeconds,
+    checkOutSeconds,
+    nowMs: Math.floor(Number(clock[0]!.now_ms))
+  });
+
+  if (!stay.ok) {
+    return stop(refused(stay.code, stay.detail));
+  }
+
+  const limit = checkNightLimits(stay.nights, {
+    minNights: offering.min_nights ?? 1,
+    maxNights: offering.max_nights ?? 366
+  });
+
+  if (limit) {
+    return stop(refused(limit.code, limit.detail));
+  }
+
+  return {
+    outcome: "ok",
+    window: {
+      kind: "stay",
+      startsIso: new Date(stay.startsAtMs).toISOString(),
+      endsIso: new Date(stay.endsAtMs).toISOString(),
+      checkInDate: input.stay!.checkInDate,
+      checkOutDate: input.stay!.checkOutDate,
+      nights: stay.nights,
+      timezone: terms.timezone,
+      checkInTime: terms.checkInTime,
+      checkOutTime: terms.checkOutTime
+    }
+  };
+}
+
 /**
  * Places a hold (or, for an `immediate` offering, a confirmed reservation) on
- * `input.quantity` units of the target resource or pool at `input.startsAtMs`.
+ * `input.quantity` units of the target resource or pool: at `input.startsAtMs`
+ * for a slot, or for the nights `[stay.checkInDate, stay.checkOutDate)` for a
+ * stay (each unit taken for ALL the nights; a stay never moves between units).
  *
  * MUST run inside the caller's tenant transaction (`withTenant*`), which owns
  * COMMIT/ROLLBACK. Returns a refusal as a value; throws only for defects.
@@ -489,13 +693,19 @@ export async function placeHold(
     return refused("RESOURCE_NOT_FOUND", "Resource not found.");
   }
 
+  const isStay = input.stay !== undefined;
+
   if (
-    offering.granularity !== "time" ||
-    resources.some((resource) => resource.booking_mode !== "slot")
+    offering.granularity !== (isStay ? "stay" : "time") ||
+    resources.some(
+      (resource) => resource.booking_mode !== (isStay ? "stay" : "slot")
+    )
   ) {
     return refused(
       "BOOKING_MODE_MISMATCH",
-      "This claim places a slot hold: use a time offering on slot resources."
+      isStay
+        ? "A stay claim needs a stay offering on stay resources."
+        : "A slot claim needs a time offering on slot resources (send `stay` for a stay resource)."
     );
   }
 
@@ -519,37 +729,41 @@ export async function placeHold(
     );
   }
 
-  const slot = deriveSlotWindow({
-    startsAtMs: input.startsAtMs,
-    durationSeconds: offering.duration_seconds!,
-    setupSeconds: offering.setup_seconds!,
-    cleanupSeconds: offering.cleanup_seconds!
-  });
+  const settings = await loadSettings(tx, ctx.tenantId);
+  const derived = isStay
+    ? await deriveStayWindow(tx, input, offering, resources)
+    : deriveTimeWindow(input, offering);
 
-  if (!slot) {
-    return {
-      outcome: "invalid",
-      errors: [{ field: "startsAt", message: "startsAt cannot form a slot." }]
-    };
+  if (derived.outcome !== "ok") {
+    return derived.result;
   }
 
-  const settings = await loadSettings(tx, ctx.tenantId);
+  const window = derived.window;
   const status = initialReservationStatus(offering.confirmation_mode);
   const holdSeconds = resolveHoldSeconds(input.holdSeconds, {
     tenantDefaultSeconds: settings.default_hold_seconds,
     tenantMaxSeconds: settings.max_hold_seconds
   });
-  const startsIso = new Date(slot.startsAtMs).toISOString();
-  const endsIso = new Date(slot.endsAtMs).toISOString();
 
   // Lazy reclaim BEFORE the savepoint: an elapsed hold on the target units must
   // not stand in the way of a live claim, and expiring it is a fact that stays
   // true even when the claim that follows is refused.
-  const reclaimed = await reclaimExpiredHolds(tx, ctx.tenantId, resourceIds, {
-    kind: "time",
-    fromMs: slot.occupiedFromMs,
-    toMs: slot.occupiedToMs
-  });
+  const reclaimed = await reclaimExpiredHolds(
+    tx,
+    ctx.tenantId,
+    resourceIds,
+    window.kind === "time"
+      ? {
+          kind: "time",
+          fromMs: window.occupiedFromMs,
+          toMs: window.occupiedToMs
+        }
+      : {
+          kind: "stay",
+          fromDate: window.checkInDate,
+          toDate: window.checkOutDate
+        }
+  );
 
   if (reclaimed.expired > 0) {
     await recordAuditEvent(tx, {
@@ -584,7 +798,7 @@ export async function placeHold(
         input,
         offering,
         resourceIds,
-        { startsIso, endsIso },
+        window,
         status,
         holdSeconds,
         settings
@@ -610,9 +824,17 @@ export async function placeHold(
             ...new Set(written.units.map((unit) => unit.resourceId))
           ],
           quantity: input.quantity,
-          startsAt: startsIso,
-          endsAt: endsIso,
-          holdExpiresAt: written.holdExpiresAt
+          startsAt: window.startsIso,
+          endsAt: window.endsIso,
+          holdExpiresAt: written.holdExpiresAt,
+          ...(window.kind === "stay"
+            ? {
+                checkInDate: window.checkInDate,
+                checkOutDate: window.checkOutDate,
+                nights: window.nights,
+                timezone: window.timezone
+              }
+            : {})
         },
         ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {})
       });
@@ -625,10 +847,26 @@ export async function placeHold(
           status,
           holdExpiresAt: written.holdExpiresAt,
           offeringId: offering.id,
-          startsAt: startsIso,
-          endsAt: endsIso,
-          occupiedFrom: new Date(slot.occupiedFromMs).toISOString(),
-          occupiedTo: new Date(slot.occupiedToMs).toISOString(),
+          startsAt: window.startsIso,
+          endsAt: window.endsIso,
+          occupiedFrom:
+            window.kind === "time"
+              ? new Date(window.occupiedFromMs).toISOString()
+              : null,
+          occupiedTo:
+            window.kind === "time"
+              ? new Date(window.occupiedToMs).toISOString()
+              : null,
+          ...(window.kind === "stay"
+            ? {
+                stay: {
+                  checkInDate: window.checkInDate,
+                  checkOutDate: window.checkOutDate,
+                  nights: window.nights,
+                  timezone: window.timezone
+                }
+              }
+            : {}),
           partySize: input.partySize,
           quantity: input.quantity,
           units: written.units

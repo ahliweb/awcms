@@ -23,10 +23,16 @@ Allocator (Issue #939, `sql/200`): the slot allocator, holds with expiry, the
 claim service `placeHold` and the read-only reconciliation, plus the
 `booking:holds:expire` job, which runs as `awcms_worker` through the narrow
 SECURITY DEFINER sweep of `sql/200` (the worker holds no privilege on the
-booking tables). **Not present yet:** the reservation routes and the
-transitions after creation (`confirm`, `cancel`, `reschedule`, ...), stays and
-blocks as allocation rows (Issue #940), AsyncAPI channels, an admin screen and
-the reporting projection (Issues #940 to #942).
+booking tables).
+
+Stays and blocks (Issue #940, `sql/204`): a stay is claimed through the same
+allocator and `placeHold` (`stay: { checkInDate, checkOutDate }`, the second
+exclusion constraint over dates), blocked nights are allocation rows owned by a
+`resource_blocks` row (`createBlock` / `releaseBlock`, `BLOCK_CONFLICT`), and
+the lazy reclaim and the reconciliation understand both. **Not present yet:**
+the reservation routes and the transitions after creation (`confirm`, `cancel`,
+`reschedule`, ...), the block routes, AsyncAPI channels, an admin screen and
+the reporting projection (Issues #941 and #942).
 
 ## The allocator, in one place
 
@@ -54,6 +60,32 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
   time, horizon and `reservations.override` are the handler's (Issue #941) and
   run before it. It never sees a customer name: the customer is the opaque
   `externalCustomerRef`, kept out of the audit row and the event detail.
+
+## Stays and blocks, in one place
+
+- **A stay is dates.** `placeHold` takes `stay: { checkInDate, checkOutDate }`
+  (local `YYYY-MM-DD` in the resource's zone, half-open) instead of an instant.
+  `deriveStay` (`domain/booking-stay.ts`) validates them with the checks of
+  `evaluateStay`, counts the nights as date arithmetic, and derives the arrival
+  and departure instants from the resource's check-in and check-out times; the
+  dates, nights, zone, local times and instants are **snapshotted onto the item**
+  and are facts afterwards. A stay takes one unit for all its nights; `quantity`
+  is how many rooms.
+- **The allocator is the same loop** (`UnitClaim` `kind: "stay"`): the free-unit
+  hint probes `daterange` overlap, the insert is `ON CONFLICT DO NOTHING`, and
+  the second exclusion constraint is the authority. A slot resource and a stay
+  resource never contend (a trigger makes an allocation's granularity its
+  resource's mode).
+- **A block is allocation rows with no reservation** (`UnitClaim` `kind:
+"block"`, `application/booking-block-service.ts`): one row per covered unit,
+  inserted in `(resource_id, ordinal)` order inside a savepoint, all-or-none,
+  under the SAME stay constraint, so a block and a booking racing for a night
+  are decided by the database and no override lifts a block. Over a live stay a
+  block is `BLOCK_CONFLICT` and cancels nothing. Releasing a block releases its
+  rows in the same statement (a trigger), and a replay writes nothing.
+- **Expiry needed no change.** A stay hold expires on the same column and
+  releases through the same item join as a slot hold, so `sql/200` and the
+  reaper are untouched; lazy reclaim probes `daterange` for stays and blocks.
 
 ## Time semantics, in one place
 
@@ -106,14 +138,17 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
 | `application/booking-hold-expiry.ts`     | Lazy reclaim and the reaper pass: one statement per expiry (reservation, units, history)        |
 | `application/booking-hold-service.ts`    | `placeHold`: reservation, item snapshot, allocations, history, audit, in one savepoint          |
 | `application/booking-hold-expiry-job.ts` | The per-tenant sweep behind `scripts/booking-holds-expire.ts`                                   |
-| `application/booking-reconciliation.ts`  | Read-only proof that reservations and allocations agree; the reaper lag                         |
+| `application/booking-reconciliation.ts`  | Read-only proof that reservations, allocations and blocks agree; the reaper lag                 |
+| `domain/booking-stay.ts`                 | Pure stay dates, night limits, pool terms and block validation (no I/O, no clock)               |
+| `application/booking-block-service.ts`   | `createBlock` / `releaseBlock`: blocked nights as allocation rows, `BLOCK_CONFLICT`, audit      |
 
 Not in the schema yet and recorded as follow-ups: `service_requirements` and
 `staff_assignments` (booking.md section 4). `resource_blocks` arrived with
-Issue #938, but its allocation rows (so the stay exclusion constraint also holds
-a block against a reservation) and its writer arrive with the stay slice
-(#940, ADR-0135), which reuses this allocator; until then availability reads
-blocks directly.
+Issue #938 and its allocation rows and writer with Issue #940 (`sql/204`); the
+HTTP routes for blocks (`blocks.read` / `.create` / `.release`, seeded by
+`sql/181`) arrive with the route slices (#941, #942). A resource-wide block
+covers the units that exist when it is placed; a unit added later is reported by
+the reconciliation (`block_missing_allocation`), not covered.
 
 Follow-ups recorded by the security audit of the foundation: the transition
 handlers of #941 must write exactly one history event per transition (the
