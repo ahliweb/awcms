@@ -254,6 +254,61 @@ describe("reporting projections", () => {
     ).toBe(true);
   });
 
+  test.each([
+    "awcms.hr.payroll.run_posted",
+    "awcms.hr.commission.accrued",
+    "hr_payroll.payslip_issued",
+    "awcms.hr.compensation.changed"
+  ])(
+    "a projection owned by ANOTHER module consuming the payroll event %s is refused (audit L5)",
+    (eventType) => {
+      const base = projection("awcms_example_table");
+      const result = validateProjectionRegistry([
+        moduleWith("fixture", {
+          reportingProjections: [
+            {
+              ...base,
+              source: {
+                strategy: "domain_event",
+                events: [{ eventType, eventVersion: "1.0" }],
+                consumerName: "fixture_consumer"
+              }
+            }
+          ]
+        })
+      ]);
+
+      expect(result.valid).toBe(false);
+      expect(
+        result.issues.some((issue) => issue.message.includes("payroll event"))
+      ).toBe(true);
+    }
+  );
+
+  test("a domain_event projection over an ordinary event is accepted", () => {
+    const base = projection("awcms_example_table");
+    const result = validateProjectionRegistry([
+      moduleWith("fixture", {
+        reportingProjections: [
+          {
+            ...base,
+            source: {
+              strategy: "domain_event",
+              events: [
+                { eventType: "awcms.blog.post_published", eventVersion: "1.0" }
+              ],
+              consumerName: "fixture_consumer"
+            }
+          }
+        ]
+      })
+    ]);
+
+    expect(result.issues.filter((i) => i.message.includes("payroll"))).toEqual(
+      []
+    );
+  });
+
   test("a domain_event projection still has to be rebuildable from a table, so it cannot dodge the rule", () => {
     const base = projection("awcms_hr_payroll_runs");
     const result = validateProjectionRegistry([
@@ -501,6 +556,46 @@ describe("edge-cache surfaces", () => {
     expect(failures.join("\n")).toContain(
       "overlaps a route a payroll module serves"
     );
+  });
+
+  test.each([
+    ["no pay word, probes only", /^\/api\/v1\/hr\/[^/]+\/runs/],
+    ["wildcard segment", /^\/api\/v1\/[^/]+\/runs$/],
+    ["hr namespace prefix", /^\/api\/v1\/hr\/employees\/[^/]+$/],
+    ["admin hr namespace", /^\/admin\/hr\/[a-z]+$/]
+  ])(
+    "a surface that dodges the vocabulary check (%s) is still refused (audit L5)",
+    (_name, pattern) => {
+      const failures = findPayrollSurfaces(
+        [
+          {
+            ...SAFE_SURFACE,
+            key: "neutral",
+            pattern,
+            moduleKey: "blog_content"
+          }
+        ],
+        new Map()
+      );
+
+      expect(failures.length).toBeGreaterThan(0);
+    }
+  );
+
+  test("a surface is probed as a regex against payroll paths, not only by its words", () => {
+    const failures = findPayrollSurfaces(
+      [
+        {
+          ...SAFE_SURFACE,
+          key: "neutral",
+          pattern: /^\/api\/v1\/hr\/[^/]+\/runs/,
+          moduleKey: "blog_content"
+        }
+      ],
+      new Map([["hr_payroll", ["/api/v1/ledger"]]])
+    );
+
+    expect(failures.join("\n")).toContain("matches the payroll route path");
   });
 
   test("a content purge enqueued for hr_payroll is reported", () => {

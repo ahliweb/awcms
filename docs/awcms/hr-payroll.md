@@ -1006,6 +1006,14 @@ masked `payout_accounts.read` and `payout_accounts.reveal` (its own warning row)
 guards the permission, not proven on every path); the helper itself is proven by
 `tests/integration/sensitive-read-audit.integration.test.ts`.
 
+_Fail-closed shape (Issue #1014 L6)._ The same gate also refuses a `recordSensitiveRead` call
+that is not `await`ed or `return`ed, is chained with `.catch`/`.then`/`.finally`, or sits
+inside a `try` whose `catch` never rethrows: each would return the data even though the audit
+failed. It is syntactic, so the routes of #957 and #961 must **also** prove it by behaviour:
+call `expectAuditFailureYieldsNoData` (`tests/fixtures/sensitive-read-fail-closed.ts`) with the
+handler body; it injects a failing audit write and requires a rejection or a non-2xx response
+without data. **That route test is an acceptance criterion for #957 and #961.**
+
 **B. Payroll data never leaves through a derived surface.**
 `src/modules/_shared/payroll-data-boundary.ts` is the single list of forbidden table
 names (`awcms_hr_payroll_*`, `awcms_hr_compensation`, `awcms_hr_payout_accounts`,
@@ -1014,8 +1022,10 @@ module `hr_payroll`. Every registry that can name a table enforces it, and each 
 refuses at the point SQL is built: the reporting projection registry and its three
 engines, the site-search source registry, the comments resource registry,
 `edge-cache:surfaces:check` (by owner, payroll vocabulary in the key or pattern, and
-overlap with a route a payroll module serves), and report exports (an export is made
+overlap with a route a payroll module serves, the pattern tested as a regex against concrete payroll paths, and the HR URL namespaces - Issue #1014 L5), and report exports (an export is made
 from a projection, and `generateProjectionExport` refuses again at write time). A
+reporting projection with a `domain_event` source may not consume a payroll event type
+(`awcms.hr.payroll.*`, `awcms.hr.commission.*`; same vocabulary as the paths). A
 test reads `module-contract.ts` and fails when a **new** descriptor type that names
 a table appears, so the next registry has to decide. Two registries are exempt on
 purpose, each with its own control: `subjectData` (a subject's own rows, with
@@ -1036,7 +1046,12 @@ gets a leading single quote (OWASP). The reporting export is lossy by design; th
 a leader is prefixed too, and `read()` strips exactly one quote), so a restore
 returns the original bytes. A typed number is written as a number; a numeric
 string is not trusted. `tests/csv-formula-neutralisation.test.ts` scans `src/` and
-fails when a CSV writer does not use the helper.
+fails when a CSV writer does not use the helper. Since Issue #1014 L4 the scan is
+structural (`scripts/lib/csv-writer-scan.ts`): a writer is any file that joins cells with
+`.join(",")` and lines with a newline, whatever it is called (arrow functions included),
+and EVERY joined cell must be a helper call or a fixed header literal; importing the
+helper proves nothing, and an exemption covers only the name/`text/csv` heuristic, never a
+file that really joins cells.
 
 **D. Hardening after the security audit (Issue #978).** The first version of A to
 C passed review with conditions; the following are fixed and are part of the

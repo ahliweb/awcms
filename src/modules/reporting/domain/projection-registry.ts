@@ -21,9 +21,11 @@ import type {
   ProjectionDescriptor
 } from "../../_shared/module-contract";
 import {
+  isPayrollEventType,
   isPayrollOwnerModule,
   isPayrollTable,
   payrollBoundaryMessage,
+  payrollEventMessage,
   payrollOwnerMessage
 } from "../../_shared/payroll-data-boundary";
 
@@ -240,6 +242,11 @@ function validateSingleDescriptor(
       push(
         'source.events must declare at least one event when strategy is "domain_event".'
       );
+    }
+    for (const [index, event] of (descriptor.source.events ?? []).entries()) {
+      if (isPayrollEventType(event.eventType)) {
+        push(payrollEventMessage(`source.events[${index}]`, event.eventType));
+      }
     }
     if (!descriptor.source.consumerName) {
       push('source.consumerName is required when strategy is "domain_event".');

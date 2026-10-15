@@ -10,6 +10,7 @@ import { findPayrollSqlLeaks } from "../scripts/payroll-sql-boundary-check";
 import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
 import {
   collectGuardDefinitions,
+  findSwallowedSensitiveReads,
   evaluateSensitiveReadCoverage
 } from "../src/modules/_shared/sensitive-read-coverage";
 
@@ -359,5 +360,49 @@ describe("M2: the SQL boundary (views, CREATE TABLE AS, foreign triggers)", () =
         }))
       )
     ).toEqual([]);
+  });
+});
+
+describe("the audit call must fail closed (audit L6)", () => {
+  const CALL = `recordSensitiveRead(tx, { tenantId, actorTenantUserId: a, permission: "hr_payroll.runs.read" })`;
+
+  test.each([
+    [
+      "try/catch that returns data",
+      `try { await ${CALL}; } catch (e) { log(e); }\nreturn ok(rows);`
+    ],
+    ["a .catch(() => {})", `await ${CALL}.catch(() => {});`],
+    ["not awaited", `${CALL};\nreturn ok(rows);`],
+    ["void-ed", `void ${CALL};`],
+    [
+      "nested in a swallowing try",
+      `try { if (x) { await ${CALL}; } } catch { }`
+    ]
+  ])("%s is refused", (_name, code) => {
+    expect(findSwallowedSensitiveReads(code).length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    ["awaited", `await ${CALL};\nreturn ok(rows);`],
+    ["returned from a helper", `return ${CALL};`],
+    ["arrow concise body", `const f = (tx) => ${CALL};`],
+    [
+      "try that rethrows",
+      `try { await ${CALL}; } catch (e) { cleanup(); throw e; }`
+    ],
+    ["try/finally only", `try { await ${CALL}; } finally { done(); }`]
+  ])("%s is accepted", (_name, code) => {
+    expect(findSwallowedSensitiveReads(code)).toEqual([]);
+  });
+
+  test("the evaluator reports it and the result is not valid", () => {
+    const result = evaluateSensitiveReadCoverage(
+      [payrollModule(BASE)],
+      [`try { await ${CALL}; } catch {}`],
+      ["src/pages/api/v1/hr-payroll/runs.ts"]
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.swallowedAudits.length).toBe(1);
   });
 });

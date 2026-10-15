@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:feefe17e051d14c9b3346d97a3aa2b339c420537aa011a0b6b7bf6ab400f0134 -->
+<!-- i18n-source-hash: sha256:2d8d934c706ea94a2bee717efe0a77c4e03a340ee0253688efbb8ddeed1707b5 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1035,6 +1035,15 @@ Hari ini pengecualiannya `periods.read`, `rules.read`, `sod_policy.read`,
 berkas yang menjaga izin, tidak dibuktikan di setiap jalur); helper itu sendiri
 dibuktikan oleh `tests/integration/sensitive-read-audit.integration.test.ts`.
 
+_Bentuk fail-closed (Issue #1014 L6)._ Gate yang sama juga menolak panggilan `recordSensitiveRead`
+yang tidak di-`await` atau di-`return`, dirantai dengan `.catch`/`.then`/`.finally`, atau berada
+di dalam `try` yang `catch`-nya tidak melempar ulang: masing-masing tetap mengembalikan data
+walau audit gagal. Gate ini sintaktis, jadi route #957 dan #961 **juga** harus membuktikannya
+lewat perilaku: panggil `expectAuditFailureYieldsNoData`
+(`tests/fixtures/sensitive-read-fail-closed.ts`) dengan badan handler; ia menyuntikkan penulisan
+audit yang gagal dan mewajibkan penolakan atau respons non-2xx tanpa data. **Tes route itu adalah
+kriteria penerimaan #957 dan #961.**
+
 **B. Data payroll tidak pernah keluar lewat permukaan turunan.**
 `src/modules/_shared/payroll-data-boundary.ts` adalah satu-satunya daftar nama
 tabel terlarang (`awcms_hr_payroll_*`, `awcms_hr_compensation`,
@@ -1043,11 +1052,14 @@ kutipan apa pun) ditambah modul pemilik `hr_payroll`. Setiap registry yang dapat
 menyebut tabel menegakkannya, dan masing-masing menolak lagi saat SQL dibangun:
 registry proyeksi reporting beserta tiga enginenya, registry sumber site-search,
 registry resource comments, `edge-cache:surfaces:check` (berdasarkan pemilik,
-kosakata payroll di key atau pola, dan tumpang-tindih dengan route yang dilayani
-modul payroll), dan ekspor laporan (ekspor dibuat dari proyeksi, dan
+kosakata payroll di key atau pola, tumpang-tindih dengan route yang dilayani
+modul payroll, pola diuji sebagai regex terhadap path payroll konkret, dan namespace URL HR -
+Issue #1014 L5), dan ekspor laporan (ekspor dibuat dari proyeksi, dan
 `generateProjectionExport` menolak lagi saat menulis). Sebuah tes membaca
 `module-contract.ts` dan gagal bila muncul tipe deskriptor **baru** yang menyebut
-tabel, sehingga registry berikutnya harus memutuskan. Dua registry dikecualikan
+tabel, sehingga registry berikutnya harus memutuskan. Proyeksi reporting bersumber `domain_event`
+tidak boleh mengonsumsi tipe event payroll (`awcms.hr.payroll.*`, `awcms.hr.commission.*`;
+kosakata yang sama dengan path). Dua registry dikecualikan
 dengan sengaja, masing-masing dengan kontrolnya sendiri: `subjectData` (baris
 milik subjek sendiri, dengan `redactedColumns`; PS-17 mewajibkan setiap tabel
 payroll punya satu) dan `dataLifecycle` (retensi dan legal hold; PS-17
@@ -1068,7 +1080,12 @@ arsip `data_lifecycle` bersifat _reversible_ (nilai yang sudah diawali `'` plus
 pemimpin juga diberi awalan, dan `read()` membuang tepat satu kutip), sehingga
 restore mengembalikan byte aslinya. Angka bertipe ditulis sebagai angka; string
 numerik tidak dipercaya. `tests/csv-formula-neutralisation.test.ts` memindai `src/`
-dan gagal bila penulis CSV tidak memakai helper itu.
+dan gagal bila penulis CSV tidak memakai helper itu. Sejak Issue #1014 L4 pemindaiannya
+struktural (`scripts/lib/csv-writer-scan.ts`): penulis adalah berkas mana pun yang
+menggabungkan sel dengan `.join(",")` dan baris dengan newline, apa pun namanya (termasuk fungsi
+panah), dan SETIAP sel yang digabung harus berupa panggilan helper atau literal header tetap;
+meng-import helper tidak membuktikan apa pun, dan pengecualian hanya berlaku untuk heuristik
+nama/`text/csv`, tidak pernah untuk berkas yang benar-benar menggabungkan sel.
 
 **D. Pengerasan setelah audit keamanan (Issue #978).** Versi pertama A sampai C
 lulus tinjauan dengan syarat; yang berikut diperbaiki dan menjadi bagian desain di

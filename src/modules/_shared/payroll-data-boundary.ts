@@ -111,6 +111,50 @@ export const PAYROLL_PATH_VOCABULARY =
   /payroll|payslip|compensation|payout|salary|salaries|wage|commission|accrual/i;
 
 /**
+ * Concrete paths a payroll route can take, written as paths rather than as
+ * words (Issue #1014 L5). A lexical check on the surface pattern misses
+ * `^/api/v1/hr/[^/]+/runs`, which names no pay word at all; testing the pattern
+ * as a REGEX against these probes does not. The module-declared routes are
+ * probed too (`findPayrollSurfaces`), so this list only has to cover the
+ * period before a payroll module declares any route.
+ */
+export const PAYROLL_ROUTE_PROBES: readonly string[] = [
+  "/api/v1/hr/payroll/runs",
+  "/api/v1/hr/payroll/runs/00000000-0000-4000-8000-000000000001",
+  "/api/v1/hr/runs",
+  "/api/v1/hr/payslips/00000000-0000-4000-8000-000000000001",
+  "/api/v1/hr/employees/00000000-0000-4000-8000-000000000001/compensation",
+  "/api/v1/hr-payroll/runs",
+  "/api/v1/hr-payroll/payslips",
+  "/api/v1/hr-commission/accruals",
+  "/api/v1/payroll/runs",
+  "/admin/hr/payroll",
+  "/admin/hr-payroll/runs",
+  "/me/payslips"
+];
+
+/**
+ * URL namespaces that belong to the HR modules. No public cache surface has a
+ * reason to sit under them, so a pattern whose literal prefix is one of these
+ * (or that a probe under one matches) is refused whatever its words are.
+ */
+export const PAYROLL_ROUTE_NAMESPACES: readonly string[] = [
+  "/api/v1/hr/",
+  "/api/v1/hr-",
+  "/admin/hr/",
+  "/admin/hr-"
+];
+
+/**
+ * Event types a payroll module emits (`awcms.hr.payroll.*`,
+ * `awcms.hr.commission.*`, `hr_payroll.*`). Reuses the path vocabulary: the
+ * words that make a URL payroll make an event type payroll.
+ */
+export function isPayrollEventType(eventType: string): boolean {
+  return PAYROLL_PATH_VOCABULARY.test(String(eventType));
+}
+
+/**
  * `"public"."awcms_hr_payslips"`, `Public.AWCMS_HR_PAYSLIPS` and
  * `awcms_hr_payslips` are the same table to PostgreSQL, so the comparison is on
  * the unquoted, lower-cased, schema-stripped name.
@@ -147,6 +191,16 @@ export function findPayrollTables(names: Iterable<string>): string[] {
 /** True when `moduleKey` is a module that owns payroll data. */
 export function isPayrollOwnerModule(moduleKey: string | null | undefined) {
   return Boolean(moduleKey) && PAYROLL_OWNER_MODULE_KEYS.includes(moduleKey!);
+}
+
+/** Refusal for a projection that consumes a payroll domain event. */
+export function payrollEventMessage(surface: string, eventType: string) {
+  return (
+    `${surface} consumes the payroll event "${eventType}". An event payload is ` +
+    "a derived copy of per-employee pay, readable by whoever holds the report " +
+    "permission (hr-payroll.md section 13.2, PS-18). See " +
+    "src/modules/_shared/payroll-data-boundary.ts."
+  );
 }
 
 /**
