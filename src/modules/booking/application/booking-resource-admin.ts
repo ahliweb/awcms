@@ -31,6 +31,7 @@
  * Audit rows record ids, codes and the NAMES of changed fields, never a label.
  */
 import {
+  decodeKeysetCursor,
   utcMicrosecondTextSql,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -987,4 +988,92 @@ export async function restorePool(
     pool: (await getPool(tx, tenantId, id))!,
     replayed: false
   };
+}
+
+/** Upper bound of the lookup helpers below: 50 pages of {@link ADMIN_PAGE_SIZE}. A tenant past it is a design question, not a silent cut. */
+const LOOKUP_PAGES = 50;
+
+/** Every resource of the tenant, page after page (bounded), for a screen's name lookup or picker. */
+export async function listAllResources(
+  tx: Sql,
+  tenantId: string,
+  filters: ResourceListFilters
+): Promise<ResourceDto[]> {
+  const all: ResourceDto[] = [];
+  let cursor: KeysetCursor | undefined;
+
+  for (let page = 0; page < LOOKUP_PAGES; page += 1) {
+    const result = await listResources(tx, tenantId, filters, cursor);
+
+    all.push(...result.resources);
+
+    const next = result.nextCursor
+      ? decodeKeysetCursor(result.nextCursor)
+      : null;
+
+    if (!next) break;
+
+    cursor = next;
+  }
+
+  return all;
+}
+
+/** Every pool of the tenant, page after page (bounded). */
+export async function listAllPools(
+  tx: Sql,
+  tenantId: string,
+  filters: { deleted: DeletedFilter }
+): Promise<PoolDto[]> {
+  const all: PoolDto[] = [];
+  let cursor: KeysetCursor | undefined;
+
+  for (let page = 0; page < LOOKUP_PAGES; page += 1) {
+    const result = await listPools(tx, tenantId, filters, cursor);
+
+    all.push(...result.pools);
+
+    const next = result.nextCursor
+      ? decodeKeysetCursor(result.nextCursor)
+      : null;
+
+    if (!next) break;
+
+    cursor = next;
+  }
+
+  return all;
+}
+
+/** The units of every live STAY resource in one read (a picker's options), bounded at 5,000 rows. */
+export async function listStayUnits(
+  tx: Sql,
+  tenantId: string
+): Promise<{ resourceId: string; unit: UnitDto }[]> {
+  const rows = (await tx`
+    SELECT u.resource_id, u.id, u.ordinal, u.label, u.status
+    FROM awcms_booking_resource_units u
+    JOIN awcms_booking_resources r
+      ON r.tenant_id = u.tenant_id AND r.id = u.resource_id
+    WHERE u.tenant_id = ${tenantId}
+      AND r.booking_mode = 'stay' AND r.deleted_at IS NULL
+    ORDER BY u.resource_id, u.ordinal
+    LIMIT 5000
+  `) as {
+    resource_id: string;
+    id: string;
+    ordinal: number;
+    label: string | null;
+    status: "active" | "inactive";
+  }[];
+
+  return rows.map((row) => ({
+    resourceId: row.resource_id,
+    unit: {
+      id: row.id,
+      ordinal: row.ordinal,
+      label: row.label,
+      status: row.status
+    }
+  }));
 }

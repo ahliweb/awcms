@@ -161,41 +161,24 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_workforce.employments.update",
   "hr_workforce.settings.configure",
   "hr_workforce.settings.read",
-  // booking (32) — ADR-0131 / Issue #937. The foundation slice has no route and
-  // no screen: the schema, the permission catalogue and the pure state machine
-  // only. Every key is unbuilt work, and the list shrinks as the admin screens
-  // land with Issues #938 to #941 (the module is `experimental` until then).
-  "booking.resources.read",
-  "booking.resources.create",
-  "booking.resources.update",
-  "booking.resources.delete",
-  "booking.resources.restore",
-  "booking.offerings.read",
-  "booking.offerings.create",
-  "booking.offerings.update",
-  "booking.offerings.delete",
-  "booking.offerings.restore",
-  "booking.schedules.read",
-  "booking.schedules.create",
-  "booking.schedules.update",
-  "booking.schedules.delete",
-  "booking.blocks.read",
-  "booking.blocks.create",
-  "booking.blocks.release",
+  // booking (7) — ADR-0131 / Issue #937. Issue #942 shipped the admin screens
+  // (`/admin/booking/*`) and claimed 25 of the 32 permissions. The seven left
+  // have no screen YET, each for a reason the screens' own docblocks give:
+  //   * `availability.read` -- the search/quote an operator would run before
+  //     creating a reservation; belongs with the reservation-create screen.
+  //   * `reservations.create`, `.reschedule`, `.override` -- they need a
+  //     date/resource picker and, for override, a justified high-risk affordance;
+  //     the detail screen deliberately offers only the single-call transitions.
+  //   * `reservations.reconcile` -- the route does not exist yet.
+  //   * `reservation_notes.read` -- an audited read of customer text; the
+  //     screens deliberately never show the note.
+  //   * `reports.read` -- the occupancy/utilization reports have no screen yet.
   "booking.availability.read",
-  "booking.reservations.read",
   "booking.reservation_notes.read",
   "booking.reservations.create",
-  "booking.reservations.confirm",
-  "booking.reservations.cancel",
   "booking.reservations.reschedule",
-  "booking.reservations.check_in",
-  "booking.reservations.complete",
-  "booking.reservations.no_show",
   "booking.reservations.override",
   "booking.reservations.reconcile",
-  "booking.policy.read",
-  "booking.policy.configure",
   "booking.reports.read",
 
   // hr_commission (5) — ADR-0132 / Issue #950. Phase 2 foundation ships API-first

@@ -37,9 +37,16 @@
  * `resources` with their units and pool membership, `resource-pools`, `offerings`
  * and `policy`, `application/booking-*-admin.ts`), the reads and writes the admin
  * screens are built on. What does NOT exist yet, deliberately: the reconciliation
- * route and the admin screens (Issue #942). The module therefore still ships `experimental` and declares no
- * `navigation`: a status ADR-0021 allows without an admin screen, and the one the
- * PR that adds the first screen flips to `active`.
+ * route.
+ *
+ * ## The admin screens (Issue #942) and the status
+ *
+ * The screens exist: `/admin/booking/{reservations,resources,offerings,schedules,
+ * blocks,policy}` plus the reservation detail, a view of the list page (`/admin/booking/reservations?id=`),
+ * each a `navigation` entry whose `requiredPermission` is seeded (`sql/181`) and
+ * enforced by the route the page drives. ADR-0021 criterion 1 (every ACTIVE module
+ * declares a screen) is therefore met and the module is `active`: it was
+ * `experimental` only because it had none.
  *
  * ## No money, no product, no customer name
  *
@@ -150,14 +157,13 @@ function stamps(input: {
 export const bookingModule = defineModule({
   key: BOOKING_MODULE_KEY,
   name: "Booking",
-  version: "0.1.0",
-  // `experimental` is the feature flag: the module has no admin screen until
-  // Issues #939 to #941 (Issue #938 added the availability read and the schedule
-  // routes, Issue #939 the allocator), and ADR-0021's "every ACTIVE module declares a screen" would be
-  // false the other way round.
-  status: "experimental",
+  version: "0.2.0",
+  // `active` since Issue #942: the module was `experimental` while it had no
+  // admin screen (ADR-0021 criterion 1: every ACTIVE module declares one), and it
+  // now declares six.
+  status: "active",
   description:
-    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. Allocator slice (Issue #939): the slot allocator that wins capacity units all-or-none under the exclusion constraint, holds with expiry (lazy reclaim at write time plus the observable `booking:holds:expire` reaper, correctness independent of it), the claim service `placeHold`, and a read-only reconciliation. Reservation slice (Issue #941): create-hold, confirm, cancel, reschedule with lineage, check-in, check-out and staff-only no-show, each idempotent, audited and published as one of nine domain events in the same transaction; the BookingPort; safe default hold caps. Holds no price, payment state, product id or customer name.",
+    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. Allocator slice (Issue #939): the slot allocator that wins capacity units all-or-none under the exclusion constraint, holds with expiry (lazy reclaim at write time plus the observable `booking:holds:expire` reaper, correctness independent of it), the claim service `placeHold`, and a read-only reconciliation. Reservation slice (Issue #941): create-hold, confirm, cancel, reschedule with lineage, check-in, check-out and staff-only no-show, each idempotent, audited and published as one of nine domain events in the same transaction; the BookingPort; safe default hold caps. Holds no price, payment state, product id or customer name. Admin configuration slice (Issue #1030): resources with units and pools, offerings and the tenant policy as routes. Operator surface (Issue #942): /admin/booking/{reservations,resources,offerings,schedules,blocks,policy}.",
   dependencies: [
     "tenant_admin",
     "identity_access",
@@ -176,6 +182,44 @@ export const bookingModule = defineModule({
     openApiPath: "openapi/modules/booking.openapi.yaml",
     basePath: "/api/v1/booking"
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_booking_reservations",
+      path: "/admin/booking/reservations",
+      order: 30,
+      requiredPermission: "booking.reservations.read"
+    },
+    {
+      labelKey: "admin.layout.nav_booking_resources",
+      path: "/admin/booking/resources",
+      order: 31,
+      requiredPermission: "booking.resources.read"
+    },
+    {
+      labelKey: "admin.layout.nav_booking_offerings",
+      path: "/admin/booking/offerings",
+      order: 32,
+      requiredPermission: "booking.offerings.read"
+    },
+    {
+      labelKey: "admin.layout.nav_booking_schedules",
+      path: "/admin/booking/schedules",
+      order: 33,
+      requiredPermission: "booking.schedules.read"
+    },
+    {
+      labelKey: "admin.layout.nav_booking_blocks",
+      path: "/admin/booking/blocks",
+      order: 34,
+      requiredPermission: "booking.blocks.read"
+    },
+    {
+      labelKey: "admin.layout.nav_booking_policy",
+      path: "/admin/booking/policy",
+      order: 35,
+      requiredPermission: "booking.policy.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "resources",

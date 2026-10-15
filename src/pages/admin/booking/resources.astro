@@ -1,0 +1,1023 @@
+---
+/**
+ * Booking resources, their units and resource pools (Issue #942, over the
+ * #1030 admin APIs): the rooms, chairs, courts or vehicles that can be booked.
+ *
+ * Reads happen server-side with the SAME functions the JSON routes use
+ * (`listResources`, `getResource`, `listPools`) inside `loadAdminScreen`, so the
+ * entry decision and the read share one transaction. Every mutation goes through
+ * an existing route with an `Idempotency-Key`; this page holds no business rule.
+ * The database guards (a booking mode or time zone that cannot change while the
+ * resource has live bookings, capacity that only grows) reach the operator as the
+ * routes' named refusals, translated by `booking-admin-messages.ts`.
+ *
+ * Pools are governed by the `resources.*` permissions (booking.md section 6) and
+ * live on this screen: a resource joins a pool through its own pool field.
+ * Every gate here is UX-only; the endpoint guards are the authority.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { bookingMessages } from "../../../lib/booking-admin-messages";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import {
+  getResource,
+  listAllPools,
+  listAllResources,
+  listResources,
+  type PoolDto,
+  type ResourceDto
+} from "../../../modules/booking/application/booking-resource-admin";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+const MODE_LABEL: Record<"slot" | "stay", string> = {
+  slot: t("By time"),
+  stay: t("By night")
+};
+const STATUS_LABEL: Record<"active" | "inactive", string> = {
+  active: t("Active"),
+  inactive: t("Inactive")
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const editParam = Astro.url.searchParams.get("edit");
+const editId =
+  editParam && UUID.test(editParam) ? editParam.toLowerCase() : null;
+const cursorParam = Astro.url.searchParams.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "booking",
+    activityCode: "resources",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    const canCreate = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "create"
+    });
+    const canUpdate = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "update"
+    });
+    const canDelete = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "delete"
+    });
+    const canRestore = await can({
+      moduleKey: "booking",
+      activityCode: "resources",
+      action: "restore"
+    });
+    const page = await listResources(
+      tx,
+      ssr.tenantId,
+      { deleted: "exclude" },
+      cursor ?? undefined
+    );
+    const pools = await listAllPools(tx, ssr.tenantId, { deleted: "exclude" });
+    const deletedResources = canRestore
+      ? await listAllResources(tx, ssr.tenantId, { deleted: "only" })
+      : [];
+    const deletedPools = canRestore
+      ? await listAllPools(tx, ssr.tenantId, { deleted: "only" })
+      : [];
+    const editing =
+      editId && canUpdate ? await getResource(tx, ssr.tenantId, editId) : null;
+
+    return {
+      resources: page.resources,
+      nextCursor: page.nextCursor,
+      pools,
+      deletedResources,
+      deletedPools,
+      editing: editing && editing.deletedAt === null ? editing : null,
+      canCreate,
+      canUpdate,
+      canDelete,
+      canRestore
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/booking/resources.astro: failed to load the booking resources",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const resources: ResourceDto[] = data?.resources ?? [];
+const pools: PoolDto[] = data?.pools ?? [];
+const deletedResources: ResourceDto[] = data?.deletedResources ?? [];
+const deletedPools: PoolDto[] = data?.deletedPools ?? [];
+const editing: ResourceDto | null = data?.editing ?? null;
+const canCreate = data?.canCreate ?? false;
+const canUpdate = data?.canUpdate ?? false;
+const canDelete = data?.canDelete ?? false;
+const canRestore = data?.canRestore ?? false;
+const showActions = canUpdate || canDelete;
+const showForm = Boolean(editing) || (canCreate && !editId);
+const poolName = new Map(pools.map((pool) => [pool.id, pool.name]));
+const formMode: "slot" | "stay" = editing?.bookingMode ?? "slot";
+
+/**
+ * A control's value plus what the script needs to send it back unchanged: the
+ * displayed text (`data-initial`) and the API value it came from
+ * (`data-original`). A PATCH sends only what the operator changed.
+ */
+const field = (display: string, original: unknown) => ({
+  value: display,
+  "data-initial": display,
+  "data-original": JSON.stringify(original ?? null)
+});
+const selectAttrs = (current: string, original: unknown) => ({
+  "data-initial": current,
+  "data-original": JSON.stringify(original ?? null)
+});
+
+const messages = {
+  ...bookingMessages(t),
+  confirmDeleteResource: t("Delete {code}? It can be restored later.", {
+    code: "{code}"
+  }),
+  confirmDeletePool: t("Delete the pool {code}? It can be restored later.", {
+    code: "{code}"
+  })
+};
+---
+
+<AdminLayout
+  title={t("Resources")}
+  description={t(
+    "The rooms, chairs, courts or vehicles that can be booked, the units each one has, and the pools that group interchangeable resources."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="resources-denied" role="alert">
+      {t("You do not have permission to view booking resources.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="resources-error" role="alert">
+      {t("Resources could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <div id="booking-messages" hidden data-msgs={JSON.stringify(messages)} />
+  )}
+
+  {canRead && !loadError && showForm && (
+    <form
+      id="resource-form"
+      class="admin-create-form fade-in-up"
+      data-resource-id={editing?.id ?? ""}
+      data-capacity={editing?.capacity ?? 0}
+    >
+      <p class="form-legend">
+        {editing
+          ? t("Edit resource {code}", { code: editing.code })
+          : t("Create a resource")}
+      </p>
+      <p
+        id="resource-form-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+
+      <label for="resource-code">{t("Code")}</label>
+      <input
+        id="resource-code"
+        type="text"
+        required
+        autocomplete="off"
+        maxlength="64"
+        value={editing?.code ?? ""}
+        disabled={Boolean(editing)}
+      />
+
+      <label for="resource-name">{t("Name")}</label>
+      <input
+        id="resource-name"
+        type="text"
+        required
+        autocomplete="off"
+        maxlength="200"
+        {...field(editing?.name ?? "", editing?.name ?? "")}
+      />
+
+      <label for="resource-kind">
+        {t("Kind (for example room, chair, court)")}
+      </label>
+      <input
+        id="resource-kind"
+        type="text"
+        required
+        autocomplete="off"
+        maxlength="32"
+        {...field(editing?.kind ?? "room", editing?.kind ?? "room")}
+      />
+
+      <label for="resource-mode">{t("Booked")}</label>
+      <select id="resource-mode" {...selectAttrs(formMode, formMode)}>
+        {(["slot", "stay"] as const).map((value) => (
+          <option value={value} selected={formMode === value}>
+            {MODE_LABEL[value]}
+          </option>
+        ))}
+      </select>
+
+      <label for="resource-timezone">{t("Time zone")}</label>
+      <input
+        id="resource-timezone"
+        type="text"
+        required
+        autocomplete="off"
+        placeholder="Asia/Jakarta"
+        {...field(editing?.timezone ?? "", editing?.timezone ?? "")}
+      />
+
+      <div id="resource-stay-fields" hidden={formMode !== "stay"}>
+        <label for="resource-check-in">{t("Check-in time")}</label>
+        <input
+          id="resource-check-in"
+          type="time"
+          {...field(
+            (editing?.stayCheckInTime ?? "").slice(0, 5),
+            editing?.stayCheckInTime ?? null
+          )}
+        />
+        <label for="resource-check-out">{t("Check-out time")}</label>
+        <input
+          id="resource-check-out"
+          type="time"
+          {...field(
+            (editing?.stayCheckOutTime ?? "").slice(0, 5),
+            editing?.stayCheckOutTime ?? null
+          )}
+        />
+      </div>
+
+      <label for="resource-capacity">
+        {editing ? t("Units (can only grow)") : t("Units")}
+      </label>
+      <input
+        id="resource-capacity"
+        type="number"
+        required
+        min={editing?.capacity ?? 1}
+        max="500"
+        step="1"
+        {...field(String(editing?.capacity ?? 1), editing?.capacity ?? 1)}
+      />
+
+      <label for="resource-pool">{t("Pool")}</label>
+      <select
+        id="resource-pool"
+        {...selectAttrs(editing?.poolId ?? "", editing?.poolId ?? null)}
+      >
+        <option value="" selected={!editing?.poolId}>
+          {t("No pool")}
+        </option>
+        {pools.map((pool) => (
+          <option value={pool.id} selected={editing?.poolId === pool.id}>
+            {pool.name}
+          </option>
+        ))}
+      </select>
+
+      <label for="resource-sort">{t("Sort order")}</label>
+      <input
+        id="resource-sort"
+        type="number"
+        step="1"
+        {...field(String(editing?.sortOrder ?? 0), editing?.sortOrder ?? 0)}
+      />
+
+      {editing && (
+        <>
+          <label for="resource-status">{t("Status")}</label>
+          <select
+            id="resource-status"
+            {...selectAttrs(editing.status, editing.status)}
+          >
+            {(["active", "inactive"] as const).map((value) => (
+              <option value={value} selected={editing.status === value}>
+                {STATUS_LABEL[value]}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      {!editing && (
+        <>
+          <label for="resource-unit-labels">
+            {t("Unit labels (optional, one per line)")}
+          </label>
+          <textarea id="resource-unit-labels" rows="3" />
+        </>
+      )}
+
+      {editing && editing.units && (
+        <fieldset class="admin-fieldset">
+          <legend>{t("Units")}</legend>
+          <p class="form-hint">
+            {t(
+              "A unit is never removed. Deactivating it stops new bookings on it; bookings already made stay."
+            )}
+          </p>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-label={t("Units")}
+          >
+            <table class="data-table data-table--stack" id="units-table">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Number")}</th>
+                  <th scope="col">{t("Label")}</th>
+                  <th scope="col">{t("Status")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {editing.units.map((unit) => (
+                  <tr data-unit-row={unit.id}>
+                    <td data-label={t("Number")}>{unit.ordinal}</td>
+                    <td data-label={t("Label")}>
+                      <input
+                        type="text"
+                        class="unit-label-input"
+                        maxlength="100"
+                        value={unit.label ?? ""}
+                        data-initial={unit.label ?? ""}
+                        data-unit-id={unit.id}
+                        aria-label={t("Label of unit {number}", {
+                          number: unit.ordinal
+                        })}
+                      />
+                    </td>
+                    <td data-label={t("Status")}>
+                      <select
+                        class="unit-status-select"
+                        data-initial={unit.status}
+                        data-unit-id={unit.id}
+                        aria-label={t("Status of unit {number}", {
+                          number: unit.ordinal
+                        })}
+                      >
+                        {(["active", "inactive"] as const).map((value) => (
+                          <option
+                            value={value}
+                            selected={unit.status === value}
+                          >
+                            {STATUS_LABEL[value]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </fieldset>
+      )}
+
+      <button type="submit" id="resource-submit">
+        {editing ? t("Save resource") : t("Create resource")}
+      </button>
+      {editing && (
+        <a class="btn btn-secondary" href="/admin/booking/resources">
+          {t("Cancel")}
+        </a>
+      )}
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <p
+      id="resource-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canRead && !loadError && (
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="resources-table-caption"
+    >
+      <table class="data-table data-table--stack" id="resources-table">
+        <caption id="resources-table-caption">
+          {tn("{count} resource", "{count} resources", resources.length, {
+            count: resources.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Code")}</th>
+            <th scope="col">{t("Name")}</th>
+            <th scope="col">{t("Booked")}</th>
+            <th scope="col">{t("Time zone")}</th>
+            <th scope="col">{t("Units")}</th>
+            <th scope="col">{t("Pool")}</th>
+            <th scope="col">{t("Status")}</th>
+            {showActions && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {resources.length === 0 ? (
+            <tr>
+              <td class="data-table-empty" colspan={showActions ? 8 : 7}>
+                <div class="empty-state">
+                  <span class="empty-state-title">{t("No resources yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? t("Create your first resource using the form above.")
+                      : t(
+                          "Resources created for this tenant will appear here."
+                        )}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            resources.map((resource) => (
+              <tr data-resource-row={resource.id}>
+                <td data-label={t("Code")}>
+                  <span class="cell-code">{resource.code}</span>
+                </td>
+                <td data-label={t("Name")}>{resource.name}</td>
+                <td data-label={t("Booked")}>
+                  {MODE_LABEL[resource.bookingMode]}
+                </td>
+                <td data-label={t("Time zone")}>{resource.timezone}</td>
+                <td data-label={t("Units")}>
+                  {t("{active} of {total} active", {
+                    active: resource.activeUnits,
+                    total: resource.capacity
+                  })}
+                </td>
+                <td data-label={t("Pool")}>
+                  {resource.poolId
+                    ? (poolName.get(resource.poolId) ?? "—")
+                    : "—"}
+                </td>
+                <td data-label={t("Status")} data-status={resource.status}>
+                  <span
+                    class="admin-status-pill"
+                    data-tone={
+                      resource.status === "active" ? "success" : "neutral"
+                    }
+                  >
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
+                    {STATUS_LABEL[resource.status]}
+                  </span>
+                </td>
+                {showActions && (
+                  <td data-label={t("Actions")} class="stacked-block">
+                    <div class="row-actions">
+                      {canUpdate && (
+                        <a
+                          class="btn btn-secondary"
+                          href={`/admin/booking/resources?edit=${resource.id}`}
+                          aria-label={t("Edit {code}", { code: resource.code })}
+                        >
+                          {t("Edit")}
+                        </a>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          class="module-toggle resource-delete-btn"
+                          data-resource-id={resource.id}
+                          data-resource-code={resource.code}
+                        >
+                          {t("Delete")}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {canRead && !loadError && data?.nextCursor && (
+    <p>
+      <a
+        class="btn btn-secondary"
+        id="resources-next"
+        href={`/admin/booking/resources?cursor=${data.nextCursor}`}
+      >
+        {t("Next page")}
+      </a>
+    </p>
+  )}
+
+  {canRead && !loadError && canRestore && deletedResources.length > 0 && (
+    <section class="admin-section fade-in-up" id="deleted-resources">
+      <h2 class="admin-section-title">
+        {t("Deleted resources")}
+        <span class="count-pill">{deletedResources.length}</span>
+      </h2>
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="deleted-resources-caption"
+      >
+        <table
+          class="data-table data-table--stack"
+          id="deleted-resources-table"
+        >
+          <caption id="deleted-resources-caption">
+            {tn(
+              "{count} deleted resource",
+              "{count} deleted resources",
+              deletedResources.length,
+              { count: deletedResources.length }
+            )}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {deletedResources.map((resource) => (
+              <tr data-deleted-resource-row={resource.id}>
+                <td data-label={t("Code")}>
+                  <span class="cell-code">{resource.code}</span>
+                </td>
+                <td data-label={t("Name")}>{resource.name}</td>
+                <td data-label={t("Actions")} class="stacked-block">
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="module-toggle resource-restore-btn"
+                      data-resource-id={resource.id}
+                    >
+                      {t("Restore")}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {canRead && !loadError && (
+    <section class="admin-section fade-in-up" id="pools-section">
+      <h2 class="admin-section-title">
+        {t("Resource pools")}
+        <span class="count-pill">{pools.length}</span>
+      </h2>
+      <p class="form-hint">
+        {t(
+          "A pool groups interchangeable resources, such as three treatment rooms. A resource joins a pool in its own form."
+        )}
+      </p>
+
+      {canCreate && (
+        <form id="pool-create-form" class="admin-create-form">
+          <p class="form-legend">{t("Create a pool")}</p>
+          <p
+            id="pool-create-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+          <label for="pool-code">{t("Code")}</label>
+          <input
+            id="pool-code"
+            type="text"
+            required
+            autocomplete="off"
+            maxlength="64"
+          />
+          <label for="pool-name">{t("Name")}</label>
+          <input
+            id="pool-name"
+            type="text"
+            required
+            autocomplete="off"
+            maxlength="200"
+          />
+          <button type="submit" id="pool-create-submit">
+            {t("Create pool")}
+          </button>
+        </form>
+      )}
+
+      <p
+        id="pool-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="pools-table-caption"
+      >
+        <table class="data-table data-table--stack" id="pools-table">
+          <caption id="pools-table-caption">
+            {tn("{count} pool", "{count} pools", pools.length, {
+              count: pools.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Resources")}</th>
+              {showActions && <th scope="col">{t("Actions")}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {pools.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={showActions ? 4 : 3}>
+                  <div class="empty-state">
+                    <span class="empty-state-title">{t("No pools yet")}</span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              pools.map((pool) => (
+                <tr data-pool-row={pool.id}>
+                  <td data-label={t("Code")}>
+                    <span class="cell-code">{pool.code}</span>
+                  </td>
+                  <td
+                    data-label={t("Name")}
+                    class={canUpdate ? "stacked-block" : ""}
+                  >
+                    {canUpdate ? (
+                      <input
+                        type="text"
+                        class="pool-name-input"
+                        maxlength="200"
+                        value={pool.name}
+                        data-pool-name={pool.id}
+                        aria-label={t("Name of pool {code}", {
+                          code: pool.code
+                        })}
+                      />
+                    ) : (
+                      pool.name
+                    )}
+                  </td>
+                  <td data-label={t("Resources")}>{pool.memberCount}</td>
+                  {showActions && (
+                    <td data-label={t("Actions")} class="stacked-block">
+                      <div class="row-actions">
+                        {canUpdate && (
+                          <button
+                            type="button"
+                            class="module-toggle pool-save-btn"
+                            data-pool-id={pool.id}
+                          >
+                            {t("Save")}
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            class="module-toggle pool-delete-btn"
+                            data-pool-id={pool.id}
+                            data-pool-code={pool.code}
+                          >
+                            {t("Delete")}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {canRestore && deletedPools.length > 0 && (
+        <div id="deleted-pools">
+          <h3 class="admin-section-title">
+            {t("Deleted pools")}
+            <span class="count-pill">{deletedPools.length}</span>
+          </h3>
+          <ul class="plain-list">
+            {deletedPools.map((pool) => (
+              <li data-deleted-pool-row={pool.id}>
+                <span class="cell-code">{pool.code}</span> {pool.name}
+                <button
+                  type="button"
+                  class="module-toggle pool-restore-btn"
+                  data-pool-id={pool.id}
+                >
+                  {t("Restore")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP: it makes Astro bundle this script as an
+  // external file (an import-free script is inlined, and inline is blocked).
+  import {
+    inputValue,
+    onAction,
+    onSubmit
+  } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    bookingMutate,
+    collectBody,
+    messageBox,
+    readMessages,
+    type FormField
+  } from "../../../lib/ui/booking-admin-client";
+  import {
+    countOrNull,
+    localTimeOrNull,
+    textOrNull
+  } from "../../../lib/booking-admin-format";
+
+  const messages = readMessages();
+  const formError = messageBox("resource-form-error");
+  const actionError = messageBox("resource-action-error");
+  const poolCreateError = messageBox("pool-create-error");
+  const poolActionError = messageBox("pool-action-error");
+
+  const mode = document.getElementById("resource-mode");
+  const stayFields = document.getElementById("resource-stay-fields");
+  mode?.addEventListener("change", () => {
+    if (stayFields) {
+      stayFields.hidden = (mode as HTMLSelectElement).value !== "stay";
+    }
+  });
+
+  const text = (raw: string) => raw.trim();
+  const resourceFields: FormField[] = [
+    { id: "resource-name", key: "name", convert: text },
+    { id: "resource-kind", key: "kind", convert: text },
+    { id: "resource-mode", key: "bookingMode", convert: text },
+    { id: "resource-timezone", key: "timezone", convert: text },
+    { id: "resource-capacity", key: "capacity", convert: countOrNull },
+    { id: "resource-pool", key: "poolId", convert: textOrNull },
+    {
+      id: "resource-sort",
+      key: "sortOrder",
+      convert: (raw) => countOrNull(raw) ?? 0
+    }
+  ];
+  const stayTimes: FormField[] = [
+    {
+      id: "resource-check-in",
+      key: "stayCheckInTime",
+      convert: localTimeOrNull
+    },
+    {
+      id: "resource-check-out",
+      key: "stayCheckOutTime",
+      convert: localTimeOrNull
+    }
+  ];
+
+  /** The units whose label or status the operator changed, and only those properties. */
+  function changedUnits(): {
+    id: string;
+    label?: string | null;
+    status?: string;
+  }[] {
+    const changed: { id: string; label?: string | null; status?: string }[] =
+      [];
+
+    for (const row of Array.from(
+      document.querySelectorAll<HTMLElement>("[data-unit-row]")
+    )) {
+      const label = row.querySelector<HTMLInputElement>(".unit-label-input");
+      const status = row.querySelector<HTMLSelectElement>(
+        ".unit-status-select"
+      );
+      const unit: { id: string; label?: string | null; status?: string } = {
+        id: row.dataset.unitRow ?? ""
+      };
+
+      if (label && label.value !== label.dataset.initial) {
+        unit.label = textOrNull(label.value);
+      }
+      if (status && status.value !== status.dataset.initial) {
+        unit.status = status.value;
+      }
+      if (unit.label !== undefined || unit.status !== undefined) {
+        changed.push(unit);
+      }
+    }
+
+    return changed;
+  }
+
+  onSubmit("resource-form", async ({ form, submit }) => {
+    const id = form.dataset.resourceId ?? "";
+    const isStay = (mode as HTMLSelectElement | null)?.value === "stay";
+
+    if (id) {
+      // A PATCH sends only what changed. Switching the mode to stay must carry
+      // both stay times (the server refuses a stay resource without them);
+      // switching to slot sends none and the server clears them.
+      const body = collectBody(
+        [
+          ...resourceFields,
+          { id: "resource-status", key: "status", convert: text }
+        ],
+        { onlyChanged: true }
+      );
+
+      if ("bookingMode" in body && isStay) {
+        for (const time of stayTimes) {
+          const el = document.getElementById(
+            time.id
+          ) as HTMLInputElement | null;
+          body[time.key] = localTimeOrNull(el?.value ?? "");
+        }
+      } else if (isStay) {
+        Object.assign(body, collectBody(stayTimes, { onlyChanged: true }));
+      }
+
+      const units = changedUnits();
+      if (units.length > 0) body.units = units;
+
+      if (Object.keys(body).length === 0) {
+        formError.show(messages.nothingToSave ?? "");
+        return;
+      }
+
+      await bookingMutate(
+        submit,
+        formError,
+        messages,
+        "PATCH",
+        `/api/v1/booking/resources/${id}`,
+        body
+      );
+      return;
+    }
+
+    const body = collectBody(resourceFields, { onlyChanged: false });
+    if (!isStay) {
+      body.stayCheckInTime = null;
+      body.stayCheckOutTime = null;
+    } else {
+      for (const time of stayTimes) {
+        const el = document.getElementById(time.id) as HTMLInputElement | null;
+        body[time.key] = localTimeOrNull(el?.value ?? "");
+      }
+    }
+
+    const labels = (
+      document.getElementById(
+        "resource-unit-labels"
+      ) as HTMLTextAreaElement | null
+    )?.value
+      .split("\n")
+      .map((line) => line.trim());
+    const capacity = typeof body.capacity === "number" ? body.capacity : 0;
+
+    body.unitLabels = (labels ?? [])
+      .slice(0, capacity)
+      .map((label) => (label === "" ? null : label));
+
+    await bookingMutate(
+      submit,
+      formError,
+      messages,
+      "POST",
+      "/api/v1/booking/resources",
+      { code: inputValue("resource-code"), ...body }
+    );
+  });
+
+  onAction(".resource-delete-btn", async (button) => {
+    const id = button.dataset.resourceId;
+    if (!id) return;
+    const question = (messages.confirmDeleteResource ?? "").replace(
+      "{code}",
+      button.dataset.resourceCode ?? ""
+    );
+    if (!(await confirmAction(question))) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "DELETE",
+      `/api/v1/booking/resources/${id}`
+    );
+  });
+
+  onAction(".resource-restore-btn", async (button) => {
+    const id = button.dataset.resourceId;
+    if (!id) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "POST",
+      `/api/v1/booking/resources/${id}/restore`
+    );
+  });
+
+  onSubmit("pool-create-form", async ({ submit }) => {
+    await bookingMutate(
+      submit,
+      poolCreateError,
+      messages,
+      "POST",
+      "/api/v1/booking/resource-pools",
+      { code: inputValue("pool-code"), name: inputValue("pool-name") }
+    );
+  });
+
+  onAction(".pool-save-btn", async (button) => {
+    const id = button.dataset.poolId;
+    if (!id) return;
+    const name = document.querySelector<HTMLInputElement>(
+      `[data-pool-name="${id}"]`
+    );
+    await bookingMutate(
+      button,
+      poolActionError,
+      messages,
+      "PATCH",
+      `/api/v1/booking/resource-pools/${id}`,
+      { name: name?.value.trim() ?? "" }
+    );
+  });
+
+  onAction(".pool-delete-btn", async (button) => {
+    const id = button.dataset.poolId;
+    if (!id) return;
+    const question = (messages.confirmDeletePool ?? "").replace(
+      "{code}",
+      button.dataset.poolCode ?? ""
+    );
+    if (!(await confirmAction(question))) return;
+    await bookingMutate(
+      button,
+      poolActionError,
+      messages,
+      "DELETE",
+      `/api/v1/booking/resource-pools/${id}`
+    );
+  });
+
+  onAction(".pool-restore-btn", async (button) => {
+    const id = button.dataset.poolId;
+    if (!id) return;
+    await bookingMutate(
+      button,
+      poolActionError,
+      messages,
+      "POST",
+      `/api/v1/booking/resource-pools/${id}/restore`
+    );
+  });
+</script>

@@ -1020,8 +1020,33 @@ export const READER_BUDGET_BYTES = 24_000;
  * sends the `bindingId` the person was shown with "yes, this is me" and "no"
  * (the server answers 409 if a newer chat replaced it) and words that refusal.
  * Measured actual total, no added margin: 322,819 B (+279 B on 322,540).
+ *
+ * **Raised for Issue #942** (the six `/admin/booking/*` screens that flipped
+ * `booking` to `active`). Seven files, 9,478 B in all: six screen scripts
+ * (985 + 1,714 + 850 + 601 + 2,596 + 2,024 B) and ONE shared chunk of 708 B,
+ * `src/lib/ui/booking-admin-client.ts`, which carries the lifecycle every booking
+ * screen shares (a fresh `Idempotency-Key` per attempt, the translated messages
+ * the page renders as `data-msgs`, the error-code-to-message lookup) so that no
+ * screen script repeats it -- the Issue #552 lesson applied up front. The scripts
+ * import `admin-form-client.ts` and `confirm-dialog-client.ts` (already shared)
+ * and add only their own requests and form-to-body mapping. No new stylesheet
+ * rules: the screens reuse the admin table, status-pill, segmented-filter and
+ * timeline classes. Measured actual total, no added margin: 332,297 B (+9,478 B
+ * on 322,819).
+ *
+ * **Raised again for Issue #942's review**: +1,781 B (334,078 B in all). Three
+ * correctness fixes, not new screens: the seconds-to-minutes round trip no longer
+ * rewrites what the operator did not touch (the shared sender now reads each
+ * control's `data-initial` / `data-original` and a PATCH sends only the changed
+ * fields: `collectBody` in `booking-admin-client.ts`, the pure mapping in
+ * `src/lib/booking-admin-format.ts`), and the sender draws its key from the
+ * repo's `createIdempotencyKeySource` (`admin-idempotency-key.ts`) instead of a
+ * fresh UUID per click. The growth is the screens' own form-to-body mapping
+ * (resources 3,311 B, offerings 2,080 B, policy 938 B) and the shared sender
+ * (1,153 B); nothing is duplicated per screen. No stylesheet grew. Measured
+ * actual total, no added margin.
  */
-export const APP_BUDGET_BYTES = 322_819;
+export const APP_BUDGET_BYTES = 334_078;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

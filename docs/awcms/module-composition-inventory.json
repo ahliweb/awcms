@@ -38,8 +38,8 @@
     {
       "key": "booking",
       "name": "Booking",
-      "version": "0.1.0",
-      "status": "experimental",
+      "version": "0.2.0",
+      "status": "active",
       "type": null,
       "dependencies": [
         "tenant_admin",
@@ -50,7 +50,7 @@
       "capabilitiesProvided": ["booking"],
       "capabilitiesConsumed": [],
       "permissionCount": 32,
-      "navigationCount": 0,
+      "navigationCount": 6,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

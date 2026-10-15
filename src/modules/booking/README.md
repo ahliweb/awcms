@@ -11,7 +11,7 @@ this file is the map of the code.
 
 ## Slices present
 
-Foundation (Issue #937): the descriptor (`experimental`), the schema (`sql/180`),
+Foundation (Issue #937): the descriptor (`experimental` until Issue #942; now `active`), the schema (`sql/180`),
 the permission catalogue (`sql/181`), the pure reservation state machine, the
 guard literals and the audit event names.
 
@@ -40,9 +40,19 @@ nine reservation events on the live AsyncAPI document, and a safe default for th
 hold caps. The block routes (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
 `POST /blocks/{id}/release`) take `Idempotency-Key` with replay and publish no
 event. **Not present yet:** the reconciliation
-route and the admin screens (#942, which is what lets the module leave
-`experimental`).
+route.
 
+Admin screens (Issue #942, no migration, no API change; the module is `active`):
+six screens -- `/admin/booking/reservations` (the list, the hold and its
+expiry; `?id=` is one reservation with its history and the confirm / cancel /
+check-in / complete / no-show actions), `/admin/booking/resources` (with units and pools), `/admin/booking/offerings`,
+`/admin/booking/schedules` (opening hours and closures), `/admin/booking/blocks` and `/admin/booking/policy` --
+each a `navigation` entry whose permission is seeded and enforced. They call only
+the routes above, send every mutation through one shared sender
+(`src/lib/ui/booking-admin-client.ts`) with an `Idempotency-Key`, show refusals
+as translated sentences (`src/lib/booking-admin-messages.ts`, `locales/`), and use
+no browser dialog. Creating, rescheduling and overriding a reservation are not on
+any screen; see [`booking.md` §3.0.3](../../../docs/awcms/booking.md).
 Admin configuration (Issue #1030, no migration; prerequisite of #942): resources
 with their units and pool membership, resource pools, service offerings and the
 tenant policy, under `/api/v1/booking/` (`resources`, `resource-pools`,

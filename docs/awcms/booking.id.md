@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:ab6d92701c667323e2e716e31b5bdcc799ee838bec9636a6d7cdfeb2264142d0 -->
+<!-- i18n-source-hash: sha256:523fb7512be3b5df0d4ae0b13193a1eee36a378cd51007a588e2aa5743827b79 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -12,8 +12,8 @@
 > dengan hold dan kedaluwarsa, serta stay dan malam terblokir lewat alokator yang
 > sama, serta route reservasi, `BookingPort`, dan sembilan event live), route
 > blok (#1012), laporan (#944) dan route konfigurasi admin (#1030: resource dan
-> unit, pool, offering, kebijakan); layar admin masih desain, dan pertanyaan
-> terbuka di §11 tetap mengaturnya. PRD-lite, state machine, ERD dan kamus
+> unit, pool, offering, kebijakan); layar admin (#942, §3.0.3) sudah dibangun, modul berstatus
+> `active`, dan pertanyaan terbuka di §11 tetap mengatur yang belum. PRD-lite, state machine, ERD dan kamus
 > data, hold dan idempotensi, matriks izin/RLS, pelaporan dan event, strategi
 > double-booking beserta tes regresi wajibnya, catatan ancaman dan privasi,
 > kontrak adapter/port, dan pertanyaan terbuka ada dalam satu tempat. Keputusan
@@ -340,6 +340,30 @@ Prasyarat layar admin (#942): layar hanya memanggil ini dan route di atas. Resou
 **Kebijakan.** `GET /policy` mengembalikan `policy` (yang diatur tenant, `null` bila tidak) dan `effective` (yang berlaku). `null` adalah **default modul, bukan "tanpa batas"** (§13: 5 hold hidup per pelanggan, 500 per tenant, hold 15 menit, grace no-show 15 menit, tanpa lead time, horizon 365 hari). `PUT /policy` **mengganti** baris: setiap field harus dikirim (key hilang adalah `400`, sehingga klien parsial tak dapat menghapus batas karena lupa); rentangnya adalah CHECK `sql/180` ditambah batas kewajaran (hold 60 sampai 86400 detik dengan default paling besar sama dengan maksimum, batas minimal 1, horizon 1 sampai 3650 hari, grace no-show 0 sampai 30 hari). Ia hanya mengubah hold dan pencarian **mendatang**. Ia berisiko tinggi (`configure` adalah aksi berisiko tinggi: ia membatasi berapa banyak inventori yang dapat ditahan satu aktor), sehingga baris audit-nya **`critical`** (`booking.policy.configured`, nilai sebelum dan sesudah; angka, nama zona dan jam lokal, tanpa data pribadi). **Tanpa step-up MFA:** [ADR-0141](../adr/0141-permissions-may-require-an-enrolled-mfa-factor.id.md) §6 hanya menandai izin payroll dan menyatakan menandai izin rutin adalah penguncian yang tidak dipilih tenant; tenant yang menginginkannya dapat menambah aturan SoD atas aksi berisiko tinggi itu. `defaultTimezone`, `defaultCheckInTime` dan `defaultCheckOutTime` disimpan agar layar menawarkannya saat membuat resource stay; server tidak menerapkannya.
 
 Audit: pembuatan dan pembaruan resource, pool dan offering adalah `info`, soft delete `warning`, restore `info`; atributnya id, kode dan nama field yang berubah, tidak pernah label unit. **Tanpa domain event** (konfigurasi, seperti blok; §3.0.1).
+
+### 3.0.3 Layar admin (Issue #942)
+
+Enam layar di bawah `/admin/booking/`, masing-masing satu entri `navigation` modul (sehingga `booking` berstatus `active`, bukan `experimental`: kriteria 1 ADR-0021). Mereka hanya memanggil route di §3, §3.0.1 dan §3.0.2; **layar tidak memuat aturan bisnis**, ia memetakan formulir ke body dan penolakan ke kalimat.
+
+| Layar                         | Izin masuk          | Menjalankan                                                                                                                                                      |
+| ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/admin/booking/reservations` | `reservations.read` | daftar (filter status, keyset), hold dan kedaluwarsanya; `?id=` adalah satu reservasi dengan item, riwayat, dan confirm / cancel / check in / complete / no-show |
+| `/admin/booking/resources`    | `resources.read`    | resource beserta unitnya (tampilan ubah memuat unit), dan pool resource (buat, ganti nama, hapus, pulihkan)                                                      |
+| `/admin/booking/offerings`    | `offerings.read`    | offering: buat, ubah, hapus, pulihkan                                                                                                                            |
+| `/admin/booking/schedules`    | `schedules.read`    | jam buka mingguan (tambah, akhiri pada tanggal, nonaktifkan), penutupan dan jam khusus (tambah, hapus)                                                           |
+| `/admin/booking/blocks`       | `blocks.read`       | malam terblokir: blokir, lepaskan                                                                                                                                |
+| `/admin/booking/policy`       | `policy.read`       | kebijakan tenant: satu formulir, `PUT` mengganti seluruh baris                                                                                                   |
+
+Cara mereka dibangun, masing-masing keputusan, bukan kebetulan:
+
+- **Pembacaan memakai fungsi route itu sendiri.** Tiap layar membaca lewat `loadAdminScreen` dengan fungsi aplikasi yang sama dengan route JSON-nya (`listOfferings`, `getResource`, `listReservations`, `getPolicy`, ...), sehingga keputusan masuk (`authorizeInTransaction`, ABAC, log keputusan) dan pembacaan berbagi satu transaksi. Kontrol dijaga `can()` pada izin yang ditegakkan endpoint; setiap gerbang hanya untuk UX dan endpoint-lah otoritasnya. Tenant tanpa izin baca mendapat pemberitahuan `*-denied`; penolakan oleh pool atau circuit breaker adalah `*-error`, tidak pernah "tanpa baris".
+- **Setiap mutasi membawa `Idempotency-Key`.** Satu pengirim bersama (`src/lib/ui/booking-admin-client.ts`, `bookingMutate`) mengambilnya dari `createIdempotencyKeySource` repo (yang dipakai inventory, tax, dan procurement), berkunci pada method + url + body: menekan request YANG SAMA lagi setelah respons hilang memutar ulang respons tersimpan, bukan mengulang, dan request yang diubah mengambil key baru. Klik ganda dihentikan dengan mengunci kontrol. Memorinya per muat halaman, jadi setelah muat ulang manual route bergaya create menjawab `CODE_TAKEN` atau `BLOCK_CONFLICT` dengan jujur (percobaan pertama memang berhasil); delete, restore, release, dan transisi reservasi juga memutar ulang menurut STATUS (§3.0.1, §3.0.2). Sumber bersama itu memakai cadangan `getRandomValues` bila `crypto.randomUUID` tidak ada (profil offline-LAN memakai http polos). Tes kontrak (`tests/admin-booking-page-contract.test.ts`) gagal bila layar mengirim mutasi dengan cara lain.
+- **Penolakan adalah kalimat dalam bahasa pembaca.** Halaman merender pesan terjemahannya sebagai JSON di atribut `data-msgs`, berkunci kode error API (`CODE_TAKEN`, `BOOKING_MODE_IN_USE`, `BLOCK_CONFLICT`, ...); skrip memilih kalimat menurut kode dan tidak pernah mencetak teks server. Tak ada literal Inggris di skrip. Katalognya `locales/en.po` dan `locales/id.po`.
+- **Tanpa dialog browser.** Hapus, batalkan, no-show, lepaskan, dan nonaktifkan lewat `<dialog>` native ADR-0125 (`confirmAction`), dioperasikan dengan keyboard seperti kontrol lain; tak ada kontrol yang hanya bisa dengan penunjuk. Tabel adalah wilayah yang dapat digulir dan difokus dengan caption, ditumpuk di bawah lebar tablet; sapuan mencakup 360 px dan axe di kedua tema (`responsive-360.e2e.ts`, `a11y-axe.e2e.ts`), dan `tests/e2e/admin-booking.e2e.ts` menjalankan setiap aksi dengan keyboard.
+- **Detail reservasi adalah tampilan halaman daftar (`?id=`), bukan route dinamis.** Route admin dinamis harus dapat dijangkau dari tautan di induknya, dan tenant baru tak punya reservasi untuk ditautkan; sebagai tampilan ia tidak mungkin yatim. Ia menampilkan item, kedaluwarsa hold (hold yang lewat dan belum dilepas sapuan ditandai **Terlambat dilepas**, dinilai pada jam DATABASE, `hold_expires_at <= clock_timestamp()`, seperti `booking-hold-expiry.ts`) dan riwayat append-only sebagai linimasa jenis event tertutup. Ia tidak pernah menampilkan referensi pelanggan maupun catatan (`reservation_notes.read` adalah pembacaan beraudit tersendiri).
+- **Satuan waktu di layar adalah menit** (durasi, buffer, pemberitahuan, lama hold, toleransi no-show), dan konversinya TIDAK PERNAH menulis ulang apa yang tidak disentuh operator (`src/lib/booking-admin-format.ts`). API menerima bilangan bulat detik apa pun, sehingga `Math.round(detik / 60)` yang ditampilkan dan `menit * 60` yang dikirim kembali akan mengubah 90 dtk menjadi 120 dtk, langkah slot 330 dtk menjadi 360 dtk (mengubah ketersediaan), membuat durasi 20 dtk tak dapat disimpan, dan menulis ulang kebijakan di bawah baris audit `critical` pada suntingan yang tak berkaitan. Karena itu setiap kontrol membawa teks yang ditampilkan (`data-initial`) dan nilai API asalnya (`data-original`): kontrol yang tak disunting mengirim nilai asli, yang disunting dikonversi; `PATCH` hanya mengirim field yang berubah dan `PUT /policy` mengirim semua field, yang tak disunting identik byte demi byte. Nilai yang bukan menit bulat tampil sebagai menit desimal dengan detik persisnya di sampingnya. Offering tidak memuat harga (§10.2). Waktu ditampilkan dalam UTC dan diberi label.
+- **Tanpa pemotongan diam-diam.** Daftar adalah halaman keyset dengan tautan Berikutnya (reservasi, blok, resource, offering, serta tabel jadwal dan penutupan masing-masing berhalaman dengan kursornya sendiri). Pencarian yang dibutuhkan layar untuk menampilkan nama atau mengisi pemilih (resource, pool, unit resource menginap, baris terhapus) membaca setiap halaman hingga batas 50 halaman, dalam satu batch untuk unit, sehingga resource ke-101 tetap punya nama dan tetap bisa dipilih. Petunjuk formulir kebijakan di samping field kosong adalah bawaan MODUL, bukan nilai yang berlaku setelah tenant mengaturnya.
+- **Tidak ada di layar mana pun, dengan sengaja:** membuat, menjadwalkan ulang, dan meng-override reservasi (etalase dan kasir yang melakukannya; UI pemilih adalah tindak lanjut epik), pencarian ketersediaan, catatan pelanggan, laporan, dan rekonsiliasi. Izin-izin itu tetap di ledger cakupan layar admin (`scripts/admin-screen-coverage-ledger.ts`, tujuh kunci), yang kini hanya memuat mereka.
 
 ### 3.1 Stay pada state machine
 
@@ -985,7 +1009,7 @@ diselesaikan oleh port.
 `type: "domain"`; `dependencies`: hanya tenant-admin / identity-access;
 `capabilities.consumes`: ketersediaan tenaga kerja (opsional) (tanpa `profile_identity`: commerce adalah otoritas pelanggan, O12), `reporting` (proyeksi),
 `domain_event_runtime` (outbox); status `experimental` sampai layar admin
-pertamanya (registry navigasi mensyaratkan halaman nyata). Kelas kompatibilitas:
+pertamanya (registry navigasi mensyaratkan halaman nyata); `active` sejak Issue #942. Kelas kompatibilitas:
 offline-lan-safe.
 
 ## 11. Pertanyaan terbuka (keputusan pemilik — dicatat, TIDAK diputuskan di sini)
@@ -1042,8 +1066,7 @@ baris lampau adalah tindak lanjut archive-then-purge (tanpa purge di v1;
 didaftarkan ke `data_lifecycle` sebagai `delegated` dengan alasan yang
 dinyatakan, ADR-0126 §7).
 
-**Tindak lanjut tercatat (bukan v1).** Layar admin (modul `experimental` sampai
-yang pertama); ABAC ber-scope lokasi/resource; kapasitas terhitung tanpa baris
+**Tindak lanjut tercatat (bukan v1).** Layar admin untuk membuat, menjadwalkan ulang, dan meng-override reservasi (enam layar §3.0.3 ada sejak Issue #942 dan modul `active`); ABAC ber-scope lokasi/resource; kapasitas terhitung tanpa baris
 unit (memakai aturan §8.1 butir 4); seri terima-sebagian; turnaround bersama;
 waitlist; ekspor iCal; no-show otomatis; jendela retensi dengan archive-then-purge; harmonisasi `profile_identity` atas referensi pelanggan (ADR sendiri; O12 mempertahankan commerce sebagai otoritas); rekurensi `MONTHLY` (O2); tindak lanjut stay O2a–O2h (§11); route `extend` §5.1; layar admin blok (#942); keyed hashing dan enkripsi at-rest tidak berlaku (tak ada identifier yang
 disimpan).
@@ -1065,10 +1088,10 @@ dari desain ke kode (peta modul:
 | **Route blok**        | #1012 | `POST /blocks`, `POST /blocks/{id}/release`, `GET /blocks`, `GET /blocks/{id}` (§3.0.1) di atas `booking-block-service.ts`, `booking-block-directory.ts` dan `booking-block-routes.ts`, terikat pada `Idempotency-Key` dengan replay (N2), rincian `BLOCK_CONFLICT` dibatasi `reservations.read`, audit `warning` / `info`, tanpa event. Tindak lanjut #940: blok seluruh-resource mencakup unit yang ditambahkan kemudian (N1, `sql/240`: trigger AFTER INSERT + kunci resource di `readBlockUnits`), reklamasi malas dibatasi pada unit yang dicakup dengan teks audit yang akurat (N3), satu instant rilis (N4, `sql/241`). Tes: `tests/integration/booking-block-api.integration.test.ts`, blok "Issue #1012" di `tests/integration/booking-stay.integration.test.ts` (interleaving dibuktikan lewat `pg_stat_activity`) dan `tests/booking-block-validation.test.ts`.                                                                                                                                                                                       |
 | **Pelaporan**         | #944  | Tiga proyeksi pada engine `reporting` (`booking.reservations`, `booking.time`, `booking.nights`; §7.2.1), field aturan `sumColumn` dan batas halaman aman-ikatan di engine, laporan langsung `GET /booking/reports/{occupancy,utilization,reservations}` dengan jendela hari Asia/Jakarta dan penahanan kelompok kecil. Satu migrasi, `sql/244` (kolom kuantitas, `projection_kind`, trigger pengisi, backfill). Tes: `tests/booking-report.test.ts`, `tests/reporting-projection-metric-delta.test.ts`, `tests/integration/booking-reporting.integration.test.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | **Konfigurasi admin** | #1030 | Route §3.0.2 di atas `booking-resource-admin.ts` (resource, unit, pool), `booking-offering-admin.ts`, `booking-policy-admin.ts` dan `booking-admin-routes.ts` / `booking-admin-support.ts` bersama (savepoint yang memetakan guard database ke 409, halaman keyset, pembungkus mutasi idempoten) dengan aturan murni di `domain/booking-admin-validation.ts`; event audit `booking.pool.*` dan `booking.offering.restored`, serta `booking.policy.configured` dinaikkan ke `critical`. Tanpa migrasi: setiap invarian yang dipakainya ada di `sql/180`, `186`, `204` dan `240`. Tes: `tests/booking-admin-validation.test.ts` dan `tests/integration/booking-admin-api.integration.test.ts` (matriks akses dua arah, replay, penolakan guard, soft delete, isolasi tenant).                                                                                                                                                                                                                                                                                      |
+| **Layar admin**       | #942  | Enam layar §3.0.3 (`src/pages/admin/booking/*.astro`), pengirim bersama `src/lib/ui/booking-admin-client.ts`, pesan terjemahan `src/lib/booking-admin-messages.ts` dan label `src/lib/booking-admin-labels.ts`, enam entri `navigation` dan perubahan status ke `active`, 218 entri katalog di `locales/en.po` / `id.po`, ledger cakupan turun menjadi tujuh kunci, dan `APP_BUDGET_BYTES` dinaikkan sebesar 11.259 B tujuh berkas skrip baru. Tanpa migrasi, tanpa perubahan API. Tes: `tests/admin-booking-page-contract.test.ts`, registry navigasi, `tests/e2e/admin-booking.e2e.ts` (hanya keyboard, setiap aksi), dan layar booking di `a11y-axe.e2e.ts` serta sapuan 360 px.                                                                                                                                                                                                                                                                                                                                                                              |
 
 **Masih desain (belum ada di kode):** route `extend` §5.1; `service_requirements`, `staff_assignments`
-dan tes T8; route `reservations/reconciliation`; layar admin (#942), yang membuat modul bisa keluar dari
-`experimental`. Pembacaan dan penulisan admin mereka ada sejak Issue #1030.
+dan tes T8; route `reservations/reconciliation`; layar untuk create / reschedule / override reservasi, ketersediaan, catatan, dan laporan (§3.0.3 menjelaskan mengapa masing-masing tidak ada).
 
 **Sambungan tempat irisan berikutnya menempel**
 
@@ -1278,7 +1301,7 @@ NULL`), kalau tidak setiap blok dihitung sebagai booking dan alasannya turun
 - **Utilization memakai waktu terpesan, bukan aktual**, juga masih terbuka di bawah O8.
 - **Jendela hari dipatok ke Asia/Jakarta** (zona waktu laporan epik), bukan zona resource; malam stay adalah tanggal dan tak butuh zona.
 - **Tidak ada dependensi `reporting` dideklarasikan.** Engine membaca deskriptor lewat `listModules()`; tenant tanpa `reporting` hanya tidak pernah me-refresh-nya.
-- **Belum dibangun:** layar admin (#942), rincian per hari laporan alur reservasi, dan KPI retensi pelanggan (angka analitik lintas-domain, §7.2).
+- **Belum dibangun:** rincian per hari laporan alur reservasi, dan KPI retensi pelanggan (angka analitik lintas-domain, §7.2).
 
 **Keputusan yang diambil di irisan #1030**
 
@@ -1290,3 +1313,12 @@ NULL`), kalau tidak setiap blok dihitung sebagai booking dan alasannya turun
 - **`includeDeleted` butuh `.restore` juga** (aturan ADR-0128 di §6, preseden `hr-workforce`), dan baris terhapus yang dibaca lewat id **atau menjadi sasaran delete atau update** (replay delete berulang, penolakan `*_DELETED`) adalah `404` netral bagi yang tanpanya, sehingga pemisahan izin tak dapat dipakai untuk mengetahui bahwa baris itu ada.
 - **Cap waktu DTO adalah string ISO UTC dengan mikrodetik** (pemformat keyset bersama), sehingga cursor daftar dan `createdAt` yang dilihat klien adalah teks yang sama.
 - **Daftar adalah halaman keyset terbaru-dulu**, seperti setiap daftar booking lain; layar yang menginginkan urutan tampilan `sortOrder` mengurutkan halaman yang dipegangnya (`sortOrder` ada di setiap baris).
+
+**Keputusan yang diambil di irisan #942**
+
+- **Satu halaman per area, enam entri sidebar, tanpa tab.** Tiap area punya izin dan penjaga masuknya sendiri, sehingga pengguna yang hanya boleh membaca kebijakan melihat satu entri, dan aturan registry navigasi (halaman nyata dan `requiredPermission` yang di-seed dan ditegakkan untuk setiap entri) terpenuhi per entri. Alternatifnya, satu halaman `/admin/booking?view=` seperti `/admin/procurement`, akan menjadi berkas 3.000 baris dengan izin masuk yang terlemah dari enam.
+- **Detail reservasi sebagai `?id=`, bukan `reservations/[id]`.** Sapuan render mensyaratkan tautan ke id nyata route dinamis di halaman induknya, dan tenant baru tak punya reservasi; sapuan yang gagal pada tenant kosong adalah pembacaan yang benar atas route yatim, jadi detail adalah tampilan halaman yang selalu ada.
+- **Nama resource berasal dari `resources.read`.** Pembaca reservasi yang tak boleh membaca resource melihat tanda strip, bukan id atau penolakan: pemisahan izin dihormati di layar seperti di API.
+- **Formulir kebijakan selalu mengirim kesepuluh field.** `PUT` mengganti baris (§3.0.2); formulir menampilkan yang diatur tenant dan, di samping setiap field kosong, bawaan yang berlaku, sehingga "kosong" tidak pernah dibaca "tanpa batas".
+- **Reschedule, create, dan override tidak ada di layar.** Masing-masing butuh pemilih tanggal dan resource yang mencerminkan ketersediaan; membangun salinan kedua yang menyimpang dari aturan ketersediaan di sebuah halaman persis yang dilarang "tanpa logika bisnis di halaman". Tujuh izin yang mereka dan pembacaan tak berlayar lain butuhkan tetap di ledger cakupan yang hanya menyusut.
+- **Anggaran aset dinaikkan sebesar yang terukur (dua kali: yang kedua untuk perbaikan tinjauan).** Tujuh berkas skrip berjumlah 11.259 B (1.153 B di antaranya pengirim bersama); lihat komentar ledger di `scripts/client-asset-budget.ts`. Tidak ada stylesheet yang membesar.

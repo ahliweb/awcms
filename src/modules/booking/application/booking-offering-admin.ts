@@ -12,6 +12,7 @@
  * it was made with, which is why delete needs no in-use guard here.
  */
 import {
+  decodeKeysetCursor,
   utcMicrosecondTextSql,
   type KeysetCursor
 } from "../../_shared/keyset-pagination";
@@ -398,4 +399,30 @@ export async function restoreOffering(
     offering: (await getOffering(tx, tenantId, id))!,
     replayed: false
   };
+}
+
+/** Every offering matching the filters, page after page (bounded at 50 pages), for a list that must not silently stop at one page. */
+export async function listAllOfferings(
+  tx: Sql,
+  tenantId: string,
+  filters: OfferingListFilters
+): Promise<OfferingDto[]> {
+  const all: OfferingDto[] = [];
+  let cursor: KeysetCursor | undefined;
+
+  for (let page = 0; page < 50; page += 1) {
+    const result = await listOfferings(tx, tenantId, filters, cursor);
+
+    all.push(...result.offerings);
+
+    const next = result.nextCursor
+      ? decodeKeysetCursor(result.nextCursor)
+      : null;
+
+    if (!next) break;
+
+    cursor = next;
+  }
+
+  return all;
 }

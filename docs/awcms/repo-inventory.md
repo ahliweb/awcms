@@ -12,8 +12,8 @@
 | `awcms_*` tables                    | 215   |
 | Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 664   |
-| Route files                         | 553   |
+| Test files                          | 667   |
+| Route files                         | 559   |
 | ADR                                 | 292   |
 
 ### Modules
@@ -50,7 +50,7 @@
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory` |
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
-| `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
+| `booking`              | 0.2.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
 | `hr_commission`        | 0.2.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
@@ -490,8 +490,8 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 511        |
-| `e2e`         | 25         |
+| `(root)`      | 513        |
+| `e2e`         | 26         |
 | `integration` | 127        |
 | `unit`        | 1          |
 
@@ -500,7 +500,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 453   |
-| `/admin/**`     | 70    |
+| `/admin/**`     | 76    |
 | publik / anonim | 30    |
 
 <!-- END GENERATED: repo-inventory -->

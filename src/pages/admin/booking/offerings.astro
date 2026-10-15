@@ -1,0 +1,774 @@
+---
+/**
+ * Booking service offerings (Issue #942, over the #1030 admin APIs).
+ *
+ * The list is read server-side with the SAME application function the JSON route
+ * uses (`listOfferings`, `GET /api/v1/booking/offerings`) inside `loadAdminScreen`,
+ * so the entry decision and the read share one transaction and the chokepoint
+ * decides. Every mutation goes through the existing routes
+ * (`POST /offerings`, `PATCH`/`DELETE /offerings/{id}`, `POST …/restore`) with an
+ * `Idempotency-Key`; this page holds no business rule. Every gate here is UX-only:
+ * the endpoint guards are the authority.
+ *
+ * An offering holds no price (booking.md section 10.2). Durations are shown and
+ * typed in MINUTES; the page converts to the API's seconds and nothing else.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import { bookingMessages } from "../../../lib/booking-admin-messages";
+import {
+  isInexactMinutes,
+  minutesDisplay
+} from "../../../lib/booking-admin-format";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import {
+  getOffering,
+  listAllOfferings,
+  listOfferings,
+  type OfferingDto
+} from "../../../modules/booking/application/booking-offering-admin";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+const GRANULARITY_LABEL: Record<"time" | "stay", string> = {
+  time: t("By time"),
+  stay: t("By night")
+};
+const CONFIRMATION_LABEL: Record<"immediate" | "hold_then_confirm", string> = {
+  immediate: t("Immediately"),
+  hold_then_confirm: t("Hold, then confirm")
+};
+const STATUS_LABEL: Record<"active" | "inactive", string> = {
+  active: t("Active"),
+  inactive: t("Inactive")
+};
+
+const editParam = Astro.url.searchParams.get("edit");
+const cursorParam = Astro.url.searchParams.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+const editId =
+  editParam &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    editParam
+  )
+    ? editParam.toLowerCase()
+    : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "booking",
+    activityCode: "offerings",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    const canCreate = await can({
+      moduleKey: "booking",
+      activityCode: "offerings",
+      action: "create"
+    });
+    const canUpdate = await can({
+      moduleKey: "booking",
+      activityCode: "offerings",
+      action: "update"
+    });
+    const canDelete = await can({
+      moduleKey: "booking",
+      activityCode: "offerings",
+      action: "delete"
+    });
+    const canRestore = await can({
+      moduleKey: "booking",
+      activityCode: "offerings",
+      action: "restore"
+    });
+    const page = await listOfferings(
+      tx,
+      ssr.tenantId,
+      { deleted: "exclude" },
+      cursor ?? undefined
+    );
+    const deleted = canRestore
+      ? await listAllOfferings(tx, ssr.tenantId, { deleted: "only" })
+      : [];
+    const editing =
+      editId && canUpdate ? await getOffering(tx, ssr.tenantId, editId) : null;
+
+    return {
+      offerings: page.offerings,
+      nextCursor: page.nextCursor,
+      deleted,
+      editing: editing && editing.deletedAt === null ? editing : null,
+      canCreate,
+      canUpdate,
+      canDelete,
+      canRestore
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/booking/offerings.astro: failed to load the offerings",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const offerings: OfferingDto[] = data?.offerings ?? [];
+const deletedOfferings: OfferingDto[] = data?.deleted ?? [];
+const editing: OfferingDto | null = data?.editing ?? null;
+const canCreate = data?.canCreate ?? false;
+const canUpdate = data?.canUpdate ?? false;
+const canDelete = data?.canDelete ?? false;
+const canRestore = data?.canRestore ?? false;
+const showActions = canUpdate || canDelete;
+const showForm = Boolean(editing) || (canCreate && !editId);
+const form = editing;
+const formGranularity: "time" | "stay" = form?.granularity ?? "time";
+
+/**
+ * A control's value plus what the script needs to send it back unchanged: the
+ * displayed text (`data-initial`) and the API value it came from
+ * (`data-original`). See `booking-admin-format.ts` for why.
+ */
+const field = (display: string, original: unknown) => ({
+  value: display,
+  "data-initial": display,
+  "data-original": JSON.stringify(original ?? null)
+});
+const minutesField = (seconds: number | null) =>
+  field(minutesDisplay(seconds), seconds);
+const countField = (value: number | null) =>
+  field(value === null ? "" : String(value), value);
+const messages = {
+  ...bookingMessages(t),
+  confirmDelete: t("Delete {code}? It can be restored later.", {
+    code: "{code}"
+  })
+};
+---
+
+<AdminLayout
+  title={t("Offerings")}
+  description={t(
+    "The services and stays that can be booked: how long they last, how many guests they take and how a booking is confirmed. An offering holds no price."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="offerings-denied" role="alert">
+      {t("You do not have permission to view booking offerings.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="offerings-error" role="alert">
+      {t("Offerings could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <div id="booking-messages" hidden data-msgs={JSON.stringify(messages)} />
+  )}
+
+  {canRead && !loadError && showForm && (
+    <form
+      id="offering-form"
+      class="admin-create-form fade-in-up"
+      data-offering-id={form?.id ?? ""}
+      data-mode={form ? "edit" : "create"}
+    >
+      <p class="form-legend">
+        {form
+          ? t("Edit offering {code}", { code: form.code })
+          : t("Create an offering")}
+      </p>
+      <p
+        id="offering-form-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+
+      <label for="offering-code">{t("Code")}</label>
+      <input
+        id="offering-code"
+        name="code"
+        type="text"
+        required
+        autocomplete="off"
+        maxlength="64"
+        value={form?.code ?? ""}
+        disabled={Boolean(form)}
+      />
+
+      <label for="offering-name">{t("Name")}</label>
+      <input
+        id="offering-name"
+        name="name"
+        type="text"
+        required
+        autocomplete="off"
+        maxlength="200"
+        {...field(form?.name ?? "", form?.name ?? "")}
+      />
+
+      <label for="offering-granularity">{t("Booked")}</label>
+      <select
+        id="offering-granularity"
+        name="granularity"
+        disabled={Boolean(form)}
+      >
+        {(["time", "stay"] as const).map((value) => (
+          <option value={value} selected={formGranularity === value}>
+            {GRANULARITY_LABEL[value]}
+          </option>
+        ))}
+      </select>
+
+      <div id="offering-time-fields" hidden={formGranularity !== "time"}>
+        <label for="offering-duration">{t("Duration (minutes)")}</label>
+        <input
+          id="offering-duration"
+          name="duration"
+          type="number"
+          step="any"
+          {...minutesField(form?.durationSeconds ?? null)}
+        />
+        {isInexactMinutes(form?.durationSeconds ?? null) && (
+          <span class="form-hint">
+            {t("Stored as {seconds} seconds.", {
+              seconds: form?.durationSeconds ?? 0
+            })}
+          </span>
+        )}
+        <label for="offering-setup">{t("Setup before (minutes)")}</label>
+        <input
+          id="offering-setup"
+          name="setup"
+          type="number"
+          step="any"
+          {...minutesField(form?.setupSeconds ?? 0)}
+        />
+        {isInexactMinutes(form?.setupSeconds ?? 0) && (
+          <span class="form-hint">
+            {t("Stored as {seconds} seconds.", {
+              seconds: form?.setupSeconds ?? 0
+            })}
+          </span>
+        )}
+        <label for="offering-cleanup">{t("Cleanup after (minutes)")}</label>
+        <input
+          id="offering-cleanup"
+          name="cleanup"
+          type="number"
+          step="any"
+          {...minutesField(form?.cleanupSeconds ?? 0)}
+        />
+        {isInexactMinutes(form?.cleanupSeconds ?? 0) && (
+          <span class="form-hint">
+            {t("Stored as {seconds} seconds.", {
+              seconds: form?.cleanupSeconds ?? 0
+            })}
+          </span>
+        )}
+        <label for="offering-step">{t("Start times every (minutes)")}</label>
+        <input
+          id="offering-step"
+          name="step"
+          type="number"
+          step="any"
+          {...minutesField(form?.slotStepSeconds ?? null)}
+        />
+        {isInexactMinutes(form?.slotStepSeconds ?? null) && (
+          <span class="form-hint">
+            {t("Stored as {seconds} seconds.", {
+              seconds: form?.slotStepSeconds ?? 0
+            })}
+          </span>
+        )}
+      </div>
+
+      <div id="offering-stay-fields" hidden={formGranularity !== "stay"}>
+        <label for="offering-min-nights">{t("Minimum nights")}</label>
+        <input
+          id="offering-min-nights"
+          name="minNights"
+          type="number"
+          min="1"
+          max="366"
+          step="1"
+          {...countField(form?.minNights ?? null)}
+        />
+        <label for="offering-max-nights">{t("Maximum nights")}</label>
+        <input
+          id="offering-max-nights"
+          name="maxNights"
+          type="number"
+          min="1"
+          max="366"
+          step="1"
+          {...countField(form?.maxNights ?? null)}
+        />
+      </div>
+
+      <label for="offering-min-party">{t("Minimum guests")}</label>
+      <input
+        id="offering-min-party"
+        name="minParty"
+        type="number"
+        min="1"
+        max="500"
+        step="1"
+        required
+        {...countField(form?.minParty ?? 1)}
+      />
+      <label for="offering-max-party">{t("Maximum guests")}</label>
+      <input
+        id="offering-max-party"
+        name="maxParty"
+        type="number"
+        min="1"
+        max="500"
+        step="1"
+        required
+        {...countField(form?.maxParty ?? 1)}
+      />
+
+      <label for="offering-confirmation">{t("Confirmation")}</label>
+      <select
+        id="offering-confirmation"
+        name="confirmationMode"
+        data-initial={form?.confirmationMode ?? "hold_then_confirm"}
+        data-original={JSON.stringify(
+          form?.confirmationMode ?? "hold_then_confirm"
+        )}
+      >
+        {(["hold_then_confirm", "immediate"] as const).map((value) => (
+          <option
+            value={value}
+            selected={(form?.confirmationMode ?? "hold_then_confirm") === value}
+          >
+            {CONFIRMATION_LABEL[value]}
+          </option>
+        ))}
+      </select>
+
+      <label for="offering-cutoff">
+        {t("Free cancellation until (minutes before start)")}
+      </label>
+      <input
+        id="offering-cutoff"
+        name="cutoff"
+        type="number"
+        step="any"
+        {...minutesField(form?.cancellationCutoffSeconds ?? null)}
+      />
+      {isInexactMinutes(form?.cancellationCutoffSeconds ?? null) && (
+        <span class="form-hint">
+          {t("Stored as {seconds} seconds.", {
+            seconds: form?.cancellationCutoffSeconds ?? 0
+          })}
+        </span>
+      )}
+      <label for="offering-lead">{t("Minimum notice (minutes)")}</label>
+      <input
+        id="offering-lead"
+        name="lead"
+        type="number"
+        step="any"
+        {...minutesField(form?.minLeadSeconds ?? null)}
+      />
+      {isInexactMinutes(form?.minLeadSeconds ?? null) && (
+        <span class="form-hint">
+          {t("Stored as {seconds} seconds.", {
+            seconds: form?.minLeadSeconds ?? 0
+          })}
+        </span>
+      )}
+      <label for="offering-horizon">{t("Bookable up to (days ahead)")}</label>
+      <input
+        id="offering-horizon"
+        name="horizon"
+        type="number"
+        min="1"
+        max="3650"
+        step="1"
+        {...countField(form?.maxHorizonDays ?? null)}
+      />
+      <p class="form-hint">
+        {t(
+          "Leave notice, cancellation and horizon blank to use the booking policy."
+        )}
+      </p>
+
+      {form && (
+        <>
+          <label for="offering-status">{t("Status")}</label>
+          <select
+            id="offering-status"
+            name="status"
+            data-initial={form.status}
+            data-original={JSON.stringify(form.status)}
+          >
+            {(["active", "inactive"] as const).map((value) => (
+              <option value={value} selected={form.status === value}>
+                {STATUS_LABEL[value]}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <button type="submit" id="offering-submit">
+        {form ? t("Save offering") : t("Create offering")}
+      </button>
+      {form && (
+        <a class="btn btn-secondary" href="/admin/booking/offerings">
+          {t("Cancel")}
+        </a>
+      )}
+    </form>
+  )}
+
+  {canRead && !loadError && (
+    <p
+      id="offering-action-error"
+      class="admin-create-error"
+      role="alert"
+      hidden
+    />
+  )}
+
+  {canRead && !loadError && (
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-labelledby="offerings-table-caption"
+    >
+      <table class="data-table data-table--stack" id="offerings-table">
+        <caption id="offerings-table-caption">
+          {tn("{count} offering", "{count} offerings", offerings.length, {
+            count: offerings.length
+          })}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("Code")}</th>
+            <th scope="col">{t("Name")}</th>
+            <th scope="col">{t("Booked")}</th>
+            <th scope="col">{t("Length")}</th>
+            <th scope="col">{t("Guests")}</th>
+            <th scope="col">{t("Confirmation")}</th>
+            <th scope="col">{t("Status")}</th>
+            {showActions && <th scope="col">{t("Actions")}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {offerings.length === 0 ? (
+            <tr>
+              <td class="data-table-empty" colspan={showActions ? 8 : 7}>
+                <div class="empty-state">
+                  <span class="empty-state-title">{t("No offerings yet")}</span>
+                  <span class="empty-state-text">
+                    {canCreate
+                      ? t("Create your first offering using the form above.")
+                      : t(
+                          "Offerings created for this tenant will appear here."
+                        )}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            offerings.map((offering) => (
+              <tr data-offering-row={offering.id}>
+                <td data-label={t("Code")}>
+                  <span class="cell-code">{offering.code}</span>
+                </td>
+                <td data-label={t("Name")}>{offering.name}</td>
+                <td data-label={t("Booked")}>
+                  {GRANULARITY_LABEL[offering.granularity]}
+                </td>
+                <td data-label={t("Length")}>
+                  {offering.granularity === "time"
+                    ? t("{minutes} min", {
+                        minutes: minutesDisplay(offering.durationSeconds)
+                      })
+                    : tn(
+                        "{min}–{max} night",
+                        "{min}–{max} nights",
+                        offering.maxNights ?? 0,
+                        {
+                          min: offering.minNights ?? 0,
+                          max: offering.maxNights ?? 0
+                        }
+                      )}
+                </td>
+                <td data-label={t("Guests")}>
+                  {offering.minParty}–{offering.maxParty}
+                </td>
+                <td data-label={t("Confirmation")}>
+                  {CONFIRMATION_LABEL[offering.confirmationMode]}
+                </td>
+                <td data-label={t("Status")} data-status={offering.status}>
+                  <span
+                    class="admin-status-pill"
+                    data-tone={
+                      offering.status === "active" ? "success" : "neutral"
+                    }
+                  >
+                    <span class="admin-status-pill-dot" aria-hidden="true" />
+                    {STATUS_LABEL[offering.status]}
+                  </span>
+                </td>
+                {showActions && (
+                  <td data-label={t("Actions")} class="stacked-block">
+                    <div class="row-actions">
+                      {canUpdate && (
+                        <a
+                          class="btn btn-secondary"
+                          href={`/admin/booking/offerings?edit=${offering.id}`}
+                          aria-label={t("Edit {code}", { code: offering.code })}
+                        >
+                          {t("Edit")}
+                        </a>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          class="module-toggle offering-delete-btn"
+                          data-offering-id={offering.id}
+                          data-offering-code={offering.code}
+                        >
+                          {t("Delete")}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {canRead && !loadError && data?.nextCursor && (
+    <p>
+      <a
+        class="btn btn-secondary"
+        id="offerings-next"
+        href={`/admin/booking/offerings?cursor=${data.nextCursor}`}
+      >
+        {t("Next page")}
+      </a>
+    </p>
+  )}
+
+  {canRead && !loadError && canRestore && deletedOfferings.length > 0 && (
+    <section class="admin-section fade-in-up" id="deleted-offerings">
+      <h2 class="admin-section-title">
+        {t("Deleted offerings")}
+        <span class="count-pill">{deletedOfferings.length}</span>
+      </h2>
+      <div
+        class="data-table-scroll"
+        role="region"
+        tabindex="0"
+        aria-labelledby="deleted-offerings-caption"
+      >
+        <table
+          class="data-table data-table--stack"
+          id="deleted-offerings-table"
+        >
+          <caption id="deleted-offerings-caption">
+            {tn(
+              "{count} deleted offering",
+              "{count} deleted offerings",
+              deletedOfferings.length,
+              { count: deletedOfferings.length }
+            )}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Actions")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {deletedOfferings.map((offering) => (
+              <tr data-deleted-offering-row={offering.id}>
+                <td data-label={t("Code")}>
+                  <span class="cell-code">{offering.code}</span>
+                </td>
+                <td data-label={t("Name")}>{offering.name}</td>
+                <td data-label={t("Actions")} class="stacked-block">
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="module-toggle offering-restore-btn"
+                      data-offering-id={offering.id}
+                    >
+                      {t("Restore")}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP: it makes Astro bundle this script as an
+  // external file (an import-free script is inlined, and inline is blocked).
+  import {
+    onAction,
+    onSubmit,
+    inputValue
+  } from "../../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../../lib/ui/confirm-dialog-client";
+  import {
+    bookingMutate,
+    collectBody,
+    messageBox,
+    readMessages,
+    type FormField
+  } from "../../../lib/ui/booking-admin-client";
+  import {
+    countOrNull,
+    minutesToSeconds
+  } from "../../../lib/booking-admin-format";
+
+  const messages = readMessages();
+  const formError = messageBox("offering-form-error");
+  const actionError = messageBox("offering-action-error");
+
+  // Show only the fields of the chosen granularity (create form).
+  const granularity = document.getElementById("offering-granularity");
+  const timeFields = document.getElementById("offering-time-fields");
+  const stayFields = document.getElementById("offering-stay-fields");
+  granularity?.addEventListener("change", () => {
+    const isTime = (granularity as HTMLSelectElement).value === "time";
+    if (timeFields) timeFields.hidden = !isTime;
+    if (stayFields) stayFields.hidden = isTime;
+  });
+
+  const text = (raw: string) => raw.trim();
+  const zeroIfBlank = (raw: string) => minutesToSeconds(raw) ?? 0;
+  const common: FormField[] = [
+    { id: "offering-name", key: "name", convert: text },
+    { id: "offering-min-party", key: "minParty", convert: countOrNull },
+    { id: "offering-max-party", key: "maxParty", convert: countOrNull },
+    { id: "offering-confirmation", key: "confirmationMode", convert: text },
+    {
+      id: "offering-cutoff",
+      key: "cancellationCutoffSeconds",
+      convert: minutesToSeconds
+    },
+    { id: "offering-lead", key: "minLeadSeconds", convert: minutesToSeconds },
+    { id: "offering-horizon", key: "maxHorizonDays", convert: countOrNull }
+  ];
+  const timeShape: FormField[] = [
+    {
+      id: "offering-duration",
+      key: "durationSeconds",
+      convert: minutesToSeconds
+    },
+    { id: "offering-setup", key: "setupSeconds", convert: zeroIfBlank },
+    { id: "offering-cleanup", key: "cleanupSeconds", convert: zeroIfBlank },
+    { id: "offering-step", key: "slotStepSeconds", convert: minutesToSeconds }
+  ];
+  const stayShape: FormField[] = [
+    { id: "offering-min-nights", key: "minNights", convert: countOrNull },
+    { id: "offering-max-nights", key: "maxNights", convert: countOrNull }
+  ];
+
+  onSubmit("offering-form", async ({ form, submit }) => {
+    const id = form.dataset.offeringId ?? "";
+    const isStay = (granularity as HTMLSelectElement | null)?.value === "stay";
+    const shape = isStay ? stayShape : timeShape;
+
+    if (id) {
+      // A PATCH sends only what the operator changed: an untouched value (90 s,
+      // shown as 1.5 minutes) is never re-sent, let alone rounded.
+      const body = collectBody(
+        [
+          ...common,
+          ...shape,
+          { id: "offering-status", key: "status", convert: text }
+        ],
+        { onlyChanged: true }
+      );
+
+      if (Object.keys(body).length === 0) {
+        formError.show(messages.nothingToSave ?? "");
+        return;
+      }
+
+      await bookingMutate(
+        submit,
+        formError,
+        messages,
+        "PATCH",
+        `/api/v1/booking/offerings/${id}`,
+        body
+      );
+      return;
+    }
+
+    await bookingMutate(
+      submit,
+      formError,
+      messages,
+      "POST",
+      "/api/v1/booking/offerings",
+      {
+        code: inputValue("offering-code"),
+        granularity: isStay ? "stay" : "time",
+        ...collectBody([...common, ...shape], { onlyChanged: false })
+      }
+    );
+  });
+
+  onAction(".offering-delete-btn", async (button) => {
+    const id = button.dataset.offeringId;
+    if (!id) return;
+    const code = button.dataset.offeringCode ?? "";
+    const question = (messages.confirmDelete ?? "").replace("{code}", code);
+    if (!(await confirmAction(question))) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "DELETE",
+      `/api/v1/booking/offerings/${id}`
+    );
+  });
+
+  onAction(".offering-restore-btn", async (button) => {
+    const id = button.dataset.offeringId;
+    if (!id) return;
+    await bookingMutate(
+      button,
+      actionError,
+      messages,
+      "POST",
+      `/api/v1/booking/offerings/${id}/restore`
+    );
+  });
+</script>

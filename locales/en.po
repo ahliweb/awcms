@@ -7735,3 +7735,690 @@ msgstr ""
 
 msgid "Tenant suspended"
 msgstr ""
+
+#. Booking admin screens (Issue #942)
+msgid "A pool groups interchangeable resources, such as three treatment rooms. A resource joins a pool in its own form."
+msgstr ""
+
+msgid "A unit is never removed. Deactivating it stops new bookings on it; bookings already made stay."
+msgstr ""
+
+msgid "Add a closure or special hours"
+msgstr ""
+
+msgid "Add a resource booked by night before blocking nights."
+msgstr ""
+
+msgid "Add opening hours"
+msgstr ""
+
+msgid "Add weekly opening hours"
+msgstr ""
+
+msgid "Add weekly opening hours so slot resources can be booked."
+msgstr ""
+
+msgid "An active schedule already covers part of that period. Shorten or deactivate it first."
+msgstr ""
+
+msgid "Back on sale"
+msgstr ""
+
+msgid "Back on sale on"
+msgstr ""
+
+msgid "Back to normal on"
+msgstr ""
+
+msgid "Block nights"
+msgstr ""
+
+msgid "Block status"
+msgstr ""
+
+msgid "Blocked nights"
+msgstr ""
+
+msgid "Blocked nights apply to stay resources only."
+msgstr ""
+
+msgid "Blocked nights could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Bookable up to (days ahead)"
+msgstr ""
+
+msgid "Booked"
+msgstr ""
+
+msgid "Booking policy"
+msgstr ""
+
+msgid "By night"
+msgstr ""
+
+msgid "By time"
+msgstr ""
+
+msgid "Cancel reservation"
+msgstr ""
+
+msgid "Cancel reservation {number}? Its resource is released."
+msgstr ""
+
+msgid "Capacity can only grow. Deactivate a unit instead of removing it."
+msgstr ""
+
+msgid "Check in"
+msgstr ""
+
+msgid "Check-in time"
+msgstr ""
+
+msgid "Check-out time"
+msgstr ""
+
+msgid "Checked in"
+msgstr ""
+
+msgid "Cleanup after (minutes)"
+msgstr ""
+
+msgid "Closes at"
+msgstr ""
+
+msgid "Closures and special hours"
+msgstr ""
+
+msgid "Complete"
+msgstr ""
+
+msgid "Confirmation"
+msgstr ""
+
+msgid "Confirmed"
+msgstr ""
+
+msgid "Create a pool"
+msgstr ""
+
+msgid "Create a resource"
+msgstr ""
+
+msgid "Create an offering"
+msgstr ""
+
+msgid "Create offering"
+msgstr ""
+
+msgid "Create pool"
+msgstr ""
+
+msgid "Create resource"
+msgstr ""
+
+msgid "Create your first offering using the form above."
+msgstr ""
+
+msgid "Create your first resource using the form above."
+msgstr ""
+
+msgid "Dates"
+msgstr ""
+
+msgid "Deactivate this schedule? Existing bookings are not changed."
+msgstr ""
+
+msgid "Default: {value}"
+msgstr ""
+
+msgid "Default: {value} days"
+msgstr ""
+
+msgid "Default: {value} minutes"
+msgstr ""
+
+msgid "Defaults offered for new stay resources"
+msgstr ""
+
+msgid "Delete the pool {code}? It can be restored later."
+msgstr ""
+
+msgid "Delete {code}? It can be restored later."
+msgstr ""
+
+msgid "Deleted offerings"
+msgstr ""
+
+msgid "Deleted pools"
+msgstr ""
+
+msgid "Deleted resources"
+msgstr ""
+
+msgid "Duration (minutes)"
+msgstr ""
+
+msgid "Edit offering {code}"
+msgstr ""
+
+msgid "Edit resource {code}"
+msgstr ""
+
+msgid "Edit {code}"
+msgstr ""
+
+msgid "Effective until (optional, exclusive)"
+msgstr ""
+
+msgid "End on"
+msgstr ""
+
+msgid "Every booking and hold, newest first. A hold is a reservation waiting for confirmation until its expiry."
+msgstr ""
+
+msgid "Every resource without its own hours"
+msgstr ""
+
+msgid "Every unit"
+msgstr ""
+
+msgid "First blocked night"
+msgstr ""
+
+msgid "First day"
+msgstr ""
+
+msgid "Free cancellation until (minutes before start)"
+msgstr ""
+
+msgid "Fri"
+msgstr ""
+
+msgid "Guests"
+msgstr ""
+
+msgid "Hold expired"
+msgstr ""
+
+msgid "Hold expires"
+msgstr ""
+
+msgid "Hold lasts (minutes)"
+msgstr ""
+
+msgid "Hold placed"
+msgstr ""
+
+msgid "Hold, then confirm"
+msgstr ""
+
+msgid "Holds"
+msgstr ""
+
+msgid "Holiday"
+msgstr ""
+
+msgid "Hours"
+msgstr ""
+
+msgid "Immediately"
+msgstr ""
+
+msgid "Kind (for example room, chair, court)"
+msgstr ""
+
+msgid "Label of unit {number}"
+msgstr ""
+
+msgid "Leave notice, cancellation and horizon blank to use the booking policy."
+msgstr ""
+
+msgid "Length"
+msgstr ""
+
+msgid "Live holds in total"
+msgstr ""
+
+msgid "Live holds per customer"
+msgstr ""
+
+msgid "Longest hold (minutes)"
+msgstr ""
+
+msgid "Mark as no-show"
+msgstr ""
+
+msgid "Mark reservation {number} as a no-show?"
+msgstr ""
+
+msgid "Marked as no-show"
+msgstr ""
+
+msgid "Maximum guests"
+msgstr ""
+
+msgid "Maximum nights"
+msgstr ""
+
+msgid "Minimum guests"
+msgstr ""
+
+msgid "Minimum nights"
+msgstr ""
+
+msgid "Minimum notice (minutes)"
+msgstr ""
+
+msgid "Mon"
+msgstr ""
+
+msgid "Name of pool {code}"
+msgstr ""
+
+msgid "New end date, exclusive"
+msgstr ""
+
+msgid "Nights"
+msgstr ""
+
+msgid "Nights you block will appear here."
+msgstr ""
+
+msgid "No blocked nights"
+msgstr ""
+
+msgid "No closures"
+msgstr ""
+
+msgid "No offerings yet"
+msgstr ""
+
+msgid "No pool"
+msgstr ""
+
+msgid "No pools yet"
+msgstr ""
+
+msgid "No reason"
+msgstr ""
+
+msgid "No reservations"
+msgstr ""
+
+msgid "No resources yet"
+msgstr ""
+
+msgid "No schedules yet"
+msgstr ""
+
+msgid "No-show"
+msgstr ""
+
+msgid "No-show grace (minutes)"
+msgstr ""
+
+msgid "Offering"
+msgstr ""
+
+msgid "Offerings"
+msgstr ""
+
+msgid "Offerings could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Offerings created for this tenant will appear here."
+msgstr ""
+
+msgid "Open on"
+msgstr ""
+
+msgid "Opens at"
+msgstr ""
+
+msgid "Overdue"
+msgstr ""
+
+msgid "Owner use"
+msgstr ""
+
+msgid "Please wait…"
+msgstr ""
+
+msgid "Pool"
+msgstr ""
+
+msgid "Private event"
+msgstr ""
+
+msgid "Release this block and put its nights back on sale?"
+msgstr ""
+
+msgid "Remove this closure or special-hours entry?"
+msgstr ""
+
+msgid "Replaced by"
+msgstr ""
+
+msgid "Rescheduled"
+msgstr ""
+
+msgid "Rescheduled from"
+msgstr ""
+
+msgid "Reservation"
+msgstr ""
+
+msgid "Reservation status"
+msgstr ""
+
+msgid "Reservation {number}"
+msgstr ""
+
+msgid "Reservations"
+msgstr ""
+
+msgid "Reservations and holds appear here as they are made."
+msgstr ""
+
+msgid "Reservations could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Resource pools"
+msgstr ""
+
+msgid "Resources"
+msgstr ""
+
+msgid "Resources could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Resources created for this tenant will appear here."
+msgstr ""
+
+msgid "Sat"
+msgstr ""
+
+msgid "Save offering"
+msgstr ""
+
+msgid "Save policy"
+msgstr ""
+
+msgid "Save resource"
+msgstr ""
+
+msgid "Schedules and closures"
+msgstr ""
+
+msgid "Schedules could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Setup before (minutes)"
+msgstr ""
+
+msgid "Some fields are not valid. Check them and try again."
+msgstr ""
+
+msgid "Some of those nights are already booked or blocked. Nothing was changed."
+msgstr ""
+
+msgid "Special hours"
+msgstr ""
+
+msgid "Start times every (minutes)"
+msgstr ""
+
+msgid "Status of unit {number}"
+msgstr ""
+
+msgid "Sun"
+msgstr ""
+
+msgid "Take nights of a stay resource out of sale for maintenance or owner use. A block never cancels a booking: nights that are already booked cannot be blocked."
+msgstr ""
+
+msgid "That block no longer exists."
+msgstr ""
+
+msgid "That code is already in use, including by a deleted record."
+msgstr ""
+
+msgid "That offering no longer exists."
+msgstr ""
+
+msgid "That pool no longer exists."
+msgstr ""
+
+msgid "That reservation no longer exists."
+msgstr ""
+
+msgid "That reservation was not found."
+msgstr ""
+
+msgid "That resource no longer exists."
+msgstr ""
+
+msgid "That time zone is not known."
+msgstr ""
+
+msgid "That unit does not belong to this resource."
+msgstr ""
+
+msgid "The booking is no longer in a state that allows that. Reload the page."
+msgstr ""
+
+msgid "The booking mode cannot change while the resource has live bookings or blocks."
+msgstr ""
+
+msgid "The booking policy could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The booking, what it holds and every step it has been through."
+msgstr ""
+
+msgid "The change could not be saved. Please try again."
+msgstr ""
+
+msgid "The database refused this change."
+msgstr ""
+
+msgid "The dates are not valid: check-out must be after check-in."
+msgstr ""
+
+msgid "The hold has expired."
+msgstr ""
+
+msgid "The new reservation"
+msgstr ""
+
+msgid "The pool is deleted. Restore the pool first."
+msgstr ""
+
+msgid "The pool still has resources. Move them out first."
+msgstr ""
+
+msgid "The previous reservation"
+msgstr ""
+
+msgid "The reservation could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "The resource has an active schedule in its current time zone. Deactivate the schedule first."
+msgstr ""
+
+msgid "The resource has live bookings or blocks. Cancel or release them, or set it to inactive."
+msgstr ""
+
+msgid "The rooms, chairs, courts or vehicles that can be booked, the units each one has, and the pools that group interchangeable resources."
+msgstr ""
+
+msgid "The rules every booking follows. A blank field uses the built-in default shown beside it, which is not the same as unlimited."
+msgstr ""
+
+msgid "The server could not be reached. Please try again."
+msgstr ""
+
+msgid "The services and stays that can be booked: how long they last, how many guests they take and how a booking is confirmed. An offering holds no price."
+msgstr ""
+
+msgid "The time zone cannot change while the resource has live bookings or blocks."
+msgstr ""
+
+msgid "The values break a rule of the booking setup."
+msgstr ""
+
+msgid "These are suggestions for the resource form; the server does not apply them by itself."
+msgstr ""
+
+msgid "This offering is deleted. Restore it first."
+msgstr ""
+
+msgid "This request was already used for a different change. Reload the page and try again."
+msgstr ""
+
+msgid "This resource is deleted. Restore it first."
+msgstr ""
+
+msgid "This schedule can no longer be changed."
+msgstr ""
+
+msgid "Through a schedule"
+msgstr ""
+
+msgid "Thu"
+msgstr ""
+
+msgid "Times are shown in UTC."
+msgstr ""
+
+msgid "Tue"
+msgstr ""
+
+msgid "Unit labels (optional, one per line)"
+msgstr ""
+
+msgid "Units"
+msgstr ""
+
+msgid "Units (can only grow)"
+msgstr ""
+
+msgid "Wed"
+msgstr ""
+
+msgid "What is booked"
+msgstr ""
+
+msgid "When bookings can be made"
+msgstr ""
+
+msgid "When each resource can be booked, and the days it is closed or opens at different hours. Changes affect future availability only; no existing booking is touched."
+msgstr ""
+
+msgid "You can read the policy but not change it."
+msgstr ""
+
+msgid "You do not have permission to view blocked nights."
+msgstr ""
+
+msgid "You do not have permission to view booking offerings."
+msgstr ""
+
+msgid "You do not have permission to view booking resources."
+msgstr ""
+
+msgid "You do not have permission to view reservations."
+msgstr ""
+
+msgid "You do not have permission to view schedules."
+msgstr ""
+
+msgid "You do not have permission to view the booking policy."
+msgstr ""
+
+msgid "{active} of {total} active"
+msgstr ""
+
+
+msgid "{minutes} min"
+msgstr ""
+
+
+msgid "{count} block"
+msgid_plural "{count} blocks"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} deleted offering"
+msgid_plural "{count} deleted offerings"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} deleted resource"
+msgid_plural "{count} deleted resources"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} entry"
+msgid_plural "{count} entries"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} item"
+msgid_plural "{count} items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} offering"
+msgid_plural "{count} offerings"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} pool"
+msgid_plural "{count} pools"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} reservation"
+msgid_plural "{count} reservations"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} resource"
+msgid_plural "{count} resources"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} schedule"
+msgid_plural "{count} schedules"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Booking resources"
+msgstr ""
+
+msgid "Booking offerings"
+msgstr ""
+
+msgid "Booking schedules"
+msgstr ""
+
+msgid "Back to reservations"
+msgstr ""
+
+msgid "Stored as {seconds} seconds."
+msgstr ""
+
+msgid "There is nothing to change."
+msgstr ""
+
+msgid "{checkIn} to {checkOut} ({nights} night)"
+msgid_plural "{checkIn} to {checkOut} ({nights} nights)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{min}–{max} night"
+msgid_plural "{min}–{max} nights"
+msgstr[0] ""
+msgstr[1] ""

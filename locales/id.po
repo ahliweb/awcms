@@ -7723,3 +7723,678 @@ msgstr "Pengiriman Telegram"
 
 msgid "Tenant suspended"
 msgstr "Tenant ditangguhkan"
+
+#. Booking admin screens (Issue #942)
+msgid "A pool groups interchangeable resources, such as three treatment rooms. A resource joins a pool in its own form."
+msgstr "Pool mengelompokkan resource yang dapat saling menggantikan, misalnya tiga ruang perawatan. Sebuah resource masuk ke pool lewat formulirnya sendiri."
+
+msgid "A unit is never removed. Deactivating it stops new bookings on it; bookings already made stay."
+msgstr "Unit tidak pernah dihapus. Menonaktifkannya menghentikan pemesanan baru pada unit itu; pemesanan yang sudah dibuat tetap berlaku."
+
+msgid "Add a closure or special hours"
+msgstr "Tambah penutupan atau jam khusus"
+
+msgid "Add a resource booked by night before blocking nights."
+msgstr "Tambahkan resource yang dipesan per malam sebelum memblokir malam."
+
+msgid "Add opening hours"
+msgstr "Tambah jam buka"
+
+msgid "Add weekly opening hours"
+msgstr "Tambah jam buka mingguan"
+
+msgid "Add weekly opening hours so slot resources can be booked."
+msgstr "Tambahkan jam buka mingguan agar resource berbasis waktu dapat dipesan."
+
+msgid "An active schedule already covers part of that period. Shorten or deactivate it first."
+msgstr "Jadwal aktif sudah mencakup sebagian periode itu. Persingkat atau nonaktifkan dulu."
+
+msgid "Back on sale"
+msgstr "Kembali dijual"
+
+msgid "Back on sale on"
+msgstr "Kembali dijual pada"
+
+msgid "Back to normal on"
+msgstr "Kembali normal pada"
+
+msgid "Block nights"
+msgstr "Blokir malam"
+
+msgid "Block status"
+msgstr "Status blok"
+
+msgid "Blocked nights"
+msgstr "Malam terblokir"
+
+msgid "Blocked nights apply to stay resources only."
+msgstr "Malam terblokir hanya berlaku untuk resource menginap."
+
+msgid "Blocked nights could not be loaded right now. Please try again later."
+msgstr "Malam terblokir tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "Bookable up to (days ahead)"
+msgstr "Dapat dipesan hingga (hari ke depan)"
+
+msgid "Booked"
+msgstr "Dipesan"
+
+msgid "Booking policy"
+msgstr "Kebijakan pemesanan"
+
+msgid "By night"
+msgstr "Per malam"
+
+msgid "By time"
+msgstr "Per waktu"
+
+msgid "Cancel reservation"
+msgstr "Batalkan reservasi"
+
+msgid "Cancel reservation {number}? Its resource is released."
+msgstr "Batalkan reservasi {number}? Resource-nya dilepas."
+
+msgid "Capacity can only grow. Deactivate a unit instead of removing it."
+msgstr "Kapasitas hanya dapat bertambah. Nonaktifkan unit, bukan menghapusnya."
+
+msgid "Check in"
+msgstr "Check-in"
+
+msgid "Check-in time"
+msgstr "Jam check-in"
+
+msgid "Check-out time"
+msgstr "Jam check-out"
+
+msgid "Checked in"
+msgstr "Sudah check-in"
+
+msgid "Cleanup after (minutes)"
+msgstr "Pembersihan sesudah (menit)"
+
+msgid "Closes at"
+msgstr "Tutup pukul"
+
+msgid "Closures and special hours"
+msgstr "Penutupan dan jam khusus"
+
+msgid "Complete"
+msgstr "Selesaikan"
+
+msgid "Confirmation"
+msgstr "Konfirmasi"
+
+msgid "Confirmed"
+msgstr "Terkonfirmasi"
+
+msgid "Create a pool"
+msgstr "Buat pool"
+
+msgid "Create a resource"
+msgstr "Buat resource"
+
+msgid "Create an offering"
+msgstr "Buat offering"
+
+msgid "Create offering"
+msgstr "Buat offering"
+
+msgid "Create pool"
+msgstr "Buat pool"
+
+msgid "Create resource"
+msgstr "Buat resource"
+
+msgid "Create your first offering using the form above."
+msgstr "Buat offering pertama Anda dengan formulir di atas."
+
+msgid "Create your first resource using the form above."
+msgstr "Buat resource pertama Anda dengan formulir di atas."
+
+msgid "Dates"
+msgstr "Tanggal"
+
+msgid "Deactivate this schedule? Existing bookings are not changed."
+msgstr "Nonaktifkan jadwal ini? Pemesanan yang ada tidak berubah."
+
+msgid "Default: {value}"
+msgstr "Bawaan: {value}"
+
+msgid "Default: {value} days"
+msgstr "Bawaan: {value} hari"
+
+msgid "Default: {value} minutes"
+msgstr "Bawaan: {value} menit"
+
+msgid "Defaults offered for new stay resources"
+msgstr "Bawaan yang ditawarkan untuk resource menginap baru"
+
+msgid "Delete the pool {code}? It can be restored later."
+msgstr "Hapus pool {code}? Pool dapat dipulihkan nanti."
+
+msgid "Delete {code}? It can be restored later."
+msgstr "Hapus {code}? Dapat dipulihkan nanti."
+
+msgid "Deleted offerings"
+msgstr "Offering terhapus"
+
+msgid "Deleted pools"
+msgstr "Pool terhapus"
+
+msgid "Deleted resources"
+msgstr "Resource terhapus"
+
+msgid "Duration (minutes)"
+msgstr "Durasi (menit)"
+
+msgid "Edit offering {code}"
+msgstr "Ubah offering {code}"
+
+msgid "Edit resource {code}"
+msgstr "Ubah resource {code}"
+
+msgid "Edit {code}"
+msgstr "Ubah {code}"
+
+msgid "Effective until (optional, exclusive)"
+msgstr "Berlaku sampai (opsional, tidak termasuk)"
+
+msgid "End on"
+msgstr "Akhiri pada"
+
+msgid "Every booking and hold, newest first. A hold is a reservation waiting for confirmation until its expiry."
+msgstr "Semua pemesanan dan hold, terbaru lebih dulu. Hold adalah reservasi yang menunggu konfirmasi hingga kedaluwarsa."
+
+msgid "Every resource without its own hours"
+msgstr "Setiap resource tanpa jam sendiri"
+
+msgid "Every unit"
+msgstr "Semua unit"
+
+msgid "First blocked night"
+msgstr "Malam pertama yang diblokir"
+
+msgid "First day"
+msgstr "Hari pertama"
+
+msgid "Free cancellation until (minutes before start)"
+msgstr "Pembatalan gratis hingga (menit sebelum mulai)"
+
+msgid "Fri"
+msgstr "Jum"
+
+msgid "Guests"
+msgstr "Tamu"
+
+msgid "Hold expired"
+msgstr "Hold kedaluwarsa"
+
+msgid "Hold expires"
+msgstr "Hold kedaluwarsa pada"
+
+msgid "Hold lasts (minutes)"
+msgstr "Hold berlaku (menit)"
+
+msgid "Hold placed"
+msgstr "Hold dibuat"
+
+msgid "Hold, then confirm"
+msgstr "Hold, lalu konfirmasi"
+
+msgid "Holds"
+msgstr "Hold"
+
+msgid "Holiday"
+msgstr "Hari libur"
+
+msgid "Hours"
+msgstr "Jam"
+
+msgid "Immediately"
+msgstr "Langsung"
+
+msgid "Kind (for example room, chair, court)"
+msgstr "Jenis (misalnya room, chair, court)"
+
+msgid "Label of unit {number}"
+msgstr "Label unit {number}"
+
+msgid "Leave notice, cancellation and horizon blank to use the booking policy."
+msgstr "Kosongkan pemberitahuan, pembatalan, dan horizon untuk memakai kebijakan pemesanan."
+
+msgid "Length"
+msgstr "Lama"
+
+msgid "Live holds in total"
+msgstr "Total hold aktif"
+
+msgid "Live holds per customer"
+msgstr "Hold aktif per pelanggan"
+
+msgid "Longest hold (minutes)"
+msgstr "Hold terlama (menit)"
+
+msgid "Mark as no-show"
+msgstr "Tandai tidak hadir"
+
+msgid "Mark reservation {number} as a no-show?"
+msgstr "Tandai reservasi {number} sebagai tidak hadir?"
+
+msgid "Marked as no-show"
+msgstr "Ditandai tidak hadir"
+
+msgid "Maximum guests"
+msgstr "Tamu maksimum"
+
+msgid "Maximum nights"
+msgstr "Malam maksimum"
+
+msgid "Minimum guests"
+msgstr "Tamu minimum"
+
+msgid "Minimum nights"
+msgstr "Malam minimum"
+
+msgid "Minimum notice (minutes)"
+msgstr "Pemberitahuan minimum (menit)"
+
+msgid "Mon"
+msgstr "Sen"
+
+msgid "Name of pool {code}"
+msgstr "Nama pool {code}"
+
+msgid "New end date, exclusive"
+msgstr "Tanggal akhir baru, tidak termasuk"
+
+msgid "Nights"
+msgstr "Malam"
+
+msgid "Nights you block will appear here."
+msgstr "Malam yang Anda blokir akan muncul di sini."
+
+msgid "No blocked nights"
+msgstr "Tidak ada malam terblokir"
+
+msgid "No closures"
+msgstr "Tidak ada penutupan"
+
+msgid "No offerings yet"
+msgstr "Belum ada offering"
+
+msgid "No pool"
+msgstr "Tanpa pool"
+
+msgid "No pools yet"
+msgstr "Belum ada pool"
+
+msgid "No reason"
+msgstr "Tanpa alasan"
+
+msgid "No reservations"
+msgstr "Tidak ada reservasi"
+
+msgid "No resources yet"
+msgstr "Belum ada resource"
+
+msgid "No schedules yet"
+msgstr "Belum ada jadwal"
+
+msgid "No-show"
+msgstr "Tidak hadir"
+
+msgid "No-show grace (minutes)"
+msgstr "Toleransi tidak hadir (menit)"
+
+msgid "Offering"
+msgstr "Offering"
+
+msgid "Offerings"
+msgstr "Offering"
+
+msgid "Offerings could not be loaded right now. Please try again later."
+msgstr "Offering tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "Offerings created for this tenant will appear here."
+msgstr "Offering yang dibuat untuk tenant ini akan muncul di sini."
+
+msgid "Open on"
+msgstr "Buka pada"
+
+msgid "Opens at"
+msgstr "Buka pukul"
+
+msgid "Overdue"
+msgstr "Terlambat dilepas"
+
+msgid "Owner use"
+msgstr "Dipakai pemilik"
+
+msgid "Please wait…"
+msgstr "Mohon tunggu…"
+
+msgid "Pool"
+msgstr "Pool"
+
+msgid "Private event"
+msgstr "Acara pribadi"
+
+msgid "Release this block and put its nights back on sale?"
+msgstr "Lepaskan blok ini dan kembalikan malamnya ke penjualan?"
+
+msgid "Remove this closure or special-hours entry?"
+msgstr "Hapus penutupan atau jam khusus ini?"
+
+msgid "Replaced by"
+msgstr "Digantikan oleh"
+
+msgid "Rescheduled"
+msgstr "Dijadwalkan ulang"
+
+msgid "Rescheduled from"
+msgstr "Dijadwalkan ulang dari"
+
+msgid "Reservation"
+msgstr "Reservasi"
+
+msgid "Reservation status"
+msgstr "Status reservasi"
+
+msgid "Reservation {number}"
+msgstr "Reservasi {number}"
+
+msgid "Reservations"
+msgstr "Reservasi"
+
+msgid "Reservations and holds appear here as they are made."
+msgstr "Reservasi dan hold muncul di sini saat dibuat."
+
+msgid "Reservations could not be loaded right now. Please try again later."
+msgstr "Reservasi tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "Resource pools"
+msgstr "Pool resource"
+
+msgid "Resources"
+msgstr "Resource"
+
+msgid "Resources could not be loaded right now. Please try again later."
+msgstr "Resource tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "Resources created for this tenant will appear here."
+msgstr "Resource yang dibuat untuk tenant ini akan muncul di sini."
+
+msgid "Sat"
+msgstr "Sab"
+
+msgid "Save offering"
+msgstr "Simpan offering"
+
+msgid "Save policy"
+msgstr "Simpan kebijakan"
+
+msgid "Save resource"
+msgstr "Simpan resource"
+
+msgid "Schedules and closures"
+msgstr "Jadwal dan penutupan"
+
+msgid "Schedules could not be loaded right now. Please try again later."
+msgstr "Jadwal tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "Setup before (minutes)"
+msgstr "Persiapan sebelum (menit)"
+
+msgid "Some fields are not valid. Check them and try again."
+msgstr "Beberapa isian tidak valid. Periksa lalu coba lagi."
+
+msgid "Some of those nights are already booked or blocked. Nothing was changed."
+msgstr "Sebagian malam itu sudah dipesan atau diblokir. Tidak ada yang diubah."
+
+msgid "Special hours"
+msgstr "Jam khusus"
+
+msgid "Start times every (minutes)"
+msgstr "Waktu mulai setiap (menit)"
+
+msgid "Status of unit {number}"
+msgstr "Status unit {number}"
+
+msgid "Sun"
+msgstr "Min"
+
+msgid "Take nights of a stay resource out of sale for maintenance or owner use. A block never cancels a booking: nights that are already booked cannot be blocked."
+msgstr "Tarik malam sebuah resource menginap dari penjualan untuk perawatan atau pemakaian pemilik. Blok tidak pernah membatalkan pemesanan: malam yang sudah dipesan tidak dapat diblokir."
+
+msgid "That block no longer exists."
+msgstr "Blok itu sudah tidak ada."
+
+msgid "That code is already in use, including by a deleted record."
+msgstr "Kode itu sudah dipakai, termasuk oleh data yang terhapus."
+
+msgid "That offering no longer exists."
+msgstr "Offering itu sudah tidak ada."
+
+msgid "That pool no longer exists."
+msgstr "Pool itu sudah tidak ada."
+
+msgid "That reservation no longer exists."
+msgstr "Reservasi itu sudah tidak ada."
+
+msgid "That reservation was not found."
+msgstr "Reservasi itu tidak ditemukan."
+
+msgid "That resource no longer exists."
+msgstr "Resource itu sudah tidak ada."
+
+msgid "That time zone is not known."
+msgstr "Zona waktu itu tidak dikenal."
+
+msgid "That unit does not belong to this resource."
+msgstr "Unit itu bukan milik resource ini."
+
+msgid "The booking is no longer in a state that allows that. Reload the page."
+msgstr "Pemesanan tidak lagi dalam keadaan yang mengizinkan itu. Muat ulang halaman."
+
+msgid "The booking mode cannot change while the resource has live bookings or blocks."
+msgstr "Mode pemesanan tidak dapat berubah selama resource punya pemesanan atau blok aktif."
+
+msgid "The booking policy could not be loaded right now. Please try again later."
+msgstr "Kebijakan pemesanan tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "The booking, what it holds and every step it has been through."
+msgstr "Pemesanan, apa yang ditahannya, dan setiap langkah yang telah dilaluinya."
+
+msgid "The change could not be saved. Please try again."
+msgstr "Perubahan tidak dapat disimpan. Silakan coba lagi."
+
+msgid "The database refused this change."
+msgstr "Database menolak perubahan ini."
+
+msgid "The dates are not valid: check-out must be after check-in."
+msgstr "Tanggal tidak valid: check-out harus setelah check-in."
+
+msgid "The hold has expired."
+msgstr "Hold sudah kedaluwarsa."
+
+msgid "The new reservation"
+msgstr "Reservasi yang baru"
+
+msgid "The pool is deleted. Restore the pool first."
+msgstr "Pool terhapus. Pulihkan pool dulu."
+
+msgid "The pool still has resources. Move them out first."
+msgstr "Pool masih punya resource. Pindahkan dulu."
+
+msgid "The previous reservation"
+msgstr "Reservasi sebelumnya"
+
+msgid "The reservation could not be loaded right now. Please try again later."
+msgstr "Reservasi tidak dapat dimuat saat ini. Coba lagi nanti."
+
+msgid "The resource has an active schedule in its current time zone. Deactivate the schedule first."
+msgstr "Resource punya jadwal aktif pada zona waktunya saat ini. Nonaktifkan jadwal dulu."
+
+msgid "The resource has live bookings or blocks. Cancel or release them, or set it to inactive."
+msgstr "Resource punya pemesanan atau blok aktif. Batalkan atau lepaskan, atau ubah menjadi nonaktif."
+
+msgid "The rooms, chairs, courts or vehicles that can be booked, the units each one has, and the pools that group interchangeable resources."
+msgstr "Ruangan, kursi, lapangan, atau kendaraan yang dapat dipesan, unit yang dimiliki masing-masing, dan pool yang mengelompokkan resource yang dapat saling menggantikan."
+
+msgid "The rules every booking follows. A blank field uses the built-in default shown beside it, which is not the same as unlimited."
+msgstr "Aturan yang diikuti setiap pemesanan. Isian kosong memakai bawaan yang ditampilkan di sebelahnya, yang tidak sama dengan tanpa batas."
+
+msgid "The server could not be reached. Please try again."
+msgstr "Server tidak dapat dihubungi. Silakan coba lagi."
+
+msgid "The services and stays that can be booked: how long they last, how many guests they take and how a booking is confirmed. An offering holds no price."
+msgstr "Layanan dan penginapan yang dapat dipesan: berapa lama, berapa tamu, dan bagaimana pemesanan dikonfirmasi. Offering tidak memuat harga."
+
+msgid "The time zone cannot change while the resource has live bookings or blocks."
+msgstr "Zona waktu tidak dapat berubah selama resource punya pemesanan atau blok aktif."
+
+msgid "The values break a rule of the booking setup."
+msgstr "Nilainya melanggar aturan pengaturan pemesanan."
+
+msgid "These are suggestions for the resource form; the server does not apply them by itself."
+msgstr "Ini hanya saran untuk formulir resource; server tidak menerapkannya sendiri."
+
+msgid "This offering is deleted. Restore it first."
+msgstr "Offering ini terhapus. Pulihkan dulu."
+
+msgid "This request was already used for a different change. Reload the page and try again."
+msgstr "Permintaan ini sudah dipakai untuk perubahan lain. Muat ulang halaman lalu coba lagi."
+
+msgid "This resource is deleted. Restore it first."
+msgstr "Resource ini terhapus. Pulihkan dulu."
+
+msgid "This schedule can no longer be changed."
+msgstr "Jadwal ini tidak dapat diubah lagi."
+
+msgid "Through a schedule"
+msgstr "Lewat jadwal"
+
+msgid "Thu"
+msgstr "Kam"
+
+msgid "Times are shown in UTC."
+msgstr "Waktu ditampilkan dalam UTC."
+
+msgid "Tue"
+msgstr "Sel"
+
+msgid "Unit labels (optional, one per line)"
+msgstr "Label unit (opsional, satu per baris)"
+
+msgid "Units"
+msgstr "Unit"
+
+msgid "Units (can only grow)"
+msgstr "Unit (hanya dapat bertambah)"
+
+msgid "Wed"
+msgstr "Rab"
+
+msgid "What is booked"
+msgstr "Apa yang dipesan"
+
+msgid "When bookings can be made"
+msgstr "Kapan pemesanan dapat dibuat"
+
+msgid "When each resource can be booked, and the days it is closed or opens at different hours. Changes affect future availability only; no existing booking is touched."
+msgstr "Kapan setiap resource dapat dipesan, dan hari ketika tutup atau buka pada jam berbeda. Perubahan hanya memengaruhi ketersediaan mendatang; tidak ada pemesanan yang disentuh."
+
+msgid "You can read the policy but not change it."
+msgstr "Anda dapat membaca kebijakan tetapi tidak mengubahnya."
+
+msgid "You do not have permission to view blocked nights."
+msgstr "Anda tidak punya izin melihat malam terblokir."
+
+msgid "You do not have permission to view booking offerings."
+msgstr "Anda tidak punya izin melihat offering pemesanan."
+
+msgid "You do not have permission to view booking resources."
+msgstr "Anda tidak punya izin melihat resource pemesanan."
+
+msgid "You do not have permission to view reservations."
+msgstr "Anda tidak punya izin melihat reservasi."
+
+msgid "You do not have permission to view schedules."
+msgstr "Anda tidak punya izin melihat jadwal."
+
+msgid "You do not have permission to view the booking policy."
+msgstr "Anda tidak punya izin melihat kebijakan pemesanan."
+
+msgid "{active} of {total} active"
+msgstr "{active} dari {total} aktif"
+
+
+msgid "{minutes} min"
+msgstr "{minutes} mnt"
+
+
+msgid "{count} block"
+msgid_plural "{count} blocks"
+msgstr[0] "{count} blok"
+
+msgid "{count} deleted offering"
+msgid_plural "{count} deleted offerings"
+msgstr[0] "{count} offering terhapus"
+
+msgid "{count} deleted resource"
+msgid_plural "{count} deleted resources"
+msgstr[0] "{count} resource terhapus"
+
+msgid "{count} entry"
+msgid_plural "{count} entries"
+msgstr[0] "{count} entri"
+
+msgid "{count} item"
+msgid_plural "{count} items"
+msgstr[0] "{count} item"
+
+msgid "{count} offering"
+msgid_plural "{count} offerings"
+msgstr[0] "{count} offering"
+
+msgid "{count} pool"
+msgid_plural "{count} pools"
+msgstr[0] "{count} pool"
+
+msgid "{count} reservation"
+msgid_plural "{count} reservations"
+msgstr[0] "{count} reservasi"
+
+msgid "{count} resource"
+msgid_plural "{count} resources"
+msgstr[0] "{count} resource"
+
+msgid "{count} schedule"
+msgid_plural "{count} schedules"
+msgstr[0] "{count} jadwal"
+
+msgid "Booking resources"
+msgstr "Resource pemesanan"
+
+msgid "Booking offerings"
+msgstr "Offering pemesanan"
+
+msgid "Booking schedules"
+msgstr "Jadwal pemesanan"
+
+msgid "Back to reservations"
+msgstr "Kembali ke reservasi"
+
+msgid "Stored as {seconds} seconds."
+msgstr "Tersimpan sebagai {seconds} detik."
+
+msgid "There is nothing to change."
+msgstr "Tidak ada yang diubah."
+
+msgid "{checkIn} to {checkOut} ({nights} night)"
+msgid_plural "{checkIn} to {checkOut} ({nights} nights)"
+msgstr[0] "{checkIn} sampai {checkOut} ({nights} malam)"
+
+msgid "{min}–{max} night"
+msgid_plural "{min}–{max} nights"
+msgstr[0] "{min}–{max} malam"
