@@ -43,6 +43,19 @@ event. **Not present yet:** the reconciliation
 route and the admin screens (#942, which is what lets the module leave
 `experimental`).
 
+Admin configuration (Issue #1030, no migration; prerequisite of #942): resources
+with their units and pool membership, resource pools, service offerings and the
+tenant policy, under `/api/v1/booking/` (`resources`, `resource-pools`,
+`offerings`, `policy`). Every write takes `Idempotency-Key` with replay and runs
+under a savepoint, so a database guard (`BOOKING_MODE_IN_USE`, `TIMEZONE_IN_USE`,
+`SCHEDULE_TIMEZONE_MISMATCH`, a duplicate code) is a named 409, not a 500. Delete
+is soft and refused while the resource is in use; capacity only grows; `PUT
+/policy` replaces the whole policy (`null` = the module default) and is audited
+`critical`. Code: `application/booking-resource-admin.ts`,
+`booking-offering-admin.ts`, `booking-policy-admin.ts`, `booking-admin-routes.ts`,
+`booking-admin-support.ts`, `domain/booking-admin-validation.ts`; see
+[`booking.md` §3.0.2](../../../docs/awcms/booking.md).
+
 Reporting (Issue #944, `sql/244`): three projections on the existing `reporting`
 engine and three live report routes; see "Reporting, in one place".
 

@@ -32,10 +32,12 @@
  * (`application/booking-reservation-service.ts`), `Idempotency-Key` through the
  * shared component, the `BookingPort` of cross-domain-contracts section 3
  * (`application/booking-port-adapter.ts`), the nine reservation events on the
- * live AsyncAPI document, and a safe DEFAULT for the hold caps. What does NOT
- * exist yet, deliberately: the report
- * and reconciliation routes, the reporting projections and the admin screens
- * (Issue #942). The module therefore still ships `experimental` and declares no
+ * live AsyncAPI document, and a safe DEFAULT for the hold caps; the report routes
+ * and projections (Issue #944); and the ADMIN CONFIGURATION routes (Issue #1030:
+ * `resources` with their units and pool membership, `resource-pools`, `offerings`
+ * and `policy`, `application/booking-*-admin.ts`), the reads and writes the admin
+ * screens are built on. What does NOT exist yet, deliberately: the reconciliation
+ * route and the admin screens (Issue #942). The module therefore still ships `experimental` and declares no
  * `navigation`: a status ADR-0021 allows without an admin screen, and the one the
  * PR that adds the first screen flips to `active`.
  *

@@ -23,14 +23,25 @@ export const BOOKING_AUDIT_EVENTS = {
   offeringCreated: { action: "booking.offering.created", severity: "info" },
   offeringUpdated: { action: "booking.offering.updated", severity: "info" },
   offeringDeleted: { action: "booking.offering.deleted", severity: "warning" },
+  offeringRestored: {
+    action: "booking.offering.restored",
+    severity: "info"
+  },
+  // Resource pools (Issue #1030): gated by the `resources.*` permissions.
+  poolCreated: { action: "booking.pool.created", severity: "info" },
+  poolUpdated: { action: "booking.pool.updated", severity: "info" },
+  poolDeleted: { action: "booking.pool.deleted", severity: "warning" },
+  poolRestored: { action: "booking.pool.restored", severity: "info" },
   scheduleChanged: { action: "booking.schedule.changed", severity: "info" },
   // Blocked nights take sellable inventory out of sale (booking.md section 9):
   // placing one is `warning`, returning the nights to sale is `info`.
   blockCreated: { action: "booking.block.created", severity: "warning" },
   blockReleased: { action: "booking.block.released", severity: "info" },
+  // The policy bounds how much inventory one actor can hold and how far ahead
+  // anyone can book (Issue #1030): a high-risk change, hence `critical`.
   policyConfigured: {
     action: "booking.policy.configured",
-    severity: "warning"
+    severity: "critical"
   },
   reservationCreated: {
     action: "booking.reservation.created",
