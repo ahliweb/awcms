@@ -364,8 +364,23 @@ async function claimChosenUnits(
  * INACTIVE units are included on purpose: a unit taken out of service and put
  * back later must still be blocked, and `sql/204` does not require an active
  * unit for a block row.
+ *
+ * The resource row is locked `FOR SHARE` in its OWN statement first (Issue
+ * #1012, N1): a unit insert takes it `FOR NO KEY UPDATE` (`sql/240`), so a unit
+ * being added either commits before this read (and is read here) or waits for
+ * the block to commit (and its trigger then covers it). Without the lock a unit
+ * inserted between this read and the commit would slip through uncovered. The
+ * unit read is a separate statement so it takes a fresh READ COMMITTED snapshot
+ * AFTER the lock wait.
  */
 async function readBlockUnits(tx: Sql, claim: BlockClaim): Promise<UnitRef[]> {
+  await tx`
+    SELECT 1
+    FROM awcms_booking_resources
+    WHERE tenant_id = ${claim.tenantId} AND id = ${claim.resourceId}
+    FOR SHARE
+  `;
+
   const rows = (await tx`
     SELECT u.id AS unit_id, u.resource_id, u.ordinal
     FROM awcms_booking_resource_blocks b

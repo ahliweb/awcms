@@ -28,8 +28,9 @@
  * ## Releasing returns the nights to sale, in the same statement
  *
  * Releasing stamps the block; the AFTER UPDATE trigger of `sql/204` releases its
- * allocation rows in that statement, so "block released <=> nights released" is a
- * database invariant, not a handler convention. Releasing a released block is a
+ * allocation rows in that statement with the block's own `released_at`
+ * (`sql/241`: one release, one instant), so "block released <=> nights released"
+ * is a database invariant, not a handler convention. Releasing a released block is a
  * replay: it writes nothing.
  *
  * ## Expired holds
@@ -48,10 +49,20 @@
  * `reservations.read`: a caller without it learns that nights are taken, not by
  * whom.
  *
- * This service has no HTTP surface: the routes that call it authorize
- * `booking.blocks.create` / `.release` (Issues #941 and #942) and carry an
- * `Idempotency-Key`; here the retry is the state check (a second release is a
- * replay) and the constraint.
+ * ## Who calls it
+ *
+ * `POST /api/v1/booking/blocks` and `.../{id}/release` (Issue #1012) authorize
+ * `booking.blocks.create` / `.release` and bind the call to an `Idempotency-Key`
+ * (`booking-block-routes.ts`): a retry after the commit replays the stored
+ * response and never reaches `createBlock` again, so it is never told
+ * `BLOCK_CONFLICT` about its own block. Inside this service the retry is still
+ * only the state check (a second release is a replay) and the constraint.
+ *
+ * ## Units added later (Issue #1012, N1)
+ *
+ * A resource-wide block also covers units added after it: `sql/240` inserts the
+ * block row for a new unit, and `readBlockUnits` locks the resource so a unit
+ * inserted concurrently cannot slip between the read and the commit.
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
@@ -339,10 +350,14 @@ export async function createBlock(
   // Lazy reclaim BEFORE the savepoint: an elapsed hold on these nights must not
   // refuse the block, and expiring it is a fact that stays true even when the
   // block that follows is refused.
+  // Only the units the block COVERS are reclaimed (Issue #1012, N3): a block of
+  // one unit names that unit, so an elapsed hold on another unit is left alone
+  // for its own sweep; a resource-wide block covers every unit, so no unit filter.
   const reclaimed = await reclaimExpiredHolds(tx, ctx.tenantId, [resource.id], {
     kind: "stay",
     fromDate: input.fromDate,
-    toDate: input.toDate
+    toDate: input.toDate,
+    ...(input.unitId ? { unitId: input.unitId } : {})
   });
 
   if (reclaimed.expired > 0) {
@@ -352,11 +367,13 @@ export async function createBlock(
       action: BOOKING_AUDIT_EVENTS.reservationExpired.action,
       resourceType: "booking_reservation",
       severity: BOOKING_AUDIT_EVENTS.reservationExpired.severity,
-      message: `${reclaimed.expired} elapsed hold(s) were expired to make room for a block.`,
+      message: `${reclaimed.expired} elapsed hold(s) holding nights of the block's unit(s) were expired to make room for it.`,
       attributes: {
         expiredCount: reclaimed.expired,
         releasedAllocations: reclaimed.releasedAllocations,
-        trigger: "lazy_reclaim"
+        trigger: "lazy_reclaim",
+        resourceId: resource.id,
+        unitId: input.unitId ?? null
       },
       ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {})
     });

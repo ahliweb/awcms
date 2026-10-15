@@ -12324,6 +12324,111 @@ Gated by `booking.availability.read`. READ-ONLY: persists and claims nothing, an
 | 422    | QUANTITY_EXCEEDS_UNITS.                                                                                           | [`ApiError`](#standard-error-envelope) |
 | 429    | RATE_LIMITED.                                                                                                     | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/booking/blocks` — List blocked nights
+
+- **operationId**: `bookingBlocksList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.blocks.read`. Newest first, keyset paginated (`cursor`). Filters: `resourceId`, `unitId`, `status`. A block carries ids, local dates and a closed reason code -- no free text and no customer reference. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                       | Description |
+| ------------------ | ------ | -------- | -------------------------- | ----------- |
+| `resourceId`       | query  | no       | string (uuid)              |             |
+| `unitId`           | query  | no       | string (uuid)              |             |
+| `status`           | query  | no       | enum(`active`, `released`) |             |
+| `cursor`           | query  | no       | string                     |             |
+| `X-Correlation-ID` | header | no       | string                     |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of blocks.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/blocks` — Block nights of a stay resource
+
+- **operationId**: `bookingBlockCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.blocks.create` (high-impact: it removes sellable inventory). Takes the half-open local date range `[fromDate, toDate)` (at most 366 nights, dates in the resource's zone) of ONE unit (`unitId`) or EVERY unit (absent or null) out of sale, for a closed `reasonCode`. A block is a HARD exclusion under the same constraint as a guest's nights: all-or-none, it never cancels a reservation, and a night already held by a live stay or another block is `409 BLOCK_CONFLICT` and writes nothing. `error.details.conflicts` names the conflicting reservations (number, status, dates; never a customer reference) and blocks only to a caller who ALSO holds `booking.reservations.read`. A resource-wide block also covers units added to the resource later. Elapsed, unswept holds on the covered units are expired first (lazy reclaim). Requires an Idempotency-Key; replaying it returns the stored response and never `BLOCK_CONFLICT` about its own block. Audited at warning severity (`booking.block.created`). Publishes no domain event in v1.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingBlockInput`](#schema-bookingblockinput)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                            | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 201    | The block, with the units holding its nights.                                                                                                                                                          | object                                 |
+| 400    | VALIDATION_ERROR, or STAY_DATES_INVALID (a malformed or out-of-order date, more than 366 nights, or a date the resource's zone does not have).                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND or UNIT_NOT_FOUND.                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | BLOCK_CONFLICT (a live stay or another block holds a night; nothing was cancelled), BOOKING_MODE_MISMATCH (a slot resource has schedule exceptions instead), CONTENTION_RETRY or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/blocks/{id}` — Read one block
+
+- **operationId**: `bookingBlockGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.blocks.read`. An unknown id and another tenant's id are the same `404 BLOCK_NOT_FOUND`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                  | Schema                                 |
+| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The block.                                                                   | object                                 |
+| 400    | Validation error.                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | BLOCK_NOT_FOUND (an unknown id and another tenant's id are the same answer). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/blocks/{id}/release` — Release a block and return its nights to sale
+
+- **operationId**: `bookingBlockRelease`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.blocks.release`. The block is locked and the database releases its allocation rows in the same statement, stamping the block's own release instant on them. Releasing an already released block returns it with `replayed: true` and writes nothing. The body is empty. Requires an Idempotency-Key; replaying it returns the stored response. Audited at info severity (`booking.block.released`). Publishes no domain event in v1.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                          | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The released block, or unchanged with `replayed: true` when it was already released. | object                                 |
+| 400    | Validation error.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | BLOCK_NOT_FOUND (an unknown id and another tenant's id are the same answer).         | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.                                                                | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/booking/reports/occupancy` — Occupancy of stay resources
 
 - **operationId**: `bookingReportsOccupancy`
@@ -14091,6 +14196,28 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
   "name": "string",
   "slug": "example-slug",
   "description": "string"
+}
+```
+
+### Schema: BookingBlockInput
+
+| Field        | Type                                      | Required | Nullable | Description                                                                               |
+| ------------ | ----------------------------------------- | -------- | -------- | ----------------------------------------------------------------------------------------- |
+| `resourceId` | string (uuid)                             | yes      | no       |                                                                                           |
+| `unitId`     | string (uuid)                             | no       | yes      | One unit of the resource; null or absent blocks every unit (including units added later). |
+| `fromDate`   | string (date)                             | yes      | no       | First blocked night, a local date in the resource's zone.                                 |
+| `toDate`     | string (date)                             | yes      | no       | Exclusive end (the day the unit is back in sale); at most 366 nights after fromDate.      |
+| `reasonCode` | enum(`maintenance`, `owner_use`, `other`) | yes      | no       |                                                                                           |
+
+**Example**
+
+```json
+{
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "unitId": "00000000-0000-0000-0000-000000000000",
+  "fromDate": "2026-01-01",
+  "toDate": "2026-01-01",
+  "reasonCode": "maintenance"
 }
 ```
 

@@ -132,7 +132,17 @@ const NIL_UUID = "00000000-0000-0000-0000-000000000000";
  */
 export type ReclaimWindow =
   | { kind: "time"; fromMs: number; toMs: number }
-  | { kind: "stay"; fromDate: string; toDate: string };
+  | {
+      kind: "stay";
+      fromDate: string;
+      toDate: string;
+      /**
+       * Limit the probe to the live rows of ONE unit (a block of a single unit
+       * reclaims only the holds on that unit). Absent = every unit of the
+       * resources (a stay claim, or a resource-wide block).
+       */
+      unitId?: string;
+    };
 
 function asList(ids: readonly string[]): string {
   // Bun.SQL does not bind a JS array as a Postgres array; the ids are uuids
@@ -343,6 +353,8 @@ async function lockElapsedHoldsOver(
             AND a.released_at IS NULL
             AND a.granularity = 'stay'
             AND a.resource_id = ANY(string_to_array(${resources}::text, ',')::uuid[])
+            AND (${window.unitId ?? null}::uuid IS NULL
+                 OR a.resource_unit_id = ${window.unitId ?? null}::uuid)
             AND daterange(a.stay_from, a.stay_to, '[)')
                 && daterange(${window.fromDate}::date, ${window.toDate}::date, '[)')
         )

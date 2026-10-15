@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8b2eb6984af6dda6f894b75ed0bfdb9d8546306de3958267fa97e812484b6c43 -->
+<!-- i18n-source-hash: sha256:6d3ee1b309e39642623895d496001ab47ea1ec75702daabc826c2e5c2d62a0c6 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -40,7 +40,9 @@ Reservasi (Issue #941, `sql/208`, `sql/209`): route `POST/GET /reservations`,
 (`application/booking-reservation-service.ts`), `Idempotency-Key` lewat
 komponen bersama, `BookingPort` (`application/booking-port-adapter.ts`), sembilan
 event reservasi di dokumen AsyncAPI live, dan default aman untuk batas hold.
-**Belum ada:** route blok (#1012), route rekonsiliasi, dan layar admin (#942,
+Route blok (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
+`POST /blocks/{id}/release`) memakai `Idempotency-Key` dengan replay dan tidak
+menerbitkan event. **Belum ada:** route rekonsiliasi, dan layar admin (#942,
 yang memungkinkan modul keluar dari `experimental`).
 
 Pelaporan (Issue #944, `sql/244`): tiga proyeksi pada engine `reporting` yang ada
@@ -238,14 +240,19 @@ checkOutDate }` (`YYYY-MM-DD` lokal pada zona resource, setengah-terbuka)
 | `application/booking-event-emit.ts`            | Event outbox dari satu fungsi fakta, dalam transaksi transisi                                   |
 | `application/booking-port-adapter.ts`          | `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule       |
 | `application/booking-transition-route.ts`      | Badan handler yang dipakai bersama lima route transisi di tempat                                |
+| `application/booking-block-routes.ts`          | Badan handler create / release blok: `runIdempotent`, lalu layanan blok                         |
+| `application/booking-block-directory.ts`       | Pembacaan blok untuk route: detail dan daftar keyset                                            |
 
 Belum ada di skema dan dicatat sebagai tindak lanjut: `service_requirements` dan
 `staff_assignments` (booking.md bagian 4). `resource_blocks` hadir bersama
 Issue #938, dan baris allocation serta penulisnya bersama Issue #940 (`sql/204`);
 route HTTP untuk blok (`blocks.read` / `.create` / `.release`, di-seed oleh
-`sql/181`) dilacak di #1012 dan hadir bersama layar (#942). Blok seluruh resource
-mencakup unit yang ada saat dipasang; unit yang ditambahkan kemudian dilaporkan
-rekonsiliasi (`block_missing_allocation`), tidak tercakup.
+`sql/181`) hadir bersama Issue #1012; layarnya #942. Blok seluruh resource
+mencakup setiap unit resource, termasuk unit yang ditambahkan kemudian (`sql/240`:
+trigger AFTER INSERT pada `resource_units` ditambah kunci resource di
+`readBlockUnits`); rekonsiliasi (`block_missing_allocation`) tetap menjadi
+pendeteksi untuk tulisan yang melewati trigger. Blok dan barisnya berbagi satu
+instant rilis (`sql/241`).
 
 Tindak lanjut yang dicatat audit keamanan fondasi: database masih belum
 mengikat perubahan status ke baris event (putaran kedaluwarsa dan layanan
