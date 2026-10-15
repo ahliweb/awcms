@@ -20,6 +20,8 @@ export type NavigationCandidate = {
   order: number;
   group?: string;
   requiredPermission?: string;
+  /** See `ModuleNavigationEntry.requiredAnyPermission`. */
+  requiredAnyPermission?: readonly string[];
 };
 
 export type NavigationFilterOptions = {
@@ -35,7 +37,7 @@ export type NavigationFilterOptions = {
  *    `maintenance` modules still show their nav — only `disabled` hides it.
  * 2. The tenant hasn't disabled that module.
  * 3. Either it declares no `requiredPermission` at all, or the caller holds
- *    that exact permission key.
+ *    that exact permission key or ANY key of `requiredAnyPermission`.
  *
  * Survivors are sorted by `order` ascending (stable) for predictable
  * rendering — `group` is carried through but not used to group-render here
@@ -54,7 +56,10 @@ export function filterVisibleNavigationEntries(
     .filter(
       (candidate) =>
         !candidate.requiredPermission ||
-        options.grantedPermissionKeys.has(candidate.requiredPermission)
+        options.grantedPermissionKeys.has(candidate.requiredPermission) ||
+        (candidate.requiredAnyPermission ?? []).some((key) =>
+          options.grantedPermissionKeys.has(key)
+        )
     )
     .sort((a, b) => a.order - b.order);
 }

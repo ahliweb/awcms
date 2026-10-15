@@ -24,7 +24,10 @@ function collectNavigationCandidates(): NavigationCandidate[] {
       icon: entry.icon,
       order: entry.order ?? 0,
       group: entry.group,
-      requiredPermission: entry.requiredPermission
+      requiredPermission: entry.requiredPermission,
+      ...(entry.requiredAnyPermission
+        ? { requiredAnyPermission: entry.requiredAnyPermission }
+        : {})
     }))
   );
 }

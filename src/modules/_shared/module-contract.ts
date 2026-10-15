@@ -127,6 +127,18 @@ export type ModuleNavigationEntry = {
   group?: string;
   requiredPermission?: string;
   /**
+   * Further permissions that ALSO make the link visible (`4.4.0`, Issue #965).
+   *
+   * `requiredPermission` names one key; a screen with several independent
+   * panels, each gated on its own key, cannot be reached from a menu that
+   * checks only one of them (a diagnostics-only administrator would never see
+   * the link). The link is shown when the caller holds `requiredPermission` OR
+   * ANY key listed here. Visibility only, never authorization: every target
+   * route still runs its own server-side guard, so a visible link grants
+   * nothing. Each key must be a permission the declaring module declares.
+   */
+  requiredAnyPermission?: readonly string[];
+  /**
    * A small count shown as a badge beside the link's label (`.admin-sidebar-
    * count` in `admin.css`, awcms-one#170) — an unread count, a pending-review
    * queue depth, that sort of thing.
@@ -306,6 +318,20 @@ export type ModuleDescriptor = {
    */
   capabilities?: ModuleCapabilityContract;
   maintainers?: string[];
+  /**
+   * This module stores, computes or notifies about PAYROLL data: pay, payslips,
+   * commission statements, compensation (`4.4.0`, Issue #965, ADR-0140).
+   *
+   * A declared fact, not a name pattern: consumers that must keep payroll off a
+   * channel (today `telegram_delivery`, whose registry refuses a template from a
+   * flagged module and whose CI gate refuses a flagged module's source touching
+   * the Telegram port at all) read THIS, so a payroll module the day it is added
+   * cannot be missed because its directory name was spelled unexpectedly.
+   * Omitting it means "not payroll-bearing", which every existing descriptor
+   * already meant. It is a heuristic's replacement, not a proof: a module that
+   * handles payroll data and does not say so is a review finding.
+   */
+  handlesPayrollData?: true;
   /**
    * Read-model projection descriptors this module owns (ported from
    * awcms-mini Issue #753) — see `ProjectionDescriptor`'s own doc comment
@@ -1288,8 +1314,17 @@ export type SubjectDataDescriptor = {
  * in-repo blast radius is zero by construction; the first user is the
  * `hr_payroll` module (#957), whose payroll-critical permissions are named in
  * `docs/awcms/hr-payroll.md` §17 (PS-13).
+ *
+ * `4.4.0` (ADR-0140, Issue #965) — added the optional
+ * `ModuleDescriptor.handlesPayrollData` and
+ * `ModuleNavigationEntry.requiredAnyPermission`. MINOR: both are purely
+ * additive, and omitting either means what every existing descriptor already
+ * meant (not payroll-bearing; visible on `requiredPermission` alone).
+ * `handlesPayrollData` replaces a name-pattern guess in the Telegram registry
+ * with a declaration; `requiredAnyPermission` lets a multi-panel screen be
+ * linked from the menu for a holder of any of its panels' keys.
  */
-export const MODULE_CONTRACT_VERSION = "4.3.0";
+export const MODULE_CONTRACT_VERSION = "4.4.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

@@ -1,0 +1,85 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
+# `telegram_delivery`
+
+Optional, off-by-default Telegram adapter for **operational and staff alerts only** (Issue #965, [ADR-0140](../../../docs/adr/0140-telegram-delivery-adapter-ops-staff-alerts-only.md); delivery capability [ADR-0133](../../../docs/adr/0133-generic-delivery-capability-whatsapp-promotion.md) section 7; field encryption [ADR-0137](../../../docs/adr/0137-payout-account-encryption-at-rest-and-keyed-hashing.md)).
+
+It **delivers** a short plain-text notice that another module decided to send to a **member of staff of the tenant** who bound their own private Telegram chat: a staff booking reminder, an approval-pending ping, an operational alert. It has no opinion about what deserves a message and ships one neutral template, `system.ops_alert`. It is Telegram-specific on purpose: `TelegramDeliveryPort` is **not** a multi-channel facade and never a fallback for another channel in either direction ([ADR-0139](../../../docs/adr/0139-cross-channel-notification-orchestration-not-admitted.md)).
+
+## What can and cannot be sent
+
+Exactly one purpose exists, `staff_ops`. This is enforced by what the registry can express, not by caller discipline:
+
+- A template declares `purpose: "staff_ops"`; no other value is representable.
+- **Variables are typed and none can carry free text**: `reference` (an opaque code, no dot, no slash), `count`, `token` (a machine name such as `email:dispatch`) and `link` (a path under `/admin/`, the origin is added from `APP_URL`, so a message can only point at this site). A value that does not satisfy its kind is **dropped**, like a variable that is not on the list.
+- **A deny list fails at registration**, not at send time: a variable named or spelled as a person name, phone, e-mail, address, identifier, amount or free text (`customerName`, `netSalary`, `note`, `phone_number`, ...) cannot be registered. Fixed wording may carry no URL, domain or `@` mention.
+- **A payroll-bearing module cannot register a template.** Ownership is declared (`ModuleDescriptor.handlesPayrollData`; `hr_commission` sets it), the key prefix must equal the registering module (`ownerModuleKey`), payroll wording and Indonesian/English variable names (gaji, upah, wages, payee, commission, plurals ...) are refused, and digit-only `reference` values of 8+ digits are dropped. `bun run telegram:templates:check` (in `bun run check`) fails a flagged module that names the port at all and follows aliased and namespace imports. **It is a heuristic, not a proof**: a static gate is blind to a runtime-built string or a payroll module that never declared itself, which is why registration enforces the same rules and the port takes a template key and allow-listed variables only. There is no `send(text)`.
+
+Refused with no exception and no override flag: payroll, personal data, customer-facing messages, `security`-class (OTP, step-up), marketing, and any fallback of another channel.
+
+## Off by default, at three levels
+
+1. **Deployment**: `TELEGRAM_ENABLED=true` plus the bot token, bot username, webhook secret and both key rings (`config:validate` fails without them). Unset: `enqueue` answers `refused: DISABLED`, the dispatcher claims nothing, the webhook answers 404.
+2. **Tenant**: the module enabled in Module Management **and** the audited `settings.configure` switch (`PUT /api/v1/telegram/settings`, high-risk). Turning it off ends every binding in the same transaction, erasing the stored chat ids. The dispatcher re-reads both every pass, so switching the module off in Module Management revokes too.
+3. **Person**: nobody receives anything before a **confirmed** chat binding.
+
+## The port
+
+`_shared/ports/telegram-delivery-port.ts`, adapter `telegramDeliveryPortAdapter` in `application/telegram-enqueue.ts`:
+
+- `enqueue(tx, { templateKey, recipientPrincipalId, variables, idempotencyKey, expiresAt, correlationId })` is **one INSERT in the caller's transaction**. `recipientPrincipalId` is the **tenant user** (`awcms_tenant_users.id`): ADR-0094's subject, and the unit whose role grants decide whether someone is still staff. The tenant is read from the transaction's own RLS context, so the port has no `tenantId` argument.
+- Refusals are **returned**, never thrown: `DISABLED`, `TEMPLATE_UNKNOWN`, `NO_BINDING`, `RATE_LIMITED`, `EXPIRY_REQUIRED`. `expiresAt` is mandatory, in the future and at most seven days out. **`NO_BINDING` triggers nothing else**: no e-mail, no WhatsApp; what the consumer does about it is its own decision.
+- Order of checks: deployment flag, template, expiry, **idempotent replay**, tenant gate, binding, rate limits. A replay answers `duplicate` even if the binding was revoked since, so a message that exists is never contradicted by later state.
+- `getStatusByCorrelation` / `cancelByCorrelation` read and cancel by the caller's own record id. The port performs **no access check and writes no audit row**: the consumer authorises and audits its own action.
+
+## The chat binding handshake (ADR-0140 section 3)
+
+1. **Request.** A staff member calls `POST /api/v1/telegram/links` **for themselves** (`links.create`). The code is 32 random bytes, base64url (43 characters), returned **once** inside `https://t.me/<bot>?start=<code>`; only its SHA-256 is stored. 10 minutes, single use, a newer request invalidates the older, five requests an hour.
+2. **Handshake.** The person opens the link; the bot receives `/start <code>`. The webhook accepts it **only from a private chat** (`chat.type = "private"` and `chat.id == from.id`, from a human), consumes the code with one atomic `UPDATE ... WHERE consumed_at IS NULL AND expires_at > now() RETURNING` (two parallel uses yield one binding) and creates a `pending_confirmation` binding. The tenant and principal come **from the code row, never from the payload**. An unknown, expired, consumed or malformed code gets the **same** reply.
+3. **Confirmation, in the staff member's own authenticated session.** `/admin/telegram` shows the captured Telegram display name (escaped text) and masked username and asks "is this you?". Only `POST /api/v1/telegram/bindings/me/confirm` makes the binding `active`. A code that was forwarded, phished or shoulder-surfed therefore binds an attacker's chat at most to `pending_confirmation`, which receives nothing; the victim sees it and presses "not me" (`.../reject`, audited at warning).
+4. **One active binding per `(tenant, principal)`** (confirming a new chat replaces the old one, audited as a re-bind), and **a chat is live in at most one principal per tenant** (a partial unique index on the keyed hash, plus a check of every ring key's candidate hash because the same chat has a different hash under each key).
+
+Groups, supergroups and channels are refused: the parser acts on private chats only, and the webhook is registered with `allowed_updates=["message"]`, so a group that merely contains the bot is invisible.
+
+## Revocation: one path, always erasing
+
+Every way a binding stops being live goes through `endBindings`: the person (admin or `/stop`), an administrator (`bindings.revoke`, high-risk, `warning` audit), the principal being deactivated or losing every role (checked **at send time** by `awcms_telegram_principal_active`), the module or the tenant switch going off, Telegram answering `403` or "chat not found" (the binding becomes `suspended`, never retried), a rejected or expired confirmation, and a re-bind. One statement flips the status, **nulls the ciphertext** and clears the captured name; a second cancels the queue rows still waiting for that binding. The schema has a CHECK that a non-live binding holds no ciphertext. The keyed hash stays as a tombstone, so the same chat cannot be re-linked without a fresh handshake by its owner. A row already `sending` is bounded by the provider timeout, exactly as WhatsApp's opt-out is.
+
+## Storage (ADR-0140 section 6)
+
+- `chat_ciphertext`: the shared ADR-0137 helper (`src/lib/security/field-encryption.ts`; this module has no second copy), AAD `telegram_chat:v1 | tenant | binding`, ring `TELEGRAM_CHAT_ENCRYPTION_KEYS`. **Fail closed**: no usable ring means no binding is created and the dispatcher claims nothing; there is no plaintext fallback.
+- `chat_hash` + `hash_key_id`: keyed HMAC-SHA256 over the tenant and the chat id under its own ring `TELEGRAM_CHAT_HASH_KEYS`. `chat_masked` (`***123`) is the only form a list, log, audit row or response carries.
+- **Queue rows carry the `binding_id`, never the chat id.** There is no reveal path.
+
+## The webhook (ADR-0140 section 7)
+
+`POST /api/v1/telegram/webhook`, no tenant in the path (one bot per deployment). In order: `404` when off; the `X-Telegram-Bot-Api-Secret-Token` header compared in **constant time** with `TELEGRAM_WEBHOOK_SECRET` (a missing or wrong header, or an unset server secret, is a `401` with a generic envelope **before** any body read or database work); a per-address rate limit and the request-body limit; then two commands, `/start <code>` and `/stop`. Everything else is `200` with no reply: no echo, no help text, no "unknown command", no command that reads or writes business data. Replay needs no update-id store because both commands are idempotent by construction. Rejections are audited in aggregate (see Security notes). The webhook is registered by an **operator script**, `bun run telegram:webhook:register --url https://<host>/api/v1/telegram/webhook` (`--dry-run`, `--delete`), never at boot.
+
+The two narrow cross-tenant lookups the unauthenticated webhook needs (code to tenant; keyed chat hash to binding) are `SECURITY DEFINER` functions in `sql/217`, with a dedicated `NOLOGIN` owner, `EXECUTE` granted only to `awcms_app`, fixed SQL and a pinned `search_path` (the `sql/048` pattern).
+
+## Provider rules (ADR-0140 section 5)
+
+- **The token never appears in any output.** It is in the request URL path, so the URL is built only inside `infrastructure/telegram-http-client.ts` (a fixed host, `api.telegram.org`, through `ssrfSafeFetch`, under `withTimeout`) and is never returned. Everything that leaves the adapter (errors, refusal reasons, Telegram descriptions, a `catch`) passes `redactProviderText`, which strips the configured token **and** anything shaped like one, plus long number runs (a chat id). `tests/telegram-delivery.test.ts` feeds token-bearing errors through every path.
+- **Plain text only**: no `parse_mode`, `disable_web_page_preview` and `link_preview_options.is_disabled`, `protect_content`.
+- **Rate rules**: at least 1000 ms per chat (a row for a chat messaged less than a second ago is deferred to the next pass, not slept on); a global ceiling default 20 a second, hard cap 25, enforced by a pacer inside the adapter that is **one instance for every tenant of a dispatch run** (`telegram-provider-resolver.ts`), because one bot has one budget; `429` reschedules to Telegram's `retry_after` (capped), spends no retry budget, writes no attempt row, and the rest of the batch is released to the same instant. Timeout and `5xx` back off `2^n` minutes (cap 15).
+- `403` and "chat not found" suspend the binding; a `400` rejection is terminal; a bad token (`401`/`404`) is retryable and trips the breaker. Only the **adapter** feeds the circuit breaker.
+- **No network I/O in a transaction** (ADR-0006): claim in a short transaction, send outside, finalise per row, each under a per-row lease that is renewed and verified.
+
+## Retention: `delegated`
+
+`bun run telegram:queue:purge` (runs **regardless** of `TELEGRAM_ENABLED`, for every tenant): expires non-terminal messages past `expires_at` (independently of the dispatcher), ends pending bindings past their window, then deletes only **terminal** messages (14 days after they stopped moving), spent attempts, revoked bindings (90 days, once nothing references them) and link codes (1 day after expiry). Windows are settings inside the descriptors' bounds. A legal hold skips the deletes. Live bindings and waiting messages are never deleted by any job. Every table has a `dataLifecycle` descriptor and an ADR-0094 `subjectData` answer; erasure of a person overwrites the ciphertext and the hash with the erasure sentinel (the schema allows it), after which the binding cannot be decrypted.
+
+## Admin surface
+
+`/admin/telegram` (navigation gated on `telegram_delivery.links.create`; the screen opens for any of the six permissions and each panel is gated on its own): status, "my Telegram chat" (link, confirm, reject, unlink), linked chats with revoke, the tenant switch, the queue and attempts, and the templates. Permissions are seeded by `sql/218`.
+
+## Security notes and known limits
+
+- **Acknowledgements are not queued (a recorded deviation from ADR-0140 section 4).** The reply to `/start` and `/stop` is the webhook's HTTP response (the Bot API's webhook-reply form). Section 4 says they go through the queue, but a queue row carries a binding and a tenant, the reply to an unknown code has neither, and `/stop` has just erased the only copy of the chat id. The webhook therefore makes no outbound call and holds no token; the cost is that a reply is best effort and not paced by the dispatcher. See the ADR's implementation note.
+- **Rejected webhook requests are audited in aggregate** on the platform tenant (one `warning` row a minute at most, flushed by the next rejection), because a rejected request has no tenant and does no work. The reason names avoid words such as "secret" because the audit redactor blanks such keys.
+- **The principal check restates `activeRoleGrants` in SQL** (`sql/217`) because `awcms_worker` must not read the identity tables; the two definitions must change together and an integration test pins the behaviour (direct grant, group grant, no grant, deactivated).
+- **A key id must not be removed from a ring while any live row still carries it**: chat ciphertexts name their key id, and a hash row holds no plaintext to re-hash.
+- **A binding restored from an old backup revives with its ciphertext.** After a restore, turn the tenant switch off and on (every binding ends) and have staff re-link.
+- **No domain events are published.** The queue row, the binding row and the audit log are the ledgers.
+- **Claim shape.** The dispatcher's claim and the purge's expiry use `WITH due AS MATERIALIZED (... LIMIT n FOR UPDATE SKIP LOCKED) UPDATE ... FROM due`, the Issue #1007 fix the email, push and WhatsApp dispatchers also carry; `queue-claim-limit.integration.test.ts` covers this queue too.
+- **Consumers are not wired yet.** `booking.staff_reminder` and `workflow_approval.approval_pending` (ADR-0140 section 1) are registered by their owning modules in their own issues; this module ships only `system.ops_alert`.

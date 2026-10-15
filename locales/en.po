@@ -7591,3 +7591,147 @@ msgstr ""
 
 msgid "Evidence reference"
 msgstr ""
+
+msgid "Waiting for confirmation"
+msgstr ""
+
+msgid "Unlinked by the person"
+msgstr ""
+
+msgid "Stopped from Telegram"
+msgstr ""
+
+msgid "Revoked by an administrator"
+msgstr ""
+
+msgid "Staff member deactivated"
+msgstr ""
+
+msgid "Module switched off"
+msgstr ""
+
+msgid "Telegram switched off for the tenant"
+msgstr ""
+
+msgid "Telegram could not reach the chat"
+msgstr ""
+
+msgid "Rejected as not theirs"
+msgstr ""
+
+msgid "Confirmation expired"
+msgstr ""
+
+msgid "Replaced by a newer chat"
+msgstr ""
+
+msgid "Replaced by a newer request"
+msgstr ""
+
+msgid "Erased"
+msgstr ""
+
+msgid "Telegram delivery"
+msgstr ""
+
+msgid "Operational alerts for staff on Telegram: link your own chat, see whose chats are linked, and check the queue. Chat ids are never shown."
+msgstr ""
+
+msgid "You do not have permission to view Telegram delivery."
+msgstr ""
+
+msgid "Could not load Telegram delivery. Please try again."
+msgstr ""
+
+msgid "Telegram carries operational and staff alerts only. It is off unless the deployment, this tenant and the person have each turned it on."
+msgstr ""
+
+msgid "Telegram is switched off on this deployment, so nothing is being sent. Messages are refused at enqueue and the dispatcher claims nothing."
+msgstr ""
+
+msgid "Telegram is switched on but the deployment is missing part of its configuration, so no chat can be linked and nothing will be sent."
+msgstr ""
+
+msgid "The Telegram delivery module is switched off for this tenant in module management."
+msgstr ""
+
+msgid "Tenant setting:"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
+msgid "Off"
+msgstr ""
+
+msgid "Turn Telegram off for this tenant"
+msgstr ""
+
+msgid "Turn Telegram on for this tenant"
+msgstr ""
+
+msgid "Turning it off unlinks every staff member's chat and erases the stored chat ids. Staff must link again if it is turned back on."
+msgstr ""
+
+msgid "My Telegram chat"
+msgstr ""
+
+msgid "You have no Telegram chat linked. Request a link, open it in Telegram on your phone, and press Start. You will then confirm here that the chat is yours."
+msgstr ""
+
+msgid "Link my Telegram"
+msgstr ""
+
+msgid "Open this link in Telegram within 10 minutes. It works once and is shown only now."
+msgstr ""
+
+msgid "A Telegram chat used your link code. Is this you? Only confirm if you recognise it."
+msgstr ""
+
+msgid "(no name)"
+msgstr ""
+
+msgid "Yes, this is me"
+msgstr ""
+
+msgid "No, this is not me"
+msgstr ""
+
+msgid "Your Telegram chat is linked and receives your alerts:"
+msgstr ""
+
+msgid "Confirmed:"
+msgstr ""
+
+msgid "Unlink my Telegram"
+msgstr ""
+
+msgid "Linked chats"
+msgstr ""
+
+msgid "Each staff member can link one private chat. The chat is shown masked only; groups and channels cannot be linked."
+msgstr ""
+
+msgid "Staff member"
+msgstr ""
+
+msgid "Chat"
+msgstr ""
+
+msgid "Linked"
+msgstr ""
+
+msgid "No Telegram chats linked."
+msgstr ""
+
+msgid "No Telegram messages recorded."
+msgstr ""
+
+msgid "Modules register their templates in code. Every template is an operational alert for staff; variables are typed and cannot carry names, contact details or free text, and anything not on the list is dropped before sending."
+msgstr ""
+
+msgid "Telegram Delivery"
+msgstr ""
+
+msgid "Tenant suspended"
+msgstr ""

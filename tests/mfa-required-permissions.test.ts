@@ -104,7 +104,8 @@ describe("declaring a permission as requiring an enrolled factor", () => {
     ).text();
 
     expect(contract).toContain("requiresMfaEnrolment?: boolean");
-    expect(contract).toContain('MODULE_CONTRACT_VERSION = "4.3.0"');
+    // 4.3.0 introduced the field; later MINOR bumps keep it (4.4.0, ADR-0140).
+    expect(contract).toMatch(/MODULE_CONTRACT_VERSION = "4\.\d+\.\d+"/);
   });
 });
 

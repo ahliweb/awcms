@@ -1,5 +1,5 @@
 {
-  "moduleCount": 32,
+  "moduleCount": 33,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -497,6 +497,22 @@
       "permissionCount": 9,
       "navigationCount": 1,
       "jobCount": 0,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "telegram_delivery",
+      "name": "Telegram Delivery",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "system",
+      "dependencies": ["tenant_admin", "identity_access", "logging"],
+      "capabilitiesProvided": ["telegram_delivery"],
+      "capabilitiesConsumed": [],
+      "permissionCount": 6,
+      "navigationCount": 1,
+      "jobCount": 2,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

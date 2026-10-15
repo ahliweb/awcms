@@ -211,3 +211,23 @@ describe("API body-authentication boundary", () => {
     expect(SESSION_FREE_BODY_ENDPOINTS.length).toBeLessThan(bodyRoutes / 4);
   });
 });
+
+describe("provider webhooks reach their own credential check", () => {
+  // Issue #965: without this exemption the middleware demanded a session
+  // before the body, so Telegram (which never holds one) got 401 on every
+  // update and the route's own secret check was unreachable.
+  test("the Telegram webhook does not require a session before its body", () => {
+    expect(
+      requiresAuthenticatedCallerBeforeBody("POST", "/api/v1/telegram/webhook")
+    ).toBe(false);
+    expect(
+      requiresAuthenticatedCallerBeforeBody("POST", "/api/v1/telegram/webhook/")
+    ).toBe(false);
+  });
+
+  test("the rest of the Telegram surface still requires one", () => {
+    expect(
+      requiresAuthenticatedCallerBeforeBody("POST", "/api/v1/telegram/links")
+    ).toBe(true);
+  });
+});

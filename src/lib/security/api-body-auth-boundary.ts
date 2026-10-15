@@ -265,6 +265,14 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
       "Same Ed25519 envelope credential as /worker/poll (ahliweb/omes#246, OMES issue #183)."
   },
 
+  // ---- Provider webhooks: a shared secret header is the credential ----
+  {
+    method: "POST",
+    pattern: "/api/v1/telegram/webhook",
+    reason:
+      "Telegram's Bot API calls it, never a person. The credential is X-Telegram-Bot-Api-Secret-Token, compared in constant time before any body read; off (TELEGRAM_ENABLED unset) it is a 404 (ADR-0140 section 7)."
+  },
+
   // ---- Retired: answers 410 without reading anything ----
   {
     method: "POST",

@@ -1393,6 +1393,23 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_whatsapp_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
   awcms_whatsapp_consents: ["SELECT"],
   awcms_whatsapp_suppressions: ["INSERT", "SELECT"],
+  // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
+  // attempts, and ends (revokes/suspends) a binding whose principal is gone or
+  // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
+  // tenant switch but never writes it and NEVER inserts a binding or a link code
+  // (only the authenticated request and the webhook, as awcms_app, create them).
+  // `telegram:queue:purge` deletes terminal messages, spent attempts, revoked
+  // bindings and expired codes (the DELETEs are the ones to notice, per sql/091).
+  awcms_telegram_settings: ["SELECT"],
+  awcms_telegram_link_codes: ["DELETE", "SELECT"],
+  // UPDATE here is COLUMN-scoped in sql/216 (status, the ciphertext, the captured
+  // display data and the revocation stamp; never chat_hash or principal_id), so the
+  // table-level matrix lists only DELETE and SELECT. The migration-grant parser
+  // reads table-level grants only; the column list is pinned by the Telegram
+  // integration tests (N2) instead.
+  awcms_telegram_bindings: ["DELETE", "SELECT"],
+  awcms_telegram_messages: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  awcms_telegram_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
   awcms_identities: ["SELECT"],
   awcms_sync_nodes: ["SELECT"],
   // Issue #180 — identity-access:business-scope:expiry (sql/027): SELECT the

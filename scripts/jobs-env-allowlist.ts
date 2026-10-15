@@ -78,11 +78,42 @@ export function renderAllowlist(names: readonly string[]): string {
   return `${HEADER}${[...names].sort().join("\n")}\n`;
 }
 
+/**
+ * Variables read ONLY by request handlers (and the operator's one-off webhook
+ * registration), never by a scheduled job. The allow-list is one file for every
+ * job container, so a secret listed here would be handed to `telegram:dispatch`
+ * and every other cron job that has no use for it (ADR-0140 audit L8). The
+ * dispatcher needs the bot token and the chat-ENCRYPTION ring; it never verifies
+ * the webhook header and never builds a chat hash.
+ */
+export const WEB_ONLY: readonly { name: string; reason: string }[] = [
+  {
+    name: "TELEGRAM_WEBHOOK_SECRET",
+    reason:
+      "verified by the webhook route; the registration script is run by an operator, not scheduled"
+  },
+  {
+    name: "TELEGRAM_CHAT_HASH_KEYS",
+    reason: "keyed chat hashes are built by the webhook and the link route only"
+  },
+  {
+    name: "TELEGRAM_WEBHOOK_RATE_PER_MINUTE",
+    reason: "the webhook route's own rate limit"
+  },
+  {
+    name: "TELEGRAM_BOT_USERNAME",
+    reason: "builds the deep link in the link route"
+  }
+];
+
 export async function collectJobEnvNames(): Promise<string[]> {
   const reads = await collectEnvReads();
   const toolingOnly = new Set(TOOLING_ONLY.map((entry) => entry.name));
+  const webOnly = new Set(WEB_ONLY.map((entry) => entry.name));
 
-  return [...reads.keys()].filter((name) => !toolingOnly.has(name)).sort();
+  return [...reads.keys()]
+    .filter((name) => !toolingOnly.has(name) && !webOnly.has(name))
+    .sort();
 }
 
 async function main(): Promise<void> {

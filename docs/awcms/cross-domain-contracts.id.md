@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:442ab4d4458f78d74a5a11a1d9da6b821aedb8cb5c6d95b0d090074d6672f247 -->
+<!-- i18n-source-hash: sha256:e731a304abbdda6cc4184d679fcc5649e96896e12a8b7dd02d50d83bc81373db -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -332,6 +332,38 @@ Idempotency key unik per `(tenant_id, idempotency_key)`; replay mengembalikan
 seperti kata ADR-0133 §8; ADR implementasi menetapkannya. Nomor telepon, isi
 pesan, atau variabel template tidak pernah muncul di event, baris audit, atau log;
 pemanggil hanya tahu id dan penerima yang dimasking.
+
+### 5.1 Port pengiriman Telegram (live, #965)
+
+- **Status:** **live sejak Issue #965** (ADR-0140, tidak aktif di balik `TELEGRAM_ENABLED`). Berbeda dengan §5, ia membawa **hanya notifikasi operasional dan staf**, kepada staf yang mengikat chat pribadinya sendiri; ia tidak pernah menjadi fallback WhatsApp atau e-mail dan tidak ada kanal lain yang fallback ke sini (ADR-0139).
+- **Modul pemilik:** `telegram_delivery` (`src/modules/_shared/ports/telegram-delivery-port.ts`).
+- **Konsumen:** `booking` (pengingat staf), `workflow_approval` (ping persetujuan tertunda), dan notifikasi operasional platform sendiri. Belum ada yang tersambung; masing-masing mendaftarkan template `staff_ops` berawalan modulnya (`registerTelegramTemplate`) di issue-nya sendiri. Modul pemilik payroll tidak dapat mendaftarkannya (`bun run telegram:templates:check`).
+- **Aturan transaksi:** seperti §5. `enqueue` dan `cancelByCorrelation` adalah penulisan dalam transaksi tenant **pemanggil**; tidak ada `send` dan tidak ada body teks bebas. Tenant dibaca dari konteks RLS transaksi itu sendiri, sehingga port tidak punya parameter `tenantId`.
+- **Semantik kegagalan:** penolakan **dikembalikan**: `DISABLED` (deployment, tenant, atau modul mati), `TEMPLATE_UNKNOWN`, `NO_BINDING`, `RATE_LIMITED`, `EXPIRY_REQUIRED`. **`NO_BINDING` tidak memicu apa pun lagi**: apa yang dilakukan konsumen terhadap orang tanpa chat tertaut adalah keputusan eksplisitnya sendiri, di modulnya sendiri.
+
+```ts
+type EnqueueTelegramInput = {
+  templateKey: string; // berawalan modul; terdaftar dengan SATU purpose "staff_ops"
+  recipientPrincipalId: string; // tenant user (awcms_tenant_users.id), bukan id chat
+  variables: Record<string, string>; // bertipe menurut kind (reference | count | token | link); selebihnya dibuang
+  idempotencyKey: string; // wajib, unik per tenant
+  expiresAt: Date; // wajib, di masa depan dan paling lama 7 hari
+  correlationId?: string;
+};
+
+type EnqueueTelegramResult =
+  | { status: "queued"; messageId: string }
+  | { status: "duplicate"; messageId: string }
+  | {
+      status: "refused";
+      reason:
+        | "DISABLED"
+        | "TEMPLATE_UNKNOWN"
+        | "NO_BINDING"
+        | "RATE_LIMITED"
+        | "EXPIRY_REQUIRED";
+    };
+```
 
 ## 6. Idempotensi per consumer ber-efek-samping — diterbitkan sekali bukan berarti ditangani sekali
 

@@ -13074,6 +13074,245 @@ Gated by `hr_commission.rules.retire` (high-risk). Withdraws a draft (abandoning
 | 404    | RESOURCE_NOT_FOUND.                           | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT or RULE_ALREADY_RETIRED. | [`ApiError`](#standard-error-envelope) |
 
+## Telegram Delivery
+
+Operator and self-service surface of the optional Telegram delivery adapter (telegram_delivery module, ADR-0140, Issue #965), which carries OPERATIONAL AND STAFF ALERTS ONLY to staff who bound their own private chat. There is NO enqueue or send endpoint: queueing is a capability-port call (TelegramDeliveryPort) made in the consuming module's own transaction, and the provider is called only by the dispatcher job, outside any transaction (ADR-0006). A chat is bound by an audited, revocable handshake: a staff member requests a one-time code for themselves, opens it in a PRIVATE Telegram chat (the unauthenticated bot webhook, secret-verified before any work), and must then confirm the displayed Telegram name from their own authenticated session. The Telegram chat id is stored only as ciphertext plus a keyed hash and is never returned by any endpoint: chats are masked in every response and message bodies and variables are never returned. One queue per deployment, never a fallback for another channel (ADR-0139). Credentials are per deployment from the environment, never per tenant. Ships inert behind TELEGRAM_ENABLED and a per-tenant switch.
+
+### `GET /api/v1/telegram/bindings` — List the tenant's chat bindings.
+
+- **operationId**: `listTelegramBindings`
+- **Security**: bearerAuth + tenantHeader
+
+Newest first: the staff member (login masked), the state, when it was linked or ended and why, and a MASKED chat reference. Never a ciphertext, a hash or a full chat id. Bounded: `hasMore` says whether the list was cut. Requires `telegram_delivery.bindings.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                                     | Description                                                              |
+| -------- | ----- | -------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `status` | query | no       | [`TelegramBindingStatus`](#schema-telegrambindingstatus) |                                                                          |
+| `limit`  | query | no       | integer                                                  | 1-200, default 50. Out-of-range values are REJECTED rather than clamped. |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | Bindings.                       | object                                 |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+| 422    | `status` or `limit` is invalid. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/telegram/bindings/{id}/revoke` — Revoke another staff member's Telegram binding.
+
+- **operationId**: `revokeTelegramBinding`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk and audited at `warning`: it removes a person's alert channel. The stored chat id is erased and the binding's queue cancelled at once. Naturally idempotent rather than `Idempotency-Key`-ed: revoking an ended binding finds nothing live and answers 404. One answer for "no such binding" and "already ended". Requires `telegram_delivery.bindings.revoke`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description     |
+| ---- | ---- | -------- | ------------- | --------------- |
+| `id` | path | yes      | string (uuid) | The binding id. |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The binding was revoked.    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/telegram/bindings/me` — Your own Telegram binding.
+
+- **operationId**: `getOwnTelegramBinding`
+- **Security**: bearerAuth + tenantHeader
+
+The caller's live binding or `null`. While it is `pending_confirmation` it carries the Telegram display name and masked username the handshake captured, which is what lets the staff member answer "is this you?" from their own session; both are cleared on confirm, reject and expiry. `available` says whether linking is possible right now (deployment flag and tenant gate). `Cache-Control: no-store`. Requires `telegram_delivery.links.create`.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The caller's binding.       | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/telegram/bindings/me/confirm` — Confirm that the Telegram chat that used your code is yours.
+
+- **operationId**: `confirmOwnTelegramBinding`
+- **Security**: bearerAuth + tenantHeader
+
+The ONLY transition to `active`, reachable only from the staff member's own authenticated session. A link code that was forwarded, phished or shoulder-surfed binds an attacker's chat at most to `pending_confirmation`. Confirming replaces any binding the person already had (audited as a re-bind, and one notice is queued to the new chat naming the tenant). The body names the chat the person was shown; a different pending chat is a 409 (`TELEGRAM_BINDING_MISMATCH`). With nothing pending the answer is 404, so a double click cannot confirm twice. A machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires `telegram_delivery.links.create`.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                           | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The binding is active.                                                                | object                                 |
+| 401    | Missing or invalid session.                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | The chat waiting for confirmation is not the one named (`TELEGRAM_BINDING_MISMATCH`). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/telegram/bindings/me/reject` — Reject the Telegram chat that used your code ("not me").
+
+- **operationId**: `rejectOwnTelegramBinding`
+- **Security**: bearerAuth + tenantHeader
+
+Ends the pending binding at once, erases its ciphertext and the captured display name, and audits it at `warning`: it means a link code reached somebody else's chat. The body names the chat the person was shown; a different pending chat is a 409 (`TELEGRAM_BINDING_MISMATCH`). A machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires `telegram_delivery.links.create`.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                           | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The pending binding was rejected.                                                     | object                                 |
+| 401    | Missing or invalid session.                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | The chat waiting for confirmation is not the one named (`TELEGRAM_BINDING_MISMATCH`). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/telegram/bindings/me/revoke` — Unlink your own Telegram chat.
+
+- **operationId**: `revokeOwnTelegramBinding`
+- **Security**: bearerAuth + tenantHeader
+
+Delivery stops at once: queued messages are cancelled and the stored chat id is erased in the same transaction. (`/stop` in the chat is the other way to leave.) No body. With nothing live the answer is 404. Requires `telegram_delivery.links.create`.
+
+**Responses**
+
+| Status | Description                         | Schema                                 |
+| ------ | ----------------------------------- | -------------------------------------- |
+| 200    | The caller's binding(s) were ended. | object                                 |
+| 401    | Missing or invalid session.         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/telegram/diagnostics` — The tenant's Telegram queue - counts, recent messages, attempts.
+
+- **operationId**: `getTelegramDiagnostics`
+- **Security**: bearerAuth + tenantHeader
+
+One endpoint rather than three because the parts are only readable together: they come from ONE transaction. Bounded rather than paginated; the historical tail is removed by retention (`bun run telegram:queue:purge`), not browsed. No chat id, ciphertext, hash, body or variable is ever selected. `configured` reports the DEPLOYMENT's settings as booleans only (present and well-formed), never a value. Requires `telegram_delivery.messages.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                                     | Description                                                              |
+| -------- | ----- | -------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `status` | query | no       | [`TelegramMessageStatus`](#schema-telegrammessagestatus) | Narrow the message list to one queue status.                             |
+| `limit`  | query | no       | integer                                                  | 1-200, default 50. Out-of-range values are REJECTED rather than clamped. |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | Telegram queue diagnostics.     | object                                 |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+| 422    | `status` or `limit` is invalid. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/telegram/links` — Request a one-time link code for yourself.
+
+- **operationId**: `createTelegramLink`
+- **Security**: bearerAuth + tenantHeader
+
+A staff member requests a code for THEMSELVES (there is no way to name another person). The code is 32 random bytes, base64url, returned ONCE inside a `https://t.me/<bot>?start=<code>` link; only its SHA-256 is stored. It expires in 10 minutes, works once, and a newer request invalidates the previous one. The response is `Cache-Control: no-store`. A per-person hourly limit applies. Opening the link in a PRIVATE Telegram chat creates a `pending_confirmation` binding that must then be confirmed from the staff member's own authenticated session (`POST /api/v1/telegram/bindings/me/confirm`). Deliberately NOT idempotency-keyed: a retry mints a replacement and invalidates the earlier code. Requires `telegram_delivery.links.create`.
+
+**Responses**
+
+| Status | Description                                                                                                          | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The link, shown once.                                                                                                | object                                 |
+| 401    | Missing or invalid session.                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Telegram is off at the deployment or tenant level (`TELEGRAM_DISABLED`).                                             | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many link codes were requested (`RATE_LIMITED`).                                                                 | [`ApiError`](#standard-error-envelope) |
+| 503    | The deployment cannot create a binding safely (no bot username or key ring; fail closed) (`TELEGRAM_MISCONFIGURED`). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/telegram/settings` — The tenant's Telegram switch and the gates around it.
+
+- **operationId**: `getTelegramSettings`
+- **Security**: bearerAuth + tenantHeader
+
+The tenant setting plus the two other reasons nothing might be sent: Module Management (`moduleEnabled`) and the deployment flag (`deploymentEnabled`). Requires `telegram_delivery.messages.read`.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Settings.                   | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/telegram/settings` — Turn Telegram on or off for this tenant.
+
+- **operationId**: `setTelegramSettings`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk (`configure`) and audited at `warning`. Turning it OFF ends every binding in the same transaction (the stored chat ids are erased and the queue cancelled), so a tenant that switches the channel off is not left holding encrypted chat ids. Idempotent by construction (it sets a value; repeating it changes nothing and writes no second audit row), so no `Idempotency-Key`. The body is validated strictly: an unknown key is a 400. Requires `telegram_delivery.settings.configure`.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The new state.              | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/telegram/templates` — The registered Telegram templates.
+
+- **operationId**: `listTelegramTemplates`
+- **Security**: bearerAuth + tenantHeader
+
+Key, version, the ONE purpose (`staff_ops`) and the typed variable allow-list. The wording is not returned: it is the owning module's copy. Requires `telegram_delivery.templates.read`.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Registered templates.       | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/telegram/webhook` — Telegram's `message` updates (the bot webhook).
+
+- **operationId**: `receiveTelegramWebhook`
+- **Security**: none (public endpoint)
+
+The ONLY route of this module that is not authenticated by a session or machine credential, and it is not meant to be called by a browser or by a person. Telegram calls it after an operator registered it with `bun run telegram:webhook:register` (`allowed_updates=["message"]`). There is no tenant in the path (one bot per deployment); the tenant is resolved from the one-time code or from the binding found by the chat's keyed hash, never from the payload.
+
+Order of work: (1) `404` when `TELEGRAM_ENABLED` is not `true`; (2) the `X-Telegram-Bot-Api-Secret-Token` header is compared in constant time with `TELEGRAM_WEBHOOK_SECRET`, and a missing or wrong header (or an unset server secret) is a `401` with NO body, before any body is read or any database work is done; (3) a per-address rate limit and the request-body limit; (4) two commands from a PRIVATE chat only, `/start <code>` and `/stop`. Everything else (any other text or command, media, edits, callback queries, groups, supergroups, channels) is `200` with no reply.
+
+A reply to `/start` and `/stop` is the HTTP response to this request (the Bot API's webhook-reply form: a JSON `sendMessage` method object), not an outbound call. Both commands are idempotent by construction, so no update id is stored.
+
+**Parameters**
+
+| Name                              | In     | Required | Type   | Description                                                          |
+| --------------------------------- | ------ | -------- | ------ | -------------------------------------------------------------------- |
+| `X-Telegram-Bot-Api-Secret-Token` | header | yes      | string | The `secret_token` given to `setWebhook`. Compared in constant time. |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Handled or ignored. The body is `{}`, or a `sendMessage` method object carrying the fixed reply when the update was `/start` or `/stop`. | object                                 |
+| 400    | The body is not valid JSON.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | The secret header is missing or wrong. A generic envelope with no detail, and no work was done.                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Telegram is switched off on this deployment.                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 413    | The body exceeds the request-body limit.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate limited, per address; repeated wrong secrets from one address are throttled the same way.                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | A transient failure. Telegram retries; both commands are idempotent.                                                                     | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -16334,6 +16573,26 @@ A snapshot without its `lines` (up to 500 per document). What a list returns; th
   "taxAmount": "10.50",
   "grossAmount": "10.50"
 }
+```
+
+### Schema: TelegramBindingStatus
+
+Enum values: `pending_confirmation`, `active`, `revoked`, `suspended`.
+
+**Example**
+
+```json
+"pending_confirmation"
+```
+
+### Schema: TelegramMessageStatus
+
+Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`, `expired`.
+
+**Example**
+
+```json
+"queued"
 ```
 
 ### Schema: ThemeConfigRequest

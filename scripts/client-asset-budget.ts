@@ -1005,8 +1005,23 @@ export const READER_BUDGET_BYTES = 24_000;
  * deduplicating. The previous ceiling was set with no margin, which is why a
  * 208 B swing from a patch bump trips it. Measured actual total, no added
  * margin: 320,643 B (+208 B on 320,435).
+ *
+ * **Raised for Issue #965** (the `/admin/telegram` screen that flipped
+ * `telegram_delivery` to `active`). One screen script of 1,897 B, and it is not
+ * per-screen duplication of the shared lifecycle: it imports `admin-form-client.ts`
+ * and `confirm-dialog-client.ts` (both already shared) and adds only the
+ * screen's own requests (request a link, confirm or reject "is this you?",
+ * unlink one's own chat, revoke a chat, switch the tenant on or off) and their
+ * error-code-to-message strings. No new stylesheet rules: it reuses the admin
+ * table, stat-card and status-pill classes. Measured actual total, no added
+ * margin: 322,540 B (+1,897 B on 320,643).
+ *
+ * **Raised again for Issue #965's security audit**: the same screen script now
+ * sends the `bindingId` the person was shown with "yes, this is me" and "no"
+ * (the server answers 409 if a newer chat replaced it) and words that refusal.
+ * Measured actual total, no added margin: 322,819 B (+279 B on 322,540).
  */
-export const APP_BUDGET_BYTES = 320_643;
+export const APP_BUDGET_BYTES = 322_819;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

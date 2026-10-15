@@ -52,6 +52,13 @@ family:
 # FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
 # given teeth by a SEMANTIC contract test that goes RED if the control drifts.
 contracts:
+  # 4.4.0 sejak ADR-0140 (Issue #965): dua field opsional DITAMBAHKAN (penambahan
+  # murni, jadi MINOR): `ModuleDescriptor.handlesPayrollData` (modul yang memegang
+  # data penggajian dideklarasikan, bukan ditebak dari nama; dibaca registri
+  # template Telegram dan gerbang CI-nya) dan
+  # `ModuleNavigationEntry.requiredAnyPermission` (tautan menu terlihat bagi
+  # pemegang salah satu izin panel layarnya; hanya visibilitas).
+  #
   # 4.3.0 sejak ADR-0141 (Issue #977): field opsional
   # `ModulePermissionDescriptor.requiresMfaEnrolment` DITAMBAHKAN (penambahan
   # murni, jadi MINOR). Izin yang menandainya hanya dapat dijalankan oleh orang
@@ -111,7 +118,7 @@ contracts:
   # DIHAPUS dari union `ModuleDeploymentProfile` — union yang menyempit adalah
   # penarikan kemampuan, jadi MAJOR (preseden 2.0.0, yang menghapus tipe
   # ekspor). Nilai ini di-cross-check gerbang terhadap MODULE_CONTRACT_VERSION.
-  moduleDescriptorContractVersion: "4.3.0"
+  moduleDescriptorContractVersion: "4.4.0"
   # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base

@@ -324,6 +324,38 @@ ADR-0133 §8 says; the implementation ADR fixes them. A phone number, message
 body or template variable never appears in an event, an audit row or a log; the
 caller learns only ids and the masked recipient.
 
+### 5.1 Telegram delivery port (live, #965)
+
+- **Status:** **live since Issue #965** (ADR-0140, inert behind `TELEGRAM_ENABLED`). Unlike §5 it carries **operational and staff alerts only**, to a member of staff who bound their own private chat; it is never a fallback for WhatsApp or e-mail and no other channel falls back to it (ADR-0139).
+- **Owning module:** `telegram_delivery` (`src/modules/_shared/ports/telegram-delivery-port.ts`).
+- **Consumers:** `booking` (staff reminders), `workflow_approval` (approval-pending pings), and the platform's own operational alerts. None of them is wired yet; each registers its module-prefixed `staff_ops` template (`registerTelegramTemplate`) in its own issue. A payroll-owning module cannot register one (`bun run telegram:templates:check`).
+- **Transaction rule:** as §5. `enqueue` and `cancelByCorrelation` are writes in the **caller's** tenant transaction; there is no `send` and no free-text body. The tenant is read from the transaction's own RLS context, so the port has no `tenantId` parameter.
+- **Failure semantics:** refusals are **returned**: `DISABLED` (deployment, tenant or module off), `TEMPLATE_UNKNOWN`, `NO_BINDING`, `RATE_LIMITED`, `EXPIRY_REQUIRED`. **`NO_BINDING` triggers nothing else**: what the consumer does about a person with no linked chat is its own explicit decision, in its own module.
+
+```ts
+type EnqueueTelegramInput = {
+  templateKey: string; // module-prefixed; registered with the ONE purpose "staff_ops"
+  recipientPrincipalId: string; // the tenant user (awcms_tenant_users.id), never a chat id
+  variables: Record<string, string>; // typed by kind (reference | count | token | link); anything else is dropped
+  idempotencyKey: string; // required, unique per tenant
+  expiresAt: Date; // required, in the future and at most 7 days out
+  correlationId?: string;
+};
+
+type EnqueueTelegramResult =
+  | { status: "queued"; messageId: string }
+  | { status: "duplicate"; messageId: string }
+  | {
+      status: "refused";
+      reason:
+        | "DISABLED"
+        | "TEMPLATE_UNKNOWN"
+        | "NO_BINDING"
+        | "RATE_LIMITED"
+        | "EXPIRY_REQUIRED";
+    };
+```
+
 ## 6. Idempotency per side-effecting consumer — emitted once is not handled once
 
 Delivery is **at-least-once**. A handler that ran and then crashed before its

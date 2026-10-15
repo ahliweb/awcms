@@ -1,0 +1,889 @@
+---
+/**
+ * Telegram delivery console — the operator and self-service surface of
+ * `telegram_delivery` (Issue #965, ADR-0140).
+ *
+ * Telegram carries OPERATIONAL AND STAFF ALERTS ONLY, to a member of staff who
+ * bound their own private chat. This one screen answers four questions:
+ *
+ * 1. Is anything sending, and if not, why? (the three levels of "off")
+ * 2. Is MY chat linked? (request a code, confirm "is this you?", unlink)
+ * 3. Whose chats are linked, and can I stop one? (administrator view)
+ * 4. Why did THIS alert not arrive, and what may modules send? (queue, templates)
+ *
+ * ## "Is this you?" is the security control, and it lives here
+ *
+ * A link code that was forwarded, phished or shoulder-surfed makes an attacker's
+ * chat reach the bot, but only `pending_confirmation`: it becomes `active` solely
+ * when the staff member answers in THEIR OWN authenticated session, on this
+ * page, looking at the Telegram name the handshake captured. The captured name is
+ * attacker-influenced text and is rendered as escaped text only.
+ *
+ * ## Nothing here can reveal a chat id
+ *
+ * Every projection returns the MASKED chat (`***123`). There is no reveal path:
+ * the stored ciphertext, the keyed hash and the full id are never selected by
+ * anything this page reads, and the freshly minted link code appears once, in the
+ * response to the click that created it, and is not rendered server-side at all.
+ *
+ * ## Each section is gated on its OWN permission
+ *
+ * The screen opens for a caller who holds any of the six; each panel and each
+ * control appears only for the permission it needs, and the endpoint behind it
+ * remains the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  getOwnBinding,
+  listBindings,
+  type TelegramBindingView
+} from "../../modules/telegram-delivery/application/telegram-bindings";
+import {
+  isTelegramMessageStatus,
+  listRecentTelegramAttempts,
+  listRecentTelegramMessages,
+  summarizeTelegramQueue,
+  TELEGRAM_MESSAGE_STATUSES,
+  type TelegramAttemptView,
+  type TelegramMessageView,
+  type TelegramQueueSummary
+} from "../../modules/telegram-delivery/application/telegram-diagnostics";
+import {
+  getTelegramSettings,
+  isTenantGateOpen,
+  readTelegramTenantGate
+} from "../../modules/telegram-delivery/application/telegram-settings";
+import type { TelegramMessageStatus } from "../../modules/telegram-delivery/domain/telegram-constants";
+import { describeTelegramDeployment } from "../../modules/telegram-delivery/domain/telegram-deployment";
+import { listTelegramTemplates } from "../../modules/telegram-delivery/domain/telegram-templates";
+
+const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const STATUS_LABEL: Record<TelegramMessageStatus, string> = {
+  queued: t("Queued"),
+  retry_wait: t("Waiting to retry"),
+  sending: t("Sending"),
+  sent: t("Sent"),
+  failed: t("Failed"),
+  cancelled: t("Cancelled"),
+  expired: t("Expired")
+};
+
+const STATUS_TONE: Record<TelegramMessageStatus, string> = {
+  queued: "info",
+  retry_wait: "warning",
+  sending: "info",
+  sent: "success",
+  failed: "danger",
+  cancelled: "warning",
+  expired: "warning"
+};
+
+const BINDING_LABEL: Record<string, string> = {
+  pending_confirmation: t("Waiting for confirmation"),
+  active: t("Active"),
+  revoked: t("Revoked"),
+  suspended: t("Suspended")
+};
+
+const BINDING_TONE: Record<string, string> = {
+  pending_confirmation: "warning",
+  active: "success",
+  revoked: "warning",
+  suspended: "danger"
+};
+
+const CAUSE_LABEL: Record<string, string> = {
+  self_admin: t("Unlinked by the person"),
+  self_stop: t("Stopped from Telegram"),
+  admin: t("Revoked by an administrator"),
+  principal_deactivated: t("Staff member deactivated"),
+  module_disabled: t("Module switched off"),
+  tenant_disabled: t("Telegram switched off for the tenant"),
+  tenant_suspended: t("Tenant suspended"),
+  provider_blocked: t("Telegram could not reach the chat"),
+  rejected: t("Rejected as not theirs"),
+  confirmation_expired: t("Confirmation expired"),
+  rebound: t("Replaced by a newer chat"),
+  superseded: t("Replaced by a newer request"),
+  erasure: t("Erased")
+};
+
+function formatTimestamp(value: string | null): string {
+  return value ? value.replace("T", " ").slice(0, 16) + " UTC" : "—";
+}
+
+const statusParam = (Astro.url.searchParams.get("status") ?? "").trim();
+const statusFilter = isTelegramMessageStatus(statusParam)
+  ? statusParam
+  : undefined;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    {
+      moduleKey: "telegram_delivery",
+      activityCode: "links",
+      action: "create"
+    },
+    {
+      moduleKey: "telegram_delivery",
+      activityCode: "messages",
+      action: "read"
+    },
+    {
+      moduleKey: "telegram_delivery",
+      activityCode: "bindings",
+      action: "read"
+    },
+    {
+      moduleKey: "telegram_delivery",
+      activityCode: "bindings",
+      action: "revoke"
+    },
+    {
+      moduleKey: "telegram_delivery",
+      activityCode: "templates",
+      action: "read"
+    },
+    {
+      moduleKey: "telegram_delivery",
+      activityCode: "settings",
+      action: "configure"
+    }
+  ],
+  load: async ({ tx, entry }) => {
+    // One boolean per request above, in order: the page-level decision is already
+    // taken, and re-asking would only write a second decision-log row.
+    const [
+      canLink,
+      canReadMessages,
+      canReadBindings,
+      canRevokeBindings,
+      canReadTemplates,
+      canConfigure
+    ] = entry as [boolean, boolean, boolean, boolean, boolean, boolean];
+
+    // One transaction, one awaited query at a time (`tx` is one connection).
+    const settings = await getTelegramSettings(tx, ssr.tenantId);
+    const gate = await readTelegramTenantGate(tx, ssr.tenantId);
+    const own = canLink
+      ? await getOwnBinding(tx, ssr.tenantId, ssr.tenantUserId)
+      : null;
+    const summary = canReadMessages
+      ? await summarizeTelegramQueue(tx, ssr.tenantId)
+      : null;
+    const list = canReadMessages
+      ? await listRecentTelegramMessages(tx, ssr.tenantId, {
+          ...(statusFilter ? { status: statusFilter } : {}),
+          limit: 50
+        })
+      : { messages: [] as TelegramMessageView[], hasMore: false };
+    const attempts = canReadMessages
+      ? await listRecentTelegramAttempts(tx, ssr.tenantId, { limit: 25 })
+      : ([] as TelegramAttemptView[]);
+    const bindings = canReadBindings
+      ? await listBindings(tx, ssr.tenantId, { limit: 50 })
+      : { bindings: [] as TelegramBindingView[], hasMore: false };
+
+    return {
+      settingEnabled: settings.enabled,
+      moduleEnabled: gate.moduleEnabled,
+      gateOpen: isTenantGateOpen(gate),
+      own,
+      summary,
+      messages: list.messages,
+      hasMoreMessages: list.hasMore,
+      attempts,
+      bindings,
+      canLink,
+      canReadMessages,
+      canReadBindings,
+      canRevokeBindings,
+      canReadTemplates,
+      canConfigure
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/telegram.astro: failed to load the Telegram console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : undefined;
+
+const summary: TelegramQueueSummary | null = data?.summary ?? null;
+const messages: TelegramMessageView[] = data?.messages ?? [];
+const attempts: TelegramAttemptView[] = data?.attempts ?? [];
+const bindings: TelegramBindingView[] = data?.bindings.bindings ?? [];
+const templates = data?.canReadTemplates ? listTelegramTemplates() : [];
+const own: TelegramBindingView | null = data?.own ?? null;
+
+const deployment = describeTelegramDeployment();
+---
+
+<AdminLayout
+  title={t("Telegram delivery")}
+  description={t(
+    "Operational alerts for staff on Telegram: link your own chat, see whose chats are linked, and check the queue. Chat ids are never shown."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="telegram-denied">
+      {t("You do not have permission to view Telegram delivery.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="telegram-load-error">
+      {t("Could not load Telegram delivery. Please try again.")}
+    </p>
+  )}
+
+  {canRead && !loadError && data && (
+    <>
+      <p id="telegram-action-error" class="state-notice" role="alert" hidden />
+      <p id="telegram-notice" class="state-notice" role="status" hidden />
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="telegram-status-title"
+      >
+        <h2 class="admin-section-title" id="telegram-status-title">
+          {t("Delivery status")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "Telegram carries operational and staff alerts only. It is off unless the deployment, this tenant and the person have each turned it on."
+          )}
+        </p>
+
+        {!deployment.enabled && (
+          <p class="state-notice" id="telegram-deployment-off-notice">
+            {t(
+              "Telegram is switched off on this deployment, so nothing is being sent. Messages are refused at enqueue and the dispatcher claims nothing."
+            )}
+          </p>
+        )}
+        {deployment.enabled && !deployment.ready && (
+          <p class="state-notice" id="telegram-misconfigured-notice">
+            {t(
+              "Telegram is switched on but the deployment is missing part of its configuration, so no chat can be linked and nothing will be sent."
+            )}
+          </p>
+        )}
+        {!data.moduleEnabled && (
+          <p class="state-notice" id="telegram-module-off-notice">
+            {t(
+              "The Telegram delivery module is switched off for this tenant in module management."
+            )}
+          </p>
+        )}
+
+        <p class="page-description">
+          {t("Tenant setting:")}{" "}
+          <strong id="telegram-setting-state">
+            {data.settingEnabled ? t("On") : t("Off")}
+          </strong>
+        </p>
+        {data.canConfigure && (
+          <>
+            <button
+              type="button"
+              class="btn btn-secondary js-telegram-toggle"
+              data-enable={data.settingEnabled ? "false" : "true"}
+            >
+              {data.settingEnabled
+                ? t("Turn Telegram off for this tenant")
+                : t("Turn Telegram on for this tenant")}
+            </button>
+            <p class="page-description">
+              {t(
+                "Turning it off unlinks every staff member's chat and erases the stored chat ids. Staff must link again if it is turned back on."
+              )}
+            </p>
+          </>
+        )}
+      </section>
+
+      {data.canLink && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="telegram-mine-title"
+          id="telegram-mine"
+        >
+          <h2 class="admin-section-title" id="telegram-mine-title">
+            {t("My Telegram chat")}
+          </h2>
+
+          {!own && (
+            <>
+              <p class="page-description">
+                {t(
+                  "You have no Telegram chat linked. Request a link, open it in Telegram on your phone, and press Start. You will then confirm here that the chat is yours."
+                )}
+              </p>
+              <button
+                type="button"
+                class="btn js-telegram-link"
+                disabled={!data.gateOpen || !deployment.ready}
+              >
+                {t("Link my Telegram")}
+              </button>
+              <div id="telegram-link-result" hidden>
+                <p class="page-description">
+                  {t(
+                    "Open this link in Telegram within 10 minutes. It works once and is shown only now."
+                  )}
+                </p>
+                <p>
+                  <a
+                    id="telegram-link-anchor"
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    ...
+                  </a>
+                </p>
+              </div>
+            </>
+          )}
+
+          {own && own.status === "pending_confirmation" && (
+            <div id="telegram-confirm-panel">
+              <p class="page-description">
+                {t(
+                  "A Telegram chat used your link code. Is this you? Only confirm if you recognise it."
+                )}
+              </p>
+              <p>
+                <strong id="telegram-pending-name">
+                  {own.displayName ?? t("(no name)")}
+                </strong>
+                {own.usernameMasked && (
+                  <>
+                    {" "}
+                    <code>{own.usernameMasked}</code>
+                  </>
+                )}{" "}
+                <code>{own.chatMasked}</code>
+              </p>
+              <button
+                type="button"
+                class="btn js-telegram-confirm"
+                data-binding-id={own.id}
+              >
+                {t("Yes, this is me")}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary js-telegram-reject"
+                data-binding-id={own.id}
+              >
+                {t("No, this is not me")}
+              </button>
+            </div>
+          )}
+
+          {own && own.status === "active" && (
+            <div id="telegram-active-panel">
+              <p class="page-description">
+                {t("Your Telegram chat is linked and receives your alerts:")}{" "}
+                <code>{own.chatMasked}</code>
+              </p>
+              <p class="page-description">
+                {t("Confirmed:")} {formatTimestamp(own.confirmedAt)}
+              </p>
+              <button
+                type="button"
+                class="btn btn-secondary js-telegram-unlink"
+              >
+                {t("Unlink my Telegram")}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {data.canReadBindings && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="telegram-bindings-title"
+          id="telegram-bindings"
+        >
+          <h2 class="admin-section-title" id="telegram-bindings-title">
+            {t("Linked chats")}
+            <span class="count-pill">{bindings.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "Each staff member can link one private chat. The chat is shown masked only; groups and channels cannot be linked."
+            )}
+          </p>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="telegram-bindings-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Staff member")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Chat")}</th>
+                  <th scope="col">{t("Linked")}</th>
+                  <th scope="col">{t("Ended")}</th>
+                  {data.canRevokeBindings && (
+                    <th scope="col">{t("Actions")}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {bindings.length === 0 && (
+                  <tr>
+                    <td
+                      colspan={data.canRevokeBindings ? 6 : 5}
+                      class="table-empty"
+                    >
+                      {t("No Telegram chats linked.")}
+                    </td>
+                  </tr>
+                )}
+                {bindings.map((binding) => (
+                  <tr>
+                    <th scope="row" data-label={t("Staff member")}>
+                      <code>
+                        {binding.principalLabel ?? binding.principalId}
+                      </code>
+                    </th>
+                    <td data-label={t("Status")} data-status={binding.status}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={BINDING_TONE[binding.status]}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {BINDING_LABEL[binding.status] ?? binding.status}
+                      </span>
+                    </td>
+                    <td data-label={t("Chat")}>
+                      <code>{binding.chatMasked}</code>
+                    </td>
+                    <td data-label={t("Linked")}>
+                      {formatTimestamp(
+                        binding.confirmedAt ?? binding.createdAt
+                      )}
+                    </td>
+                    <td data-label={t("Ended")}>
+                      {binding.revokedAt
+                        ? `${formatTimestamp(binding.revokedAt)} — ${
+                            (binding.revokeCause &&
+                              CAUSE_LABEL[binding.revokeCause]) ??
+                            ""
+                          }`
+                        : "—"}
+                    </td>
+                    {data.canRevokeBindings && (
+                      <td data-label={t("Actions")}>
+                        {(binding.status === "active" ||
+                          binding.status === "pending_confirmation") && (
+                          <button
+                            type="button"
+                            class="btn btn-secondary js-telegram-revoke"
+                            data-binding-id={binding.id}
+                          >
+                            {t("Revoke")}
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {data.canReadMessages && summary && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="telegram-queue-title"
+          id="telegram-queue"
+        >
+          <h2 class="admin-section-title" id="telegram-queue-title">
+            {t("Queue")}
+          </h2>
+          <div class="admin-stat-grid">
+            {TELEGRAM_MESSAGE_STATUSES.map((status) => (
+              <div class="admin-stat-card">
+                <span class="admin-stat-card-label">
+                  {STATUS_LABEL[status]}
+                </span>
+                <span
+                  class="admin-stat-card-value"
+                  data-telegram-count={status}
+                >
+                  {summary.countsByStatus[status] ?? 0}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p class="page-description">
+            {t("Oldest still waiting:")}{" "}
+            <strong>{formatTimestamp(summary.oldestPendingAt)}</strong>
+          </p>
+
+          <form method="get" class="admin-filter-form">
+            <label class="admin-field">
+              <span>{t("Status")}</span>
+              <select name="status">
+                <option value="">{t("All")}</option>
+                {TELEGRAM_MESSAGE_STATUSES.map((status) => (
+                  <option value={status} selected={statusFilter === status}>
+                    {STATUS_LABEL[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" class="btn btn-secondary">
+              {t("Filter")}
+            </button>
+          </form>
+
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="telegram-queue-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Template")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Retries")}</th>
+                  <th scope="col">{t("Last error")}</th>
+                  <th scope="col">{t("Expires")}</th>
+                  <th scope="col">{t("Queued")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {messages.length === 0 && (
+                  <tr>
+                    <td colspan={6} class="table-empty">
+                      {t("No Telegram messages recorded.")}
+                    </td>
+                  </tr>
+                )}
+                {messages.map((message) => (
+                  <tr>
+                    <th scope="row" data-label={t("Template")}>
+                      <code>{message.templateKey}</code>
+                    </th>
+                    <td data-label={t("Status")} data-status={message.status}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={STATUS_TONE[message.status]}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {STATUS_LABEL[message.status]}
+                      </span>
+                    </td>
+                    <td data-label={t("Retries")}>{message.retryCount}</td>
+                    <td data-label={t("Last error")}>
+                      {message.lastError ?? message.failureCode ?? "—"}
+                    </td>
+                    <td data-label={t("Expires")}>
+                      {formatTimestamp(message.expiresAt)}
+                    </td>
+                    <td data-label={t("Queued")}>
+                      {formatTimestamp(message.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.hasMoreMessages && (
+            <p class="page-description">
+              {t(
+                "Newest 50 shown; older messages are removed by retention, not browsed."
+              )}
+            </p>
+          )}
+
+          <h3 class="admin-section-title" id="telegram-attempts-title">
+            {t("Recent delivery attempts")}
+            <span class="count-pill">{attempts.length}</span>
+          </h3>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="telegram-attempts-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("When")}</th>
+                  <th scope="col">{t("Attempt")}</th>
+                  <th scope="col">{t("Outcome")}</th>
+                  <th scope="col">{t("Reply")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attempts.length === 0 && (
+                  <tr>
+                    <td colspan={4} class="table-empty">
+                      {t("No delivery attempts recorded.")}
+                    </td>
+                  </tr>
+                )}
+                {attempts.map((attempt) => (
+                  <tr>
+                    <th scope="row" data-label={t("When")}>
+                      {formatTimestamp(attempt.createdAt)}
+                    </th>
+                    <td data-label={t("Attempt")}>{attempt.attemptNo}</td>
+                    <td
+                      data-label={t("Outcome")}
+                      data-outcome={attempt.outcome}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          attempt.outcome === "success" ? "success" : "danger"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {attempt.outcome === "success"
+                          ? t("Success")
+                          : t("Failure")}
+                      </span>
+                    </td>
+                    <td data-label={t("Reply")}>
+                      {attempt.errorMessage ??
+                        attempt.providerResponseSnippet ??
+                        "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {data.canReadTemplates && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="telegram-templates-title"
+          id="telegram-templates"
+        >
+          <h2 class="admin-section-title" id="telegram-templates-title">
+            {t("Registered templates")}
+            <span class="count-pill">{templates.length}</span>
+          </h2>
+          <p class="page-description">
+            {t(
+              "Modules register their templates in code. Every template is an operational alert for staff; variables are typed and cannot carry names, contact details or free text, and anything not on the list is dropped before sending."
+            )}
+          </p>
+          <div
+            class="data-table-scroll"
+            role="region"
+            tabindex="0"
+            aria-labelledby="telegram-templates-title"
+          >
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">{t("Template")}</th>
+                  <th scope="col">{t("Allowed variables")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((template) => (
+                  <tr>
+                    <th scope="row" data-label={t("Template")}>
+                      <code>{template.key}</code> v{template.version}
+                    </th>
+                    <td data-label={t("Allowed variables")}>
+                      {template.variables.length === 0
+                        ? "—"
+                        : template.variables
+                            .map(
+                              (variable) =>
+                                `${variable.name} (${variable.kind})`
+                            )
+                            .join(", ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+  import { confirmAction } from "../../lib/ui/confirm-dialog-client";
+
+  const actionError = messageBox("telegram-action-error");
+  const noticeBox = messageBox("telegram-notice");
+
+  // The link code is returned once, in the response to this click, and is put
+  // straight into the anchor. It is never rendered by the server.
+  onAction(".js-telegram-link", async (button) => {
+    actionError.clear();
+    noticeBox.clear();
+
+    const unlock = lockElement(button, "Please wait…");
+    const result = await sendJsonForData<{ link: string; expiresAt: string }>(
+      "POST",
+      "/api/v1/telegram/links"
+    );
+    const anchor = document.getElementById("telegram-link-anchor");
+    const panel = document.getElementById("telegram-link-result");
+
+    if (
+      result.ok &&
+      result.data &&
+      result.data.link.startsWith("https://t.me/") &&
+      anchor instanceof HTMLAnchorElement &&
+      panel
+    ) {
+      anchor.href = result.data.link;
+      anchor.textContent = result.data.link;
+      panel.hidden = false;
+      unlock();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "TELEGRAM_DISABLED"
+        ? "Telegram is switched off, so no chat can be linked."
+        : result.errorCode === "TELEGRAM_MISCONFIGURED"
+          ? "Telegram is not fully configured on this deployment."
+          : result.errorCode === "RATE_LIMITED"
+            ? "Too many link requests. Try again later."
+            : "Could not create a link. Please try again."
+    );
+    unlock();
+  });
+
+  // Both answers name the chat the person was SHOWN (`bindingId`); the server
+  // answers 409 if a newer code has replaced it since the page was rendered.
+  onAction(".js-telegram-confirm", async (button) => {
+    const bindingId = button.dataset.bindingId;
+    if (!bindingId) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", "/api/v1/telegram/bindings/me/confirm", { bindingId }),
+      (errorCode) =>
+        errorCode === "RESOURCE_NOT_FOUND"
+          ? "That request expired. Request a new link."
+          : errorCode === "TELEGRAM_BINDING_MISMATCH"
+            ? "A newer chat is waiting. Reload the page and check it again."
+            : "Could not confirm. Please try again."
+    );
+  });
+
+  onAction(".js-telegram-reject", async (button) => {
+    const bindingId = button.dataset.bindingId;
+    if (!bindingId) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", "/api/v1/telegram/bindings/me/reject", { bindingId }),
+      (errorCode) =>
+        errorCode === "TELEGRAM_BINDING_MISMATCH"
+          ? "A newer chat is waiting. Reload the page and check it again."
+          : "Could not reject that chat. Please try again."
+    );
+  });
+
+  onAction(".js-telegram-unlink", async (button) => {
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", "/api/v1/telegram/bindings/me/revoke"),
+      "Could not unlink. Please try again."
+    );
+  });
+
+  onAction(".js-telegram-revoke", async (button) => {
+    const bindingId = button.dataset.bindingId;
+    if (!bindingId) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `/api/v1/telegram/bindings/${bindingId}/revoke`),
+      (errorCode) =>
+        errorCode === "RESOURCE_NOT_FOUND"
+          ? "That chat was already unlinked."
+          : "Could not revoke that chat. Please try again."
+    );
+  });
+
+  onAction(".js-telegram-toggle", async (button) => {
+    const enabled = button.dataset.enable === "true";
+
+    if (
+      !enabled &&
+      !(await confirmAction(
+        "Turn Telegram off? Every staff member's chat will be unlinked."
+      ))
+    ) {
+      return;
+    }
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("PUT", "/api/v1/telegram/settings", { enabled }),
+      "Could not change the setting. Please try again."
+    );
+  });
+</script>

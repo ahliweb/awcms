@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:a3de8cbea3fce07c1e43d1512408f5ec18d32ada914f91b8a690ab0e71fc3481 -->
+<!-- i18n-source-hash: sha256:e33c393ca576c13df114dc7e1c0c0d64e41f178dd3e6fea4f8cafe690601b793 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-136 target menjalankan berkas di `scripts/`; 61 di antaranya
+140 target menjalankan berkas di `scripts/`; 62 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -164,6 +164,10 @@ terjadwal, atau oleh workflow CI tertentu.
 | `subject-data:registry:check`             | `subject-data-registry-check.ts`               | ✅   |
 | `sync:objects:dispatch`                   | `object-sync-dispatch.ts`                      | —    |
 | `sync:objects:purge`                      | `object-queue-purge.ts`                        | —    |
+| `telegram:dispatch`                       | `telegram-dispatch.ts`                         | —    |
+| `telegram:queue:purge`                    | `telegram-queue-purge.ts`                      | —    |
+| `telegram:templates:check`                | `telegram-templates-check.ts`                  | ✅   |
+| `telegram:webhook:register`               | `telegram-webhook-register.ts`                 | —    |
 | `tenant-domain:dns:sync`                  | `tenant-domain-dns-sync.ts`                    | —    |
 | `version:check`                           | `version-check.ts`                             | ✅   |
 | `whatsapp:dispatch`                       | `whatsapp-dispatch.ts`                         | —    |

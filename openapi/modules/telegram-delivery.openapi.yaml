@@ -1,0 +1,951 @@
+# Source fragment for the "telegram_delivery" module (Issue #965, ADR-0140).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations. Schemas
+# shared by 2+ modules (or referenced by none) live in the root fragment
+# (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses) only resolve after
+# `bun run openapi:bundle` merges this file with the root fragment and every
+# sibling module fragment into openapi/awcms-public-api.openapi.yaml. Edit this
+# file (or the root fragment for shared components), never the generated bundle.
+#
+# ## What is deliberately NOT here
+#
+# There is no "send a message" or "enqueue" endpoint. Queueing is a capability
+# port call (`TelegramDeliveryPort`, `_shared/ports/telegram-delivery-port.ts`)
+# made in the CONSUMER's own transaction and authorised by the consumer's own
+# permission for its own business action. Nothing on this surface ever returns a
+# Telegram chat id, a ciphertext, a hash, a message body or a template variable:
+# chats are masked. There is no endpoint that reveals a chat id.
+paths:
+  /api/v1/telegram/webhook:
+    post:
+      operationId: receiveTelegramWebhook
+      tags:
+        - Telegram Delivery
+      security: []
+      summary: Telegram's `message` updates (the bot webhook).
+      description: >-
+        The ONLY route of this module that is not authenticated by a session or
+        machine credential, and it is not meant to be called by a browser or by a
+        person. Telegram calls it after an operator registered it with
+        `bun run telegram:webhook:register` (`allowed_updates=["message"]`).
+        There is no tenant in the path (one bot per deployment); the tenant is
+        resolved from the one-time code or from the binding found by the chat's
+        keyed hash, never from the payload.
+
+
+        Order of work: (1) `404` when `TELEGRAM_ENABLED` is not `true`; (2) the
+        `X-Telegram-Bot-Api-Secret-Token` header is compared in constant time with
+        `TELEGRAM_WEBHOOK_SECRET`, and a missing or wrong header (or an unset server
+        secret) is a `401` with NO body, before any body is read or any database
+        work is done; (3) a per-address rate limit and the request-body limit;
+        (4) two commands from a PRIVATE chat only, `/start <code>` and `/stop`.
+        Everything else (any other text or command, media, edits, callback queries,
+        groups, supergroups, channels) is `200` with no reply.
+
+
+        A reply to `/start` and `/stop` is the HTTP response to this request (the
+        Bot API's webhook-reply form: a JSON `sendMessage` method object), not an
+        outbound call. Both commands are idempotent by construction, so no update
+        id is stored.
+      parameters:
+        - name: X-Telegram-Bot-Api-Secret-Token
+          in: header
+          required: true
+          description: >-
+            The `secret_token` given to `setWebhook`. Compared in constant time.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: A Telegram `Update` object (only `message` is read).
+              additionalProperties: true
+      responses:
+        "200":
+          description: >-
+            Handled or ignored. The body is `{}`, or a `sendMessage` method object
+            carrying the fixed reply when the update was `/start` or `/stop`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  method:
+                    type: string
+                    enum:
+                      - sendMessage
+                  chat_id:
+                    type: string
+                  text:
+                    type: string
+                  disable_web_page_preview:
+                    type: boolean
+                  protect_content:
+                    type: boolean
+        "400":
+          description: The body is not valid JSON.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: >-
+            The secret header is missing or wrong. A generic envelope with no
+            detail, and no work was done.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Telegram is switched off on this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: The body exceeds the request-body limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: >-
+            Rate limited, per address; repeated wrong secrets from one address are
+            throttled the same way.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: >-
+            A transient failure. Telegram retries; both commands are idempotent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/telegram/links:
+    post:
+      operationId: createTelegramLink
+      tags:
+        - Telegram Delivery
+      summary: Request a one-time link code for yourself.
+      description: >-
+        A staff member requests a code for THEMSELVES (there is no way to name
+        another person). The code is 32 random bytes, base64url, returned ONCE
+        inside a `https://t.me/<bot>?start=<code>` link; only its SHA-256 is
+        stored. It expires in 10 minutes, works once, and a newer request
+        invalidates the previous one. The response is `Cache-Control: no-store`.
+        A per-person hourly limit applies. Opening the link in a PRIVATE Telegram
+        chat creates a `pending_confirmation` binding that must then be confirmed
+        from the staff member's own authenticated session
+        (`POST /api/v1/telegram/bindings/me/confirm`). Deliberately NOT
+        idempotency-keyed: a retry mints a replacement and invalidates the earlier
+        code. Requires `telegram_delivery.links.create`.
+      responses:
+        "200":
+          description: The link, shown once.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TelegramLink"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: >-
+            Telegram is off at the deployment or tenant level (`TELEGRAM_DISABLED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many link codes were requested (`RATE_LIMITED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: >-
+            The deployment cannot create a binding safely (no bot username or key
+            ring; fail closed) (`TELEGRAM_MISCONFIGURED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/telegram/bindings:
+    get:
+      operationId: listTelegramBindings
+      tags:
+        - Telegram Delivery
+      summary: List the tenant's chat bindings.
+      description: >-
+        Newest first: the staff member (login masked), the state, when it was
+        linked or ended and why, and a MASKED chat reference. Never a ciphertext,
+        a hash or a full chat id. Bounded: `hasMore` says whether the list was cut.
+        Requires `telegram_delivery.bindings.read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/TelegramBindingStatus"
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            1-200, default 50. Out-of-range values are REJECTED rather than clamped.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Bindings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      bindings:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TelegramBinding"
+                      hasMore:
+                        type: boolean
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: "`status` or `limit` is invalid."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/telegram/bindings/me:
+    get:
+      operationId: getOwnTelegramBinding
+      tags:
+        - Telegram Delivery
+      summary: Your own Telegram binding.
+      description: >-
+        The caller's live binding or `null`. While it is `pending_confirmation` it
+        carries the Telegram display name and masked username the handshake
+        captured, which is what lets the staff member answer "is this you?" from
+        their own session; both are cleared on confirm, reject and expiry.
+        `available` says whether linking is possible right now (deployment flag
+        and tenant gate). `Cache-Control: no-store`. Requires
+        `telegram_delivery.links.create`.
+      responses:
+        "200":
+          description: The caller's binding.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      binding:
+                        allOf:
+                          - $ref: "#/components/schemas/TelegramBinding"
+                        nullable: true
+                      available:
+                        type: boolean
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/telegram/bindings/me/confirm:
+    post:
+      operationId: confirmOwnTelegramBinding
+      tags:
+        - Telegram Delivery
+      summary: Confirm that the Telegram chat that used your code is yours.
+      description: >-
+        The ONLY transition to `active`, reachable only from the staff member's own
+        authenticated session. A link code that was forwarded, phished or
+        shoulder-surfed binds an attacker's chat at most to `pending_confirmation`.
+        Confirming replaces any binding the person already had (audited as a
+        re-bind, and one notice is queued to the new chat naming the tenant). The
+        body names the chat the person was shown; a different pending chat is a
+        409 (`TELEGRAM_BINDING_MISMATCH`). With nothing pending the answer is 404,
+        so a double click cannot confirm twice. A machine credential is refused
+        with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires
+        `telegram_delivery.links.create`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bindingId
+              additionalProperties: false
+              properties:
+                bindingId:
+                  type: string
+                  format: uuid
+                  description: The chat the person was shown (`GET .../bindings/me`).
+      responses:
+        "200":
+          description: The binding is active.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      confirmed:
+                        type: boolean
+                        enum:
+                          - true
+                      replacedPrevious:
+                        type: boolean
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            The chat waiting for confirmation is not the one named
+            (`TELEGRAM_BINDING_MISMATCH`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/telegram/bindings/me/reject:
+    post:
+      operationId: rejectOwnTelegramBinding
+      tags:
+        - Telegram Delivery
+      summary: Reject the Telegram chat that used your code ("not me").
+      description: >-
+        Ends the pending binding at once, erases its ciphertext and the captured
+        display name, and audits it at `warning`: it means a link code reached
+        somebody else's chat. The body names the chat the person was shown; a
+        different pending chat is a 409 (`TELEGRAM_BINDING_MISMATCH`). A machine
+        credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires
+        `telegram_delivery.links.create`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - bindingId
+              additionalProperties: false
+              properties:
+                bindingId:
+                  type: string
+                  format: uuid
+                  description: The chat the person was shown (`GET .../bindings/me`).
+      responses:
+        "200":
+          description: The pending binding was rejected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      rejected:
+                        type: boolean
+                        enum:
+                          - true
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            The chat waiting for confirmation is not the one named
+            (`TELEGRAM_BINDING_MISMATCH`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/telegram/bindings/me/revoke:
+    post:
+      operationId: revokeOwnTelegramBinding
+      tags:
+        - Telegram Delivery
+      summary: Unlink your own Telegram chat.
+      description: >-
+        Delivery stops at once: queued messages are cancelled and the stored chat
+        id is erased in the same transaction. (`/stop` in the chat is the other way
+        to leave.) No body. With nothing live the answer is 404. Requires
+        `telegram_delivery.links.create`.
+      responses:
+        "200":
+          description: The caller's binding(s) were ended.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: integer
+                      cancelledMessages:
+                        type: integer
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/telegram/bindings/{id}/revoke:
+    post:
+      operationId: revokeTelegramBinding
+      tags:
+        - Telegram Delivery
+      summary: Revoke another staff member's Telegram binding.
+      description: >-
+        High-risk and audited at `warning`: it removes a person's alert channel.
+        The stored chat id is erased and the binding's queue cancelled at once.
+        Naturally idempotent rather than `Idempotency-Key`-ed: revoking an ended
+        binding finds nothing live and answers 404. One answer for "no such
+        binding" and "already ended". Requires `telegram_delivery.bindings.revoke`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The binding id.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The binding was revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: boolean
+                        enum:
+                          - true
+                      cancelledMessages:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/telegram/settings:
+    get:
+      operationId: getTelegramSettings
+      tags:
+        - Telegram Delivery
+      summary: The tenant's Telegram switch and the gates around it.
+      description: >-
+        The tenant setting plus the two other reasons nothing might be sent:
+        Module Management (`moduleEnabled`) and the deployment flag
+        (`deploymentEnabled`). Requires `telegram_delivery.messages.read`.
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TelegramSettings"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: setTelegramSettings
+      tags:
+        - Telegram Delivery
+      summary: Turn Telegram on or off for this tenant.
+      description: >-
+        High-risk (`configure`) and audited at `warning`. Turning it OFF ends every
+        binding in the same transaction (the stored chat ids are erased and the
+        queue cancelled), so a tenant that switches the channel off is not left
+        holding encrypted chat ids. Idempotent by construction (it sets a value;
+        repeating it changes nothing and writes no second audit row), so no
+        `Idempotency-Key`. The body is validated strictly: an unknown key is a
+        400. Requires `telegram_delivery.settings.configure`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              additionalProperties: false
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: The new state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      changed:
+                        type: boolean
+                      revokedBindings:
+                        type: integer
+                      cancelledMessages:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/telegram/diagnostics:
+    get:
+      operationId: getTelegramDiagnostics
+      tags:
+        - Telegram Delivery
+      summary: The tenant's Telegram queue - counts, recent messages, attempts.
+      description: >-
+        One endpoint rather than three because the parts are only readable
+        together: they come from ONE transaction. Bounded rather than paginated;
+        the historical tail is removed by retention
+        (`bun run telegram:queue:purge`), not browsed. No chat id, ciphertext,
+        hash, body or variable is ever selected. `configured` reports the
+        DEPLOYMENT's settings as booleans only (present and well-formed), never a
+        value. Requires `telegram_delivery.messages.read`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Narrow the message list to one queue status.
+          schema:
+            $ref: "#/components/schemas/TelegramMessageStatus"
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            1-200, default 50. Out-of-range values are REJECTED rather than clamped.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Telegram queue diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TelegramDiagnostics"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: "`status` or `limit` is invalid."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/telegram/templates:
+    get:
+      operationId: listTelegramTemplates
+      tags:
+        - Telegram Delivery
+      summary: The registered Telegram templates.
+      description: >-
+        Key, version, the ONE purpose (`staff_ops`) and the typed variable
+        allow-list. The wording is not returned: it is the owning module's copy.
+        Requires `telegram_delivery.templates.read`.
+      responses:
+        "200":
+          description: Registered templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TelegramTemplateList"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+components:
+  schemas:
+    TelegramBindingStatus:
+      type: string
+      enum:
+        - pending_confirmation
+        - active
+        - revoked
+        - suspended
+    TelegramMessageStatus:
+      type: string
+      enum:
+        - queued
+        - retry_wait
+        - sending
+        - sent
+        - failed
+        - cancelled
+        - expired
+    TelegramLink:
+      type: object
+      properties:
+        link:
+          type: string
+          description: >-
+            `https://t.me/<bot>?start=<code>`. Contains the single-use code; shown
+            once and never stored in plaintext.
+        expiresAt:
+          type: string
+          format: date-time
+    TelegramBinding:
+      type: object
+      description: >-
+        A chat binding. The ciphertext, the keyed hash and the full chat id are
+        never part of this projection.
+      properties:
+        id:
+          type: string
+          format: uuid
+        principalId:
+          type: string
+          format: uuid
+          description: The staff member (tenant user).
+        principalLabel:
+          type: string
+          nullable: true
+          description: The staff member's login, masked.
+        status:
+          $ref: "#/components/schemas/TelegramBindingStatus"
+        chatMasked:
+          type: string
+          description: The last three digits only (`***123`).
+        displayName:
+          type: string
+          nullable: true
+          description: >-
+            Present only while `pending_confirmation` and only on the caller's own
+            binding. Attacker-influenced text: render escaped.
+        usernameMasked:
+          type: string
+          nullable: true
+        pendingExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        confirmedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokeCause:
+          type: string
+          nullable: true
+          enum:
+            - self_admin
+            - self_stop
+            - admin
+            - principal_deactivated
+            - module_disabled
+            - tenant_disabled
+            - tenant_suspended
+            - provider_blocked
+            - rejected
+            - confirmation_expired
+            - rebound
+            - superseded
+            - erasure
+        createdAt:
+          type: string
+          format: date-time
+    TelegramSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: The tenant switch (off until an administrator turns it on).
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        moduleEnabled:
+          type: boolean
+          description: Whether Module Management has the module on for the tenant.
+        deploymentEnabled:
+          type: boolean
+          description: Whether `TELEGRAM_ENABLED` is true on this deployment.
+    TelegramMessage:
+      type: object
+      description: >-
+        A queue row. The chat, the rendered body and the template variables are
+        never part of this projection.
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateKey:
+          type: string
+        status:
+          $ref: "#/components/schemas/TelegramMessageStatus"
+        principalId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
+        failureCode:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        nextAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+    TelegramDeliveryAttempt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+        attemptNo:
+          type: integer
+        outcome:
+          type: string
+          enum:
+            - success
+            - failure
+        providerName:
+          type: string
+        providerResponseSnippet:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+          description: Redacted of the bot token and long number runs before it is stored.
+        createdAt:
+          type: string
+          format: date-time
+    TelegramQueueSummary:
+      type: object
+      properties:
+        countsByStatus:
+          type: object
+          description: Every status is present, with 0 when it has no rows.
+          additionalProperties:
+            type: integer
+        oldestPendingAt:
+          type: string
+          format: date-time
+          nullable: true
+        activeBindings:
+          type: integer
+        pendingBindings:
+          type: integer
+    TelegramDeployment:
+      type: object
+      description: >-
+        Booleans only: present and well-formed, never a value.
+      properties:
+        enabled:
+          type: boolean
+        botTokenConfigured:
+          type: boolean
+        botUsernameConfigured:
+          type: boolean
+        webhookSecretConfigured:
+          type: boolean
+        encryptionKeysConfigured:
+          type: boolean
+        hashKeysConfigured:
+          type: boolean
+        ready:
+          type: boolean
+    TelegramDiagnostics:
+      type: object
+      properties:
+        summary:
+          $ref: "#/components/schemas/TelegramQueueSummary"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelegramMessage"
+        hasMoreMessages:
+          type: boolean
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelegramDeliveryAttempt"
+        configured:
+          $ref: "#/components/schemas/TelegramDeployment"
+    TelegramTemplateList:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              version:
+                type: integer
+              purpose:
+                type: string
+                enum:
+                  - staff_ops
+              variables:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    kind:
+                      type: string
+                      enum:
+                        - reference
+                        - count
+                        - token
+                        - link

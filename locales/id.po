@@ -7579,3 +7579,147 @@ msgstr "Pulihkan di atas opt-out"
 
 msgid "Evidence reference"
 msgstr "Referensi bukti"
+
+msgid "Waiting for confirmation"
+msgstr "Menunggu konfirmasi"
+
+msgid "Unlinked by the person"
+msgstr "Diputus oleh orangnya"
+
+msgid "Stopped from Telegram"
+msgstr "Dihentikan dari Telegram"
+
+msgid "Revoked by an administrator"
+msgstr "Dicabut oleh administrator"
+
+msgid "Staff member deactivated"
+msgstr "Staf dinonaktifkan"
+
+msgid "Module switched off"
+msgstr "Modul dimatikan"
+
+msgid "Telegram switched off for the tenant"
+msgstr "Telegram dimatikan untuk tenant"
+
+msgid "Telegram could not reach the chat"
+msgstr "Telegram tidak dapat menjangkau chat"
+
+msgid "Rejected as not theirs"
+msgstr "Ditolak karena bukan miliknya"
+
+msgid "Confirmation expired"
+msgstr "Konfirmasi kedaluwarsa"
+
+msgid "Replaced by a newer chat"
+msgstr "Digantikan chat yang lebih baru"
+
+msgid "Replaced by a newer request"
+msgstr "Digantikan permintaan yang lebih baru"
+
+msgid "Erased"
+msgstr "Dihapus"
+
+msgid "Telegram delivery"
+msgstr "Pengiriman Telegram"
+
+msgid "Operational alerts for staff on Telegram: link your own chat, see whose chats are linked, and check the queue. Chat ids are never shown."
+msgstr "Notifikasi operasional untuk staf di Telegram: tautkan chat Anda sendiri, lihat chat siapa yang tertaut, dan periksa antrean. Id chat tidak pernah ditampilkan."
+
+msgid "You do not have permission to view Telegram delivery."
+msgstr "Anda tidak memiliki izin untuk melihat pengiriman Telegram."
+
+msgid "Could not load Telegram delivery. Please try again."
+msgstr "Pengiriman Telegram tidak dapat dimuat. Silakan coba lagi."
+
+msgid "Telegram carries operational and staff alerts only. It is off unless the deployment, this tenant and the person have each turned it on."
+msgstr "Telegram hanya membawa notifikasi operasional dan staf. Telegram mati kecuali deployment, tenant ini, dan orangnya masing-masing menyalakannya."
+
+msgid "Telegram is switched off on this deployment, so nothing is being sent. Messages are refused at enqueue and the dispatcher claims nothing."
+msgstr "Telegram dimatikan pada deployment ini, sehingga tidak ada yang dikirim. Pesan ditolak saat masuk antrean dan dispatcher tidak mengklaim apa pun."
+
+msgid "Telegram is switched on but the deployment is missing part of its configuration, so no chat can be linked and nothing will be sent."
+msgstr "Telegram dinyalakan tetapi sebagian konfigurasi deployment belum ada, sehingga tidak ada chat yang dapat ditautkan dan tidak ada yang akan dikirim."
+
+msgid "The Telegram delivery module is switched off for this tenant in module management."
+msgstr "Modul pengiriman Telegram dimatikan untuk tenant ini di manajemen modul."
+
+msgid "Tenant setting:"
+msgstr "Pengaturan tenant:"
+
+msgid "On"
+msgstr "Aktif"
+
+msgid "Off"
+msgstr "Nonaktif"
+
+msgid "Turn Telegram off for this tenant"
+msgstr "Matikan Telegram untuk tenant ini"
+
+msgid "Turn Telegram on for this tenant"
+msgstr "Nyalakan Telegram untuk tenant ini"
+
+msgid "Turning it off unlinks every staff member's chat and erases the stored chat ids. Staff must link again if it is turned back on."
+msgstr "Mematikannya akan memutus tautan chat setiap staf dan menghapus id chat yang tersimpan. Staf harus menautkan ulang jika dinyalakan kembali."
+
+msgid "My Telegram chat"
+msgstr "Chat Telegram saya"
+
+msgid "You have no Telegram chat linked. Request a link, open it in Telegram on your phone, and press Start. You will then confirm here that the chat is yours."
+msgstr "Anda belum menautkan chat Telegram. Minta tautan, buka di Telegram pada ponsel Anda, lalu tekan Start. Setelah itu Anda mengonfirmasi di sini bahwa chat tersebut milik Anda."
+
+msgid "Link my Telegram"
+msgstr "Tautkan Telegram saya"
+
+msgid "Open this link in Telegram within 10 minutes. It works once and is shown only now."
+msgstr "Buka tautan ini di Telegram dalam 10 menit. Tautan hanya berlaku sekali dan hanya ditampilkan sekarang."
+
+msgid "A Telegram chat used your link code. Is this you? Only confirm if you recognise it."
+msgstr "Sebuah chat Telegram memakai kode tautan Anda. Apakah ini Anda? Konfirmasi hanya jika Anda mengenalinya."
+
+msgid "(no name)"
+msgstr "(tanpa nama)"
+
+msgid "Yes, this is me"
+msgstr "Ya, ini saya"
+
+msgid "No, this is not me"
+msgstr "Bukan, ini bukan saya"
+
+msgid "Your Telegram chat is linked and receives your alerts:"
+msgstr "Chat Telegram Anda tertaut dan menerima notifikasi Anda:"
+
+msgid "Confirmed:"
+msgstr "Dikonfirmasi:"
+
+msgid "Unlink my Telegram"
+msgstr "Putuskan tautan Telegram saya"
+
+msgid "Linked chats"
+msgstr "Chat tertaut"
+
+msgid "Each staff member can link one private chat. The chat is shown masked only; groups and channels cannot be linked."
+msgstr "Setiap staf dapat menautkan satu chat pribadi. Chat hanya ditampilkan disamarkan; grup dan kanal tidak dapat ditautkan."
+
+msgid "Staff member"
+msgstr "Staf"
+
+msgid "Chat"
+msgstr "Chat"
+
+msgid "Linked"
+msgstr "Tertaut"
+
+msgid "No Telegram chats linked."
+msgstr "Belum ada chat Telegram yang tertaut."
+
+msgid "No Telegram messages recorded."
+msgstr "Belum ada pesan Telegram yang tercatat."
+
+msgid "Modules register their templates in code. Every template is an operational alert for staff; variables are typed and cannot carry names, contact details or free text, and anything not on the list is dropped before sending."
+msgstr "Modul mendaftarkan templatenya di kode. Setiap template adalah notifikasi operasional untuk staf; variabel bertipe dan tidak dapat membawa nama, kontak, atau teks bebas, dan apa pun yang tidak ada di daftar dibuang sebelum dikirim."
+
+msgid "Telegram Delivery"
+msgstr "Pengiriman Telegram"
+
+msgid "Tenant suspended"
+msgstr "Tenant ditangguhkan"

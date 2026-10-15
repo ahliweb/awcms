@@ -44,6 +44,10 @@ export const hrCommissionModule = defineModule({
   key: HR_COMMISSION_MODULE_KEY,
   name: "HR Commission",
   version: "0.2.0",
+  // Commission accruals are monetary pay facts: payroll data by any reading
+  // (ADR-0132). Declared so that no channel that must keep payroll off it (the
+  // Telegram registry and its CI gate, ADR-0140) has to guess from a name.
+  handlesPayrollData: true,
   // `experimental` = the flag is OFF: no admin screen exists yet (ADR-0021
   // criterion 1 requires every ACTIVE module to declare one). The family's
   // rollout rule (docs/awcms/hr-payroll.md section 14) is "experimental until

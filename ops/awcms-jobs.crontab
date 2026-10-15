@@ -160,6 +160,21 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # window (legal-hold gated, bounded batches).
 35 3 * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-purge.lock $AWCMS_RUN_JOB sync:objects:purge >> $AWCMS_JOB_LOG/sync-objects-purge.log 2>&1
 
+# telegram_delivery — Drain the due Telegram queue (tenant gate, binding and
+# principal re-check, per-chat spacing, global rate ceiling, retry_after
+# handling, circuit breaker, suspension of an unreachable chat) for every
+# active tenant.
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/telegram-dispatch.lock $AWCMS_RUN_JOB telegram:dispatch >> $AWCMS_JOB_LOG/telegram-dispatch.log 2>&1
+
+# telegram_delivery — Expire non-terminal Telegram messages past their expiry,
+# end unconfirmed bindings past their confirmation window and the bindings of
+# any tenant whose module or switch is off or whose person was deactivated or
+# lost every role (erasing the stored chat id), then delete TERMINAL queue
+# rows and spent attempts past retention, revoked bindings past 90 days and
+# expired link codes (legal-hold gated, bounded batches). Never deletes a
+# waiting message or a live binding.
+10 4 * * * /usr/bin/flock -n $AWCMS_LOCK/telegram-queue-purge.lock $AWCMS_RUN_JOB telegram:queue:purge >> $AWCMS_JOB_LOG/telegram-queue-purge.log 2>&1
+
 # tenant_domain — Reconciles pending/active domain rows against the configured
 # DNS provider so a verification record that was created but never propagated
 # does not leave a tenant stuck at pending_verification forever. Read-only
