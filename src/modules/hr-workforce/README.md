@@ -45,7 +45,8 @@ declares no `navigation`. It flips to `active` with its first screen.
   `tenant_user_id`, passed through `defineTenantRoute`'s new `ownershipGrant`
   option. It only widens `employments.read`; ABAC deny, scope and SoD still apply,
   a machine credential never carries it, and a missing id and someone else's row
-  are the same 403. The link itself is `employments.assign`: high-risk and audited.
+  are the same 403. The link itself is `employments.assign`: high-risk and audited,
+  and bound to the employee's own profile (see "Known phase-1 posture").
 - **High-risk actions** (`create`, terms change, `assign`, `delete`, `restore`,
   `configure`) require an `Idempotency-Key` and are audited without any name,
   title, number or reason; the one identifier they carry is the login's UUID on
@@ -297,16 +298,33 @@ Open (tracked, not hidden):
   lifecycle (soft delete, then a purge after the employer's retention period) but
   nothing purges; archive-then-purge for HR rows is a follow-up.
 
-Known phase-1 posture (documented, no further code in this PR):
+Known phase-1 posture:
 
-- **The `assign` link is not bound to the employee.** Nothing proves the login
-  being linked is the person the employment is about. A holder of `assign` can
-  link their OWN login to any employment and then read it through the ownership
-  grant. The control is the permission itself (high-risk, audited, idempotent,
-  never granted to a role by default): the audit row records WHICH login received
-  ownership (`linkedTenantUserId`, a UUID, and the previous one) so a misuse is
-  attributable, and a tenant may author an SoD rule over `assign`. There is no
-  step-up.
+- **The `assign` link is bound to the employee (finding PS-14, Issue #979).**
+  The ownership grant is the key to "an employee sees their own" and, in phase 3,
+  to payslips, so the link is no longer just a permission. (1) A caller cannot
+  link their OWN login to another person's employment (`403 SELF_LINK_FORBIDDEN`).
+  (2) The linked tenant user's identity must carry the employment's `profile_id`
+  (`422 PROFILE_MISMATCH`); the match is exact and fail-closed, so a profile that
+  was merged away on either side must be re-pointed first. Because an employee
+  and a login of the same person share a profile, linking your own login to your
+  own employment still works. (3) A re-link (changing or removing an existing
+  link) is audited at `critical` (a first link stays `warning`) with the before
+  and after login UUIDs and no free text, and, when the employment already has
+  attendance events, needs the CONDITIONAL step-up of ADR-0141 section 4: a
+  caller with no enrolled factor is not locked out (the audit row records
+  `stepUp: "not_enrolled"`), an enrolled caller with a stale session gets
+  `403 STEP_UP_REQUIRED`. Refusals are not stored under the Idempotency-Key, so
+  the same key succeeds after a step-up. Further hardening: the three refusals each write an `account_link_refused` audit
+  row (reason code and UUIDs only; the refusal is a returned `Response`, so the
+  transaction commits and the row survives); a repeat "link the same login"
+  re-validates the login rather than echoing a pre-fix link as `200`; the login's
+  identity must be `active`; an employment that was EVER linked
+  (`last_tenant_user_id`, `sql/228`) stays a re-link after an unlink; the
+  `awcms_hr_employments_link_guard` trigger refuses a mismatched login in the
+  database; and the `security:readiness` warning "Employment account links belong
+  to the employment's person" lists links made before the fix. Still open for #961: "released payslips"
+  join the history test, and the former owner is revoked from payslips there.
 - **`employments.read` is tenant-wide.** No `office` business scope bounds it
   in phase 1; per-office and per-manager reads (design-pack scenarios S4 and S6)
   need the scope adapter and a `manager_of` ownership reason, both later issues.

@@ -642,20 +642,131 @@ export type AssignAccountOutcome =
   | { outcome: "deleted" }
   | { outcome: "terminated" }
   | { outcome: "user_not_found" }
-  | { outcome: "account_in_use" };
+  | { outcome: "self_link_forbidden" }
+  | { outcome: "profile_mismatch" }
+  | { outcome: "account_in_use" }
+  | { outcome: "step_up_required" };
+
+/**
+ * The result of the caller-supplied conditional step-up check (ADR-0141 §4):
+ * `satisfied` (enrolled, fresh), `not_enrolled` (no second factor exists, so
+ * none is demanded — recorded in the audit row), or `required` (enrolled but
+ * stale: refuse).
+ */
+export type StepUpState = "satisfied" | "not_enrolled" | "required";
+
+export type AssignAccountContext = {
+  /**
+   * Evaluates the CONDITIONAL step-up for the calling session. Injected so the
+   * application layer holds no session or Response knowledge, and called only
+   * when the change is a re-link of an employment that has history.
+   */
+  checkStepUp: () => Promise<StepUpState>;
+};
+
+type LinkTargetVerdict =
+  "user_not_found" | "self_link_forbidden" | "profile_mismatch" | null;
+
+/**
+ * The rules a login must satisfy to be (or stay) the employee's: an ACTIVE login
+ * (tenant user and identity both) that belongs to the employment's person. Run
+ * on the no-op path too, so a link made before PS-14 was fixed is re-checked
+ * instead of being echoed back as `200`.
+ */
+async function checkLinkTarget(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  employmentProfileId: string | undefined,
+  actorTenantUserId: string | null
+): Promise<LinkTargetVerdict> {
+  const user = (await tx`
+    SELECT i.profile_id FROM awcms_tenant_users tu
+    JOIN awcms_identities i
+      ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
+    WHERE tu.tenant_id = ${tenantId} AND tu.id = ${tenantUserId}
+      AND tu.status = 'active' AND tu.principal_kind = 'user'
+      AND i.status = 'active'
+  `) as { profile_id: string | null }[];
+
+  if (user.length === 0) {
+    return "user_not_found";
+  }
+
+  if (user[0]!.profile_id === employmentProfileId) {
+    return null;
+  }
+
+  // Checked before the generic profile rule so the caller learns the specific
+  // reason. A self-link to the caller's OWN employment (same profile) passes.
+  return tenantUserId === actorTenantUserId
+    ? "self_link_forbidden"
+    : "profile_mismatch";
+}
+
+/**
+ * A refused link leaves a trace (PS-14, audit M3): UUIDs and a reason code only.
+ * The caller returns the refusal as a normal `Response`, not a throw, so the
+ * transaction COMMITS and this row survives — the same property that lets the
+ * ABAC decision log keep a deny.
+ */
+async function recordLinkRefusal(
+  tx: Bun.SQL,
+  tenantId: string,
+  employmentId: string,
+  actor: Actor,
+  reason: "self_link_forbidden" | "profile_mismatch" | "step_up_required",
+  requestedTenantUserId: string | null,
+  previousTenantUserId: string | null
+): Promise<void> {
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId: actor.actorTenantUserId ?? undefined,
+    moduleKey: HR_WORKFORCE_MODULE_KEY,
+    action: "hr_workforce.employment.account_link_refused",
+    resourceType: "hr_employment",
+    resourceId: employmentId,
+    severity: "warning",
+    message: "Employment account link refused.",
+    attributes: { reason, requestedTenantUserId, previousTenantUserId },
+    correlationId: actor.correlationId
+  });
+}
 
 /**
  * Link (or unlink with `null`) the login that IS this employee. This is the
- * basis of self-service ownership, so it is a high-risk `assign`, audited at
- * `warning`, and the audit row records the login's UUID (not PII) and the
- * previous one, so a misuse is attributable.
+ * basis of self-service ownership (and, in phase 3, of payslip ownership), so
+ * it is a high-risk `assign` — finding PS-14 of the phase-3 security review
+ * (`docs/awcms/hr-payroll.md` §17, Issue #979):
+ *
+ * 1. **No self-link to another person's employment.** Whoever holds `assign`
+ *    could otherwise link their OWN login to a colleague's employment and read
+ *    that person's own-scoped data. Refused as `self_link_forbidden`.
+ * 2. **The login must belong to the employment's person.** The linked tenant
+ *    user's identity must carry the employment's `profile_id` (exact match;
+ *    fail-closed, so a profile merged away from either side must be re-pointed
+ *    before linking). Refused as `profile_mismatch`.
+ * 3. **A re-link is not a first link.** Changing or removing an existing link
+ *    is audited at `critical` with the before/after login UUIDs (no free
+ *    text), and, when the employment already has attendance history (later also
+ *    released payslips), requires the CONDITIONAL step-up: a holder with no
+ *    second factor is not locked out (ADR-0141 §4), and the audit row records
+ *    which case applied. A first link stays `warning`; an employment that has
+ *    EVER been linked (`last_tenant_user_id`) counts as re-linked, so
+ *    unlink-then-link keeps the critical level.
+ * 4. **Refusals and stale links leave a trace / are re-checked.** The three
+ *    PS-14 refusals write an `account_link_refused` audit row (reason code and
+ *    UUIDs only); a no-op "link the same login" re-validates the login instead
+ *    of echoing a pre-fix link back as `200`; and `awcms_hr_employments_link_guard`
+ *    (`sql/228`) refuses a mismatched login in the database as well.
  */
 export async function assignAccount(
   tx: Bun.SQL,
   tenantId: string,
   employmentId: string,
   actor: Actor,
-  tenantUserId: string | null
+  tenantUserId: string | null,
+  context: AssignAccountContext
 ): Promise<AssignAccountOutcome> {
   const header = await lockHeader(tx, tenantId, employmentId);
 
@@ -668,11 +779,46 @@ export async function assignAccount(
   }
 
   const existing = (await tx`
-    SELECT tenant_user_id FROM awcms_hr_employments
+    SELECT tenant_user_id, last_tenant_user_id, profile_id
+    FROM awcms_hr_employments
     WHERE tenant_id = ${tenantId} AND id = ${employmentId}
-  `) as { tenant_user_id: string | null }[];
+  `) as {
+    tenant_user_id: string | null;
+    last_tenant_user_id: string | null;
+    profile_id: string;
+  }[];
+  const employmentProfileId = existing[0]?.profile_id;
+  const currentTenantUserId = existing[0]?.tenant_user_id ?? null;
+  const lastTenantUserId = existing[0]?.last_tenant_user_id ?? null;
 
-  if ((existing[0]?.tenant_user_id ?? null) === tenantUserId) {
+  if (currentTenantUserId === tenantUserId) {
+    if (tenantUserId !== null) {
+      // A link that predates PS-14 may be wrong: re-validate rather than echo it.
+      const stale = await checkLinkTarget(
+        tx,
+        tenantId,
+        tenantUserId,
+        employmentProfileId,
+        actor.actorTenantUserId
+      );
+
+      if (stale !== null) {
+        if (stale !== "user_not_found") {
+          await recordLinkRefusal(
+            tx,
+            tenantId,
+            employmentId,
+            actor,
+            stale,
+            tenantUserId,
+            currentTenantUserId
+          );
+        }
+
+        return { outcome: stale };
+      }
+    }
+
     return {
       outcome: "ok",
       replayed: true,
@@ -685,14 +831,28 @@ export async function assignAccount(
   }
 
   if (tenantUserId !== null) {
-    const user = (await tx`
-      SELECT 1 AS present FROM awcms_tenant_users
-      WHERE tenant_id = ${tenantId} AND id = ${tenantUserId}
-        AND status = 'active' AND principal_kind = 'user'
-    `) as { present: number }[];
+    const verdict = await checkLinkTarget(
+      tx,
+      tenantId,
+      tenantUserId,
+      employmentProfileId,
+      actor.actorTenantUserId
+    );
 
-    if (user.length === 0) {
-      return { outcome: "user_not_found" };
+    if (verdict !== null) {
+      if (verdict !== "user_not_found") {
+        await recordLinkRefusal(
+          tx,
+          tenantId,
+          employmentId,
+          actor,
+          verdict,
+          tenantUserId,
+          currentTenantUserId ?? lastTenantUserId
+        );
+      }
+
+      return { outcome: verdict };
     }
 
     const inUse = (await tx`
@@ -707,10 +867,47 @@ export async function assignAccount(
     }
   }
 
+  // "Ever linked" (audit L4): an unlink-then-link is still a RE-link, so the
+  // last login is kept in `last_tenant_user_id` and recorded as the "before".
+  const previousTenantUserId = currentTenantUserId ?? lastTenantUserId;
+  const relink = previousTenantUserId !== null;
+  let hasHistory = false;
+  let stepUp: StepUpState | "not_applicable" = "not_applicable";
+
+  if (relink) {
+    // Phase 3 (#961) adds "released payslips" to this test.
+    const history = (await tx`
+      SELECT 1 AS present FROM awcms_hr_attendance_events
+      WHERE tenant_id = ${tenantId} AND employment_id = ${employmentId}
+      LIMIT 1
+    `) as { present: number }[];
+
+    hasHistory = history.length > 0;
+
+    if (hasHistory) {
+      stepUp = await context.checkStepUp();
+
+      if (stepUp === "required") {
+        await recordLinkRefusal(
+          tx,
+          tenantId,
+          employmentId,
+          actor,
+          "step_up_required",
+          tenantUserId,
+          previousTenantUserId
+        );
+
+        return { outcome: "step_up_required" };
+      }
+    }
+  }
+
   await tx`
     UPDATE awcms_hr_employments
-    SET tenant_user_id = ${tenantUserId}, updated_at = now(),
-        updated_by = ${actor.actorTenantUserId}
+    SET tenant_user_id = ${tenantUserId},
+        last_tenant_user_id = ${currentTenantUserId ?? lastTenantUserId},
+        updated_at = now(), updated_by = ${actor.actorTenantUserId}
     WHERE tenant_id = ${tenantId} AND id = ${employmentId}
   `;
 
@@ -721,18 +918,22 @@ export async function assignAccount(
     action: "hr_workforce.employment.account_assigned",
     resourceType: "hr_employment",
     resourceId: employmentId,
-    severity: "warning",
-    message:
-      tenantUserId === null
+    severity: relink ? "critical" : "warning",
+    message: relink
+      ? tenantUserId === null
         ? "Employment account link removed."
-        : "Employment account link set.",
-    // The login that received (or lost) ownership is a UUID, not personal data,
-    // and is exactly what an auditor needs: WHICH login can now read this
-    // employment through the ownership grant.
+        : "Employment account re-linked."
+      : "Employment account link set.",
+    // The logins that received (or lost) ownership are UUIDs, not personal
+    // data, and are exactly what an auditor needs: WHICH login can now read
+    // this employment through the ownership grant. Never free text.
     attributes: {
       linked: tenantUserId !== null,
+      relink,
       linkedTenantUserId: tenantUserId,
-      previousTenantUserId: existing[0]?.tenant_user_id ?? null
+      previousTenantUserId,
+      hadHistory: hasHistory,
+      stepUp
     },
     correlationId: actor.correlationId
   });

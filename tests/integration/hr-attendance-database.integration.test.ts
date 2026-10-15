@@ -1233,11 +1233,21 @@ suite("hr_workforce attendance database invariants (Issue #947)", () => {
   });
 
   describe("segregation of duties: the employee the correction is about is never the approver either", () => {
+    // These tests are about the SoD triggers, not the link rules, and use
+    // arbitrary logins: take the PS-14 link guard (#979, covered by the
+    // hr_workforce database tests) out of the way for the write.
     async function linkLogin(employmentId: string, login: string | null) {
-      await getAdminSql()`
-        UPDATE awcms_hr_employments SET tenant_user_id = ${login}
-        WHERE id = ${employmentId}
-      `;
+      const admin = getAdminSql();
+      await admin`ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard`;
+
+      try {
+        await admin`
+          UPDATE awcms_hr_employments SET tenant_user_id = ${login}
+          WHERE id = ${employmentId}
+        `;
+      } finally {
+        await admin`ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard`;
+      }
     }
 
     async function subjectOf(correctionId: string) {

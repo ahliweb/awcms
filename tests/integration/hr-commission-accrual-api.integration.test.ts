@@ -269,13 +269,21 @@ async function seedEmployment(tenantUserId: string | null): Promise<string> {
     VALUES (${env.tenantId}, 'person', ${`Employee ${employmentCounter}`})
     RETURNING id
   `) as { id: string }[];
-  const found = (await sql`
-    INSERT INTO awcms_hr_employments
-      (tenant_id, profile_id, employee_no, hired_on, tenant_user_id)
-    VALUES (${env.tenantId}, ${profile[0]!.id}, ${`E-${employmentCounter}`},
-            '2026-01-01', ${tenantUserId})
-    RETURNING id
-  `) as { id: string }[];
+  // Arbitrary logins here; the PS-14 link guard (#979) is bypassed for the insert.
+  await sql`ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard_insert`;
+  let found: { id: string }[];
+
+  try {
+    found = (await sql`
+      INSERT INTO awcms_hr_employments
+        (tenant_id, profile_id, employee_no, hired_on, tenant_user_id)
+      VALUES (${env.tenantId}, ${profile[0]!.id}, ${`E-${employmentCounter}`},
+              '2026-01-01', ${tenantUserId})
+      RETURNING id
+    `) as { id: string }[];
+  } finally {
+    await sql`ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard_insert`;
+  }
 
   return found[0]!.id;
 }

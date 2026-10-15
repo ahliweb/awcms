@@ -1167,7 +1167,7 @@ Tracked downstream in `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. Th
 > the design as written** (this pack, ADR-0132, ADR-0136, ADR-0137, ADR-0138)
 > against the security review prompt of doc 12 (secrets, auth, tenant context,
 > ABAC default-deny, RLS, audit, idempotency, masking, safe errors) and the
-> threat table of §13.1. **No payroll code exists (phase 1 employment link excepted, PS-14), so nothing here is a test result.**
+> threat table of §13.1. **No payroll code exists (phase 1 employment link excepted, PS-14), so nothing here is a test result. PS-14 is the one finding with code: the phase 1 link now refuses a self-link to another person's employment, requires the login's profile to match, and treats a re-link as `critical` with a conditional step-up when history exists (#979); only its payslip half (revoking the former owner, `404` on another user's payslip) remains for #961.**
 > The legal half needs human counsel and is a checklist (§17.3) with a blank
 > sign-off (§17.4). **#957 and every later payroll implementation issue stay
 > blocked until (a) counsel signs §17.4 and (b) the blocking findings of §17.2

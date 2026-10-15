@@ -3322,6 +3322,96 @@ export async function checkPlatformTenantIdentifiable(): Promise<SecurityCheckRe
   }
 }
 
+/**
+ * Employments whose linked login belongs to a DIFFERENT person than the
+ * employment (Issue #979, finding PS-14). The application and the
+ * `awcms_hr_employments_link_guard` trigger now refuse such a link, but a link
+ * made before that fix is never re-checked by either, and it is exactly the one
+ * that lets a login read someone else's own-scoped data (and, in phase 3,
+ * payslips). Returns employment ids only: no name, number or login.
+ */
+export async function reportMismatchedEmploymentLinks(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<string[]> {
+  const rows = (await tx`
+    SELECT e.id FROM awcms_hr_employments e
+    JOIN awcms_tenant_users tu
+      ON tu.tenant_id = e.tenant_id AND tu.id = e.tenant_user_id
+    JOIN awcms_identities i
+      ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
+    WHERE e.tenant_id = ${tenantId} AND e.deleted_at IS NULL
+      AND i.profile_id IS DISTINCT FROM e.profile_id
+    ORDER BY e.id
+  `) as { id: string }[];
+
+  return rows.map((row) => row.id);
+}
+
+/**
+ * `warning`, not `critical`: it reports data that already exists, it does not
+ * decide, and a critical would block a deploy over rows an operator fixes by
+ * unlinking (`PUT .../employments/{id}/account` with `null`). One transaction
+ * per active tenant, uncapped scan, ids capped only in the evidence text — the
+ * reasons are `checkMfaRequiredPermissionHolders`'s. Passes loudly.
+ */
+export async function checkHrEmploymentLinksMatchProfile(): Promise<SecurityCheckResult> {
+  const name = "Employment account links belong to the employment's person";
+  const severity: CheckSeverity = "warning";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const tenants = (await sql`
+      SELECT id FROM awcms_tenants WHERE status = 'active' ORDER BY id
+    `) as { id: string }[];
+    const flagged: string[] = [];
+    let total = 0;
+
+    for (const tenant of tenants) {
+      const ids = await withTenantOrThrow(
+        sql,
+        tenant.id,
+        (tx) => reportMismatchedEmploymentLinks(tx, tenant.id),
+        { workClass: "maintenance" }
+      );
+
+      if (ids.length > 0) {
+        total += ids.length;
+        flagged.push(
+          `tenant ${tenant.id}: ${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ` …and ${ids.length - 5} more` : ""}`
+        );
+      }
+    }
+
+    if (flagged.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${total} employment(s) are linked to a login of a DIFFERENT person (ids only): ${flagged.slice(0, 20).join("; ")}. Each lets that login read the employment through the ownership grant. Unlink it with PUT /api/v1/hr-workforce/employments/{id}/account {"tenantUserId": null} (critical-audited) and re-link the right login. Issue #979 / PS-14.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `${tenants.length} active tenant(s) scanned; every linked employment's login belongs to the employment's person.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify employment account links: ${errorMessage(error)}.`
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
@@ -3354,6 +3444,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkSsoBreakGlassReady(),
     checkMfaEnrolmentAvailableForRequiredPermissions(),
     await checkMfaRequiredPermissionHolders(),
+    await checkHrEmploymentLinksMatchProfile(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt(),
