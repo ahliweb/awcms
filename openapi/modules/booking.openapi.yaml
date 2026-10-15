@@ -1229,6 +1229,232 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /api/v1/booking/blocks:
+    get:
+      operationId: bookingBlocksList
+      tags:
+        - Booking
+      summary: List blocked nights
+      description: "Gated by `booking.blocks.read`. Newest first, keyset paginated (`cursor`). Filters: `resourceId`, `unitId`, `status`. A block carries ids, local dates and a closed reason code -- no free text and no customer reference. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: resourceId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: unitId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - released
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of blocks.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      blocks:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BookingBlock"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: bookingBlockCreate
+      tags:
+        - Booking
+      summary: Block nights of a stay resource
+      description: "Gated by `booking.blocks.create` (high-impact: it removes sellable inventory). Takes the half-open local date range `[fromDate, toDate)` (at most 366 nights, dates in the resource's zone) of ONE unit (`unitId`) or EVERY unit (absent or null) out of sale, for a closed `reasonCode`. A block is a HARD exclusion under the same constraint as a guest's nights: all-or-none, it never cancels a reservation, and a night already held by a live stay or another block is `409 BLOCK_CONFLICT` and writes nothing. `error.details.conflicts` names the conflicting reservations (number, status, dates; never a customer reference) and blocks only to a caller who ALSO holds `booking.reservations.read`. A resource-wide block also covers units added to the resource later. Elapsed, unswept holds on the covered units are expired first (lazy reclaim). Requires an Idempotency-Key; replaying it returns the stored response and never `BLOCK_CONFLICT` about its own block. Audited at warning severity (`booking.block.created`). Publishes no domain event in v1."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingBlockInput"
+      responses:
+        "201":
+          description: The block, with the units holding its nights.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BookingBlockResult"
+                  meta:
+                    type: object
+        "400":
+          description: "VALIDATION_ERROR, or STAY_DATES_INVALID (a malformed or out-of-order date, more than 366 nights, or a date the resource's zone does not have)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: "RESOURCE_NOT_FOUND or UNIT_NOT_FOUND."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: "BLOCK_CONFLICT (a live stay or another block holds a night; nothing was cancelled), BOOKING_MODE_MISMATCH (a slot resource has schedule exceptions instead), CONTENTION_RETRY or IDEMPOTENCY_CONFLICT."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/blocks/{id}:
+    get:
+      operationId: bookingBlockGet
+      tags:
+        - Booking
+      summary: Read one block
+      description: "Gated by `booking.blocks.read`. An unknown id and another tenant's id are the same `404 BLOCK_NOT_FOUND`."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The block.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      block:
+                        $ref: "#/components/schemas/BookingBlock"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: "BLOCK_NOT_FOUND (an unknown id and another tenant's id are the same answer)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/booking/blocks/{id}/release:
+    post:
+      operationId: bookingBlockRelease
+      tags:
+        - Booking
+      summary: Release a block and return its nights to sale
+      description: "Gated by `booking.blocks.release`. The block is locked and the database releases its allocation rows in the same statement, stamping the block's own release instant on them. Releasing an already released block returns it with `replayed: true` and writes nothing. The body is empty. Requires an Idempotency-Key; replaying it returns the stored response. Audited at info severity (`booking.block.released`). Publishes no domain event in v1."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: "The released block, or unchanged with `replayed: true` when it was already released."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/BookingBlockResult"
+                      - type: object
+                        properties:
+                          releasedAllocations:
+                            type: integer
+                            description: Allocation rows released by THIS call (0 on a replay).
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: "BLOCK_NOT_FOUND (an unknown id and another tenant's id are the same answer)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: "IDEMPOTENCY_CONFLICT."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     BookingLocalWindow:
@@ -2077,3 +2303,102 @@ components:
               $ref: "#/components/schemas/BookingSuppressedNumber"
             noShowRate:
               $ref: "#/components/schemas/BookingSuppressedNumber"
+    BookingBlockInput:
+      type: object
+      additionalProperties: false
+      required:
+        - resourceId
+        - fromDate
+        - toDate
+        - reasonCode
+      properties:
+        resourceId:
+          type: string
+          format: uuid
+        unitId:
+          type: string
+          format: uuid
+          nullable: true
+          description: One unit of the resource; null or absent blocks every unit (including units added later).
+        fromDate:
+          type: string
+          format: date
+          description: First blocked night, a local date in the resource's zone.
+        toDate:
+          type: string
+          format: date
+          description: Exclusive end (the day the unit is back in sale); at most 366 nights after fromDate.
+        reasonCode:
+          type: string
+          enum:
+            - maintenance
+            - owner_use
+            - other
+    BookingBlock:
+      type: object
+      required:
+        - id
+        - resourceId
+        - unitId
+        - fromDate
+        - toDate
+        - nights
+        - reasonCode
+        - status
+        - releasedAt
+        - createdAt
+        - unitIds
+      properties:
+        id:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+        unitId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null = every unit of the resource.
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+        nights:
+          type: integer
+        reasonCode:
+          type: string
+          enum:
+            - maintenance
+            - owner_use
+            - other
+        status:
+          type: string
+          enum:
+            - active
+            - released
+        releasedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        unitIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Units holding a night of this block (the rows are kept after a release).
+    BookingBlockResult:
+      type: object
+      required:
+        - block
+        - replayed
+      properties:
+        block:
+          $ref: "#/components/schemas/BookingBlock"
+        replayed:
+          type: boolean

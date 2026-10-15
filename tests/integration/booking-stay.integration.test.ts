@@ -537,6 +537,62 @@ async function rawStayAllocation(
   return { reservationId: reservation[0]!.id, itemId: item[0]!.id };
 }
 
+/** Polls until a backend whose query matches `pattern` is waiting on a heavyweight lock. */
+async function waitForLockWait(pattern: string): Promise<void> {
+  const deadline = Date.now() + 5000;
+
+  while (Date.now() < deadline) {
+    const rows = (await getAdminSql()`
+      SELECT count(*)::int AS n
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND wait_event_type = 'Lock'
+        AND query ILIKE ${`%${pattern}%`}
+    `) as { n: number }[];
+
+    if (rows[0]!.n > 0) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(`nothing waited on a lock inside "${pattern}"`);
+}
+
+async function addUnit(
+  tx: Bun.SQL,
+  tenantId: string,
+  resourceId: string,
+  ordinal: number
+): Promise<string> {
+  const rows = (await tx`
+    INSERT INTO awcms_booking_resource_units (tenant_id, resource_id, ordinal)
+    VALUES (${tenantId}, ${resourceId}, ${ordinal})
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows[0]!.id;
+}
+
+/** Units of a resource that hold NO live row of an active resource-wide block over them. */
+async function uncoveredUnits(resourceId: string): Promise<number> {
+  const rows = (await getAdminSql()`
+    SELECT count(*)::int AS n
+    FROM awcms_booking_resource_blocks b
+    JOIN awcms_booking_resource_units u
+      ON u.tenant_id = b.tenant_id AND u.resource_id = b.resource_id
+    WHERE b.resource_id = ${resourceId} AND b.resource_unit_id IS NULL
+      AND b.status = 'active'
+      AND NOT EXISTS (
+        SELECT 1 FROM awcms_booking_resource_allocations a
+        WHERE a.tenant_id = b.tenant_id AND a.block_id = b.id
+          AND a.resource_unit_id = u.id AND a.released_at IS NULL)
+  `) as { n: number }[];
+
+  return rows[0]!.n;
+}
+
 const suite = integrationEnabled ? describe : describe.skip;
 
 suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
@@ -2245,9 +2301,18 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
           "ALTER TABLE awcms_booking_resource_blocks ENABLE TRIGGER awcms_booking_resource_blocks_release_nights"
         );
       });
-      // 2. A unit added after the block was placed.
-      await admin`INSERT INTO awcms_booking_resource_units (tenant_id, resource_id, ordinal)
-                  VALUES (${tenantId}, ${growing.resourceId}, 3)`;
+      // 2. A unit added after the block was placed, BEHIND the cover trigger of
+      //    sql/240 (through it the unit is covered: see "Issue #1012").
+      await admin.begin(async (tx) => {
+        await tx.unsafe(
+          "ALTER TABLE awcms_booking_resource_units DISABLE TRIGGER awcms_booking_resource_units_cover_blocks"
+        );
+        await tx`INSERT INTO awcms_booking_resource_units (tenant_id, resource_id, ordinal)
+                 VALUES (${tenantId}, ${growing.resourceId}, 3)`;
+        await tx.unsafe(
+          "ALTER TABLE awcms_booking_resource_units ENABLE TRIGGER awcms_booking_resource_units_cover_blocks"
+        );
+      });
       // 3. A row whose dates drifted from its block's.
       await admin.begin(async (tx) => {
         await tx.unsafe(
@@ -2278,6 +2343,289 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
         count: 1
       });
       expect(report.drift).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe("Issue #1012 -- follow-ups of the #940 review", () => {
+    describe("N1 -- a resource-wide block covers units added later (sql/240)", () => {
+      test("a unit added afterwards gets its block row, cannot be booked, and is released with the block", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 2 });
+        const blockId = await placedBlock(
+          TENANT_A,
+          blockOf(fixture, D(10), D(14))
+        );
+
+        expect(await liveBlockRows(blockId)).toBe(2);
+
+        const added = await tenantTx(TENANT_A, (tx) =>
+          addUnit(tx, TENANT_A, fixture.resourceId, 3)
+        );
+
+        expect(await liveBlockRows(blockId)).toBe(3);
+        expect(await uncoveredUnits(fixture.resourceId)).toBe(0);
+
+        // Availability said BLOCKED for the unit and now the claim agrees.
+        expect(
+          await place(TENANT_A, stayClaim(fixture, D(11), D(12)))
+        ).toMatchObject({ outcome: "refused", code: "SLOT_UNAVAILABLE" });
+        // The added unit specifically: it holds a live block row of its own.
+        const addedRows = (await getAdminSql()`
+          SELECT count(*)::int AS n
+          FROM awcms_booking_resource_allocations
+          WHERE block_id = ${blockId} AND resource_unit_id = ${added}
+            AND released_at IS NULL
+        `) as { n: number }[];
+
+        expect(addedRows[0]!.n).toBe(1);
+
+        const report = await tenantTx(TENANT_A, (tx) =>
+          runReconciliation(tx, TENANT_A)
+        );
+
+        expect(
+          report.findings
+            .filter((finding) => finding.check === "block_missing_allocation")
+            .map((finding) => finding.sampleIds ?? [])
+            .flat()
+        ).not.toContain(blockId);
+
+        const released = await tenantTx(TENANT_A, (tx) =>
+          releaseBlock(tx, ctxOf(TENANT_A), blockId)
+        );
+
+        expect(released).toMatchObject({
+          outcome: "ok",
+          replayed: false,
+          releasedAllocations: 3
+        });
+        expect(await liveBlockRows(blockId)).toBe(0);
+        expect(
+          (await place(TENANT_A, stayClaim(fixture, D(11), D(12)))).outcome
+        ).toBe("ok");
+      });
+
+      test("only ACTIVE RESOURCE-WIDE blocks of THAT resource extend: a unit block, a released block and another resource's block do not", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 2 });
+        const other = await newFixture(TENANT_A, { capacity: 1 });
+        const unitBlock = await placedBlock(
+          TENANT_A,
+          blockOf(fixture, D(10), D(12), { unitId: fixture.unitIds[0]! })
+        );
+        const releasedWide = await placedBlock(
+          TENANT_A,
+          blockOf(fixture, D(20), D(22))
+        );
+        const otherBlock = await placedBlock(
+          TENANT_A,
+          blockOf(other, D(10), D(12))
+        );
+        const wide = await placedBlock(
+          TENANT_A,
+          blockOf(fixture, D(25), D(27))
+        );
+
+        await tenantTx(TENANT_A, (tx) =>
+          releaseBlock(tx, ctxOf(TENANT_A), releasedWide)
+        );
+        await tenantTx(TENANT_A, (tx) =>
+          addUnit(tx, TENANT_A, fixture.resourceId, 3)
+        );
+
+        expect(await liveBlockRows(unitBlock)).toBe(1);
+        expect(await liveBlockRows(releasedWide)).toBe(0);
+        expect(await liveBlockRows(otherBlock)).toBe(1);
+        expect(await liveBlockRows(wide)).toBe(3);
+      });
+
+      test("a unit added to ANOTHER TENANT's resource is untouched by this tenant's blocks (RLS)", async () => {
+        const mine = await newFixture(TENANT_A, { capacity: 1 });
+        const theirs = await newFixture(TENANT_B, { capacity: 1 });
+        const theirBefore = await blockCount(TENANT_B);
+        const myBlock = await placedBlock(
+          TENANT_A,
+          blockOf(mine, D(10), D(12))
+        );
+
+        await tenantTx(TENANT_B, (tx) =>
+          addUnit(tx, TENANT_B, theirs.resourceId, 2)
+        );
+
+        expect(await liveBlockRows(myBlock)).toBe(1);
+        expect(await blockCount(TENANT_B)).toBe(theirBefore);
+      });
+
+      test("a unit insert that commits FIRST is read by the block (the block waits for the resource lock)", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 2 });
+        const unitTx = openTransaction(TENANT_A, (tx) =>
+          addUnit(tx, TENANT_A, fixture.resourceId, 3)
+        );
+
+        await unitTx.opened;
+
+        let outcome: unknown = "pending";
+        const blocking = block(TENANT_A, blockOf(fixture, D(10), D(12))).then(
+          (result) => {
+            outcome = result;
+          }
+        );
+
+        await waitForLockWait("INSERT INTO awcms_booking_resource_blocks");
+        expect(outcome).toBe("pending");
+
+        await unitTx.commit();
+        await blocking;
+
+        expect(outcome).toMatchObject({ outcome: "ok" });
+        expect(await liveAllocations(fixture.resourceId)).toBe(3);
+        expect(await uncoveredUnits(fixture.resourceId)).toBe(0);
+      });
+
+      test("a unit insert that arrives while a block is UNCOMMITTED waits for it, then is covered", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 2 });
+        const blockTx = openTransaction(TENANT_A, (tx) =>
+          createBlock(tx, ctxOf(TENANT_A), blockOf(fixture, D(10), D(12)))
+        );
+
+        await blockTx.opened;
+
+        let done = false;
+        const adding = tenantTx(TENANT_A, (tx) =>
+          addUnit(tx, TENANT_A, fixture.resourceId, 3)
+        ).then(() => {
+          done = true;
+        });
+
+        await waitForLockWait("INSERT INTO awcms_booking_resource_units");
+        expect(done).toBe(false);
+
+        await blockTx.commit();
+        await adding;
+
+        expect(await liveAllocations(fixture.resourceId)).toBe(3);
+        expect(await uncoveredUnits(fixture.resourceId)).toBe(0);
+      });
+
+      test("a soak of blocks racing unit inserts leaves NO unit uncovered, in either order", async () => {
+        for (let round = 0; round < 15; round += 1) {
+          const fixture = await newFixture(TENANT_A, { capacity: 2 });
+          const outcomes = await race<unknown>([
+            () => block(TENANT_A, blockOf(fixture, D(10), D(12))),
+            () =>
+              tenantTx(TENANT_A, (tx) =>
+                addUnit(tx, TENANT_A, fixture.resourceId, 3)
+              ),
+            () =>
+              tenantTx(TENANT_A, (tx) =>
+                addUnit(tx, TENANT_A, fixture.resourceId, 4)
+              )
+          ]);
+
+          expect(outcomes[0]).toMatchObject({ outcome: "ok" });
+          expect(await uncoveredUnits(fixture.resourceId)).toBe(0);
+          expect(await liveAllocations(fixture.resourceId)).toBe(4);
+        }
+      });
+    });
+
+    describe("N3 -- lazy reclaim on a block targets only the covered unit(s)", () => {
+      async function unitOfReservation(reservationId: string) {
+        const rows = (await getAdminSql()`
+          SELECT a.resource_unit_id
+          FROM awcms_booking_reservation_items i
+          JOIN awcms_booking_resource_allocations a ON a.item_id = i.id
+          WHERE i.reservation_id = ${reservationId}
+        `) as { resource_unit_id: string }[];
+
+        return rows[0]!.resource_unit_id;
+      }
+
+      async function statusOf(reservationId: string): Promise<string> {
+        const rows = (await getAdminSql()`
+          SELECT status FROM awcms_booking_reservations WHERE id = ${reservationId}
+        `) as { status: string }[];
+
+        return rows[0]!.status;
+      }
+
+      test("a block of ONE unit expires the elapsed hold on that unit and leaves the elapsed hold on another unit for its own sweep", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 2 });
+        const a = await placedStay(TENANT_A, fixture, D(10), D(12));
+        const b = await placedStay(TENANT_A, fixture, D(10), D(12));
+
+        await backdateHold(a.reservationId);
+        await backdateHold(b.reservationId);
+
+        const target = await unitOfReservation(a.reservationId);
+
+        expect(await unitOfReservation(b.reservationId)).not.toBe(target);
+        expect(
+          (
+            await block(
+              TENANT_A,
+              blockOf(fixture, D(10), D(12), { unitId: target })
+            )
+          ).outcome
+        ).toBe("ok");
+        expect(await statusOf(a.reservationId)).toBe("expired");
+        // Elapsed, but on a unit this block does not cover: not this call's business.
+        expect(await statusOf(b.reservationId)).toBe("held");
+
+        const audit = (await getAdminSql()`
+          SELECT message, attributes
+          FROM awcms_audit_events
+          WHERE tenant_id = ${TENANT_A} AND action = 'booking.reservation.expired'
+            AND attributes->>'resourceId' = ${fixture.resourceId}
+        `) as { message: string; attributes: Record<string, unknown> }[];
+
+        expect(audit).toHaveLength(1);
+        expect(audit[0]!.message).toContain("block's unit(s)");
+        expect(audit[0]!.attributes).toMatchObject({
+          expiredCount: 1,
+          unitId: target,
+          trigger: "lazy_reclaim"
+        });
+      });
+
+      test("a resource-wide block covers every unit, so it reclaims the elapsed holds on all of them", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 2 });
+        const a = await placedStay(TENANT_A, fixture, D(10), D(12));
+        const b = await placedStay(TENANT_A, fixture, D(10), D(12));
+
+        await backdateHold(a.reservationId);
+        await backdateHold(b.reservationId);
+
+        expect(
+          (await block(TENANT_A, blockOf(fixture, D(10), D(12)))).outcome
+        ).toBe("ok");
+        expect(await statusOf(a.reservationId)).toBe("expired");
+        expect(await statusOf(b.reservationId)).toBe("expired");
+      });
+    });
+
+    describe("N4 -- one release instant for a block and its rows (sql/241)", () => {
+      test("the block's released_at equals every one of its rows' released_at, to the microsecond", async () => {
+        const fixture = await newFixture(TENANT_A, { capacity: 4 });
+        const blockId = await placedBlock(
+          TENANT_A,
+          blockOf(fixture, D(10), D(12))
+        );
+
+        await tenantTx(TENANT_A, (tx) =>
+          releaseBlock(tx, ctxOf(TENANT_A), blockId)
+        );
+
+        const rows = (await getAdminSql()`
+          SELECT count(*)::int AS n,
+                 count(DISTINCT a.released_at)::int AS instants,
+                 bool_and(a.released_at = b.released_at) AS same_as_block
+          FROM awcms_booking_resource_blocks b
+          JOIN awcms_booking_resource_allocations a
+            ON a.tenant_id = b.tenant_id AND a.block_id = b.id
+          WHERE b.id = ${blockId}
+        `) as { n: number; instants: number; same_as_block: boolean }[];
+
+        expect(rows[0]).toEqual({ n: 4, instants: 1, same_as_block: true });
+      });
     });
   });
 

@@ -25,7 +25,7 @@ claim service `placeHold` and the read-only reconciliation, plus the
 SECURITY DEFINER sweep of `sql/200` (the worker holds no privilege on the
 booking tables).
 
-Stays and blocks (Issue #940, `sql/204`): a stay is claimed through the same
+Stays and blocks (Issue #940, `sql/204`; block routes and follow-ups, Issue #1012, `sql/240`, `sql/241`): a stay is claimed through the same
 allocator and `placeHold` (`stay: { checkInDate, checkOutDate }`, the second
 exclusion constraint over dates), blocked nights are allocation rows owned by a
 `resource_blocks` row (`createBlock` / `releaseBlock`, `BLOCK_CONFLICT`), and
@@ -37,7 +37,9 @@ Reservations (Issue #941, `sql/208`, `sql/209`): the routes `POST/GET
 (`application/booking-reservation-service.ts`), `Idempotency-Key` through the
 shared component, the `BookingPort` (`application/booking-port-adapter.ts`), the
 nine reservation events on the live AsyncAPI document, and a safe default for the
-hold caps. **Not present yet:** the block routes (#1012), the reconciliation
+hold caps. The block routes (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
+`POST /blocks/{id}/release`) take `Idempotency-Key` with replay and publish no
+event. **Not present yet:** the reconciliation
 route and the admin screens (#942, which is what lets the module leave
 `experimental`).
 
@@ -225,6 +227,8 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
 | `application/booking-event-emit.ts`            | Outbox events from the one facts function, in the transition's transaction                      |
 | `application/booking-port-adapter.ts`          | The `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule   |
 | `application/booking-transition-route.ts`      | The handler body shared by the five in-place transition routes                                  |
+| `application/booking-block-routes.ts`          | The handler bodies of block create / release: `runIdempotent`, then the block service           |
+| `application/booking-block-directory.ts`       | Block reads for the routes: detail and keyset list                                              |
 | `domain/booking-reporting.ts`                  | The three reporting projection descriptors and why the event table is their source              |
 | `domain/booking-report.ts`                     | Pure report rules: Jakarta day windows, clipping, O8 statuses, small-group suppression          |
 | `application/booking-report-directory.ts`      | The only SQL of the report routes: aggregates only, tenant-scoped, no person                    |
@@ -233,9 +237,12 @@ Not in the schema yet and recorded as follow-ups: `service_requirements` and
 `staff_assignments` (booking.md section 4). `resource_blocks` arrived with
 Issue #938 and its allocation rows and writer with Issue #940 (`sql/204`); the
 HTTP routes for blocks (`blocks.read` / `.create` / `.release`, seeded by
-`sql/181`) are tracked in #1012 and arrive with the screens (#942). A resource-wide block
-covers the units that exist when it is placed; a unit added later is reported by
-the reconciliation (`block_missing_allocation`), not covered.
+`sql/181`) arrived with Issue #1012; the screens are #942. A resource-wide block
+covers every unit of the resource, including a unit added later (`sql/240`: an
+AFTER INSERT trigger on `resource_units` plus the resource lock in
+`readBlockUnits`); the reconciliation (`block_missing_allocation`) remains the
+detector for a write that bypassed the trigger. A block and its rows share one
+release instant (`sql/241`).
 
 Follow-ups recorded by the security audit of the foundation: the database
 still does not tie a status change to an event row (the expiry pass and the

@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 203   |
+| Migrations                          | 205   |
 | `awcms_*` tables                    | 215   |
 | Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 656   |
-| Route files                         | 540   |
+| Test files                          | 658   |
+| Route files                         | 543   |
 | ADR                                 | 286   |
 
 ### Modules
@@ -260,7 +260,9 @@
 | 200 | `sql/228_awcms_hr_employment_link_guard.sql`                       |
 | 201 | `sql/236_awcms_hr_commission_beneficiary_snapshot.sql`             |
 | 202 | `sql/237_awcms_hr_commission_sod_fail_closed.sql`                  |
-| 203 | `sql/244_awcms_booking_reporting_facts.sql`                        |
+| 203 | `sql/240_awcms_booking_block_unit_coverage.sql`                    |
+| 204 | `sql/241_awcms_booking_block_release_one_timestamp.sql`            |
+| 205 | `sql/244_awcms_booking_reporting_facts.sql`                        |
 
 ### Tables & Row-Level Security
 
@@ -486,16 +488,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 508        |
+| `(root)`      | 509        |
 | `e2e`         | 25         |
-| `integration` | 122        |
+| `integration` | 123        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 440   |
+| `/api/v1/**`    | 443   |
 | `/admin/**`     | 70    |
 | publik / anonim | 30    |
 

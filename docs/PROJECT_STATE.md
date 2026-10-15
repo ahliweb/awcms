@@ -119,7 +119,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                          | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                          | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Base modules                      | **33** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrations                        | **203** (`sql/001`–`244`)                                                                                                           | `ls sql/`                                                                               |
+| Migrations                        | **205** (`sql/001`–`244`)                                                                                                           | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0143** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
 | Admin screens                     | **69** `.astro` files in `src/pages/admin/`; **3 of 33** modules without `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **86** (52.320 lines) — on typechecking see §6                                                                                      | `find src -name '*.astro'`                                                              |
@@ -391,9 +391,9 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
-- **BOOKING BUILD-OUT — slices #937 to #941 landed; next #942 (the admin
-  screens, which are what lets the module leave `experimental`) and #1012 (the
-  block create/release routes).** #937 schema (`sql/180`, `sql/181`), #938
+- **BOOKING BUILD-OUT — slices #937 to #941 and #1012 (the block
+  create/release routes, `sql/240`/`sql/241`) landed; next #942 (the admin
+  screens, which are what lets the module leave `experimental`).** #937 schema (`sql/180`, `sql/181`), #938
   availability and schedules (`sql/186`), #939 the slot allocator, holds with
   expiry and the reconciliation (`sql/200`: `booking:holds:expire` runs as
   `awcms_worker` through a narrow SECURITY DEFINER sweep), #940 stays and blocked
@@ -416,7 +416,7 @@ pioneered directly here after the ADR-0047 freeze.)
   must take the per-tenant cap lock before counting; (4) the concurrency evidence
   is `booking-concurrency` / `booking-stay` (through `placeHold`), and
   `booking-reservation` / `booking-reservation-api` (through the transitions and
-  the real routes); (5) not built: `extend`, the block routes (#1012), the report
+  the real routes); (5) not built: `extend`, the report
   and reconciliation routes, `staff_assignments` (T8), the reporting projections.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 October 2026 (v10.7.0): #915–#918 done

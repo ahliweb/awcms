@@ -24,14 +24,16 @@
  * `placeHold` (`stay: { checkInDate, checkOutDate }`, `domain/booking-stay.ts`),
  * and blocked nights as allocation rows owned by `resource_blocks`
  * (`application/booking-block-service.ts`: `createBlock`, `releaseBlock`,
- * `BLOCK_CONFLICT`); and the RESERVATION slice (Issue #941): the routes
+ * `BLOCK_CONFLICT`) and, from Issue #1012, their routes (`POST/GET /blocks`,
+ * `GET /blocks/{id}`, `POST /blocks/{id}/release`, bound to `Idempotency-Key`,
+ * no event in v1); and the RESERVATION slice (Issue #941): the routes
  * `POST/GET /reservations`, `GET /reservations/{id}` and the transitions
  * `confirm`, `cancel`, `reschedule`, `check-in`, `check-out` and `no-show`
  * (`application/booking-reservation-service.ts`), `Idempotency-Key` through the
  * shared component, the `BookingPort` of cross-domain-contracts section 3
  * (`application/booking-port-adapter.ts`), the nine reservation events on the
  * live AsyncAPI document, and a safe DEFAULT for the hold caps. What does NOT
- * exist yet, deliberately: the HTTP routes for blocks (Issue #1012), the report
+ * exist yet, deliberately: the report
  * and reconciliation routes, the reporting projections and the admin screens
  * (Issue #942). The module therefore still ships `experimental` and declares no
  * `navigation`: a status ADR-0021 allows without an admin screen, and the one the
