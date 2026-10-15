@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 197   |
+| Migrations                          | 199   |
 | `awcms_*` tables                    | 215   |
 | Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 644   |
-| Route files                         | 529   |
+| Test files                          | 648   |
+| Route files                         | 537   |
 | ADR                                 | 284   |
 
 ### Modules
@@ -50,7 +50,7 @@
 | `procurement`          | 0.1.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `profile_identity`, `logging`, `domain_event_runtime`, `reporting`, `inventory` |
 | `hr_workforce`         | 0.1.0   | experimental | domain | no   | `tenant_admin`, `profile_identity`                                                                                 |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
-| `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
+| `booking`              | 0.1.0   | experimental | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
 | `hr_commission`        | 0.2.0   | experimental | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
@@ -251,10 +251,12 @@
 | 191 | `sql/199_awcms_hr_attendance_permissions.sql`                      |
 | 192 | `sql/200_awcms_booking_hold_expiry_sweep.sql`                      |
 | 193 | `sql/204_awcms_booking_stay_blocks.sql`                            |
-| 194 | `sql/216_awcms_telegram_delivery_schema.sql`                       |
-| 195 | `sql/217_awcms_telegram_delivery_bootstrap.sql`                    |
-| 196 | `sql/218_awcms_telegram_delivery_permissions.sql`                  |
-| 197 | `sql/224_awcms_sensitive_read_windows.sql`                         |
+| 194 | `sql/208_awcms_booking_reschedule_lineage.sql`                     |
+| 195 | `sql/209_awcms_booking_expiry_event_facts.sql`                     |
+| 196 | `sql/216_awcms_telegram_delivery_schema.sql`                       |
+| 197 | `sql/217_awcms_telegram_delivery_bootstrap.sql`                    |
+| 198 | `sql/218_awcms_telegram_delivery_permissions.sql`                  |
+| 199 | `sql/224_awcms_sensitive_read_windows.sql`                         |
 
 ### Tables & Row-Level Security
 
@@ -480,16 +482,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 502        |
+| `(root)`      | 504        |
 | `e2e`         | 25         |
-| `integration` | 116        |
+| `integration` | 118        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 429   |
+| `/api/v1/**`    | 437   |
 | `/admin/**`     | 70    |
 | publik / anonim | 30    |
 

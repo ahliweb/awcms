@@ -74,6 +74,16 @@
  *
  * Every write names `tenant_id` AND runs under RLS FORCE.
  */
+import {
+  databaseNowIso,
+  emitReservationEventFromFacts,
+  emitReservationEvents
+} from "./booking-event-emit";
+import {
+  parseReservationFacts,
+  type ReservationFacts
+} from "../domain/booking-reservation-events";
+
 type Sql = Bun.SQL;
 
 export type ExpiryTrigger = "reaper" | "lazy_reclaim";
@@ -83,6 +93,15 @@ export type ExpiryOutcome = {
   expired: number;
   /** Live allocations released with `released_reason = 'expired'`. */
   releasedAllocations: number;
+};
+
+/**
+ * What the REAPER learns about each hold it expired: its non-personal event
+ * facts, read by the sweep's own function (`sql/209`) because the worker may not
+ * read the booking tables. The job publishes the `expired` event from them.
+ */
+export type ReaperOutcome = ExpiryOutcome & {
+  expiredReservations: readonly ReservationFacts[];
 };
 
 export const NOTHING_EXPIRED: ExpiryOutcome = {
@@ -134,7 +153,8 @@ async function applyExpiry(
   tx: Sql,
   tenantId: string,
   ids: readonly string[],
-  trigger: ExpiryTrigger
+  trigger: ExpiryTrigger,
+  correlationId: string | undefined
 ): Promise<ExpiryOutcome> {
   if (ids.length === 0) {
     return NOTHING_EXPIRED;
@@ -187,9 +207,34 @@ async function applyExpiry(
     )
     SELECT (SELECT count(*) FROM expired)::int AS expired,
            (SELECT count(*) FROM released)::int AS released,
-           (SELECT count(*) FROM history)::int AS history
-  `) as { expired: number; released: number; history: number }[];
+           (SELECT count(*) FROM history)::int AS history,
+           (SELECT string_agg(id::text, ',') FROM expired) AS expired_ids
+  `) as {
+    expired: number;
+    released: number;
+    history: number;
+    expired_ids: string | null;
+  }[];
   const row = rows[0]!;
+
+  // The `expired` domain event, in this same transaction: a hold that expired
+  // because a claim wanted its units (lazy reclaim) is as expired as one the
+  // sweep found, and a consumer cancelling a pending order needs to hear both.
+  if (row.expired_ids) {
+    const occurredAt = await databaseNowIso(tx);
+
+    for (const id of row.expired_ids.split(",")) {
+      await emitReservationEvents(tx, tenantId, id, [
+        {
+          kind: "expired",
+          status: "expired",
+          previousStatus: "held",
+          occurredAt,
+          correlationId: correlationId ?? null
+        }
+      ]);
+    }
+  }
 
   return {
     expired: Number(row.expired),
@@ -212,20 +257,56 @@ export async function expireDueHolds(
   tx: Sql,
   tenantId: string,
   limit: number = EXPIRY_BATCH_LIMIT
-): Promise<ExpiryOutcome> {
+): Promise<ReaperOutcome> {
   const bounded = Math.max(1, Math.min(Math.floor(limit), 1000));
   const rows = (await tx`
-    SELECT expired_count, released_count
+    SELECT expired_reservation_id, released_allocations, event_facts
     FROM awcms_booking_expire_due_holds(${tenantId}::uuid, ${bounded}::integer)
-  `) as { expired_count: number; released_count: number }[];
-  const row = rows[0];
+  `) as {
+    expired_reservation_id: string;
+    released_allocations: number;
+    event_facts: unknown;
+  }[];
 
-  return row
-    ? {
-        expired: Number(row.expired_count),
-        releasedAllocations: Number(row.released_count)
-      }
-    : NOTHING_EXPIRED;
+  return {
+    expired: rows.length,
+    releasedAllocations: rows.reduce(
+      (sum, row) => sum + Number(row.released_allocations),
+      0
+    ),
+    expiredReservations: rows.map((row) =>
+      parseReservationFacts(row.event_facts)
+    )
+  };
+}
+
+/**
+ * Publishes the `expired` event for every hold the sweep expired. A plain
+ * outbox write in the sweep's own tenant transaction (the worker may use the
+ * outbox, `sql/022`), so a pass that fails after expiring rolls the expiry and
+ * its events back together and the next pass finds the same holds again.
+ */
+export async function emitReaperExpiredEvents(
+  tx: Sql,
+  tenantId: string,
+  outcome: ReaperOutcome,
+  correlationId: string
+): Promise<void> {
+  if (outcome.expiredReservations.length === 0) {
+    return;
+  }
+
+  const occurredAt = await databaseNowIso(tx);
+
+  for (const facts of outcome.expiredReservations) {
+    await emitReservationEventFromFacts(tx, tenantId, facts, {
+      kind: "expired",
+      status: "expired",
+      previousStatus: "held",
+      occurredAt,
+      correlationId
+    });
+  }
 }
 
 /**
@@ -324,7 +405,8 @@ export async function reclaimExpiredHolds(
   tenantId: string,
   resourceIds: readonly string[],
   window: ReclaimWindow,
-  batchLimit: number = RECLAIM_BATCH_LIMIT
+  batchLimit: number = RECLAIM_BATCH_LIMIT,
+  correlationId?: string
 ): Promise<ExpiryOutcome> {
   if (resourceIds.length === 0) {
     return NOTHING_EXPIRED;
@@ -354,7 +436,8 @@ export async function reclaimExpiredHolds(
       tx,
       tenantId,
       locked.map((row) => row.id),
-      "lazy_reclaim"
+      "lazy_reclaim",
+      correlationId
     );
 
     expired += outcome.expired;

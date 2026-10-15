@@ -41,8 +41,13 @@
       "version": "0.1.0",
       "status": "experimental",
       "type": null,
-      "dependencies": ["tenant_admin", "identity_access", "logging"],
-      "capabilitiesProvided": [],
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "domain_event_runtime"
+      ],
+      "capabilitiesProvided": ["booking"],
       "capabilitiesConsumed": [],
       "permissionCount": 32,
       "navigationCount": 0,

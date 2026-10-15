@@ -373,7 +373,7 @@ queued/sent/failed/suppressed/cancelled) — published through
 outbox write) and delivered by `bun run domain-events:dispatch` with
 per-order-key ordering, backoff, dead-letter + audited replay.
 
-A separate, **provisional** document, `asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml`, holds the schemas of events for modules that do not exist yet (booking, hr_payroll, WhatsApp delivery). It is not part of the live contract, is emitted by no code, and is gated by `bun run asyncapi:provisional:check`; an event lives in exactly one of the two files. See [`docs/awcms/cross-domain-contracts.md`](awcms/cross-domain-contracts.md).
+A separate, **provisional** document, `asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml`, holds the schemas of events for modules that do not exist yet (hr_payroll; the WhatsApp delivery events went live with Issue #963 and the nine booking reservation events with Issue #941). It is not part of the live contract, is emitted by no code, and is gated by `bun run asyncapi:provisional:check`; an event lives in exactly one of the two files. See [`docs/awcms/cross-domain-contracts.md`](awcms/cross-domain-contracts.md).
 
 ## Migration
 

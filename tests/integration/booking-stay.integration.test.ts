@@ -1887,7 +1887,7 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
         })
       );
 
-      expect(outcome).toEqual({ expired: 0, releasedAllocations: 0 });
+      expect(outcome).toMatchObject({ expired: 0, releasedAllocations: 0 });
 
       const forStay = await tenantTx(TENANT_A, (tx) =>
         reclaimExpiredHolds(tx, TENANT_A, [stay.resourceId], {
@@ -1897,7 +1897,7 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
         })
       );
 
-      expect(forStay).toEqual({ expired: 1, releasedAllocations: 1 });
+      expect(forStay).toMatchObject({ expired: 1, releasedAllocations: 1 });
     });
 
     test("the reaper (awcms_worker, through the narrow sweep) expires an elapsed stay hold, releases its nights, and leaves a block alone", async () => {
@@ -1918,7 +1918,7 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
         expireDueHolds(tx, tenantId)
       );
 
-      expect(outcome).toEqual({ expired: 1, releasedAllocations: 1 });
+      expect(outcome).toMatchObject({ expired: 1, releasedAllocations: 1 });
       expect(await liveBlockRows(blocked)).toBe(1);
 
       const rows = (await getAdminSql()`
@@ -1970,7 +1970,7 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
         return expireDueHolds(tx, tenantId);
       });
 
-      expect(outcome).toEqual({ expired: 2, releasedAllocations: 2 });
+      expect(outcome).toMatchObject({ expired: 2, releasedAllocations: 2 });
     });
 
     test("the sweep cannot release a block's nights: a block row is released only by releasing its block", async () => {
@@ -2394,8 +2394,11 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
       let blockedBookings = 0;
       let stayLive = 0;
       let blockLive = 0;
-      const raced = await newFixture(tenantId);
-      const blocked = await newFixture(tenantId);
+      // `immediate` offerings: a confirmed reservation takes no tenant cap lock
+      // (Issue #941). A held claim would, by design, make B wait for A's commit on
+      // that lock, and this test keeps A open on purpose while B runs.
+      const raced = await newFixture(tenantId, { confirmation: "immediate" });
+      const blocked = await newFixture(tenantId, { confirmation: "immediate" });
 
       try {
         await admin.unsafe(

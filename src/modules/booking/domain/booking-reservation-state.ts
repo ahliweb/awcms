@@ -181,6 +181,14 @@ export type TransitionInput = {
   now: Date;
   /** The hold's expiry (`hold_expires_at`); `null` once confirmed. */
   holdExpiresAt: Date | null;
+  /**
+   * Whether the hold has elapsed, decided by the DATABASE in the statement that
+   * locked the row (`hold_expires_at <= clock_timestamp()`). When given it wins
+   * over comparing `holdExpiresAt` with `now`: a JS `Date` holds milliseconds
+   * and the column microseconds, so a comparison in the same millisecond could
+   * disagree with the trigger that is the final authority.
+   */
+  holdElapsed?: boolean;
 };
 
 /**
@@ -211,7 +219,8 @@ export function evaluateTransition(input: TransitionInput): TransitionResult {
         httpStatus: 409
       };
     }
-    const expired = input.holdExpiresAt.getTime() <= input.now.getTime();
+    const expired =
+      input.holdElapsed ?? input.holdExpiresAt.getTime() <= input.now.getTime();
     // Extending an elapsed hold would revive one whose units may have been
     // reclaimed (the trigger refuses it too): HOLD_EXPIRED, like a confirm.
     if ((input.action === "confirm" || input.action === "extend") && expired) {
