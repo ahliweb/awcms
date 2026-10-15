@@ -762,6 +762,62 @@ suite("hr_commission accrual HTTP surface (Issue #951)", () => {
       expect((await detail(id)).body.data!.accrual.status).toBe("pending");
     });
 
+    test("an unlinked beneficiary employment is refused with 409 BENEFICIARY_LOGIN_UNRESOLVED, not 500 and not allowed (Issue #1019)", async () => {
+      if (!handlerReady) return;
+      const unlinked = await seedEmployment(null);
+      const created = await accrue(
+        saleBody({
+          employmentId: unlinked,
+          source: { type: "sale_line", ref: "ORD-UNLINKED" }
+        })
+      );
+
+      expect(created.status).toBe(201);
+
+      const id = created.body.data!.accrual.id;
+      const refused = await act("approve", id);
+
+      expect(refused.status).toBe(409);
+      expect(refused.body.error!.code).toBe("BENEFICIARY_LOGIN_UNRESOLVED");
+      expect((await detail(id)).body.data!.accrual.status).toBe("pending");
+    });
+
+    test("unlink -> self-approve -> relink is refused by the handler (Issue #1019)", async () => {
+      if (!handlerReady) return;
+      const id = await accrued("ORD-BYPASS");
+
+      await admin()`
+        UPDATE awcms_hr_employments SET tenant_user_id = NULL
+        WHERE id = ${employmentId}
+      `;
+
+      const selfApprove = await act("approve", id, beneficiary.token);
+
+      expect(selfApprove.status).toBe(403);
+      expect(selfApprove.body.error!.code).toBe(
+        "APPROVE_OWN_ACCRUAL_FORBIDDEN"
+      );
+
+      // The fixture's login belongs to another profile (sql/228 would refuse
+      // the re-link), so the guard is off for this one statement.
+      await admin().begin(async (tx) => {
+        await tx.unsafe(
+          "ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard"
+        );
+        await tx`
+          UPDATE awcms_hr_employments SET tenant_user_id = ${beneficiary.tenantUserId}
+          WHERE id = ${employmentId}
+        `;
+        await tx.unsafe(
+          "ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard"
+        );
+      });
+
+      expect((await act("approve", id, beneficiary.token)).status).toBe(403);
+      expect((await detail(id)).body.data!.accrual.status).toBe("pending");
+      expect((await act("approve", id)).status).toBe(200);
+    });
+
     test("a voided accrual can never be paid, released or approved", async () => {
       if (!handlerReady) return;
       const id = await accrued();

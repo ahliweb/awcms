@@ -219,7 +219,9 @@ export const NOT_SENSITIVE_READS: Readonly<Record<string, string>> = {
 export const PAYROLL_TABLE_SOURCE_EXEMPTIONS: Readonly<Record<string, string>> =
   {
     "src/modules/hr-commission/application/hr-commission-accrual-ledger.ts":
-      "the data-access layer of the ledger (writes and reads alike). Its read entry points, listAccruals and getAccrual, are called by the accruals GET routes AND by the POST accrue route (which returns the stored accrual on a replay); each of those call sites calls recordSensitiveRead for hr_commission.accruals.read: the GETs always, the POST on both its replayed branch and its Idempotency-Key replay (tests/hr-commission-read-audit.test.ts)"
+      "the data-access layer of the ledger (writes and reads alike). Its read entry points, listAccruals and getAccrual, are called by the accruals GET routes AND by the POST accrue route (which returns the stored accrual on a replay); each of those call sites calls recordSensitiveRead for hr_commission.accruals.read: the GETs always, the POST on both its replayed branch and its Idempotency-Key replay (tests/hr-commission-read-audit.test.ts)",
+    "src/modules/hr-workforce/application/hr-workforce-directory.ts":
+      "assignAccount runs a single EXISTS over the commission accrual ledger (status not paid or voided) to decide whether re-linking an employment's login needs the ADR-0141 step-up (Issue #1019). It returns one boolean, never a row, an amount, a rule or a status, so no accrual data reaches a caller or a response; the mutation itself is audited at critical with the before/after login ids"
   };
 
 export function findSensitiveReadPolicy(

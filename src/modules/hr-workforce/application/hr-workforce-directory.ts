@@ -875,11 +875,24 @@ export async function assignAccount(
   let stepUp: StepUpState | "not_applicable" = "not_applicable";
 
   if (relink) {
-    // Phase 3 (#961) adds "released payslips" to this test.
+    // Phase 3 (#961) adds "released payslips" to this test. An UNSETTLED
+    // commission accrual (anything not paid or voided) is history too (Issue
+    // #1019): re-pointing the login of an employment that is still owed money
+    // deserves a re-verification of the person doing it. That step-up is
+    // friction and an audit signal, NOT the control: segregation of duties on
+    // commission is enforced by the sql/237 trigger (snapshot + current link,
+    // fail closed), which holds whatever this path does. Existence only; no
+    // amount is read.
     const history = (await tx`
-      SELECT 1 AS present FROM awcms_hr_attendance_events
-      WHERE tenant_id = ${tenantId} AND employment_id = ${employmentId}
-      LIMIT 1
+      SELECT 1 AS present
+      WHERE EXISTS (
+        SELECT 1 FROM awcms_hr_attendance_events
+        WHERE tenant_id = ${tenantId} AND employment_id = ${employmentId}
+      ) OR EXISTS (
+        SELECT 1 FROM awcms_hr_commission_accruals
+        WHERE tenant_id = ${tenantId} AND employment_id = ${employmentId}
+          AND status NOT IN ('paid', 'voided')
+      )
     `) as { present: number }[];
 
     hasHistory = history.length > 0;

@@ -147,7 +147,12 @@ declares no `navigation`. It flips to `active` with its first screen.
   can approve, release or pay none of their own accrual; whoever created an
   accrual cannot approve it; whoever approved it cannot pay it (`403
 SEGREGATION_OF_DUTIES`, or `APPROVE_OWN_ACCRUAL_FORBIDDEN` for the beneficiary
-  approving). Void is not segregated. A test removes the trigger's guard and shows
+  approving). **The beneficiary is the login snapshotted when the accrual was
+  created (`beneficiary_tenant_user_id`, stamped by trigger, `sql/236`) AND the
+  employment's current login** (Issue #1019): unlinking the login and relinking it
+  around a self-approval gains nothing. With neither a linked login nor a snapshot,
+  approve, release and pay are refused (fail closed, `409
+BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test removes the trigger's guard and shows
   the bypass succeeds.
 - **The log cannot diverge from the status.** `awcms_hr_commission_transitions` is
   written only by the accrual's own triggers (a direct insert is refused by

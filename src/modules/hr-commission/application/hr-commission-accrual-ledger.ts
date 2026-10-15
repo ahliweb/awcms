@@ -588,7 +588,7 @@ export async function transitionAccrual(
 
   const locked = (await tx`
     SELECT status, employment_id, rule_key, rule_version::int AS rule_version,
-           created_by, approved_by
+           created_by, approved_by, beneficiary_tenant_user_id
     FROM awcms_hr_commission_accruals
     WHERE tenant_id = ${tenantId} AND id = ${id}
     FOR UPDATE
@@ -597,6 +597,7 @@ export async function transitionAccrual(
     employment_id: string;
     created_by: string | null;
     approved_by: string | null;
+    beneficiary_tenant_user_id: string | null;
     rule_key: string;
     rule_version: number;
   }[];
@@ -626,6 +627,7 @@ export async function transitionAccrual(
     `) as { tenant_user_id: string | null }[];
     const kind = sodViolation(action, userId, {
       beneficiaryUserId: beneficiary[0]?.tenant_user_id ?? null,
+      snapshotBeneficiaryUserId: row.beneficiary_tenant_user_id,
       createdBy: row.created_by,
       approvedBy: row.approved_by
     });

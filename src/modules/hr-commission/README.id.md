@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:e5ba8102bd992acec070a39432e29fdadc498bda9ab5465c5239a82166ad6441 -->
+<!-- i18n-source-hash: sha256:d5ba25fa55120753de0d5816a5ee0568829d69c9931579d30b639e8a9059e875 -->
 
 # `hr_commission`
 
@@ -157,7 +157,12 @@ paid`, dan `voided` dari `pending` atau `approved`. Tiap sisi menstempel aktor d
   itu sendiri) tak dapat approve, release, atau pay akrualnya sendiri; pembuat
   akrual tak dapat menyetujuinya; penyetuju tak dapat membayarnya (`403
 SEGREGATION_OF_DUTIES`, atau `APPROVE_OWN_ACCRUAL_FORBIDDEN` untuk penerima yang
-  menyetujui). Void tidak dipisahkan. Sebuah tes menghapus guard trigger dan
+  menyetujui). **Penerima adalah login yang di-snapshot saat akrual dibuat
+  (`beneficiary_tenant_user_id`, distempel trigger, `sql/236`) DAN login employment
+  saat ini** (Issue #1019): melepas lalu menautkan kembali login di sekitar
+  persetujuan diri sendiri tidak memberi apa-apa. Bila tak ada login tertaut maupun
+  snapshot, approve, release, dan pay ditolak (fail closed, `409
+BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes menghapus guard trigger dan
   menunjukkan bypass-nya berhasil.
 - **Log tak dapat menyimpang dari status.** `awcms_hr_commission_transitions`
   ditulis hanya oleh trigger milik akrual (insert langsung ditolak oleh

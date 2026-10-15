@@ -441,6 +441,18 @@ stamped `reversed`. A reversal of an already-`paid` accrual is netted by the nex
 payroll (a negative line), not clawed from a closed run. Reversal is once per
 accrual (partial unique index) and a reversal is not reversible.
 
+**The beneficiary's login is snapshotted (Issue #1019, `sql/236`/`sql/237`).**
+Separation of duties needs to know who the beneficiary is. The employment's login
+(`tenant_user_id`) can be unlinked and relinked by whoever holds
+`hr_workforce.employments.assign`, so an accrual stamps the login at birth
+(`beneficiary_tenant_user_id`, set by trigger; a writer-supplied value is discarded;
+immutable like every monetary fact), and approve, release and pay are refused for
+BOTH the snapshotted and the current login. When the employment has neither a linked
+login nor a snapshot the beneficiary cannot be identified, and the transition is
+refused (**fail closed**, `409 BENEFICIARY_LOGIN_UNRESOLVED`) until a login is linked;
+`void` stays allowed. Consequence: commission for an employee without a login cannot
+be approved, released or paid until one is linked.
+
 ### 6.4 Boundaries
 
 This is **employee commission**: the beneficiary is always an employment (so there

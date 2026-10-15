@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:7b61b55de79faf6f11d23dd964bda7dc3204f168aef3d386f00a2db3a55aa153 -->
+<!-- i18n-source-hash: sha256:feefe17e051d14c9b3346d97a3aa2b339c420537aa011a0b6b7bf6ab400f0134 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -464,6 +464,17 @@ sumbernya sendiri; fakta moneter yang asli tidak disentuh dan statusnya diberi c
 `reversed`. Reversal atas akrual yang sudah `paid` diperhitungkan oleh payroll
 berikutnya (baris negatif), tidak ditarik dari run yang sudah tertutup. Reversal
 sekali per akrual (unique index parsial) dan reversal tidak dapat di-reverse.
+
+**Login penerima di-snapshot (Issue #1019, `sql/236`/`sql/237`).** Pemisahan tugas
+perlu tahu siapa penerimanya. Login employment (`tenant_user_id`) dapat dilepas dan
+ditautkan kembali oleh pemegang `hr_workforce.employments.assign`, maka akrual
+menstempel login itu saat lahir (`beneficiary_tenant_user_id`, diisi trigger; nilai
+dari penulis dibuang; tak berubah seperti semua fakta moneter), dan approve, release,
+serta pay ditolak untuk login hasil snapshot MAUPUN login saat ini. Bila employment
+tak punya login tertaut maupun snapshot, penerima tak dapat diidentifikasi dan
+transisi ditolak (**fail closed**, `409 BENEFICIARY_LOGIN_UNRESOLVED`) sampai sebuah
+login ditautkan; `void` tetap boleh. Konsekuensi: komisi karyawan tanpa login tak
+dapat disetujui, dirilis, atau dibayar sebelum login ditautkan.
 
 ### 6.4 Batas
 

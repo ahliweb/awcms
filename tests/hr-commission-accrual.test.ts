@@ -103,6 +103,7 @@ describe("the accrual state machine", () => {
 describe("segregation of duties", () => {
   const parties = {
     beneficiaryUserId: "ben",
+    snapshotBeneficiaryUserId: "ben",
     createdBy: "maker",
     approvedBy: "checker"
   };
@@ -124,21 +125,70 @@ describe("segregation of duties", () => {
     expect(sodViolation("pay", "other", parties)).toBeNull();
   });
 
-  test("an unlinked beneficiary or an unstamped row constrains nothing", () => {
-    expect(
-      sodViolation("approve", "x", {
+  test("unstamped creator and approver constrain nothing when the beneficiary is known", () => {
+    const parties = {
+      beneficiaryUserId: "ben",
+      snapshotBeneficiaryUserId: "ben",
+      createdBy: null,
+      approvedBy: null
+    };
+
+    expect(sodViolation("approve", "x", parties)).toBeNull();
+    expect(sodViolation("pay", "x", parties)).toBeNull();
+  });
+
+  test("an unidentifiable beneficiary fails CLOSED on approve, release and pay (Issue #1019)", () => {
+    for (const snapshotBeneficiaryUserId of [null]) {
+      const parties = {
         beneficiaryUserId: null,
+        snapshotBeneficiaryUserId,
         createdBy: null,
         approvedBy: null
-      })
-    ).toBeNull();
-    expect(
-      sodViolation("pay", "x", {
-        beneficiaryUserId: null,
-        createdBy: null,
-        approvedBy: null
-      })
-    ).toBeNull();
+      };
+
+      expect(sodViolation("approve", "x", parties)).toBe(
+        "beneficiary_unresolved"
+      );
+      expect(sodViolation("release", "x", parties)).toBe(
+        "beneficiary_unresolved"
+      );
+      expect(sodViolation("pay", "x", parties)).toBe("beneficiary_unresolved");
+      // Voiding moves no money and stays the safe way out.
+      expect(sodViolation("void", "x", parties)).toBeNull();
+    }
+  });
+
+  test("the birth snapshot binds even when the employment is unlinked now, and the current link binds even without a snapshot", () => {
+    const unlinkedNow = {
+      beneficiaryUserId: null,
+      snapshotBeneficiaryUserId: "ben",
+      createdBy: null,
+      approvedBy: null
+    };
+
+    expect(sodViolation("approve", "ben", unlinkedNow)).toBe("beneficiary");
+    expect(sodViolation("release", "ben", unlinkedNow)).toBe("beneficiary");
+    expect(sodViolation("pay", "ben", unlinkedNow)).toBe("beneficiary");
+    expect(sodViolation("approve", "other", unlinkedNow)).toBeNull();
+
+    const relinkedToOther = {
+      beneficiaryUserId: "new",
+      snapshotBeneficiaryUserId: "ben",
+      createdBy: null,
+      approvedBy: null
+    };
+
+    expect(sodViolation("approve", "ben", relinkedToOther)).toBe("beneficiary");
+    expect(sodViolation("approve", "new", relinkedToOther)).toBe("beneficiary");
+
+    const noSnapshot = {
+      beneficiaryUserId: "ben",
+      snapshotBeneficiaryUserId: null,
+      createdBy: null,
+      approvedBy: null
+    };
+
+    expect(sodViolation("release", "ben", noSnapshot)).toBe("beneficiary");
   });
 });
 
