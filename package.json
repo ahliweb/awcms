@@ -147,6 +147,7 @@
     "db:pool:health": "bun scripts/db-pool-health.ts",
     "redis:health": "bun scripts/redis-health.ts",
     "changesets:policy:check": "bun scripts/changeset-policy-check.ts",
+    "ci:local": "bun scripts/ci-local.ts",
     "version:check": "bun scripts/version-check.ts",
     "release:verify": "bun scripts/release-verify.ts",
     "modules:dag:check": "bun scripts/validate-module-graph.ts",

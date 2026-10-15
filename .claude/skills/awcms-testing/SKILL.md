@@ -113,7 +113,20 @@ role` (42501) — **not** a skip, so it is easy to misread as a regression.
    CI: the harness (`tests/integration/`) and then the legacy ad-hoc ones
    (9 `*-postgres.test.ts` files and friends).
 
+**Or let the runner do all of it: `bun run ci:local --job integration`** (and
+`--job e2e` for the browser suite). It takes a superuser connection string from
+`CI_LOCAL_DATABASE_URL` (falling back to `DATABASE_URL`), creates a throwaway
+database, runs the exact workflow steps in order — migrate, the harness suite,
+then the legacy file list — pins `DATABASE_URL`/`SETUP_DATABASE_URL`/
+`WORKER_DATABASE_URL` so a `.env` value cannot split the brain, and drops the
+database afterwards. Without a database URL it reports the job as `SKIPPED
+(reason)` with a non-zero exit code — never as passed. Use a dedicated Postgres
+server: the harness toggles the cluster-scoped `awcms_app`/`awcms_worker` roles,
+so two runs on one server interfere. Reference:
+[`docs/awcms/ci-local.md`](../../../docs/awcms/ci-local.md).
+
 ## Rules
 
+- Before a PR: the full `bun run check`, then `bun run ci:local` for the CI jobs `check` does not cover (hygiene, changeset policy, DB-gated integration, Bun 1.3.0 floor, E2E). A `SKIPPED` job is unverified, not green. GitHub's required checks (ruleset `11653326`) still gate the merge.
 - Every new feature has at minimum a logic unit test + one integration/contract test.
 - Tenant-scoped tests use a tenant context; do not depend on global data.

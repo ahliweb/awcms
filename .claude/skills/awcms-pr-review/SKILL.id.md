@@ -5,7 +5,7 @@ description: Review pull request AWCMS terhadap Definition of Done dan kontrak p
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:82276ce248a18de097261fa5186c731fdfa5908fdfd4a727f7557abfe27f3c19 -->
+<!-- i18n-source-hash: sha256:91f4b63e1249da803cc3eb2e2e51ef9b43994651e7e91cb341068bbe8d52cbf9 -->
 
 # AWCMS — PR Review
 
@@ -24,7 +24,7 @@ Ikuti `docs/awcms/12_generator_prompt.md` (Prompt Review PR), `docs/awcms/09_roa
 9. Soft delete policy untuk resource deletable; posted/append-only entity tidak dihapus.
 10. Input validation lengkap; error response standar.
 11. Sensitive data masked.
-12. Test relevan ada & pass; build pass.
+12. Test relevan ada & pass; build pass. Tanyakan job `bun run ci:local` mana yang dijalankan penulis: ia mencakup job CI yang tidak dicakup `bun run check` (hygiene, kebijakan changeset, integrasi DB-gated, lantai Bun 1.3.0, E2E). Job yang dilaporkannya `SKIPPED (alasan)` **belum terverifikasi, bukan lulus** — check GitHub pada PR (ruleset `11653326`) yang mencakupnya, dan itu tetap yang menentukan merge.
 13. Docs diperbarui; commit mengikuti convention `<type>(<scope>): <summary>`.
 14. **Diff menyentuh `.astro`? Baca tipenya dengan MATA.** `bun run typecheck`
     (`tsc --noEmit`) **tidak bisa mengurai `.astro`** dan melewatinya diam-diam,

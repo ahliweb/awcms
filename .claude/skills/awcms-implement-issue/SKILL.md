@@ -51,6 +51,8 @@ bun test
 bun run build
 ```
 
+Before pushing, run the **full** `bun run check` (it is only the `quality` CI job) and then **`bun run ci:local`** — it runs every other job of `ci.yml`/`changesets.yml` locally (repo hygiene, changeset policy, DB-gated integration tests against a throwaway database, the Bun 1.3.0 floor, E2E smoke) with the workflows' own commands. Commit first (the changeset job diffs committed history). Copy each job's result into `Test results` in the report: a job `ci:local` reports as `SKIPPED (reason)` was **not verified**, and the exit code is non-zero (2) for it — never write it up as passed. It does not replace GitHub's required checks (ruleset `11653326`); details in [`docs/awcms/ci-local.md`](../../../docs/awcms/ci-local.md).
+
 ## Definition of Done
 
 Follow the DoD checklist in `AGENTS.md`. Close with an **implementation report**:

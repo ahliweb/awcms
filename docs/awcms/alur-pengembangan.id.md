@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:210230d8a050f015bcdb0a78176fd8898b43c416ac9f3b636672ed5ef3c8958e -->
+<!-- i18n-source-hash: sha256:bd81025712b394a748411ac089f518026b3abadf463403186c8d399d73e6ceee -->
 
 # Alur pengembangan AWCMS
 
@@ -237,6 +237,19 @@ proteksi branch di [`branch-protection.md`](branch-protection.md).
 
 Gerbangnya: rantai `bun run check` penuh, suite DB-gated, E2E Playwright,
 CodeQL, GitGuardian, dan changeset wajib untuk perubahan perilaku.
+
+**Sebelum push: `bun run ci:local`** ([`ci-local.md`](ci-local.md), Issue
+#1001). `bun run check` hanyalah job `quality`; `ci:local` juga menjalankan repo
+hygiene, kebijakan changeset, suite integrasi DB-gated terhadap database
+sementara, lantai Bun 1.3.0, dan smoke Playwright, dengan perintah workflow
+sendiri dalam urutannya, lalu mencetak satu tabel. Job yang tidak bisa dijalankan
+di sini dilaporkan `SKIPPED (alasan)` dan exit code-nya bukan nol — tidak pernah
+lulus diam-diam. `tests/ci-local-parity.test.ts` menjaga daftar job-nya tetap
+sejalan dengan `ci.yml` dan `changesets.yml`, sehingga job workflow baru tidak
+bisa hilang tanpa diketahui. **Ini tidak menggantikan gerbang di atas:** required
+checks GitHub (ruleset `11653326`, [`branch-protection.md`](branch-protection.md))
+tetap yang menentukan apakah PR boleh merge; run lokal adalah verifikasi sebelum
+push, bukan penggantinya.
 
 **Jebakan yang sudah pernah menggigit:** PR bertumpuk (base bukan `main`)
 menjalankan **NOL** gerbang, sementara `gh pr checks` tetap tampak hijau karena

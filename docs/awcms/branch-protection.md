@@ -224,6 +224,28 @@ went missing from its CI for a period) — treat that history
 as a warning to design for from the start in `awcms`, not a problem to be
 rediscovered later.
 
+## Local pre-push verification (`bun run ci:local`) does not change what gates merging
+
+`bun run ci:local` ([`ci-local.md`](ci-local.md), Issue #1001) runs, on a
+developer's machine, every job of `ci.yml` and `changesets.yml` — Quality, Repo
+hygiene, the changeset policy, Integration tests, the Bun 1.3.0 minimum-supported
+cell and E2E smoke — with the workflows' own commands in their order, and prints a
+summary table. It exists so a branch is not pushed merely to find out whether it
+is green.
+
+**It is not a gate and is not part of the ruleset.** The `required_status_checks`
+in ruleset `11653326` listed above are still what GitHub evaluates before a PR can
+merge, reported by GitHub Actions and the two apps — a green local run grants
+nothing, and a red or skipped one blocks nothing. `ci:local` also cannot see
+CodeQL, GitGuardian or `release.yml`. Treat it as the verification before the
+push, not instead of the checks after it.
+
+The local runner is held in step with the workflows so it cannot quietly stop
+mirroring them: `tests/ci-local-parity.test.ts` fails when a workflow job is added
+without a local counterpart, when a step is added, or when a mirrored `run:` text
+changes. When you add or rename a job in `ci.yml`, that test names what to update
+in `scripts/ci-local.ts`.
+
 ## Deferred (not yet adapted — needs infrastructure that does not exist yet)
 
 - **`docker-compose*.yml` validation** (part of the `hygiene` job in
@@ -242,6 +264,8 @@ section above about its status as a required check.)
 
 ## See also
 
+- [`ci-local.md`](ci-local.md) — `bun run ci:local`, the pre-push local runner
+  for these same jobs (verification before push, not a gate).
 - [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)
   — testing pyramid and production readiness checklist this CI
   orchestration serves.

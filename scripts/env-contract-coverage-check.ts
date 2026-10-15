@@ -109,6 +109,21 @@ export const TOOLING_ONLY: readonly { name: string; reason: string }[] = [
       "Overrides the base ref `changesets:policy:check` diffs against. Set by CI (and by a developer reproducing a PR check locally), never by a deployment."
   },
   {
+    name: "CI_LOCAL_DATABASE_URL",
+    reason:
+      "Superuser connection string `ci:local` uses to create and drop the throwaway databases of its integration and e2e jobs (falls back to DATABASE_URL). A developer-machine setting for running the CI jobs locally, never read by a running deployment."
+  },
+  {
+    name: "PLAYWRIGHT_BROWSERS_PATH",
+    reason:
+      "Playwright's own variable for where its browsers live. `ci:local` reads it only to check that the Chromium the e2e job needs is installed before starting; the application never reads it."
+  },
+  {
+    name: "PLAYWRIGHT_CHROMIUM_EXECUTABLE",
+    reason:
+      "Points playwright.config.ts at a pre-installed system Chromium on machines where `playwright install` cannot run. `ci:local` reads it only to decide whether the e2e job can run; the application never reads it."
+  },
+  {
     name: "RELEASE_VERIFY_TAG",
     reason:
       "The tag `release:verify` validates. Meaningful only on a tagged release commit inside release.yml, never in a running environment."

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](branch-protection.md)
 
-<!-- i18n-source-hash: sha256:4defe9c5c32ff3b8c617a067aeb30dd464e7a44cbb70f5eee05e4553d096c3af -->
+<!-- i18n-source-hash: sha256:6fd2aa683e31009b3c978d5b3c2dda73e0e3259e551c6f8fb86c072d90fe29c4 -->
 
 # Branch Protection — Required Status Checks
 
@@ -230,6 +230,28 @@ sempat hilang dari CI-nya untuk suatu periode) — perlakukan riwayat itu
 sebagai peringatan untuk didesain dari awal di `awcms`, bukan masalah yang
 ditemukan ulang nanti.
 
+## Verifikasi lokal sebelum push (`bun run ci:local`) tidak mengubah apa yang menentukan merge
+
+`bun run ci:local` ([`ci-local.md`](ci-local.md), Issue #1001) menjalankan, di
+mesin developer, setiap job `ci.yml` dan `changesets.yml` — Quality, Repo
+hygiene, kebijakan changeset, Integration tests, sel minimum-supported Bun 1.3.0,
+dan E2E smoke — dengan perintah workflow sendiri dalam urutannya, lalu mencetak
+tabel ringkasan. Tujuannya agar branch tidak di-push hanya untuk mengetahui apakah
+ia hijau.
+
+**Ia bukan gate dan bukan bagian ruleset.** `required_status_checks` di ruleset
+`11653326` yang tercantum di atas tetap yang dievaluasi GitHub sebelum PR boleh
+merge, dilaporkan oleh GitHub Actions dan kedua app — run lokal yang hijau tidak
+memberi apa-apa, dan yang merah atau di-skip tidak memblokir apa-apa. `ci:local`
+juga tidak bisa melihat CodeQL, GitGuardian, atau `release.yml`. Perlakukan ia
+sebagai verifikasi sebelum push, bukan pengganti check sesudahnya.
+
+Runner lokal dijaga sejalan dengan workflow agar tidak diam-diam berhenti
+mencerminkannya: `tests/ci-local-parity.test.ts` gagal bila job workflow
+ditambahkan tanpa padanan lokal, bila sebuah step ditambahkan, atau bila teks
+`run:` yang dicerminkan berubah. Saat Anda menambah atau mengganti nama job di
+`ci.yml`, test itu menyebut apa yang harus diperbarui di `scripts/ci-local.ts`.
+
 ## Deferred (belum diadaptasi — butuh infrastruktur yang belum ada)
 
 - **Validasi `docker-compose*.yml`** (bagian dari job `hygiene` di
@@ -248,6 +270,8 @@ bagian di atas soal statusnya sebagai required check.)
 
 ## See also
 
+- [`ci-local.md`](ci-local.md) — `bun run ci:local`, runner lokal sebelum push
+  untuk job-job yang sama (verifikasi sebelum push, bukan gate).
 - [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)
   — testing pyramid and production readiness checklist this CI
   orchestration serves.

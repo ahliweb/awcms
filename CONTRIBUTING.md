@@ -57,6 +57,7 @@ Jalankan yang relevan dengan perubahan Anda:
 
 ```bash
 bun run check         # gate CI utama — rantai lengkap & urutannya ada di package.json's "check" script, jangan diduplikasi di sini
+bun run ci:local      # SEMUA job CI (quality + hygiene + changesets + integration + minimum-supported + e2e) — lihat di bawah
 bun run lint          # prettier check
 bun run typecheck     # tsc --noEmit
 bun test              # unit + integration test (bun:test) di tests/
@@ -69,6 +70,35 @@ bun run knowledge:check  # bila mengubah graphify-out/, .graphifyignore, knowled
 Sebuah changeset juga ditegakkan sebagai CI check **terpisah dan wajib**
 (bukan sekadar saran) — lihat `.github/workflows/changesets.yml`, job
 "Changeset required for behavior changes" (`scripts/changeset-policy-check.ts`).
+
+### Seluruh job CI di mesin sendiri: `bun run ci:local`
+
+`bun run check` hanya mencakup job `quality`. Job lain di GitHub Actions — repo
+hygiene, kebijakan changeset, tes integrasi Postgres, lantai Bun 1.3.0, dan E2E
+Playwright — punya padanan lokal di **`bun run ci:local`**
+([`scripts/ci-local.ts`](scripts/ci-local.ts)), yang menjalankan perintah
+workflow yang sama dengan urutan yang sama lalu mencetak satu tabel ringkasan:
+
+```bash
+bun run ci:local                        # semua job
+bun run ci:local --job quality          # satu job (boleh diulang)
+CI_LOCAL_DATABASE_URL=postgres://postgres:...@127.0.0.1:5432/postgres \
+  bun run ci:local --job integration --job e2e   # job ber-database
+```
+
+- Job yang tidak bisa jalan di mesin Anda (tanpa URL Postgres, tanpa Chromium,
+  tanpa Bun 1.3.0) dilaporkan **`SKIPPED (alasan)`**, tidak pernah `PASS`. Exit
+  code: `0` semua lulus, `1` ada yang gagal, `2` tidak ada yang gagal tetapi ada
+  yang dilewati (belum terverifikasi).
+- Job `integration`/`e2e` membuat database sementara bernama unik di server
+  Postgres **superuser** yang Anda tunjuk dan menghapusnya setelah selesai, juga
+  saat gagal. Pakai server Postgres tersendiri, bukan yang melayani aplikasi dev
+  Anda.
+- Commit dulu sebelum menjalankannya: job `changesets` membandingkan riwayat
+  yang sudah di-commit dengan `origin/main`.
+- Ini verifikasi **sebelum push**, bukan pengganti ruleset: required status
+  checks di GitHub (ruleset `11653326`) tetap yang menentukan boleh-tidaknya
+  merge. Rincian lengkap: [`docs/awcms/ci-local.md`](docs/awcms/ci-local.md).
 
 ## Menulis test
 
