@@ -151,15 +151,13 @@ async function claimEligibleMessages(
     sql,
     tenantId,
     async (tx) => {
+      // `MATERIALIZED` is load-bearing. Without it the planner may inline the
+      // locking sub-select into the UPDATE, and on stale statistics for a
+      // near-empty table it then re-runs the `LIMIT` once per outer row, so
+      // one statement can claim more than `limit` rows (Issue #1007). The
+      // CTE forces the locked, limited id set to be computed exactly once.
       const rows = await tx`
-        UPDATE awcms_whatsapp_messages
-        SET status = 'sending', next_attempt_at = ${leaseExpiry},
-            -- Re-claiming an EXPIRED sending row is a failed attempt: count it,
-            -- so a poison pill reaches the retry cap instead of looping.
-            retry_count = retry_count
-              + CASE WHEN status = 'sending' THEN 1 ELSE 0 END,
-            updated_at = now()
-        WHERE id IN (
+        WITH due AS MATERIALIZED (
           SELECT id FROM awcms_whatsapp_messages
           WHERE tenant_id = ${tenantId}
             AND (
@@ -174,13 +172,23 @@ async function claimEligibleMessages(
           LIMIT ${limit}
           FOR UPDATE SKIP LOCKED
         )
-        RETURNING id, correlation_id, template_key, purpose, recipient,
-                  recipient_hash, recipient_masked, body, variables,
-                  contains_secret, expires_at, retry_count, created_at
+        UPDATE awcms_whatsapp_messages AS t
+        SET status = 'sending', next_attempt_at = ${leaseExpiry},
+            -- Re-claiming an EXPIRED sending row is a failed attempt: count it,
+            -- so a poison pill reaches the retry cap instead of looping.
+            retry_count = t.retry_count
+              + CASE WHEN t.status = 'sending' THEN 1 ELSE 0 END,
+            updated_at = now()
+        FROM due
+        WHERE t.id = due.id
+        RETURNING t.id, t.correlation_id, t.template_key, t.purpose,
+                  t.recipient, t.recipient_hash, t.recipient_masked, t.body,
+                  t.variables, t.contains_secret, t.expires_at, t.retry_count,
+                  t.created_at
       `;
 
-      // `UPDATE ... RETURNING` does not preserve the sub-select's ORDER BY, so
-      // the priority order (security first, then oldest first) is applied here.
+      // `UPDATE ... RETURNING` does not preserve the CTE's ORDER BY, so the
+      // priority order (security first, then oldest first) is applied here.
       const rank = (purpose: string) =>
         purpose === "security" ? 0 : purpose === "transactional" ? 1 : 2;
 
