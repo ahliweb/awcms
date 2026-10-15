@@ -129,13 +129,22 @@ async function seedEmployment(
     VALUES (${tenantId}, 'person', ${`Employee ${employmentCounter}`})
     RETURNING id
   `) as { id: string }[];
-  const employment = (await admin`
-    INSERT INTO awcms_hr_employments
-      (tenant_id, profile_id, employee_no, hired_on, tenant_user_id)
-    VALUES (${tenantId}, ${profile[0]!.id}, ${`E-${employmentCounter}`},
-            ${values.hiredOn ?? "2026-01-01"}::date, ${values.tenantUserId ?? null})
-    RETURNING id
-  `) as { id: string }[];
+  // Commission tests link arbitrary logins; the PS-14 link guard (#979, tested
+  // in the hr_workforce database suite) is taken out of the way for the insert.
+  await admin`ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard_insert`;
+  let employment: { id: string }[];
+
+  try {
+    employment = (await admin`
+      INSERT INTO awcms_hr_employments
+        (tenant_id, profile_id, employee_no, hired_on, tenant_user_id)
+      VALUES (${tenantId}, ${profile[0]!.id}, ${`E-${employmentCounter}`},
+              ${values.hiredOn ?? "2026-01-01"}::date, ${values.tenantUserId ?? null})
+      RETURNING id
+    `) as { id: string }[];
+  } finally {
+    await admin`ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard_insert`;
+  }
   const id = employment[0]!.id;
 
   if (values.terminatedOn) {

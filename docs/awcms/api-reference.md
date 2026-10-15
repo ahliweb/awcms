@@ -11900,7 +11900,7 @@ Gated by `hr_workforce.employments.delete` (high-risk). For an employment entere
 - **operationId**: `hrWorkforceEmploymentAccountAssign`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid>"}` links the login that IS this employee; `null` unlinks. This is the basis of self-service ownership. One active employment per login. The audit row records the login UUID (not PII) and the previous one. Requires an Idempotency-Key.
+Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid>"}` links the login that IS this employee; `null` unlinks. This is the basis of self-service ownership (and of payslip ownership in phase 3), so (finding PS-14, #979): the caller cannot link their OWN login to another person's employment (`403 SELF_LINK_FORBIDDEN`); the linked login must belong to the employment's person, i.e. its identity carries the employment's `profileId` (`422 PROFILE_MISMATCH`); and a RE-LINK (changing or removing an existing link, or linking again after an unlink) is audited at `critical` (a first link at `warning`) with the before and after login UUIDs and no free text, and, when the employment already has attendance history, requires the conditional step-up of ADR-0141 section 4 (`403 STEP_UP_REQUIRED` for an enrolled caller with a stale session; a caller with no enrolled factor is not locked out and the audit row records `not_enrolled`). Each refusal writes an `account_link_refused` audit row (reason code and UUIDs only); repeating the current link re-validates it. One active employment per login. Requires an Idempotency-Key.
 
 **Parameters**
 
@@ -11919,10 +11919,10 @@ Gated by `hr_workforce.employments.assign` (high-risk). `{"tenantUserId": "<uuid
 | 200    | The employment, with `replayed` true when the link was already as asked.           | object                                 |
 | 400    | Validation error.                                                                  | [`ApiError`](#standard-error-envelope) |
 | 401    | Missing or invalid session.                                                        | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | ACCESS_DENIED, SELF_LINK_FORBIDDEN or STEP_UP_REQUIRED.                            | [`ApiError`](#standard-error-envelope) |
 | 404    | RESOURCE_NOT_FOUND.                                                                | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT, EMPLOYMENT_DELETED, EMPLOYMENT_TERMINATED or ACCOUNT_IN_USE. | [`ApiError`](#standard-error-envelope) |
-| 422    | USER_NOT_FOUND.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 422    | USER_NOT_FOUND or PROFILE_MISMATCH.                                                | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/hr-workforce/employments/{id}/restore` — Restore an employment
 

@@ -72,9 +72,14 @@ async function seedProfile(tenantId: string, tag: string): Promise<string> {
   return rows[0]!.id;
 }
 
-async function seedTenantUser(tenantId: string, tag: string): Promise<string> {
+async function seedTenantUser(
+  tenantId: string,
+  tag: string,
+  existingProfileId?: string
+): Promise<string> {
   const admin = getAdminSql();
-  const profile = await seedProfile(tenantId, `login-${tag}`);
+  const profile =
+    existingProfileId ?? (await seedProfile(tenantId, `login-${tag}`));
   const identity = (await admin`
     INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
     VALUES (${tenantId}, ${profile}, ${`${tag}@example.com`}, 'x')
@@ -333,8 +338,8 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
       await employ(TENANT_A, profileA);
     });
 
-    test("per login: one login cannot be two active employees", async () => {
-      const user = await seedTenantUser(TENANT_A, "shared");
+    test("per login: one login cannot be two active employees (the index holds even with the link guard bypassed)", async () => {
+      const user = await seedTenantUser(TENANT_A, "shared", profileA);
       const other = await seedProfile(TENANT_A, "other");
       const one = await employ(TENANT_A, profileA);
       const two = await employ(TENANT_A, other);
@@ -344,13 +349,89 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         (tx) =>
           tx`UPDATE awcms_hr_employments SET tenant_user_id = ${user} WHERE id = ${one}`
       );
+
+      // `two` belongs to another person, so the link guard (PS-14) refuses it
+      // first; take the guard out of the way to prove the unique index still
+      // stands behind it.
       await assertRejected(
         inTenant(
           TENANT_A,
           (tx) =>
             tx`UPDATE awcms_hr_employments SET tenant_user_id = ${user} WHERE id = ${two}`
         ),
-        /awcms_hr_employments_one_active_per_user|23505/
+        /link_guard|same person|55000/
+      );
+
+      const admin = getAdminSql();
+      await admin`ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard`;
+
+      try {
+        await assertRejected(
+          inTenant(
+            TENANT_A,
+            (tx) =>
+              tx`UPDATE awcms_hr_employments SET tenant_user_id = ${user} WHERE id = ${two}`
+          ),
+          /awcms_hr_employments_one_active_per_user|23505/
+        );
+      } finally {
+        await admin`ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard`;
+      }
+    });
+
+    test("PS-14 link guard: the runtime role cannot bind a login of another person, whatever the application does", async () => {
+      const mine = await seedTenantUser(TENANT_A, "guard-own", profileA);
+      const stranger = await seedTenantUser(TENANT_A, "guard-stranger");
+      const employment = await employ(TENANT_A, profileA);
+
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) =>
+            tx`UPDATE awcms_hr_employments SET tenant_user_id = ${stranger} WHERE id = ${employment}`
+        ),
+        /same person|55000/
+      );
+
+      // The same rule on INSERT: a stranger's login is refused, the person's
+      // own is accepted.
+      const fresh = await seedProfile(TENANT_A, "guard-insert");
+      const freshOwn = await seedTenantUser(
+        TENANT_A,
+        "guard-insert-own",
+        fresh
+      );
+
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            INSERT INTO awcms_hr_employments
+              (tenant_id, profile_id, employee_no, hired_on, tenant_user_id)
+            VALUES (${TENANT_A}, ${fresh}, 'G-STRANGER', '2026-01-01', ${stranger})
+          `
+        ),
+        /same person|55000/
+      );
+      await inTenant(
+        TENANT_A,
+        (tx) => tx`
+          INSERT INTO awcms_hr_employments
+            (tenant_id, profile_id, employee_no, hired_on, tenant_user_id)
+          VALUES (${TENANT_A}, ${fresh}, 'G-OWN', '2026-01-01', ${freshOwn})
+        `
+      );
+
+      // The person's own login is accepted, and can be removed again.
+      await inTenant(
+        TENANT_A,
+        (tx) =>
+          tx`UPDATE awcms_hr_employments SET tenant_user_id = ${mine} WHERE id = ${employment}`
+      );
+      await inTenant(
+        TENANT_A,
+        (tx) =>
+          tx`UPDATE awcms_hr_employments SET tenant_user_id = NULL WHERE id = ${employment}`
       );
     });
 

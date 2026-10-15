@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:37896aef79982a5d1204ed5d5e44f14b60cb513a506cddb96b59ab640afdccec -->
+<!-- i18n-source-hash: sha256:7b61b55de79faf6f11d23dd964bda7dc3204f168aef3d386f00a2db3a55aa153 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1207,7 +1207,7 @@ Dilacak di hilir pada `ahliweb/awcms-one` `docs/aw-business-platform-dor.md`. Pe
 > ADR-0138) terhadap prompt tinjauan keamanan di dokumen 12 (secret, autentikasi,
 > konteks tenant, ABAC default-deny, RLS, audit, idempotensi, masking, error
 > aman) dan tabel ancaman §13.1. **Belum ada kode payroll (kecuali tautan kepegawaian fase 1, PS-14), jadi tidak ada satu pun hasil
-> uji di sini.** Bagian hukum memerlukan penasihat hukum manusia dan berupa daftar
+> uji di sini. PS-14 adalah satu-satunya temuan yang sudah berkode: tautan fase 1 kini menolak tautan-diri ke kepegawaian orang lain, mewajibkan profil login cocok, dan memperlakukan penautan ulang sebagai `critical` dengan step-up kondisional bila ada riwayat (#979); hanya separuh slip gajinya (mencabut pemilik lama, `404` untuk slip pengguna lain) yang tersisa untuk #961.** Bagian hukum memerlukan penasihat hukum manusia dan berupa daftar
 > periksa (§17.3) dengan blok tanda tangan (§17.4) yang sengaja kosong. **#957 dan
 > semua issue implementasi payroll berikutnya tetap terblokir sampai (a) penasihat
 > hukum menandatangani §17.4 dan (b) temuan pemblokir §17.2 ditulis ke dalam

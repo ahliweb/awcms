@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b4a91d5bf618b30ab07fbd1aa28f2d85cb09719d4bef99bcb1ae533cef7fc61d -->
+<!-- i18n-source-hash: sha256:4426217a125e671efe1d20f550088557becb666529c24125c3d6e420333bc8e4 -->
 
 # `hr_workforce`
 
@@ -48,7 +48,8 @@ mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.
   `defineTenantRoute`. Ia hanya MELEBARKAN `employments.read`; ABAC deny, scope,
   dan SoD tetap berlaku, kredensial mesin tidak pernah membawanya, dan id yang
   tidak ada serta baris milik orang lain adalah 403 yang sama. Penautannya sendiri
-  adalah `employments.assign`: berisiko tinggi dan diaudit.
+  adalah `employments.assign`: berisiko tinggi, diaudit, dan terikat pada profil
+  karyawannya sendiri (lihat "Postur fase 1 yang diketahui").
 - **Aksi berisiko tinggi** (`create`, perubahan terms, `assign`, `delete`,
   `restore`, `configure`) mewajibkan `Idempotency-Key` dan diaudit tanpa nama,
   jabatan, nomor, atau alasan; satu-satunya pengenal yang dibawanya adalah UUID
@@ -303,17 +304,35 @@ Terbuka (dilacak, tidak disembunyikan):
   dimaksud (soft delete, lalu purge setelah masa retensi pemberi kerja) tetapi
   belum ada yang mem-purge; archive-then-purge untuk baris HR adalah tindak lanjut.
 
-Postur fase 1 yang diketahui (didokumentasikan, tanpa kode tambahan di PR ini):
+Postur fase 1 yang diketahui:
 
-- **Penautan `assign` tidak terikat pada karyawannya.** Tidak ada yang
-  membuktikan login yang ditautkan adalah orang yang dimaksud employment. Pemegang
-  `assign` dapat menautkan login MILIKNYA ke employment mana pun lalu
-  membacanya lewat ownership grant. Kendalinya adalah permission itu sendiri
-  (berisiko tinggi, diaudit, idempoten, tidak pernah diberikan ke role secara
-  default): baris audit mencatat login MANA yang menerima kepemilikan
-  (`linkedTenantUserId`, sebuah UUID, beserta yang sebelumnya) sehingga
-  penyalahgunaan dapat ditelusuri, dan tenant dapat menyusun aturan SoD atas
-  `assign`. Tidak ada step-up.
+- **Penautan `assign` terikat pada karyawannya (temuan PS-14, Issue #979).**
+  Ownership grant adalah kunci "karyawan melihat miliknya" dan, di fase 3, slip
+  gaji, sehingga penautan tidak lagi sekadar sebuah permission. (1) Pemanggil
+  tidak dapat menautkan login MILIKNYA ke employment orang lain
+  (`403 SELF_LINK_FORBIDDEN`). (2) Identity milik tenant user yang ditautkan harus
+  membawa `profile_id` employment (`422 PROFILE_MISMATCH`); kecocokannya persis
+  dan fail-closed, sehingga profil yang sudah di-merge pada salah satu sisi harus
+  diarahkan ulang lebih dulu. Karena karyawan dan login orang yang sama berbagi
+  profil, menautkan login sendiri ke employment sendiri tetap berfungsi.
+  (3) Penautan ulang (mengganti atau menghapus tautan yang ada) diaudit pada
+  `critical` (penautan pertama tetap `warning`) dengan UUID login sebelum dan
+  sesudah tanpa teks bebas, dan, bila employment sudah punya event kehadiran,
+  memerlukan step-up KONDISIONAL ADR-0141 bagian 4: pemanggil tanpa faktor
+  terdaftar tidak terkunci (baris audit mencatat `stepUp: "not_enrolled"`),
+  pemanggil terdaftar dengan sesi basi mendapat `403 STEP_UP_REQUIRED`. Penolakan
+  tidak disimpan di bawah Idempotency-Key, sehingga key yang sama berhasil setelah
+  step-up. Pengerasan lanjutan: ketiga penolakan menulis baris audit
+  `account_link_refused` (kode alasan dan UUID saja; penolakan adalah `Response`
+  yang dikembalikan, sehingga transaksi commit dan barisnya bertahan); permintaan
+  "tautkan login yang sama" memvalidasi ulang login alih-alih menggemakan tautan
+  pra-perbaikan sebagai `200`; identity login harus `active`; employment yang
+  PERNAH ditautkan (`last_tenant_user_id`, `sql/228`) tetap penautan ulang
+  setelah unlink; trigger `awcms_hr_employments_link_guard` menolak login yang
+  tidak cocok di database; dan peringatan `security:readiness` "Employment account
+  links belong to the employment's person" mendaftar tautan yang dibuat sebelum
+  perbaikan. Masih terbuka untuk #961: "slip gaji yang sudah dirilis" bergabung ke
+  uji riwayat, dan pemilik lama dicabut dari slip gaji di sana.
 - **`employments.read` berlaku se-tenant.** Tidak ada business scope `office`
   yang membatasinya di fase 1; pembacaan per kantor dan per atasan (skenario S4
   dan S6 paket desain) butuh adapter scope dan alasan kepemilikan `manager_of`,

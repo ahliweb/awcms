@@ -168,16 +168,24 @@ async function seedProfile(tenantId: string, tag: string): Promise<string> {
 async function seedUser(
   tenantId: string,
   label: string,
-  permissionKeys: readonly string[]
-): Promise<{ token: string; tenantUserId: string }> {
+  permissionKeys: readonly string[],
+  existingProfileId?: string
+): Promise<{
+  token: string;
+  tenantUserId: string;
+  profileId: string;
+  identityId: string;
+}> {
   userCounter += 1;
   const sql = admin();
   const tag = `${label}-${userCounter}`;
-  const profile = (await sql`
-    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
-    VALUES (${tenantId}, 'person', ${`User ${tag}`})
-    RETURNING id
-  `) as { id: string }[];
+  const profile = existingProfileId
+    ? [{ id: existingProfileId }]
+    : ((await sql`
+        INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+        VALUES (${tenantId}, 'person', ${`User ${tag}`})
+        RETURNING id
+      `) as { id: string }[]);
   const identity = (await sql`
     INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
     VALUES (${tenantId}, ${profile[0]!.id}, ${`${tag}@example.com`}, 'x')
@@ -231,7 +239,12 @@ async function seedUser(
     );
   }
 
-  return { token, tenantUserId: tenantUser[0]!.id };
+  return {
+    token,
+    tenantUserId: tenantUser[0]!.id,
+    profileId: profile[0]!.id,
+    identityId: identity[0]!.id
+  };
 }
 
 const ALL_HR_PERMISSIONS = (hrWorkforceModule.permissions ?? []).map(
@@ -286,8 +299,12 @@ async function count(table: string): Promise<number> {
 }
 
 /** An employment (no login yet). */
-async function hire(tag: string, managerId?: string): Promise<string> {
-  const profileId = await seedProfile(env.tenantId, tag);
+async function hire(
+  tag: string,
+  managerId?: string,
+  existingProfileId?: string
+): Promise<string> {
+  const profileId = existingProfileId ?? (await seedProfile(env.tenantId, tag));
   numberCounter += 1;
   const response = await call<{ id: string }>(createEmployment, {
     method: "POST",
@@ -324,7 +341,8 @@ async function employee(
   managerId?: string
 ) {
   const user = await seedUser(env.tenantId, label, permissions);
-  const employmentId = await hire(label, managerId);
+  // The employment is the PERSON of the login (#979: the link must match).
+  const employmentId = await hire(label, managerId, user.profileId);
 
   await link(employmentId, user.tenantUserId);
 
@@ -597,6 +615,7 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
     type Runner = (who: {
       token: string;
       tenantUserId: string;
+      profileId: string;
     }) => Promise<{ status: number }>;
     // Each case is built so a call by an AUTHORISED user succeeds (2xx). Cases that
     // need the caller to own an employment link one first.
@@ -604,7 +623,11 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       [
         "hr_workforce.clock.create",
         async (who) => {
-          const own = await hire(`own-${who.tenantUserId.slice(0, 4)}`);
+          const own = await hire(
+            `own-${who.tenantUserId.slice(0, 4)}`,
+            undefined,
+            who.profileId
+          );
           await link(own, who.tenantUserId);
 
           return clock(own, {}, who.token);
@@ -619,7 +642,11 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       [
         "hr_workforce.corrections.create",
         async (who) => {
-          const own = await hire(`corr-${who.tenantUserId.slice(0, 4)}`);
+          const own = await hire(
+            `corr-${who.tenantUserId.slice(0, 4)}`,
+            undefined,
+            who.profileId
+          );
           await link(own, who.tenantUserId);
 
           return requestCorrection({ employmentId: own }, who.token);
@@ -636,7 +663,11 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       [
         "hr_workforce.corrections.cancel",
         async (who) => {
-          const own = await hire(`wd-${who.tenantUserId.slice(0, 4)}`);
+          const own = await hire(
+            `wd-${who.tenantUserId.slice(0, 4)}`,
+            undefined,
+            who.profileId
+          );
           const seeded = await seedCorrection(own, who.tenantUserId);
 
           return withdraw(seeded.id, who.token);
@@ -645,7 +676,11 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       [
         "hr_workforce.corrections.approve",
         async (who) => {
-          const own = await hire(`ap-${who.tenantUserId.slice(0, 4)}`);
+          const own = await hire(
+            `ap-${who.tenantUserId.slice(0, 4)}`,
+            undefined,
+            who.profileId
+          );
           const approver = await seedUser(env.tenantId, "bite-approver", []);
           const seeded = await seedCorrection(own, env.ownerTenantUserId, {
             status: "approved",
@@ -1004,7 +1039,7 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
           })
         ).status
       ).toBe(201);
-      const rehired = await hire("me-again");
+      const rehired = await hire("me-again", undefined, me.profileId);
       await link(rehired, me.tenantUserId);
       const newEvent = (await clock(rehired, {}, me.token)).body.data!;
       const newCorrection = (
@@ -1984,7 +2019,13 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       expect(
         (await decide(relinked.workflowInstanceId, subject.token)).status
       ).toBe(200);
-      const successor = await seedUser(env.tenantId, "successor", []);
+      // A second login of the SAME person: the link guard (#979) admits no other.
+      const successor = await seedUser(
+        env.tenantId,
+        "successor",
+        [],
+        subject.profileId
+      );
       await admin()`
         UPDATE awcms_hr_employments SET tenant_user_id = ${successor.tenantUserId}
         WHERE id = ${subject.employmentId}`;

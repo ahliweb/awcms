@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 199   |
+| Migrations                          | 200   |
 | `awcms_*` tables                    | 215   |
 | Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 650   |
+| Test files                          | 651   |
 | Route files                         | 537   |
 | ADR                                 | 284   |
 
@@ -257,6 +257,7 @@
 | 197 | `sql/217_awcms_telegram_delivery_bootstrap.sql`                    |
 | 198 | `sql/218_awcms_telegram_delivery_permissions.sql`                  |
 | 199 | `sql/224_awcms_sensitive_read_windows.sql`                         |
+| 200 | `sql/228_awcms_hr_employment_link_guard.sql`                       |
 
 ### Tables & Row-Level Security
 
@@ -484,7 +485,7 @@
 | ------------- | ---------- |
 | `(root)`      | 506        |
 | `e2e`         | 25         |
-| `integration` | 118        |
+| `integration` | 119        |
 | `unit`        | 1          |
 
 ### Routes

@@ -139,7 +139,12 @@ async function seedUser(
   tenantId: string,
   label: string,
   permissionKeys: readonly string[]
-): Promise<{ token: string; tenantUserId: string }> {
+): Promise<{
+  token: string;
+  tenantUserId: string;
+  profileId: string;
+  identityId: string;
+}> {
   userCounter += 1;
   const sql = admin();
   const tag = `${label}-${userCounter}`;
@@ -201,7 +206,12 @@ async function seedUser(
     );
   }
 
-  return { token, tenantUserId: tenantUser[0]!.id };
+  return {
+    token,
+    tenantUserId: tenantUser[0]!.id,
+    profileId: profile[0]!.id,
+    identityId: identity[0]!.id
+  };
 }
 
 const ALL_HR_PERMISSIONS = (hrWorkforceModule.permissions ?? []).map(
@@ -343,8 +353,8 @@ function explicit(
   };
 }
 
-async function hire(tag: string): Promise<string> {
-  const profileId = await seedProfile(env.tenantId, tag);
+async function hire(tag: string, existingProfileId?: string): Promise<string> {
+  const profileId = existingProfileId ?? (await seedProfile(env.tenantId, tag));
   numberCounter += 1;
   const response = await call<{ id: string }>(createEmployment, {
     method: "POST",
@@ -860,9 +870,10 @@ suite("hr_workforce shifts HTTP surface (Issue #946)", () => {
 
   test("employee sees own: ?mine=true lists the caller's PUBLISHED schedule only; everything else is 403", async () => {
     if (!handlerReady) return;
-    const mine = await hire("mine");
-    const theirs = await hire("theirs");
     const employee = await seedUser(env.tenantId, "employee", []);
+    // The employment is the PERSON of the login (#979: the link must match).
+    const mine = await hire("mine", employee.profileId);
+    const theirs = await hire("theirs");
 
     expect(
       (

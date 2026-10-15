@@ -41,6 +41,7 @@ import {
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { grantRolePolicy } from "../../src/modules/identity-access/application/access-policy-writer";
+import { linkIdentityToPrincipal } from "../../src/modules/identity-access/application/principal-store";
 import { hrWorkforceModule } from "../../src/modules/hr-workforce/module";
 import { POST as setupInitialize } from "../../src/pages/api/v1/setup/initialize";
 import { POST as authLogin } from "../../src/pages/api/v1/auth/login";
@@ -163,16 +164,26 @@ async function seedProfile(tenantId: string, tag: string): Promise<string> {
 async function seedUser(
   tenantId: string,
   label: string,
-  permissionKeys: readonly string[]
-): Promise<{ token: string; tenantUserId: string }> {
+  permissionKeys: readonly string[],
+  // A SECOND login of an existing person (a re-link target, #979).
+  existingProfileId?: string
+): Promise<{
+  token: string;
+  tenantUserId: string;
+  profileId: string;
+  identityId: string;
+  loginIdentifier: string;
+}> {
   userCounter += 1;
   const sql = admin();
   const tag = `${label}-${userCounter}`;
-  const profile = (await sql`
-    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
-    VALUES (${tenantId}, 'person', ${`User ${tag}`})
-    RETURNING id
-  `) as { id: string }[];
+  const profile = existingProfileId
+    ? [{ id: existingProfileId }]
+    : ((await sql`
+        INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+        VALUES (${tenantId}, 'person', ${`User ${tag}`})
+        RETURNING id
+      `) as { id: string }[]);
   const identity = (await sql`
     INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
     VALUES (${tenantId}, ${profile[0]!.id}, ${`${tag}@example.com`}, 'x')
@@ -226,8 +237,69 @@ async function seedUser(
     );
   }
 
-  return { token, tenantUserId: tenantUser[0]!.id };
+  return {
+    token,
+    tenantUserId: tenantUser[0]!.id,
+    profileId: profile[0]!.id,
+    identityId: identity[0]!.id,
+    loginIdentifier: `${tag}@example.com`
+  };
 }
+
+type AuditRow = { severity: string; attributes: Record<string, unknown> };
+
+async function accountAudits(
+  employmentId: string,
+  action = "hr_workforce.employment.account_assigned"
+): Promise<AuditRow[]> {
+  const rows = (await admin()`
+    SELECT severity, attributes
+    FROM awcms_audit_events
+    WHERE tenant_id = ${env.tenantId} AND resource_id = ${employmentId}
+      AND action = ${action}
+    ORDER BY created_at, id
+  `) as { severity: string; attributes: unknown }[];
+
+  return rows.map((row) => ({
+    severity: row.severity,
+    attributes: (typeof row.attributes === "string"
+      ? JSON.parse(row.attributes)
+      : row.attributes) as Record<string, unknown>
+  }));
+}
+
+async function lastAudit(employmentId: string): Promise<AuditRow> {
+  return (await accountAudits(employmentId)).at(-1)!;
+}
+
+/** Give the user a confirmed second factor (the state ADR-0141 §4 keys on). */
+async function enrol(user: {
+  identityId: string;
+  loginIdentifier: string;
+}): Promise<void> {
+  const principalId = await linkIdentityToPrincipal(
+    admin(),
+    user.identityId,
+    user.loginIdentifier
+  );
+
+  await admin()`
+    INSERT INTO awcms_principal_mfa_factors
+      (principal_id, factor_type, secret_ciphertext, status, last_used_step,
+       activated_at)
+    VALUES (${principalId}, 'totp', 'ciphertext-not-read', 'active', -1, now())
+  `;
+}
+
+async function freshStepUp(user: { identityId: string }): Promise<void> {
+  await admin()`
+    UPDATE awcms_sessions
+    SET assurance_level = 'aal2', stepped_up_at = now()
+    WHERE identity_id = ${user.identityId}
+  `;
+}
+
+const REFUSED = "hr_workforce.employment.account_link_refused";
 
 const ALL_HR_PERMISSIONS = (hrWorkforceModule.permissions ?? []).map(
   (permission) => `hr_workforce.${permission.activityCode}.${permission.action}`
@@ -295,8 +367,12 @@ async function newEmployment(
   });
 }
 
-async function hire(tag: string, extra: Record<string, unknown> = {}) {
-  const profileId = await seedProfile(env.tenantId, tag);
+async function hire(
+  tag: string,
+  extra: Record<string, unknown> = {},
+  existingProfileId?: string
+) {
+  const profileId = existingProfileId ?? (await seedProfile(env.tenantId, tag));
   const response = await newEmployment(profileId, extra);
   expect(response.status).toBe(201);
 
@@ -436,7 +512,7 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
     test("reads own employment, terms and ?mine=true with NO permission; nobody else's", async () => {
       if (!handlerReady) return;
       const me = await seedUser(env.tenantId, "employee", []);
-      const mine = await hire("mine");
+      const mine = await hire("mine", {}, me.profileId);
       const theirs = await hire("theirs");
       expect((await link(mine.id, me.tenantUserId)).status).toBe(200);
 
@@ -496,7 +572,7 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
     test("the ownership grant widens READ only: an employee cannot write, link, delete or read settings", async () => {
       if (!handlerReady) return;
       const me = await seedUser(env.tenantId, "employee", []);
-      const mine = await hire("mine");
+      const mine = await hire("mine", {}, me.profileId);
       await link(mine.id, me.tenantUserId);
 
       expect(
@@ -532,7 +608,7 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
     test("an unlinked, deleted or terminated-then-relinked employment grants nothing", async () => {
       if (!handlerReady) return;
       const me = await seedUser(env.tenantId, "employee", []);
-      const mine = await hire("mine");
+      const mine = await hire("mine", {}, me.profileId);
       await link(mine.id, me.tenantUserId);
       expect((await getOne(mine.id, me.token)).status).toBe(200);
 
@@ -558,7 +634,7 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
     test("an explicit ABAC deny still overrules the ownership grant, and disabling it restores the read", async () => {
       if (!handlerReady) return;
       const me = await seedUser(env.tenantId, "employee", []);
-      const mine = await hire("mine");
+      const mine = await hire("mine", {}, me.profileId);
       await link(mine.id, me.tenantUserId);
       expect((await getOne(mine.id, me.token)).status).toBe(200);
 
@@ -602,8 +678,8 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
   describe("every guard bites (all-but-one is refused, only-that-one succeeds)", () => {
     test("assign, delete, restore, configure and create each need their own permission", async () => {
       if (!handlerReady) return;
-      const employment = await hire("guards");
       const subject = await seedUser(env.tenantId, "subject", []);
+      const employment = await hire("guards", {}, subject.profileId);
 
       type Probe = {
         key: string;
@@ -914,10 +990,10 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
   // --- the login link -------------------------------------------------------------------
 
   describe("the login link (assign)", () => {
-    test("one active employment per login; replay is a no-op; a delegated or unknown user is refused", async () => {
+    test("replay is a no-op; an unknown user and a login of ANOTHER person are refused", async () => {
       if (!handlerReady) return;
       const user = await seedUser(env.tenantId, "login", []);
-      const first = await hire("first");
+      const first = await hire("first", {}, user.profileId);
       const second = await hire("second");
 
       expect((await link(first.id, user.tenantUserId)).status).toBe(200);
@@ -926,13 +1002,245 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
       expect(replay.status).toBe(200);
       expect(replay.body.data!.replayed).toBe(true);
 
-      const taken = await link(second.id, user.tenantUserId);
-      expect(taken.status).toBe(409);
-      expect(taken.body.error?.code).toBe("ACCOUNT_IN_USE");
+      // The login belongs to a different person than `second`'s: refused on the
+      // profile rule BEFORE the one-login-one-employment rule could matter.
+      const foreign = await link(second.id, user.tenantUserId);
+      expect(foreign.status).toBe(422);
+      expect(foreign.body.error?.code).toBe("PROFILE_MISMATCH");
 
       const unknown = await link(second.id, crypto.randomUUID());
       expect(unknown.status).toBe(422);
       expect(unknown.body.error?.code).toBe("USER_NOT_FOUND");
+    });
+
+    test("PS-14 (1): the assigner cannot link their OWN login to someone else's employment (both directions)", async () => {
+      if (!handlerReady) return;
+      const assigner = await seedUser(env.tenantId, "assigner", [
+        "hr_workforce.employments.assign"
+      ]);
+      const colleague = await hire("colleague");
+      const mine = await hire("assigner-own", {}, assigner.profileId);
+
+      // Refused, with the specific reason, and nothing changed or audited.
+      const refused = await link(
+        colleague.id,
+        assigner.tenantUserId,
+        assigner.token
+      );
+      expect(refused.status).toBe(403);
+      expect(refused.body.error?.code).toBe("SELF_LINK_FORBIDDEN");
+      expect((await getOne(colleague.id)).body.data!.accountLinked).toBe(false);
+      expect(await accountAudits(colleague.id)).toHaveLength(0);
+      // The refusal itself leaves a trace (UUIDs + reason code only) and it
+      // survived the refused request: the 403 is a returned Response, so the
+      // transaction committed.
+      const trace = await accountAudits(colleague.id, REFUSED);
+      expect(trace).toHaveLength(1);
+      expect(trace[0]!.severity).toBe("warning");
+      expect(trace[0]!.attributes).toEqual({
+        reason: "self_link_forbidden",
+        requestedTenantUserId: assigner.tenantUserId,
+        previousTenantUserId: null
+      });
+
+      // The same actor linking their OWN login to THEIR OWN employment is the
+      // legitimate case and still works.
+      const own = await link(mine.id, assigner.tenantUserId, assigner.token);
+      expect(own.status).toBe(200);
+      expect(own.body.data!.employment.accountLinked).toBe(true);
+
+      // And the colleague's own login (same person) is accepted.
+      const theirs = await seedUser(
+        env.tenantId,
+        "colleague-login",
+        [],
+        colleague.profileId
+      );
+      expect(
+        (await link(colleague.id, theirs.tenantUserId, assigner.token)).status
+      ).toBe(200);
+    });
+
+    test("PS-14 (2): the linked login must belong to the employment's person (both directions)", async () => {
+      if (!handlerReady) return;
+      const person = await seedUser(env.tenantId, "person", []);
+      const other = await seedUser(env.tenantId, "other", []);
+      const employment = await hire("person-emp", {}, person.profileId);
+
+      // A login of another person is refused, and grants that person nothing.
+      const mismatch = await link(employment.id, other.tenantUserId);
+      expect(mismatch.status).toBe(422);
+      expect(mismatch.body.error?.code).toBe("PROFILE_MISMATCH");
+      expect((await getOne(employment.id, other.token)).status).toBe(403);
+      expect((await getOne(employment.id)).body.data!.accountLinked).toBe(
+        false
+      );
+      expect(await accountAudits(employment.id)).toHaveLength(0);
+      expect(
+        (await accountAudits(employment.id, REFUSED)).map(
+          (row) => row.attributes.reason
+        )
+      ).toEqual(["profile_mismatch"]);
+
+      // An inactive identity is not a login that can be linked (audit L2).
+      const sleeper = await seedUser(
+        env.tenantId,
+        "sleeper",
+        [],
+        person.profileId
+      );
+      await admin()`UPDATE awcms_identities SET status = 'inactive' WHERE id = ${sleeper.identityId}`;
+      expect(
+        (await link(employment.id, sleeper.tenantUserId)).body.error?.code
+      ).toBe("USER_NOT_FOUND");
+
+      // The matching login is linked, and now grants the employee their own.
+      expect((await link(employment.id, person.tenantUserId)).status).toBe(200);
+      expect((await getOne(employment.id, person.token)).status).toBe(200);
+    });
+
+    test("PS-14 (audit M2): a link made BEFORE the fix is re-validated on a no-op, not echoed back as 200", async () => {
+      if (!handlerReady) return;
+      const person = await seedUser(env.tenantId, "legacy-person", []);
+      const stranger = await seedUser(env.tenantId, "legacy-stranger", []);
+      const employment = await hire("legacy", {}, person.profileId);
+
+      // Reproduce a pre-fix row: the DB guard is taken out of the way.
+      await admin()`ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard`;
+
+      try {
+        await admin()`
+          UPDATE awcms_hr_employments SET tenant_user_id = ${stranger.tenantUserId}
+          WHERE id = ${employment.id}
+        `;
+      } finally {
+        await admin()`ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard`;
+      }
+
+      const echoed = await link(employment.id, stranger.tenantUserId);
+      expect(echoed.status).toBe(422);
+      expect(echoed.body.error?.code).toBe("PROFILE_MISMATCH");
+
+      // The way out is an unlink, then the right login.
+      expect((await link(employment.id, null)).status).toBe(200);
+      expect((await link(employment.id, person.tenantUserId)).status).toBe(200);
+    });
+
+    test("PS-14 (3): a first link is a warning; a re-link is critical, names before and after, and carries no free text", async () => {
+      if (!handlerReady) return;
+      const first = await seedUser(env.tenantId, "first-login", []);
+      const second = await seedUser(
+        env.tenantId,
+        "second-login",
+        [],
+        first.profileId
+      );
+      const employment = await hire("relink", {}, first.profileId);
+
+      expect((await link(employment.id, first.tenantUserId)).status).toBe(200);
+      // No history yet, so no step-up is asked; the re-link is still critical.
+      expect((await link(employment.id, second.tenantUserId)).status).toBe(200);
+      expect((await link(employment.id, null)).status).toBe(200);
+      // Unlink-then-link is still a RE-link (audit L4): critical, and the
+      // "before" is the login that was last linked.
+      expect((await link(employment.id, first.tenantUserId)).status).toBe(200);
+
+      const audits = await accountAudits(employment.id);
+      expect(audits.map((row) => row.severity)).toEqual([
+        "warning",
+        "critical",
+        "critical",
+        "critical"
+      ]);
+      expect(audits[3]!.attributes).toMatchObject({
+        relink: true,
+        linkedTenantUserId: first.tenantUserId,
+        previousTenantUserId: second.tenantUserId
+      });
+      expect(audits[1]!.attributes).toMatchObject({
+        relink: true,
+        linkedTenantUserId: second.tenantUserId,
+        previousTenantUserId: first.tenantUserId,
+        hadHistory: false,
+        stepUp: "not_applicable"
+      });
+      expect(audits[2]!.attributes).toMatchObject({
+        linked: false,
+        previousTenantUserId: second.tenantUserId
+      });
+      // Only UUIDs and booleans ride in the row.
+      expect(JSON.stringify(audits[1]!.attributes)).not.toMatch(/@example/);
+    });
+
+    test("PS-14 (3): re-linking an employment WITH attendance needs the conditional step-up (ADR-0141 §4)", async () => {
+      if (!handlerReady) return;
+      const person = await seedUser(env.tenantId, "hist-a", []);
+      const next = await seedUser(env.tenantId, "hist-b", [], person.profileId);
+      const employment = await hire("history", {}, person.profileId);
+      expect((await link(employment.id, person.tenantUserId)).status).toBe(200);
+
+      await admin()`
+        INSERT INTO awcms_hr_attendance_events
+          (tenant_id, employment_id, kind, occurred_at, source, client_event_key)
+        VALUES (${env.tenantId}, ${employment.id}, 'clock_in', now(), 'self',
+                'ps14-history')
+      `;
+
+      // 1. An assigner with NO enrolled factor is not locked out: the re-link
+      //    succeeds and the audit row records WHY no step-up was demanded.
+      const unenrolled = await seedUser(env.tenantId, "assign-plain", [
+        "hr_workforce.employments.assign"
+      ]);
+      expect(
+        (await link(employment.id, next.tenantUserId, unenrolled.token)).status
+      ).toBe(200);
+      expect((await lastAudit(employment.id)).attributes).toMatchObject({
+        hadHistory: true,
+        stepUp: "not_enrolled"
+      });
+      expect((await link(employment.id, person.tenantUserId)).status).toBe(200);
+
+      // 2. An ENROLLED assigner with a stale (aal1) session is refused, the
+      //    link is untouched and nothing is audited.
+      const enrolled = await seedUser(env.tenantId, "assign-mfa", [
+        "hr_workforce.employments.assign"
+      ]);
+      await enrol(enrolled);
+      const before = (await accountAudits(employment.id)).length;
+      const stale = await link(
+        employment.id,
+        next.tenantUserId,
+        enrolled.token
+      );
+      expect(stale.status).toBe(403);
+      expect(stale.body.error?.code).toBe("STEP_UP_REQUIRED");
+      expect(
+        (await link(employment.id, null, enrolled.token)).body.error?.code
+      ).toBe("STEP_UP_REQUIRED");
+      expect((await getOne(employment.id, person.token)).status).toBe(200);
+      expect(await accountAudits(employment.id)).toHaveLength(before);
+      expect(
+        (await accountAudits(employment.id, REFUSED)).map(
+          (row) => row.attributes.reason
+        )
+      ).toEqual(["step_up_required", "step_up_required"]);
+
+      // 3. A fresh step-up lets it through (the refusal was not cached by the
+      //    Idempotency-Key: refusals are not stored).
+      await freshStepUp(enrolled);
+      expect(
+        (await link(employment.id, next.tenantUserId, enrolled.token)).status
+      ).toBe(200);
+      const done = await lastAudit(employment.id);
+      expect(done.severity).toBe("critical");
+      expect(done.attributes).toMatchObject({
+        stepUp: "satisfied",
+        previousTenantUserId: person.tenantUserId,
+        linkedTenantUserId: next.tenantUserId
+      });
+      // The former owner lost the grant.
+      expect((await getOne(employment.id, person.token)).status).toBe(403);
+      expect((await getOne(employment.id, next.token)).status).toBe(200);
     });
   });
 
@@ -1055,10 +1363,14 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
   test("audit rows say what happened and carry no employee number, title or reason; the link row names the login UUID", async () => {
     if (!handlerReady) return;
     const user = await seedUser(env.tenantId, "audited", []);
-    const employment = await hire("audit", {
-      employeeNo: "E-SECRET-77",
-      jobTitle: "Chief Secret Officer"
-    });
+    const employment = await hire(
+      "audit",
+      {
+        employeeNo: "E-SECRET-77",
+        jobTitle: "Chief Secret Officer"
+      },
+      user.profileId
+    );
     await link(employment.id, user.tenantUserId);
     await changeTermsOf(employment.id, {
       effectiveFrom: "2026-03-01",

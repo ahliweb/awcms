@@ -391,6 +391,7 @@ export const hrWorkforceModule = defineModule({
       subjectColumns: [
         { column: "profile_id", references: "profile" },
         { column: "tenant_user_id", references: "tenant_user" },
+        { column: "last_tenant_user_id", references: "tenant_user" },
         { column: "created_by", references: "tenant_user" },
         { column: "updated_by", references: "tenant_user" },
         { column: "deleted_by", references: "tenant_user" },
