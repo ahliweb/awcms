@@ -12,6 +12,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { listFilesRecursive, REPO_ROOT } from "../scripts/lib/repo-files";
+import {
+  findUnguardedCsvJoins,
+  joinsCellsIntoLines,
+  namesCsvWriter
+} from "../scripts/lib/csv-writer-scan";
 import { stripComments } from "../scripts/lib/source-text";
 import {
   csvCellForWrite,
@@ -289,12 +294,51 @@ describe("the two CSV writers in the repository", () => {
   });
 });
 
+describe("the structural scanner (audit L4) fails on a deliberately bad writer", () => {
+  const BAD: Record<string, string> = {
+    "an arrow writer that never neutralises": `const toCsv = (rows) => rows.map((r) => [r.a, r.b].join(",")).join("\n");`,
+    "a writer that imports the helper but skips it on a cell": `import { csvCellForWrite } from "../lib/security/csv-formula";
+      const line = [csvCellForWrite(r.a), r.b].join(",");`,
+    "a .map writer whose callback has no helper": `const out = cols.map((c) => String(row[c])).join(",");`,
+    "an untraceable identifier": `export function emit(cells) { return cells.join(","); }`,
+    "a spread of raw cells": `const line = [csvCellForWrite(a), ...rest].join(",");`,
+    "a header literal that is itself a formula": `const h = ["=cmd"].join(",");`
+  };
+
+  test.each(Object.entries(BAD))("%s is reported", (_name, code) => {
+    expect(findUnguardedCsvJoins(code).length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    `const l = [csvCellForWrite(a), csvCellForWrite(b)].join(",");`,
+    `const h = ["id", "name"].join(","); const l = [h].join("\n");`,
+    `const h = cols.map((c) => csvCellForWrite(c)).join(",");`,
+    `const cells = cols.map((c) => csvCellForWrite(row[c]));\nconst line = cells.join(",");`,
+    `const line = cols\n  .map((c) => csvCellForWrite(row[c], { reversible: true }))\n  .join(",");`
+  ])("a guarded writer passes: %s", (code) => {
+    expect(findUnguardedCsvJoins(code)).toEqual([]);
+  });
+
+  test("detection is structural: an arrow writer, and a comma+newline join, are both writers", () => {
+    expect(namesCsvWriter("const toCsv = (rows) => rows.length;")).toBe(true);
+    expect(namesCsvWriter("const emitCSV = async (rows) => 1;")).toBe(true);
+    expect(namesCsvWriter("const x = 1;")).toBe(false);
+    expect(
+      joinsCellsIntoLines(
+        'const t = rows.map((r) => [r.a].join(",")).join("\\n");'
+      )
+    ).toBe(true);
+    // A comma-join alone (an SQL array literal, a message) is not a CSV writer.
+    expect(joinsCellsIntoLines('const a = `{${ids.join(",")}}`;')).toBe(false);
+  });
+});
+
 describe("no CSV writer in src/ keeps its own copy of the rule", () => {
   /**
-   * A file that DEFINES a CSV cell writer (`function csv...(`, or a `.csv`
-   * artifact written by hand) must import the shared helper. The download route
-   * only serves a stored artifact and the admin screen only offers the format as
-   * a choice, so they are listed with that reason.
+   * Files that MENTION CSV (a name, a `text/csv` header) without writing cells.
+   * Each exemption covers the name/content-type heuristic ONLY: a file that
+   * joins cells with a comma and lines with a newline is scanned structurally
+   * whatever this list says (audit L4: no whole-file exemptions).
    */
   const NOT_WRITERS: Record<string, string> = {
     "src/pages/api/v1/reports/exports/runs/[id]/download.ts":
@@ -319,26 +363,32 @@ describe("no CSV writer in src/ keeps its own copy of the rule", () => {
     "src/lib/i18n/catalogs/id.generated.ts": "generated catalogue"
   };
 
-  /** A function whose name says CSV, or a `text/csv` response. */
-  const definesCsvWriter = (code: string): boolean =>
-    /function\s+\w*csv\w*\s*\(/i.test(code) || /text\/csv/.test(code);
+  /**
+   * Files whose comma+newline joins are NOT spreadsheet rows. The exemption is
+   * conditional, not whole-file: the file must never name a CSV writer or serve
+   * `text/csv` (asserted below), so turning it into one re-arms the scan.
+   */
+  const COMMA_JOINS_THAT_ARE_NOT_CSV: Record<string, string> = {
+    "src/lib/observability/adapters/prometheus-text-adapter.ts":
+      "Prometheus exposition format: joins label pairs with a comma"
+  };
+
+  const HELPER_FILE = "src/lib/security/csv-formula.ts";
 
   const files = listFilesRecursive("src", {
     extensions: [".ts", ".astro"],
     relativeTo: REPO_ROOT
   });
 
-  test("the scan finds the two known writers (so it is not vacuous)", async () => {
+  async function codeOf(file: string): Promise<string> {
+    return stripComments(await readFile(path.join(REPO_ROOT, file), "utf8"));
+  }
+
+  test("the scan finds the two known writers structurally (so it is not vacuous)", async () => {
     const writers: string[] = [];
 
     for (const file of files) {
-      const code = stripComments(
-        await readFile(path.join(REPO_ROOT, file), "utf8")
-      );
-
-      if (definesCsvWriter(code)) {
-        writers.push(file);
-      }
+      if (joinsCellsIntoLines(await codeOf(file))) writers.push(file);
     }
 
     expect(writers).toContain(
@@ -349,21 +399,37 @@ describe("no CSV writer in src/ keeps its own copy of the rule", () => {
     );
   });
 
-  test("every file that writes CSV cells imports the shared helper and defines no escape of its own", async () => {
+  test("every comma-joined cell row in src/ passes each cell through the helper", async () => {
     const offenders: string[] = [];
 
     for (const file of files) {
-      if (file === "src/lib/security/csv-formula.ts") continue;
-      if (Object.hasOwn(NOT_WRITERS, file)) continue;
+      if (file === HELPER_FILE) continue;
 
-      const code = stripComments(
-        await readFile(path.join(REPO_ROOT, file), "utf8")
-      );
-      if (!definesCsvWriter(code)) continue;
+      const code = await codeOf(file);
 
-      if (!code.includes("lib/security/csv-formula")) {
+      if (Object.hasOwn(COMMA_JOINS_THAT_ARE_NOT_CSV, file)) continue;
+      if (!joinsCellsIntoLines(code)) continue;
+
+      for (const problem of findUnguardedCsvJoins(code)) {
+        offenders.push(`${file}: ${problem}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("a file that names a CSV writer or serves text/csv, and is not listed, uses the helper and has no escape of its own", async () => {
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      if (file === HELPER_FILE || Object.hasOwn(NOT_WRITERS, file)) continue;
+
+      const code = await codeOf(file);
+      if (!namesCsvWriter(code)) continue;
+
+      if (!/\b(?:csvCellForWrite|neutralizeCsvFormula)\s*\(/.test(code)) {
         offenders.push(
-          `${file}: writes CSV without importing src/lib/security/csv-formula.ts`
+          `${file}: names a CSV writer but never CALLS the shared helper`
         );
       }
 
@@ -373,5 +439,19 @@ describe("no CSV writer in src/ keeps its own copy of the rule", () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  test("every exemption is still a file that exists and still has no structural writer", async () => {
+    for (const file of Object.keys(NOT_WRITERS)) {
+      expect(files).toContain(file);
+      expect(joinsCellsIntoLines(await codeOf(file))).toBe(false);
+    }
+  });
+
+  test("a comma-join exemption holds only while the file stays unrelated to CSV", async () => {
+    for (const file of Object.keys(COMMA_JOINS_THAT_ARE_NOT_CSV)) {
+      expect(files).toContain(file);
+      expect(namesCsvWriter(await codeOf(file))).toBe(false);
+    }
   });
 });

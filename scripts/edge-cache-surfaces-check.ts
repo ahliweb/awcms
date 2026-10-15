@@ -27,6 +27,8 @@ import { listModules } from "../src/modules";
 import {
   PAYROLL_OWNER_MODULE_KEYS,
   PAYROLL_PATH_VOCABULARY,
+  PAYROLL_ROUTE_NAMESPACES,
+  PAYROLL_ROUTE_PROBES,
   isPayrollOwnerModule
 } from "../src/modules/_shared/payroll-data-boundary";
 
@@ -629,6 +631,29 @@ export function findPayrollSurfaces(
       )
     ) {
       reasons.push("its path overlaps a route a payroll module serves");
+    }
+
+    // Issue #1014 L5: behaviour, not words. Whatever the pattern is called, if
+    // it MATCHES a path a payroll route takes it would cache that response.
+    const probes = [
+      ...PAYROLL_ROUTE_PROBES,
+      ...payrollRoutes.flatMap((route) => [route, `${route}/x`, `${route}/x/y`])
+    ];
+    const matched = probes.find((probe) => surface.pattern.test(probe));
+
+    if (matched !== undefined) {
+      reasons.push(`its pattern matches the payroll route path "${matched}"`);
+    }
+
+    if (
+      prefixes.some((prefix) =>
+        PAYROLL_ROUTE_NAMESPACES.some(
+          (namespace) =>
+            prefix.startsWith(namespace) || namespace.startsWith(prefix)
+        )
+      )
+    ) {
+      reasons.push("its path lies in an HR module namespace");
     }
 
     if (reasons.length > 0) {

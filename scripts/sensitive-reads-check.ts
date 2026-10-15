@@ -86,6 +86,12 @@ function main(): void {
     );
   }
 
+  for (const entry of result.swallowedAudits) {
+    console.error(
+      `  ${entry.source} - ${entry.problem} (Issue #1014 L6). The audit call must abort the transaction: await or return it, no .catch, and no try/catch that does not rethrow.`
+    );
+  }
+
   for (const key of result.unclassified) {
     console.error(
       `  ${key} - a read-shaped permission of a sensitive module with no policy. Add a policy to SENSITIVE_READ_POLICIES, or an entry with a reason to NOT_SENSITIVE_READS, in src/modules/_shared/sensitive-reads.ts.`

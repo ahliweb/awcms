@@ -59,6 +59,122 @@ import {
  * behaviour by the route-level tests the #957/#961 acceptance wording requires
  * (hr-payroll.md section 13.3).
  */
+/**
+ * Fail-closed shape of the audit call (Issue #1014 L6).
+ *
+ * `recordSensitiveRead` aborts the caller's transaction when it throws; a
+ * route that wraps it in `try { } catch { }` (or `.catch(() => {})`, or does
+ * not await it) turns that into "read succeeded, audit lost" and nothing else
+ * in the gate can see it. This is the syntactic half: every call must be
+ * `await`ed or `return`ed (or be an arrow's concise body), must not be chained
+ * with `.catch`/`.then`, and must not sit inside a `try` whose `catch` has no
+ * `throw`. The behavioural half is the route test that injects a failing audit
+ * insert and asserts no data comes back (`tests/sensitive-read-fail-closed-
+ * contract.test.ts` holds the reusable assertion).
+ */
+export function findSwallowedSensitiveReads(source: string): string[] {
+  const clean = stripComments(source);
+  const problems: string[] = [];
+
+  for (const call of clean.matchAll(/\brecordSensitiveRead\s*\(/g)) {
+    const start = call.index!;
+    const before = clean.slice(0, start).trimEnd();
+
+    if (/\bfunction\s*$/.test(before) || /\bimport\s*\{[^}]*$/.test(before)) {
+      continue;
+    }
+    if (/^\s*(?:,|\})/.test(clean.slice(start + call[0].length))) continue;
+
+    const where = `near offset ${start}`;
+
+    if (!/(?:\bawait|\breturn|=>)$/.test(before)) {
+      problems.push(
+        `recordSensitiveRead (${where}) is not awaited or returned, so a failed audit would not stop the read`
+      );
+    }
+
+    const open = start + call[0].length - 1;
+    let depth = 0;
+    let close = clean.length;
+
+    for (let index = open; index < clean.length; index += 1) {
+      if (clean[index] === "(") depth += 1;
+      if (clean[index] === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          close = index;
+          break;
+        }
+      }
+    }
+
+    if (/^\s*\.(?:catch|then|finally)\s*\(/.test(clean.slice(close + 1))) {
+      problems.push(
+        `recordSensitiveRead (${where}) is chained with .catch/.then/.finally, which can swallow its failure`
+      );
+    }
+
+    // Walk outward through the enclosing blocks; any `try` whose `catch` has
+    // no `throw` swallows the audit failure.
+    let level = 0;
+
+    for (let index = start - 1; index >= 0; index -= 1) {
+      const char = clean[index];
+
+      if (char === "}") level += 1;
+      else if (char === "{") {
+        if (level > 0) {
+          level -= 1;
+          continue;
+        }
+        if (!/\btry\s*$/.test(clean.slice(0, index))) continue;
+
+        let blockDepth = 0;
+        let blockEnd = -1;
+
+        for (let k = index; k < clean.length; k += 1) {
+          if (clean[k] === "{") blockDepth += 1;
+          if (clean[k] === "}") {
+            blockDepth -= 1;
+            if (blockDepth === 0) {
+              blockEnd = k;
+              break;
+            }
+          }
+        }
+
+        const rest = clean.slice(blockEnd + 1);
+        const catchMatch = /^\s*catch\s*(?:\([^)]*\))?\s*\{/.exec(rest);
+
+        if (!catchMatch) continue;
+
+        const catchOpen = blockEnd + 1 + catchMatch[0].length - 1;
+        let catchDepth = 0;
+        let catchEnd = clean.length;
+
+        for (let k = catchOpen; k < clean.length; k += 1) {
+          if (clean[k] === "{") catchDepth += 1;
+          if (clean[k] === "}") {
+            catchDepth -= 1;
+            if (catchDepth === 0) {
+              catchEnd = k;
+              break;
+            }
+          }
+        }
+
+        if (!/\bthrow\b/.test(clean.slice(catchOpen, catchEnd))) {
+          problems.push(
+            `recordSensitiveRead (${where}) sits inside a try whose catch never rethrows, so a failed audit would still return the data`
+          );
+        }
+      }
+    }
+  }
+
+  return problems;
+}
+
 export type UnauditedRoute = {
   permission: string;
   source: string;
@@ -81,6 +197,8 @@ export type SensitiveReadCoverageResult = {
   unauditedTableReaders: { source: string; tables: string[] }[];
   /** Exemptions for a file that no longer exists or no longer names such a table. */
   staleSourceExemptions: string[];
+  /** Calls of `recordSensitiveRead` that could swallow their own failure (Issue #1014 L6). */
+  swallowedAudits: { source: string; problem: string }[];
   coveredGuardCount: number;
 };
 
@@ -304,6 +422,7 @@ export function evaluateSensitiveReadCoverage(
   const unauditedRoutes: UnauditedRoute[] = [];
   const computedGuards: string[] = [];
   const unauditedTableReaders: { source: string; tables: string[] }[] = [];
+  const swallowedAudits: { source: string; problem: string }[] = [];
   const usedTableExemptions = new Set<string>();
   let coveredGuardCount = 0;
 
@@ -327,6 +446,12 @@ export function evaluateSensitiveReadCoverage(
 
     // The gate's own implementation files describe guards in prose and regexes.
     const internals = name.startsWith("src/modules/_shared/");
+
+    if (!internals) {
+      for (const problem of findSwallowedSensitiveReads(source)) {
+        swallowedAudits.push({ source: name, problem });
+      }
+    }
 
     for (const ref of internals ? [] : collectAuthorizeRefs(source)) {
       const resolved = guardDefinitions.get(ref);
@@ -468,7 +593,8 @@ export function evaluateSensitiveReadCoverage(
       conflictingExemptions.length === 0 &&
       computedGuards.length === 0 &&
       unauditedTableReaders.length === 0 &&
-      staleSourceExemptions.length === 0,
+      staleSourceExemptions.length === 0 &&
+      swallowedAudits.length === 0,
     policyProblems,
     unauditedRoutes,
     unclassified,
@@ -477,6 +603,7 @@ export function evaluateSensitiveReadCoverage(
     computedGuards,
     unauditedTableReaders,
     staleSourceExemptions,
+    swallowedAudits,
     coveredGuardCount
   };
 }
