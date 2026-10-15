@@ -113,6 +113,48 @@ async function seedActor(tenantId: string, tag: string): Promise<void> {
 
   ACTOR_IDS.set(tenantId, user[0]!.id);
 }
+/**
+ * A real workflow definition + instance for a procurement document, written by
+ * the admin (the runtime role cannot mint a verdict - sql/252). The instance is
+ * what the engine would have created at submit: `procurement_document`, the
+ * document id as text, requested by the submitter.
+ */
+async function seedApprovalInstance(
+  tenantId: string,
+  spec: {
+    resourceId: string;
+    requestedBy: string;
+    status?: string;
+    resourceType?: string;
+  }
+): Promise<string> {
+  const sql = getAdminSql();
+  const definition = (await sql`
+    INSERT INTO awcms_workflow_definitions
+      (tenant_id, workflow_key, name, version, lifecycle_status, graph)
+    VALUES (${tenantId}, ${`procurement.document_approval.${crypto.randomUUID()}`},
+            'Approval', 1, 'active',
+            ${{ startNodeId: "e", nodes: [{ id: "e", type: "end", outcome: "approved" }] }}::jsonb)
+    RETURNING id
+  `) as { id: string }[];
+  const instance = (await sql`
+    INSERT INTO awcms_workflow_instances
+      (tenant_id, workflow_definition_id, resource_type, resource_id, status,
+       requested_by_tenant_user_id)
+    VALUES (${tenantId}, ${definition[0]!.id},
+            ${spec.resourceType ?? "procurement_document"}, ${spec.resourceId}, ${spec.status ?? "pending"}, ${spec.requestedBy})
+    RETURNING id
+  `) as { id: string }[];
+
+  return instance[0]!.id;
+}
+
+async function setInstanceStatus(instanceId: string, status: string) {
+  await getAdminSql()`
+    UPDATE awcms_workflow_instances SET status = ${status} WHERE id = ${instanceId}
+  `;
+}
+
 const ITEM = { itemType: "commerce.variant", unitCode: "unit" };
 
 function inTenant<T>(
@@ -515,14 +557,21 @@ suite("procurement database invariants (Issue #888, ADR-0128)", () => {
         );
         const id = (created as { document: { id: string } }).document.id;
 
+        const instanceId = await seedApprovalInstance(TENANT_A, {
+          resourceId: id,
+          requestedBy: actor
+        });
+        instanceOf.set(id, instanceId);
+
         await admin`
           UPDATE awcms_procurement_documents
-          SET status = 'submitted', submitted_at = now(),
-              approval_status = 'pending', approval_instance_id = gen_random_uuid()
+          SET status = 'submitted', submitted_at = now(), submitted_by = ${actor},
+              approval_status = 'pending', approval_instance_id = ${instanceId}
           WHERE tenant_id = ${TENANT_A} AND id = ${id}`;
 
         return id;
       };
+      const instanceOf = new Map<string, string>();
       const finalise = (id: string, by: string | null) =>
         admin`UPDATE awcms_procurement_documents
               SET status = 'finalised', finalised_at = now(), finalised_by = ${by}
@@ -551,6 +600,7 @@ suite("procurement database invariants (Issue #888, ADR-0128)", () => {
 
       // pending -> rejected is allowed, and rejected is final: it can neither
       // be finalised nor flipped to approved.
+      await setInstanceStatus(instanceOf.get(pending)!, "rejected");
       await admin`UPDATE awcms_procurement_documents SET approval_status = 'rejected'
                   WHERE tenant_id = ${TENANT_A} AND id = ${pending}`;
       await assertRejected(
@@ -565,6 +615,7 @@ suite("procurement database invariants (Issue #888, ADR-0128)", () => {
 
       // pending -> approved is allowed; approved cannot go back.
       const approved = await pendingSubmitted();
+      await setInstanceStatus(instanceOf.get(approved)!, "approved");
       await admin`UPDATE awcms_procurement_documents SET approval_status = 'approved'
                   WHERE tenant_id = ${TENANT_A} AND id = ${approved}`;
       await assertRejected(
@@ -590,6 +641,284 @@ suite("procurement database invariants (Issue #888, ADR-0128)", () => {
               SET status = 'reversed', reversed_at = now(), reversed_by = ${actor}
               WHERE tenant_id = ${TENANT_A} AND id = ${approved}`,
         /23514|actor_stamps/i
+      );
+    });
+
+    // --- approval is bound to the workflow engine's verdict (#1045) -----------------
+    //
+    // Everything below runs as the RUNTIME role (`awcms_app`) under the tenant
+    // context - the role a compromised handler would hold - not as the table owner.
+
+    async function draftDocument(): Promise<string> {
+      const created = await inTenant(TENANT_A, (tx) =>
+        createDocument(
+          tx,
+          TENANT_A,
+          actorOf(TENANT_A),
+          receive(supA, locA, [[`ab-${crypto.randomUUID()}`, "1", "1"]])
+        )
+      );
+
+      return (created as { document: { id: string } }).document.id;
+    }
+
+    /** The runtime role's draft -> submitted write, binding whatever it is told to. */
+    function runtimeSubmit(
+      id: string,
+      approvalStatus: string,
+      instanceId: string | null
+    ) {
+      const actor = ACTOR_IDS.get(TENANT_A)!;
+
+      return inTenant(
+        TENANT_A,
+        (tx) => tx`
+          UPDATE awcms_procurement_documents
+          SET status = 'submitted', submitted_at = now(), submitted_by = ${actor},
+              approval_status = ${approvalStatus},
+              approval_instance_id = ${instanceId}
+          WHERE tenant_id = ${TENANT_A} AND id = ${id}`
+      );
+    }
+
+    function runtimeSetApproval(id: string, approvalStatus: string) {
+      return inTenant(
+        TENANT_A,
+        (tx) => tx`
+          UPDATE awcms_procurement_documents SET approval_status = ${approvalStatus}
+          WHERE tenant_id = ${TENANT_A} AND id = ${id}`
+      );
+    }
+
+    async function submittedWithInstance(): Promise<{
+      id: string;
+      instanceId: string;
+    }> {
+      const id = await draftDocument();
+      const instanceId = await seedApprovalInstance(TENANT_A, {
+        resourceId: id,
+        requestedBy: ACTOR_IDS.get(TENANT_A)!
+      });
+      await runtimeSubmit(id, "pending", instanceId);
+
+      return { id, instanceId };
+    }
+
+    test("a forged approval is refused while the bound instance is still pending (#1045, exploit e10)", async () => {
+      const { id, instanceId } = await submittedWithInstance();
+
+      await assertRejected(
+        runtimeSetApproval(id, "approved"),
+        /PROCUREMENT_APPROVAL_VERDICT_MISMATCH/
+      );
+      await assertRejected(
+        runtimeSetApproval(id, "rejected"),
+        /PROCUREMENT_APPROVAL_VERDICT_MISMATCH/
+      );
+
+      // The verdict must also AGREE: an approved document needs an approved
+      // instance, a rejected one a rejected (or cancelled) instance.
+      await setInstanceStatus(instanceId, "rejected");
+      await assertRejected(
+        runtimeSetApproval(id, "approved"),
+        /PROCUREMENT_APPROVAL_VERDICT_MISMATCH/
+      );
+
+      // The document is still pending, so it cannot be finalised either.
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+          UPDATE awcms_procurement_documents
+          SET status = 'finalised', finalised_at = now(),
+              finalised_by = ${ACTOR_IDS.get(TENANT_A)!}
+          WHERE tenant_id = ${TENANT_A} AND id = ${id}`
+        ),
+        /23514|finalise_approval/i
+      );
+    });
+
+    test("submit refuses an instance that does not exist, names another document or type, belongs to another tenant, was requested by someone else, or disagrees with the status (#1045)", async () => {
+      const actor = ACTOR_IDS.get(TENANT_A)!;
+
+      // Not an instance at all.
+      const a = await draftDocument();
+      await assertRejected(
+        runtimeSubmit(a, "pending", crypto.randomUUID()),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // An instance that names ANOTHER document.
+      const b = await draftDocument();
+      const other = await draftDocument();
+      const otherInstance = await seedApprovalInstance(TENANT_A, {
+        resourceId: other,
+        requestedBy: actor
+      });
+      await assertRejected(
+        runtimeSubmit(b, "pending", otherInstance),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // An instance of another resource TYPE that happens to carry this id.
+      const c = await draftDocument();
+      const wrongType = await seedApprovalInstance(TENANT_A, {
+        resourceId: c,
+        requestedBy: actor,
+        resourceType: "hr_attendance_correction"
+      });
+      await assertRejected(
+        runtimeSubmit(c, "pending", wrongType),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // Another TENANT's instance, even one that names this very document id.
+      const d = await draftDocument();
+      const foreign = await seedApprovalInstance(TENANT_B, {
+        resourceId: d,
+        requestedBy: actor // every other field matches; only the tenant differs
+      });
+      await assertRejected(
+        runtimeSubmit(d, "pending", foreign),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+      // RLS already hides it from the runtime role; the trigger's own tenant
+      // check must hold for a role that sees every tenant (the table owner).
+      await assertRejected(
+        getAdminSql()`
+          UPDATE awcms_procurement_documents
+          SET status = 'submitted', submitted_at = now(),
+              submitted_by = ${actor}, approval_status = 'pending',
+              approval_instance_id = ${foreign}
+          WHERE tenant_id = ${TENANT_A} AND id = ${d}`,
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // An instance somebody else requested.
+      const e = await draftDocument();
+      const notMine = await seedApprovalInstance(TENANT_A, {
+        resourceId: e,
+        requestedBy: ACTOR_IDS.get(TENANT_B)!
+      });
+      await assertRejected(
+        runtimeSubmit(e, "pending", notMine),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // A pending instance cannot be recorded as already approved at submit ...
+      const f = await draftDocument();
+      const pendingInstance = await seedApprovalInstance(TENANT_A, {
+        resourceId: f,
+        requestedBy: actor
+      });
+      await assertRejected(
+        runtimeSubmit(f, "approved", pendingInstance),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // ... and a document that needs no approval binds no instance.
+      await assertRejected(
+        runtimeSubmit(f, "not_required", pendingInstance),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // The honest bindings are accepted: pending against a pending instance,
+      // and a verdict the workflow already reached when it started.
+      await runtimeSubmit(f, "pending", pendingInstance);
+      const g = await draftDocument();
+      const settled = await seedApprovalInstance(TENANT_A, {
+        resourceId: g,
+        requestedBy: actor,
+        status: "approved"
+      });
+      await runtimeSubmit(g, "approved", settled);
+    });
+
+    test("a pg_temp table named like the instance table cannot stand in for it (#1045)", async () => {
+      const actor = ACTOR_IDS.get(TENANT_A)!;
+
+      // At submit: a TEMP instance that says everything the trigger wants to hear.
+      const a = await draftDocument();
+      const fakeId = crypto.randomUUID();
+      await assertRejected(
+        inTenant(TENANT_A, async (tx) => {
+          await tx`CREATE TEMP TABLE awcms_workflow_instances
+                   (LIKE public.awcms_workflow_instances INCLUDING DEFAULTS) ON COMMIT DROP`;
+          await tx`INSERT INTO pg_temp.awcms_workflow_instances
+                     (id, tenant_id, workflow_definition_id, resource_type,
+                      resource_id, status, requested_by_tenant_user_id)
+                   VALUES (${fakeId}, ${TENANT_A}, gen_random_uuid(),
+                           'procurement_document', ${a}, 'approved', ${actor})`;
+
+          return tx`
+            UPDATE awcms_procurement_documents
+            SET status = 'submitted', submitted_at = now(), submitted_by = ${actor},
+                approval_status = 'approved', approval_instance_id = ${fakeId}
+            WHERE tenant_id = ${TENANT_A} AND id = ${a}`;
+        }),
+        /PROCUREMENT_APPROVAL_BAD_WORKFLOW/
+      );
+
+      // At the verdict: the real instance is pending; a TEMP twin with the same id
+      // says approved.
+      const { id, instanceId } = await submittedWithInstance();
+      await assertRejected(
+        inTenant(TENANT_A, async (tx) => {
+          await tx`CREATE TEMP TABLE awcms_workflow_instances
+                   (LIKE public.awcms_workflow_instances INCLUDING DEFAULTS) ON COMMIT DROP`;
+          await tx`INSERT INTO pg_temp.awcms_workflow_instances
+                     (id, tenant_id, workflow_definition_id, resource_type,
+                      resource_id, status, requested_by_tenant_user_id)
+                   VALUES (${instanceId}, ${TENANT_A}, gen_random_uuid(),
+                           'procurement_document', ${id}, 'approved', ${actor})`;
+
+          return tx`
+            UPDATE awcms_procurement_documents SET approval_status = 'approved'
+            WHERE tenant_id = ${TENANT_A} AND id = ${id}`;
+        }),
+        /PROCUREMENT_APPROVAL_VERDICT_MISMATCH/
+      );
+    });
+
+    test("the legitimate engine path still finalises: finalise refreshes the verdict from the instance (#1045)", async () => {
+      // The engine decided; the application refreshes inside finalise.
+      const { id, instanceId } = await submittedWithInstance();
+      await setInstanceStatus(instanceId, "approved");
+
+      const outcome = await inTenant(TENANT_A, (tx) =>
+        finaliseDocument(
+          tx,
+          inventoryLedgerPortAdapter,
+          TENANT_A,
+          id,
+          actorOf(TENANT_A)
+        )
+      );
+      expect(outcome.outcome).toBe("ok");
+      const rows = (await getAdminSql()`
+        SELECT status, approval_status FROM awcms_procurement_documents
+        WHERE tenant_id = ${TENANT_A} AND id = ${id}`) as {
+        status: string;
+        approval_status: string;
+      }[];
+      expect(rows[0]).toEqual({
+        status: "finalised",
+        approval_status: "approved"
+      });
+
+      // A rejected (or cancelled) instance is recorded as a rejection.
+      const rejected = await submittedWithInstance();
+      await setInstanceStatus(rejected.instanceId, "rejected");
+      await runtimeSetApproval(rejected.id, "rejected");
+      const cancelled = await submittedWithInstance();
+      await setInstanceStatus(cancelled.instanceId, "cancelled");
+      await runtimeSetApproval(cancelled.id, "rejected");
+
+      // A document that needed no approval submits and finalises as before
+      // (the whole real flow, no instance).
+      await receivedDocument(
+        TENANT_A,
+        receive(supA, locA, [["ab-plain", "1", "1"]])
       );
     });
 
