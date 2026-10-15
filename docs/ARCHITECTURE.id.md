@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ARCHITECTURE.md)
 
-<!-- i18n-source-hash: sha256:e169d7a216e5a8d66b9a7cf700fa54eba93f54168fadbc9bb1c506aa398658a5 -->
+<!-- i18n-source-hash: sha256:458b492019546609d2d9820c4cd16c2a35fb2e626f5da6d26d1fe9e1e8177673 -->
 
 # Arsitektur AWCMS
 
@@ -375,7 +375,7 @@ queued/sent/failed/suppressed/cancelled) — dipublikasikan lewat
 outbox write) dan dikirim `bun run domain-events:dispatch` dengan
 per-order-key ordering, backoff, dead-letter + replay ter-audit.
 
-Dokumen **provisional** yang terpisah, `asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml`, menyimpan skema event untuk modul yang belum ada (booking, hr_payroll, pengiriman WhatsApp). Ia bukan bagian dari kontrak live, tidak diterbitkan kode mana pun, dan digerbangi `bun run asyncapi:provisional:check`; sebuah event hidup di tepat satu dari dua berkas. Lihat [`docs/awcms/cross-domain-contracts.md`](awcms/cross-domain-contracts.md).
+Dokumen **provisional** yang terpisah, `asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml`, menyimpan skema event untuk modul yang belum ada (hr_payroll; event pengiriman WhatsApp sudah live sejak Issue #963 dan sembilan event reservasi booking sejak Issue #941). Ia bukan bagian dari kontrak live, tidak diterbitkan kode mana pun, dan digerbangi `bun run asyncapi:provisional:check`; sebuah event hidup di tepat satu dari dua berkas. Lihat [`docs/awcms/cross-domain-contracts.md`](awcms/cross-domain-contracts.md).
 
 ## Migration
 

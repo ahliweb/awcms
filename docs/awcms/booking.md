@@ -5,18 +5,18 @@
 > **Status:** admitted by [ADR-0131](../adr/0131-generic-booking-module-admission.md)
 > (Issue #915). **Built in slices: §13 says what exists in the code today**
 > (schema, permission catalogue, availability and schedule routes, the
-> allocator with holds and expiry, and stays and blocked nights through the same
-> allocator); the reservation routes, the block routes, the AsyncAPI channels
-> and the admin screens are still design, and the open questions in §11 still
-> govern them. PRD-lite, state machine, ERD and data
+> allocator with holds and expiry, stays and blocked nights through the same
+> allocator, and the reservation routes, the `BookingPort` and the nine live
+> events); the block routes and the admin screens are still design, and the open
+> questions in §11 still govern them. PRD-lite, state machine, ERD and data
 > dictionary, holds and idempotency, permissions/RLS matrix, reporting and
 > events, the double-booking strategy with its required regression test, threat
 > and privacy notes, the adapter/port contract and the open questions are in
 > one place. Decisions and rejected alternatives are in the ADR. It follows the
 > shape of [`inventory-ledger.md`](inventory-ledger.md),
 > [`procurement.md`](procurement.md) and [`tax-calculation.md`](tax-calculation.md).
-> Event names here are **provisional**; the AsyncAPI channels are added when the
-> module is built. Day-granularity (nightly) stays are part of v1 by [ADR-0135](../adr/0135-day-granularity-stays-admitted-into-booking-v1.md) (§2.5, §3.1).
+> The nine reservation events are **live** (Issue #941, §7.4): they moved from
+> the provisional AsyncAPI document to the live one. Day-granularity (nightly) stays are part of v1 by [ADR-0135](../adr/0135-day-granularity-stays-admitted-into-booking-v1.md) (§2.5, §3.1).
 
 ## 1. PRD-lite
 
@@ -195,6 +195,17 @@ or the reverse), `EXTERNAL_REF_IN_USE` (409: a live reservation already holds
 that `external_ref`), `RESOURCE_NOT_FOUND` and `OFFERING_NOT_FOUND` (404,
 neutral: another tenant's id is the same answer as an unknown one). The stay slice (Issue #940) adds: `STAY_DATES_INVALID` (400: malformed or out-of-order dates, an instant instead of a date, a date the zone does not have, a check-in date already past in the zone), `MIN_STAY_VIOLATION` and `MAX_STAY_EXCEEDED` (409: the offering's night limits), `STAY_POOL_INCONSISTENT` (409: the stay resources of a pool do not share one zone and one pair of check-in and check-out times, so there is no single snapshot to take), and, for a block, `BLOCK_CONFLICT` (409: a live stay or another block holds a night of the range; nothing was cancelled), `UNIT_NOT_FOUND` and `BLOCK_NOT_FOUND` (404). A booking that loses a night to a block, or to another stay, is `SLOT_UNAVAILABLE`, as for slots.
 
+The reservation routes (Issue #941) add the refusals only they can make:
+`NO_SHOW_TOO_EARLY` (409: before the start plus the grace), `CHECK_IN_TOO_EARLY`
+(409: a stay before its check-in date in the resource's zone), `RESOURCE_REQUIRED`
+(400: a reschedule of a reservation that spans several resources must say where
+it moves), `LEAD_TIME_VIOLATION`, `HORIZON_EXCEEDED` and `OUTSIDE_SCHEDULE` (all
+409, all lifted only by `reservations.override`), and the neutral
+`RESERVATION_NOT_FOUND` (404: an unknown id, another tenant's id and a hidden one
+are one answer). `HOLD_EXPIRED` is also the answer for a hold the sweep has
+already expired, not only for one that has elapsed and not been swept: a payment
+observed after expiry learns it was too late.
+
 **Late cancellation.** An offering's `cancellation_cutoff_seconds` makes a
 cancellation inside the cutoff carry `late_cancellation = true` on the event and
 the reservation. The module records the fact; **any fee is a commerce decision**.
@@ -202,6 +213,45 @@ the reservation. The module records the fact; **any fee is a commerce decision**
 **No-show.** Marked by a person, after `starts_at + no_show_grace_seconds`
 (policy). An automatic no-show job is off by default and is an open question
 (O2/O3).
+
+### 3.0 The routes and the transition service (Issue #941)
+
+| Route (all under `/api/v1/booking`)           | Verb       | Permission                | Success                                                    |
+| --------------------------------------------- | ---------- | ------------------------- | ---------------------------------------------------------- |
+| `POST /reservations`                          | create     | `reservations.create`     | `201`, `{ reservation, replayed, policyLifted }`           |
+| `POST /reservations/{id}/confirm`             | confirm    | `reservations.confirm`    | `200`, `{ reservation, replayed }`                         |
+| `POST /reservations/{id}/cancel`              | cancel     | `reservations.cancel`     | `200`, `{ reservation, replayed }`                         |
+| `POST /reservations/{id}/reschedule`          | reschedule | `reservations.reschedule` | `200`, `{ reservation, previous, replayed, policyLifted }` |
+| `POST /reservations/{id}/check-in`            | check_in   | `reservations.check_in`   | `200`, `{ reservation, replayed }`                         |
+| `POST /reservations/{id}/check-out`           | complete   | `reservations.complete`   | `200`, `{ reservation, replayed }`                         |
+| `POST /reservations/{id}/no-show`             | no_show    | `reservations.no_show`    | `200`, `{ reservation, replayed }`                         |
+| `GET /reservations`, `GET /reservations/{id}` | read       | `reservations.read`       | list (keyset) / detail with the history                    |
+
+Every mutation requires `Idempotency-Key` (the shared component, ADR-0129) and
+takes the same path: the route authorizes its permission first (default deny),
+validates the body strictly, then `runIdempotent` returns the stored response of
+the same key, user and request or runs the transition. A refusal is a returned
+value, is never stored, and wrote nothing. The service
+(`application/booking-reservation-service.ts`) locks the reservation `FOR UPDATE`,
+reads the database clock in the same statement, decides with the pure state
+machine, and only then writes: the reservation, the allocations the verb releases,
+**exactly one** history row, one audit row and one outbox event, in the one
+transaction. The `BookingPort` (§10.1) calls the same functions, so a transition
+made through the port is identical to one made through the route.
+
+**`overridePolicy` is a second, independent check.** Opening hours, lead time and
+horizon are refused unless the body says `overridePolicy: true` AND the caller
+also holds `reservations.override`, which is checked first through
+`authorizeInTransaction` (a high-risk action, so action-time separation of duties
+applies), before anything is read or written, and audited `critical`. `create`
+alone cannot lift policy and `override` alone cannot create (both tested). It
+never lifts an allocation conflict. A pool is as strict as its strictest member,
+because the allocator may land the booking on any of them.
+
+**Ownership.** There is no ownership grant on any reservation route: grants can
+only widen a read, the customer is an opaque token at the commerce authority and
+not a tenant user, and the creator of a reservation is not entitled to read it for
+having created it. A customer-facing grant is a downstream decision (ADR-0063).
 
 ### 3.1 Stays on the state machine
 
@@ -318,6 +368,13 @@ ttl`, where `ttl` = the request's `holdSeconds` clamped to
   whether it blocks _availability_ is not — it does.
 - `POST …/extend` extends once per hold, by at most `default_hold_seconds`, never
   beyond `max_hold_seconds` from creation; it requires `reservations.create`.
+  **Not built by Issue #941** (it was not in that issue's list): when it is, it
+  creates no hold but must still take the cap lock of §13 before it counts.
+- **Hold caps default to 5 live holds per customer and 500 per tenant**
+  (Issue #941; `NULL` in the settings is the module default, not unlimited). A
+  hold with no customer reference is bounded by the tenant cap only, and an
+  `immediate` confirmation is not a hold. The numbers and their trade-off are in
+  §13.
 - **Expiry has two cooperating parts**, because an exclusion constraint cannot
   read a clock: (1) the job `booking:holds:expire` (every minute, per tenant,
   `FOR UPDATE SKIP LOCKED`, bounded batch) sets `expired`, releases allocations
@@ -360,6 +417,19 @@ append events on both. A refusal (conflict, hours, lead time) rolls the whole
 transaction back to the untouched original. Intervals are never edited in place.
 The adapter's `external_ref` moves to the new reservation; the lineage is the
 stable handle for "this customer's booking" across reschedules.
+
+**Built in Issue #941.** The old reservation is superseded BEFORE the replacement
+exists (its allocations released, then `rescheduled` naming the replacement's
+pre-generated id), so it has left the live set of the `external_ref` unique index
+when the replacement carries the same reference; `sql/208` therefore makes the
+`superseded_by_id` foreign key `DEFERRABLE INITIALLY DEFERRED` (still enforced at
+commit). The replacement is born `confirmed` whatever the offering says, with the
+old customer reference, party, source, note and external reference, and announces
+itself with `created` and `confirmed` (naming `rescheduledFromId`); the old one
+announces `rescheduled` (naming `supersededById`). Repeating the same reschedule
+against an already-rescheduled reservation is a replay; a different move is
+`INVALID_STATE`. Only a reservation with one item moves (v1 claims one item per
+reservation).
 
 ## 6. Permissions and RLS matrix
 
@@ -464,13 +534,16 @@ that fall outside a proposed schedule (or inside a proposed closure) without
 changing anything. The same applies to a staff availability change reported by
 the workforce capability.
 
-### 7.4 Events (provisional)
+### 7.4 Events (live since Issue #941)
 
 Convention (as `awcms.procurement.document.finalised`): channel
 `awcms.<module>.<entity>.<verb>`, one shared `DomainEvent` envelope, published
 through the domain-event outbox **in the same transaction** as the transition; a
 refused or replayed call publishes nothing. The issue's shorthand
 `booking.reservation.*` therefore appears on the wire with the `awcms.` prefix.
+The nine channels are in `asyncapi/awcms-domain-events.asyncapi.yaml`, the types
+in `DOMAIN_EVENT_TYPE_REGISTRY` and in the module's `events.publishes`, all
+version `1.0`.
 
 | Event                                   | When                                                                             |
 | --------------------------------------- | -------------------------------------------------------------------------------- |
@@ -484,10 +557,23 @@ refused or replayed call publishes nothing. The issue's shorthand
 | `awcms.booking.reservation.no_show`     | confirmed → no_show                                                              |
 | `awcms.booking.reservation.expired`     | a hold expired (a ninth name beyond the issue list; ADR-0040's adapter needs it) |
 
+**Who publishes what.** A new reservation: `created`, then `held` (a hold) or
+`confirmed` (an `immediate` offering). A replacement of a reschedule: the old one
+`rescheduled`, the new one `created` then `confirmed`. `expired` is published by
+BOTH ways a hold expires: lazy reclaim, in the claim's transaction, and the
+`booking:holds:expire` sweep, in its own tenant transaction as `awcms_worker`.
+The worker may use the outbox but not read the booking tables, so the sweep's
+SECURITY DEFINER function now returns the non-personal facts of what it expired
+(`sql/209`); the facts of every event come from the one function
+`awcms_booking_reservation_event_facts`, so a request transition, lazy reclaim and
+the sweep cannot carry different fields. The cancellation reason code is on the
+append-only history row and is **not** in the event.
+
 Payload: `reservationId`, `reservationNo`, `lineageId`, `status`, `previousStatus`,
 `startsAt`/`endsAt` (RFC 3339 UTC), `resourceIds`, `offeringIds`, `partySize`,
 `externalRefType`/`externalRef` (the adapter's own opaque pair), `occurredAt`,
-`correlationId`; for a reservation with stay items also `stays` (`resourceId`, `checkInDate`, `checkOutDate`, `nights`, `timezone`; additive, absent otherwise, no new event, §3.1). **Never** a customer name, contact, note or reason text. Consumers
+`correlationId`; `lateCancellation` on `cancelled`, `supersededById` on
+`rescheduled`, `rescheduledFromId` on the events of a replacement; for a reservation with stay items also `stays` (`resourceId`, `checkInDate`, `checkOutDate`, `nights`, `timezone`; additive, absent otherwise, no new event, §3.1). **Never** a customer name, contact, note or reason text. Consumers
 de-duplicate on the envelope's event id; delivery is at-least-once.
 
 ## 8. Double-booking prevention and the required regression test
@@ -553,7 +639,7 @@ PostgreSQL as the runtime role `awcms_app` (FORCE RLS in effect), on separate
 connections (not one pooled transaction). Use the repo's rejection helper, not
 `expect(...).rejects` (which hangs with Bun.SQL).
 
-**Status (§13).** T1 is in `booking-database.integration.test.ts` (#937). T2, T3 (with the `DO NOTHING` interleaving it rests on), T6 (a) and the reaper races of (b), and T7 are in `booking-concurrency.integration.test.ts` (#939), driven through `placeHold` on real concurrent transactions rather than through `POST /booking/reservations`, which arrives with #941; they move behind the route in #941 together with T4, T5 and the confirm-versus-job half of T6 (b). T9 to T13 are in `booking-stay.integration.test.ts` (#940), driven through `placeHold` and `createBlock` rather than through `POST /booking/reservations` and the block API, which arrive with #941 and #942; they move behind the routes then. T8 needs `staff_assignments`.
+**Status (§13).** T1 is in `booking-database.integration.test.ts` (#937). T2, T3 (with the `DO NOTHING` interleaving it rests on), T6 (a) and the reaper races of (b), and T7 are in `booking-concurrency.integration.test.ts` (#939), driven through `placeHold` on real concurrent transactions. Issue #941 adds `booking-reservation.integration.test.ts` (the application layer on real transactions: T5 (a), (b) and (c), the confirm-versus-sweep half of T6 (b), the default caps racing, `expired` published by both ways, no personal data in an event or an audit row, the `BookingPort`) and `booking-reservation-api.integration.test.ts` (the real route handlers: T4 with five parallel requests on one key, the access matrix of §6 both ways, the override both ways, neutral not-found, the payment-field refusal). T2 and T10 still drive `placeHold` directly: the route adds authorization and an idempotency store in front of the same claim and does not change what the 20 contenders race for. T9 to T13 are in `booking-stay.integration.test.ts` (#940), driven through `placeHold` and `createBlock` rather than through `POST /booking/reservations` and the block API, which arrive with #941 and #942; they move behind the routes then. T8 needs `staff_assignments`.
 
 **T1 — database level, interleaving proven.** Fixture: one resource, capacity 1,
 one unit; window `[10:00, 11:00)`.
@@ -640,6 +726,14 @@ what the note reveals).
 | Blocks used to hide inventory or deny sales                                              | `blocks.create` is a separate, high-impact permission, `Idempotency-Key`, audited `warning`; a block cannot override or cancel an existing reservation; the active blocks are listed and releasable (`blocks.release`) and reconciled (§7.1)                       |
 | Provider call inside a transaction                                                       | none exists; any notification or payment is downstream, through the outbox                                                                                                                                                                                         |
 
+**What the hold caps rely on.** The per-customer cap counts holds by
+`external_customer_ref`, which the adapter or BFF supplies and the module cannot
+verify: a hold with no reference (or a fresh reference per hold) is not counted
+against any customer. Only the **per-tenant** cap is a hard bound; the
+per-customer cap is a fairness control that is as good as the caller's
+authentication of its customers (a downstream public channel authenticates its
+customer and rate-limits at the edge).
+
 **Privacy (UU PDP 27/2022) — inputs to the privacy analysis, not legal
 conclusions.** The operator's legal role (controller, processor or both) is
 owner decision O5 of the downstream DoR and is not assumed here. The design
@@ -661,8 +755,17 @@ secrets, and no credential, token or key exists in it.
 ### 10.1 What the module gives
 
 A `BookingPort` in `src/modules/_shared/ports/booking-port.ts` (ADR-0011:
-consumers depend on the neutral port, never on module code). It _returns_ a
-refusal as a value; it throws only for defects. Provisional shape:
+consumers depend on the neutral port, never on module code), **built in Issue
+#941** with its adapter `application/booking-port-adapter.ts`. It _returns_ a
+refusal as a value; it throws only for defects. The built signatures differ from
+the sketch below in four ways: every method takes the caller's transaction first
+(`tx`) and the input carries `tenantId`; `quote` asks one `resourceId` (a pool is
+a `hold`-only target); the refusal union is completed with what the claim can say
+(`RESERVATION_NOT_FOUND`, `QUANTITY_EXCEEDS_UNITS`, `BOOKING_MODE_MISMATCH`,
+`EXTERNAL_REF_IN_USE`, `CONTENTION_RETRY`, the stay refusals, `VALIDATION_ERROR`);
+and the port has **no override** (lifting policy is a human act behind a
+high-risk permission). Idempotency is by key on the same store as the routes under
+its own scopes; only a success is stored. Sketch:
 
 ```ts
 interface BookingPort {
@@ -777,7 +880,9 @@ pack cannot be finalised until the answer is recorded.
 - **O2h — block events.** Whether a downstream (a channel manager) needs `awcms.booking.block.*` events; v1 emits none.
 
 Also open and _not_ in the downstream tracker (proposed for it): the default and
-maximum hold TTL and the per-customer hold cap numbers (§5.1 are placeholders);
+maximum hold TTL (§5.1, 900 and 86 400 seconds, are the module's defaults, not an
+owner decision); the hold CAP numbers were settled by Issue #941 as a safe default
+(§13) and stay tunable per tenant;
 whether a series can be partially accepted; whether the no-show grace is
 per-offering rather than per-tenant; whether `reservation_notes.read` should be a
 separate permission from `reservations.read` (assumed yes). None of the above is
@@ -804,7 +909,7 @@ registered with `data_lifecycle` as `delegated` with a stated reason, ADR-0126 �
 until the first); location/resource-scoped ABAC; counted capacity without unit
 rows (would use §8.1 rule 4); partial-accept series; shared turnaround; waitlist;
 iCal export; automatic no-show; a retention window with archive-then-purge; `profile_identity` harmonisation of the customer reference (own ADR; O12 kept commerce as the authority);
-`MONTHLY` recurrence (O2); the stay follow-ups O2a–O2h (§11); updating the provisional AsyncAPI payloads and `cross-domain-contracts.md` with the additive `stays` field when the events go live; keyed hashing and at-rest
+`MONTHLY` recurrence (O2); the stay follow-ups O2a–O2h (§11); the `extend` route of §5.1; the block routes (#1012); keyed hashing and at-rest
 encryption are not applicable (no identifier is stored).
 
 ## 13. Implementation status
@@ -813,20 +918,18 @@ What is built, what is only specified, and where the next slice attaches. The
 design above is the contract; this section is the map from it to the code
 (module map: [`src/modules/booking/README.md`](../../src/modules/booking/README.md)).
 
-| Slice                | Issue | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundation           | #937  | Schema `sql/180` (RLS FORCE, composite foreign keys, both exclusion constraints, the state machine as a trigger, append-only history), permission catalogue `sql/181`, the pure state machine. Test T1 (database-level interleaving).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Availability         | #938  | Schedules, exceptions, blocks table (`sql/186`), the pure slot and stay availability, `GET /availability`, schedule routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Allocator, holds** | #939  | The slot allocator (§8.1 rules 1 to 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, first free unit in `(sort_order, id, ordinal)` order, all-or-none for several units, units chosen together inserted in `(resource_id, ordinal)` order, `23P01` and `40P01` handled (bounded retry with jitter). Holds with expiry (§5.1): lazy reclaim at write time plus the `booking:holds:expire` reaper, correctness independent of the reaper. `placeHold`, the claim a reservation route will call. Hold caps (a sum, §8.1 rule 4). The read-only reconciliation of §7.1. Tests T2, T3 (and its `DO NOTHING` premise), T6 (a, b), T7, in `tests/integration/booking-concurrency.integration.test.ts`. One migration, `sql/200`, and only for the job's privilege: the narrow SECURITY DEFINER sweep that lets `booking:holds:expire` run as `awcms_worker`; the schema of `sql/180` already holds every invariant the allocator needs.                                                                                                         |
-| **Stays, blocks**    | #940  | Stay claims through `placeHold` (`stay: { checkInDate, checkOutDate }`: dates validated in the resource's zone, nights as date arithmetic, the arrival and departure instants and the zone and local times snapshotted onto the item, the offering's `min_nights` / `max_nights`) and through the same allocator (`UnitClaim` `kind: "stay"`, the `daterange` probe); lazy reclaim of stay holds (`ReclaimWindow` `kind: "stay"`); blocked nights as allocation rows (`booking-block-service.ts`: `createBlock`, `releaseBlock`, `BLOCK_CONFLICT`, `UnitClaim` `kind: "block"`); three block reconciliation checks; tests T9 to T13 in `tests/integration/booking-stay.integration.test.ts` and the pure rules in `tests/booking-stay.test.ts`. One migration, `sql/204` (the block rows and their guards, `BOOKING_MODE_IN_USE`, the 368-day instant bound). `sql/200` needs no change: a stay hold expires on the same column and releases through the same item join. No HTTP route, block routes included: they arrive with #941 and #942. |
+| Slice                | Issue | Built                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Foundation           | #937  | Schema `sql/180` (RLS FORCE, composite foreign keys, both exclusion constraints, the state machine as a trigger, append-only history), permission catalogue `sql/181`, the pure state machine. Test T1 (database-level interleaving).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Availability         | #938  | Schedules, exceptions, blocks table (`sql/186`), the pure slot and stay availability, `GET /availability`, schedule routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **Allocator, holds** | #939  | The slot allocator (§8.1 rules 1 to 3, 6): `INSERT ... ON CONFLICT DO NOTHING RETURNING`, first free unit in `(sort_order, id, ordinal)` order, all-or-none for several units, units chosen together inserted in `(resource_id, ordinal)` order, `23P01` and `40P01` handled (bounded retry with jitter). Holds with expiry (§5.1): lazy reclaim at write time plus the `booking:holds:expire` reaper, correctness independent of the reaper. `placeHold`, the claim a reservation route will call. Hold caps (a sum, §8.1 rule 4). The read-only reconciliation of §7.1. Tests T2, T3 (and its `DO NOTHING` premise), T6 (a, b), T7, in `tests/integration/booking-concurrency.integration.test.ts`. One migration, `sql/200`, and only for the job's privilege: the narrow SECURITY DEFINER sweep that lets `booking:holds:expire` run as `awcms_worker`; the schema of `sql/180` already holds every invariant the allocator needs.                                                                                                                 |
+| **Reservations**     | #941  | The routes of §3.0 (`POST/GET /reservations`, `GET /reservations/{id}`, `confirm`, `cancel`, `reschedule`, `check-in`, `check-out`, `no-show`) over `application/booking-reservation-service.ts`; `Idempotency-Key` through the shared component, with the state check as the second layer; policy (`application/booking-reservation-policy.ts`, `domain/booking-policy.ts`) and the `overridePolicy` path with its independent high-risk check; reschedule with lineage; the `BookingPort` and its adapter; the nine events on the live AsyncAPI document and in the runtime registry, published by request transitions, lazy reclaim and the sweep; safe default hold caps. Migrations `sql/208` (deferred `superseded_by_id` foreign key) and `sql/209` (the event-facts function, the sweep returning what it expired). Tests: the pure rules in `tests/booking-policy.test.ts` and `tests/booking-reservation-validation.test.ts`; `tests/integration/booking-reservation.integration.test.ts` and `booking-reservation-api.integration.test.ts`. |
+| **Stays, blocks**    | #940  | Stay claims through `placeHold` (`stay: { checkInDate, checkOutDate }`: dates validated in the resource's zone, nights as date arithmetic, the arrival and departure instants and the zone and local times snapshotted onto the item, the offering's `min_nights` / `max_nights`) and through the same allocator (`UnitClaim` `kind: "stay"`, the `daterange` probe); lazy reclaim of stay holds (`ReclaimWindow` `kind: "stay"`); blocked nights as allocation rows (`booking-block-service.ts`: `createBlock`, `releaseBlock`, `BLOCK_CONFLICT`, `UnitClaim` `kind: "block"`); three block reconciliation checks; tests T9 to T13 in `tests/integration/booking-stay.integration.test.ts` and the pure rules in `tests/booking-stay.test.ts`. One migration, `sql/204` (the block rows and their guards, `BOOKING_MODE_IN_USE`, the 368-day instant bound). `sql/200` needs no change: a stay hold expires on the same column and releases through the same item join. No HTTP route, block routes included: they arrive with #941 and #942.         |
 
-**Still design (not in the code):** the reservation routes and the transitions
-after creation (`confirm`, `cancel`, `reschedule`, `check_in`, `complete`,
-`no_show`, `extend`), `Idempotency-Key` on them and the `reservations.override`
-policy path (Issue #941); the nine events on the live AsyncAPI document (#941);
-the HTTP routes for blocks (`blocks.read` / `.create` / `.release` are seeded by `sql/181` and enforced by those routes, which do not exist yet); `service_requirements`, `staff_assignments` and test T8; the
+**Still design (not in the code):** the `extend` route of §5.1; the HTTP routes for blocks (`blocks.read` / `.create` / `.release` are seeded by `sql/181` and the guards exist, but the routes are tracked in #1012); `service_requirements`, `staff_assignments` and test T8; the
 `reservations/reconciliation` route and the report routes; reporting
-projections; the admin screens (#942); the `BookingPort`.
+projections; the admin screens (#942), which are what lets the module leave
+`experimental`.
 
 **Seams the next slices attach to**
 
@@ -845,9 +948,10 @@ projections; the admin screens (#942); the `BookingPort`.
 - `reclaimExpiredHolds` takes a `ReclaimWindow` union with two members: `time`
   probes `tstzrange` overlap, `stay` probes `daterange` overlap (used for stays
   and for blocks).
-- Confirm, cancel and reschedule (#941) must write exactly one history row per
-  transition; the expiry primitive (`applyExpiry`) is the model: reservation,
-  allocations and `expired` event in one statement.
+- Confirm, cancel and reschedule (#941) write exactly one history row per
+  transition, in the same transaction; the expiry primitive (`applyExpiry`) was
+  the model. A trigger that ties a status change to its history row is still not
+  built.
 
 **Decisions taken in the #939 slice**
 
@@ -880,18 +984,25 @@ projections; the admin screens (#942); the `BookingPort`.
 - **Reaper health** is read from the data (`hold_overdue_unswept` and
   `reaper.oldestOverdueSeconds` in the reconciliation, 300 second grace) and
   from the shared job runner's telemetry; nothing depends on it.
-- **Left open (N4): hold caps default to unlimited, and that is not a safe
-  default for production.** #941 must set a sane default (or require the tenant
-  to configure one) before `booking` leaves `experimental`, and **every
-  hold-creating path must take the same per-tenant advisory lock**
-  (`pg_advisory_xact_lock(hashtextextended('awcms_booking.holds:' || tenant, 0))`
-  in `enforceHoldCaps`) before it counts live holds: `extend`, a reschedule that
-  creates a hold, a series, an adapter route. A path that creates a hold without
-  that lock reopens the race the cap test closes.
-- **Hold caps default to unlimited** (`NULL` = module default): the numbers are
-  an open owner question (§11), and a cap that is configured is enforced under a
-  per-tenant transaction advisory lock so two requests cannot both read "one
-  below the cap".
+- **N4 settled in #941: the hold caps have a safe default.** `NULL` in the
+  settings is now the module default, not unlimited: **5 live holds per customer
+  and 500 per tenant** (`POLICY_DEFAULTS`). The reasoning: a hold occupies
+  inventory with no payment behind it, so the number one actor can hold is the
+  lever against hold flooding. Five is generous for a person comparing dates and
+  small for a script; 500 is the number of checkouts in progress at one instant
+  (holds last minutes) that a busy property does not reach and that bounds what one
+  hostile caller can take out of sale. Too low turns a legitimate burst (a flash
+  sale, a class that opens at noon) into `429 HOLD_LIMIT_EXCEEDED` for honest
+  customers; too high lets one caller hold the shelf. A walk-in hold with no
+  customer reference is bounded by the tenant cap only, and an `immediate`
+  confirmation is not a hold. The numbers are per-tenant settings columns
+  (`max_active_holds_per_*`, at least 1; a tenant that wants no practical cap sets
+  a very large number); the policy route that writes them (`policy.configure`) is
+  a later slice. **Every hold-creating path must still take the same per-tenant
+  advisory lock** (`pg_advisory_xact_lock(hashtextextended('awcms_booking.holds:' || tenant, 0))`
+  in `enforceHoldCaps`) before it counts live holds: the future `extend`, a
+  series, an adapter route. A path that creates a hold without that lock reopens
+  the race the cap test closes.
 
 **Decisions taken in the #940 slice**
 
@@ -938,3 +1049,76 @@ checkOutDate }` instead of `startsAtMs` (exactly one of them). A client never
   no "today" rule for a block); the block routes and their `Idempotency-Key`
   belong to the route slices, where the state check (a second release is a
   replay) and the constraint already make a retry harmless.
+
+**Decisions taken in the #941 slice**
+
+- **The cap is checked after the claim, not before.** The advisory lock is held
+  until commit, so taking it first would serialise every hold of a tenant before
+  the exclusion constraint saw them, and T2 would then prove the lock rather than
+  the constraint. Checked after the units are won (inside the claim's savepoint,
+  counting the hold just inserted, so "over" is a count above the cap), contenders
+  for the same units still race at the constraint and only the winners queue on the
+  cap. Trade-offs: the winners of one tenant queue on the lock until their
+  transactions end (throughput of hold creation is bounded per tenant, never across
+  tenants), a claim over the cap briefly wins and then loses its units with the
+  savepoint, and a capped caller asking for a taken slot is told
+  `SLOT_UNAVAILABLE`, not `HOLD_LIMIT_EXCEEDED`. There is no deadlock: the lock
+  holder has finished every insert that could wait on another transaction.
+- **The two mutation checks (T7, T13) use `immediate` offerings.** They keep
+  claim A uncommitted while claim B runs, to prove the constraint is what stops
+  B. A held claim now queues B on the cap lock after the claim (by design), so
+  with the constraint dropped B would wait for A's commit; a confirmed reservation
+  takes no cap lock, and the constraint-present premise tests (T1, T9, the
+  `DO NOTHING` interleaving) are unaffected because B blocks on the allocation
+  row before it ever reaches the cap.
+- **The sweep returns what it expired.** `awcms_booking_expire_due_holds` changed
+  its return type (`sql/209`; the old function is dropped, `sql/200` is untouched)
+  so the job can publish `expired` in the same transaction without the worker
+  reading the booking tables. Alternative rejected: a worker-readable "facts"
+  function over arbitrary reservations, which would let a compromised worker read
+  the external references of every reservation.
+- **One facts function, not three payload builders.** An event may carry only
+  what `awcms_booking_reservation_event_facts` returns; the customer reference and
+  the note are not columns it reads, so no handler can leak them into an event by
+  accident. A test asserts the key set and that no key names a person, reason,
+  actor or amount (the envelope still carries `actorTenantUserId`, as every
+  module's events do; the PAYLOAD has no actor).
+- **The state check is the second idempotency layer, per verb, by target state.**
+  Confirm on `confirmed`, cancel on `cancelled`, check-in on `checked_in`, check-out
+  on `completed`, no-show on `no_show` return `replayed: true` and write nothing
+  (no history, audit or event row), with any key. Reschedule on `rescheduled`
+  replays only when the request matches the replacement; otherwise `INVALID_STATE`.
+  A confirm of an `expired` reservation is `HOLD_EXPIRED`, not `INVALID_STATE`.
+- **A client-supplied correlation id is not trusted to be a uuid.** It arrives in a
+  header as any string; the history table's column is `uuid`, so it is written only
+  when it parses as one (audit and events keep the string).
+- **`externalRef.id` is refused if it looks like a credential.** The outbox
+  refuses a payload with a credential-shaped value and the reference rides every
+  event; refusing it at the door is a `400`, not a `500` after the claim is won.
+- **No-show grace default is 15 minutes** (`no_show_grace_seconds`; for a stay the
+  arrival instant plus the grace), a number this slice had to pick because the pack
+  left it open. A property that holds a room until evening raises it.
+- **`GET /reservations` and `GET /reservations/{id}`** were added beyond the issue's
+  verb list because the access matrix of §6 names `reservations.read` and a screen
+  (#942) cannot be built without them. They never return the note.
+- **Same-key requests are serialised by an advisory lock.** The idempotency store
+  is keyed on `(tenant, scope, key)`; the acting user is only in the request hash,
+  so another user reusing a key gets `409 IDEMPOTENCY_CONFLICT`. Without a lock,
+  two concurrent requests with one key both found nothing and both claimed, and the
+  loser could be refused (`SLOT_UNAVAILABLE`, `HOLD_LIMIT_EXCEEDED`) by the
+  winner's uncommitted booking: a retry told its own booking conflicts. Both the
+  routes and the port now take `pg_advisory_xact_lock('idem:' || tenant || scope
+|| key)` before the lookup, so the second request waits for the first to commit
+  and replays its stored response (tested with capacity 1: five concurrent
+  requests, five `201`s, one body). The port additionally runs produce-and-save in
+  a savepoint and answers a lost save race with the winner's outcome.
+- **The clock is read after the row lock.** `lockReservation` locks, then reads
+  `clock_timestamp()` in a second statement, so a confirm that queued behind
+  another writer judges "elapsed" at the instant the `held -> confirmed` trigger
+  will, and is `HOLD_EXPIRED`, never a trigger error (tested with a hold that
+  elapses during the wait).
+- **Out of scope and recorded:** the `extend` route and the `policy.configure`
+  route (the tenant-facing way to change the hold caps and the no-show grace; the
+  numbers live in `awcms_booking_settings` and are set by SQL until then).
+  The no-show grace default (15 minutes) is a module default, tunable per tenant
+  through the same settings row.

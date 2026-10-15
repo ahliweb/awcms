@@ -46,11 +46,11 @@ describe("asyncapi provisional check", () => {
     expect(problemsOf(await fixtures())).toEqual([]);
   });
 
-  test("carries the 15 settled event names (the 7 whatsapp events went live with whatsapp_delivery, Issue #963)", async () => {
-    const { provisional } = await fixtures();
+  test("carries the 6 settled hr event names (the 7 whatsapp events went live with whatsapp_delivery, Issue #963, and the 9 booking events with the reservation routes, Issue #941)", async () => {
+    const { provisional, live } = await fixtures();
     const names = Object.keys(provisional.channels);
 
-    expect(names).toHaveLength(15);
+    expect(names).toHaveLength(6);
     for (const verb of [
       "created",
       "held",
@@ -62,7 +62,11 @@ describe("asyncapi provisional check", () => {
       "no_show",
       "expired"
     ]) {
-      expect(names).toContain(`awcms.booking.reservation.${verb}`);
+      // An event lives in exactly one of the two documents.
+      expect(names).not.toContain(`awcms.booking.reservation.${verb}`);
+      expect(Object.keys(live.channels)).toContain(
+        `awcms.booking.reservation.${verb}`
+      );
     }
     for (const name of [
       "attendance.recorded",
@@ -78,13 +82,13 @@ describe("asyncapi provisional check", () => {
 
   test("rejects a badly named channel", async () => {
     const input = await fixtures();
-    input.provisional.channels["booking.reservation.created"] = {
-      ...input.provisional.channels["awcms.booking.reservation.created"],
-      address: "booking.reservation.created"
+    input.provisional.channels["hr.shift.assigned"] = {
+      ...input.provisional.channels["awcms.hr.shift.assigned"],
+      address: "hr.shift.assigned"
     };
 
     expect(problemsOf(input).join("\n")).toContain(
-      'Channel "booking.reservation.created" does not match'
+      'Channel "hr.shift.assigned" does not match'
     );
   });
 
@@ -136,7 +140,7 @@ describe("asyncapi provisional check", () => {
     schemas.HrPayrollFinalizedPayload.properties.grossAmount = {
       type: "string"
     };
-    schemas.BookingReservationPayload.properties.paymentState = {
+    schemas.HrAttendanceRecordedPayload.properties.paymentState = {
       type: "string"
     };
     schemas.HrShiftAssignedPayload.properties.phoneNumber = { type: "string" };

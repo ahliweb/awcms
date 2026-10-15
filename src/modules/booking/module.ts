@@ -9,7 +9,7 @@
  * constraints on `awcms_booking_resource_allocations`, `sql/180`), a reservation
  * state machine enforced by trigger, and an append-only transition history.
  *
- * ## What exists, and what does not (slices #937 to #940)
+ * ## What exists, and what does not (slices #937 to #941)
  *
  * What exists: the descriptor, the schema (`sql/180`, `sql/186`, `sql/204`), the
  * permission catalogue (`sql/181`), the PURE reservation state machine
@@ -24,13 +24,18 @@
  * `placeHold` (`stay: { checkInDate, checkOutDate }`, `domain/booking-stay.ts`),
  * and blocked nights as allocation rows owned by `resource_blocks`
  * (`application/booking-block-service.ts`: `createBlock`, `releaseBlock`,
- * `BLOCK_CONFLICT`). What does NOT exist yet, deliberately: the reservation HTTP
- * routes, the HTTP routes for blocks, OpenAPI paths for them, AsyncAPI channels,
- * the admin screens and the reporting projections (Issues #941, #942). The
- * module therefore ships `experimental`, declares no `navigation`, and no route
- * reaches the allocator: it is the "feature flag off" the issue asks for -- a
- * status ADR-0021 allows without an admin screen, and the one a later PR flips
- * to `active` together with its first screen.
+ * `BLOCK_CONFLICT`); and the RESERVATION slice (Issue #941): the routes
+ * `POST/GET /reservations`, `GET /reservations/{id}` and the transitions
+ * `confirm`, `cancel`, `reschedule`, `check-in`, `check-out` and `no-show`
+ * (`application/booking-reservation-service.ts`), `Idempotency-Key` through the
+ * shared component, the `BookingPort` of cross-domain-contracts section 3
+ * (`application/booking-port-adapter.ts`), the nine reservation events on the
+ * live AsyncAPI document, and a safe DEFAULT for the hold caps. What does NOT
+ * exist yet, deliberately: the HTTP routes for blocks (Issue #1012), the report
+ * and reconciliation routes, the reporting projections and the admin screens
+ * (Issue #942). The module therefore still ships `experimental` and declares no
+ * `navigation`: a status ADR-0021 allows without an admin screen, and the one the
+ * PR that adds the first screen flips to `active`.
  *
  * ## No money, no product, no customer name
  *
@@ -52,6 +57,7 @@ import {
   type SubjectDataDescriptor
 } from "../_shared/module-contract";
 import { BOOKING_MODULE_KEY } from "./domain/booking-permissions";
+import { BOOKING_EVENT_TYPES } from "./domain/booking-reservation-events";
 
 /**
  * A `delegated` descriptor for a table nothing purges, so each table answers the
@@ -146,8 +152,21 @@ export const bookingModule = defineModule({
   // false the other way round.
   status: "experimental",
   description:
-    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. Allocator slice (Issue #939): the slot allocator that wins capacity units all-or-none under the exclusion constraint, holds with expiry (lazy reclaim at write time plus the observable `booking:holds:expire` reaper, correctness independent of it), the claim service `placeHold`, and a read-only reconciliation. Holds no price, payment state, product id or customer name.",
-  dependencies: ["tenant_admin", "identity_access", "logging"],
+    "Generic resources, capacity units, schedules and reservations (Issue #937, ADR-0131, ADR-0135) for anything that rents out time, space or capacity, including nightly stays. Foundation slice: the schema with RLS FORCE and composite tenant foreign keys, two exclusion constraints that make double-booking unrepresentable, a reservation state machine enforced by trigger, an append-only transition history, the permission catalogue and the pure state-machine function. Availability slice (Issue #938): schedules, closures and exceptions, pure slot and stay availability with explicit timezone and interval semantics, blocked nights, and the tenant-scoped availability read. Allocator slice (Issue #939): the slot allocator that wins capacity units all-or-none under the exclusion constraint, holds with expiry (lazy reclaim at write time plus the observable `booking:holds:expire` reaper, correctness independent of it), the claim service `placeHold`, and a read-only reconciliation. Reservation slice (Issue #941): create-hold, confirm, cancel, reschedule with lineage, check-in, check-out and staff-only no-show, each idempotent, audited and published as one of nine domain events in the same transaction; the BookingPort; safe default hold caps. Holds no price, payment state, product id or customer name.",
+  dependencies: [
+    "tenant_admin",
+    "identity_access",
+    "logging",
+    "domain_event_runtime"
+  ],
+  capabilities: {
+    provides: ["booking"]
+  },
+  events: {
+    asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",
+    publishes: Object.values(BOOKING_EVENT_TYPES),
+    subscribes: []
+  },
   api: {
     openApiPath: "openapi/modules/booking.openapi.yaml",
     basePath: "/api/v1/booking"
@@ -334,10 +353,10 @@ export const bookingModule = defineModule({
         backlog: "bounded"
       },
       purpose:
-        "Expires booking holds whose lifetime has elapsed on the database clock (reservation `expired`, units released, `expired` history row, one aggregate audit entry per tenant per pass). Housekeeping, not the gate: the allocator reclaims an elapsed hold on the units it claims, so a stopped sweep leaves stale `held` rows and never a double booking. Its lag is observable as `hold_overdue_unswept` in the booking reconciliation (booking.md section 7.1).",
+        "Expires booking holds whose lifetime has elapsed on the database clock (reservation `expired`, units released, `expired` history row, the `awcms.booking.reservation.expired` domain event per hold in the same transaction, one aggregate audit entry per tenant per pass). Housekeeping, not the gate: the allocator reclaims an elapsed hold on the units it claims, so a stopped sweep leaves stale `held` rows and never a double booking. Its lag is observable as `hold_overdue_unswept` in the booking reconciliation (booking.md section 7.1).",
       recommendedSchedule: "Every minute via cron/systemd timer.",
       environmentNotes:
-        "Database-only operation, no external network dependency. Runs as `awcms_worker` under a per-tenant context. The worker holds no privilege on the booking tables: the sweep goes through `awcms_booking_expire_due_holds` (sql/200), a narrow SECURITY DEFINER function (the sql/142 pattern, ADR-0090) that can only expire an elapsed hold of the session's own tenant, and the `held -> expired` trigger refuses an expiry before the hold has elapsed. Bounded per-tenant passes in the maintenance work class; safe to run alongside request traffic (it never waits on a locked hold: SKIP LOCKED). `--dry-run` counts the elapsed holds per tenant.",
+        "Database-only operation, no external network dependency. Runs as `awcms_worker` under a per-tenant context. The worker holds no privilege on the booking tables: the sweep goes through `awcms_booking_expire_due_holds` (sql/200, returning what it expired since sql/209 so the job can publish the event without reading the tables), a narrow SECURITY DEFINER function (the sql/142 pattern, ADR-0090) that can only expire an elapsed hold of the session's own tenant, and the `held -> expired` trigger refuses an expiry before the hold has elapsed. Bounded per-tenant passes in the maintenance work class; safe to run alongside request traffic (it never waits on a locked hold: SKIP LOCKED). `--dry-run` counts the elapsed holds per tenant.",
       safeInOfflineLan: true
     }
   ],

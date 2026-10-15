@@ -6,9 +6,10 @@ info:
   x-awcms-emitted-by-code: false
   description: |-
     PROVISIONAL. NOT part of the live event contract and NOT emitted by any
-    code today. This document holds the event schemas that the booking and
-    hr_payroll design packs settled on (the whatsapp_delivery events went live
-    with its implementation, Issue #963), validated by
+    code today. This document holds the event schemas that the hr_payroll
+    design pack settled on (the whatsapp_delivery events went live with its
+    implementation, Issue #963, and the nine booking reservation events with
+    the reservation routes, Issue #941), validated by
     `bun run asyncapi:provisional:check`, so that the names and payloads are
     reviewed as data before any module exists.
 
@@ -26,87 +27,6 @@ info:
     See docs/awcms/cross-domain-contracts.md for the capability ports,
     consumer idempotency and the provisional-to-live migration.
 channels:
-  awcms.booking.reservation.created:
-    address: awcms.booking.reservation.created
-    x-awcms-status: provisional
-    messages:
-      BookingReservationCreated:
-        $ref: "#/components/messages/BookingReservationCreated"
-    description: >-
-      PROVISIONAL. A reservation exists (held, or confirmed when the offering confirms immediately). Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.held:
-    address: awcms.booking.reservation.held
-    x-awcms-status: provisional
-    messages:
-      BookingReservationHeld:
-        $ref: "#/components/messages/BookingReservationHeld"
-    description: >-
-      PROVISIONAL. A hold was placed; not emitted when the offering confirms immediately. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.confirmed:
-    address: awcms.booking.reservation.confirmed
-    x-awcms-status: provisional
-    messages:
-      BookingReservationConfirmed:
-        $ref: "#/components/messages/BookingReservationConfirmed"
-    description: >-
-      PROVISIONAL. A hold became confirmed, or a reservation was created already confirmed. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.rescheduled:
-    address: awcms.booking.reservation.rescheduled
-    x-awcms-status: provisional
-    messages:
-      BookingReservationRescheduled:
-        $ref: "#/components/messages/BookingReservationRescheduled"
-    description: >-
-      PROVISIONAL. The old reservation was superseded by a new one; carries supersededById (old reservation) and the new reservation's rescheduledFromId is on its created event. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.cancelled:
-    address: awcms.booking.reservation.cancelled
-    x-awcms-status: provisional
-    messages:
-      BookingReservationCancelled:
-        $ref: "#/components/messages/BookingReservationCancelled"
-    description: >-
-      PROVISIONAL. A held or confirmed reservation was cancelled; carries lateCancellation. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.checked_in:
-    address: awcms.booking.reservation.checked_in
-    x-awcms-status: provisional
-    messages:
-      BookingReservationCheckedIn:
-        $ref: "#/components/messages/BookingReservationCheckedIn"
-    description: >-
-      PROVISIONAL. A confirmed reservation was checked in. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.completed:
-    address: awcms.booking.reservation.completed
-    x-awcms-status: provisional
-    messages:
-      BookingReservationCompleted:
-        $ref: "#/components/messages/BookingReservationCompleted"
-    description: >-
-      PROVISIONAL. A checked-in reservation was completed. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.no_show:
-    address: awcms.booking.reservation.no_show
-    x-awcms-status: provisional
-    messages:
-      BookingReservationNoShow:
-        $ref: "#/components/messages/BookingReservationNoShow"
-    description: >-
-      PROVISIONAL. A confirmed reservation was marked no-show by a person. Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
-  awcms.booking.reservation.expired:
-    address: awcms.booking.reservation.expired
-    x-awcms-status: provisional
-    messages:
-      BookingReservationExpired:
-        $ref: "#/components/messages/BookingReservationExpired"
-    description: >-
-      PROVISIONAL. A hold expired (by the sweep job or by lazy reclaim). Owner: booking (ADR-0131 / docs/awcms/booking.md section 7.4).
-      Becomes live with: booking phase 1.
   awcms.hr.attendance.recorded:
     address: awcms.hr.attendance.recorded
     x-awcms-status: provisional
@@ -163,150 +83,6 @@ channels:
       Becomes live with: hr phase 3.
 components:
   messages:
-    BookingReservationCreated:
-      name: BookingReservationCreated
-      title: awcms.booking.reservation.created
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.created }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationHeld:
-      name: BookingReservationHeld
-      title: awcms.booking.reservation.held
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.held }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationConfirmed:
-      name: BookingReservationConfirmed
-      title: awcms.booking.reservation.confirmed
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.confirmed }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationRescheduled:
-      name: BookingReservationRescheduled
-      title: awcms.booking.reservation.rescheduled
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.rescheduled }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationCancelled:
-      name: BookingReservationCancelled
-      title: awcms.booking.reservation.cancelled
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.cancelled }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationCheckedIn:
-      name: BookingReservationCheckedIn
-      title: awcms.booking.reservation.checked_in
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.checked_in }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationCompleted:
-      name: BookingReservationCompleted
-      title: awcms.booking.reservation.completed
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.completed }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationNoShow:
-      name: BookingReservationNoShow
-      title: awcms.booking.reservation.no_show
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.no_show }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
-    BookingReservationExpired:
-      name: BookingReservationExpired
-      title: awcms.booking.reservation.expired
-      contentType: application/json
-      x-awcms-status: provisional
-      x-awcms-owner: "booking (ADR-0131 / docs/awcms/booking.md section 7.4)"
-      payload:
-        allOf:
-          - $ref: "#/components/schemas/DomainEventEnvelope"
-          - type: object
-            properties:
-              eventType: { const: awcms.booking.reservation.expired }
-              eventVersion: { const: "1.0" }
-              aggregateType: { const: reservation }
-              payload:
-                $ref: "#/components/schemas/BookingReservationPayload"
     HrAttendanceRecorded:
       name: HrAttendanceRecorded
       title: awcms.hr.attendance.recorded
@@ -441,61 +217,6 @@ components:
           properties:
             sourceModule: { type: string }
             schemaVersion: { type: string }
-    BookingReservationPayload:
-      type: object
-      additionalProperties: false
-      required:
-        [
-          reservationId,
-          reservationNo,
-          lineageId,
-          status,
-          previousStatus,
-          startsAt,
-          endsAt,
-          resourceIds,
-          offeringIds,
-          partySize,
-          occurredAt
-        ]
-      description: >-
-        Never a customer name, contact, note or reason text, and no payment
-        state. externalRefType/externalRef are the adapter's own opaque pair.
-        lateCancellation is carried by cancelled; supersededById by rescheduled;
-        rescheduledFromId by the created event of the replacement.
-      properties:
-        reservationId: { type: string, format: uuid }
-        reservationNo: { type: string }
-        lineageId: { type: string, format: uuid }
-        status:
-          {
-            type: string,
-            enum:
-              [
-                held,
-                confirmed,
-                rescheduled,
-                cancelled,
-                checked_in,
-                completed,
-                no_show,
-                expired
-              ]
-          }
-        previousStatus:
-          { type: [string, "null"], enum: [held, confirmed, checked_in, null] }
-        startsAt: { type: string, format: date-time }
-        endsAt: { type: string, format: date-time }
-        resourceIds: { type: array, items: { type: string, format: uuid } }
-        offeringIds: { type: array, items: { type: string, format: uuid } }
-        partySize: { type: integer, minimum: 1 }
-        externalRefType: { type: [string, "null"] }
-        externalRef: { type: [string, "null"] }
-        lateCancellation: { type: boolean }
-        supersededById: { type: string, format: uuid }
-        rescheduledFromId: { type: string, format: uuid }
-        occurredAt: { type: string, format: date-time }
-        correlationId: { type: string }
     HrAttendanceRecordedPayload:
       type: object
       additionalProperties: false

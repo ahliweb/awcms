@@ -41,11 +41,12 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 */5 * * * * /usr/bin/flock -n $AWCMS_LOCK/blog-publish-scheduled.lock $AWCMS_RUN_JOB blog:publish:scheduled >> $AWCMS_JOB_LOG/blog-publish-scheduled.log 2>&1
 
 # booking — Expires booking holds whose lifetime has elapsed on the database
-# clock (reservation `expired`, units released, `expired` history row, one
-# aggregate audit entry per tenant per pass). Housekeeping, not the gate: the
-# allocator reclaims an elapsed hold on the units it claims, so a stopped
-# sweep leaves stale `held` rows and never a double booking. Its lag is
-# observable as `hold_overdue_unswept` in the booking reconciliation
+# clock (reservation `expired`, units released, `expired` history row, the
+# `awcms.booking.reservation.expired` domain event per hold in the same
+# transaction, one aggregate audit entry per tenant per pass). Housekeeping,
+# not the gate: the allocator reclaims an elapsed hold on the units it claims,
+# so a stopped sweep leaves stale `held` rows and never a double booking. Its
+# lag is observable as `hold_overdue_unswept` in the booking reconciliation
 # (booking.md section 7.1).
 * * * * * /usr/bin/flock -n $AWCMS_LOCK/booking-holds-expire.lock $AWCMS_RUN_JOB booking:holds:expire >> $AWCMS_JOB_LOG/booking-holds-expire.log 2>&1
 

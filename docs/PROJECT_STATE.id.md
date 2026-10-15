@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:1bee6f2c2caca73727ff9be095372945d5f46e61795cfc200ee926aef8d87e79 -->
+<!-- i18n-source-hash: sha256:d3743f51bb9bae62cd5a7ad137142921fb532483124ce1c85f1951b7f577faf6 -->
 
 # AWCMS — Project State & Continuation
 
@@ -120,7 +120,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                 | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                 | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Modul base                         | **33** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **197** (`sql/001`–`224`)                                                                                                          | `ls sql/`                                                                               |
+| Migrasi                            | **199** (`sql/001`–`224`)                                                                                                          | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0141** (`0000` = template; status ADR tertinggi: **Accepted**)                                                          | `ls docs/adr/`                                                                          |
 | Layar admin                        | **69** berkas `.astro` di `src/pages/admin/`; **3 dari 33** modul tanpa `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **86** (52.320 baris) — soal typecheck lihat §6                                                                                    | `find src -name '*.astro'`                                                              |
@@ -394,25 +394,34 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
 
 ## 4. Backlog / langkah berikutnya
 
-- **PEMBANGUNAN BOOKING — irisan #937 sampai #940 sudah masuk; berikutnya #941
-  (route reservasi, dan route blok bersamanya atau dengan #942).** #937 skema
-  (`sql/180`, `sql/181`), #938 availability dan jadwal (`sql/186`), #939 alokator
-  slot, hold dengan kedaluwarsa, dan rekonsiliasi (satu migrasi, `sql/200`, hanya
-  untuk privilege reaper: `booking:holds:expire` berjalan sebagai `awcms_worker`
-  lewat sapuan SECURITY DEFINER sempit; skema sudah memegang setiap invarian),
-  #940 stay dan malam terblokir lewat alokator yang sama (satu migrasi, `sql/204`:
-  baris blok di bawah exclusion constraint stay beserta guard-nya; `sql/200`
-  tidak perlu diubah; tes T9 sampai T13 di
-  `tests/integration/booking-stay.integration.test.ts`). Peta dari paket ke kode ada di [`awcms/booking.md`](awcms/booking.id.md)
-  §13. Tiga hal yang harus diketahui penerus: (1) `placeHold` adalah klaim,
-  bukan handler pembuatan: jam buka, lead time, horizon, dan jalur `override`
-  milik #941 dan harus berjalan sebelumnya; (2) kebenaran tak pernah bergantung
-  pada job `booking:holds:expire` (reklamasi malas menutup setiap klaim),
-  kesehatannya adalah `hold_overdue_unswept` pada rekonsiliasi; (3) bukti
-  konkurensi ada di `tests/integration/booking-concurrency.integration.test.ts`
-  (T2, T3, T6, T7) dan `booking-stay.integration.test.ts` (T9 sampai T13),
-  dijalankan lewat `placeHold` dan `createBlock` sampai #941 dan #942 memasang
-  route di depannya.
+- **PEMBANGUNAN BOOKING — irisan #937 sampai #941 sudah masuk; berikutnya #942
+  (layar admin, yang membuat modul bisa keluar dari `experimental`) dan #1012
+  (route buat/lepas blok).** #937 skema (`sql/180`, `sql/181`), #938 availability
+  dan jadwal (`sql/186`), #939 alokator slot, hold dengan kedaluwarsa, dan
+  rekonsiliasi (`sql/200`: `booking:holds:expire` berjalan sebagai `awcms_worker`
+  lewat sapuan SECURITY DEFINER sempit), #940 stay dan malam terblokir lewat
+  alokator yang sama (`sql/204`), #941 route reservasi (`POST/GET /reservations`,
+  `confirm`, `cancel`, `reschedule`, `check-in`, `check-out`, `no-show`) dengan
+  `Idempotency-Key`, `override` berisiko tinggi sebagai pemeriksaan independen,
+  `BookingPort`, sembilan event pada dokumen AsyncAPI live, dan bawaan AMAN untuk
+  batas hold (5 per pelanggan, 500 per tenant; `NULL` di settings tak lagi
+  berarti tak terbatas). Dua migrasi kecil: `sql/208` (foreign key
+  `superseded_by_id` menjadi dapat ditangguhkan agar reschedule bisa
+  menggantikan reservasi lama sebelum penggantinya ada) dan `sql/209` (satu
+  fungsi fakta event, dan sapuan yang mengembalikan yang dikedaluwarsakannya agar
+  worker bisa menerbitkan `expired`). Peta dari paket ke kode ada di
+  [`awcms/booking.md`](awcms/booking.id.md) §13. Yang harus diketahui penerus:
+  (1) `placeHold` adalah klaim, `createReservation` / `transitionReservation` /
+  `rescheduleReservation` adalah transisinya, dan penolakan adalah nilai yang
+  dikembalikan yang harus dikembalikan SEBELUM menulis apa pun (`withTenant`
+  meng-commit 4xx yang dikembalikan); (2) kebenaran tak pernah bergantung pada
+  job `booking:holds:expire` (reklamasi malas menutup setiap klaim); (3) setiap
+  jalur pembuat hold (`extend` kelak, seri) harus mengambil kunci batas per tenant
+  sebelum menghitung; (4) bukti konkurensi adalah `booking-concurrency` /
+  `booking-stay` (lewat `placeHold`), dan `booking-reservation` /
+  `booking-reservation-api` (lewat transisi dan route sungguhan); (5) belum
+  dibangun: `extend`, route blok (#1012), route laporan dan rekonsiliasi,
+  `staff_assignments` (T8), proyeksi reporting.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 Oktober 2026 (v10.7.0): #915–#918 selesai
   di hulu, pada hari yang sama ADR-0040 hilir diterima (awcms-one#335, O0).**

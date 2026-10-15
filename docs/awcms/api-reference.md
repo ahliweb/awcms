@@ -12324,6 +12324,254 @@ Gated by `booking.availability.read`. READ-ONLY: persists and claims nothing, an
 | 422    | QUANTITY_EXCEEDS_UNITS.                                                                                           | [`ApiError`](#standard-error-envelope) |
 | 429    | RATE_LIMITED.                                                                                                     | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/booking/reservations` — List reservations
+
+- **operationId**: `bookingReservationsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.read`. Newest first, keyset paginated (`cursor`). Filters: `status`, `lineageId` (every reservation of one booking across reschedules) and the adapter's natural key (`externalRefType` with `externalRef`, both or neither). The customer note is never returned (it is behind `booking.reservation_notes.read`). Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                                                                   | Description |
+| ------------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------ | ----------- |
+| `status`           | query  | no       | enum(`held`, `confirmed`, `checked_in`, `completed`, `cancelled`, `rescheduled`, `no_show`, `expired`) |             |
+| `lineageId`        | query  | no       | string (uuid)                                                                                          |             |
+| `externalRefType`  | query  | no       | string                                                                                                 |             |
+| `externalRef`      | query  | no       | string                                                                                                 |             |
+| `cursor`           | query  | no       | string                                                                                                 |             |
+| `X-Correlation-ID` | header | no       | string                                                                                                 |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of reservations.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations` — Place a hold or create a reservation
+
+- **operationId**: `bookingReservationCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.create`. Places a HOLD (`held`, expiring on the database clock; `holdSeconds` is clamped to `[60, max_hold_seconds]`) or, when the offering confirms immediately, a `confirmed` reservation. The claim is won all-or-none under the database's exclusion constraints: a taken slot or night is `409 SLOT_UNAVAILABLE` and leaves nothing behind. The server owns the status, the interval (derived from the offering and `startsAt`, or from the `stay` dates in the resource's zone), the buffers and the expiry; a client never sends them. A body that names a payment field (`paid`, `deposit`, `amount`, `balance`, ...) is `400 PAYMENT_FIELD_NOT_ACCEPTED` naming the field, and any other unknown key is a `400 VALIDATION_ERROR`. Holds are capped per customer and per tenant (defaults 5 and 500, tenant-configurable; `429 HOLD_LIMIT_EXCEEDED`). Opening hours (`409 OUTSIDE_SCHEDULE`), lead time (`409 LEAD_TIME_VIOLATION`) and horizon (`409 HORIZON_EXCEEDED`) are refused unless `overridePolicy` is true AND the caller also holds the HIGH-RISK `booking.reservations.override`, checked first through the access chokepoint (action-time separation of duties applies), audited `critical`; an override never lifts a conflict. Requires an Idempotency-Key: replaying it returns the stored response and writes nothing; a fresh key against a live `externalRef` is `409 EXTERNAL_REF_IN_USE`. Audited; publishes `awcms.booking.reservation.created` and `.held` or `.confirmed` in the same transaction. Rejected requests write nothing.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingCreateReservationInput`](#schema-bookingcreatereservationinput)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                                                              | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The reservation.                                                                                                                                                                                                                                         | object                                 |
+| 400    | VALIDATION_ERROR, PAYMENT_FIELD_NOT_ACCEPTED, STAY_DATES_INVALID or IDEMPOTENCY_REQUIRED.                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND or OFFERING_NOT_FOUND (neutral: another tenant's id is the same answer as an unknown one).                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | SLOT_UNAVAILABLE, OUTSIDE_SCHEDULE, LEAD_TIME_VIOLATION, HORIZON_EXCEEDED, PARTY_SIZE_OUT_OF_RANGE, BOOKING_MODE_MISMATCH, MIN_STAY_VIOLATION, MAX_STAY_EXCEEDED, STAY_POOL_INCONSISTENT, EXTERNAL_REF_IN_USE, CONTENTION_RETRY or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | QUANTITY_EXCEEDS_UNITS.                                                                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 429    | HOLD_LIMIT_EXCEEDED.                                                                                                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/reservations/{id}` — Read a reservation
+
+- **operationId**: `bookingReservationGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.read`. The reservation with its items and its append-only transition history. The customer note is never returned (it is behind `booking.reservation_notes.read`). There is no ownership grant on this read: the customer is an opaque reference at the commerce authority, not a tenant user. An unknown id and another tenant's id are the same `404 RESERVATION_NOT_FOUND`. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                      | Schema                                 |
+| ------ | -------------------------------- | -------------------------------------- |
+| 200    | The reservation and its history. | object                                 |
+| 400    | Validation error.                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.      | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND.           | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations/{id}/cancel` — Cancel a held or confirmed reservation
+
+- **operationId**: `bookingReservationCancel`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.cancel`. `held` or `confirmed` -> `cancelled`, releasing every live allocation in the same transaction. `reasonCode` is an optional short code, never free text. A cancellation inside the offering's `cancellation_cutoff_seconds` of the start (the arrival instant for a stay) is recorded as `lateCancellation: true` on the reservation and the event; the module records the fact, any fee is the commerce layer's. Cancelling an already cancelled reservation returns it with `replayed: true` and writes nothing. Requires an Idempotency-Key; replaying it returns the stored response. Audited at warning severity; publishes `awcms.booking.reservation.cancelled`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): [`BookingCancelInput`](#schema-bookingcancelinput)
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The reservation after the transition, or unchanged with `replayed: true` when it was already in the target state. | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer).                                | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE or IDEMPOTENCY_CONFLICT.                                                                            | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations/{id}/check-in` — Check a confirmed reservation in
+
+- **operationId**: `bookingReservationCheckIn`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.check_in`. `confirmed` -> `checked_in`; the allocations are kept. A stay is refused (`409 CHECK_IN_TOO_EARLY`) before its check-in DATE in the resource's time zone; there is deliberately no time-of-day check, an early arrival being a front-desk decision. Checking in a checked-in reservation returns it with `replayed: true` and writes nothing. Requires an Idempotency-Key; replaying it returns the stored response. Audited; publishes `awcms.booking.reservation.checked_in`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The reservation after the transition, or unchanged with `replayed: true` when it was already in the target state. | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer).                                | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE, CHECK_IN_TOO_EARLY or IDEMPOTENCY_CONFLICT.                                                        | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations/{id}/check-out` — Check a reservation out (complete it)
+
+- **operationId**: `bookingReservationCheckOut`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.complete`. `checked_in` -> `completed` (the `complete` verb, "check-out" in the UI). The booked interval is NOT shrunk by an early departure: the allocations are kept, as for a slot. Completing a completed reservation returns it with `replayed: true` and writes nothing. Requires an Idempotency-Key; replaying it returns the stored response. Audited; publishes `awcms.booking.reservation.completed`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The reservation after the transition, or unchanged with `replayed: true` when it was already in the target state. | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer).                                | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE or IDEMPOTENCY_CONFLICT.                                                                            | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations/{id}/confirm` — Confirm a held reservation
+
+- **operationId**: `bookingReservationConfirm`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.confirm`. `held` -> `confirmed`; the hold expiry is cleared. Re-checks the hold has not expired under the reservation's row lock, on the DATABASE clock: an elapsed hold is `409 HOLD_EXPIRED` even when the sweep has not run, and so is one the sweep already expired. A confirm racing the sweep serialises on that lock and exactly one wins. Confirming a reservation that is already confirmed returns it with `replayed: true` and writes nothing, with any Idempotency-Key. Body: none (payment is the commerce layer's, which decides WHEN to ask for a confirm). Requires an Idempotency-Key; replaying it returns the stored response. Audited; publishes `awcms.booking.reservation.confirmed`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The reservation after the transition, or unchanged with `replayed: true` when it was already in the target state. | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer).                                | [`ApiError`](#standard-error-envelope) |
+| 409    | HOLD_EXPIRED, INVALID_STATE or IDEMPOTENCY_CONFLICT.                                                              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations/{id}/no-show` — Mark a confirmed reservation as a no-show
+
+- **operationId**: `bookingReservationNoShow`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.no_show` (staff only: a customer-facing adapter credential is simply not granted it). `confirmed` -> `no_show`, marked BY A PERSON after the start plus `no_show_grace_seconds` (default 15 minutes; for a stay the start is the arrival instant); earlier is `409 NO_SHOW_TOO_EARLY`. There is no automatic no-show in v1: nothing else ever writes this state. The allocations are KEPT, so the slot is accounted as consumed. Marking a no-show twice returns the reservation with `replayed: true` and writes nothing. Requires an Idempotency-Key; replaying it returns the stored response. Audited at warning severity; publishes `awcms.booking.reservation.no_show`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The reservation after the transition, or unchanged with `replayed: true` when it was already in the target state. | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer).                                | [`ApiError`](#standard-error-envelope) |
+| 409    | INVALID_STATE, NO_SHOW_TOO_EARLY or IDEMPOTENCY_CONFLICT.                                                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/reservations/{id}/reschedule` — Reschedule a confirmed reservation
+
+- **operationId**: `bookingReservationReschedule`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.reservations.reschedule`. Moves a `confirmed` reservation to a new time (`startsAt`) or new dates (`stay`) in ONE transaction: the old allocations are released, the old reservation becomes `rescheduled` (naming its replacement in `supersededById`) and the replacement is inserted `confirmed` under the same `lineageId` with `rescheduledFromId` set, carrying the old customer reference, party, source, note and external reference. Moving or extending over one's own slot or nights does not conflict with itself. Intervals are never edited in place. ANY refusal (the new interval is taken, outside policy, contended) rolls everything back to the untouched original, which stays `confirmed` with its allocations live. `resourceId` or `poolId` moves it elsewhere; a reservation spanning several resources must say where it goes (`400 RESOURCE_REQUIRED`). `overridePolicy` lifts hours, lead time and horizon and additionally needs the HIGH-RISK `booking.reservations.override` (checked first; audited `critical`); it never lifts a conflict. Rescheduling an already rescheduled reservation to the same time returns the replacement with `replayed: true`. Requires an Idempotency-Key; replaying it returns the stored response. Audited at warning severity; publishes `awcms.booking.reservation.rescheduled` for the old reservation and `created` + `confirmed` for the replacement.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingRescheduleInput`](#schema-bookingrescheduleinput)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The reservation after the transition, or unchanged with `replayed: true` when it was already in the target state.                                                                                                                                                       | object                                 |
+| 400    | VALIDATION_ERROR, PAYMENT_FIELD_NOT_ACCEPTED, STAY_DATES_INVALID, RESOURCE_REQUIRED (a reservation spanning several resources must say where it moves) or IDEMPOTENCY_REQUIRED.                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer), or RESOURCE_NOT_FOUND / OFFERING_NOT_FOUND for a target resource, pool or offering that is not in this tenant.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | SLOT_UNAVAILABLE, OUTSIDE_SCHEDULE, LEAD_TIME_VIOLATION, HORIZON_EXCEEDED, INVALID_STATE, BOOKING_MODE_MISMATCH, MIN_STAY_VIOLATION, MAX_STAY_EXCEEDED, STAY_POOL_INCONSISTENT, EXTERNAL_REF_IN_USE, PARTY_SIZE_OUT_OF_RANGE, CONTENTION_RETRY or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | QUANTITY_EXCEEDS_UNITS.                                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/booking/schedule-exceptions` — List schedule exceptions
 
 - **operationId**: `bookingScheduleExceptionsList`
@@ -13771,6 +14019,66 @@ Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1
 }
 ```
 
+### Schema: BookingCancelInput
+
+| Field        | Type   | Required | Nullable | Description                              |
+| ------------ | ------ | -------- | -------- | ---------------------------------------- |
+| `reasonCode` | string | no       | yes      | A short lowercase code, never free text. |
+
+**Example**
+
+```json
+{
+  "reasonCode": "string"
+}
+```
+
+### Schema: BookingCreateReservationInput
+
+Exactly one of `resourceId` or `poolId`, and exactly one of `startsAt` (a slot) or `stay` (a night range). A payment field is refused by name.
+
+| Field                 | Type                                           | Required | Nullable | Description                                                                                   |
+| --------------------- | ---------------------------------------------- | -------- | -------- | --------------------------------------------------------------------------------------------- |
+| `offeringId`          | string (uuid)                                  | yes      | no       |                                                                                               |
+| `resourceId`          | string (uuid)                                  | no       | no       |                                                                                               |
+| `poolId`              | string (uuid)                                  | no       | no       |                                                                                               |
+| `startsAt`            | string (date-time)                             | no       | no       | RFC 3339 with an explicit offset or Z. Slot offerings only.                                   |
+| `stay`                | [`BookingStayDates`](#schema-bookingstaydates) | no       | no       |                                                                                               |
+| `partySize`           | integer                                        | no       | no       |                                                                                               |
+| `quantity`            | integer                                        | no       | no       | Units claimed at once, all-or-none.                                                           |
+| `holdSeconds`         | number                                         | no       | no       | Clamped to [60, max_hold_seconds].                                                            |
+| `externalCustomerRef` | string                                         | no       | yes      | The commerce authority's opaque customer token (no spaces, no '@'); null for a walk-in.       |
+| `externalRef`         | object                                         | no       | yes      |                                                                                               |
+| `source`              | string                                         | no       | no       |                                                                                               |
+| `customerNote`        | string                                         | no       | yes      | Free text; classified, never logged, audited or put in an event.                              |
+| `overridePolicy`      | boolean                                        | no       | no       | Lift opening hours, lead time and horizon. Needs `booking.reservations.override` in addition. |
+
+**Example**
+
+```json
+{
+  "offeringId": "00000000-0000-0000-0000-000000000000",
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "poolId": "00000000-0000-0000-0000-000000000000",
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "stay": {
+    "checkInDate": "2026-01-01",
+    "checkOutDate": "2026-01-01"
+  },
+  "partySize": 1,
+  "quantity": 1,
+  "holdSeconds": 0,
+  "externalCustomerRef": "string",
+  "externalRef": {
+    "type": "string",
+    "id": "string"
+  },
+  "source": "string",
+  "customerNote": "string",
+  "overridePolicy": false
+}
+```
+
 ### Schema: BookingLocalWindow
 
 A local wall-clock window [from, to) in the schedule's zone; it never crosses midnight.
@@ -13786,6 +14094,31 @@ A local wall-clock window [from, to) in the schedule's zone; it never crosses mi
 {
   "from": "09:00",
   "to": "17:00"
+}
+```
+
+### Schema: BookingRescheduleInput
+
+| Field            | Type                                           | Required | Nullable | Description |
+| ---------------- | ---------------------------------------------- | -------- | -------- | ----------- |
+| `startsAt`       | string (date-time)                             | no       | no       |             |
+| `stay`           | [`BookingStayDates`](#schema-bookingstaydates) | no       | no       |             |
+| `resourceId`     | string (uuid)                                  | no       | no       |             |
+| `poolId`         | string (uuid)                                  | no       | no       |             |
+| `overridePolicy` | boolean                                        | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "startsAt": "2026-01-01T00:00:00.000Z",
+  "stay": {
+    "checkInDate": "2026-01-01",
+    "checkOutDate": "2026-01-01"
+  },
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "poolId": "00000000-0000-0000-0000-000000000000",
+  "overridePolicy": false
 }
 ```
 
@@ -13873,6 +14206,22 @@ The closed rules schema. Only `weekly` is accepted; a weekday absent from it is 
 ```json
 {
   "weekly": "(operation-specific payload)"
+}
+```
+
+### Schema: BookingStayDates
+
+| Field          | Type          | Required | Nullable | Description                                         |
+| -------------- | ------------- | -------- | -------- | --------------------------------------------------- |
+| `checkInDate`  | string (date) | yes      | no       | Local date in the resource's zone.                  |
+| `checkOutDate` | string (date) | yes      | no       | Exclusive; after `checkInDate`, at most 366 nights. |
+
+**Example**
+
+```json
+{
+  "checkInDate": "2026-01-01",
+  "checkOutDate": "2026-01-01"
 }
 ```
 
@@ -16769,7 +17118,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (58)
+### Channels (67)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -16798,6 +17147,15 @@ consumer/subscriber contract in this file).
 - `awcms.blog-content.widget.created` — A widget was created. Documented contract only; producer is `pages/api/v1/blog/widgets/index.ts`'s `blog-content.widget.created` log line.
 - `awcms.blog-content.widget.deleted` — A widget was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.deleted` log line.
 - `awcms.blog-content.widget.updated` — A widget was updated. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.updated` log line.
+- `awcms.booking.reservation.cancelled` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A held or confirmed reservation was cancelled and its allocations released. Producer: `transitionReservation`. Same payload shape as `reservation.created`, plus `lateCancellation` (the module records the fact; any fee is the commerce layer's). The cancellation reason code is on the append-only history row, never in the event.
+- `awcms.booking.reservation.checked_in` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A confirmed reservation was checked in. Producer: `transitionReservation`. Same payload shape as `reservation.created`.
+- `awcms.booking.reservation.completed` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A checked-in reservation was completed (checked out). Producer: `transitionReservation`. Same payload shape as `reservation.created`.
+- `awcms.booking.reservation.confirmed` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A hold became confirmed (`previousStatus` held) or a reservation was created already confirmed (`previousStatus` null). Producer: `booking/application/booking-reservation-service.ts`'s `transitionReservation` and `placeHold`. Same payload shape as `reservation.created`.
+- `awcms.booking.reservation.created` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A reservation exists: held, or confirmed when the offering confirms immediately, or the confirmed replacement of a reschedule (then `rescheduledFromId` names the reservation it replaced). Producer: `booking/application/booking-hold-service.ts`'s `placeHold`, in the SAME transaction as the claim: a rolled-back or refused claim emits nothing. Payload: `reservationId`, `reservationNo`, `lineageId`, `status`, `previousStatus`, `startsAt`/`endsAt` (RFC 3339 UTC), `resourceIds`, `offeringIds`, `partySize`, `externalRefType`/`externalRef` (the adapter's own opaque pair), `stays` (additive, only when the reservation holds a stay: `resourceId`, `checkInDate`, `checkOutDate`, `nights`, `timezone`), `occurredAt`, `correlationId`. NEVER a customer name, contact, reference or note, a reason text, an actor in the payload (the envelope carries `actorTenantUserId` like every module's events) or any amount or payment state: the module stores none.
+- `awcms.booking.reservation.expired` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A hold expired and its allocations were released: found by the `booking:holds:expire` sweep (published in the sweep's own tenant transaction, `booking/application/booking-hold-expiry-job.ts`) or reclaimed by a claim that wanted its units (`booking-hold-expiry.ts`'s `reclaimExpiredHolds`). Same payload shape as `reservation.created`; `previousStatus` is held.
+- `awcms.booking.reservation.held` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A hold was placed; not emitted when the offering confirms immediately. Producer: `placeHold`. Same payload shape as `reservation.created`.
+- `awcms.booking.reservation.no_show` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A confirmed reservation was marked no-show by a person after its start plus the grace period (there is no automatic no-show). Producer: `transitionReservation`. Same payload shape as `reservation.created`.
+- `awcms.booking.reservation.rescheduled` — Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md section 7.4). A confirmed reservation was superseded by its replacement in one transaction. Producer: `placeHold` with `replaces`, called by `rescheduleReservation`. Same payload shape as `reservation.created`, plus `supersededById` (the replacement); the replacement announces itself with `created` and `confirmed` carrying `rescheduledFromId`.
 - `awcms.comments.comment.approved` — A comment became publicly visible, either by auto-approval under the thread policy or by a moderator's approve decision. Producers: `comments/application/comment-service.ts`'s `submitComment` and `comments/application/comment-moderation.ts`'s `moderateComment`. The reply-notification consumer keys off THIS event rather than `comment.submitted`, so a comment still held for moderation never triggers a notification.
 - `awcms.comments.comment.submitted` — A comment was submitted against a published, public commentable resource (ADR-0041). Producer: `comments/application/comment-service.ts`'s `submitComment`. The payload carries opaque references only — comment and thread id, resource type, the server-derived public URL, and the resulting status. Never the body text, the author address, or any identity hash.
 - `awcms.comments.reply.created` — A submitted comment was a reply to an existing comment. Producer: `comments/application/comment-service.ts`'s `submitComment`, published alongside `comment.submitted` so a consumer can distinguish thread replies without re-reading the row. The recipient address is resolved from encrypted storage by the dispatcher at send time and is never carried here.

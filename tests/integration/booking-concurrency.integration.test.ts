@@ -1020,7 +1020,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         expireDueHolds(tx, tenantId)
       );
 
-      expect(after).toEqual({ expired: 1, releasedAllocations: 1 });
+      expect(after).toMatchObject({ expired: 1, releasedAllocations: 1 });
     });
 
     test("an expired hold cannot be confirmed, even though nothing has swept it (the database clock decides)", async () => {
@@ -1638,7 +1638,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         )
       );
 
-      expect(outcome).toEqual({ expired: 8, releasedAllocations: 8 });
+      expect(outcome).toMatchObject({ expired: 8, releasedAllocations: 8 });
 
       const rows = (await getAdminSql()`
         SELECT status, count(*)::int AS n
@@ -1742,7 +1742,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         expireDueHolds(tx, tenantId)
       );
 
-      expect(outcome).toEqual({ expired: 1, releasedAllocations: 1 });
+      expect(outcome).toMatchObject({ expired: 1, releasedAllocations: 1 });
 
       const rows = (await getAdminSql()`
         SELECT r.id, r.status, r.status_changed_by IS NULL AS system_actor,
@@ -1890,7 +1890,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         expireDueHolds(tx, tenantId, 1000)
       );
 
-      expect(outcome).toEqual({ expired: 0, releasedAllocations: 0 });
+      expect(outcome).toMatchObject({ expired: 0, releasedAllocations: 0 });
 
       const rows = (await getAdminSql()`
         SELECT status, hold_expires_at IS NOT NULL AS still_a_hold
@@ -1949,7 +1949,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
 
       expect(
         await workerTx(tenantX, (tx) => expireDueHolds(tx, tenantX))
-      ).toEqual({ expired: 1, releasedAllocations: 1 });
+      ).toMatchObject({ expired: 1, releasedAllocations: 1 });
 
       const rows = (await getAdminSql()`
         SELECT id, status FROM awcms_booking_reservations
@@ -1976,11 +1976,12 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
       }
 
       // 0 and negative clamp UP to one hold per call; the tenant has three.
+      // (The function returns one row per expired reservation since sql/209.)
       const raw = (limit: number) =>
         workerTx(
           tenantId,
           (tx) =>
-            tx`SELECT expired_count FROM awcms_booking_expire_due_holds(${tenantId}::uuid, ${limit}::integer)`
+            tx`SELECT count(*)::int AS expired_count FROM awcms_booking_expire_due_holds(${tenantId}::uuid, ${limit}::integer)`
         ) as Promise<{ expired_count: number }[]>;
 
       expect((await raw(0))[0]!.expired_count).toBe(1);
@@ -2018,8 +2019,8 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         expireDueHolds(tx, tenantId)
       );
 
-      expect(reclaimed).toEqual({ expired: 1, releasedAllocations: 1 });
-      expect(swept).toEqual({ expired: 1, releasedAllocations: 1 });
+      expect(reclaimed).toMatchObject({ expired: 1, releasedAllocations: 1 });
+      expect(swept).toMatchObject({ expired: 1, releasedAllocations: 1 });
 
       const footprint = async (reservationId: string) => {
         const reservation = (await getAdminSql()`
@@ -2084,7 +2085,13 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
 
       let live = 0;
       let overlappingPairs = 0;
-      const fixture = await newFixture(tenantId);
+      // An `immediate` offering: the claim is a confirmed reservation, not a hold,
+      // so it takes no tenant cap lock (Issue #941). A held claim would, by design,
+      // make B wait for A's commit on that lock, and this test keeps A open on
+      // purpose while B runs.
+      const fixture = await newFixture(tenantId, {
+        confirmation: "immediate"
+      });
 
       try {
         await admin.unsafe(

@@ -318,6 +318,116 @@ channels:
       (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-
       dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp-
       dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.
+  awcms.booking.reservation.created:
+    address: awcms.booking.reservation.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A reservation exists: held, or confirmed when the offering
+      confirms immediately, or the confirmed replacement of a reschedule (then
+      `rescheduledFromId` names the reservation it replaced). Producer:
+      `booking/application/booking-hold-service.ts`'s `placeHold`, in the SAME
+      transaction as the claim: a rolled-back or refused claim emits nothing.
+      Payload: `reservationId`, `reservationNo`, `lineageId`, `status`,
+      `previousStatus`, `startsAt`/`endsAt` (RFC 3339 UTC), `resourceIds`,
+      `offeringIds`, `partySize`, `externalRefType`/`externalRef` (the
+      adapter's own opaque pair), `stays` (additive, only when the reservation
+      holds a stay: `resourceId`, `checkInDate`, `checkOutDate`, `nights`,
+      `timezone`), `occurredAt`, `correlationId`. NEVER a customer name,
+      contact, reference or note, a reason text, an actor in the payload (the
+      envelope carries `actorTenantUserId` like every module's events) or any amount or
+      payment state: the module stores none.
+  awcms.booking.reservation.held:
+    address: awcms.booking.reservation.held
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A hold was placed; not emitted when the offering confirms
+      immediately. Producer: `placeHold`. Same payload shape as
+      `reservation.created`.
+  awcms.booking.reservation.confirmed:
+    address: awcms.booking.reservation.confirmed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A hold became confirmed (`previousStatus` held) or a
+      reservation was created already confirmed (`previousStatus` null).
+      Producer: `booking/application/booking-reservation-service.ts`'s
+      `transitionReservation` and `placeHold`. Same payload shape as
+      `reservation.created`.
+  awcms.booking.reservation.rescheduled:
+    address: awcms.booking.reservation.rescheduled
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A confirmed reservation was superseded by its replacement
+      in one transaction. Producer: `placeHold` with `replaces`, called by
+      `rescheduleReservation`. Same payload shape as `reservation.created`,
+      plus `supersededById` (the replacement); the replacement announces
+      itself with `created` and `confirmed` carrying `rescheduledFromId`.
+  awcms.booking.reservation.cancelled:
+    address: awcms.booking.reservation.cancelled
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A held or confirmed reservation was cancelled and its
+      allocations released. Producer: `transitionReservation`. Same payload
+      shape as `reservation.created`, plus `lateCancellation` (the module
+      records the fact; any fee is the commerce layer's). The cancellation
+      reason code is on the append-only history row, never in the event.
+  awcms.booking.reservation.checked_in:
+    address: awcms.booking.reservation.checked_in
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A confirmed reservation was checked in. Producer:
+      `transitionReservation`. Same payload shape as `reservation.created`.
+  awcms.booking.reservation.completed:
+    address: awcms.booking.reservation.completed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A checked-in reservation was completed (checked out).
+      Producer: `transitionReservation`. Same payload shape as
+      `reservation.created`.
+  awcms.booking.reservation.no_show:
+    address: awcms.booking.reservation.no_show
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A confirmed reservation was marked no-show by a person
+      after its start plus the grace period (there is no automatic no-show).
+      Producer: `transitionReservation`. Same payload shape as
+      `reservation.created`.
+  awcms.booking.reservation.expired:
+    address: awcms.booking.reservation.expired
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Booking reservation event (ADR-0131, Issue #941; docs/awcms/booking.md
+      section 7.4). A hold expired and its allocations were released: found by
+      the `booking:holds:expire` sweep (published in the sweep's own tenant
+      transaction, `booking/application/booking-hold-expiry-job.ts`) or
+      reclaimed by a claim that wanted its units (`booking-hold-expiry.ts`'s
+      `reclaimExpiredHolds`). Same payload shape as `reservation.created`;
+      `previousStatus` is held.
   awcms.email.message.queued:
     address: awcms.email.message.queued
     messages:
@@ -784,6 +894,60 @@ operations:
       $ref: "#/channels/awcms.whatsapp.dispatch.failed"
     messages:
       - $ref: "#/channels/awcms.whatsapp.dispatch.failed/messages/DomainEvent"
+  publishBookingReservationCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.created"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.created/messages/DomainEvent"
+  publishBookingReservationHeld:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.held"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.held/messages/DomainEvent"
+  publishBookingReservationConfirmed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.confirmed"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.confirmed/messages/DomainEvent"
+  publishBookingReservationRescheduled:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.rescheduled"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.rescheduled/messages/DomainEvent"
+  publishBookingReservationCancelled:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.cancelled"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.cancelled/messages/DomainEvent"
+  publishBookingReservationCheckedIn:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.checked_in"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.checked_in/messages/DomainEvent"
+  publishBookingReservationCompleted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.completed"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.completed/messages/DomainEvent"
+  publishBookingReservationNoShow:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.no_show"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.no_show/messages/DomainEvent"
+  publishBookingReservationExpired:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.booking.reservation.expired"
+    messages:
+      - $ref: "#/channels/awcms.booking.reservation.expired/messages/DomainEvent"
   publishEmailMessageQueued:
     action: send
     channel:

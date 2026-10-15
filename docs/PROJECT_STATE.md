@@ -119,7 +119,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                          | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                          | `git rev-list --count v10.7.0..HEAD`                                                    |
 | Base modules                      | **33** (see the list in ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrations                        | **197** (`sql/001`–`224`)                                                                                                           | `ls sql/`                                                                               |
+| Migrations                        | **199** (`sql/001`–`224`)                                                                                                           | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0141** (`0000` = template; highest ADR status: **Accepted**)                                                             | `ls docs/adr/`                                                                          |
 | Admin screens                     | **69** `.astro` files in `src/pages/admin/`; **3 of 33** modules without `navigation:` (`booking`, `hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **86** (52.320 lines) — on typechecking see §6                                                                                      | `find src -name '*.astro'`                                                              |
@@ -391,25 +391,33 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
-- **BOOKING BUILD-OUT — slices #937 to #940 landed; next #941 (reservation
-  routes, and the block routes with them or with #942).** #937 schema (`sql/180`,
-  `sql/181`), #938 availability and schedules (`sql/186`), #939 the slot
-  allocator, holds with expiry and the reconciliation (one migration, `sql/200`,
-  only for the reaper's privilege: `booking:holds:expire` runs as `awcms_worker`
-  through a narrow SECURITY DEFINER sweep; the schema already held every
-  invariant), #940 stays and blocked nights through the same allocator (one
-  migration, `sql/204`: block rows under the stay exclusion constraint and their
-  guards; `sql/200` needed no change; tests T9 to T13 in
-  `tests/integration/booking-stay.integration.test.ts`). The map from the pack to the code is
-  [`awcms/booking.md`](awcms/booking.md) §13. Three things a continuer must
-  know: (1) `placeHold` is the claim, not the create handler: opening hours,
-  lead time, horizon and the `override` path are #941's and must run before it;
+- **BOOKING BUILD-OUT — slices #937 to #941 landed; next #942 (the admin
+  screens, which are what lets the module leave `experimental`) and #1012 (the
+  block create/release routes).** #937 schema (`sql/180`, `sql/181`), #938
+  availability and schedules (`sql/186`), #939 the slot allocator, holds with
+  expiry and the reconciliation (`sql/200`: `booking:holds:expire` runs as
+  `awcms_worker` through a narrow SECURITY DEFINER sweep), #940 stays and blocked
+  nights through the same allocator (`sql/204`), #941 the reservation routes
+  (`POST/GET /reservations`, `confirm`, `cancel`, `reschedule`, `check-in`,
+  `check-out`, `no-show`) with `Idempotency-Key`, the high-risk `override` as an
+  independent check, the `BookingPort`, the nine events on the live AsyncAPI
+  document and a safe DEFAULT for the hold caps (5 per customer, 500 per tenant;
+  `NULL` in the settings no longer means unlimited). Two small migrations:
+  `sql/208` (the `superseded_by_id` foreign key becomes deferrable so a reschedule
+  can supersede the old reservation before its replacement exists) and `sql/209`
+  (the one event-facts function, and the sweep returning what it expired so the
+  worker can publish `expired`). The map from the pack to the code is
+  [`awcms/booking.md`](awcms/booking.md) §13. What a continuer must know: (1)
+  `placeHold` is the claim, `createReservation` / `transitionReservation` /
+  `rescheduleReservation` are the transitions, and a refusal is a returned value
+  that must be returned BEFORE any write (`withTenant` commits a returned 4xx);
   (2) correctness never depends on the `booking:holds:expire` job (lazy reclaim
-  covers every claim), its health is `hold_overdue_unswept` in the
-  reconciliation; (3) the concurrency evidence is
-  `tests/integration/booking-concurrency.integration.test.ts` (T2, T3, T6, T7)
-  and `booking-stay.integration.test.ts` (T9 to T13), driven through `placeHold`
-  and `createBlock` until #941 and #942 put a route in front of them.
+  covers every claim); (3) every hold-creating path (the future `extend`, a series)
+  must take the per-tenant cap lock before counting; (4) the concurrency evidence
+  is `booking-concurrency` / `booking-stay` (through `placeHold`), and
+  `booking-reservation` / `booking-reservation-api` (through the transitions and
+  the real routes); (5) not built: `extend`, the block routes (#1012), the report
+  and reconciliation routes, `staff_assignments` (T8), the reporting projections.
 
 - **AW BUSINESS PLATFORM WAVE A — 8 October 2026 (v10.7.0): #915–#918 done
   upstream, the same day downstream ADR-0040 was accepted (awcms-one#335, O0).**

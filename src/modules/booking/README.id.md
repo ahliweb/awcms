@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:5a4e9938cb22f6eeeb0ff9f619b6b2e2928d698c4ebe8a26adbdbb1a0c94f549 -->
+<!-- i18n-source-hash: sha256:2bfb7b6e53555d19a405f66f73ebeaefe3d48239b69bd4a13672d956053bb981 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -32,10 +32,17 @@ Stay dan blok (Issue #940, `sql/204`): stay diklaim lewat allocator dan
 `placeHold` yang sama (`stay: { checkInDate, checkOutDate }`, exclusion
 constraint kedua atas tanggal), malam terblokir adalah baris allocation milik
 satu baris `resource_blocks` (`createBlock` / `releaseBlock`, `BLOCK_CONFLICT`),
-dan reklamasi malas serta rekonsiliasi memahami keduanya. **Belum ada:** route
-reservasi dan transisi setelah pembuatan (`confirm`, `cancel`, `reschedule`,
-...), route blok, channel AsyncAPI, layar admin, dan proyeksi reporting
-(Issue #941 dan #942).
+dan reklamasi malas serta rekonsiliasi memahami keduanya.
+
+Reservasi (Issue #941, `sql/208`, `sql/209`): route `POST/GET /reservations`,
+`GET /reservations/{id}` dan transisi `confirm`, `cancel`, `reschedule`,
+`check-in`, `check-out` dan `no-show`
+(`application/booking-reservation-service.ts`), `Idempotency-Key` lewat
+komponen bersama, `BookingPort` (`application/booking-port-adapter.ts`), sembilan
+event reservasi di dokumen AsyncAPI live, dan default aman untuk batas hold.
+**Belum ada:** route blok (#1012), route laporan dan rekonsiliasi, proyeksi
+reporting, dan layar admin (#942, yang memungkinkan modul keluar dari
+`experimental`).
 
 ## Allocator, di satu tempat
 
@@ -62,9 +69,14 @@ CONFLICT DO NOTHING RETURNING id`: PostgreSQL menunggu baris konkuren yang
   terlambat tetap menemukan unit bebas, dan keterlambatan reaper terlihat sebagai
   `hold_overdue_unswept` di `runReconciliation`.
 - **`placeHold` adalah klaim, bukan handler pembuatan.** Jam buka, lead time,
-  horizon, dan `reservations.override` milik handler (Issue #941) dan berjalan
-  sebelumnya. Ia tak pernah melihat nama pelanggan: pelanggan adalah
-  `externalCustomerRef` yang opak, dijauhkan dari baris audit dan detail event.
+  horizon, dan `reservations.override` milik handler pembuatan
+  (`createReservation`, Issue #941) dan berjalan sebelumnya. Ia tak pernah
+  melihat nama pelanggan: pelanggan adalah `externalCustomerRef` yang opak,
+  dijauhkan dari baris audit dan event.
+- **Batas hold selalu berlaku.** `NULL` di settings berarti default modul (5 hold
+  hidup per pelanggan, 500 per tenant, `domain/booking-policy.ts`), bukan tanpa
+  batas. Hitungan diambil di bawah advisory lock per tenant, sehingga hold satu
+  tenant diserialkan selama transaksi klaim.
 
 ## Stay dan blok, di satu tempat
 
@@ -92,6 +104,43 @@ checkOutDate }` (`YYYY-MM-DD` lokal pada zona resource, setengah-terbuka)
 - **Kedaluwarsa tak perlu diubah.** Hold stay berakhir pada kolom yang sama dan
   dilepas lewat join item yang sama dengan hold slot, sehingga `sql/200` dan
   reaper tidak tersentuh; reklamasi malas memeriksa `daterange` untuk stay dan blok.
+
+## Reservasi, di satu tempat
+
+- **Transisi adalah satu transaksi** (`transitionReservation`): kunci reservasi
+  `FOR UPDATE`, baca jam DATABASE dalam statement yang sama, putuskan dengan mesin
+  status murni, tolak sebagai nilai SEBELUM menulis apa pun (`withTenant`
+  meng-commit 4xx yang dikembalikan), lalu tulis reservasi, lepas allocation bila
+  kata kerjanya demikian, tambahkan TEPAT SATU baris riwayat, satu baris audit,
+  dan satu event outbox. Meminta status yang sudah dimiliki reservasi adalah replay
+  (`replayed: true`) dan tidak menulis apa pun, dengan `Idempotency-Key` apa pun.
+- **Route** mengotorisasi izin kata kerjanya lebih dulu (default tolak),
+  memvalidasi body secara ketat (field pembayaran adalah
+  `PAYMENT_FIELD_NOT_ACCEPTED` yang menyebut namanya, key tak dikenal lain adalah
+  `VALIDATION_ERROR`), lalu `runIdempotent` (respons tersimpan untuk key, user, dan
+  request yang sama dikembalikan apa adanya; key yang dipakai ulang dengan request
+  lain adalah `IDEMPOTENCY_CONFLICT`). Penolakan tak pernah disimpan. Not-found
+  adalah satu 404 netral untuk id tak dikenal dan id tenant lain.
+- **`overridePolicy` adalah pemeriksaan kedua yang independen.** Mengangkat jam
+  buka, lead time, dan horizon membutuhkan `reservations.override` selain izin
+  kata kerjanya sendiri, diperiksa lebih dulu lewat `authorizeInTransaction`
+  (aksi berisiko tinggi, sehingga separation-of-duties saat aksi berlaku) dan
+  diaudit `critical`. Ia tak pernah mengangkat konflik allocation. Port tak punya
+  override.
+- **Reschedule** (`rescheduleReservation` + `placeHold` dengan `replaces`) adalah
+  satu savepoint: lepas allocation lama, tandai reservasi lama `rescheduled`,
+  sisipkan pengganti dengan lineage yang sama, klaim interval baru. Baris lama
+  digantikan SEBELUM penggantinya ada, itulah sebabnya `sql/208` menjadikan satu
+  foreign key itu ditangguhkan; penolakan di mana pun meng-rollback seluruh
+  pemindahan.
+- **Event** berasal dari satu fungsi database,
+  `awcms_booking_reservation_event_facts` (`sql/209`): daftar-izin fakta non-pribadi,
+  sehingga transisi request, reklamasi malas, dan sapuan (yang mengembalikan fakta
+  yang dikedaluwarsakannya, karena worker tak boleh membaca tabel) membawa field
+  yang sama. `expired` diterbitkan oleh kedua cara hold berakhir.
+- **Ownership grant: tidak ada.** `ownershipGrant` hanya bisa memperluas
+  pembacaan, dan pelanggan adalah token opak di otoritas commerce, bukan tenant
+  user; pembuat reservasi tidak berhak membacanya hanya karena membuatnya.
 
 ## Semantik waktu, di satu tempat
 
@@ -128,38 +177,47 @@ checkOutDate }` (`YYYY-MM-DD` lokal pada zona resource, setengah-terbuka)
 
 ## Tata letak
 
-| Path                                     | Isinya                                                                                      |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `module.ts`                              | Descriptor: 32 izin, `dataLifecycle` dan `subjectData` untuk tabel-tabelnya                 |
-| `domain/booking-reservation-state.ts`    | Mesin status reservasi sebagai fungsi murni (tanpa I/O, pemanggil memberi jam database)     |
-| `domain/booking-permissions.ts`          | Objek guard literal untuk `authorizeInTransaction` (dipakai mulai Issue #938)               |
-| `domain/booking-audit.ts`                | Nama dan severity audit event                                                               |
-| `domain/booking-time.ts`                 | Zona, aritmetika tanggal, dan resolusi gap/fold RFC 5545 yang murni                         |
-| `domain/booking-schedule.ts`             | Skema rules tertutup, pemilihan jadwal, ekspansi ke jendela UTC, penutupan (murni)          |
-| `domain/booking-availability.ts`         | Ketersediaan slot dan evaluasi stay yang murni (tanpa I/O, tanpa jam)                       |
-| `domain/booking-validation.ts`           | Validasi request ketat (RFC 3339 beroffset, zona IANA)                                      |
-| `domain/booking-staff-availability.ts`   | Seam StaffAvailabilityConsumer no-op yang dihubungkan Issue #949                            |
-| `application/*-directory.ts`             | Satu-satunya kode yang membaca atau menulis baris (jam database, per tenant, savepoint)     |
-| `domain/booking-allocation.ts`           | Umur hold, jendela slot, urutan unit, klasifikasi SQLSTATE, backoff retry (murni)           |
-| `application/booking-allocator.ts`       | `claimUnits`: unit dari satu item, semua-atau-tidak, di bawah exclusion constraint          |
-| `application/booking-hold-expiry.ts`     | Reklamasi malas dan satu putaran reaper: satu statement per kedaluwarsa                     |
-| `application/booking-hold-service.ts`    | `placeHold`: reservasi, snapshot item, allocation, riwayat, audit, dalam satu savepoint     |
-| `application/booking-hold-expiry-job.ts` | Sapuan per tenant di balik `scripts/booking-holds-expire.ts`                                |
-| `application/booking-reconciliation.ts`  | Bukti read-only bahwa reservasi, allocation, dan blok sepakat; keterlambatan reaper         |
-| `domain/booking-stay.ts`                 | Tanggal stay, batas malam, syarat pool, dan validasi blok yang murni (tanpa I/O/jam)        |
-| `application/booking-block-service.ts`   | `createBlock` / `releaseBlock`: malam terblokir sebagai allocation, `BLOCK_CONFLICT`, audit |
+| Path                                           | Isinya                                                                                          |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `module.ts`                                    | Descriptor: 32 izin, `dataLifecycle` dan `subjectData` untuk tabel-tabelnya                     |
+| `domain/booking-reservation-state.ts`          | Mesin status reservasi sebagai fungsi murni (tanpa I/O, pemanggil memberi jam database)         |
+| `domain/booking-permissions.ts`                | Objek guard literal untuk `authorizeInTransaction` (dipakai mulai Issue #938)                   |
+| `domain/booking-audit.ts`                      | Nama dan severity audit event                                                                   |
+| `domain/booking-time.ts`                       | Zona, aritmetika tanggal, dan resolusi gap/fold RFC 5545 yang murni                             |
+| `domain/booking-schedule.ts`                   | Skema rules tertutup, pemilihan jadwal, ekspansi ke jendela UTC, penutupan (murni)              |
+| `domain/booking-availability.ts`               | Ketersediaan slot dan evaluasi stay yang murni (tanpa I/O, tanpa jam)                           |
+| `domain/booking-validation.ts`                 | Validasi request ketat (RFC 3339 beroffset, zona IANA)                                          |
+| `domain/booking-staff-availability.ts`         | Seam StaffAvailabilityConsumer no-op yang dihubungkan Issue #949                                |
+| `application/*-directory.ts`                   | Satu-satunya kode yang membaca atau menulis baris (jam database, per tenant, savepoint)         |
+| `domain/booking-allocation.ts`                 | Umur hold, jendela slot, urutan unit, klasifikasi SQLSTATE, backoff retry (murni)               |
+| `application/booking-allocator.ts`             | `claimUnits`: unit dari satu item, semua-atau-tidak, di bawah exclusion constraint              |
+| `application/booking-hold-expiry.ts`           | Reklamasi malas dan satu putaran reaper: satu statement per kedaluwarsa                         |
+| `application/booking-hold-service.ts`          | `placeHold`: reservasi, snapshot item, allocation, riwayat, audit, dalam satu savepoint         |
+| `application/booking-hold-expiry-job.ts`       | Sapuan per tenant di balik `scripts/booking-holds-expire.ts`                                    |
+| `application/booking-reconciliation.ts`        | Bukti read-only bahwa reservasi, allocation, dan blok sepakat; keterlambatan reaper             |
+| `domain/booking-stay.ts`                       | Tanggal stay, batas malam, syarat pool, dan validasi blok yang murni (tanpa I/O/jam)            |
+| `application/booking-block-service.ts`         | `createBlock` / `releaseBlock`: malam terblokir sebagai allocation, `BLOCK_CONFLICT`, audit     |
+| `domain/booking-policy.ts`                     | Kebijakan murni: jam/lead/horizon slot, pembatalan terlambat, grace no-show, batas hold default |
+| `domain/booking-reservation-events.ts`         | Sembilan tipe event dan pembangun payload tertutup (tanpa orang, alasan, atau jumlah)           |
+| `domain/booking-reservation-validation.ts`     | Body reservasi ketat; field pembayaran ditolak dengan menyebut namanya                          |
+| `application/booking-reservation-service.ts`   | `createReservation`, `transitionReservation`, `rescheduleReservation`                           |
+| `application/booking-reservation-policy.ts`    | Jam, lead time, dan horizon untuk klaim, dari mesin yang sama dengan ketersediaan               |
+| `application/booking-reservation-directory.ts` | Daftar, detail, dan riwayat reservasi (catatan tak pernah dibaca)                               |
+| `application/booking-event-emit.ts`            | Event outbox dari satu fungsi fakta, dalam transaksi transisi                                   |
+| `application/booking-port-adapter.ts`          | `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule       |
+| `application/booking-transition-route.ts`      | Badan handler yang dipakai bersama lima route transisi di tempat                                |
 
 Belum ada di skema dan dicatat sebagai tindak lanjut: `service_requirements` dan
 `staff_assignments` (booking.md bagian 4). `resource_blocks` hadir bersama
 Issue #938, dan baris allocation serta penulisnya bersama Issue #940 (`sql/204`);
 route HTTP untuk blok (`blocks.read` / `.create` / `.release`, di-seed oleh
-`sql/181`) hadir bersama irisan route (#941, #942). Blok seluruh resource
+`sql/181`) dilacak di #1012 dan hadir bersama layar (#942). Blok seluruh resource
 mencakup unit yang ada saat dipasang; unit yang ditambahkan kemudian dilaporkan
 rekonsiliasi (`block_missing_allocation`), tidak tercakup.
 
-Tindak lanjut yang dicatat audit keamanan fondasi: handler transisi pada #941
-wajib menulis tepat satu event riwayat per transisi (database belum mengikat
-perubahan status ke baris event; putaran kedaluwarsa #939 melakukannya dalam
-satu statement), dan tabel append-only sebaiknya juga
-menolak TRUNCATE lewat trigger (kini hanya privilege yang dicabut yang
-menahan role runtime).
+Tindak lanjut yang dicatat audit keamanan fondasi: database masih belum
+mengikat perubahan status ke baris event (putaran kedaluwarsa dan layanan
+transisi masing-masing menulis tepat satu baris riwayat per transisi, dalam
+transaksi yang sama, dan sebuah tes menghitungnya; trigger yang menegakkannya
+belum dibangun), dan tabel append-only sebaiknya juga menolak TRUNCATE lewat
+trigger (kini hanya privilege yang dicabut yang menahan role runtime).

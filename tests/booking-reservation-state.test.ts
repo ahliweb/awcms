@@ -286,10 +286,13 @@ describe("module descriptor, guards and audit names stay in step", () => {
   });
 
   test("it does not depend on commerce or any ERP module", () => {
+    // `domain_event_runtime` since Issue #941: the nine reservation events are
+    // published through its outbox, in the same transaction as the transition.
     expect(bookingModule.dependencies).toEqual([
       "tenant_admin",
       "identity_access",
-      "logging"
+      "logging",
+      "domain_event_runtime"
     ]);
   });
 

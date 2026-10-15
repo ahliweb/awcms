@@ -96,7 +96,7 @@ export type AvailabilityOutcome =
   | { outcome: "mode_mismatch"; message: string }
   | { outcome: "too_many_units"; units: number };
 
-async function loadSchedules(
+export async function loadSchedules(
   tx: Sql,
   tenantId: string,
   resourceId: string,
@@ -136,7 +136,7 @@ async function loadSchedules(
   }));
 }
 
-async function loadExceptions(
+export async function loadExceptions(
   tx: Sql,
   tenantId: string,
   resourceId: string,

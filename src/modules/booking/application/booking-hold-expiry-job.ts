@@ -52,6 +52,7 @@ import { BOOKING_MODULE_KEY } from "../domain/booking-permissions";
 import {
   EXPIRY_BATCH_LIMIT,
   countDueHolds,
+  emitReaperExpiredEvents,
   expireDueHolds
 } from "./booking-hold-expiry";
 
@@ -74,6 +75,11 @@ async function expirePass(
     tenantId,
     async (tx) => {
       const outcome = await expireDueHolds(tx, tenantId, EXPIRY_BATCH_LIMIT);
+
+      // The `expired` domain event, in the SAME transaction as the expiry
+      // (booking.md section 7.4): the worker may use the outbox, and the facts
+      // came back from the sweep's own function.
+      await emitReaperExpiredEvents(tx, tenantId, outcome, correlationId);
 
       if (outcome.expired > 0) {
         await recordAuditEvent(tx, {

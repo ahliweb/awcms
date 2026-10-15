@@ -1,15 +1,16 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:e731a304abbdda6cc4184d679fcc5649e96896e12a8b7dd02d50d83bc81373db -->
+<!-- i18n-source-hash: sha256:b78f6f6d9030e771c62d609ee55fc93cbe99d806c749ca066baf9dd9a24d5908 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
-> **Status:** hanya desain (Issue #918 butir 2-3). **Tidak ada kode runtime untuk
-> apa pun di dokumen ini.** Ketiga port di bawah adalah sketsa signature, event-nya
-> berada di dokumen AsyncAPI **provisional** yang terpisah dan tervalidasi mesin
-> serta bukan bagian dari kontrak live, dan berkas `_shared/ports/*.ts` dibuat oleh
-> PR implementasi fase 1 masing-masing modul, bukan sekarang (port tanpa
-> implementasi adalah kode mati yang harus dihapus reviewer).
+> **Status:** port booking dan sembilan event-nya sudah **dibangun** (Issue
+> #941); port ketersediaan staf (#946) serta port WhatsApp dan tujuh event-nya
+> (#963) dibangun sebelumnya. Yang masih desain adalah event `hr` (masih di
+> dokumen AsyncAPI **provisional** yang terpisah dan tervalidasi mesin serta
+> bukan bagian dari kontrak live) dan consumer di bagian 6. Berkas
+> `_shared/ports/*.ts` dibuat oleh PR implementasi fase 1 masing-masing modul
+> (port tanpa implementasi adalah kode mati yang harus dihapus reviewer).
 >
 > Dokumen ini adalah sambungan empat keputusan: paket booking
 > ([ADR-0131](../adr/0131-generic-booking-module-admission.md),
@@ -26,10 +27,10 @@
 
 | Artefak                                                                               | Status           | Lokasi                                                                                                                              |
 | ------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Port booking (`quote`, `hold`, `confirm`, `cancel`, `reschedule`)                     | desain           | §3                                                                                                                                  |
+| Port booking (`quote`, `hold`, `confirm`, `cancel`, `reschedule`)                     | **built** (#941) | §3                                                                                                                                  |
 | Port ketersediaan staf (`getAvailability`)                                            | **built** (#946) | §4                                                                                                                                  |
 | Port pengiriman WhatsApp (`enqueue`, `getStatusByCorrelation`, `cancelByCorrelation`) | **live** (#963)  | §5                                                                                                                                  |
-| 15 skema event provisional (9 booking, 6 hr); 7 event whatsapp sudah **live**         | **provisional**  | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
+| 6 skema event provisional (hr); 7 event whatsapp dan 9 event booking sudah **live**   | **provisional**  | [`asyncapi/provisional/…provisional.asyncapi.yaml`](../../asyncapi/provisional/awcms-cross-domain-events.provisional.asyncapi.yaml) |
 | Registrasi consumer (`ModuleDescriptor.domainEventConsumers`)                         | ADR-0134         | tidak dinyatakan ulang; dokumen ini hanya _memakainya_                                                                              |
 | Idempotensi per consumer ber-efek-samping                                             | desain           | §6                                                                                                                                  |
 | Bagaimana sebuah event berpindah dari provisional ke live                             | proses           | §7                                                                                                                                  |
@@ -77,6 +78,14 @@ ADR-0063 (otorisasi di chokepoint), diterapkan sekali, bukan tiga kali.
 
 ## 3. Port booking
 
+- **Status:** **dibangun di Issue #941** (`src/modules/_shared/ports/booking-port.ts`,
+  adapter `booking/application/booking-port-adapter.ts`). Signature di bawah
+  adalah sketsanya; port yang dibangun berbeda dalam empat hal: setiap metode
+  menerima transaksi pemanggil lebih dulu dan input membawa `tenantId` (seperti
+  port WhatsApp dan ketersediaan staf); `quote` menanyakan satu `resourceId`;
+  gabungan penolakan dilengkapi (lihat catatan di akhir bagian ini); dan tidak ada
+  override. Sembilan event-nya pindah ke dokumen AsyncAPI live dan registri
+  runtime.
 - **Modul pemilik:** `booking` (ADR-0131; `src/modules/_shared/ports/booking-port.ts`).
 - **Consumer:** adapter commerce downstream (offering ↔ produk, hold → order,
   pembayaran → confirm), route portal atau kiosk di repo yang sama. Booking
@@ -193,8 +202,26 @@ kontak pelanggan, catatan teks bebas. Salah satunya di input adalah
 `PAYMENT_FIELD_NOT_ACCEPTED` atau error validasi. Pembayaran milik adapter;
 adapterlah yang memutuskan _kapan_ meminta `confirm`.
 
-Catatan signature provisional: `BookingRefusal` adalah daftar paket saat ini; PR
-implementasi menetapkan union final dan enumerasi OpenAPI `ErrorCode` sekaligus.
+**Jaga transaksi tetap singkat.** `hold` mengambil advisory lock per tenant
+setelah memenangkan unitnya (hitungan batas hold, booking.md §13) dan menahannya
+sampai transaksi pemanggil berakhir; kunci idempotensi key-sama ditahan serupa.
+Consumer yang membungkus `hold` dalam transaksi panjang (panggilan provider,
+render lambat) membuat setiap hold lain tenant itu mengantre di belakangnya.
+Lakukan panggilan port, lalu commit; jangan pernah memanggil provider di dalam
+transaksi (§2).
+
+Catatan signature: `BookingRefusal` yang dibangun adalah daftar paket yang
+dilengkapi dengan apa yang bisa diucapkan klaim dan transisi:
+`QUANTITY_EXCEEDS_UNITS`, `BOOKING_MODE_MISMATCH`, `MIN_STAY_VIOLATION`,
+`MAX_STAY_EXCEEDED`, `STAY_DATES_INVALID`, `STAY_POOL_INCONSISTENT`,
+`CONTENTION_RETRY`, `EXTERNAL_REF_IN_USE`, `RESOURCE_NOT_FOUND`,
+`OFFERING_NOT_FOUND`, `RESERVATION_NOT_FOUND`, `RESOURCE_REQUIRED` dan
+`VALIDATION_ERROR` (`RECURRENCE_UNSUPPORTED` dan `TIMEZONE_INVALID` tidak bisa
+dihasilkan port saat ini dan dikeluarkan; `STAFF_UNAVAILABLE` dipertahankan untuk
+irisan staf). Dokumen OpenAPI tidak mengenumerasi kode error. Stay ditanyakan
+dengan `stay: { checkInDate, checkOutDate }` sebagai ganti `startsAt`. `hold`
+menerima `poolId` sebagai ganti `resourceId`, dan `reschedule` mengembalikan
+`reservationId` PENGGANTI.
 
 ## 4. Port ketersediaan staf
 
@@ -468,7 +495,7 @@ lama, bukan suntingan.
 
 ## 8. Butir terbuka
 
-- Union `BookingRefusal` final, nama port WhatsApp, dan tipe field payload hr yang
+- Nama port WhatsApp dan tipe field payload hr yang
   persis (misalnya enumerasi `kind`, `source`, `operation`) ditetapkan tiap PR
   implementasi; skema provisional membiarkannya sebagai string di mana paket tidak
   mendaftar himpunan tertutup.
