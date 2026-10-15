@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](mfa-totp-step-up.md)
 
-<!-- i18n-source-hash: sha256:68c9904e4efcda2e10d1ef65caf525c520d6d333f9e82b19f279928df9f87d3b -->
+<!-- i18n-source-hash: sha256:67a48aed4112b610ceffb90e72caff811a7f644d3f375bacb7cc8bab830fa1aa -->
 
 # MFA TOTP, recovery codes, dan step-up authentication
 
@@ -22,7 +22,9 @@ Referensi implementasi Issue #184 (epic #177). Modul: `identity-access`. ADR: [A
 ### 1.1 Enrollment
 
 ```
-POST /api/v1/auth/mfa/totp/enroll/start   (sesi valid; AUTH_MFA_ENABLED=true)
+POST /api/v1/auth/mfa/totp/enroll/start   { currentPassword }   (sesi valid + autentikasi ulang, atau grant pendaftaran; AUTH_MFA_ENABLED=true)
+  -> SESI harus autentikasi ulang (#1004): kata sandi SAAT INI (kredensial principal, jika tidak hash identitas - aturan login), atau sesi SSO yang dibuat <= 5 menit lalu bila orangnya tak bekerja di tenant lain
+  -> faktor pending terikat pada sesi/grant ini dan hidup 10 menit
   -> generate secret 20 byte (CSPRNG), simpan factor `pending` (secret terenkripsi)
   -> balas { secret (base32), otpauthUri }   # ditampilkan SEKALI
 POST /api/v1/auth/mfa/totp/enroll/verify  { code }
@@ -133,9 +135,11 @@ permissions: [
 
 **Bootstrap — tenant tanpa pemegang terdaftar tidak terkunci.** Pendaftaran (`POST /auth/mfa/totp/enroll/start` lalu `/verify`) butuh sesi dan tanpa izin, dan berada di luar chokepoint. Jadi: owner (atau pemegang mana pun) membuka `/admin/account`, mendaftar, dan permintaan berikutnya langsung dilayani — tanpa restart, tanpa tindakan administrator, tanpa perubahan kebijakan tenant. Semua yang tak bertanda berfungsi sepanjang waktu, itulah yang membuat mereka dapat mencapai layar itu. Prasyarat: `AUTH_MFA_ENABLED=true` dan `AUTH_MFA_SECRET_ENCRYPTION_KEY`; tanpanya penolakannya `enrolment_unavailable` untuk **semua orang** (fail-closed) dan `security:readiness` gagal pada pemeriksaan `critical` "Pendaftaran MFA tersedia saat sebuah izin mewajibkan faktor terdaftar". Pemegang tunggal yang kehilangan perangkatnya memakai kode pemulihan (§4), lalu mendaftar ulang.
 
+**Autentikasi ulang sebelum pendaftaran (#1004, ADR-0141 §7).** Sesi saja tak dapat memulai pendaftaran: `currentPassword` wajib (`400 PASSWORD_REQUIRED` / `INVALID_CREDENTIALS`, `403 REAUTHENTICATION_REQUIRED` untuk sesi SSO-saja yang basi, dibatasi laju per sumber). Jalur grant pendaftaran saat login tidak berubah. Saat aktivasi pemilik akun diemail `system.security_notice` (butuh template bawaan di-seed: `bun run email:templates:seed-defaults`) dan peristiwa audit `critical` `mfa_enrolled` ditulis; menonaktifkan faktor juga memberi notifikasi. Pemegang kata sandi masih dapat mendaftar (ia mengajukan kata sandi yang sama) tetapi tak lagi dapat melakukannya diam-diam. `enroll/verify` dibatasi lajunya (per sumber dan per sesi/grant), hanya menerima sesi atau grant yang memulai pendaftaran, dan menghancurkan secret pending setelah 5 kode salah (`429 MFA_ENROLLMENT_EXHAUSTED`). Notifikasi hanya dikirim ke kotak surat akun di tenant tempat pendaftaran.
+
 **Menemukan orangnya sebelum mereka menemukan penolakannya.** `bun run security:readiness` mendaftar, per tenant yang modulnya dapat dipakai, pemegang (dari sumber grant mana pun) yang tak punya faktor aktif — hanya id dan jumlah. Ini `warning`: mereka ditolak, bukan kerentanan, dan masing-masing diminta mendaftar sekali.
 
-**Yang tidak dibuktikan gerbang.** Ia membuktikan faktor ada pada akun, bukan bahwa pemilik akun yang memegangnya: pendaftaran hanya butuh sesi, sehingga pemegang kata sandi pemegang yang belum terdaftar dapat mendaftarkan authenticator miliknya lebih dulu. Jalankan laporan pemegang **sebelum mengaktifkan modul yang menandai izin** agar pemegang yang sah mendaftar lebih dulu; pengerasan pendaftaran itu sendiri (verifikasi ulang kata sandi atau `aal2` untuk memulainya bagi pemegang izin bertanda, dan notifikasi saat faktor pertama didaftarkan) dilacak di ahliweb/awcms#1004.
+**Yang tidak dibuktikan gerbang.** Ia membuktikan faktor ada pada akun, bukan bahwa pemilik akun yang memegangnya: pemegang kata sandi pemegang yang belum terdaftar masih dapat mendaftarkan authenticator miliknya lebih dulu (sesi saja tak lagi dapat, dan pemilik diberi tahu lewat jalur lain; lihat §1.1 dan ADR-0141 §7). Jalankan laporan pemegang **sebelum mengaktifkan modul yang menandai izin** agar pemegang yang sah mendaftar lebih dulu.
 
 Ini tuas yang berbeda dari §1.5. Kebijakan tenant menentukan siapa yang harus mendaftar **untuk login**; ini menentukan **izin** mana yang tidak dapat dijalankan tanpa pendaftaran. Keduanya berpadu dan tidak saling menggantikan.
 

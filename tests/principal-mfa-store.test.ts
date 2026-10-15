@@ -269,7 +269,7 @@ describe("the ordinary writes stay keyed to the human they belong to", () => {
     expect(discard).toContain("status = 'pending'");
 
     const insert = await statementOf((tx) =>
-      insertPendingFactor(tx, "human-1", "cipher", new Date())
+      insertPendingFactor(tx, "human-1", "cipher", "binding-hash")
     );
 
     expect(insert).toContain("'pending'");
@@ -278,18 +278,36 @@ describe("the ordinary writes stay keyed to the human they belong to", () => {
   test("activation seeds the replay guard with the confirming step", async () => {
     // Without it the very code just typed to enrol is still accepted by the
     // login path inside the same time window.
-    const statement = await statementOf((tx) =>
-      activateFactor(tx, "f-1", 77, new Date())
+    const statement = await statementOf(
+      (tx) => activateFactor(tx, "f-1", 77, new Date()),
+      [{ id: "f-1" }]
     );
 
     expect(statement).toContain("last_used_step = ?");
     expect(statement).toContain("status = 'active'");
-    expect(statement).toContain("WHERE id = ?");
+    expect(statement).toContain("WHERE id = ? AND status = 'pending'");
+  });
+
+  test("activating a factor that is no longer pending fails instead of succeeding silently", async () => {
+    // #1004 re-audit M-A: zero rows updated means a racing request already
+    // activated or deleted it; carrying on would mint recovery codes for it.
+    await expect(
+      statementOf((tx) => activateFactor(tx, "f-1", 77, new Date()), [])
+    ).rejects.toThrow("no longer pending");
+  });
+
+  test("the pending read locks the row so parallel guesses queue behind the cap", async () => {
+    const statement = await statementOf(
+      (tx) => findPendingFactor(tx, "human-1", 600),
+      []
+    );
+
+    expect(statement).toContain("FOR UPDATE");
   });
 
   test("the pending read is keyed on the human", async () => {
     const statement = await statementOf(
-      (tx) => findPendingFactor(tx, "human-1"),
+      (tx) => findPendingFactor(tx, "human-1", 600),
       [{ id: "f-1", secret_ciphertext: "c" }]
     );
 

@@ -8,6 +8,9 @@ import { resolveAuthInputs } from "../../../../../../modules/identity-access/app
 import { requireStepUp } from "../../../../../../modules/identity-access/application/mfa-session-assurance";
 import { disableMfa } from "../../../../../../modules/identity-access/application/mfa";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
+import { createEmailAuthNotificationAdapter } from "../../../../../../modules/email/application/auth-notification-port-adapter";
+import { notifyMfaChange } from "../../../../../../modules/identity-access/application/mfa-security-notice";
+import { resolveClientIp } from "../../../../../../lib/security/rate-limit";
 
 /**
  * `POST /api/v1/auth/mfa/totp/disable` (Issue #184) — high-risk, self-service:
@@ -17,7 +20,12 @@ import { recordAuditEvent } from "../../../../../../modules/logging/application/
  * the step-up window. Not gated on `AUTH_MFA_ENABLED` (an operator must be able
  * to disable an existing factor even after the enrollment feature is off).
  */
-export const POST: APIRoute = async ({ request, cookies, locals }) => {
+export const POST: APIRoute = async ({
+  request,
+  cookies,
+  locals,
+  clientAddress
+}) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
 
   if (!tenantId)
@@ -43,6 +51,18 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       );
     }
 
+    // Removing a factor is half of "replacing" one (#1004): the owner is told
+    // out of band, exactly as for an enrolment.
+    const notice = await notifyMfaChange(tx, {
+      tenantId,
+      identityId,
+      kind: "disabled",
+      notifications: createEmailAuthNotificationAdapter(),
+      occurredAt: now,
+      clientIp: resolveClientIp(request, clientAddress),
+      correlationId: locals.correlationId
+    });
+
     await recordAuditEvent(tx, {
       tenantId,
       moduleKey: "identity_access",
@@ -51,6 +71,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       resourceId: identityId,
       severity: "warning",
       message: "Multi-factor authentication disabled.",
+      attributes: { notified: notice.delivered },
       correlationId: locals.correlationId
     });
 

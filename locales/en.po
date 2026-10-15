@@ -498,6 +498,15 @@ msgstr ""
 msgid "Could not start setup. Please try again."
 msgstr ""
 
+msgid "Enter your current password to set up two-factor authentication."
+msgstr ""
+
+msgid "Sign in again through your identity provider, then set up two-factor authentication."
+msgstr ""
+
+msgid "For your security, confirm your current password before setting up two-factor authentication. You will get an email telling you it was added."
+msgstr ""
+
 msgid "That code is not right. Try the next one."
 msgstr ""
 
@@ -8422,3 +8431,6 @@ msgid "{min}–{max} night"
 msgid_plural "{min}–{max} nights"
 msgstr[0] ""
 msgstr[1] ""
+
+msgid "Continue"
+msgstr ""

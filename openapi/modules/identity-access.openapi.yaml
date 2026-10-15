@@ -1032,7 +1032,37 @@ paths:
           description: Enrollment grant token from a login that returned MFA_ENROLLMENT_REQUIRED; used in place of a session.
           schema:
             type: string
+      requestBody:
+        required: false
+        description: A SESSION alone does not suffice (#1004, ADR-0141 section 7) - it must re-authenticate with the account's CURRENT password (`currentPassword`, verified by the login rule - the principal credential once promoted, else the identity hash; wrong passwords count toward the principal lockout and a locked person gets 429). An SSO session is exempt only when minted by the identity provider within the last 5 minutes AND the person has no identity in another tenant (the factor is principal-global); otherwise the password is required. 403 REAUTHENTICATION_REQUIRED means no password can be presented (password login disabled, or none exists) - ask an administrator. The enrollment grant waives the password ONLY when it was minted by a login that just verified it (origin login - the password sign-in, or the tenantless sign-in redeemed at POST /auth/session/tenant). A grant minted by POST /auth/session/switch (origin switch, reached with a bearer session alone) or a grant that predates the origin column re-authenticates exactly like a session. A stolen session therefore cannot enrol an attacker's authenticator, directly or through a tenant switch. An account with an active factor is refused (409) whatever the credentials; replacing a factor means disabling it first, which needs a fresh step-up. Rate limited per session or grant and per source.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  maxLength: 1024
+                  description: Required for a session-authorized start (except a fresh single-tenant SSO session) and for a grant minted by a tenant switch; ignored for a grant minted by a password login.
       responses:
+        "400":
+          description: PASSWORD_REQUIRED (a session, or a grant minted by a tenant switch or with no recorded origin, started without currentPassword), INVALID_CREDENTIALS (wrong currentPassword) or VALIDATION_ERROR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Request body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many enrolment attempts for this session/grant or source, or the person is locked out after failed password attempts (they count toward the same lockout as a failed login).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "200":
           description: Pending factor created; secret shown once.
           content:
@@ -1130,6 +1160,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          description: Rate limited per source and per session/grant, or MFA_ENROLLMENT_EXHAUSTED - five wrong codes destroyed the pending secret (a pending enrolment is also bound to the session or grant that started it, expires after 10 minutes, and is then reported as 404; start again).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "500":
           description: MFA misconfigured.
           content:

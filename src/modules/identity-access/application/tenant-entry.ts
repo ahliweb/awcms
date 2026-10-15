@@ -35,6 +35,7 @@
 import { fetchGrantedPermissionKeys } from "./auth-context";
 import {
   createEnrollmentGrant,
+  type EnrollmentGrantOrigin,
   createMfaChallenge,
   findActiveMfaFactor
 } from "./mfa";
@@ -87,7 +88,19 @@ export type TenantEntryOutcome =
  */
 export async function evaluateTenantEntry(
   tx: Bun.SQL,
-  input: { tenantId: string; principalId: string; now: Date }
+  input: {
+    tenantId: string;
+    principalId: string;
+    now: Date;
+    /**
+     * How the caller got here (#1004, H-A): `login` when the password was just
+     * verified (tenantless sign-in redeemed through a selection token), `switch`
+     * when all the caller holds is a bearer session. It is stamped on any
+     * enrolment grant minted below and decides whether `enroll/start` must
+     * re-authenticate.
+     */
+    grantOrigin: EnrollmentGrantOrigin;
+  }
 ): Promise<TenantEntryOutcome> {
   const tenantRows = (await tx`
     SELECT status FROM awcms_tenants WHERE id = ${input.tenantId}
@@ -190,7 +203,8 @@ export async function evaluateTenantEntry(
           input.tenantId,
           identity.id,
           resolveChallengeTtlSec(),
-          input.now
+          input.now,
+          input.grantOrigin
         );
 
         return {

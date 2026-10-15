@@ -495,6 +495,15 @@ msgstr "Autentikasi dua faktor sudah aktif untuk akun Anda."
 msgid "Could not start setup. Please try again."
 msgstr "Tidak dapat memulai penyiapan. Silakan coba lagi."
 
+msgid "Enter your current password to set up two-factor authentication."
+msgstr "Masukkan kata sandi Anda saat ini untuk menyiapkan autentikasi dua faktor."
+
+msgid "Sign in again through your identity provider, then set up two-factor authentication."
+msgstr "Masuk kembali melalui penyedia identitas Anda, lalu siapkan autentikasi dua faktor."
+
+msgid "For your security, confirm your current password before setting up two-factor authentication. You will get an email telling you it was added."
+msgstr "Demi keamanan Anda, konfirmasi kata sandi Anda saat ini sebelum menyiapkan autentikasi dua faktor. Anda akan menerima email yang memberi tahu bahwa fitur ini ditambahkan."
+
 msgid "That code is not right. Try the next one."
 msgstr "Kode itu tidak tepat. Coba kode berikutnya."
 
@@ -8398,3 +8407,6 @@ msgstr[0] "{checkIn} sampai {checkOut} ({nights} malam)"
 msgid "{min}–{max} night"
 msgid_plural "{min}–{max} nights"
 msgstr[0] "{min}–{max} malam"
+
+msgid "Continue"
+msgstr "Lanjutkan"

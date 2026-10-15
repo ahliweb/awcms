@@ -345,6 +345,14 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
         "#186 optional turnstileToken (backward-compatible)",
       "/api/v1/setup/initialize":
         "#186 optional turnstileToken (backward-compatible)",
+      // #1004 adds an OPTIONAL `currentPassword` body and 400/429 responses to
+      // the TOTP enrolment start; the operation description is untouched.
+      // #1004 follow-up: enroll/verify gains a 429 (rate limit / pending secret
+      // destroyed after five wrong codes).
+      "/api/v1/auth/mfa/totp/enroll/verify":
+        "#1004 added 429 response (backward-compatible)",
+      "/api/v1/auth/mfa/totp/enroll/start":
+        "#1004 optional currentPassword body + 400/429 (backward-compatible for the grant path; a session start now needs the password)",
       // The one entry here that is NOT backward-compatible, and is listed as
       // such on purpose. `events` gains `maxItems: 500` — a document-additive
       // change (no field removed, no type changed, so `isAdditiveSuperset`

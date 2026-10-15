@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 208   |
+| Migrations                          | 211   |
 | `awcms_*` tables                    | 215   |
 | Tables with `FORCE` RLS             | 197   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 671   |
+| Test files                          | 673   |
 | Route files                         | 559   |
 | ADR                                 | 292   |
 
@@ -265,7 +265,10 @@
 | 205 | `sql/244_awcms_booking_reporting_facts.sql`                        |
 | 206 | `sql/252_awcms_workflow_approval_immutability.sql`                 |
 | 207 | `sql/256_awcms_idempotency_actor_scope.sql`                        |
-| 208 | `sql/276_awcms_idempotency_keys_worker_purge_grant.sql`            |
+| 208 | `sql/260_awcms_mfa_pending_factor_binding.sql`                     |
+| 209 | `sql/261_awcms_principal_other_tenant_identity.sql`                |
+| 210 | `sql/262_awcms_mfa_enrollment_grant_origin.sql`                    |
+| 211 | `sql/276_awcms_idempotency_keys_worker_purge_grant.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -491,9 +494,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 516        |
+| `(root)`      | 517        |
 | `e2e`         | 26         |
-| `integration` | 128        |
+| `integration` | 129        |
 | `unit`        | 1          |
 
 ### Routes

@@ -7,9 +7,16 @@ import { withTenant } from "../../../../../../../lib/database/tenant-context";
 import { hashSessionToken } from "../../../../../../../lib/auth/session-token";
 import { resolveAuthInputs } from "../../../../../../../modules/identity-access/application/access-guard";
 import { resolveLoginPolicyConfig } from "../../../../../../../modules/identity-access/application/login-policy";
-import { isMfaFeatureEnabled } from "../../../../../../../lib/auth/mfa-config";
+import {
+  isMfaFeatureEnabled,
+  resolveMfaRateLimitMax,
+  resolveMfaRateLimitWindowSec
+} from "../../../../../../../lib/auth/mfa-config";
+import { checkAuthRateLimit } from "../../../../../../../lib/security/auth-rate-limit";
+import { checkSharedRateLimit } from "../../../../../../../lib/security/rate-limit";
 import {
   consumeEnrollmentGrant,
+  enrollmentBindingHash,
   resolveEnrollAuth,
   verifyTotpEnrollment
 } from "../../../../../../../modules/identity-access/application/mfa";
@@ -18,13 +25,28 @@ import {
   setSessionCookies
 } from "../../../../../../../modules/identity-access/application/mfa-session-assurance";
 import { recordAuditEvent } from "../../../../../../../modules/logging/application/audit-log";
+import { createEmailAuthNotificationAdapter } from "../../../../../../../modules/email/application/auth-notification-port-adapter";
+import { notifyMfaChange } from "../../../../../../../modules/identity-access/application/mfa-security-notice";
+import { log } from "../../../../../../../lib/logging/logger";
 import {
+  hashClientIp,
   persistableClientIpHash,
   summarizeUserAgent
 } from "../../../../../../../lib/security/client-fingerprint";
 import { resolveClientIp } from "../../../../../../../lib/security/rate-limit";
 
 const ENROLLMENT_TOKEN_HEADER = "x-awcms-mfa-enrollment-token";
+
+function tooManyVerifyAttempts(retryAfterSec: number): Response {
+  return fail(
+    429,
+    "RATE_LIMITED",
+    "Too many verification attempts. Try again later.",
+    {},
+    undefined,
+    { "retry-after": String(retryAfterSec) }
+  );
+}
 
 type VerifyEnrollmentBody = { code?: unknown };
 
@@ -59,6 +81,30 @@ export const POST: APIRoute = async ({
   if (!token && !enrollmentToken)
     return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
+  // Same two ceilings as the login MFA challenge (`totp/verify`): per
+  // session/grant - the thing being attacked, which rotating addresses does not
+  // escape - and per source (and tenant). The HOLDER bucket is spent first; the
+  // source bucket only once the credential is known to be real, below, so junk
+  // tokens cannot burn a shared address's allowance (#1004 re-audit L1).
+  const clientIp = resolveClientIp(request, clientAddress);
+  const rateMax = resolveMfaRateLimitMax();
+  const windowMs = resolveMfaRateLimitWindowSec() * 1000;
+  const holder = token
+    ? hashSessionToken(token)
+    : enrollmentBindingHash(`grant-token:${enrollmentToken}`);
+  const holderLimit = await checkSharedRateLimit(
+    `auth-mfa-enroll-verify:${holder}`,
+    {
+      // Twice the source ceiling: a person who exhausts a pending secret (5
+      // wrong codes) must still be able to start over and confirm in the window.
+      maxAttempts: rateMax * 2,
+      windowMs
+    }
+  );
+
+  if (!holderLimit.allowed)
+    return tooManyVerifyAttempts(holderLimit.retryAfterSec);
+
   const body = (await request
     .json()
     .catch(() => null)) as VerifyEnrollmentBody | null;
@@ -85,42 +131,105 @@ export const POST: APIRoute = async ({
       return fail(401, "AUTH_REQUIRED", "Session is invalid or expired.");
     }
 
+    const sourceLimit = await checkAuthRateLimit({
+      clientIp,
+      tenantId,
+      scope: "mfa-enroll-verify",
+      config: { maxAttempts: rateMax, windowMs }
+    });
+
+    if (!sourceLimit.allowed) {
+      return tooManyVerifyAttempts(sourceLimit.retryAfterSec);
+    }
+
     const result = await verifyTotpEnrollment(
       tx,
       tenantId,
       auth.identityId,
       body.code as string,
       process.env,
-      now
+      now,
+      auth.bindingHash
     );
 
     if (!result.ok) {
+      if (result.code === "MFA_ENROLLMENT_EXHAUSTED") {
+        await recordAuditEvent(tx, {
+          tenantId,
+          moduleKey: "identity_access",
+          action: "mfa_enroll_verify_exhausted",
+          resourceType: "identity",
+          resourceId: auth.identityId,
+          severity: "warning",
+          message:
+            "Pending TOTP enrolment discarded after too many wrong codes.",
+          attributes: {
+            via: auth.viaEnrollment ? "enrollment_grant" : "session",
+            ipHash: hashClientIp(clientIp)
+          },
+          correlationId: locals.correlationId
+        });
+      }
+
       const status =
         result.code === "MFA_ENROLLMENT_NOT_FOUND"
           ? 404
-          : result.code === "MFA_INVALID_CODE"
-            ? 400
-            : 500;
+          : result.code === "MFA_ENROLLMENT_EXHAUSTED"
+            ? 429
+            : result.code === "MFA_INVALID_CODE"
+              ? 400
+              : 500;
 
       return fail(
         status,
         result.code,
         result.code === "MFA_ENROLLMENT_NOT_FOUND"
           ? "No pending MFA enrollment found. Start enrollment again."
-          : result.code === "MFA_INVALID_CODE"
-            ? "Invalid verification code."
-            : "Multi-factor authentication is misconfigured on this server."
+          : result.code === "MFA_ENROLLMENT_EXHAUSTED"
+            ? "Too many wrong codes. This setup was cancelled; start again."
+            : result.code === "MFA_INVALID_CODE"
+              ? "Invalid verification code."
+              : "Multi-factor authentication is misconfigured on this server."
       );
     }
 
+    // Out-of-band notice to the account's own mailbox (#1004): whoever enrolled,
+    // the owner is told on a channel the session does not control. Enqueue only;
+    // the email dispatcher sends outside any transaction (ADR-0006).
+    const notice = await notifyMfaChange(tx, {
+      tenantId,
+      identityId: auth.identityId,
+      kind: "enrolled",
+      notifications: createEmailAuthNotificationAdapter(),
+      occurredAt: now,
+      clientIp,
+      correlationId: locals.correlationId
+    });
+
+    if (!notice.delivered) {
+      log("warning", "identity_access.mfa_enrolment_notice.not_enqueued", {
+        moduleKey: "identity_access",
+        correlationId: locals.correlationId
+      });
+    }
+
+    // `critical`, not `warning` (#1004): a first factor is what flips the
+    // ADR-0141 gate to satisfied, so this is the event an investigation of a
+    // takeover starts from. `notified` records whether anyone was told.
     await recordAuditEvent(tx, {
       tenantId,
       moduleKey: "identity_access",
       action: "mfa_enrolled",
       resourceType: "identity",
       resourceId: auth.identityId,
-      severity: "warning",
+      severity: "critical",
       message: "Multi-factor authentication (TOTP) enrolled and activated.",
+      attributes: {
+        via: auth.viaEnrollment ? "enrollment_grant" : "session",
+        notified: notice.delivered,
+        ipHash: hashClientIp(clientIp),
+        userAgent: summarizeUserAgent(request)
+      },
       correlationId: locals.correlationId
     });
 

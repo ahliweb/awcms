@@ -158,7 +158,10 @@ export const POST: APIRoute = async ({
       const entry = await evaluateTenantEntry(tx, {
         tenantId,
         principalId,
-        now
+        now,
+        // The selection token is only ever issued by a sign-in that just
+        // verified the password, so a grant minted here keeps the exemption.
+        grantOrigin: "login"
       });
 
       if (!entry.ok) {

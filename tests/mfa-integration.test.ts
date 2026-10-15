@@ -37,6 +37,7 @@ import {
   createEnrollmentGrant,
   createMfaChallenge,
   disableMfa,
+  enrollmentBindingHash,
   findActiveMfaFactor,
   getMfaStatus,
   resolveEnrollAuth,
@@ -57,6 +58,7 @@ const MFA_ENV = {
   AUTH_MFA_SECRET_ENCRYPTION_KEY: Buffer.alloc(32, 42).toString("base64")
 } as NodeJS.ProcessEnv;
 
+const TEST_BINDING = enrollmentBindingHash("mfa-integration-test");
 const CODE_OPTS = { periodSec: 30, digits: 6 };
 
 describeOrSkip("MFA (real PostgreSQL)", () => {
@@ -180,13 +182,29 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     enrollAt: Date
   ): Promise<Buffer> {
     const start = await tx(tenantId, (t) =>
-      startTotpEnrollment(t, tenantId, identityId, "user", MFA_ENV, enrollAt)
+      startTotpEnrollment(
+        t,
+        tenantId,
+        identityId,
+        "user",
+        MFA_ENV,
+        enrollAt,
+        TEST_BINDING
+      )
     );
     if (!start.ok) throw new Error(`enroll start failed: ${start.code}`);
     const secret = base32Decode(start.secretBase32);
     const code = generateTotpCode(secret, enrollAt.getTime(), CODE_OPTS);
     const verify = await tx(tenantId, (t) =>
-      verifyTotpEnrollment(t, tenantId, identityId, code, MFA_ENV, enrollAt)
+      verifyTotpEnrollment(
+        t,
+        tenantId,
+        identityId,
+        code,
+        MFA_ENV,
+        enrollAt,
+        TEST_BINDING
+      )
     );
     if (!verify.ok) throw new Error(`enroll verify failed: ${verify.code}`);
     return secret;
@@ -294,7 +312,15 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
 
     // Re-enroll via the full path to capture the recovery codes.
     const start = await tx(tenantId, (t) =>
-      startTotpEnrollment(t, tenantId, identityId, "user", MFA_ENV, enrollAt)
+      startTotpEnrollment(
+        t,
+        tenantId,
+        identityId,
+        "user",
+        MFA_ENV,
+        enrollAt,
+        TEST_BINDING
+      )
     );
     if (!start.ok) throw new Error("enroll start failed");
     const secret = base32Decode(start.secretBase32);
@@ -306,7 +332,8 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
         identityId,
         enrollCode,
         MFA_ENV,
-        enrollAt
+        enrollAt,
+        TEST_BINDING
       )
     );
     if (!verify.ok) throw new Error("enroll verify failed");
@@ -857,7 +884,7 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     const now = new Date("2026-07-19T10:00:00Z");
 
     const grant = await tx(tenantId, (t) =>
-      createEnrollmentGrant(t, tenantId, identityId, 300, now)
+      createEnrollmentGrant(t, tenantId, identityId, 300, now, "login")
     );
 
     const auth = await tx(tenantId, (t) =>

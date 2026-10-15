@@ -27,6 +27,7 @@ import { POST as loginPOST } from "../src/pages/api/v1/auth/login";
 import { POST as challengeVerifyPOST } from "../src/pages/api/v1/auth/mfa/totp/verify";
 import { POST as enrollStartPOST } from "../src/pages/api/v1/auth/mfa/totp/enroll/start";
 import { POST as enrollVerifyPOST } from "../src/pages/api/v1/auth/mfa/totp/enroll/verify";
+import { POST as switchPOST } from "../src/pages/api/v1/auth/session/switch";
 import { POST as stepUpPOST } from "../src/pages/api/v1/auth/mfa/step-up";
 import { POST as adminResetPOST } from "../src/pages/api/v1/auth/mfa/admin/reset";
 import { hashPassword } from "../src/lib/auth/password";
@@ -38,7 +39,13 @@ import {
 } from "../src/lib/auth/totp";
 import { encryptMfaSecret } from "../src/lib/auth/mfa-secret-crypto";
 import { hashRecoveryCode } from "../src/lib/auth/mfa-recovery-code";
-import { linkIdentityToPrincipal } from "../src/modules/identity-access/application/principal-store";
+import { seedDefaultEmailTemplates } from "../src/modules/email/application/email-template-directory";
+import { DEFAULT_EMAIL_TEMPLATES } from "../src/modules/email/domain/email-default-templates";
+import {
+  linkIdentityToPrincipal,
+  setPrincipalCredential
+} from "../src/modules/identity-access/application/principal-store";
+import { PENDING_ENROLLMENT_MAX_FAILURES } from "../src/modules/identity-access/application/mfa";
 
 const DATABASE_URL =
   process.env.MFA_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -148,6 +155,8 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       await sql`DELETE FROM awcms_mfa_challenges WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_identity_mfa_factors WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_sessions WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_email_messages WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_email_templates WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_audit_events WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_abac_decision_logs WHERE tenant_id = ${tenantId}`;
       // ADR-0078 — bootstrap's owner grant lands in `awcms_access_policies`,
@@ -186,12 +195,16 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     return tenantId;
   }
 
-  async function seedUser(tenantId: string): Promise<{
+  async function seedUser(
+    tenantId: string,
+    sharedLoginIdentifier?: string
+  ): Promise<{
     identityId: string;
     tenantUserId: string;
     loginIdentifier: string;
   }> {
-    const loginIdentifier = `user-${Math.random().toString(36).slice(2)}`;
+    const loginIdentifier =
+      sharedLoginIdentifier ?? `user-${Math.random().toString(36).slice(2)}`;
     const profile = (await sql`
       INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
       VALUES (${tenantId}, 'person', 'E2E User') RETURNING id
@@ -327,6 +340,654 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     expect(login2.status).toBe(401);
     expect(login2.body.error.code).toBe("MFA_REQUIRED");
     expect(typeof login2.body.error.details.mfaChallengeToken).toBe("string");
+  });
+
+  // ---- #1004 (audit F-3 of #977): a SESSION alone cannot enrol a factor ----
+  //
+  // MUTATION PROOF: delete the `reauthenticateForEnrollment` call in
+  // `enroll/start.ts` -> a bearer of nothing but a session starts enrolment ->
+  // the "session-only attacker" test is RED.
+
+  async function sessionFor(
+    tenantId: string,
+    user: { loginIdentifier: string }
+  ): Promise<string> {
+    const login = await callRoute(loginPOST, {
+      tenantId,
+      ip: nextIp(),
+      body: { loginIdentifier: user.loginIdentifier, password: PASSWORD }
+    });
+    expect(login.status).toBe(200);
+    return login.body.data.token as string;
+  }
+
+  async function pendingFactorCount(identityId: string): Promise<number> {
+    const rows = (await sql`
+      SELECT count(*)::int AS n FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${await principalOf(identityId)} AND status = 'pending'
+    `) as { n: number }[];
+    return rows[0]!.n;
+  }
+
+  test("#1004: a session-only attacker cannot start enrolment; the password re-authenticates", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const token = await sessionFor(tenantId, user);
+    const bearer = { authorization: `Bearer ${token}` };
+
+    // No password: refused, nothing created.
+    const bare = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer
+    });
+    expect(bare.status).toBe(400);
+    expect(bare.body.error.code).toBe("PASSWORD_REQUIRED");
+    expect(await pendingFactorCount(user.identityId)).toBe(0);
+
+    // Wrong password: refused, nothing created, audited.
+    const wrong = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: "not the password" }
+    });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe("INVALID_CREDENTIALS");
+    expect(await pendingFactorCount(user.identityId)).toBe(0);
+    const audits = (await sql`
+      SELECT count(*)::int AS n FROM awcms_audit_events
+      WHERE tenant_id = ${tenantId} AND action = 'mfa_enroll_reauth_failed'
+    `) as { n: number }[];
+    expect(audits[0]!.n).toBe(2);
+
+    // Correct password: enrolment starts.
+    const ok = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: PASSWORD }
+    });
+    expect(ok.status).toBe(200);
+    expect(typeof ok.body.data.secret).toBe("string");
+    expect(await pendingFactorCount(user.identityId)).toBe(1);
+  });
+
+  test("#1004: an existing factor cannot be replaced or added to through enroll/start", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const factorId = await seedActiveFactor(
+      user.identityId,
+      generateTotpSecret()
+    );
+    // With a factor, login stops at the challenge; mint a session directly.
+    const sessionToken = await mintSession(
+      tenantId,
+      user.identityId,
+      "password"
+    );
+
+    // Even with the correct password: 409, the factor is untouched.
+    const res = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${sessionToken}` },
+      body: { currentPassword: PASSWORD }
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("MFA_ALREADY_ACTIVE");
+    const rows = (await sql`
+      SELECT status FROM awcms_principal_mfa_factors WHERE id = ${factorId}
+    `) as { status: string }[];
+    expect(rows[0]!.status).toBe("active");
+  });
+
+  async function mintSession(
+    tenantId: string,
+    identityId: string,
+    originAuth: "password" | "sso",
+    lastAuthenticatedAt: Date = new Date()
+  ): Promise<string> {
+    const token = `t1004-${crypto.randomUUID()}`;
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+    await sql`
+      INSERT INTO awcms_sessions
+        (tenant_id, identity_id, token_hash, expires_at, assurance_level,
+         last_authenticated_at, origin_auth, credential_epoch)
+      VALUES (${tenantId}, ${identityId}, ${hashSessionToken(token)},
+        now() + interval '1 hour', 'aal1', ${lastAuthenticatedAt}, ${originAuth},
+        ${await currentEpoch(identityId)})
+    `;
+    return token;
+  }
+
+  /** Like mintSession, but tolerates an identity with no principal (epoch 0). */
+  async function mintSessionRaw(
+    tenantId: string,
+    identityId: string,
+    originAuth: "password" | "sso"
+  ): Promise<string> {
+    const token = `t1004-${crypto.randomUUID()}`;
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+    await sql`
+      INSERT INTO awcms_sessions
+        (tenant_id, identity_id, token_hash, expires_at, assurance_level,
+         last_authenticated_at, origin_auth, credential_epoch)
+      VALUES (${tenantId}, ${identityId}, ${hashSessionToken(token)},
+        now() + interval '1 hour', 'aal1', now(), ${originAuth}, 0)
+    `;
+    return token;
+  }
+
+  async function currentEpoch(identityId: string): Promise<number> {
+    const rows = (await sql`
+      SELECT p.credential_epoch FROM awcms_principals p
+      JOIN awcms_identities i ON i.principal_id = p.id WHERE i.id = ${identityId}
+    `) as { credential_epoch: number }[];
+    return rows[0]!.credential_epoch;
+  }
+
+  test("#1004: an SSO session re-authenticates by freshness only", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+
+    const stale = await mintSession(
+      tenantId,
+      user.identityId,
+      "sso",
+      new Date(Date.now() - 3_600_000)
+    );
+    // Stale SSO session, password not presented -> falls to the password rule.
+    const refused = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${stale}` }
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.code).toBe("PASSWORD_REQUIRED");
+
+    const fresh = await mintSession(tenantId, user.identityId, "sso");
+    const allowed = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${fresh}` }
+    });
+    expect(allowed.status).toBe(200);
+  });
+
+  test("#1004: completing enrolment writes a critical audit event and queues a notice to the owner", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    await seedDefaultEmailTemplates(
+      sql,
+      tenantId,
+      user.tenantUserId,
+      DEFAULT_EMAIL_TEMPLATES
+    );
+    const token = await sessionFor(tenantId, user);
+    const bearer = { authorization: `Bearer ${token}` };
+
+    const start = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: PASSWORD }
+    });
+    expect(start.status).toBe(200);
+    const secret = base32Decode(start.body.data.secret as string);
+    const verify = await callRoute(enrollVerifyPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { code: generateTotpCode(secret, Date.now(), CODE_OPTS) }
+    });
+    expect(verify.status).toBe(200);
+
+    const audit = (await sql`
+      SELECT severity, attributes FROM awcms_audit_events
+      WHERE tenant_id = ${tenantId} AND action = 'mfa_enrolled'
+    `) as { severity: string; attributes: Record<string, unknown> }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.severity).toBe("critical");
+    expect(audit[0]!.attributes.via).toBe("session");
+    expect(audit[0]!.attributes.notified).toBe(true);
+
+    const mail = (await sql`
+      SELECT count(*)::int AS n FROM awcms_email_messages
+      WHERE tenant_id = ${tenantId} AND template_key = 'system.security_notice'
+    `) as { n: number }[];
+    expect(mail[0]!.n).toBe(1);
+  });
+
+  // ---- #1004 follow-ups from the security review of 938caa88 ----
+
+  const OTHER_PASSWORD = "a completely different passphrase 42";
+
+  /** Same person in two tenants, then the password changed THROUGH tenant A. */
+  async function twoTenantsPasswordChangedInA() {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const loginIdentifier = `shared-${Math.random().toString(36).slice(2)}`;
+    const userA = await seedUser(tenantA, loginIdentifier);
+    const userB = await seedUser(tenantB, loginIdentifier);
+    const principalId = await principalOf(userA.identityId);
+    // What `password-change` does: the PRINCIPAL credential and tenant A's own
+    // copy change; tenant B's identity row keeps the stale hash.
+    const newHash = await hashPassword(OTHER_PASSWORD);
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantA}, false)`;
+    await sql`UPDATE awcms_identities SET password_hash = ${newHash} WHERE id = ${userA.identityId}`;
+    await setPrincipalCredential(sql, principalId, newHash);
+    return { tenantA, tenantB, userA, userB, principalId };
+  }
+
+  test("#1004 H1: re-authentication uses the CURRENT credential, not a tenant's stale hash", async () => {
+    const { tenantB, userB } = await twoTenantsPasswordChangedInA();
+    const token = await mintSession(tenantB, userB.identityId, "password");
+    const bearer = { authorization: `Bearer ${token}` };
+
+    // The password this tenant's own row still carries is no longer the password.
+    const old = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: PASSWORD }
+    });
+    expect(old.status).toBe(400);
+    expect(old.body.error.code).toBe("INVALID_CREDENTIALS");
+    expect(await pendingFactorCount(userB.identityId)).toBe(0);
+
+    const current = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: OTHER_PASSWORD }
+    });
+    expect(current.status).toBe(200);
+  });
+
+  test("#1004 M1: wrong passwords count toward the principal lockout, and a locked person is refused", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const principalId = await principalOf(user.identityId);
+    const token = await mintSession(tenantId, user.identityId, "password");
+    const bearer = { authorization: `Bearer ${token}` };
+
+    await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: "wrong" }
+    });
+    const rows = (await sql`
+      SELECT failed_login_count FROM awcms_principals WHERE id = ${principalId}
+    `) as { failed_login_count: number }[];
+    expect(rows[0]!.failed_login_count).toBe(1);
+
+    await sql`UPDATE awcms_principals SET locked_until = now() + interval '10 minutes' WHERE id = ${principalId}`;
+    const locked = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: PASSWORD }
+    });
+    expect(locked.status).toBe(429);
+    expect(await pendingFactorCount(user.identityId)).toBe(0);
+  });
+
+  test("#1004 M1: a per-session bucket bounds guesses whatever the source address", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const token = await mintSession(tenantId, user.identityId, "password");
+    const bearer = { authorization: `Bearer ${token}` };
+    // Reset the lockout each time so only the bucket can be what stops us.
+    let last = 0;
+    for (let i = 0; i < 12; i += 1) {
+      await sql`UPDATE awcms_principals SET failed_login_count = 0, locked_until = NULL WHERE id = ${await principalOf(user.identityId)}`;
+      const res = await callRoute(enrollStartPOST, {
+        tenantId,
+        ip: nextIp(),
+        headers: bearer,
+        body: { currentPassword: "wrong" }
+      });
+      last = res.status;
+      if (last === 429) break;
+    }
+    expect(last).toBe(429);
+  });
+
+  test("#1004 H2: a fresh SSO session does not enrol a principal-global factor for a person who works in another tenant", async () => {
+    const { tenantB, userB } = await twoTenantsPasswordChangedInA();
+    const sso = await mintSession(tenantB, userB.identityId, "sso");
+    const bearer = { authorization: `Bearer ${sso}` };
+
+    const bare = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: bearer
+    });
+    expect(bare.status).toBe(400);
+    expect(bare.body.error.code).toBe("PASSWORD_REQUIRED");
+    expect(await pendingFactorCount(userB.identityId)).toBe(0);
+
+    const withPassword = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: OTHER_PASSWORD }
+    });
+    expect(withPassword.status).toBe(200);
+  });
+
+  async function startedEnrolment(
+    tenantId: string,
+    user: { identityId: string }
+  ) {
+    const token = await mintSession(tenantId, user.identityId, "password");
+    const bearer = { authorization: `Bearer ${token}` };
+    const start = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: PASSWORD }
+    });
+    expect(start.status).toBe(200);
+    const secret = base32Decode(start.body.data.secret as string);
+    return { token, bearer, secret };
+  }
+
+  function verifyCall(
+    tenantId: string,
+    bearer: Record<string, string>,
+    code: string
+  ) {
+    return callRoute(enrollVerifyPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { code }
+    });
+  }
+
+  test("#1004 H3: another session of the same person cannot confirm an enrolment it did not start", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const { bearer, secret } = await startedEnrolment(tenantId, user);
+    const other = {
+      authorization: `Bearer ${await mintSession(tenantId, user.identityId, "password")}`
+    };
+    const code = generateTotpCode(secret, Date.now(), CODE_OPTS);
+
+    const stolen = await verifyCall(tenantId, other, code);
+    expect(stolen.status).toBe(404);
+
+    const owner = await verifyCall(tenantId, bearer, code);
+    expect(owner.status).toBe(200);
+  });
+
+  test("#1004 H3: a pending enrolment expires by the database clock and is replaced by the next start", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const { bearer, secret } = await startedEnrolment(tenantId, user);
+    await sql`UPDATE awcms_principal_mfa_factors SET created_at = now() - interval '11 minutes' WHERE principal_id = ${await principalOf(user.identityId)} AND status = 'pending'`;
+
+    const expired = await verifyCall(
+      tenantId,
+      bearer,
+      generateTotpCode(secret, Date.now(), CODE_OPTS)
+    );
+    expect(expired.status).toBe(404);
+
+    const restart = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: bearer,
+      body: { currentPassword: PASSWORD }
+    });
+    expect(restart.status).toBe(200);
+    const fresh = base32Decode(restart.body.data.secret as string);
+    const ok = await verifyCall(
+      tenantId,
+      bearer,
+      generateTotpCode(fresh, Date.now(), CODE_OPTS)
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  test("#1004 H3: a pending factor from before the binding column cannot be confirmed", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const { bearer, secret } = await startedEnrolment(tenantId, user);
+    await sql`UPDATE awcms_principal_mfa_factors SET enrollment_binding_hash = NULL WHERE principal_id = ${await principalOf(user.identityId)} AND status = 'pending'`;
+
+    const res = await verifyCall(
+      tenantId,
+      bearer,
+      generateTotpCode(secret, Date.now(), CODE_OPTS)
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("#1004 H3: wrong codes destroy the pending secret at the cap", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const { bearer, secret } = await startedEnrolment(tenantId, user);
+    const good = generateTotpCode(secret, Date.now(), CODE_OPTS);
+    const wrong = good === "000000" ? "111111" : "000000";
+
+    for (let i = 1; i < PENDING_ENROLLMENT_MAX_FAILURES; i += 1) {
+      const res = await verifyCall(tenantId, bearer, wrong);
+      expect(res.status).toBe(400);
+    }
+    const last = await verifyCall(tenantId, bearer, wrong);
+    expect(last.status).toBe(429);
+    expect(last.body.error.code).toBe("MFA_ENROLLMENT_EXHAUSTED");
+    expect(await pendingFactorCount(user.identityId)).toBe(0);
+
+    // The right code for the destroyed secret no longer works.
+    const after = await verifyCall(tenantId, bearer, good);
+    expect(after.status).toBe(404);
+  });
+
+  test("#1004 H3: enroll/verify is rate limited per session", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const token = await mintSession(tenantId, user.identityId, "password");
+    const bearer = { authorization: `Bearer ${token}` };
+    let last = 0;
+    for (let i = 0; i < 40; i += 1) {
+      last = (await verifyCall(tenantId, bearer, "123456")).status;
+      if (last === 429) break;
+    }
+    expect(last).toBe(429);
+  });
+
+  // ---- #1004 re-audit: H-A (switch-minted grant), M-A (raceable cap) ----
+
+  async function switchIntoRequiredTenant() {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const loginIdentifier = `sw-${Math.random().toString(36).slice(2)}`;
+    const userA = await seedUser(tenantA, loginIdentifier);
+    const userB = await seedUser(tenantB, loginIdentifier);
+    await sql`
+      INSERT INTO awcms_tenant_mfa_policies (tenant_id, enforcement_level)
+      VALUES (${tenantB}, 'required_for_all')
+    `;
+    // The attacker holds nothing but a (stolen) password-origin session in A.
+    const stolen = await mintSession(tenantA, userA.identityId, "password");
+    const switched = await callRoute(switchPOST, {
+      tenantId: tenantA,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${stolen}` },
+      body: { tenantId: tenantB }
+    });
+
+    return { tenantB, userB, switched };
+  }
+
+  test("#1004 H-A: a grant minted by a tenant SWITCH must re-authenticate; a login grant still does not", async () => {
+    const { tenantB, userB, switched } = await switchIntoRequiredTenant();
+    expect(switched.status).toBe(401);
+    expect(switched.body.error.code).toBe("MFA_ENROLLMENT_REQUIRED");
+    const grant = switched.body.error.details.mfaEnrollmentToken as string;
+    const origin = (await sql`
+      SELECT enrollment_origin FROM awcms_mfa_challenges
+      WHERE tenant_id = ${tenantB} AND purpose = 'enrollment'
+    `) as { enrollment_origin: string }[];
+    expect(origin[0]!.enrollment_origin).toBe("switch");
+
+    // No password: refused, nothing created.
+    const bare = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { "x-awcms-mfa-enrollment-token": grant }
+    });
+    expect(bare.status).toBe(400);
+    expect(bare.body.error.code).toBe("PASSWORD_REQUIRED");
+    expect(await pendingFactorCount(userB.identityId)).toBe(0);
+
+    const wrong = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { "x-awcms-mfa-enrollment-token": grant },
+      body: { currentPassword: "nope" }
+    });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe("INVALID_CREDENTIALS");
+
+    const ok = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { "x-awcms-mfa-enrollment-token": grant },
+      body: { currentPassword: PASSWORD }
+    });
+    expect(ok.status).toBe(200);
+  });
+
+  test("#1004 H-A: a grant minted by a PASSWORD LOGIN still skips re-authentication", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    await sql`
+      INSERT INTO awcms_tenant_mfa_policies (tenant_id, enforcement_level)
+      VALUES (${tenantId}, 'required_for_all')
+    `;
+    const login = await callRoute(loginPOST, {
+      tenantId,
+      ip: nextIp(),
+      body: { loginIdentifier: user.loginIdentifier, password: PASSWORD }
+    });
+    expect(login.status).toBe(401);
+    expect(login.body.error.code).toBe("MFA_ENROLLMENT_REQUIRED");
+    const origin = (await sql`
+      SELECT enrollment_origin FROM awcms_mfa_challenges
+      WHERE tenant_id = ${tenantId} AND purpose = 'enrollment'
+    `) as { enrollment_origin: string }[];
+    expect(origin[0]!.enrollment_origin).toBe("login");
+
+    const start = await callRoute(enrollStartPOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: {
+        "x-awcms-mfa-enrollment-token": login.body.error.details
+          .mfaEnrollmentToken as string
+      }
+    });
+    expect(start.status).toBe(200);
+  });
+
+  test("#1004 H-A: a pre-sql/262 grant (NULL origin) is treated as a switch grant", async () => {
+    const { tenantB, userB, switched } = await switchIntoRequiredTenant();
+    const grant = switched.body.error.details.mfaEnrollmentToken as string;
+    await sql`UPDATE awcms_mfa_challenges SET enrollment_origin = NULL WHERE tenant_id = ${tenantB} AND purpose = 'enrollment'`;
+
+    const bare = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { "x-awcms-mfa-enrollment-token": grant }
+    });
+    expect(bare.status).toBe(400);
+    expect(await pendingFactorCount(userB.identityId)).toBe(0);
+  });
+
+  test("#1004 M-A: thirty parallel wrong codes evaluate at most five", async () => {
+    const prior = process.env.AUTH_MFA_RATE_LIMIT_MAX;
+    process.env.AUTH_MFA_RATE_LIMIT_MAX = "1000";
+    try {
+      const tenantId = await createTenant();
+      const user = await seedUser(tenantId);
+      const { bearer, secret } = await startedEnrolment(tenantId, user);
+      const good = generateTotpCode(secret, Date.now(), CODE_OPTS);
+      const wrong = good === "000000" ? "111111" : "000000";
+
+      const results = await Promise.all(
+        Array.from({ length: 30 }, () => verifyCall(tenantId, bearer, wrong))
+      );
+      const codes = results.map((r) => r.body?.error?.code as string);
+      const evaluatedAsWrong = codes.filter(
+        (c) => c === "MFA_INVALID_CODE"
+      ).length;
+      const exhausted = codes.filter(
+        (c) => c === "MFA_ENROLLMENT_EXHAUSTED"
+      ).length;
+
+      // Evaluated = answered "wrong code" (cap-1 of them) + the one that hit
+      // the cap. Anything above PENDING_ENROLLMENT_MAX_FAILURES means guesses
+      // beyond the cap were tested.
+      expect(evaluatedAsWrong).toBeLessThanOrEqual(
+        PENDING_ENROLLMENT_MAX_FAILURES - 1
+      );
+      expect(evaluatedAsWrong + Math.min(exhausted, 1)).toBeLessThanOrEqual(
+        PENDING_ENROLLMENT_MAX_FAILURES
+      );
+      expect(await pendingFactorCount(user.identityId)).toBe(0);
+    } finally {
+      if (prior === undefined) delete process.env.AUTH_MFA_RATE_LIMIT_MAX;
+      else process.env.AUTH_MFA_RATE_LIMIT_MAX = prior;
+    }
+  });
+
+  test("#1004 L2: an UNLINKED identity fails closed for the SSO exemption and is verified like login does", async () => {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const loginIdentifier = `unl-${Math.random().toString(36).slice(2)}`;
+    const userA = await seedUser(tenantA, loginIdentifier);
+    const newHash = await hashPassword(OTHER_PASSWORD);
+    await setPrincipalCredential(
+      sql,
+      await principalOf(userA.identityId),
+      newHash
+    );
+
+    // Tenant B's identity for the same address was never linked to the principal.
+    const userB = await seedUser(tenantB, loginIdentifier);
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantB}, false)`;
+    await sql`UPDATE awcms_identities SET principal_id = NULL WHERE id = ${userB.identityId}`;
+
+    const sso = await mintSessionRaw(tenantB, userB.identityId, "sso");
+    const bare = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${sso}` }
+    });
+    expect(bare.status).toBe(400);
+    expect(bare.body.error.code).toBe("PASSWORD_REQUIRED");
+
+    // The credential is the person's CURRENT one (found by address, as login does).
+    const stale = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${sso}` },
+      body: { currentPassword: PASSWORD }
+    });
+    expect(stale.status).toBe(400);
+    expect(stale.body.error.code).toBe("INVALID_CREDENTIALS");
+    const current = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${sso}` },
+      body: { currentPassword: OTHER_PASSWORD }
+    });
+    expect(current.status).toBe(200);
   });
 
   test("F7: login -> MFA -> stale step-up blocks admin action -> step-up -> action succeeds", async () => {

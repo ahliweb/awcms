@@ -176,7 +176,10 @@ export const POST: APIRoute = async ({
       const entry = await evaluateTenantEntry(tx, {
         tenantId: targetTenantId,
         principalId: source.principalId,
-        now
+        now,
+        // A bearer session is all the caller holds: any enrolment grant minted
+        // here must re-authenticate at `enroll/start` (#1004, H-A).
+        grantOrigin: "switch"
       });
 
       if (!entry.ok) {
