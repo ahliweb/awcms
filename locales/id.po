@@ -7688,6 +7688,12 @@ msgstr "Sebuah chat Telegram memakai kode tautan Anda. Apakah ini Anda? Konfirma
 msgid "(no name)"
 msgstr "(tanpa nama)"
 
+msgid "Verification PIN"
+msgstr "PIN verifikasi"
+
+msgid "Enter the 6-digit PIN the bot sent to that Telegram chat. If you did not receive one, this is not your chat: press No."
+msgstr "Masukkan PIN 6 digit yang dikirim bot ke chat Telegram tersebut. Jika Anda tidak menerimanya, ini bukan chat Anda: tekan Bukan."
+
 msgid "Yes, this is me"
 msgstr "Ya, ini saya"
 

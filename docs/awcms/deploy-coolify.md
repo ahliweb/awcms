@@ -304,6 +304,10 @@ That runner is what gets scheduled through a Coolify **Scheduled Task** (if your
 
 Other jobs (audit purge, sync objects, etc.) are scheduled with exactly the same one-shot container pattern, only the command name differs — see [`deployment-profiles.md`](deployment-profiles.md) §Job registry for the full job list and which ones are on-demand (not a repeating cron).
 
+## Telegram webhook: do not log response bodies
+
+If `TELEGRAM_ENABLED=true`, the verification PIN (Issue #1008) is returned **in the HTTP response body** of `POST /api/v1/telegram/webhook` (the Bot API's webhook-reply form). A reverse proxy, WAF, API gateway or APM agent in front of the app must therefore **not log or capture response bodies for `/api/v1/telegram/webhook`** (nor request bodies, which carry chat ids). The app itself never logs them. The PIN is short-lived (10 minutes), hashed at rest and limited to five wrong answers, but a body log would hand it to whoever reads the log.
+
 ## Rollback
 
 - **Registry image (Pattern 2)**: rollback = redeploy the previous image tag in Coolify. Because `Dockerfile.production` is immutable per build, a pure application rollback is a fast operation.

@@ -22,8 +22,9 @@ import {
   isValidTelegramBotToken,
   isValidTelegramWebhookSecret,
   resolveTelegramBotUsername,
-  resolveTelegramEncryptionRing,
-  resolveTelegramHashRing
+  resolveTelegramEncryptionRingUnchecked,
+  resolveTelegramHashRingUnchecked,
+  telegramRingsShareAKey
 } from "../src/modules/telegram-delivery/domain/telegram-config";
 
 type EnvBag = Record<string, string | undefined>;
@@ -890,7 +891,9 @@ export function validateEnv(env: EnvBag): string[] {
       );
     }
 
-    const encryption = resolveTelegramEncryptionRing(env as NodeJS.ProcessEnv);
+    const encryption = resolveTelegramEncryptionRingUnchecked(
+      env as NodeJS.ProcessEnv
+    );
 
     if (!encryption.ok) {
       problems.push(
@@ -898,7 +901,7 @@ export function validateEnv(env: EnvBag): string[] {
       );
     }
 
-    const hash = resolveTelegramHashRing(env as NodeJS.ProcessEnv);
+    const hash = resolveTelegramHashRingUnchecked(env as NodeJS.ProcessEnv);
 
     if (!hash.ok) {
       problems.push(
@@ -906,13 +909,7 @@ export function validateEnv(env: EnvBag): string[] {
       );
     }
 
-    if (
-      encryption.ok &&
-      hash.ok &&
-      encryption.keys.some((encryptionKey) =>
-        hash.keys.some((hashKey) => hashKey.key.equals(encryptionKey.key))
-      )
-    ) {
+    if (telegramRingsShareAKey(encryption, hash)) {
       problems.push(
         "TELEGRAM_CHAT_ENCRYPTION_KEYS dan TELEGRAM_CHAT_HASH_KEYS tidak boleh berbagi kunci yang sama; keduanya harus cincin kunci terpisah."
       );

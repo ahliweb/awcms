@@ -21,7 +21,7 @@
  * minute, never one per request. The row carries counts and reasons only: no
  * address, no header, no body.
  */
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
@@ -53,6 +53,26 @@ export function verifyWebhookSecret(
 }
 
 /**
+ * The per-chat rate-limit key (Issue #1008, L3). Telegram calls the webhook from
+ * a small set of addresses, so a per-address bucket cannot tell one noisy user
+ * from another; this one is per chat, and is only ever built AFTER the secret
+ * header verified.
+ *
+ * The chat id is HMAC-ed with the webhook secret and truncated, so the limiter's
+ * store (Redis, when configured) never holds a chat id, readable or reversible
+ * without the secret. It is a short-lived counter key, not an identifier.
+ */
+export function telegramChatRateLimitKey(
+  chatKey: string,
+  secret: string
+): string {
+  return `telegram-webhook-chat:${createHmac("sha256", secret)
+    .update(`telegram:chat-rate:${chatKey}`, "utf8")
+    .digest("hex")
+    .slice(0, 32)}`;
+}
+
+/**
  * The reason names avoid words like "secret" and "credential" on purpose: they are keys in an audit
  * row's `attributes`, and the audit redactor (rightly) blanks the VALUE of any
  * key that looks like one, which turned the counts into `[REDACTED]`.
@@ -61,6 +81,7 @@ export type WebhookRejectionReason =
   | "header_mismatch"
   | "header_absent"
   | "rate_limited"
+  | "chat_rate_limited"
   | "too_large"
   | "malformed";
 

@@ -379,6 +379,24 @@ const deployment = describeTelegramDeployment();
                 )}{" "}
                 <code>{own.chatMasked}</code>
               </p>
+              <div class="form-row">
+                <label for="telegram-pin">{t("Verification PIN")}</label>
+                <input
+                  id="telegram-pin"
+                  name="pin"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxlength="6"
+                  required
+                />
+                <p class="form-hint">
+                  {t(
+                    "Enter the 6-digit PIN the bot sent to that Telegram chat. If you did not receive one, this is not your chat: press No."
+                  )}
+                </p>
+              </div>
               <button
                 type="button"
                 class="btn js-telegram-confirm"
@@ -762,9 +780,24 @@ const deployment = describeTelegramDeployment();
     sendJson,
     sendJsonForData
   } from "../../lib/ui/admin-form-client";
+  import { createIdempotencyKeySource } from "../../lib/ui/admin-idempotency-key";
   import { confirmAction } from "../../lib/ui/confirm-dialog-client";
 
   const actionError = messageBox("telegram-action-error");
+
+  /**
+   * The administrator revoke and the switch require the header (Issue #1008).
+   * One key per distinct (method, url, body): a retry of the same request replays
+   * the stored answer instead of running twice; a different request gets a new key.
+   */
+  const keyFor = createIdempotencyKeySource();
+  function idempotency(
+    method: string,
+    url: string,
+    body?: unknown
+  ): Record<string, string> {
+    return { "Idempotency-Key": keyFor({ method, url, body: body ?? null }) };
+  }
   const noticeBox = messageBox("telegram-notice");
 
   // The link code is returned once, in the response to this click, and is put
@@ -813,17 +846,33 @@ const deployment = describeTelegramDeployment();
     const bindingId = button.dataset.bindingId;
     if (!bindingId) return;
 
+    const pinInput = document.getElementById("telegram-pin");
+    const pin =
+      pinInput instanceof HTMLInputElement ? pinInput.value.trim() : "";
+
+    if (!/^[0-9]{6}$/.test(pin)) {
+      actionError.show("Enter the 6-digit PIN the bot sent to that chat.");
+      return;
+    }
+
     await mutateAndReload(
       button,
       actionError,
       () =>
-        sendJson("POST", "/api/v1/telegram/bindings/me/confirm", { bindingId }),
+        sendJson("POST", "/api/v1/telegram/bindings/me/confirm", {
+          bindingId,
+          pin
+        }),
       (errorCode) =>
         errorCode === "RESOURCE_NOT_FOUND"
           ? "That request expired. Request a new link."
           : errorCode === "TELEGRAM_BINDING_MISMATCH"
             ? "A newer chat is waiting. Reload the page and check it again."
-            : "Could not confirm. Please try again."
+            : errorCode === "TELEGRAM_PIN_INVALID"
+              ? "That PIN is not right. Check the PIN the bot sent to your chat."
+              : errorCode === "TELEGRAM_PIN_LOCKED"
+                ? "Too many wrong PINs. The chat was unlinked; request a new link."
+                : "Could not confirm. Please try again."
     );
   });
 
@@ -859,7 +908,13 @@ const deployment = describeTelegramDeployment();
     await mutateAndReload(
       button,
       actionError,
-      () => sendJson("POST", `/api/v1/telegram/bindings/${bindingId}/revoke`),
+      () =>
+        sendJson(
+          "POST",
+          `/api/v1/telegram/bindings/${bindingId}/revoke`,
+          undefined,
+          idempotency("POST", `/api/v1/telegram/bindings/${bindingId}/revoke`)
+        ),
       (errorCode) =>
         errorCode === "RESOURCE_NOT_FOUND"
           ? "That chat was already unlinked."
@@ -882,7 +937,13 @@ const deployment = describeTelegramDeployment();
     await mutateAndReload(
       button,
       actionError,
-      () => sendJson("PUT", "/api/v1/telegram/settings", { enabled }),
+      () =>
+        sendJson(
+          "PUT",
+          "/api/v1/telegram/settings",
+          { enabled },
+          idempotency("PUT", "/api/v1/telegram/settings", { enabled })
+        ),
       "Could not change the setting. Please try again."
     );
   });

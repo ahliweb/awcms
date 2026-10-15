@@ -5,6 +5,12 @@ import {
   readJsonBody
 } from "../../../../lib/security/request-body-limit";
 import {
+  readIdempotencyKey,
+  refuseMachineCredential,
+  runTelegramIdempotent,
+  TELEGRAM_SETTINGS_IDEMPOTENCY_SCOPE
+} from "../../../../modules/telegram-delivery/application/telegram-idempotency";
+import {
   getTelegramSettings,
   readTelegramTenantGate,
   setTelegramEnabled
@@ -44,10 +50,13 @@ export const GET = defineTenantRoute({
  * are erased and the queue cancelled), so a tenant that switches the channel off
  * is not left holding encrypted chat ids for it.
  *
- * Idempotent by construction (it SETS a value; repeating it changes nothing and
- * writes no second audit row), so no `Idempotency-Key`. The body is validated
- * AFTER authorization so an unauthorised token learns nothing about the schema,
- * and strictly: an unknown key is a 400.
+ * `Idempotency-Key` REQUIRED (Issue #1008, L12): it SETS a value, so repeating it
+ * changes nothing and writes no second audit row, but the ANSWER of a retry
+ * (`changed`, `revokedBindings`) differed from the first; with a key the retry
+ * replays the stored response. A machine credential is refused (the key is filed
+ * per acting person, ADR-0145). The body is validated AFTER authorization so an
+ * unauthorised token learns nothing about the schema, and strictly: an unknown
+ * key is a 400.
  */
 export const PUT = defineTenantRoute<{ payload: unknown }>({
   workClass: "interactive",
@@ -69,7 +78,13 @@ export const PUT = defineTenantRoute<{ payload: unknown }>({
     activityCode: "settings",
     action: "configure"
   },
-  handler: async ({ tx, tenantId, auth, prepared, locals }) => {
+  handler: async ({ tx, tenantId, auth, prepared, locals, request }) => {
+    const refused = refuseMachineCredential(auth.context);
+
+    if (refused) {
+      return refused;
+    }
+
     const payload = prepared.payload;
 
     if (
@@ -86,19 +101,38 @@ export const PUT = defineTenantRoute<{ payload: unknown }>({
       );
     }
 
-    const result = await setTelegramEnabled(
+    const enabled = (payload as { enabled: boolean }).enabled;
+    const idempotencyKey = readIdempotencyKey(request);
+
+    if (idempotencyKey instanceof Response) {
+      return idempotencyKey;
+    }
+
+    return runTelegramIdempotent(
       tx,
       tenantId,
-      (payload as { enabled: boolean }).enabled,
+      TELEGRAM_SETTINGS_IDEMPOTENCY_SCOPE,
+      idempotencyKey,
       auth.context.tenantUserId,
-      { correlationId: locals.correlationId }
-    );
+      { enabled },
+      async () => {
+        const result = await setTelegramEnabled(
+          tx,
+          tenantId,
+          enabled,
+          auth.context.tenantUserId,
+          { correlationId: locals.correlationId }
+        );
 
-    return ok({
-      enabled: result.enabled,
-      changed: result.changed,
-      revokedBindings: result.revokedBindings,
-      cancelledMessages: result.cancelledMessages
-    });
+        return {
+          body: {
+            enabled: result.enabled,
+            changed: result.changed,
+            revokedBindings: result.revokedBindings,
+            cancelledMessages: result.cancelledMessages
+          }
+        };
+      }
+    );
   }
 });

@@ -138,6 +138,27 @@ export function parseTelegramUpdate(update: unknown): TelegramInboundCommand {
 }
 
 /**
+ * The chat an update came from, as a string key, for rate limiting only (Issue
+ * #1008). Unlike `parseTelegramUpdate` it does not care what the message says or
+ * what kind of chat it is: a noisy user is noisy with plain text too, and those
+ * messages are exactly the ones that parse as `ignored`. `null` when the update
+ * has no usable chat.
+ */
+export function extractUpdateChatKey(update: unknown): string | null {
+  if (!isRecord(update) || !isRecord(update.message)) {
+    return null;
+  }
+
+  const chat = update.message.chat;
+
+  if (!isRecord(chat) || !Number.isSafeInteger(chat.id)) {
+    return null;
+  }
+
+  return String(chat.id);
+}
+
+/**
  * The fixed replies. Plain text, no markup (no `parse_mode` is ever sent), no
  * link. One neutral wording covers an unknown, expired, consumed or malformed
  * code, so the reply is not an oracle for which codes exist.
@@ -149,11 +170,14 @@ export function parseTelegramUpdate(update: unknown): TelegramInboundCommand {
  * after `sanitizeDisplayName` (control and bidi characters stripped, capped); the
  * rest of the text is fixed.
  */
-export function telegramReplyLinked(tenantLabel: string | null): string {
+export function telegramReplyLinked(
+  tenantLabel: string | null,
+  pin: string
+): string {
   const who = tenantLabel ?? "this organisation";
   const siapa = tenantLabel ?? "organisasi ini";
 
-  return `Chat received for ${who}. Open the admin and confirm that this is you; until then this chat will not receive alerts. / Chat diterima untuk ${siapa}. Buka admin dan konfirmasi bahwa ini Anda; sebelum itu chat ini tidak menerima notifikasi.`;
+  return `Chat received for ${who}. Your verification PIN is ${pin}. Open the admin and enter this PIN to confirm that this is you; until then this chat will not receive alerts. Do not share the PIN. / Chat diterima untuk ${siapa}. PIN verifikasi Anda adalah ${pin}. Buka admin dan masukkan PIN ini untuk mengonfirmasi bahwa ini Anda; sebelum itu chat ini tidak menerima notifikasi. Jangan bagikan PIN ini.`;
 }
 
 /** The same person, with the same chat, who asked for a new code: nothing is waiting for confirmation. */

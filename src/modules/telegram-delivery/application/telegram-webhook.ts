@@ -81,7 +81,7 @@ export type HandleTelegramWebhookOptions = {
 };
 
 type LinkOutcome =
-  | { kind: "linked"; tenantLabel: string | null }
+  | { kind: "linked"; tenantLabel: string | null; pin: string }
   | { kind: "already_linked"; tenantLabel: string | null }
   | { kind: "invalid" };
 
@@ -266,14 +266,14 @@ export async function handleTelegramWebhookUpdate(
         return { kind: "already_linked", tenantLabel };
       }
 
-      return { kind: "linked", tenantLabel };
+      return { kind: "linked", tenantLabel, pin: created.pin };
     },
     { workClass: "interactive" }
   );
 
   if (outcome.kind === "linked") {
     return {
-      reply: telegramReplyLinked(outcome.tenantLabel),
+      reply: telegramReplyLinked(outcome.tenantLabel, outcome.pin),
       replyChatId: command.chatId,
       outcome: "linked"
     };

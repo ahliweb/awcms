@@ -65,6 +65,12 @@ export const DEFAULT_TELEGRAM_DISPATCH_BATCH_SIZE = 25;
 export const DEFAULT_TELEGRAM_RATE_PER_BINDING_PER_HOUR = 30;
 export const DEFAULT_TELEGRAM_RATE_PER_TENANT_PER_HOUR = 1000;
 export const DEFAULT_TELEGRAM_WEBHOOK_RATE_PER_MINUTE = 120;
+/**
+ * Updates per minute from ONE chat (Issue #1008, L3). A fixed ceiling and not a
+ * setting: a person sends a handful of commands, so there is nothing to tune,
+ * and a setting nobody needs is one more variable to document and validate.
+ */
+export const TELEGRAM_WEBHOOK_CHAT_RATE_PER_MINUTE = 10;
 
 export const DEFAULT_TELEGRAM_MESSAGE_RETENTION_DAYS = 14;
 export const DEFAULT_TELEGRAM_BINDING_RETENTION_DAYS = 90;
@@ -312,11 +318,11 @@ export function isValidTelegramBotToken(
 }
 
 /**
- * The chat-id encryption ring (`TELEGRAM_CHAT_ENCRYPTION_KEYS`): its own ring,
- * separate from the payout one and every other (ADR-0140 section 6). Fail closed:
- * `{ ok: false }` means no binding is created and the dispatcher sends nothing.
+ * The two rings as the environment spells them, with no distinctness check. The
+ * config validator uses these so it can word the problem itself; everything that
+ * RUNS uses the checked resolvers below.
  */
-export function resolveTelegramEncryptionRing(
+export function resolveTelegramEncryptionRingUnchecked(
   env: NodeJS.ProcessEnv = process.env
 ): KeyRingResult {
   return resolveKeyRing(
@@ -326,8 +332,7 @@ export function resolveTelegramEncryptionRing(
   );
 }
 
-/** The keyed-hash ring (`TELEGRAM_CHAT_HASH_KEYS`), ADR-0137 section 3. Fail closed. */
-export function resolveTelegramHashRing(
+export function resolveTelegramHashRingUnchecked(
   env: NodeJS.ProcessEnv = process.env
 ): KeyRingResult {
   return resolveKeyRing(
@@ -335,4 +340,62 @@ export function resolveTelegramHashRing(
     { TELEGRAM_CHAT_HASH_KEYS: env.TELEGRAM_CHAT_HASH_KEYS },
     STRICT_KEY_RING_OPTIONS
   );
+}
+
+/**
+ * True when the two rings share a key. A hash key that is also an encryption key
+ * would make the keyed hash a function of key material that protects the
+ * ciphertext (ADR-0140 section 6), so the rings must be separate.
+ */
+export function telegramRingsShareAKey(
+  encryption: KeyRingResult,
+  hash: KeyRingResult
+): boolean {
+  return (
+    encryption.ok &&
+    hash.ok &&
+    encryption.keys.some((encryptionKey) =>
+      hash.keys.some((hashKey) => hashKey.key.equals(encryptionKey.key))
+    )
+  );
+}
+
+const RINGS_NOT_DISTINCT_REASON =
+  "TELEGRAM_CHAT_ENCRYPTION_KEYS and TELEGRAM_CHAT_HASH_KEYS must not share a key.";
+
+/**
+ * The chat-id encryption ring (`TELEGRAM_CHAT_ENCRYPTION_KEYS`): its own ring,
+ * separate from the payout one and every other (ADR-0140 section 6). Fail closed:
+ * `{ ok: false }` means no binding is created and the dispatcher sends nothing.
+ *
+ * Distinctness from the hash ring is enforced HERE, at runtime, and not only by
+ * `config:validate` (Issue #1008, L11): a deployment started without running the
+ * validator, or one whose environment was edited afterwards, still refuses to
+ * encrypt or decrypt under a ring that overlaps the hash ring.
+ */
+export function resolveTelegramEncryptionRing(
+  env: NodeJS.ProcessEnv = process.env
+): KeyRingResult {
+  const encryption = resolveTelegramEncryptionRingUnchecked(env);
+
+  return telegramRingsShareAKey(
+    encryption,
+    resolveTelegramHashRingUnchecked(env)
+  )
+    ? { ok: false, reason: RINGS_NOT_DISTINCT_REASON }
+    : encryption;
+}
+
+/** The keyed-hash ring (`TELEGRAM_CHAT_HASH_KEYS`), ADR-0137 section 3. Fail closed, and distinct from the encryption ring at runtime (Issue #1008, L11). */
+export function resolveTelegramHashRing(
+  env: NodeJS.ProcessEnv = process.env
+): KeyRingResult {
+  const hash = resolveTelegramHashRingUnchecked(env);
+
+  return telegramRingsShareAKey(
+    resolveTelegramEncryptionRingUnchecked(env),
+    hash
+  )
+    ? { ok: false, reason: RINGS_NOT_DISTINCT_REASON }
+    : hash;
 }

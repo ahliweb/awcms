@@ -401,3 +401,51 @@ const RATE_LIMIT_COMMAND_TIMEOUT_MS = 250;
 function defaultRateLimitKey(raw: string): string {
   return buildRedisKey({ namespace: "rate-limit", key: raw });
 }
+
+/**
+ * Gives back ONE unit of a bucket that `checkSharedRateLimit` just charged, for
+ * a caller that charged it and then refused the request for a DIFFERENT reason
+ * (Issue #1008: a per-chat charge followed by a per-address `429`, which Telegram
+ * retries, would otherwise burn the chat's allowance on requests that never did
+ * any work). Best effort and never below zero: it only ever makes the limiter
+ * MORE permissive by one request the caller itself rejected, and a Redis failure
+ * is swallowed exactly as in the check (fail open).
+ */
+export async function refundSharedRateLimit(
+  key: string,
+  config: RateLimitConfig,
+  now: number = Date.now(),
+  deps: {
+    client?: { send(command: string, args: string[]): Promise<unknown> } | null;
+    buildKey?: (raw: string) => string;
+  } = {}
+): Promise<void> {
+  const client = deps.client === undefined ? getRedisClient() : deps.client;
+
+  if (!client) {
+    const existing = buckets.get(key);
+
+    if (
+      existing &&
+      now - existing.windowStart < config.windowMs &&
+      existing.count > 0
+    ) {
+      existing.count -= 1;
+    }
+
+    return;
+  }
+
+  const window = Math.floor(now / config.windowMs);
+  const redisKey = (deps.buildKey ?? defaultRateLimitKey)(`${key}:${window}`);
+
+  try {
+    await withRedisCommandTimeout(
+      client.send("DECR", [redisKey]) as Promise<unknown>,
+      RATE_LIMIT_COMMAND_TIMEOUT_MS,
+      "rate-limit DECR"
+    );
+  } catch {
+    // Fail open, as the check does.
+  }
+}

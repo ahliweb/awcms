@@ -7700,6 +7700,12 @@ msgstr ""
 msgid "(no name)"
 msgstr ""
 
+msgid "Verification PIN"
+msgstr ""
+
+msgid "Enter the 6-digit PIN the bot sent to that Telegram chat. If you did not receive one, this is not your chat: press No."
+msgstr ""
+
 msgid "Yes, this is me"
 msgstr ""
 

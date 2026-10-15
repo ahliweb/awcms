@@ -7,9 +7,10 @@ import {
 import { confirmOwnBinding } from "../../../../../../modules/telegram-delivery/application/telegram-bindings";
 import { enqueueActivationNotice } from "../../../../../../modules/telegram-delivery/application/telegram-enqueue";
 import {
-  parseBindingIdBody,
+  parseConfirmBody,
   refuseNonInteractive
 } from "../../../../../../modules/telegram-delivery/application/telegram-interactive-guard";
+import { resolveTelegramHashRing } from "../../../../../../modules/telegram-delivery/domain/telegram-config";
 
 /**
  * `POST /api/v1/telegram/bindings/me/confirm` (Issue #965, ADR-0140 section 3 step
@@ -19,9 +20,15 @@ import {
  * or shoulder-surfed binds an attacker's chat at most to `pending_confirmation`,
  * and the prompt appears only here.
  *
- * Body `{ "bindingId": "<uuid>" }`: the chat the person was SHOWN. If a newer
- * code replaced it in the meantime the answer is 409, never a confirmation of a
- * chat they did not look at.
+ * Body `{ "bindingId": "<uuid>", "pin": "<6 digits>" }` (Issue #1008): the chat
+ * the person was SHOWN, and the PIN the bot sent to THAT chat. The PIN is proof
+ * of possession: the person has to read it in the chat they are binding. If a
+ * newer code replaced the binding in the meantime the answer is 409, never a
+ * confirmation of a chat they did not look at. A wrong PIN is `422
+ * TELEGRAM_PIN_INVALID` and is counted in the database; the fifth wrong answer
+ * ends the pending binding (`423 TELEGRAM_PIN_LOCKED`) and the person requests a
+ * new link. The count does not depend on the rate limiter, which fails open when
+ * Redis is down.
  *
  * Confirming replaces any binding the person already had (audited as a re-bind)
  * and queues one notice to the new chat saying which tenant it is now tied to.
@@ -55,13 +62,24 @@ export const POST = defineTenantRoute<{ payload: unknown }>({
       return refused;
     }
 
-    const bindingId = parseBindingIdBody(prepared.payload);
+    const body = parseConfirmBody(prepared.payload);
 
-    if (!bindingId) {
+    if (!body) {
       return fail(
         400,
         "VALIDATION_ERROR",
-        "Request body must be an object with the `bindingId` you were shown and nothing else."
+        "Request body must be an object with the `bindingId` you were shown, the 6-digit `pin` the bot sent, and nothing else."
+      );
+    }
+
+    // Fail closed: without the ring no PIN can be verified.
+    const hashRing = resolveTelegramHashRing();
+
+    if (!hashRing.ok) {
+      return fail(
+        503,
+        "TELEGRAM_MISCONFIGURED",
+        "Telegram is not fully configured on this deployment."
       );
     }
 
@@ -69,7 +87,9 @@ export const POST = defineTenantRoute<{ payload: unknown }>({
       tx,
       tenantId,
       auth.context.tenantUserId,
-      bindingId,
+      body.bindingId,
+      body.pin,
+      hashRing,
       { correlationId: locals.correlationId }
     );
 
@@ -86,6 +106,24 @@ export const POST = defineTenantRoute<{ payload: unknown }>({
         409,
         "TELEGRAM_BINDING_MISMATCH",
         "The chat waiting for confirmation is not the one you were shown. Reload the page and check it again."
+      );
+    }
+
+    if (result.outcome === "pin_invalid") {
+      return fail(
+        422,
+        "TELEGRAM_PIN_INVALID",
+        "That PIN is not right. Check the PIN the bot sent to your Telegram chat.",
+        {},
+        { attemptsLeft: result.attemptsLeft }
+      );
+    }
+
+    if (result.outcome === "pin_locked") {
+      return fail(
+        423,
+        "TELEGRAM_PIN_LOCKED",
+        "Too many wrong PINs. The pending chat was unlinked; request a new link."
       );
     }
 

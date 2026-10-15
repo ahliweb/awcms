@@ -41,16 +41,24 @@ paths:
         `X-Telegram-Bot-Api-Secret-Token` header is compared in constant time with
         `TELEGRAM_WEBHOOK_SECRET`, and a missing or wrong header (or an unset server
         secret) is a `401` with NO body, before any body is read or any database
-        work is done; (3) a per-address rate limit and the request-body limit;
-        (4) two commands from a PRIVATE chat only, `/start <code>` and `/stop`.
-        Everything else (any other text or command, media, edits, callback queries,
-        groups, supergroups, channels) is `200` with no reply.
+        work is done; (3) the request-body limit, then a per-CHAT rate limit (an
+        over-limit chat gets `200` with no reply, never `429`, and spends nothing
+        else, so one noisy user cannot cause `429`s for everyone behind Telegram's
+        few addresses), then a per-address rate limit; (4) two commands from a
+        PRIVATE chat only, `/start <code>` and `/stop`. Everything else (any other
+        text or command, media, edits, callback queries, groups, supergroups,
+        channels) is `200` with no reply. The shared limiter fails OPEN when Redis
+        is configured but unreachable, so the per-chat bucket is a fairness
+        control, not a security boundary.
 
 
         A reply to `/start` and `/stop` is the HTTP response to this request (the
         Bot API's webhook-reply form: a JSON `sendMessage` method object), not an
-        outbound call. Both commands are idempotent by construction, so no update
-        id is stored.
+        outbound call. The reply to a valid `/start` carries the one-time
+        verification PIN (Issue #1008) that the staff member must type into the
+        admin to confirm; only its keyed hash is stored. Both commands are
+        idempotent by construction (a code is consumed atomically, so a replayed
+        `/start` cannot mint a second PIN or binding), so no update id is stored.
       parameters:
         - name: X-Telegram-Bot-Api-Secret-Token
           in: header
@@ -307,11 +315,17 @@ paths:
         shoulder-surfed binds an attacker's chat at most to `pending_confirmation`.
         Confirming replaces any binding the person already had (audited as a
         re-bind, and one notice is queued to the new chat naming the tenant). The
-        body names the chat the person was shown; a different pending chat is a
-        409 (`TELEGRAM_BINDING_MISMATCH`). With nothing pending the answer is 404,
-        so a double click cannot confirm twice. A machine credential is refused
-        with 403 (`INTERACTIVE_SESSION_REQUIRED`). Requires
-        `telegram_delivery.links.create`.
+        body names the chat the person was shown and carries the 6-digit PIN the
+        bot sent to THAT chat when it received `/start` (proof of possession: the
+        person has to read the PIN in the chat they are binding, Issue #1008). A
+        different pending chat is a 409 (`TELEGRAM_BINDING_MISMATCH`). A wrong PIN
+        is a 422 (`TELEGRAM_PIN_INVALID`, `details.attemptsLeft`) and is counted in
+        the database; the fifth wrong PIN ends the pending binding and erases its
+        chat id (423 `TELEGRAM_PIN_LOCKED`) and the person requests a new link. A
+        pending binding created before PINs existed has none and cannot be
+        confirmed. With nothing pending the answer is 404, so a double click
+        cannot confirm twice. A machine credential is refused with 403
+        (`INTERACTIVE_SESSION_REQUIRED`). Requires `telegram_delivery.links.create`.
       requestBody:
         required: true
         content:
@@ -320,12 +334,17 @@ paths:
               type: object
               required:
                 - bindingId
+                - pin
               additionalProperties: false
               properties:
                 bindingId:
                   type: string
                   format: uuid
                   description: The chat the person was shown (`GET .../bindings/me`).
+                pin:
+                  type: string
+                  pattern: "^[0-9]{6}$"
+                  description: The verification PIN the bot sent to that chat.
       responses:
         "200":
           description: The binding is active.
@@ -359,6 +378,22 @@ paths:
           description: >-
             The chat waiting for confirmation is not the one named
             (`TELEGRAM_BINDING_MISMATCH`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: >-
+            The PIN is not right (`TELEGRAM_PIN_INVALID`); `error.details.attemptsLeft`
+            is how many wrong answers remain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "423":
+          description: >-
+            Too many wrong PINs: the pending binding was ended
+            (`TELEGRAM_PIN_LOCKED`).
           content:
             application/json:
               schema:
@@ -472,10 +507,16 @@ paths:
       description: >-
         High-risk and audited at `warning`: it removes a person's alert channel.
         The stored chat id is erased and the binding's queue cancelled at once.
-        Naturally idempotent rather than `Idempotency-Key`-ed: revoking an ended
-        binding finds nothing live and answers 404. One answer for "no such
-        binding" and "already ended". Requires `telegram_delivery.bindings.revoke`.
+        `Idempotency-Key` required (Issue #1008): a retry with the same key replays
+        the stored 200 instead of answering 404 for a binding the first call
+        already ended; the same key with a different binding is a 409; a refusal
+        is not stored. Without a key, revoking an ended binding finds nothing live
+        and answers 404, one answer for "no such binding" and "already ended". A
+        machine credential is refused with 403 (`INTERACTIVE_SESSION_REQUIRED`):
+        the key is filed per acting person, and deactivating the principal ends its
+        binding on the next sweep. Requires `telegram_delivery.bindings.revoke`.
       parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
         - name: id
           in: path
           required: true
@@ -514,6 +555,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/telegram/settings:
     get:
       operationId: getTelegramSettings
@@ -553,10 +600,15 @@ paths:
         High-risk (`configure`) and audited at `warning`. Turning it OFF ends every
         binding in the same transaction (the stored chat ids are erased and the
         queue cancelled), so a tenant that switches the channel off is not left
-        holding encrypted chat ids. Idempotent by construction (it sets a value;
-        repeating it changes nothing and writes no second audit row), so no
-        `Idempotency-Key`. The body is validated strictly: an unknown key is a
-        400. Requires `telegram_delivery.settings.configure`.
+        holding encrypted chat ids. `Idempotency-Key` required (Issue #1008): the
+        state is idempotent (it sets a value and writes no second audit row), but a
+        retry's ANSWER (`changed`, `revokedBindings`) would differ from the first;
+        with a key the retry replays the stored response, and the same key with a
+        different `enabled` is a 409. A machine credential is refused with 403
+        (`INTERACTIVE_SESSION_REQUIRED`). The body is validated strictly: an
+        unknown key is a 400. Requires `telegram_delivery.settings.configure`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -600,6 +652,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/telegram/diagnostics:
     get:
       operationId: getTelegramDiagnostics
