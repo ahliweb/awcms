@@ -168,7 +168,7 @@ export function cellProblem(
     if (depth >= 2) return `identifier ${receiver} cannot be traced`;
 
     const declaration = new RegExp(
-      `(?:const|let|var)\\s+${receiver.replace(/\$/g, "\\$")}\\s*(?::[^=]+)?=([\\s\\S]*?);`
+      `(?:const|let|var)\\s+${escapeRegExp(receiver)}\\s*(?::[^=]+)?=([\\s\\S]*?);`
     ).exec(code);
 
     if (declaration === null) {
@@ -189,6 +189,11 @@ export function cellProblem(
   return helperCall(receiver)
     ? null
     : `receiver \`${receiver.replace(/\s+/g, " ")}\` is not provably neutralised`;
+}
+
+/** Escapes every RegExp metacharacter, backslash included. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 /** Every comma-join in `code` whose cells are not provably neutralised. */
