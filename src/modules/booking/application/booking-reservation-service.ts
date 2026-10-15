@@ -293,6 +293,20 @@ async function lockReservation(
   return rows[0] ?? null;
 }
 
+/**
+ * Is this the `sql/180` guard trigger refusing an elapsed hold? Matches the
+ * SQLSTATE (55000, object_not_in_prerequisite_state) AND the `HOLD_EXPIRED` tag
+ * the trigger puts in its message, so the module's other 55000 refusals (a
+ * shortened hold, an illegal transition) are never mistaken for it.
+ */
+function isHoldExpiredTrigger(error: unknown): boolean {
+  return (
+    error instanceof Bun.SQL.PostgresError &&
+    String(error.errno) === "55000" &&
+    /awcms_booking: HOLD_EXPIRED:/.test(error.message)
+  );
+}
+
 /** The state each verb leaves a reservation in: asking for it again is a replay. */
 const TARGET_STATUS: Readonly<Record<TransitionAction, ReservationStatus>> = {
   confirm: "confirmed",
@@ -455,10 +469,34 @@ export async function transitionReservation(
       : false;
   const reasonCode = action === "cancel" ? (input.reasonCode ?? null) : null;
 
-  const updated = (await applyUpdate(tx, ctx, row, action, decision.to, {
-    lateCancellation,
-    reasonCode
-  })) as { id: string }[];
+  // The `held -> confirmed` guard trigger (sql/180) judges the hold by its OWN
+  // `clock_timestamp()`, a few milliseconds after the read above. A hold that
+  // elapses in that window makes the UPDATE raise 55000 HOLD_EXPIRED even though
+  // the application judged it live (#1025). That is the same answer as an
+  // elapsed hold, so it becomes the refusal, not a 500. The UPDATE runs in a
+  // savepoint so the failed statement cannot leave the transaction aborted; it
+  // is the first write, so nothing (history, audit, outbox) exists to undo.
+  const savepoint = "booking_transition_update";
+  let updated: { id: string }[];
+
+  await tx.unsafe(`SAVEPOINT ${savepoint}`);
+
+  try {
+    updated = (await applyUpdate(tx, ctx, row, action, decision.to, {
+      lateCancellation,
+      reasonCode
+    })) as { id: string }[];
+    await tx.unsafe(`RELEASE SAVEPOINT ${savepoint}`);
+  } catch (error) {
+    await tx.unsafe(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    await tx.unsafe(`RELEASE SAVEPOINT ${savepoint}`);
+
+    if (isHoldExpiredTrigger(error)) {
+      return refuse("HOLD_EXPIRED", "The hold has expired.");
+    }
+
+    throw error;
+  }
 
   if (updated.length !== 1) {
     // Unreachable while the row is locked and its status was just read.

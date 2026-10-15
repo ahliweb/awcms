@@ -1245,6 +1245,99 @@ suite("booking reservation transitions (Issue #941, ADR-0131)", () => {
     });
   });
 
+  describe("a confirm whose hold elapses between the clock read and the UPDATE (#1025)", () => {
+    /**
+     * Forces the window deterministically: the hold has ~2 s left when the
+     * service reads the clock under the row lock, and the confirm UPDATE is held
+     * back 2.6 s before it reaches the database, so the `held -> confirmed`
+     * guard trigger (sql/180) judges the hold elapsed after the application
+     * judged it live. Without the fix the trigger's 55000 HOLD_EXPIRED escapes
+     * as an exception (a 500); with it the savepoint rolls back and the call
+     * returns the refusal.
+     */
+    function delayedConfirmTx(tx: Bun.TransactionSQL): Bun.TransactionSQL {
+      return new Proxy(tx, {
+        apply(target, thisArg, args: unknown[]) {
+          const strings = args[0] as readonly string[] | undefined;
+          const text = Array.isArray(strings) ? strings.join("?") : "";
+
+          if (text.includes("SET status = 'confirmed'")) {
+            return new Promise((resolve, reject) => {
+              setTimeout(() => {
+                Reflect.apply(target, thisArg, args).then(resolve, reject);
+              }, 2600);
+            });
+          }
+
+          return Reflect.apply(target, thisArg, args);
+        }
+      });
+    }
+
+    async function auditCount(reservationId: string): Promise<number> {
+      const rows = (await getAdminSql()`
+        SELECT count(*)::int AS n FROM awcms_audit_events
+        WHERE module_key = 'booking' AND resource_id = ${reservationId}
+      `) as { n: number }[];
+
+      return rows[0]!.n;
+    }
+
+    test("the service returns the HOLD_EXPIRED refusal and writes nothing", async () => {
+      const fixture = await newFixture(TENANT_A);
+      const hold = await created(TENANT_A, fixture);
+      const eventsBefore = (await domainEvents(hold.id)).length;
+      const auditBefore = await auditCount(hold.id);
+
+      await setHoldExpiry(hold.id, "clock_timestamp() + interval '2 seconds'");
+
+      const outcome = await tenantTx(TENANT_A, (tx) =>
+        transitionReservation(
+          delayedConfirmTx(tx),
+          ctxOf(TENANT_A),
+          hold.id,
+          "confirm"
+        )
+      );
+
+      expect(outcome).toMatchObject({
+        outcome: "refused",
+        code: "HOLD_EXPIRED",
+        httpStatus: 409
+      });
+
+      const final = (await getAdminSql()`
+        SELECT status FROM awcms_booking_reservations WHERE id = ${hold.id}
+      `) as { status: string }[];
+
+      expect(final[0]!.status).toBe("held");
+      expect(await liveAllocations(hold.id)).toBe(1);
+      expect(await historyKinds(hold.id)).toEqual(["created", "held"]);
+      expect(await auditCount(hold.id)).toBe(auditBefore);
+      expect((await domainEvents(hold.id)).length).toBe(eventsBefore);
+    });
+
+    test("the BookingPort confirm refuses with HOLD_EXPIRED instead of throwing", async () => {
+      const fixture = await newFixture(TENANT_A);
+      const hold = await created(TENANT_A, fixture);
+
+      await setHoldExpiry(hold.id, "clock_timestamp() + interval '2 seconds'");
+
+      const outcome = await tenantTx(TENANT_A, (tx) =>
+        bookingPort.confirm(delayedConfirmTx(tx), {
+          tenantId: TENANT_A,
+          correlationId: crypto.randomUUID(),
+          actorTenantUserId: ACTORS.get(TENANT_A)!,
+          reservationId: hold.id,
+          idempotencyKey: `confirm-${crypto.randomUUID()}`
+        })
+      );
+
+      expect(outcome).toEqual({ ok: false, reason: "HOLD_EXPIRED" });
+      expect(await historyKinds(hold.id)).toEqual(["created", "held"]);
+    });
+  });
+
   describe("no event and no audit row carries personal data", () => {
     test("the customer reference, the note and the cancellation reason never leave the reservation", async () => {
       const fixture = await newFixture(TENANT_A, { cutoffSeconds: 60 });
