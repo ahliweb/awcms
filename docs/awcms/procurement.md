@@ -217,7 +217,7 @@ Known limits, stated explicitly (ADR-0128):
 - On anonymisation the supplier's `profile_id` link is **retained** (it resolves to an anonymised profile); the trading name is retained under the financial_tax obligation.
 - Adding an identifier the supplier already holds is idempotent (a uniform `201` acknowledgement of type, label, masked value and classification — no id, no timestamp — identical for a fresh and an already-held value, so it is no equality oracle); soft-deleted suppliers' identifiers are unreachable until restore; the supplier report lists soft-deleted suppliers with `deleted: true`.
 
-- **DB-level limit of the approval rule.** The database refuses `finalised`/`reversed` unless approval is `not_required|approved` and fixes the instance after submit, but it trusts the application at `draft → submitted`: it cannot tell that an `approved` status written at submit came from a real workflow decision.
+- **The database follows the workflow engine's verdict (#1045, `sql/300`).** At `draft → submitted` the bound `approval_instance_id` must be this tenant's instance, of resource type `procurement_document`, naming this document, requested by the submitter, and its status must agree with the recorded `approval_status` (`pending`, or the settled verdict when the workflow finished at start); a document that needs no approval binds no instance. Any later move of `approval_status` out of `pending` re-reads the instance `FOR SHARE` and requires `approved` for `approved`, and `rejected` or `cancelled` for `rejected` (a cancelled request is never an approval). The trigger function pins `search_path` and schema-qualifies the instance table. The runtime role can therefore no longer forge an approval and then finalise.
 
 Recorded follow-ups:
 

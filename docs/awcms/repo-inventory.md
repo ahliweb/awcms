@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 215   |
+| Migrations                          | 216   |
 | `awcms_*` tables                    | 216   |
 | Tables with `FORCE` RLS             | 198   |
 | RLS-free tables (global, by design) | 18    |
@@ -273,6 +273,7 @@
 | 213 | `sql/281_awcms_hr_attendance_correction_decider_nullable.sql`      |
 | 214 | `sql/284_awcms_booking_reminder_intents.sql`                       |
 | 215 | `sql/285_awcms_booking_reminder_functions.sql`                     |
+| 216 | `sql/300_awcms_procurement_approval_binding.sql`                   |
 
 ### Tables & Row-Level Security
 
