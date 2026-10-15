@@ -9,24 +9,28 @@
  * constraints on `awcms_booking_resource_allocations`, `sql/180`), a reservation
  * state machine enforced by trigger, and an append-only transition history.
  *
- * ## What exists, and what does not (slices #937 to #939)
+ * ## What exists, and what does not (slices #937 to #940)
  *
- * What exists: the descriptor, the schema (`sql/180`, `sql/186`), the permission
- * catalogue (`sql/181`), the PURE reservation state machine
+ * What exists: the descriptor, the schema (`sql/180`, `sql/186`, `sql/204`), the
+ * permission catalogue (`sql/181`), the PURE reservation state machine
  * (`domain/booking-reservation-state.ts`), the guard literals and the audit
- * event names; the availability read and the schedule routes (Issue #938); and
- * the ALLOCATOR slice (Issue #939): `application/booking-allocator.ts` (units
+ * event names; the availability read and the schedule routes (Issue #938); the
+ * ALLOCATOR slice (Issue #939): `application/booking-allocator.ts` (units
  * claimed all-or-none under the exclusion constraint), `booking-hold-expiry.ts`
  * (lazy reclaim plus the reaper primitive), `booking-hold-service.ts`
  * (`placeHold`, the claim a reservation route will call),
- * `booking-reconciliation.ts` and the job `booking:holds:expire`. What does NOT
- * exist yet, deliberately: stay claims and blocks as allocation rows (Issue
- * #940), the reservation HTTP routes, OpenAPI paths for them, AsyncAPI channels,
- * the admin screens and the reporting projections (Issues #941, #942). The module
- * therefore ships `experimental`, declares no `navigation`, and no route reaches
- * the allocator: it is the "feature flag off" the issue asks for -- a status
- * ADR-0021 allows without an admin screen, and the one a later PR flips to
- * `active` together with its first screen.
+ * `booking-reconciliation.ts` and the job `booking:holds:expire`; and the STAY
+ * slice (Issue #940, ADR-0135): stay claims through the same allocator and
+ * `placeHold` (`stay: { checkInDate, checkOutDate }`, `domain/booking-stay.ts`),
+ * and blocked nights as allocation rows owned by `resource_blocks`
+ * (`application/booking-block-service.ts`: `createBlock`, `releaseBlock`,
+ * `BLOCK_CONFLICT`). What does NOT exist yet, deliberately: the reservation HTTP
+ * routes, the HTTP routes for blocks, OpenAPI paths for them, AsyncAPI channels,
+ * the admin screens and the reporting projections (Issues #941, #942). The
+ * module therefore ships `experimental`, declares no `navigation`, and no route
+ * reaches the allocator: it is the "feature flag off" the issue asks for -- a
+ * status ADR-0021 allows without an admin screen, and the one a later PR flips
+ * to `active` together with its first screen.
  *
  * ## No money, no product, no customer name
  *

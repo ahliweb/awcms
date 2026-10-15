@@ -24,6 +24,10 @@ export const BOOKING_AUDIT_EVENTS = {
   offeringUpdated: { action: "booking.offering.updated", severity: "info" },
   offeringDeleted: { action: "booking.offering.deleted", severity: "warning" },
   scheduleChanged: { action: "booking.schedule.changed", severity: "info" },
+  // Blocked nights take sellable inventory out of sale (booking.md section 9):
+  // placing one is `warning`, returning the nights to sale is `info`.
+  blockCreated: { action: "booking.block.created", severity: "warning" },
+  blockReleased: { action: "booking.block.released", severity: "info" },
   policyConfigured: {
     action: "booking.policy.configured",
     severity: "warning"

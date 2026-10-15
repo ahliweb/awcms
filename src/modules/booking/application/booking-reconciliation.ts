@@ -26,8 +26,21 @@
  * exact count and up to `SAMPLE_SIZE` ids, so a report stays small however large
  * the drift. The checks scan the tenant's rows; this is an on-demand operator
  * read (permission `booking.reservations.reconcile`, wired by Issue #941), not a
- * hot path. Stay-specific and block-specific checks (a block allocation without
- * an active block, and the reverse) arrive with those rows in Issue #940.
+ * hot path.
+ *
+ * ## Stays and blocks (Issue #940, ADR-0135)
+ *
+ * A stay allocation is checked against its item by the same queries as a slot
+ * (`allocation_item_mismatch` compares `[stay_from, stay_to)` with the item's
+ * `[check_in_date, check_out_date)`; `allocation_granularity_mismatch` compares
+ * an allocation's granularity with its resource's `booking_mode`). A block has
+ * rows of its own: three checks prove them -- a live block row whose block is
+ * released (`block_allocation_orphan`), an active block that does not own
+ * exactly the rows its units call for (`block_missing_allocation`), and a row
+ * whose resource, unit or dates differ from its block's
+ * (`block_allocation_mismatch`). `sql/204` makes the first impossible through
+ * the application role (the block's release trigger), so a finding there means
+ * a writer that bypassed it.
  */
 import { REAPER_GRACE_SECONDS } from "../domain/booking-allocation";
 
@@ -46,7 +59,10 @@ export const RECONCILIATION_CHECKS = [
   "reservation_envelope_mismatch",
   "lineage_broken",
   "missing_created_event",
-  "missing_status_event"
+  "missing_status_event",
+  "block_allocation_orphan",
+  "block_missing_allocation",
+  "block_allocation_mismatch"
 ] as const;
 export type ReconciliationCheck = (typeof RECONCILIATION_CHECKS)[number];
 
@@ -329,6 +345,75 @@ export async function runReconciliation(
               AND e.kind = r.status
           )
         ORDER BY r.id
+        LIMIT ${sample}
+      `) as IdRow[]
+    )
+  );
+
+  // 12. A live blocked night whose block has been released: the nights were
+  //     never returned to sale.
+  findings.push(
+    await runCheck(
+      "block_allocation_orphan",
+      (await tx`
+        SELECT a.id, count(*) OVER () AS total
+        FROM awcms_booking_resource_allocations a
+        JOIN awcms_booking_resource_blocks b
+          ON b.tenant_id = a.tenant_id AND b.id = a.block_id
+        WHERE a.tenant_id = ${tenantId}
+          AND a.released_at IS NULL
+          AND b.status <> 'active'
+        ORDER BY a.id
+        LIMIT ${sample}
+      `) as IdRow[]
+    )
+  );
+
+  // 13. An active block that does not own exactly one live row per unit it
+  //     covers: the named unit, or every unit of the resource. A resource that
+  //     gained a unit after the block was placed shows here too -- the block
+  //     does not cover it.
+  findings.push(
+    await runCheck(
+      "block_missing_allocation",
+      (await tx`
+        SELECT b.id, count(*) OVER () AS total
+        FROM awcms_booking_resource_blocks b
+        WHERE b.tenant_id = ${tenantId}
+          AND b.status = 'active'
+          AND (
+            SELECT count(*) FROM awcms_booking_resource_allocations a
+            WHERE a.tenant_id = b.tenant_id AND a.block_id = b.id
+              AND a.released_at IS NULL
+          ) <> CASE WHEN b.resource_unit_id IS NULL
+                    THEN (SELECT count(*) FROM awcms_booking_resource_units u
+                          WHERE u.tenant_id = b.tenant_id
+                            AND u.resource_id = b.resource_id)
+                    ELSE 1 END
+        ORDER BY b.id
+        LIMIT ${sample}
+      `) as IdRow[]
+    )
+  );
+
+  // 14. A blocked night whose resource, unit or dates differ from its block's.
+  findings.push(
+    await runCheck(
+      "block_allocation_mismatch",
+      (await tx`
+        SELECT a.id, count(*) OVER () AS total
+        FROM awcms_booking_resource_allocations a
+        JOIN awcms_booking_resource_blocks b
+          ON b.tenant_id = a.tenant_id AND b.id = a.block_id
+        WHERE a.tenant_id = ${tenantId}
+          AND (
+            a.resource_id <> b.resource_id
+            OR (b.resource_unit_id IS NOT NULL
+                AND a.resource_unit_id <> b.resource_unit_id)
+            OR a.stay_from <> b.block_from
+            OR a.stay_to <> b.block_to
+          )
+        ORDER BY a.id
         LIMIT ${sample}
       `) as IdRow[]
     )
