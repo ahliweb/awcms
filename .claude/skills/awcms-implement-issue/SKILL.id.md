@@ -5,7 +5,7 @@ description: Kerjakan satu issue/sprint AWCMS secara atomic dari awal sampai lap
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:919fedad9717462f7023d50fba9541cef5444e2f46af626aacb50c5fca61123a -->
+<!-- i18n-source-hash: sha256:7ac0cbf92adaf245f48fcdbd2220dc2185b69b3d3081a73c0865e210308991ac -->
 
 # AWCMS — Implement Issue / Sprint (Atomic)
 
@@ -52,6 +52,8 @@ bun run api:spec:check
 bun test
 bun run build
 ```
+
+Sebelum push, jalankan `bun run check` **penuh** (itu hanya job CI `quality`) lalu **`bun run ci:local`** — ia menjalankan setiap job lain di `ci.yml`/`changesets.yml` secara lokal (repo hygiene, kebijakan changeset, tes integrasi DB-gated terhadap database sementara, lantai Bun 1.3.0, E2E smoke) dengan perintah workflow sendiri. Commit dulu (job changeset membandingkan riwayat yang sudah di-commit). Salin hasil tiap job ke `Test results` di laporan: job yang dilaporkan `ci:local` sebagai `SKIPPED (alasan)` **belum terverifikasi**, dan exit code-nya bukan nol (2) — jangan pernah menuliskannya sebagai lulus. Ia tidak menggantikan required checks GitHub (ruleset `11653326`); rincian di [`docs/awcms/ci-local.md`](../../../docs/awcms/ci-local.md).
 
 ## Definition of Done
 

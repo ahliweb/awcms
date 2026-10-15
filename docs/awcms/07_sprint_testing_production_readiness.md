@@ -189,6 +189,22 @@ flowchart TB
 
 The pyramid: many unit tests at the base, few end-to-end at the top; security & performance tests stand guard.
 
+> **Running every layer the way CI does: `bun run ci:local` (Issue #1001).**
+> `bun run check` runs the unit/contract layers with `DATABASE_URL` blank, so the
+> DB-gated integration layer and the browser layer only ever ran on GitHub. The
+> `ci:local` runner (`scripts/ci-local.ts`, reference in
+> [`ci-local.md`](ci-local.md)) runs them on your machine with the workflows'
+> own commands: `integration` = `bun run db:migrate` + `bun test tests/integration/`
+> (harness suite) + the legacy ad-hoc file list, each against a throwaway database
+> it creates and drops; `e2e` = build, start the server, seed through
+> `POST /api/v1/setup/initialize`, `bun run test:e2e`; `minimum-supported` = the
+> Bun 1.3.0 floor; plus `hygiene`, `changesets` and `quality`. A job it cannot run
+> on that machine is `SKIPPED (reason)` and the exit code is non-zero, so "the
+> integration tests were skipped" can never read as "they passed". It is the
+> verification before a push; GitHub's required checks
+> (ruleset `11653326`, [`branch-protection.md`](branch-protection.md)) still gate
+> merging.
+
 > **Real browser E2E (Playwright + Bun).** The harness now **does exist**
 > in this repo (Issue #166, ported from awcms-mini): `playwright.config.ts` +
 > `tests/e2e/*.e2e.ts`, run via `bun run test:e2e` (→ `bun --bun

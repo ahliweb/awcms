@@ -240,6 +240,18 @@ branch protection in [`branch-protection.md`](branch-protection.md).
 The gates: the full `bun run check` chain, the DB-gated suite, Playwright E2E,
 CodeQL, GitGuardian, and a mandatory changeset for behaviour changes.
 
+**Before you push: `bun run ci:local`** ([`ci-local.md`](ci-local.md), Issue
+#1001). `bun run check` is only the `quality` job; `ci:local` also runs repo
+hygiene, the changeset policy, the DB-gated integration suites against a
+throwaway database, the Bun 1.3.0 floor and the Playwright smoke, with the
+workflows' own commands in their order, and prints one table. A job it cannot run
+here is reported `SKIPPED (reason)` and the exit code is non-zero — never a
+silent pass. `tests/ci-local-parity.test.ts` keeps its job list in step with
+`ci.yml` and `changesets.yml`, so a new workflow job cannot be silently missing.
+**It does not replace the gates above:** GitHub's required checks (ruleset
+`11653326`, [`branch-protection.md`](branch-protection.md)) still decide whether a
+PR may merge; the local run is the verification before the push, not instead of it.
+
 **A trap that has already bitten:** a stacked PR (base is not `main`) runs **ZERO**
 gates, while `gh pr checks` still looks green because GitGuardian passes on its
 own.

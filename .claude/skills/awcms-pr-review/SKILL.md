@@ -22,7 +22,7 @@ Follow `docs/awcms/12_generator_prompt.md` (PR Review Prompt), `docs/awcms/09_ro
 9. Soft delete policy for deletable resources; posted/append-only entities are not deleted.
 10. Complete input validation; standard error responses.
 11. Sensitive data masked.
-12. Relevant tests exist & pass; build passes.
+12. Relevant tests exist & pass; build passes. Ask which jobs of `bun run ci:local` the author ran: it covers the CI jobs `bun run check` does not (hygiene, changeset policy, DB-gated integration, Bun 1.3.0 floor, E2E). A job it reported `SKIPPED (reason)` is **unverified, not passed** — the PR's GitHub checks (ruleset `11653326`) are what cover it, and they still gate the merge.
 13. Docs updated; commits follow the convention `<type>(<scope>): <summary>`.
 14. **Does the diff touch `.astro`? Read the types with your EYES.** `bun run typecheck`
     (`tsc --noEmit`) **cannot parse `.astro`** and skips it silently,

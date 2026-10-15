@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:4c3d5409593be4abfda5f4e44acb4947ec626be77c6866553b183f457c772304 -->
+<!-- i18n-source-hash: sha256:c8fd997ee886149ffc969d6339e4a8a0157df019c6c275a155dfb3a948abd933 -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -190,6 +190,23 @@ flowchart TB
 ```
 
 Piramida: banyak unit test di dasar, sedikit end-to-end di puncak; security & performance test mengawal.
+
+> **Menjalankan setiap lapisan seperti CI: `bun run ci:local` (Issue #1001).**
+> `bun run check` menjalankan lapisan unit/kontrak dengan `DATABASE_URL`
+> dikosongkan, sehingga lapisan integrasi DB-gated dan lapisan browser selama ini
+> hanya berjalan di GitHub. Runner `ci:local` (`scripts/ci-local.ts`, rujukan di
+> [`ci-local.md`](ci-local.md)) menjalankannya di mesin Anda dengan perintah
+> workflow sendiri: `integration` = `bun run db:migrate` + `bun test
+tests/integration/` (suite harness) + daftar berkas legacy ad-hoc, masing-masing
+> terhadap database sementara yang dibuat dan dihapusnya; `e2e` = build,
+> menyalakan server, seed lewat `POST /api/v1/setup/initialize`, `bun run
+test:e2e`; `minimum-supported` = lantai Bun 1.3.0; ditambah `hygiene`,
+> `changesets`, dan `quality`. Job yang tidak bisa dijalankan di mesin itu
+> berstatus `SKIPPED (alasan)` dan exit code-nya bukan nol, sehingga "tes
+> integrasi di-skip" tidak pernah terbaca sebagai "lulus". Ini verifikasi sebelum
+> push; required checks GitHub (ruleset
+> `11653326`, [`branch-protection.md`](branch-protection.md)) tetap yang
+> menentukan merge.
 
 > **E2E browser sungguhan (Playwright + Bun).** Harness-nya kini **sudah ada**
 > di repo ini (Issue #166, port dari awcms-mini): `playwright.config.ts` +
