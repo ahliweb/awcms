@@ -193,6 +193,20 @@ of scoping), the create endpoint rejects a non-empty `filter` with `400
 NOT_IMPLEMENTED` until a follow-up issue defines its schema and wires it
 into generation (reviewer + security-auditor finding, PR #781).
 
+**Payroll data is never exportable (Issue #978, PS-18).** An export is a file
+that outlives the request and is opened in a spreadsheet, so it is the widest copy
+of a projection there is. No projection may read an `awcms_hr_payroll_*`,
+`awcms_hr_compensation`, `awcms_hr_payout_accounts` or `awcms_hr_payslips` table,
+or be declared by `hr_payroll`: `reporting:projections:registry:check` refuses the
+descriptor, the three engines refuse to build SQL for such a table, and
+`generateProjectionExport` refuses again at write time
+(`assertProjectionExportable`). The single list of forbidden names is
+`src/modules/_shared/payroll-data-boundary.ts`; the route to a future payroll
+report (own permission, minimum cohort size, own ADR) is in
+`docs/awcms/hr-payroll.md` section 13.3. CSV cells that begin with `=`, `+`, `-`,
+`@`, TAB or CR get a leading single quote through the shared
+`src/lib/security/csv-formula.ts`.
+
 ### API
 
 `GET /api/v1/reports/projections[/{key}]`,

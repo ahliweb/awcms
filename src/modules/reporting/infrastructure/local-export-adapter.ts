@@ -21,38 +21,22 @@
 import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
+import { csvCellForWrite } from "../../../lib/security/csv-formula";
+
 export type ExportRow = {
   metricKey: string;
   label: string;
   value: number;
 };
 
-function csvEscape(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  const text = typeof value === "string" ? value : String(value);
-
-  // Spreadsheet-formula-injection neutralization: a metric label is
-  // code-declared (`ProjectionDescriptor.metricLabels`, never tenant
-  // input) so this is defense in depth, not the primary control — still
-  // applied unconditionally per this repo's general CSV-export posture.
-  const neutralized = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-
-  if (/[",\n\r]/.test(neutralized)) {
-    return `"${neutralized.replace(/"/g, '""')}"`;
-  }
-
-  return neutralized;
-}
-
 function serializeCsv(rows: readonly ExportRow[]): string {
   const header = ["metricKey", "label", "value"].join(",");
   const lines = rows.map((row) =>
-    [csvEscape(row.metricKey), csvEscape(row.label), csvEscape(row.value)].join(
-      ","
-    )
+    [
+      csvCellForWrite(row.metricKey),
+      csvCellForWrite(row.label),
+      csvCellForWrite(row.value)
+    ].join(",")
   );
   return [header, ...lines].join("\n");
 }

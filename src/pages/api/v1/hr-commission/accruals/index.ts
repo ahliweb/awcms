@@ -1,5 +1,6 @@
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import type { CommissionAccrualRequest } from "../../../../../modules/_shared/ports/commission-accrual-port";
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import { accrueRefusal } from "../../../../../modules/hr-commission/application/hr-commission-accrual-route-support";
 import {
@@ -77,19 +78,31 @@ export const GET = defineTenantRoute<ListPrepared>({
     };
   },
   authorize: HR_COMMISSION_GUARDS.accruals.read,
-  handler: async ({ tx, tenantId, prepared }) =>
-    ok(
-      await listAccruals(
-        tx,
-        tenantId,
-        {
-          employmentId: prepared.employmentId,
-          status: prepared.status,
-          sourceType: prepared.sourceType
-        },
-        prepared.cursor ?? undefined
-      )
-    )
+  handler: async ({ tx, tenantId, auth, prepared, locals }) => {
+    const page = await listAccruals(
+      tx,
+      tenantId,
+      {
+        employmentId: prepared.employmentId,
+        status: prepared.status,
+        sourceType: prepared.sourceType
+      },
+      prepared.cursor ?? undefined
+    );
+
+    // PS-18: a read of people's earnings is an audited event (ids and counts
+    // only, coalesced per actor and window), on this transaction.
+    await recordSensitiveRead(tx, {
+      tenantId,
+      actorTenantUserId: auth.context.tenantUserId,
+      permission: "hr_commission.accruals.read",
+      itemCount: page.accruals.length,
+      resourceIds: page.accruals.map((accrual) => accrual.id),
+      correlationId: locals.correlationId
+    });
+
+    return ok(page);
+  }
 });
 
 type CreatePrepared = {
@@ -163,6 +176,19 @@ export const POST = defineTenantRoute<CreatePrepared>({
 
         const stored = await getAccrual(tx, tenantId, result.accrual.id);
 
+        // PS-18: a REPLAY hands back an existing accrual (amount, status),
+        // which is a read of someone's earnings. A first-time accrual is
+        // audited by auditAccrued above.
+        if (result.outcome === "replayed") {
+          await auditAccrualReplayRead(
+            tx,
+            tenantId,
+            auth.context.tenantUserId,
+            result.accrual.id,
+            locals.correlationId
+          );
+        }
+
         return {
           status: result.outcome === "accrued" ? 201 : 200,
           body: {
@@ -170,6 +196,39 @@ export const POST = defineTenantRoute<CreatePrepared>({
             accrual: stored!.accrual
           }
         };
+      },
+      async (storedBody) => {
+        const id = (
+          storedBody as { data?: { accrual?: { id?: unknown } } } | null
+        )?.data?.accrual?.id;
+
+        if (typeof id === "string") {
+          await auditAccrualReplayRead(
+            tx,
+            tenantId,
+            auth.context.tenantUserId,
+            id,
+            locals.correlationId
+          );
+        }
       }
     )
 });
+
+/** The read audit for a replayed POST, which returns a stored accrual. */
+function auditAccrualReplayRead(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  accrualId: string,
+  correlationId: string | undefined
+) {
+  return recordSensitiveRead(tx, {
+    tenantId,
+    actorTenantUserId,
+    permission: "hr_commission.accruals.read",
+    itemCount: 1,
+    resourceIds: [accrualId],
+    correlationId
+  });
+}

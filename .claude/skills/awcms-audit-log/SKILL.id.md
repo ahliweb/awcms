@@ -5,7 +5,7 @@ description: Tulis audit log untuk aksi high-risk AWCMS dengan redaction. Gunaka
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:3279d0c2d3760ecf4a8903170cf5efd35e9f601f9e174f863d31db9312df0bf9 -->
+<!-- i18n-source-hash: sha256:9d011d589da903da1196660d1f97823f4d8517aafeee20bf2b707dae658884b5 -->
 
 # AWCMS — Audit Log (High-Risk)
 
@@ -72,3 +72,19 @@ detail lengkap dan panduan troubleshooting operator-safe.
 ## Correlation ID & extension point
 
 Sejak Issue #447: `correlationId` pada `AuditEventInput` cukup diisi dari `context.locals.correlationId` (jangan generate UUID baru sendiri); dan setiap `recordAuditEvent` sukses otomatis memanggil extension point `AuditExportHook` bila terpasang (default no-op) — lihat `awcms-observability` untuk aturan lengkap sebelum memasang/mengimplementasikan consumer di titik itu.
+
+## Pembacaan sensitif (Issue #978, PS-18)
+
+PEMBACAAN data yang berbahaya di tangan yang salah (gaji, gaji tingkat-baris, slip
+gaji karyawan lain, ekspor apa pun) adalah peristiwa yang dapat diaudit. Panggil
+`recordSensitiveRead(tx, { tenantId, actorTenantUserId, permission, itemCount,
+resourceIds })` (`src/modules/logging/application/sensitive-read-audit.ts`) pada
+transaksi YANG SAMA dengan pembacaan, setelah otorisasi dan sebelum data
+dikembalikan. Ia menerima KUNCI IZIN dan mencari jenis, severity, dan jendela di
+`src/modules/_shared/sensitive-reads.ts`, sehingga route tidak bisa meremehkan
+dirinya. Ia mencatat id (hanya UUID) dan jumlah, tidak pernah nominal; penelusuran
+digabung per aktor, jenis, dan jendela (`awcms_sensitive_read_windows`, `sql/224`);
+ekspor tidak pernah digabung; dan ia fail-closed. `bun run sensitive-reads:check`
+menggagalkan route yang menjaga izin tercakup tanpa memanggilnya, dan izin read,
+list, export, atau download `hr_payroll` tanpa kebijakan dan tanpa alasan di
+`NOT_SENSITIVE_READS`. Desain lengkap: `docs/awcms/hr-payroll.id.md` bagian 13.3.

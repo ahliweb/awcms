@@ -23,6 +23,11 @@
  */
 import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import {
+  CSV_NEUTRALISED_MARKER,
+  csvCellForWrite,
+  restoreCsvCell
+} from "../../../lib/security/csv-formula";
 import type {
   ArchivePort,
   ArchiveWriteInput,
@@ -62,25 +67,6 @@ function buildArtifactPath(
   return { dir, filePath: `${dir}/${fileName}` };
 }
 
-function csvEscape(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  const text =
-    typeof value === "string"
-      ? value
-      : value instanceof Date
-        ? value.toISOString()
-        : JSON.stringify(value);
-
-  if (/[",\n\r]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-
-  return text;
-}
-
 function serializeJsonl(rows: readonly Record<string, unknown>[]): string {
   return rows.map((row) => JSON.stringify(row)).join("\n");
 }
@@ -91,12 +77,20 @@ function serializeCsv(rows: readonly Record<string, unknown>[]): string {
   }
 
   const columns = Object.keys(rows[0]!);
-  const header = columns.map(csvEscape).join(",");
+  // `reversible`: this file is parsed back by `deserializeCsv`, so the
+  // formula-neutralising quote (Issue #978, PS-18) must be undone exactly.
+  const header = columns
+    .map((column) => csvCellForWrite(column, { reversible: true }))
+    .join(",");
   const lines = rows.map((row) =>
-    columns.map((column) => csvEscape(row[column])).join(",")
+    columns
+      .map((column) => csvCellForWrite(row[column], { reversible: true }))
+      .join(",")
   );
 
-  return [header, ...lines].join("\n");
+  // The marker tells `deserializeCsv` this file was written with reversible
+  // neutralisation; an older archive has none and restores raw (audit L2).
+  return [CSV_NEUTRALISED_MARKER, header, ...lines].join("\n");
 }
 
 function deserializeJsonl(content: string): Record<string, unknown>[] {
@@ -116,7 +110,7 @@ function deserializeJsonl(content: string): Record<string, unknown>[] {
  * general-purpose CSV parser for arbitrary external files.
  *
  * Parses the WHOLE document in one pass (never pre-splits on `\n` first) —
- * `serializeCsv`'s own `csvEscape` deliberately allows a literal newline inside a
+ * `serializeCsv`'s own cell writer (`csvCellForWrite`) deliberately allows a literal newline inside a
  * quoted field (matching RFC4180), so a line-based pre-split would incorrectly
  * cut a single row in two wherever an archived value happens to contain `\n`.
  * Quote state is tracked across the entire input; only an UNQUOTED `\n` ends a
@@ -191,7 +185,16 @@ function deserializeCsv(content: string): Record<string, unknown>[] {
     return [];
   }
 
-  const rows = parseCsvDocument(content);
+  // Only a file that carries the marker was neutralised by the writer; an
+  // archive written before Issue #978 restores raw. Header included: the writer
+  // neutralises both, and `restoreCsvCell` is its exact inverse.
+  const marked = content.startsWith(`${CSV_NEUTRALISED_MARKER}\n`);
+  const body = marked
+    ? content.slice(CSV_NEUTRALISED_MARKER.length + 1)
+    : content;
+  const rows = parseCsvDocument(body).map((fields) =>
+    marked ? fields.map(restoreCsvCell) : fields
+  );
   const header = rows[0]!;
 
   return rows.slice(1).map((fields) => {
