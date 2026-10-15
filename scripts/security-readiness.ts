@@ -3412,6 +3412,91 @@ export async function checkHrEmploymentLinksMatchProfile(): Promise<SecurityChec
   }
 }
 
+/**
+ * Commission accruals the beneficiary approved, released or paid themselves
+ * (Issue #1019). Before `sql/236`/`sql/237` the separation-of-duties trigger
+ * compared against a NULL when the employment had no linked login, so a
+ * self-approval made through an unlink and relink passed. The snapshot only
+ * exists for accruals backfilled or born after the fix, so this finds the ones
+ * where the snapshot (or the backfilled link) equals a stamped actor. Ids only.
+ */
+export async function reportSelfSettledCommissionAccruals(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<string[]> {
+  const rows = (await tx`
+    SELECT id FROM awcms_hr_commission_accruals
+    WHERE tenant_id = ${tenantId}
+      AND beneficiary_tenant_user_id IS NOT NULL
+      AND beneficiary_tenant_user_id IN (approved_by, released_by, paid_by)
+    ORDER BY id
+  `) as { id: string }[];
+
+  return rows.map((row) => row.id);
+}
+
+/**
+ * `warning`, like the link check above: it reports rows that already exist and
+ * decides nothing. One transaction per active tenant under RLS, uncapped scan,
+ * ids capped only in the evidence text.
+ */
+export async function checkCommissionAccrualsNotSelfSettled(): Promise<SecurityCheckResult> {
+  const name = "Commission accruals were not settled by their own beneficiary";
+  const severity: CheckSeverity = "warning";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const tenants = (await sql`
+      SELECT id FROM awcms_tenants WHERE status = 'active' ORDER BY id
+    `) as { id: string }[];
+    const flagged: string[] = [];
+    let total = 0;
+
+    for (const tenant of tenants) {
+      const ids = await withTenantOrThrow(
+        sql,
+        tenant.id,
+        (tx) => reportSelfSettledCommissionAccruals(tx, tenant.id),
+        { workClass: "maintenance" }
+      );
+
+      if (ids.length > 0) {
+        total += ids.length;
+        flagged.push(
+          `tenant ${tenant.id}: ${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ` …and ${ids.length - 5} more` : ""}`
+        );
+      }
+    }
+
+    if (flagged.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${total} commission accrual(s) were approved, released or paid by the login of their own beneficiary (ids only): ${flagged.slice(0, 20).join("; ")}. They predate the snapshot fix (Issue #1019) and escaped separation of duties; review each with the payroll owner.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `${tenants.length} active tenant(s) scanned; no accrual was settled by its own beneficiary.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify commission accrual separation of duties: ${errorMessage(error)}.`
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
@@ -3445,6 +3530,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkMfaEnrolmentAvailableForRequiredPermissions(),
     await checkMfaRequiredPermissionHolders(),
     await checkHrEmploymentLinksMatchProfile(),
+    await checkCommissionAccrualsNotSelfSettled(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt(),

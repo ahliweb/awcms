@@ -1561,7 +1561,9 @@ suite("hr_commission accrual ledger database invariants (Issue #951)", () => {
     });
 
     test("balances reconcile to the transitions; tampering outside the application is reported", async () => {
-      const second = await seedEmployment(TENANT_A);
+      const second = await seedEmployment(TENANT_A, {
+        tenantUserId: await seedTenantUser(TENANT_A, "second")
+      });
       await accrualAt(TENANT_A, employment, "pending", manager, "r1");
       await accrualAt(TENANT_A, employment, "approved", manager, "r2");
       await accrualAt(TENANT_A, second, "payable", manager, "r3");
@@ -1603,6 +1605,299 @@ suite("hr_commission accrual ledger database invariants (Issue #951)", () => {
       expect(dirty.statusMismatches).toEqual([paid]);
     });
   });
+
+  describe("the beneficiary login snapshot (Issue #1019)", () => {
+    // The link guard (sql/228) refuses a login of another profile; these
+    // tests re-point the link on purpose, as a maintenance session could.
+    const setLink = (employmentId: string, userId: string | null) =>
+      getAdminSql().begin(async (tx) => {
+        await tx.unsafe(
+          "ALTER TABLE awcms_hr_employments DISABLE TRIGGER awcms_hr_employments_link_guard"
+        );
+        await tx`
+          UPDATE awcms_hr_employments SET tenant_user_id = ${userId}
+          WHERE id = ${employmentId}
+        `;
+        await tx.unsafe(
+          "ALTER TABLE awcms_hr_employments ENABLE TRIGGER awcms_hr_employments_link_guard"
+        );
+      });
+
+    const snapshotOf = async (id: string): Promise<string | null> =>
+      (
+        (await getAdminSql()`
+          SELECT beneficiary_tenant_user_id AS b FROM awcms_hr_commission_accruals
+          WHERE id = ${id}
+        `) as { b: string | null }[]
+      )[0]!.b;
+
+    const rawApprove = (id: string, by: string) =>
+      inTenant(
+        TENANT_A,
+        (tx) => tx`
+          UPDATE awcms_hr_commission_accruals
+          SET status = 'approved', approved_at = now(), approved_by = ${by}
+          WHERE id = ${id}
+        `
+      );
+
+    test("a birth stamps the employment's login; a writer-supplied value is discarded", async () => {
+      const id = await accrued(TENANT_A, sale(employment));
+
+      expect(await snapshotOf(id)).toBe(owner);
+
+      const ruleId = (
+        (await getAdminSql()`
+          SELECT id FROM awcms_hr_commission_rules WHERE tenant_id = ${TENANT_A}
+        `) as { id: string }[]
+      )[0]!.id;
+      const forged = (await inTenant(
+        TENANT_A,
+        (tx) => tx`
+          INSERT INTO awcms_hr_commission_accruals
+            (tenant_id, employment_id, rule_id, rule_key, rule_version,
+             source_type, source_ref, calculation, base_amount, rate, amount,
+             currency_code, occurred_at, occurred_on, request_digest,
+             beneficiary_tenant_user_id)
+          VALUES (${TENANT_A}, ${employment}, ${ruleId}, 'upsell', 1,
+                  'sale_line', 'forged', 'percent', 1, 2.5, 0.03, 'XTS',
+                  '2026-03-10T10:00:00Z', '2026-03-10', ${"a".repeat(64)},
+                  ${manager})
+          RETURNING id
+        `
+      )) as { id: string }[];
+
+      expect(await snapshotOf(forged[0]!.id)).toBe(owner);
+    });
+
+    test("an unlinked employment is born with no snapshot", async () => {
+      const unlinked = await seedEmployment(TENANT_A);
+      const id = await accrued(TENANT_A, sale(unlinked));
+
+      expect(await snapshotOf(id)).toBeNull();
+    });
+
+    test("the snapshot is a fact: it cannot be changed after birth", async () => {
+      const id = await accrued(TENANT_A, sale(employment));
+
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_hr_commission_accruals
+            SET beneficiary_tenant_user_id = ${manager} WHERE id = ${id}
+          `
+        ),
+        /immutable monetary facts|55000/
+      );
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_hr_commission_accruals
+            SET beneficiary_tenant_user_id = NULL WHERE id = ${id}
+          `
+        ),
+        /immutable monetary facts|55000/
+      );
+    });
+
+    test("the reported bypass is refused: unlink, self-approve, self-release, relink", async () => {
+      const id = await accrued(TENANT_A, sale(employment));
+
+      // Step 1: the beneficiary unlinks their own employment's login.
+      await setLink(employment, null);
+
+      // Step 2: they approve and release their own accrual, in the service...
+      const selfApprove = await transition(TENANT_A, id, "approve", owner);
+      expect(selfApprove).toEqual({
+        outcome: "sod_violation",
+        kind: "beneficiary"
+      });
+      // ...and in the database, were the service bypassed.
+      await assertRejected(
+        rawApprove(id, owner),
+        /beneficiary or the creator|55000/
+      );
+
+      // Step 3: relinking changes nothing either.
+      await setLink(employment, owner);
+      expect((await transition(TENANT_A, id, "approve", owner)).outcome).toBe(
+        "sod_violation"
+      );
+      await assertRejected(
+        rawApprove(id, owner),
+        /beneficiary or the creator|55000/
+      );
+
+      // The accrual never moved.
+      expect(await snapshotOf(id)).toBe(owner);
+      expect(await getAccrualStatus(id)).toBe("pending");
+    });
+
+    test("release and pay by the beneficiary are refused even while unlinked", async () => {
+      const id = await accrued(TENANT_A, sale(employment));
+
+      expect((await transition(TENANT_A, id, "approve", manager)).outcome).toBe(
+        "ok"
+      );
+      await setLink(employment, null);
+
+      expect((await transition(TENANT_A, id, "release", owner)).outcome).toBe(
+        "sod_violation"
+      );
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_hr_commission_accruals
+            SET status = 'payable', released_at = now(), released_by = ${owner}
+            WHERE id = ${id}
+          `
+        ),
+        /cannot release their own|55000/
+      );
+
+      // The two-person control still works with the login unlinked.
+      expect((await transition(TENANT_A, id, "release", manager)).outcome).toBe(
+        "ok"
+      );
+      expect((await transition(TENANT_A, id, "pay", owner)).outcome).toBe(
+        "sod_violation"
+      );
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_hr_commission_accruals
+            SET status = 'paid', paid_at = now(), paid_by = ${owner}
+            WHERE id = ${id}
+          `
+        ),
+        /cannot pay the accrual|55000/
+      );
+      expect((await transition(TENANT_A, id, "pay", payer)).outcome).toBe("ok");
+    });
+
+    test("re-pointing the link: both the snapshotted and the current login are the beneficiary", async () => {
+      const id = await accrued(TENANT_A, sale(employment));
+
+      await setLink(employment, payer);
+
+      expect((await transition(TENANT_A, id, "approve", owner)).outcome).toBe(
+        "sod_violation"
+      );
+      expect((await transition(TENANT_A, id, "approve", payer)).outcome).toBe(
+        "sod_violation"
+      );
+      await assertRejected(
+        rawApprove(id, payer),
+        /beneficiary or the creator|55000/
+      );
+      expect((await transition(TENANT_A, id, "approve", manager)).outcome).toBe(
+        "ok"
+      );
+    });
+
+    test("fail closed: no linked login and no snapshot refuses approve, release and pay (409 in the handler)", async () => {
+      const unlinked = await seedEmployment(TENANT_A);
+      const id = await accrued(TENANT_A, sale(unlinked));
+
+      expect(await transition(TENANT_A, id, "approve", manager)).toEqual({
+        outcome: "sod_violation",
+        kind: "beneficiary_unresolved"
+      });
+      await assertRejected(
+        rawApprove(id, manager),
+        /BENEFICIARY_LOGIN_UNRESOLVED/
+      );
+
+      // Release and pay are refused by the database too: put the row into
+      // `approved` / `payable` with the triggers off (a maintenance session),
+      // then attempt the next edge with them on.
+      await getAdminSql().begin(async (tx) => {
+        await tx.unsafe("SET LOCAL session_replication_role = replica");
+        await tx`UPDATE awcms_hr_commission_accruals
+                 SET status = 'approved', approved_at = now(), approved_by = ${manager}
+                 WHERE id = ${id}`;
+      });
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_hr_commission_accruals
+            SET status = 'payable', released_at = now(), released_by = ${payer}
+            WHERE id = ${id}
+          `
+        ),
+        /BENEFICIARY_LOGIN_UNRESOLVED/
+      );
+      await getAdminSql().begin(async (tx) => {
+        await tx.unsafe("SET LOCAL session_replication_role = replica");
+        await tx`UPDATE awcms_hr_commission_accruals
+                 SET status = 'payable', released_at = now(), released_by = ${payer}
+                 WHERE id = ${id}`;
+      });
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            UPDATE awcms_hr_commission_accruals
+            SET status = 'paid', paid_at = now(), paid_by = ${owner}
+            WHERE id = ${id}
+          `
+        ),
+        /BENEFICIARY_LOGIN_UNRESOLVED/
+      );
+
+      // Neither edge is open to the service either.
+      expect(await transition(TENANT_A, id, "pay", payer)).toEqual({
+        outcome: "sod_violation",
+        kind: "beneficiary_unresolved"
+      });
+
+      // Voiding stays the safe way out (of a pending accrual).
+      const pending = await accrued(
+        TENANT_A,
+        sale(unlinked, { source: { type: "sale_line", ref: "ORD-V" } })
+      );
+
+      expect(
+        (await transition(TENANT_A, pending, "void", manager)).outcome
+      ).toBe("ok");
+    });
+
+    test("linking a login to a previously unlinked employment makes the transition possible for others", async () => {
+      const unlinked = await seedEmployment(TENANT_A);
+      const id = await accrued(TENANT_A, sale(unlinked));
+
+      const newcomer = await seedTenantUser(TENANT_A, "newcomer");
+
+      await setLink(unlinked, newcomer);
+
+      // No snapshot (born unlinked), but the current link binds the newcomer.
+      expect(
+        (await transition(TENANT_A, id, "approve", newcomer)).outcome
+      ).toBe("sod_violation");
+      expect((await transition(TENANT_A, id, "approve", manager)).outcome).toBe(
+        "ok"
+      );
+
+      // Unlinking again afterwards and releasing: no snapshot, no link -> refused.
+      await setLink(unlinked, null);
+      expect((await transition(TENANT_A, id, "release", payer)).outcome).toBe(
+        "sod_violation"
+      );
+    });
+  });
+
+  async function getAccrualStatus(id: string): Promise<string> {
+    return (
+      (await getAdminSql()`
+        SELECT status FROM awcms_hr_commission_accruals WHERE id = ${id}
+      `) as { status: string }[]
+    )[0]!.status;
+  }
 
   describe("concurrency", () => {
     test("a concurrent soft delete of the employment serialises with an accrual: the employment row is locked FOR SHARE", async () => {
@@ -2034,6 +2329,7 @@ suite("hr_commission accrual ledger database invariants (Issue #951)", () => {
           // by `approver` once it has been approved.
           const parties = {
             beneficiaryUserId: owner,
+            snapshotBeneficiaryUserId: owner,
             createdBy: creator,
             approvedBy: before === "pending" ? null : approver
           };

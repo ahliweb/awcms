@@ -32,6 +32,14 @@ export function transitionRefusal(
         `A ${result.status} accrual cannot be ${VERB[action]}.`
       );
     case "sod_violation":
+      if (result.kind === "beneficiary_unresolved") {
+        return fail(
+          409,
+          "BENEFICIARY_LOGIN_UNRESOLVED",
+          `The beneficiary employment has no linked login, so segregation of duties cannot be proven; link a login to the employment before the accrual can be ${VERB[action]}.`
+        );
+      }
+
       if (result.kind === "beneficiary" && action === "approve") {
         return fail(
           403,

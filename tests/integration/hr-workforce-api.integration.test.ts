@@ -1244,6 +1244,86 @@ suite("hr_workforce HTTP surface (Issue #945)", () => {
     });
   });
 
+  describe("commission history counts for the re-link step-up (Issue #1019)", () => {
+    // A row written with triggers and FKs off (a maintenance session): this file
+    // is about the account link, not about how an accrual is born.
+    async function seedAccrual(
+      employmentId: string,
+      status: "pending" | "voided",
+      ref: string
+    ) {
+      await admin().begin(async (tx) => {
+        await tx.unsafe("SET LOCAL session_replication_role = replica");
+        await tx`
+          INSERT INTO awcms_hr_commission_accruals
+            (tenant_id, employment_id, rule_id, rule_key, rule_version,
+             source_type, source_ref, calculation, base_amount, rate, amount,
+             currency_code, occurred_at, occurred_on, request_digest, status,
+             voided_at, voided_by)
+          VALUES (${env.tenantId}, ${employmentId}, gen_random_uuid(), 'upsell', 1,
+                  'sale_line', ${ref}, 'percent', 1, 2.5, 0.03, 'XTS',
+                  '2026-03-10T10:00:00Z', '2026-03-10', ${"a".repeat(64)}, ${status},
+                  ${status === "voided" ? new Date() : null},
+                  ${status === "voided" ? await firstTenantUser() : null})
+        `;
+      });
+    }
+
+    async function firstTenantUser(): Promise<string> {
+      return (
+        (await admin()`
+          SELECT id FROM awcms_tenant_users WHERE tenant_id = ${env.tenantId} LIMIT 1
+        `) as { id: string }[]
+      )[0]!.id;
+    }
+
+    test("an employment with only a PENDING accrual (no attendance) needs the step-up on re-link; a voided one does not", async () => {
+      if (!handlerReady) return;
+      const person = await seedUser(env.tenantId, "acc-a", []);
+      const next = await seedUser(env.tenantId, "acc-b", [], person.profileId);
+      const employment = await hire("accrual-hist", {}, person.profileId);
+      expect((await link(employment.id, person.tenantUserId)).status).toBe(200);
+
+      const enrolled = await seedUser(env.tenantId, "acc-mfa", [
+        "hr_workforce.employments.assign"
+      ]);
+      await enrol(enrolled);
+
+      // No history at all: an enrolled assigner with a stale session passes.
+      await seedAccrual(employment.id, "voided", "ACC-VOID");
+      expect(
+        (await link(employment.id, next.tenantUserId, enrolled.token)).status
+      ).toBe(200);
+      expect((await lastAudit(employment.id)).attributes).toMatchObject({
+        hadHistory: false
+      });
+      expect(
+        (await link(employment.id, person.tenantUserId, enrolled.token)).status
+      ).toBe(200);
+
+      // A pending accrual makes it history: stale session refused, fresh passes.
+      await seedAccrual(employment.id, "pending", "ACC-PEND");
+      const stale = await link(
+        employment.id,
+        next.tenantUserId,
+        enrolled.token
+      );
+      expect(stale.status).toBe(403);
+      expect(stale.body.error?.code).toBe("STEP_UP_REQUIRED");
+
+      await freshStepUp(enrolled);
+      expect(
+        (await link(employment.id, next.tenantUserId, enrolled.token)).status
+      ).toBe(200);
+      const done = await lastAudit(employment.id);
+      expect(done.severity).toBe("critical");
+      expect(done.attributes).toMatchObject({
+        hadHistory: true,
+        stepUp: "satisfied"
+      });
+    });
+  });
+
   // --- delete / restore --------------------------------------------------------------------
 
   describe("soft delete and restore", () => {

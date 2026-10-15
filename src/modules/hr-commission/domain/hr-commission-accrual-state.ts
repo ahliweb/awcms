@@ -62,11 +62,21 @@ export const ACCRUAL_ACTION_TARGET: Readonly<
   pay: "paid"
 };
 
-export type SodRefusal = "beneficiary" | "creator_approves" | "approver_pays";
+export type SodRefusal =
+  | "beneficiary"
+  | "beneficiary_unresolved"
+  | "creator_approves"
+  | "approver_pays";
 
 export type AccrualParties = {
-  /** The login linked to the beneficiary employment (`null` when unlinked). */
+  /** The login linked to the beneficiary employment NOW (`null` when unlinked). */
   beneficiaryUserId: string | null;
+  /**
+   * The beneficiary's login as of the accrual's birth (`sql/236`; `null` when
+   * the employment was unlinked then). SoD holds against this AND the current
+   * link, so unlink -> self-approve -> relink gains nothing (Issue #1019).
+   */
+  snapshotBeneficiaryUserId: string | null;
   createdBy: string | null;
   approvedBy: string | null;
 };
@@ -83,8 +93,19 @@ export function sodViolation(
   actor: string,
   parties: AccrualParties
 ): SodRefusal | null {
-  if (action !== "void" && actor === parties.beneficiaryUserId) {
-    return "beneficiary";
+  if (action !== "void") {
+    const snapshot = parties.snapshotBeneficiaryUserId;
+
+    // FAIL CLOSED (Issue #1019): with no login linked now and none snapshotted,
+    // the beneficiary cannot be identified, and "actor differs from NULL" would
+    // prove nothing. Approve, release and pay are refused until a login is linked.
+    if (parties.beneficiaryUserId === null && snapshot === null) {
+      return "beneficiary_unresolved";
+    }
+
+    if (actor === parties.beneficiaryUserId || actor === snapshot) {
+      return "beneficiary";
+    }
   }
 
   if (action === "approve" && actor === parties.createdBy) {
