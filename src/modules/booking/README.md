@@ -42,6 +42,17 @@ hold caps. The block routes (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`
 event. **Not present yet:** the reconciliation
 route.
 
+Reminders (Issue #943, `sql/284`, `sql/285`): confirmation and reminder
+**intents** (`awcms_booking_reminder_intents`, once per reservation, kind and
+occurrence), created and handed to the one WhatsApp queue through the
+`WhatsappDeliveryPort` by the job `booking:reminders:dispatch`
+(`application/booking-reminder-dispatch.ts`, `booking-reminder-job.ts`). Nothing
+on the reservation path changes; booking holds no contact, credential, queue or
+provider call. The customer is resolved to a recipient by a
+`BookingReminderRecipientPort` the deployment registers
+(`registerBookingReminderRecipients`); with none, the job is inert. See
+[`booking.md` §7.5](../../../docs/awcms/booking.md).
+
 Admin screens (Issue #942, no migration, no API change; the module is `active`):
 six screens -- `/admin/booking/reservations` (the list, the hold and its
 expiry; `?id=` is one reservation with its history and the confirm / cancel /

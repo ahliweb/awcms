@@ -116,6 +116,11 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0131 / Issue #937. Immutable snapshot of what a reservation booked: offering code and name, duration, buffers, instants and stay dates. No actor stamp, no customer reference and no free text; the customer reference and note live on the parent reservation, which has its own descriptor."
   },
   {
+    table: "awcms_booking_reminder_intents",
+    reason:
+      "ADR-0131, ADR-0133 / Issue #943. One row per (reservation, kind, occurrence): a reservation id, a kind, a status, a short lower-case outcome code and the opaque id of the delivery queue row. No actor, no customer reference, no contact, no body and no free text -- the recipient is resolved at dispatch time and never stored here. The person is the customer of the parent reservation, which has its own descriptor, and the delivery module's queue row (its own descriptor) holds the message; erasing the customer at the authority leaves this row naming nobody."
+  },
+  {
     table: "awcms_booking_resource_allocations",
     reason:
       "ADR-0131 / Issue #937. One row per claimed unit: item id, resource and unit ids, an interval or date range and a release stamp. No actor and no person column -- it records that a unit was occupied, never by whom; the reservation it hangs off has its own descriptor."

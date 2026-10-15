@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ce2916d9cf602bfa85b130028e00b18b7dc01586cb0a48e03d8938cc2dbdc16e -->
+<!-- i18n-source-hash: sha256:932b6dbedd254ee4416c781f4250e75035b97b386d691e2f98a80e0aeae91390 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -43,6 +43,17 @@ event reservasi di dokumen AsyncAPI live, dan default aman untuk batas hold.
 Route blok (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
 `POST /blocks/{id}/release`) memakai `Idempotency-Key` dengan replay dan tidak
 menerbitkan event. **Belum ada:** route rekonsiliasi.
+
+Pengingat (Issue #943, `sql/284`, `sql/285`): **intent** konfirmasi dan
+pengingat (`awcms_booking_reminder_intents`, sekali per reservasi, kind, dan
+occurrence), dibuat dan diserahkan ke satu antrean WhatsApp lewat
+`WhatsappDeliveryPort` oleh job `booking:reminders:dispatch`
+(`application/booking-reminder-dispatch.ts`, `booking-reminder-job.ts`). Jalur
+reservasi tidak berubah; booking tidak menyimpan kontak, kredensial, antrean, atau
+panggilan provider. Pelanggan di-resolve ke penerima oleh
+`BookingReminderRecipientPort` yang didaftarkan deployment
+(`registerBookingReminderRecipients`); tanpa itu, job inert. Lihat
+[`booking.md` §7.5](../../../docs/awcms/booking.id.md).
 
 Layar admin (Issue #942, tanpa migrasi, tanpa perubahan API; modul `active`): enam
 layar -- `/admin/booking/reservations` (daftar, hold dan

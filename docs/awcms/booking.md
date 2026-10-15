@@ -703,6 +703,117 @@ Payload: `reservationId`, `reservationNo`, `lineageId`, `status`, `previousStatu
 `rescheduled`, `rescheduledFromId` on the events of a replacement; for a reservation with stay items also `stays` (`resourceId`, `checkInDate`, `checkOutDate`, `nights`, `timezone`; additive, absent otherwise, no new event, §3.1). **Never** a customer name, contact, note or reason text. Consumers
 de-duplicate on the envelope's event id; delivery is at-least-once.
 
+### 7.5 Reminders and confirmations (Issue #943)
+
+Booking owns the **debt** ("a confirmation or reminder is owed for this
+reservation"); `whatsapp_delivery` owns the **message** (consent, templating,
+provider, queue;
+[ADR-0133](../adr/0133-generic-delivery-capability-whatsapp-promotion.md)
+sections 3 and 8). There is no booking queue, outbox or provider call.
+
+**Flow.** Nothing on the reservation transaction path changes: confirming or
+cancelling a booking writes nothing about reminders, so a slow or broken
+delivery capability can never slow or fail a booking. The scheduled job
+`booking:reminders:dispatch` (every minute, `awcms_worker`, per tenant) runs one
+bounded pass per tenant, in this order:
+
+1. **Stale sweep.** A `pending` intent whose reservation is no longer confirmed
+   is settled `cancelled` (or `expired` once the reservation has begun). An
+   `enqueued` intent whose reservation was cancelled, expired, rescheduled or
+   marked no-show has its still-queued message cancelled through
+   `WhatsappDeliveryPort.cancelByCorrelation` (a no-op once the message left the
+   queue, as the port promises).
+2. **Materialize.** Intents are created for **confirmed** reservations, once per
+   `(reservation, kind, occurrence)` (unique key, `ON CONFLICT DO NOTHING`):
+   `confirmation` (occurrence 0) for a reservation confirmed in the last 6 hours
+   (so switching the feature on never floods the back catalogue), and `reminder`
+   (occurrence 1) once the 24-hour lead window opens and before the reservation
+   starts. A walk-in (no `external_customer_ref`) and a booking confirmed
+   _inside_ the lead window are created already settled `skipped`
+   (`no_customer_ref`, `booked_inside_lead`): the confirmation is the notice.
+3. **Dispatch.** Each due intent is resolved to a recipient and handed to the
+   port; the answer settles it (below).
+
+**Idempotent per (reservation, kind, occurrence), in three layers**: the unique
+key of `awcms_booking_reminder_intents` (`sql/284`); an intent leaves `pending`
+exactly once and only `pending` intents reach the port (`FOR UPDATE SKIP
+LOCKED`); and the delivery module's own `(tenant, idempotency_key)` unique key,
+with the key `booking:{reservationId}:{kind}:{occurrence}` (also the correlation
+id). A crash between the enqueue and the settle replays as `duplicate` and
+settles `enqueued` with the original message id; two workers, or a retried job,
+queue one message. (The idempotency keys of
+[ADR-0145](../adr/0145-idempotency-keys-are-scoped-per-actor-and-the-request-hash-is-keyed.md)
+are per actor and belong to request routes; this job has no actor and no route,
+so the natural key above is the mechanism.)
+
+**A cancelled reservation emits none, and nothing is sent late.** The dispatch
+read returns a reservation only while it is `confirmed` and holds a share lock on
+it for the rest of the transaction (`FOR SHARE ... SKIP LOCKED`): a cancel either
+happened before (nothing is queued) or waits until the pass ends. A message
+queued by an earlier pass is cancelled by the stale sweep through
+`cancelByCorrelation`, which only touches `queued` and `retry_wait` messages. A
+message leased in `sending` at that moment cannot be cancelled, and a provider
+timeout would send it to `retry_wait` and resend it after backoff. So the sweep
+marks an intent reconciled **only when every message under its key is terminal**
+(`sent`, `failed`, `cancelled`, `expired`); otherwise the intent is left and
+looked at again on the next pass until the message is cancelled or terminal. As
+a second layer every message is enqueued with an expiry: the reservation's start
+for a reminder, the earlier of the start and the 6-hour freshness window for a
+confirmation, so even a delivery outage cannot send either after the booking has
+begun. The sweep also revisits enqueued intents whose reservation has already
+started. A pending intent whose reservation started or finished (confirmed,
+checked in, completed) settles `expired`; one whose reservation was cancelled or
+moved settles `cancelled`. The residual window is one job interval (a minute)
+between a cancel and the cancellation of a still-queued message.
+
+**Bounded work and lock time.** The sweep and the materialize step handle 100
+intents per pass, and the job repeats a tenant's pass until it drains (sweep
+work counts as progress), for at most 45 seconds per run, so a mass cancellation
+of several hundred reservations is cleared within one run. The dispatch step
+holds a share lock on every reservation it reads until the pass commits, and
+that lock blocks a customer's cancel or confirm; so it reads at most 25 intents,
+stops taking new ones after 5 seconds (the rest stay pending, unlocked at
+commit), and runs under `lock_timeout` 2 s and `statement_timeout` 10 s, so a
+stuck lock or query aborts the pass instead of holding those locks. A resolver
+or enqueue failure is logged as `booking.reminder.dispatch_failed` with the
+intent id, error class and code, never the message text or any contact.
+
+**No contact in booking.** The customer is still only the opaque
+`external_customer_ref` (commerce is the authority, O12). The deployment supplies
+a `BookingReminderRecipientPort` (`_shared/ports/`) that turns the reference into
+a `WhatsappRecipient` inside the job's transaction (database reads only, no
+network); the contact is used for one `enqueue` and never stored, logged or put in
+an event. **No implementation ships here, so the job is inert** (creates and
+sends nothing) until a deployment registers one with
+`registerBookingReminderRecipients` from its own job entry point. Only two
+template variables leave the booking schema: the reservation number and the local
+start time (templates `booking.confirmation` and `booking.reminder`, both
+`transactional`, English wording).
+
+**Settlement.** `queued`/`duplicate` become `enqueued`; `suppressed` (opt-out,
+hard failure) becomes `suppressed`; a verdict refusal (`CONSENT_REQUIRED`,
+`TEMPLATE_UNKNOWN`, `RECIPIENT_INVALID`, ...) becomes `refused`; a resolver that
+cannot address the customer becomes `skipped` (`recipient_unresolved`).
+`DISABLED`, `MISCONFIGURED` and `RATE_LIMITED` are properties of the deployment,
+not of the message: the intent stays `pending`, the pass stops for that tenant,
+and it is retried next minute (a rate limit is given up after 30 attempts). A
+resolver or enqueue that throws costs that intent one attempt (a savepoint per
+intent) and does not stop the others. Consent is entirely the delivery module's:
+a `transactional` message needs no marketing opt-in and survives a marketing
+withdrawal; an opt-out stops it; neither touches the reservation.
+
+**Privileges.** The worker holds no privilege on the reservation tables. It reads
+through three narrow `SECURITY DEFINER` functions (`sql/285`, the `sql/200`
+pattern, owner `awcms_booking_reminders`, tenant argument must equal the session
+tenant, `EXECUTE` to `awcms_worker` alone) and settles intents with `UPDATE` on
+`awcms_booking_reminder_intents` only. The runtime role may only read it; no row
+is ever deleted (trigger and revoked privilege).
+
+**Operations.** The pass is database-only, so it is safe on the offline/LAN
+profile. WhatsApp itself is off unless `WHATSAPP_ENABLED=true`;
+`whatsapp:dispatch` registers booking's templates in its own process (it does),
+or a queued message fails terminally as `template_unknown`.
+
 ## 8. Double-booking prevention and the required regression test
 
 ### 8.1 The strategy
@@ -1005,6 +1116,7 @@ pack cannot be finalised until the answer is recorded.
 - **O2f — date-dependent rules.** Per-night rates and rate plans, date-dependent minimum stay, arrival-day or departure-day restrictions are out of v1 (the minimum is per offering, §2.5).
 - **O2g — no-show for stays.** Whether the grace is per offering (and whether a no-show releases the remaining nights after the first) — the existing open question, now concrete.
 - **O2h — block events.** Whether a downstream (a channel manager) needs `awcms.booking.block.*` events; v1 emits none.
+- **O13 — reminder policy (Issue #943).** Recorded, not decided: (a) the lead is a fixed 24 hours and there is one reminder per reservation; whether it is per tenant (a `reminder_lead_seconds` column and policy field) or per offering, and whether a second reminder exists; (b) the confirmation is sent on the next job pass after `confirm`; whether a tenant can switch confirmations or reminders off independently; (c) the wording is neutral English and carries only the reservation number and the local start; per-tenant wording and locale, and a Meta-approved provider template name, are the owner's; (d) e-mail is not routed (the e-mail module cannot take an opaque customer reference either); whether a customer without WhatsApp should fall back to e-mail; (e) which downstream adapter implements `BookingReminderRecipientPort` (commerce, per O12).
 
 Also open and _not_ in the downstream tracker (proposed for it): the default and
 maximum hold TTL (§5.1, 900 and 86 400 seconds, are the module's defaults, not an
@@ -1055,6 +1167,7 @@ design above is the contract; this section is the map from it to the code
 | **Reporting**        | #944  | Three projections on the `reporting` engine (`booking.reservations`, `booking.time`, `booking.nights`; §7.2.1), the `sumColumn` rule field and the tie-safe page boundary in the engine, the live reports `GET /booking/reports/{occupancy,utilization,reservations}` with Asia/Jakarta day windows and small-group suppression. One migration, `sql/244` (the quantity columns, `projection_kind`, the stamping trigger, a backfill). Tests: `tests/booking-report.test.ts`, `tests/reporting-projection-metric-delta.test.ts`, `tests/integration/booking-reporting.integration.test.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | **Admin config**     | #1030 | The routes of §3.0.2 over `booking-resource-admin.ts` (resources, units, pools), `booking-offering-admin.ts`, `booking-policy-admin.ts` and the shared `booking-admin-routes.ts` / `booking-admin-support.ts` (the savepoint that maps a database guard to a 409, the keyset page, the idempotent-mutation wrapper) with the pure rules in `domain/booking-admin-validation.ts`; the audit events `booking.pool.*` and `booking.offering.restored`, and `booking.policy.configured` raised to `critical`. No migration: every invariant it relies on is in `sql/180`, `186`, `204` and `240`. Tests: `tests/booking-admin-validation.test.ts` and `tests/integration/booking-admin-api.integration.test.ts` (the access matrix both ways, replay, the guard refusals, soft delete, tenant isolation).                                                                                                                                                                                                                                                                   |
 | **Admin screens**    | #942  | The six screens of §3.0.3 (`src/pages/admin/booking/*.astro`), the shared sender `src/lib/ui/booking-admin-client.ts`, the translated messages `src/lib/booking-admin-messages.ts` and labels `src/lib/booking-admin-labels.ts`, six `navigation` entries and the status flip to `active`, 218 catalogue entries in `locales/en.po` / `id.po`, the coverage ledger down to seven keys, and `APP_BUDGET_BYTES` raised by the 11,259 B of the seven new script files. No migration, no API change. Tests: `tests/admin-booking-page-contract.test.ts`, the navigation registry, `tests/e2e/admin-booking.e2e.ts` (keyboard-only, every action), and the booking screens in `a11y-axe.e2e.ts` and the 360 px sweep.                                                                                                                                                                                                                                                                                                                                                        |
+| **Reminders**        | #943  | The job `booking:reminders:dispatch` (§7.5) over `booking-reminder-dispatch.ts` / `booking-reminder-job.ts`, the intents table `sql/284` and the three narrow reads of `sql/285`, the `BookingReminderRecipientPort`, the templates `booking.confirmation` / `booking.reminder`, handed to `whatsapp_delivery` through `WhatsappDeliveryPort`. Inert until a deployment registers a recipient resolver.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 **Still design (not in the code):** the `extend` route of §5.1; `service_requirements`, `staff_assignments` and test T8; the
 `reservations/reconciliation` route; the screens for reservation create / reschedule / override, availability, notes and reports (§3.0.3 says why each is absent).
