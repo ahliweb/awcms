@@ -12429,6 +12429,215 @@ Gated by `booking.blocks.release`. The block is locked and the database releases
 | 404    | BLOCK_NOT_FOUND (an unknown id and another tenant's id are the same answer).         | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT.                                                                | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/booking/offerings` — List service offerings
+
+- **operationId**: `bookingOfferingsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.offerings.read`. Newest first, keyset paginated (`cursor`). Filters: `granularity`, `status`, and `includeDeleted` / `onlyDeleted` (soft-deleted rows are hidden by default and need `booking.offerings.restore` as well). An offering holds no price and no product id. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                       | Description                                                                                       |
+| ------------------ | ------ | -------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `granularity`      | query  | no       | enum(`time`, `stay`)       |                                                                                                   |
+| `status`           | query  | no       | enum(`active`, `inactive`) |                                                                                                   |
+| `includeDeleted`   | query  | no       | boolean                    | true lists live and soft-deleted rows; needs `booking.offerings.restore` as well (403 otherwise). |
+| `onlyDeleted`      | query  | no       | boolean                    | true lists only soft-deleted rows; needs `booking.offerings.restore` as well (403 otherwise).     |
+| `cursor`           | query  | no       | string                     | Opaque keyset cursor from the previous page.                                                      |
+| `X-Correlation-ID` | header | no       | string                     |                                                                                                   |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of offerings.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/offerings` — Create a service offering
+
+- **operationId**: `bookingOfferingCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.offerings.create`. A `time` offering needs `durationSeconds` and `slotStepSeconds` (at least 300) and may set buffers; a `stay` offering needs `minNights` and `maxNights` (at most 366) and sends no time field. `maxParty` is at least `minParty`. A duplicate `code` (case-insensitive) is `409 CODE_TAKEN`. Requires an Idempotency-Key. Audited at info severity (`booking.offering.created`).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingOfferingInput`](#schema-bookingofferinginput)
+
+**Responses**
+
+| Status | Description                               | Schema                                 |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| 201    | The offering.                             | object                                 |
+| 400    | VALIDATION_ERROR or IDEMPOTENCY_REQUIRED. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.               | [`ApiError`](#standard-error-envelope) |
+| 409    | CODE_TAKEN or IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+| 422    | CONSTRAINT_VIOLATED.                      | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/offerings/{id}` — Read one service offering
+
+- **operationId**: `bookingOfferingGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.offerings.read`. A soft-deleted offering is returned (with `deletedAt`) only to a holder of `booking.offerings.restore`, anyone else gets the neutral 404. An unknown id and another tenant's id are the same `404 OFFERING_NOT_FOUND`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The offering.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | OFFERING_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/booking/offerings/{id}` — Edit a service offering
+
+- **operationId**: `bookingOfferingPatch`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.offerings.update`. `code` and `granularity` are fixed; the merged offering must still satisfy the shape of its granularity (`400 VALIDATION_ERROR` otherwise). Changes FUTURE bookings only: a reservation item keeps the snapshot it was made with. `409 OFFERING_DELETED` for a deleted offering. Requires an Idempotency-Key. Audited at info severity (`booking.offering.updated`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingOfferingPatch`](#schema-bookingofferingpatch)
+
+**Responses**
+
+| Status | Description                               | Schema                                 |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| 200    | The offering.                             | object                                 |
+| 400    | VALIDATION_ERROR or IDEMPOTENCY_REQUIRED. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.               | [`ApiError`](#standard-error-envelope) |
+| 404    | OFFERING_NOT_FOUND.                       | [`ApiError`](#standard-error-envelope) |
+| 409    | OFFERING_DELETED or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | CONSTRAINT_VIOLATED.                      | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/booking/offerings/{id}` — Soft-delete a service offering
+
+- **operationId**: `bookingOfferingDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.offerings.delete`. SOFT delete; reservations keep their snapshot. Deleting a deleted offering returns it with `replayed: true`. Requires an Idempotency-Key. Audited at warning severity (`booking.offering.deleted`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The deleted offering.       | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | OFFERING_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/offerings/{id}/restore` — Restore a soft-deleted service offering
+
+- **operationId**: `bookingOfferingRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.offerings.restore`. Restoring a live offering returns it with `replayed: true`. The body is empty. Requires an Idempotency-Key. Audited at info severity (`booking.offering.restored`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The restored offering.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | OFFERING_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/policy` — Read the booking policy
+
+- **operationId**: `bookingPolicyGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.policy.read`. `policy` is what the tenant set (`null` where it did not, meaning the MODULE DEFAULT, not unlimited) and `effective` is what is in force. A tenant that never wrote a policy reads every field `null` and `updatedAt: null`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The policy.                 | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/booking/policy` — Replace the booking policy
+
+- **operationId**: `bookingPolicyPut`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.policy.configure` (HIGH-RISK: it bounds how much inventory one actor can hold and how far ahead anyone can book). REPLACES the whole policy: every field must be present and `null` selects the module default (hold caps default to 5 per customer and 500 per tenant). Ranges: hold seconds 60 to 86400 with `defaultHoldSeconds` at most `maxHoldSeconds`; hold caps at least 1; `minLeadSeconds` at least 0; `maxHorizonDays` 1 to 3650; `noShowGraceSeconds` 0 to 2592000; `defaultTimezone` an IANA name. Changes FUTURE holds and searches only. Requires an Idempotency-Key; replaying it returns the stored response. Audited at critical severity (`booking.policy.configured`) with the before and after values. No MFA step-up: ADR-0141 flags payroll permissions only.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingPolicyInput`](#schema-bookingpolicyinput)
+
+**Responses**
+
+| Status | Description                                                                 | Schema                                 |
+| ------ | --------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The policy now in force.                                                    | object                                 |
+| 400    | VALIDATION_ERROR (a missing or out-of-range field) or IDEMPOTENCY_REQUIRED. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.                                                       | [`ApiError`](#standard-error-envelope) |
+| 422    | CONSTRAINT_VIOLATED.                                                        | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/booking/reports/occupancy` — Occupancy of stay resources
 
 - **operationId**: `bookingReportsOccupancy`
@@ -12751,6 +12960,326 @@ Gated by `booking.reservations.reschedule`. Moves a `confirmed` reservation to a
 | 404    | RESERVATION_NOT_FOUND (an unknown id and another tenant's id are the same answer), or RESOURCE_NOT_FOUND / OFFERING_NOT_FOUND for a target resource, pool or offering that is not in this tenant.                                                                       | [`ApiError`](#standard-error-envelope) |
 | 409    | SLOT_UNAVAILABLE, OUTSIDE_SCHEDULE, LEAD_TIME_VIOLATION, HORIZON_EXCEEDED, INVALID_STATE, BOOKING_MODE_MISMATCH, MIN_STAY_VIOLATION, MAX_STAY_EXCEEDED, STAY_POOL_INCONSISTENT, EXTERNAL_REF_IN_USE, PARTY_SIZE_OUT_OF_RANGE, CONTENTION_RETRY or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
 | 422    | QUANTITY_EXCEEDS_UNITS.                                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/resource-pools` — List resource pools
+
+- **operationId**: `bookingResourcePoolsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.read` (pools are governed by the `resources` permissions). Newest first, keyset paginated (`cursor`); soft-deleted pools are hidden by default (`includeDeleted` / `onlyDeleted` need `booking.resources.restore` as well). Each carries its live `memberCount`. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type    | Description                                                                                       |
+| ------------------ | ------ | -------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `includeDeleted`   | query  | no       | boolean | true lists live and soft-deleted rows; needs `booking.resources.restore` as well (403 otherwise). |
+| `onlyDeleted`      | query  | no       | boolean | true lists only soft-deleted rows; needs `booking.resources.restore` as well (403 otherwise).     |
+| `cursor`           | query  | no       | string  | Opaque keyset cursor from the previous page.                                                      |
+| `X-Correlation-ID` | header | no       | string  |                                                                                                   |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of pools.            | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/resource-pools` — Create a resource pool
+
+- **operationId**: `bookingResourcePoolCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.create`. A set of interchangeable resources; a resource joins a pool through its own `poolId`. A duplicate `code` (case-insensitive) is `409 CODE_TAKEN`. Requires an Idempotency-Key. Audited at info severity (`booking.pool.created`).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingResourcePoolInput`](#schema-bookingresourcepoolinput)
+
+**Responses**
+
+| Status | Description                               | Schema                                 |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| 201    | The pool.                                 | object                                 |
+| 400    | VALIDATION_ERROR or IDEMPOTENCY_REQUIRED. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.               | [`ApiError`](#standard-error-envelope) |
+| 409    | CODE_TAKEN or IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/resource-pools/{id}` — Read one pool with its members
+
+- **operationId**: `bookingResourcePoolGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.read`. Returns the pool with its live members (at most 500); a soft-deleted pool is returned (with `deletedAt`) only to a holder of `booking.resources.restore`, anyone else gets the neutral 404. An unknown id and another tenant's id are the same `404 POOL_NOT_FOUND`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The pool and its members.   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | POOL_NOT_FOUND.             | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/booking/resource-pools/{id}` — Rename a resource pool
+
+- **operationId**: `bookingResourcePoolPatch`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.update`. `code` is fixed. `409 POOL_DELETED` for a deleted pool. Requires an Idempotency-Key. Audited at info severity (`booking.pool.updated`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingResourcePoolPatch`](#schema-bookingresourcepoolpatch)
+
+**Responses**
+
+| Status | Description                               | Schema                                 |
+| ------ | ----------------------------------------- | -------------------------------------- |
+| 200    | The pool.                                 | object                                 |
+| 400    | VALIDATION_ERROR or IDEMPOTENCY_REQUIRED. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.               | [`ApiError`](#standard-error-envelope) |
+| 404    | POOL_NOT_FOUND.                           | [`ApiError`](#standard-error-envelope) |
+| 409    | POOL_DELETED or IDEMPOTENCY_CONFLICT.     | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/booking/resource-pools/{id}` — Soft-delete a resource pool
+
+- **operationId**: `bookingResourcePoolDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.delete`. SOFT delete. Refused with `409 POOL_NOT_EMPTY` while a live resource is a member. Deleting a deleted pool returns it with `replayed: true`. Requires an Idempotency-Key. Audited at warning severity (`booking.pool.deleted`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                             | Schema                                 |
+| ------ | --------------------------------------- | -------------------------------------- |
+| 200    | The deleted pool.                       | object                                 |
+| 400    | Validation error.                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.             | [`ApiError`](#standard-error-envelope) |
+| 404    | POOL_NOT_FOUND.                         | [`ApiError`](#standard-error-envelope) |
+| 409    | POOL_NOT_EMPTY or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/resource-pools/{id}/restore` — Restore a soft-deleted resource pool
+
+- **operationId**: `bookingResourcePoolRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.restore`. Restoring a live pool returns it with `replayed: true`. The body is empty. Requires an Idempotency-Key. Audited at info severity (`booking.pool.restored`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The restored pool.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | POOL_NOT_FOUND.             | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/resources` — List resources
+
+- **operationId**: `bookingResourcesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.read`. This tenant's resources, newest first, keyset paginated (`cursor`). Filters: `status`, `bookingMode`, `poolId`, and `includeDeleted` / `onlyDeleted` (soft-deleted rows are hidden by default and need `booking.resources.restore` as well). Each row carries `capacity` and `activeUnits`; the units themselves are on the read of one resource. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                       | Description                                                                                       |
+| ------------------ | ------ | -------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `status`           | query  | no       | enum(`active`, `inactive`) |                                                                                                   |
+| `bookingMode`      | query  | no       | enum(`slot`, `stay`)       |                                                                                                   |
+| `poolId`           | query  | no       | string (uuid)              |                                                                                                   |
+| `includeDeleted`   | query  | no       | boolean                    | true lists live and soft-deleted rows; needs `booking.resources.restore` as well (403 otherwise). |
+| `onlyDeleted`      | query  | no       | boolean                    | true lists only soft-deleted rows; needs `booking.resources.restore` as well (403 otherwise).     |
+| `cursor`           | query  | no       | string                     | Opaque keyset cursor from the previous page.                                                      |
+| `X-Correlation-ID` | header | no       | string                     |                                                                                                   |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of resources.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/resources` — Create a resource and its units
+
+- **operationId**: `bookingResourceCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.create`. Creates the resource and its `capacity` units (ordinals 1 to capacity, labelled from `unitLabels`) in ONE transaction. A stay resource needs `stayCheckInTime` and `stayCheckOutTime` (local times); a slot resource sends neither. `timezone` is an IANA name, never an offset. A duplicate `code` (case-insensitive) is `409 CODE_TAKEN`; an unknown or deleted `poolId` is `404 POOL_NOT_FOUND`. Requires an Idempotency-Key; a retry returns the SAME 201 and body and never `CODE_TAKEN` about its own row. Audited at info severity (`booking.resource.created`).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingResourceInput`](#schema-bookingresourceinput)
+
+**Responses**
+
+| Status | Description                                                        | Schema                                 |
+| ------ | ------------------------------------------------------------------ | -------------------------------------- |
+| 201    | The resource with its units.                                       | object                                 |
+| 400    | VALIDATION_ERROR, TIMEZONE_INVALID or IDEMPOTENCY_REQUIRED.        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | POOL_NOT_FOUND.                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | CODE_TAKEN or IDEMPOTENCY_CONFLICT.                                | [`ApiError`](#standard-error-envelope) |
+| 422    | CONSTRAINT_VIOLATED (a database rule the validator did not state). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/booking/resources/{id}` — Read one resource with its units
+
+- **operationId**: `bookingResourceGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.read`. A soft-deleted resource is returned (with `deletedAt`) only to a holder of `booking.resources.restore`, so a screen can offer the restore; anyone else gets the neutral 404. An unknown id and another tenant's id are the same `404 RESOURCE_NOT_FOUND`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The resource and its units.                                                     | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND (an unknown id and another tenant's id are the same answer). | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/booking/resources/{id}` — Edit a resource, its pool membership and its units
+
+- **operationId**: `bookingResourcePatch`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.update`. `code` is fixed. Editable: `name`, `kind`, `status`, `poolId` (a pool id, or null to leave the pool: this is the pool membership), `timezone`, `bookingMode`, the stay times, `sortOrder`, `capacity` (GROW only: new units are appended and a resource-wide block covers them) and `units` (relabel, activate or deactivate by unit id). Changing `bookingMode` to `slot` clears the stay times unless sent. The database refuses a `bookingMode` change while the resource has live allocations or active blocks (`409 BOOKING_MODE_IN_USE`), a `timezone` change while it has them (`409 TIMEZONE_IN_USE`) or an active schedule in the current zone (`409 SCHEDULE_TIMEZONE_MISMATCH`). Capacity never shrinks (`409 CAPACITY_REDUCTION_NOT_ALLOWED`: deactivate a unit instead). A refusal writes nothing. Requires an Idempotency-Key. Audited at info severity (`booking.resource.updated`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`BookingResourcePatch`](#schema-bookingresourcepatch)
+
+**Responses**
+
+| Status | Description                                                                                                                                                | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The resource with its units.                                                                                                                               | object                                 |
+| 400    | VALIDATION_ERROR, TIMEZONE_INVALID or IDEMPOTENCY_REQUIRED.                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND, POOL_NOT_FOUND or UNIT_NOT_FOUND.                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | BOOKING_MODE_IN_USE, TIMEZONE_IN_USE, SCHEDULE_TIMEZONE_MISMATCH, CAPACITY_REDUCTION_NOT_ALLOWED, RESOURCE_DELETED, GUARD_REFUSED or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 422    | CONSTRAINT_VIOLATED.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/booking/resources/{id}` — Soft-delete a resource
+
+- **operationId**: `bookingResourceDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.delete`. SOFT delete: reservations keep referencing the resource and nothing is removed. Refused with `409 RESOURCE_IN_USE` while a held, confirmed or checked-in reservation or an active block needs it (set `status` to `inactive` to stop selling instead). Deleting a deleted resource returns it with `replayed: true` and writes nothing. Requires an Idempotency-Key. Audited at warning severity (`booking.resource.deleted`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                              | Schema                                 |
+| ------ | ---------------------------------------- | -------------------------------------- |
+| 200    | The deleted resource.                    | object                                 |
+| 400    | Validation error.                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.              | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                      | [`ApiError`](#standard-error-envelope) |
+| 409    | RESOURCE_IN_USE or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/booking/resources/{id}/restore` — Restore a soft-deleted resource
+
+- **operationId**: `bookingResourceRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `booking.resources.restore`. Restoring a live resource returns it with `replayed: true` and writes nothing. The body is empty. Requires an Idempotency-Key. Audited at info severity (`booking.resource.restored`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The restored resource.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.         | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/booking/schedule-exceptions` — List schedule exceptions
 
@@ -14299,6 +14828,122 @@ A local wall-clock window [from, to) in the schedule's zone; it never crosses mi
 }
 ```
 
+### Schema: BookingOfferingInput
+
+| Field                       | Type                                   | Required | Nullable | Description                       |
+| --------------------------- | -------------------------------------- | -------- | -------- | --------------------------------- |
+| `code`                      | string                                 | yes      | no       |                                   |
+| `name`                      | string                                 | yes      | no       |                                   |
+| `granularity`               | enum(`time`, `stay`)                   | yes      | no       |                                   |
+| `durationSeconds`           | integer                                | no       | yes      |                                   |
+| `setupSeconds`              | integer                                | no       | yes      |                                   |
+| `cleanupSeconds`            | integer                                | no       | yes      |                                   |
+| `slotStepSeconds`           | integer                                | no       | yes      | At least 300 for a time offering. |
+| `minNights`                 | integer                                | no       | yes      |                                   |
+| `maxNights`                 | integer                                | no       | yes      |                                   |
+| `minParty`                  | integer                                | no       | no       |                                   |
+| `maxParty`                  | integer                                | no       | no       |                                   |
+| `confirmationMode`          | enum(`immediate`, `hold_then_confirm`) | no       | no       |                                   |
+| `cancellationCutoffSeconds` | integer                                | no       | yes      |                                   |
+| `minLeadSeconds`            | integer                                | no       | yes      |                                   |
+| `maxHorizonDays`            | integer                                | no       | yes      |                                   |
+| `status`                    | enum(`active`, `inactive`)             | no       | no       |                                   |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "granularity": "time",
+  "durationSeconds": 0,
+  "setupSeconds": 0,
+  "cleanupSeconds": 0,
+  "slotStepSeconds": 0,
+  "minNights": 0,
+  "maxNights": 0,
+  "minParty": 1,
+  "maxParty": 0,
+  "confirmationMode": "immediate",
+  "cancellationCutoffSeconds": 0,
+  "minLeadSeconds": 0,
+  "maxHorizonDays": 0,
+  "status": "active"
+}
+```
+
+### Schema: BookingOfferingPatch
+
+| Field                       | Type                                   | Required | Nullable | Description                       |
+| --------------------------- | -------------------------------------- | -------- | -------- | --------------------------------- |
+| `name`                      | string                                 | no       | no       |                                   |
+| `durationSeconds`           | integer                                | no       | yes      |                                   |
+| `setupSeconds`              | integer                                | no       | yes      |                                   |
+| `cleanupSeconds`            | integer                                | no       | yes      |                                   |
+| `slotStepSeconds`           | integer                                | no       | yes      | At least 300 for a time offering. |
+| `minNights`                 | integer                                | no       | yes      |                                   |
+| `maxNights`                 | integer                                | no       | yes      |                                   |
+| `minParty`                  | integer                                | no       | no       |                                   |
+| `maxParty`                  | integer                                | no       | no       |                                   |
+| `confirmationMode`          | enum(`immediate`, `hold_then_confirm`) | no       | no       |                                   |
+| `cancellationCutoffSeconds` | integer                                | no       | yes      |                                   |
+| `minLeadSeconds`            | integer                                | no       | yes      |                                   |
+| `maxHorizonDays`            | integer                                | no       | yes      |                                   |
+| `status`                    | enum(`active`, `inactive`)             | no       | no       |                                   |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "durationSeconds": 0,
+  "setupSeconds": 0,
+  "cleanupSeconds": 0,
+  "slotStepSeconds": 0,
+  "minNights": 0,
+  "maxNights": 0,
+  "minParty": 1,
+  "maxParty": 0,
+  "confirmationMode": "immediate",
+  "cancellationCutoffSeconds": 0,
+  "minLeadSeconds": 0,
+  "maxHorizonDays": 0,
+  "status": "active"
+}
+```
+
+### Schema: BookingPolicyInput
+
+| Field                       | Type    | Required | Nullable | Description |
+| --------------------------- | ------- | -------- | -------- | ----------- |
+| `defaultHoldSeconds`        | integer | yes      | yes      |             |
+| `maxHoldSeconds`            | integer | yes      | yes      |             |
+| `maxActiveHoldsPerCustomer` | integer | yes      | yes      |             |
+| `maxActiveHoldsPerTenant`   | integer | yes      | yes      |             |
+| `minLeadSeconds`            | integer | yes      | yes      |             |
+| `maxHorizonDays`            | integer | yes      | yes      |             |
+| `noShowGraceSeconds`        | integer | yes      | yes      |             |
+| `defaultTimezone`           | string  | yes      | yes      |             |
+| `defaultCheckInTime`        | string  | yes      | yes      |             |
+| `defaultCheckOutTime`       | string  | yes      | yes      |             |
+
+**Example**
+
+```json
+{
+  "defaultHoldSeconds": 60,
+  "maxHoldSeconds": 60,
+  "maxActiveHoldsPerCustomer": 1,
+  "maxActiveHoldsPerTenant": 1,
+  "minLeadSeconds": 0,
+  "maxHorizonDays": 1,
+  "noShowGraceSeconds": 0,
+  "defaultTimezone": "string",
+  "defaultCheckInTime": "string",
+  "defaultCheckOutTime": "string"
+}
+```
+
 ### Schema: BookingRescheduleInput
 
 | Field            | Type                                           | Required | Nullable | Description |
@@ -14321,6 +14966,116 @@ A local wall-clock window [from, to) in the schedule's zone; it never crosses mi
   "resourceId": "00000000-0000-0000-0000-000000000000",
   "poolId": "00000000-0000-0000-0000-000000000000",
   "overridePolicy": false
+}
+```
+
+### Schema: BookingResourceInput
+
+| Field              | Type                       | Required | Nullable | Description |
+| ------------------ | -------------------------- | -------- | -------- | ----------- |
+| `code`             | string                     | yes      | no       |             |
+| `name`             | string                     | yes      | no       |             |
+| `kind`             | string                     | yes      | no       |             |
+| `capacity`         | integer                    | yes      | no       |             |
+| `poolId`           | string (uuid)              | no       | yes      |             |
+| `timezone`         | string                     | yes      | no       |             |
+| `bookingMode`      | enum(`slot`, `stay`)       | no       | no       |             |
+| `stayCheckInTime`  | string                     | no       | yes      |             |
+| `stayCheckOutTime` | string                     | no       | yes      |             |
+| `sortOrder`        | integer                    | no       | no       |             |
+| `status`           | enum(`active`, `inactive`) | no       | no       |             |
+| `unitLabels`       | array of string            | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "kind": "string",
+  "capacity": 1,
+  "poolId": "00000000-0000-0000-0000-000000000000",
+  "timezone": "Asia/Jakarta",
+  "bookingMode": "slot",
+  "stayCheckInTime": "14:00",
+  "stayCheckOutTime": "12:00",
+  "sortOrder": 0,
+  "status": "active",
+  "unitLabels": ["string"]
+}
+```
+
+### Schema: BookingResourcePatch
+
+| Field              | Type                       | Required | Nullable | Description |
+| ------------------ | -------------------------- | -------- | -------- | ----------- |
+| `name`             | string                     | no       | no       |             |
+| `kind`             | string                     | no       | no       |             |
+| `status`           | enum(`active`, `inactive`) | no       | no       |             |
+| `poolId`           | string (uuid)              | no       | yes      |             |
+| `timezone`         | string                     | no       | no       |             |
+| `bookingMode`      | enum(`slot`, `stay`)       | no       | no       |             |
+| `stayCheckInTime`  | string                     | no       | yes      |             |
+| `stayCheckOutTime` | string                     | no       | yes      |             |
+| `sortOrder`        | integer                    | no       | no       |             |
+| `capacity`         | integer                    | no       | no       | Grow only.  |
+| `units`            | array of object            | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "kind": "string",
+  "status": "active",
+  "poolId": "00000000-0000-0000-0000-000000000000",
+  "timezone": "string",
+  "bookingMode": "slot",
+  "stayCheckInTime": "string",
+  "stayCheckOutTime": "string",
+  "sortOrder": 0,
+  "capacity": 1,
+  "units": [
+    {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "label": "string",
+      "status": "active"
+    }
+  ]
+}
+```
+
+### Schema: BookingResourcePoolInput
+
+| Field              | Type               | Required | Nullable | Description |
+| ------------------ | ------------------ | -------- | -------- | ----------- |
+| `code`             | string             | yes      | no       |             |
+| `name`             | string             | yes      | no       |             |
+| `allocationPolicy` | enum(`first_free`) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "allocationPolicy": "first_free"
+}
+```
+
+### Schema: BookingResourcePoolPatch
+
+| Field              | Type               | Required | Nullable | Description |
+| ------------------ | ------------------ | -------- | -------- | ----------- |
+| `name`             | string             | no       | no       |             |
+| `allocationPolicy` | enum(`first_free`) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "allocationPolicy": "first_free"
 }
 ```
 

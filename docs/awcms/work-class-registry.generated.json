@@ -447,6 +447,26 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/booking/offerings/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/offerings/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/offerings/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/policy.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/booking/reports/occupancy.ts",
       "workClass": "interactive",
       "source": "factory"
@@ -498,6 +518,36 @@
     },
     {
       "path": "src/pages/api/v1/booking/reservations/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/resource-pools/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/resource-pools/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/resource-pools/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/resources/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/resources/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/booking/resources/index.ts",
       "workClass": "interactive",
       "source": "factory"
     },

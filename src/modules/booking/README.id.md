@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:6d3ee1b309e39642623895d496001ab47ea1ec75702daabc826c2e5c2d62a0c6 -->
+<!-- i18n-source-hash: sha256:1afff1911f16774eec3f5c369327e637e4c8741b27611270d2252687db935416 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -44,6 +44,19 @@ Route blok (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
 `POST /blocks/{id}/release`) memakai `Idempotency-Key` dengan replay dan tidak
 menerbitkan event. **Belum ada:** route rekonsiliasi, dan layar admin (#942,
 yang memungkinkan modul keluar dari `experimental`).
+
+Konfigurasi admin (Issue #1030, tanpa migrasi; prasyarat #942): resource beserta unit
+dan keanggotaan pool-nya, pool resource, offering layanan dan kebijakan tenant, di
+bawah `/api/v1/booking/` (`resources`, `resource-pools`, `offerings`, `policy`).
+Setiap tulis memakai `Idempotency-Key` dengan replay dan berjalan di bawah
+savepoint, sehingga guard database (`BOOKING_MODE_IN_USE`, `TIMEZONE_IN_USE`,
+`SCHEDULE_TIMEZONE_MISMATCH`, kode ganda) menjadi 409 bernama, bukan 500. Delete
+bersifat soft dan ditolak selama resource dipakai; kapasitas hanya bertambah;
+`PUT /policy` mengganti seluruh kebijakan (`null` = default modul) dan diaudit
+`critical`. Kode: `application/booking-resource-admin.ts`,
+`booking-offering-admin.ts`, `booking-policy-admin.ts`, `booking-admin-routes.ts`,
+`booking-admin-support.ts`, `domain/booking-admin-validation.ts`; lihat
+[`booking.md` §3.0.2](../../../docs/awcms/booking.id.md).
 
 Pelaporan (Issue #944, `sql/244`): tiga proyeksi pada engine `reporting` yang ada
 dan tiga route laporan langsung; lihat "Pelaporan, di satu tempat".
