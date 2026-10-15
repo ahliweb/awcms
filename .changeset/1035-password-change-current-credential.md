@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+security(identity_access): changing your password now verifies the CURRENT credential, not a stale per-tenant copy (#1035). `password-change` used `awcms_identities.password_hash`, so after a password was changed in tenant A, a tenant-B session holding the OLD password could change it in B and take the account in every tenant. It now uses the shared login-rule verifier (principal credential once promoted, else the identity hash), checks the principal lockout first (`429`) and counts a wrong password toward it. The principal credential stays the single source of truth (no migration; a test fails the build if any other file reads an identity's `password_hash`). Other sessions in the tenant are revoked before the epoch bump, and the caller's own session now survives the change as documented. See ADR-0141 section 8. A password reset of an identity that was never linked to its person's record now replaces the person's credential and bumps the epoch (it used to write only the identity copy, leaving the old password working everywhere), and links the identity.

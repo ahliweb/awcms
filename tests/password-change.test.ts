@@ -73,17 +73,40 @@ function stageThrough(
     [{ principal_id: "human-7" }],
     [],
     [],
-    [{ password_hash: passwordHash }],
+    // The shared verifier (#1035): the identity row, then its principal, whose
+    // credential is not promoted yet so the identity's own hash is the one used.
+    [
+      {
+        password_hash: passwordHash,
+        principal_id: "human-7",
+        login_identifier: "alice@example.com"
+      }
+    ],
+    [
+      {
+        id: "human-7",
+        email_normalized: "alice@example.com",
+        password_hash: null,
+        failed_login_count: 0,
+        locked_until: null
+      }
+    ],
     ...extra
   ];
 }
 
-/** The tail after the identity UPDATE, revoking `sessionIds` other sessions. */
+/**
+ * The tail after the identity UPDATE: revoke `sessionIds` other sessions (while
+ * the caller is still live), then the principal credential write, then the
+ * caller's own session is re-stamped with the new epoch.
+ */
 function stageRevocation(sessionIds: string[]): unknown[][] {
   return [
     [],
     [{ identity_id: "identity-7" }],
-    sessionIds.map((id) => ({ id }))
+    sessionIds.map((id) => ({ id })),
+    [],
+    []
   ];
 }
 
@@ -191,7 +214,7 @@ describe("step-up is asked for only when there is a factor to ask for", () => {
     );
 
     expect(source.indexOf("requireStepUp(")).toBeLessThan(
-      source.indexOf("verifyPassword(")
+      source.indexOf("verifyCurrentPassword(")
     );
   });
 });
@@ -209,9 +232,16 @@ describe("the write happens only after the credential is proven", () => {
         { currentPassword: "not it", newPassword: NEXT },
         NOW
       )
-    ).toEqual({ outcome: "invalid_credentials" });
+    ).toEqual({ outcome: "invalid_credentials", identityId: "identity-7" });
 
-    expect(calls.some((call) => call.sql.includes("UPDATE"))).toBe(false);
+    // The only write is the lockout counter: nothing replaces a credential.
+    expect(
+      calls.filter(
+        (call) =>
+          call.sql.includes("UPDATE") &&
+          !call.sql.includes("failed_login_count + 1")
+      )
+    ).toEqual([]);
   });
 
   test("success replaces the hash, clears the lockout, and revokes the OTHER sessions", async () => {

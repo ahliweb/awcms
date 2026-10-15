@@ -22,6 +22,34 @@
  * additionally required from anyone who has one. Nobody is ever asked for less
  * than they can supply, and nobody is asked for something they cannot.
  *
+ * ## The current password is checked by THE shared verifier (#1035)
+ *
+ * Since ADR-0086 the live credential belongs to the PRINCIPAL (the person); an
+ * identity's own `password_hash` is a per-tenant copy that goes stale as soon as
+ * the password is changed from another tenant. This function used to verify
+ * against that copy, so after Alice changed her password in tenant A, anyone
+ * holding a tenant-B session and her OLD password could "change" it in B and
+ * take the account in every tenant. It now calls `verifyCurrentPassword`
+ * (`current-password.ts`), which applies the login rule - the principal's
+ * credential once promoted, the identity's hash only until then - checks the
+ * principal lockout first, and counts a wrong password toward it.
+ *
+ * ## What a change WRITES, and who survives it
+ *
+ * One source of truth: the principal credential, via `setPrincipalCredential`
+ * (which also clears the lockout and bumps `credential_epoch`, ending every
+ * session of the person in EVERY tenant). The current tenant's identity copy is
+ * still written so the legacy fallback is never left holding the old,
+ * possibly-leaked hash; other tenants' copies cannot be reached from here (FORCE
+ * RLS) and do not need to be, because once a principal holds a credential no
+ * reader consults an identity copy (see ADR-0141 section 8).
+ *
+ * Sessions: the other sessions in this tenant are revoked FIRST (while the
+ * caller is still recognisable, so the count is real), then the epoch bump ends
+ * the person's sessions everywhere else, then the caller's own session is
+ * re-stamped with the new epoch so the person who proved the old password is
+ * not signed out of the tab they changed it in.
+ *
  * ## Order inside the function
  *
  * Step-up is evaluated BEFORE the argon2id verification. It is far cheaper, and
@@ -29,10 +57,14 @@
  * submitted `currentPassword` was right.
  */
 import { setPrincipalCredential } from "./principal-store";
-import { hashPassword, verifyPassword } from "../../../lib/auth/password";
+import { hashPassword } from "../../../lib/auth/password";
+import { verifyCurrentPassword } from "./current-password";
 import { getMfaStatus } from "./mfa";
 import { requireStepUp } from "./mfa-session-assurance";
-import { revokeOtherOwnSessions } from "./session-directory";
+import {
+  restampOwnSessionAfterCredentialChange,
+  revokeOtherOwnSessions
+} from "./session-directory";
 import { sessionCredentialCurrent } from "./session-credential-epoch";
 import { isPasswordLoginDisabledForIdentity } from "./tenant-auth-policy";
 
@@ -44,8 +76,10 @@ export type ChangeOwnPasswordResult =
   | { outcome: "step_up_required" }
   /** The tenant policy says this identity signs in by SSO; there is no password to change. */
   | { outcome: "password_login_disabled" }
-  /** `currentPassword` did not match. */
-  | { outcome: "invalid_credentials" };
+  /** `currentPassword` did not match (counted toward the principal lockout). */
+  | { outcome: "invalid_credentials"; identityId: string }
+  /** The person is locked out by failed password attempts; nothing was verified. */
+  | { outcome: "locked"; identityId: string };
 
 /**
  * Replaces the caller's password.
@@ -99,22 +133,24 @@ export async function changeOwnPassword(
     return { outcome: "password_login_disabled" };
   }
 
-  const identityRows = (await tx`
-    SELECT password_hash, principal_id FROM awcms_identities
-    WHERE tenant_id = ${tenantId} AND id = ${identityId} AND status = 'active'
-  `) as { password_hash: string; principal_id: string | null }[];
-  const passwordHash = identityRows[0]?.password_hash;
-  const principalId = identityRows[0]?.principal_id ?? null;
+  const verified = await verifyCurrentPassword(tx, {
+    tenantId,
+    identityId,
+    password: input.currentPassword,
+    now
+  });
 
-  // A live session whose identity is gone or deactivated: reported as
-  // unauthenticated, not as a bad password. The session is what stopped being
-  // valid.
-  if (!passwordHash) return { outcome: "unauthenticated" };
-
-  if (!(await verifyPassword(input.currentPassword, passwordHash))) {
-    return { outcome: "invalid_credentials" };
+  // A live session whose identity is gone or deactivated, or that has nothing to
+  // verify against: reported as unauthenticated, not as a bad password. The
+  // session is what stopped being valid.
+  if (verified.outcome === "no_credential")
+    return { outcome: "unauthenticated" };
+  if (verified.outcome === "locked") return { outcome: "locked", identityId };
+  if (verified.outcome === "invalid") {
+    return { outcome: "invalid_credentials", identityId };
   }
 
+  const principalId = verified.principalId;
   const newPasswordHash = await hashPassword(input.newPassword);
 
   await tx`
@@ -126,20 +162,23 @@ export async function changeOwnPassword(
     WHERE tenant_id = ${tenantId} AND id = ${identityId}
   `;
 
-  // ADR-0086 — same obligation as the reset path: the live credential and the
-  // live lockout are on the principal, and changing one without the other
-  // produces an account whose new password does not work.
-  //
-  // `principal_id` rides along on the SELECT that already ran rather than
-  // costing a second round trip. That is not only cheaper: a fresh query here
-  // was the first shape written, and it moved a test's revoked-session count
-  // from 2 to 0 — the extra statement shifted what the surrounding code saw.
-  // Reading the column that is already being fetched cannot do that.
+  // Others in THIS tenant first, while the caller is still a live session; the
+  // epoch bump below then ends the person's sessions in every other tenant.
+  const revocation = await revokeOtherOwnSessions(tx, tenantId, tokenHash, now);
+
+  // ADR-0086 - the live credential and the live lockout are on the principal.
   if (principalId) {
     await setPrincipalCredential(tx, principalId, newPasswordHash);
-  }
 
-  const revocation = await revokeOtherOwnSessions(tx, tenantId, tokenHash, now);
+    // The bump just made the caller's own session stale; it proved the old
+    // password a moment ago, so it keeps working.
+    await restampOwnSessionAfterCredentialChange(
+      tx,
+      tenantId,
+      identityId,
+      tokenHash
+    );
+  }
 
   return {
     outcome: "changed",
