@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:230d8c418266a781aa08b1bb82477bd414ee53f220d9b61000f5049c3b3dfef0 -->
+<!-- i18n-source-hash: sha256:b4a91d5bf618b30ab07fbd1aa28f2d85cb09719d4bef99bcb1ae533cef7fc61d -->
 
 # `hr_workforce`
 
@@ -179,12 +179,18 @@ digantikan".
   pemohon memutuskan; (2) guard self-approval chokepoint menolak pemohon
   **menyelesaikan** (`403`); (3) handler menolak instance approved yang tidak punya
   keputusan setuju manusia (`409 CORRECTION_NO_APPROVER`: graf tanpa node persetujuan
-  akan menjadikan pemohon penyetuju dirinya) atau yang diikuti pemohon **langsung
-  atau sebagai pemberi delegasi yang kedudukannya dipakai delegat**
-  (`409 CORRECTION_SELF_APPROVED`: guard engine hanya membandingkan pengguna yang
-  bertindak, sehingga delegat yang menyetujui atas nama pemohon lolos); (4)
-  database: `CHECK (status <> 'approved' OR decided_by <> requested_by)` dan trigger
-  yang membaca ulang baris keputusan workflow sendiri. Status koreksi hanya dapat
+  akan menjadikan pemohon penyetuju dirinya) atau yang diikuti pemohon **atau pegawai yang
+  dikoreksi** **langsung atau sebagai pemberi delegasi yang kedudukannya dipakai
+  delegat**, atau yang diselesaikan pegawai itu (`409 CORRECTION_SELF_APPROVED`:
+  guard engine hanya membandingkan pengguna yang bertindak, sehingga delegat yang
+  menyetujui atas nama seseorang lolos, dan rekan yang mengajukan koreksi untuk
+  seorang pegawai akan membiarkan pegawai itu menyetujuinya). Subjek adalah login
+  yang tertaut ke employment saat koreksi diminta (dipotret di
+  `subject_tenant_user_id`, dicap trigger) DAN yang tertaut sekarang, sehingga
+  penautan ulang di antaranya tidak melepas pengecualian; tidak ada pengecualian
+  transitif rantai atasan; (4) database: `CHECK` bahwa `decided_by` bukan pemohon
+  maupun subjek, dan trigger yang membaca ulang baris keputusan workflow sendiri
+  (diputuskan oleh dan atas nama). Status koreksi hanya dapat
   mengikuti putusan instance (`approved`/`rejected`/`cancelled`), dan baris
   `approved` tanpa event-nya tidak dapat commit (constraint trigger tertunda).
 - **Siapa melihat apa.** `?mine=true` (setiap employment pemanggil yang hidup, yang
@@ -200,7 +206,7 @@ digantikan".
   terms mereka). Request cacat ditahan sampai otorisasi memutuskan, sehingga
   pemanggil yang tidak berwenang diberi `403` sebelum `400`.
 - **Alasan bersifat sensitif.** Ia dipilih hanya pada `GET .../{id}` dan hanya untuk
-  pemohon, assignee workflow dari instance, atau pemanggil yang perannya memberi
+  pemohon, assignee workflow HIDUP dari instance (kursi yang dialihkan atau dilewati tidak melihat apa pun), atau pemanggil yang perannya memberi
   `corrections.read`; atasan yang membaca koreksi bawahannya lewat rantai saja
   melihat semuanya kecuali alasan. Tidak ada respons tulis yang membawanya (jadi
   penyimpanan idempotensi tidak menyimpannya), daftar tidak pernah, dan tidak ada

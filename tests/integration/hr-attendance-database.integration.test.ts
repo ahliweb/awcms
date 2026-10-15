@@ -1232,6 +1232,188 @@ suite("hr_workforce attendance database invariants (Issue #947)", () => {
     });
   });
 
+  describe("segregation of duties: the employee the correction is about is never the approver either", () => {
+    async function linkLogin(employmentId: string, login: string | null) {
+      await getAdminSql()`
+        UPDATE awcms_hr_employments SET tenant_user_id = ${login}
+        WHERE id = ${employmentId}
+      `;
+    }
+
+    async function subjectOf(correctionId: string) {
+      const rows = (await getAdminSql()`
+        SELECT subject_tenant_user_id FROM awcms_hr_attendance_corrections
+        WHERE id = ${correctionId}
+      `) as { subject_tenant_user_id: string | null }[];
+
+      return rows[0]!.subject_tenant_user_id;
+    }
+
+    test("the subject login is stamped by the trigger at request time; a writer-supplied value is discarded; no login means NULL", async () => {
+      const subject = await seedUser(TENANT_A, "subject");
+      await linkLogin(empA, subject);
+      const c = await pendingCorrection(TENANT_A, empA, userA);
+
+      expect(await subjectOf(c.id)).toBe(subject);
+
+      const forged = crypto.randomUUID();
+      const { instanceId } = await seedInstance(TENANT_A, {
+        requestedBy: userA,
+        resourceId: forged
+      });
+      await inTenant(TENANT_A, async (tx) => {
+        await tx`
+          INSERT INTO awcms_hr_attendance_corrections
+            (id, tenant_id, employment_id, kind, proposed_kind,
+             proposed_occurred_at, reason, workflow_instance_id, requested_by,
+             subject_tenant_user_id)
+          VALUES (${forged}, ${TENANT_A}, ${empA}, 'add', 'clock_out',
+                  now() - interval '1 hour', 'forgot', ${instanceId}, ${userA},
+                  ${approverA})
+        `;
+      });
+
+      expect(await subjectOf(forged)).toBe(subject);
+
+      await linkLogin(empA, null);
+      const unlinked = await pendingCorrection(TENANT_A, empA, userA);
+
+      expect(await subjectOf(unlinked.id)).toBeNull();
+    });
+
+    test("TRIGGER: the subject approving directly refuses the approval, even beside another approver", async () => {
+      const subject = await seedUser(TENANT_A, "subject");
+      await linkLogin(empA, subject);
+      const c = await pendingCorrection(TENANT_A, empA, userA);
+      await setInstanceStatus(c.instanceId, "approved");
+      await decide(TENANT_A, c.taskId, approverA);
+      await decide(TENANT_A, c.taskId, subject);
+
+      await assertRejected(
+        approveAndApply(TENANT_A, {
+          id: c.id,
+          employmentId: empA,
+          approver: approverA
+        }),
+        /HR_CORRECTION_SELF_APPROVAL/
+      );
+    });
+
+    test("TRIGGER: the subject as the recorded approver, and a delegate acting on the subject's behalf, are the same refusal", async () => {
+      const subject = await seedUser(TENANT_A, "subject");
+      const delegate = await seedUser(TENANT_A, "delegate");
+      await linkLogin(empA, subject);
+
+      const direct = await pendingCorrection(TENANT_A, empA, userA);
+      await setInstanceStatus(direct.instanceId, "approved");
+      await decide(TENANT_A, direct.taskId, subject);
+      await assertRejected(
+        approveAndApply(TENANT_A, {
+          id: direct.id,
+          employmentId: empA,
+          approver: subject
+        }),
+        /HR_CORRECTION_SELF_APPROVAL|sod_check/
+      );
+
+      const delegated = await pendingCorrection(TENANT_A, empA, userA);
+      await setInstanceStatus(delegated.instanceId, "approved");
+      await decide(TENANT_A, delegated.taskId, delegate, "approve", subject);
+      await assertRejected(
+        approveAndApply(TENANT_A, {
+          id: delegated.id,
+          employmentId: empA,
+          approver: delegate
+        }),
+        /HR_CORRECTION_SELF_APPROVAL/
+      );
+    });
+
+    test("TRIGGER: a re-link between the request and the settle sheds nothing: the snapshot and the login linked now are both excluded", async () => {
+      const subject = await seedUser(TENANT_A, "subject");
+      const successor = await seedUser(TENANT_A, "successor");
+      await linkLogin(empA, subject);
+      const c = await pendingCorrection(TENANT_A, empA, userA);
+      await setInstanceStatus(c.instanceId, "approved");
+
+      // The employment is re-linked to another login before the settle.
+      await linkLogin(empA, successor);
+      await decide(TENANT_A, c.taskId, approverA);
+      await decide(TENANT_A, c.taskId, subject);
+      await assertRejected(
+        approveAndApply(TENANT_A, {
+          id: c.id,
+          employmentId: empA,
+          approver: approverA
+        }),
+        /HR_CORRECTION_SELF_APPROVAL/
+      );
+
+      // ... and the login linked NOW is excluded too (the request had none).
+      await linkLogin(empA, null);
+      const later = await pendingCorrection(TENANT_A, empA, userA);
+      await setInstanceStatus(later.instanceId, "approved");
+      await linkLogin(empA, successor);
+      await decide(TENANT_A, later.taskId, approverA);
+      await decide(TENANT_A, later.taskId, successor);
+      await assertRejected(
+        approveAndApply(TENANT_A, {
+          id: later.id,
+          employmentId: empA,
+          approver: approverA
+        }),
+        /HR_CORRECTION_SELF_APPROVAL/
+      );
+    });
+
+    test("CHECK: decided_by cannot equal the subject on an approved row, even without the workflow rows", async () => {
+      const subject = await seedUser(TENANT_A, "subject");
+      await linkLogin(empA, subject);
+      const c = await pendingCorrection(TENANT_A, empA, userA);
+
+      await getAdminSql().begin(async (sql) => {
+        await sql`ALTER TABLE awcms_hr_attendance_corrections DISABLE TRIGGER awcms_hr_attendance_corrections_guard`;
+        await sql`ALTER TABLE awcms_hr_attendance_corrections DISABLE TRIGGER awcms_hr_attendance_corrections_applied`;
+        let refused: unknown = null;
+
+        try {
+          await sql.savepoint(async (sp) => {
+            await sp`
+              UPDATE awcms_hr_attendance_corrections
+              SET status = 'approved', decided_by = ${subject}, decided_at = now()
+              WHERE id = ${c.id}`;
+          });
+        } catch (error) {
+          refused = error;
+        }
+
+        expect(String(refused)).toMatch(/sod_check|check constraint/i);
+        await sql`ALTER TABLE awcms_hr_attendance_corrections ENABLE TRIGGER awcms_hr_attendance_corrections_guard`;
+        await sql`ALTER TABLE awcms_hr_attendance_corrections ENABLE TRIGGER awcms_hr_attendance_corrections_applied`;
+      });
+    });
+
+    test("an unrelated approver is not excluded (no transitive manager-chain exclusion)", async () => {
+      const subject = await seedUser(TENANT_A, "subject");
+      await linkLogin(empA, subject);
+      const c = await pendingCorrection(TENANT_A, empA, userA);
+      await setInstanceStatus(c.instanceId, "approved");
+      await decide(TENANT_A, c.taskId, approverA);
+
+      await approveAndApply(TENANT_A, {
+        id: c.id,
+        employmentId: empA,
+        approver: approverA
+      });
+
+      const rows = (await getAdminSql()`
+        SELECT status FROM awcms_hr_attendance_corrections WHERE id = ${c.id}
+      `) as { status: string }[];
+
+      expect(rows[0]!.status).toBe("approved");
+    });
+  });
+
   describe("the manager chain, downwards", () => {
     function reports(tenantId: string, manager: string) {
       return inTenant(tenantId, async (tx) => {

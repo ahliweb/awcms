@@ -338,7 +338,16 @@ export type EventRefusal =
   | "employment_terminated"
   | "employment_deleted";
 
-const EVENT_REFUSAL_TAGS: readonly [string, EventRefusal][] = [
+/**
+ * The correction guard's own refusals, which repeat what `settleCorrection`
+ * checked: a divergence between the two is a named refusal, never a 500.
+ */
+export type CorrectionGuardRefusal =
+  "self_approval" | "no_approver" | "verdict_mismatch";
+
+type Refusal = EventRefusal | CorrectionGuardRefusal;
+
+const EVENT_REFUSAL_TAGS: readonly [string, Refusal][] = [
   // Another correction superseded the same event between the check and the
   // insert: the one-superseder unique index is the arbiter.
   ["awcms_hr_attendance_events_one_superseder", "target_superseded"],
@@ -346,10 +355,14 @@ const EVENT_REFUSAL_TAGS: readonly [string, EventRefusal][] = [
   ["HR_ATTENDANCE_BACKDATED", "backdated"],
   ["HR_ATTENDANCE_TOO_OLD", "too_old"],
   ["HR_EMPLOYMENT_TERMINATED", "employment_terminated"],
-  ["HR_EMPLOYMENT_DELETED", "employment_deleted"]
+  ["HR_EMPLOYMENT_DELETED", "employment_deleted"],
+  ["HR_CORRECTION_SELF_APPROVAL", "self_approval"],
+  ["HR_CORRECTION_NO_APPROVER", "no_approver"],
+  ["HR_CORRECTION_VERDICT_MISMATCH", "verdict_mismatch"]
 ];
 
-function refusalOf(error: unknown): EventRefusal | null {
+/** The named refusal a database error carries, or `null` for any other error. */
+export function refusalOf(error: unknown): Refusal | null {
   const text = error instanceof Error ? error.message : "";
 
   return EVENT_REFUSAL_TAGS.find(([tag]) => text.includes(tag))?.[1] ?? null;
@@ -417,6 +430,17 @@ export async function recordEvent(
   });
 
   if (!attempt.ok) {
+    // The correction guard does not run on a recorded (non-correction) event.
+    if (
+      attempt.reason === "self_approval" ||
+      attempt.reason === "no_approver" ||
+      attempt.reason === "verdict_mismatch"
+    ) {
+      throw new Error(
+        `Unexpected refusal ${attempt.reason} recording an event.`
+      );
+    }
+
     return { outcome: "refused", reason: attempt.reason };
   }
 
@@ -476,7 +500,7 @@ function replayOutcome(
 async function guarded<T>(
   tx: Bun.TransactionSQL,
   work: (sp: Bun.SQL) => Promise<T>
-): Promise<{ ok: true; value: T } | { ok: false; reason: EventRefusal }> {
+): Promise<{ ok: true; value: T } | { ok: false; reason: Refusal }> {
   try {
     return { ok: true, value: await tx.savepoint((sp) => work(sp)) };
   } catch (error) {
@@ -595,6 +619,7 @@ export async function correctionAccessFacts(
              WHERE t.tenant_id = c.tenant_id
                AND t.workflow_instance_id = c.workflow_instance_id
                AND a.tenant_user_id = ${tenantUserId}
+               AND a.status IN ('pending', 'decided')
            ) AS is_assignee
     FROM awcms_hr_attendance_corrections c
     WHERE c.tenant_id = ${tenantId} AND c.id = ${correctionId}
@@ -862,6 +887,7 @@ type LockedCorrection = {
   status: CorrectionStatus;
   workflow_instance_id: string;
   requested_by: string;
+  subject_tenant_user_id: string | null;
 };
 
 async function lockCorrection(
@@ -871,7 +897,8 @@ async function lockCorrection(
 ): Promise<LockedCorrection | null> {
   const rows = (await tx`
     SELECT id, employment_id, kind, target_event_id, proposed_kind,
-           proposed_occurred_at, status, workflow_instance_id, requested_by
+           proposed_occurred_at, status, workflow_instance_id, requested_by,
+           subject_tenant_user_id
     FROM awcms_hr_attendance_corrections
     WHERE tenant_id = ${tenantId} AND id = ${correctionId}
     FOR UPDATE
@@ -967,7 +994,7 @@ export type SettleOutcome =
   | { outcome: "no_approver" }
   | { outcome: "self_approved" }
   | { outcome: "target_superseded" }
-  | { outcome: "apply_refused"; reason: EventRefusal };
+  | { outcome: "apply_refused"; reason: EventRefusal | "verdict_mismatch" };
 
 type InstanceRow = {
   status: string;
@@ -985,8 +1012,9 @@ type DecisionRow = {
  *
  *   * instance `pending`   -> nothing to apply yet (`still_pending`);
  *   * instance `approved`  -> needs at least one approving decision, and NONE by
- *                             the requester (directly or as the delegator whose
- *                             standing a delegate used): otherwise refused, the
+ *                             the requester or by the employee the correction is
+ *                             ABOUT (directly or as the delegator whose standing
+ *                             a delegate used), and the settling actor is neither: otherwise refused, the
  *                             correction stays pending. Then the status moves to
  *                             `approved` and the superseding event is appended, in
  *                             one savepoint, so both happen or neither does;
@@ -1048,13 +1076,29 @@ export async function settleCorrection(
       return { outcome: "no_approver" };
     }
 
+    // Segregation of duties covers the requester AND the person the correction
+    // is about: the login linked when it was requested, and the one linked now
+    // (a re-link in between must not shed the exclusion). No manager-chain check.
+    const currentLogin = (await tx`
+      SELECT tenant_user_id FROM awcms_hr_employments
+      WHERE tenant_id = ${tenantId} AND id = ${row.employment_id}
+    `) as { tenant_user_id: string | null }[];
+    const excluded = new Set<string>(
+      [
+        row.requested_by,
+        row.subject_tenant_user_id,
+        currentLogin[0]?.tenant_user_id ?? null
+      ].filter((id): id is string => id !== null)
+    );
+
     if (
       approving.some(
         (d) =>
-          d.decided_by_tenant_user_id === row.requested_by ||
-          d.on_behalf_of_tenant_user_id === row.requested_by
+          excluded.has(d.decided_by_tenant_user_id) ||
+          (d.on_behalf_of_tenant_user_id !== null &&
+            excluded.has(d.on_behalf_of_tenant_user_id))
       ) ||
-      actorId === row.requested_by
+      (actorId !== null && excluded.has(actorId))
     ) {
       return { outcome: "self_approved" };
     }
@@ -1094,9 +1138,18 @@ export async function settleCorrection(
     });
 
     if (!applied.ok) {
-      return applied.reason === "target_superseded"
-        ? { outcome: "target_superseded" }
-        : { outcome: "apply_refused", reason: applied.reason };
+      switch (applied.reason) {
+        case "target_superseded":
+          return { outcome: "target_superseded" };
+        case "self_approval":
+          return { outcome: "self_approved" };
+        case "no_approver":
+          return { outcome: "no_approver" };
+        case "verdict_mismatch":
+          return { outcome: "apply_refused", reason: "verdict_mismatch" };
+        default:
+          return { outcome: "apply_refused", reason: applied.reason };
+      }
     }
   } else if (instance.status === "rejected") {
     const rejecter =

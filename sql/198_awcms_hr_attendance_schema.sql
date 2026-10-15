@@ -45,9 +45,12 @@
 --     used). `rejected` needs a `rejected` instance, `withdrawn` a `cancelled`
 --     one. `approved` also needs the superseding event to exist by commit (a
 --     deferred constraint trigger), so approval and application cannot part.
---   * SEGREGATION OF DUTIES: `decided_by <> requested_by` on an approved row is a
---     CHECK constraint, and the trigger repeats it against the workflow's own
---     decision rows.
+--   * SEGREGATION OF DUTIES: on an approved row `decided_by` is neither the
+--     requester nor the employee the correction is ABOUT (`subject_tenant_user_id`,
+--     the login linked at request time, stamped by the trigger): a CHECK
+--     constraint. The trigger repeats it against the workflow's own decision rows
+--     (directly or on behalf of), for the snapshot AND the login linked now.
+--     There is no transitive manager-chain exclusion.
 --   * NO CLOCKING ON A DELETED EMPLOYMENT, and none on a TERMINATED one (only an
 --     approved correction may still touch a terminated employment's history).
 --
@@ -157,6 +160,13 @@ CREATE TABLE IF NOT EXISTS awcms_hr_attendance_corrections (
   -- no (tenant_id, id) key; the guard checks the tenant, resource and requester.
   workflow_instance_id uuid NOT NULL REFERENCES awcms_workflow_instances (id),
   requested_by uuid NOT NULL,
+  -- The login linked to the employment AT REQUEST TIME (NULL when it had none),
+  -- stamped by the guard trigger and never supplied by a writer: the person the
+  -- correction is ABOUT may not approve it either (segregation of duties covers
+  -- the subject, not only the requester). A snapshot, so a re-link between the
+  -- request and the settle does not shed the exclusion; the guard also checks the
+  -- employment's CURRENT login.
+  subject_tenant_user_id uuid,
   -- The approver (approved), the rejecter (rejected) or whoever ended the
   -- instance (withdrawn). NULL while pending.
   decided_by uuid,
@@ -179,9 +189,13 @@ CREATE TABLE IF NOT EXISTS awcms_hr_attendance_corrections (
       (status = 'pending' AND decided_by IS NULL AND decided_at IS NULL)
       OR (status <> 'pending' AND decided_by IS NOT NULL AND decided_at IS NOT NULL)
     ),
-  -- SEGREGATION OF DUTIES, in the data: the requester is never the approver.
+  -- SEGREGATION OF DUTIES, in the data: neither the requester nor the person the
+  -- correction is about is the approver.
   CONSTRAINT awcms_hr_attendance_corrections_sod_check
-    CHECK (status <> 'approved' OR decided_by <> requested_by),
+    CHECK (status <> 'approved'
+           OR (decided_by <> requested_by
+               AND (subject_tenant_user_id IS NULL
+                    OR decided_by <> subject_tenant_user_id))),
   CONSTRAINT awcms_hr_attendance_corrections_employment_fkey
     FOREIGN KEY (tenant_id, employment_id)
     REFERENCES awcms_hr_employments (tenant_id, id),
@@ -190,6 +204,9 @@ CREATE TABLE IF NOT EXISTS awcms_hr_attendance_corrections (
     REFERENCES awcms_hr_attendance_events (tenant_id, id),
   CONSTRAINT awcms_hr_attendance_corrections_requested_by_fkey
     FOREIGN KEY (tenant_id, requested_by)
+    REFERENCES awcms_tenant_users (tenant_id, id),
+  CONSTRAINT awcms_hr_attendance_corrections_subject_fkey
+    FOREIGN KEY (tenant_id, subject_tenant_user_id)
     REFERENCES awcms_tenant_users (tenant_id, id),
   CONSTRAINT awcms_hr_attendance_corrections_decided_by_fkey
     FOREIGN KEY (tenant_id, decided_by)
@@ -213,6 +230,9 @@ CREATE INDEX IF NOT EXISTS awcms_hr_attendance_corrections_target_idx
   WHERE target_event_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS awcms_hr_attendance_corrections_requested_by_idx
   ON awcms_hr_attendance_corrections (tenant_id, requested_by);
+CREATE INDEX IF NOT EXISTS awcms_hr_attendance_corrections_subject_idx
+  ON awcms_hr_attendance_corrections (tenant_id, subject_tenant_user_id)
+  WHERE subject_tenant_user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS awcms_hr_attendance_corrections_decided_by_idx
   ON awcms_hr_attendance_corrections (tenant_id, decided_by) WHERE decided_by IS NOT NULL;
 
@@ -358,6 +378,8 @@ AS $$
 DECLARE
   header_deleted timestamptz;
   header_found boolean;
+  header_login uuid;
+  current_login uuid;
   target_employment uuid;
   inst_tenant uuid;
   inst_type text;
@@ -370,7 +392,8 @@ BEGIN
       RAISE EXCEPTION 'awcms_hr: a correction is created pending' USING ERRCODE = '55000';
     END IF;
 
-    SELECT e.deleted_at, true INTO header_deleted, header_found
+    SELECT e.deleted_at, e.tenant_user_id, true
+      INTO header_deleted, header_login, header_found
       FROM awcms_hr_employments e
      WHERE e.tenant_id = NEW.tenant_id AND e.id = NEW.employment_id
      FOR SHARE;
@@ -378,6 +401,9 @@ BEGIN
     IF header_found IS TRUE AND header_deleted IS NOT NULL THEN
       RAISE EXCEPTION 'awcms_hr: HR_EMPLOYMENT_DELETED' USING ERRCODE = '55000';
     END IF;
+
+    -- The subject's login is stamped HERE; whatever the writer supplied is discarded.
+    NEW.subject_tenant_user_id := header_login;
 
     IF NEW.target_event_id IS NOT NULL THEN
       SELECT ev.employment_id INTO target_employment
@@ -409,11 +435,13 @@ BEGIN
   -- UPDATE: only a status move out of `pending`, plus its stamps.
   IF (NEW.id, NEW.tenant_id, NEW.employment_id, NEW.kind, NEW.target_event_id,
       NEW.proposed_kind, NEW.proposed_occurred_at, NEW.reason,
-      NEW.workflow_instance_id, NEW.requested_by, NEW.created_at)
+      NEW.workflow_instance_id, NEW.requested_by, NEW.subject_tenant_user_id,
+      NEW.created_at)
      IS DISTINCT FROM
      (OLD.id, OLD.tenant_id, OLD.employment_id, OLD.kind, OLD.target_event_id,
       OLD.proposed_kind, OLD.proposed_occurred_at, OLD.reason,
-      OLD.workflow_instance_id, OLD.requested_by, OLD.created_at) THEN
+      OLD.workflow_instance_id, OLD.requested_by, OLD.subject_tenant_user_id,
+      OLD.created_at) THEN
     RAISE EXCEPTION 'awcms_hr: a correction''s proposal is immutable; only its status moves'
       USING ERRCODE = '55000';
   END IF;
@@ -451,10 +479,17 @@ BEGIN
       RAISE EXCEPTION 'awcms_hr: HR_CORRECTION_NO_APPROVER' USING ERRCODE = '23514';
     END IF;
 
-    -- ... and the requester made NONE, directly or as the delegator whose
-    -- standing a delegate used (the workflow engine's own self-approval guard
-    -- compares only the acting user).
-    IF EXISTS (
+    -- ... and neither the requester NOR THE PERSON THE CORRECTION IS ABOUT made
+    -- one, directly or as the delegator whose standing a delegate used (the
+    -- workflow engine's own self-approval guard compares only the acting user).
+    -- The subject is the login linked when it was requested AND the login linked
+    -- now, so a re-link in between does not shed the exclusion.
+    SELECT e.tenant_user_id INTO current_login
+      FROM awcms_hr_employments e
+     WHERE e.tenant_id = NEW.tenant_id AND e.id = NEW.employment_id;
+
+    IF NEW.decided_by IN (NEW.requested_by, NEW.subject_tenant_user_id, current_login)
+       OR EXISTS (
       SELECT 1
         FROM awcms_workflow_decisions d
         JOIN awcms_workflow_tasks t
@@ -462,8 +497,10 @@ BEGIN
        WHERE d.tenant_id = NEW.tenant_id
          AND t.workflow_instance_id = NEW.workflow_instance_id
          AND d.decision IN ('approve', 'force_approve')
-         AND (d.decided_by_tenant_user_id = NEW.requested_by
-              OR d.on_behalf_of_tenant_user_id = NEW.requested_by)
+         AND (d.decided_by_tenant_user_id IN
+                (NEW.requested_by, NEW.subject_tenant_user_id, current_login)
+              OR d.on_behalf_of_tenant_user_id IN
+                (NEW.requested_by, NEW.subject_tenant_user_id, current_login))
     ) THEN
       RAISE EXCEPTION 'awcms_hr: HR_CORRECTION_SELF_APPROVAL' USING ERRCODE = '23514';
     END IF;
@@ -549,4 +586,4 @@ $$;
 COMMENT ON TABLE awcms_hr_attendance_events IS
   'Issue #947 / ADR-0132 — CONFIDENTIAL behavioural data. Append-only (no UPDATE/DELETE for awcms_app, plus triggers). recorded_at is the DATABASE clock; occurred_at is bounded by the tenant skew; self/supervisor events cannot be back-dated, kiosk/import replays are accepted up to 7 days and flagged late. Replay-safe by client_event_key. Superseded only by an approved correction, once. No location, photo, device or network column (O6, ADR-0138: evidence is a separate table, Issue #970).';
 COMMENT ON TABLE awcms_hr_attendance_corrections IS
-  'Issue #947 / ADR-0132 — CONFIDENTIAL; `reason` is SENSITIVE (never audited, never in an event or the workflow store). A proposed add/replace of an attendance event. Only the status moves, and it follows the workflow_approval verdict; the requester can never be the approver (CHECK + trigger against the workflow decision rows, including delegation). Never deleted.';
+  'Issue #947 / ADR-0132 — CONFIDENTIAL; `reason` is SENSITIVE (never audited, never in an event or the workflow store). A proposed add/replace of an attendance event. Only the status moves, and it follows the workflow_approval verdict; neither the requester nor the employee the correction is about (the login linked at request time or now) can be the approver (CHECK + trigger against the workflow decision rows, including delegation). Never deleted.';

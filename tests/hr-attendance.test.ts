@@ -12,6 +12,7 @@ import {
   validateCreateAttendanceEvent,
   validateCreateCorrection
 } from "../src/modules/hr-workforce/domain/hr-attendance-validation";
+import { refusalOf } from "../src/modules/hr-workforce/application/hr-attendance-directory";
 import { HR_WORKFORCE_GUARDS } from "../src/modules/hr-workforce/domain/hr-workforce-permissions";
 import { hrWorkforceModule } from "../src/modules/hr-workforce/module";
 
@@ -313,6 +314,40 @@ describe("source-text guarantees", () => {
       expect(text).not.toMatch(
         /\b(latitude|longitude|geo_?location|gps|photo|biometric|fingerprint|device_id|ssid)\b/i
       );
+    }
+  });
+});
+
+describe("database refusals are named, never a 500 (Issue #947)", () => {
+  test("the correction guard's own refusals map to a named reason, like the event guard's", () => {
+    const named: Record<string, string> = {
+      HR_ATTENDANCE_FUTURE: "future",
+      HR_CORRECTION_SELF_APPROVAL: "self_approval",
+      HR_CORRECTION_NO_APPROVER: "no_approver",
+      HR_CORRECTION_VERDICT_MISMATCH: "verdict_mismatch"
+    };
+
+    for (const [tag, reason] of Object.entries(named)) {
+      expect(refusalOf(new Error(`awcms_hr: ${tag}`))).toBe(reason as never);
+    }
+
+    expect(refusalOf(new Error("connection reset"))).toBeNull();
+    expect(refusalOf("not an error")).toBeNull();
+  });
+
+  test("every status-move refusal the SQL raises on `approved` has a mapping", () => {
+    const sql = readFileSync(
+      "sql/198_awcms_hr_attendance_schema.sql",
+      "utf8"
+    ).replace(/^--.*$/gm, "");
+
+    for (const tag of [
+      "HR_CORRECTION_SELF_APPROVAL",
+      "HR_CORRECTION_NO_APPROVER",
+      "HR_CORRECTION_VERDICT_MISMATCH"
+    ]) {
+      expect(sql).toContain(tag);
+      expect(refusalOf(new Error(`awcms_hr: ${tag}`))).not.toBeNull();
     }
   });
 });

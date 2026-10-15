@@ -32,8 +32,10 @@ const SCOPE = "hr_workforce_attendance_correction_settle";
  *
  * Segregation of duties: the requester cannot settle their own correction, an
  * approved instance with no human approving decision is refused, and so is one the
- * requester approved directly or as the delegator whose standing a delegate used
- * (409 `CORRECTION_SELF_APPROVED`); the database repeats each check. High-risk,
+ * requester OR THE EMPLOYEE THE CORRECTION IS ABOUT approved directly or as the
+ * delegator whose standing a delegate used, or one that employee settles (409
+ * `CORRECTION_SELF_APPROVED`; the employee is the login linked when it was
+ * requested and the one linked now); the database repeats each check. High-risk,
  * audited without the reason, idempotent.
  */
 export const POST = defineTenantRoute<Prepared>({
@@ -136,7 +138,7 @@ export const POST = defineTenantRoute<Prepared>({
             return fail(
               409,
               "CORRECTION_SELF_APPROVED",
-              "The requester took part in approving this correction, directly or as a delegator; it cannot be applied."
+              "The requester, or the employee the correction is about, took part in approving or settling it, directly or as a delegator; it cannot be applied."
             );
           case "target_superseded":
             return fail(

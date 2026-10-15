@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:baf03759cb86d9462d284ebd51219a13a3b6162ac53547718d26f7d9cce0049d -->
+<!-- i18n-source-hash: sha256:6453e9e08bf6959ff4bf634476dde566ffa16e675de107cd0d133e06b5787c7d -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -180,7 +180,8 @@ mengusulkan event tambahan atau pengganti dengan alasan wajib, memulai instance
 yang lama. Catatan efektif adalah "event yang tidak digantikan". Persetujuan
 **wajib dan gagal-tertutup**: tenant tanpa workflow `hr.attendance_correction`
 terbit mendapat `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` saat submit. Guard
-persetujuan-diri yang sudah ada mencegah pegawai menyetujui koreksinya sendiri.
+persetujuan-diri mencegah baik pemohon maupun pegawai yang dikoreksi menyetujuinya
+(rekan yang mengajukannya atas nama mereka tidak menghindarinya).
 Teks alasan adalah data pribadi dan tidak pernah ikut dalam baris audit atau
 event.
 
@@ -195,8 +196,11 @@ lebih tua dari skew tenant **ditolak** (`ATTENDANCE_BACKDATED`: pakai koreksi); 
 `kiosk`/`import` adalah antrean yang diputar ulang, jadi waktu usang **diterima**
 hingga 7 hari dan ditandai `late` lewat 15 menit (lebih tua: ditolak). Baris koreksi
 hanya mengubah status dan status itu harus mengikuti putusan `workflow_approval`,
-pemohon tidak pernah boleh menjadi penyetuju (CHECK, trigger atas baris keputusan
-workflow termasuk delegat yang bertindak atas nama pemohon, dan chokepoint), dan
+baik pemohon maupun pegawai yang dikoreksi (login yang tertaut saat permintaan,
+dipotret di `subject_tenant_user_id`, dan yang tertaut sekarang) tidak boleh menjadi
+penyetuju atau menyelesaikannya (CHECK, trigger atas baris keputusan workflow
+termasuk delegat yang bertindak atas nama salah satunya, chokepoint, dan handler;
+pengecualian rantai atasan sengaja tidak termasuk), dan
 instance workflow dimulai tanpa fakta. Koreksi yang instan usulannya lebih jauh ke
 masa depan daripada skew tenant ditolak saat dibuat dengan `422
 ATTENDANCE_TIME_IN_FUTURE` (guard event akan menolaknya saat persetujuan dan

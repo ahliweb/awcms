@@ -1916,6 +1916,129 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       ).toBe("pending");
     });
 
+    test("SoD covers the SUBJECT: the employee a colleague filed a correction about cannot approve it (directly, as a delegator, or by settling it), and a re-link sheds nothing", async () => {
+      if (!handlerReady) return;
+      const other = await seedUser(env.tenantId, "other", [WORKFLOW_DECIDE]);
+      const hr = await seedUser(env.tenantId, "hr", [
+        "hr_workforce.corrections.approve",
+        "hr_workforce.corrections.read",
+        "hr_workforce.attendance.read"
+      ]);
+      const subject = await employee("subject", [
+        "hr_workforce.clock.create",
+        "hr_workforce.corrections.approve",
+        WORKFLOW_DECIDE
+      ]);
+      // A colleague files it FOR the subject (the record-for-others power).
+      const colleague = await employee("colleague", [
+        "hr_workforce.corrections.create",
+        "hr_workforce.attendance.create"
+      ]);
+      await publishWorkflow([subject.tenantUserId, other.tenantUserId]);
+      const file = async () =>
+        (
+          await requestCorrection(
+            { employmentId: subject.employmentId },
+            colleague.token
+          )
+        ).body.data!;
+      const refusedAndPending = async (id: string, token: string) => {
+        const refused = await settle(id, token);
+
+        expect(refused.status).toBe(409);
+        expect(refused.body.error!.code).toBe("CORRECTION_SELF_APPROVED");
+        expect((await readCorrection(id, hr.token)).body.data!.status).toBe(
+          "pending"
+        );
+        expect(await count("awcms_hr_attendance_events")).toBe(0);
+      };
+
+      // (1) The subject approves in the workflow themself.
+      const direct = await file();
+      expect(
+        (await decide(direct.workflowInstanceId, subject.token)).status
+      ).toBe(200);
+      await refusedAndPending(direct.id, hr.token);
+
+      // (2) A delegate acted on the subject's behalf.
+      const delegated = await file();
+      expect(
+        (await decide(delegated.workflowInstanceId, other.token)).status
+      ).toBe(200);
+      await admin()`
+        UPDATE awcms_workflow_decisions
+        SET on_behalf_of_tenant_user_id = ${subject.tenantUserId}
+        WHERE workflow_task_id = ${await taskOf(delegated.workflowInstanceId)}`;
+      await refusedAndPending(delegated.id, hr.token);
+
+      // (3) Another approved it, but the SUBJECT tries to settle it.
+      const settledBySubject = await file();
+      expect(
+        (await decide(settledBySubject.workflowInstanceId, other.token)).status
+      ).toBe(200);
+      await refusedAndPending(settledBySubject.id, subject.token);
+
+      // (4) The subject approved; the employment is re-linked to another login
+      // before the settle: the request-time snapshot still excludes them.
+      const relinked = await file();
+      expect(
+        (await decide(relinked.workflowInstanceId, subject.token)).status
+      ).toBe(200);
+      const successor = await seedUser(env.tenantId, "successor", []);
+      await admin()`
+        UPDATE awcms_hr_employments SET tenant_user_id = ${successor.tenantUserId}
+        WHERE id = ${subject.employmentId}`;
+      await refusedAndPending(relinked.id, hr.token);
+
+      // (5) Control: an unrelated approver settles normally (no manager-chain rule).
+      const fine = await file();
+      expect((await decide(fine.workflowInstanceId, other.token)).status).toBe(
+        200
+      );
+      const done = await settle(fine.id, hr.token);
+
+      expect(done.status).toBe(200);
+      expect(done.body.data!.status).toBe("approved");
+      expect(done.body.data!.decidedBy).toBe(other.tenantUserId);
+    });
+
+    test("a workflow seat that was reassigned or skipped no longer sees the sensitive reason; a pending or decided seat does", async () => {
+      if (!handlerReady) return;
+      const { approver, worker } = await setup();
+      const created = (
+        await requestCorrection(
+          { employmentId: worker.employmentId },
+          worker.token
+        )
+      ).body.data!;
+      const seat = async (status: string) => {
+        await admin()`
+          UPDATE awcms_workflow_task_assignments SET status = ${status}
+          WHERE tenant_id = ${env.tenantId}
+            AND tenant_user_id = ${approver.tenantUserId}
+            AND workflow_task_id = ${await taskOf(created.workflowInstanceId)}`;
+
+        return readCorrection(created.id, approver.token);
+      };
+
+      const live = await seat("pending");
+
+      expect(live.status).toBe(200);
+      expect(live.body.data!.reason).toBe(REASON);
+
+      for (const status of ["reassigned", "skipped"]) {
+        const gone = await seat(status);
+
+        expect(gone.status).toBe(403);
+        expect(JSON.stringify(gone.body)).not.toContain("SENTINEL");
+      }
+
+      const decided = await seat("decided");
+
+      expect(decided.status).toBe(200);
+      expect(decided.body.data!.reason).toBe(REASON);
+    });
+
     test("the reason never leaves the correction's own row: not in audit, the workflow store, domain events or any response but the permitted ones", async () => {
       if (!handlerReady) return;
       const { approver, hr, worker } = await setup();

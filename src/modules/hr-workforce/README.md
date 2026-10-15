@@ -174,11 +174,17 @@ superseded".
   requester **settling** (`403`); (3) the handler refuses an approved instance that
   has no human approving decision (`409 CORRECTION_NO_APPROVER`: a graph with no
   approval node would make the requester their own approver) or in which the
-  requester took part **directly or as the delegator whose standing a delegate used**
+  requester **or the employee the correction is about** took part **directly or as
+  the delegator whose standing a delegate used**, or which that employee settles
   (`409 CORRECTION_SELF_APPROVED`: the engine's guard compares only the acting user,
-  so a delegate approving on the requester's behalf passes it); (4) the database:
-  `CHECK (status <> 'approved' OR decided_by <> requested_by)` and a trigger that
-  re-reads the workflow's own decision rows. The correction's status can only follow
+  so a delegate approving on someone's behalf passes it, and a colleague filing a
+  correction for an employee would otherwise let that employee approve it). The
+  subject is the login linked to the employment when the correction was requested
+  (snapshotted in `subject_tenant_user_id`, stamped by the trigger) AND the one
+  linked now, so a re-link in between does not shed the exclusion; there is no
+  transitive manager-chain exclusion; (4) the database: a `CHECK` that
+  `decided_by` is neither the requester nor the subject, and a trigger that
+  re-reads the workflow's own decision rows (decided by and on behalf of). The correction's status can only follow
   the instance's verdict (`approved`/`rejected`/`cancelled`), and an `approved` row
   without its event cannot commit (deferred constraint trigger).
 - **Who sees what.** `?mine=true` (every live employment of the caller, terminated ones included: a
@@ -194,7 +200,8 @@ superseded".
   A malformed request is held until authorization has decided, so an unauthorised
   caller is told `403` before `400`.
 - **The reason is sensitive.** It is selected only on `GET .../{id}` and only for the
-  requester, a workflow assignee of the instance, or a caller whose roles grant
+  requester, a LIVE workflow assignee of the instance (a seat that was reassigned or
+  skipped sees nothing), or a caller whose roles grant
   `corrections.read`; a supervisor reading a report's correction through the chain
   alone sees everything but the reason. No write response carries it (so the
   idempotency store holds none), the list never does, and no audit row, domain event,

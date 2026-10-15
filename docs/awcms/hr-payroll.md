@@ -171,8 +171,9 @@ proposes an added or replaced event with a mandatory reason, starts a
 `workflow_approval` instance, and on approval appends a new event that
 `supersedes` the old. The effective record is "events not superseded". Approval is
 **required and fail-closed**: a tenant with no published `hr.attendance_correction`
-workflow gets `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` at submit. The existing
-self-approval guard stops an employee from approving their own correction. The
+workflow gets `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` at submit. The
+self-approval guard stops both the requester and the employee the correction is
+about from approving it (a colleague filing it for them does not get around it). The
 reason text is personal data and never rides in an audit row or event.
 
 **As built (Issue #947, `sql/198`–`sql/199`).** Two refinements of the text above,
@@ -185,9 +186,12 @@ event claims "now", so a claimed time older than the tenant skew is **refused**
 (`ATTENDANCE_BACKDATED`: use a correction); a `kiosk`/`import` event is a replayed
 queue, so a stale time is **accepted** up to 7 days and flagged `late` past 15
 minutes (older: refused). The correction row only changes status and that status
-must follow the `workflow_approval` verdict, the requester can never be the approver
-(CHECK, trigger over the workflow's decision rows including a delegate acting on the
-requester's behalf, and the chokepoint), and the workflow instance is started with no
+must follow the `workflow_approval` verdict, neither the requester nor the employee the
+correction is about (the login linked at request time, snapshotted in
+`subject_tenant_user_id`, and the one linked now) can be the approver or settle it
+(CHECK, trigger over the workflow's decision rows including a delegate acting on
+either person's behalf, the chokepoint and the handler; a manager-chain exclusion is
+deliberately not part of it), and the workflow instance is started with no
 facts. A correction whose proposed instant is further in the future than the tenant
 skew is refused at creation with `422 ATTENDANCE_TIME_IN_FUTURE` (the event guard
 would refuse it at approval and leave the correction pending for good); the
