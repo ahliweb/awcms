@@ -61,6 +61,7 @@
  * next invocation.
  */
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
+import { log } from "../../../lib/logging/logger";
 import {
   fetchActiveTenants,
   runBoundedBatches,
@@ -77,6 +78,7 @@ import {
 import { applyCursorBoundarySafetyMargin } from "../domain/cursor-boundary";
 import { DATA_LIFECYCLE_MODULE_KEY } from "../domain/data-lifecycle-permissions";
 import type { ArchivePort } from "../domain/archive-port";
+import { KNOWN_UNREADABLE_DELEGATED_TABLES } from "../domain/known-unreadable-delegated";
 import { planLifecycleDryRun } from "./dry-run-planner";
 import { fetchActiveLegalHoldsForPlanning } from "./legal-hold-service";
 import { getCursor, upsertCursor } from "./cursor-store";
@@ -349,6 +351,119 @@ async function runGenericPurgePass(
   );
 }
 
+/**
+ * A short, row-free code for a failure: the PostgreSQL SQLSTATE when there is
+ * one (`42501` is `permission denied`), otherwise the error's constructor name.
+ * Never the message, which for a database error can quote a table, a column or
+ * a value (Issue #1040).
+ */
+export function lifecycleFailureCode(error: unknown): string {
+  // Bun.SQL puts the SQLSTATE in `errno` (and a driver label in `code`);
+  // node-postgres-style drivers put it in `code`. Accept either.
+  for (const field of ["errno", "code"] as const) {
+    const value = (error as Record<string, unknown> | null)?.[field];
+
+    if (typeof value === "string" && /^[0-9A-Z]{5}$/.test(value)) {
+      return value;
+    }
+  }
+
+  const name = (error as { constructor?: { name?: unknown } } | null)
+    ?.constructor?.name;
+
+  return typeof name === "string" && /^[A-Za-z0-9_]{1,64}$/.test(name)
+    ? name
+    : "unknown";
+}
+
+const INSUFFICIENT_PRIVILEGE = "42501";
+
+/**
+ * Is this failure the EXPECTED one: a delegated snapshot of a table the worker
+ * is deliberately not allowed to read (Issue #1040)? Both halves must hold, the
+ * table on the shrink-only baseline AND `insufficient_privilege`. A different
+ * SQLSTATE on a baseline table (a dropped column, a broken index) is a real
+ * fault and must not hide behind the baseline.
+ */
+export function isKnownUnreadableDelegatedFailure(
+  tableName: string,
+  error: unknown
+): boolean {
+  return (
+    KNOWN_UNREADABLE_DELEGATED_TABLES.includes(tableName) &&
+    lifecycleFailureCode(error) === INSUFFICIENT_PRIVILEGE
+  );
+}
+
+/**
+ * Records that one descriptor's pass failed, and says so in the log, without
+ * letting the failure take the rest of the tenant's pass with it (Issue #1040).
+ *
+ * Logs the descriptor key and a redacted code only. If even the bookkeeping
+ * write fails (for example the worker cannot INSERT into the runs table), that
+ * is logged and swallowed too: the caller's loop must reach the next descriptor.
+ */
+async function recordDescriptorFailure(
+  sql: Bun.SQL,
+  tenantId: string,
+  descriptor: HighVolumeTableDescriptor,
+  runType: "dry_run" | "archive" | "purge",
+  correlationId: string,
+  startedAt: Date,
+  error: unknown,
+  expected = false
+): Promise<void> {
+  const errorCode = lifecycleFailureCode(error);
+
+  log(
+    expected ? "info" : "warning",
+    expected
+      ? "data_lifecycle.descriptor_known_unreadable"
+      : "data_lifecycle.descriptor_failed",
+    {
+      moduleKey: DATA_LIFECYCLE_MODULE_KEY,
+      tenantId,
+      descriptorKey: descriptor.key,
+      runType,
+      errorCode,
+      correlationId
+    }
+  );
+
+  try {
+    await withTenantOrThrow(
+      sql,
+      tenantId,
+      (tx) =>
+        recordLifecycleRun(tx, tenantId, {
+          descriptorKey: descriptor.key,
+          runType,
+          status: "failed",
+          eligibleCount: 0,
+          heldCount: 0,
+          archivedCount: 0,
+          purgeableCount: 0,
+          purgedCount: 0,
+          blockedCount: 0,
+          errorCount: 1,
+          cutoffAt: null,
+          correlationId,
+          startedAt,
+          finishedAt: new Date()
+        }),
+      { workClass: "maintenance" }
+    );
+  } catch (recordError) {
+    log("warning", "data_lifecycle.descriptor_failure_unrecorded", {
+      moduleKey: DATA_LIFECYCLE_MODULE_KEY,
+      tenantId,
+      descriptorKey: descriptor.key,
+      errorCode: lifecycleFailureCode(recordError),
+      correlationId
+    });
+  }
+}
+
 export type DataLifecycleArchivePurgeResult = {
   tenantsChecked: number;
   descriptorsGeneric: number;
@@ -357,7 +472,53 @@ export type DataLifecycleArchivePurgeResult = {
   totalPurged: number;
   totalDryRunEligible: number;
   tenantsHitPassLimit: string[];
+  /** `<tenantId>:<descriptorKey>` for every descriptor whose pass threw (Issue #1040). */
+  descriptorFailures: string[];
+  /**
+   * `<tenantId>:<descriptorKey>` for delegated snapshots that failed with
+   * `42501` on a table in `KNOWN_UNREADABLE_DELEGATED_TABLES`. Expected, so
+   * they do NOT make the job `partial` (Issue #1040).
+   */
+  knownUnreadableDelegated: string[];
 };
+
+/**
+ * The job-level verdict for a result (Issue #1040). `partial`, which the runner
+ * turns into a non-zero exit code, is for what an operator must look at: an
+ * unfinished backlog or a descriptor that failed unexpectedly. Expected
+ * known-unreadable delegated snapshots are reported but never make it partial,
+ * or the daily job would alarm on every run.
+ */
+export function summarizeArchivePurgeOutcome(
+  result: DataLifecycleArchivePurgeResult
+): { status: "success" | "partial"; detail: string | undefined } {
+  const hitPassLimit = result.tenantsHitPassLimit.length > 0;
+  const failures = result.descriptorFailures.length;
+
+  if (hitPassLimit) {
+    return {
+      status: "partial",
+      detail: `Backlog not fully drained for: ${result.tenantsHitPassLimit.join(", ")}`
+    };
+  }
+
+  if (failures > 0) {
+    return {
+      status: "partial",
+      detail: `${failures} descriptor pass(es) failed (tenant:descriptor): ${result.descriptorFailures.join(", ")}`
+    };
+  }
+
+  const known = result.knownUnreadableDelegated.length;
+
+  return {
+    status: "success",
+    detail:
+      known > 0
+        ? `${known} delegated snapshot(s) skipped as known-unreadable (tenant:descriptor): ${result.knownUnreadableDelegated.join(", ")}`
+        : undefined
+  };
+}
 
 export type RunArchivePurgeOptions = {
   now?: Date;
@@ -398,6 +559,8 @@ export async function runDataLifecycleArchivePurge(
   let totalPurged = 0;
   let totalDryRunEligible = 0;
   const tenantsHitPassLimit: string[] = [];
+  const descriptorFailures: string[] = [];
+  const knownUnreadableDelegated: string[] = [];
 
   for (const tenant of tenants) {
     if (ctx.signal?.aborted) {
@@ -413,126 +576,165 @@ export async function runDataLifecycleArchivePurge(
 
     for (const descriptor of delegatedDescriptors) {
       const startedAt = new Date();
-      const snapshot = await withTenantOrThrow(
-        sql,
-        tenant.id,
-        (tx) =>
-          planLifecycleDryRun(tx, descriptor, tenant.id, activeHolds, now),
-        { workClass: "maintenance" }
-      );
-      totalDryRunEligible += snapshot.eligibleCount;
 
-      await withTenantOrThrow(
-        sql,
-        tenant.id,
-        (tx) =>
-          recordLifecycleRun(tx, tenant.id, {
-            descriptorKey: descriptor.key,
-            runType: "dry_run",
-            status: "completed",
-            eligibleCount: snapshot.eligibleCount,
-            heldCount: snapshot.heldCount,
-            archivedCount: snapshot.archivedCount,
-            purgeableCount: snapshot.purgeableCount,
-            purgedCount: 0,
-            blockedCount: snapshot.blockedCount,
-            errorCount: 0,
-            cutoffAt: snapshot.cutoffAt,
-            correlationId: ctx.correlationId,
-            startedAt,
-            finishedAt: new Date()
-          }),
-        { workClass: "maintenance" }
-      );
+      try {
+        const snapshot = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            planLifecycleDryRun(tx, descriptor, tenant.id, activeHolds, now),
+          { workClass: "maintenance" }
+        );
+        totalDryRunEligible += snapshot.eligibleCount;
+
+        await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            recordLifecycleRun(tx, tenant.id, {
+              descriptorKey: descriptor.key,
+              runType: "dry_run",
+              status: "completed",
+              eligibleCount: snapshot.eligibleCount,
+              heldCount: snapshot.heldCount,
+              archivedCount: snapshot.archivedCount,
+              purgeableCount: snapshot.purgeableCount,
+              purgedCount: 0,
+              blockedCount: snapshot.blockedCount,
+              errorCount: 0,
+              cutoffAt: snapshot.cutoffAt,
+              correlationId: ctx.correlationId,
+              startedAt,
+              finishedAt: new Date()
+            }),
+          { workClass: "maintenance" }
+        );
+      } catch (error) {
+        const expected = isKnownUnreadableDelegatedFailure(
+          descriptor.tableName,
+          error
+        );
+
+        (expected ? knownUnreadableDelegated : descriptorFailures).push(
+          `${tenant.id}:${descriptor.key}`
+        );
+        await recordDescriptorFailure(
+          sql,
+          tenant.id,
+          descriptor,
+          "dry_run",
+          ctx.correlationId,
+          startedAt,
+          error,
+          expected
+        );
+      }
     }
 
     for (const descriptor of genericDescriptors) {
       const startedAt = new Date();
       const cutoff = computeCutoff(descriptor, now);
 
-      // `activeHolds` here is used ONLY for this tenant-scoped REPORTING snapshot
-      // (`awcms_data_lifecycle_runs`) — a once-per-tenant fetch is fine for a
-      // compliance-audit record. The REAL archive/purge execution below
-      // re-fetches holds fresh inside every single batch pass
-      // (`runGenericArchivePass`/`runGenericPurgePass` themselves) — see the
-      // TOCTOU fix comment on those functions.
-      const snapshot = await withTenantOrThrow(
-        sql,
-        tenant.id,
-        (tx) =>
-          planLifecycleDryRun(tx, descriptor, tenant.id, activeHolds, now),
-        { workClass: "maintenance" }
-      );
+      try {
+        // `activeHolds` here is used ONLY for this tenant-scoped REPORTING snapshot
+        // (`awcms_data_lifecycle_runs`) — a once-per-tenant fetch is fine for a
+        // compliance-audit record. The REAL archive/purge execution below
+        // re-fetches holds fresh inside every single batch pass
+        // (`runGenericArchivePass`/`runGenericPurgePass` themselves) — see the
+        // TOCTOU fix comment on those functions.
+        const snapshot = await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            planLifecycleDryRun(tx, descriptor, tenant.id, activeHolds, now),
+          { workClass: "maintenance" }
+        );
 
-      let archivedThisRun = 0;
-      let purgedThisRun = 0;
-      let hitPassLimit = false;
+        let archivedThisRun = 0;
+        let purgedThisRun = 0;
+        let hitPassLimit = false;
 
-      if (!ctx.dryRun) {
-        if (descriptor.archive.archivable) {
-          const archiveOutcome = await runBoundedBatches(
+        if (!ctx.dryRun) {
+          if (descriptor.archive.archivable) {
+            const archiveOutcome = await runBoundedBatches(
+              () =>
+                runGenericArchivePass(
+                  sql,
+                  descriptor,
+                  tenant.id,
+                  cutoff,
+                  options.archivePort,
+                  ctx.correlationId
+                ),
+              { signal: ctx.signal, maxPasses: options.maxPasses }
+            );
+            archivedThisRun = archiveOutcome.totalCount;
+            hitPassLimit ||= archiveOutcome.hitPassLimit;
+          }
+
+          const purgeOutcome = await runBoundedBatches(
             () =>
-              runGenericArchivePass(
+              runGenericPurgePass(
                 sql,
                 descriptor,
                 tenant.id,
                 cutoff,
-                options.archivePort,
                 ctx.correlationId
               ),
             { signal: ctx.signal, maxPasses: options.maxPasses }
           );
-          archivedThisRun = archiveOutcome.totalCount;
-          hitPassLimit ||= archiveOutcome.hitPassLimit;
+          purgedThisRun = purgeOutcome.totalCount;
+          hitPassLimit ||= purgeOutcome.hitPassLimit;
         }
 
-        const purgeOutcome = await runBoundedBatches(
-          () =>
-            runGenericPurgePass(
-              sql,
-              descriptor,
-              tenant.id,
-              cutoff,
-              ctx.correlationId
-            ),
-          { signal: ctx.signal, maxPasses: options.maxPasses }
+        totalArchived += archivedThisRun;
+        totalPurged += purgedThisRun;
+        if (hitPassLimit) {
+          tenantsHitPassLimit.push(tenant.id);
+        }
+
+        await withTenantOrThrow(
+          sql,
+          tenant.id,
+          (tx) =>
+            recordLifecycleRun(tx, tenant.id, {
+              descriptorKey: descriptor.key,
+              runType: ctx.dryRun
+                ? "dry_run"
+                : descriptor.archive.archivable
+                  ? "archive"
+                  : "purge",
+              status: hitPassLimit ? "partial" : "completed",
+              eligibleCount: snapshot.eligibleCount,
+              heldCount: snapshot.heldCount,
+              archivedCount: snapshot.archivedCount,
+              purgeableCount: snapshot.purgeableCount,
+              purgedCount: purgedThisRun,
+              blockedCount: snapshot.blockedCount,
+              errorCount: 0,
+              cutoffAt: snapshot.cutoffAt,
+              correlationId: ctx.correlationId,
+              startedAt,
+              finishedAt: new Date()
+            }),
+          { workClass: "maintenance" }
         );
-        purgedThisRun = purgeOutcome.totalCount;
-        hitPassLimit ||= purgeOutcome.hitPassLimit;
+      } catch (error) {
+        descriptorFailures.push(`${tenant.id}:${descriptor.key}`);
+        await recordDescriptorFailure(
+          sql,
+          tenant.id,
+          descriptor,
+          ctx.dryRun
+            ? "dry_run"
+            : descriptor.archive.archivable
+              ? "archive"
+              : "purge",
+          ctx.correlationId,
+          startedAt,
+          error
+        );
       }
-
-      totalArchived += archivedThisRun;
-      totalPurged += purgedThisRun;
-      if (hitPassLimit) {
-        tenantsHitPassLimit.push(tenant.id);
-      }
-
-      await withTenantOrThrow(
-        sql,
-        tenant.id,
-        (tx) =>
-          recordLifecycleRun(tx, tenant.id, {
-            descriptorKey: descriptor.key,
-            runType: ctx.dryRun
-              ? "dry_run"
-              : descriptor.archive.archivable
-                ? "archive"
-                : "purge",
-            status: hitPassLimit ? "partial" : "completed",
-            eligibleCount: snapshot.eligibleCount,
-            heldCount: snapshot.heldCount,
-            archivedCount: snapshot.archivedCount,
-            purgeableCount: snapshot.purgeableCount,
-            purgedCount: purgedThisRun,
-            blockedCount: snapshot.blockedCount,
-            errorCount: 0,
-            cutoffAt: snapshot.cutoffAt,
-            correlationId: ctx.correlationId,
-            startedAt,
-            finishedAt: new Date()
-          }),
-        { workClass: "maintenance" }
-      );
     }
   }
 
@@ -543,6 +745,8 @@ export async function runDataLifecycleArchivePurge(
     totalArchived,
     totalPurged,
     totalDryRunEligible,
-    tenantsHitPassLimit
+    tenantsHitPassLimit,
+    descriptorFailures,
+    knownUnreadableDelegated
   };
 }

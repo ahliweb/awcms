@@ -39,6 +39,7 @@
  * the kind of statement that gets mistaken for "the job can run".
  */
 import { listModules } from "../src/modules";
+import { KNOWN_UNREADABLE_DELEGATED_TABLES } from "../src/modules/data-lifecycle/domain/known-unreadable-delegated";
 import { loadMigrations } from "./lib/migrations";
 import { grantsPrivilegeToRole } from "./sql-grants";
 
@@ -100,6 +101,46 @@ export function deriveRequiredGrants(
   return required.sort((a, b) => a.tableName.localeCompare(b.tableName));
 }
 
+// The baseline lives with the engine that consumes it
+// (`known-unreadable-delegated.ts`), because the job must know which snapshot
+// failures are expected and `src/` cannot import from `scripts/`. Re-exported so
+// the gate and its tests keep one import path.
+export { KNOWN_UNREADABLE_DELEGATED_TABLES };
+
+/** Delegated, tenant-scoped descriptor tables the worker holds no SELECT on. */
+export function findUnreadableDelegatedTables(
+  modules: ReturnType<typeof listModules>,
+  migrationSql: string
+): string[] {
+  const unreadable = new Set<string>();
+
+  for (const module of modules) {
+    for (const descriptor of module.dataLifecycle ?? []) {
+      if (descriptor.executionMode !== "delegated") continue;
+      if (descriptor.scope !== "tenant") continue;
+      if (!grantsPrivilege(migrationSql, descriptor.tableName, "SELECT")) {
+        unreadable.add(descriptor.tableName);
+      }
+    }
+  }
+
+  return [...unreadable].sort();
+}
+
+/** Compare the live set with the baseline. Pure, so a fixture can drive it. */
+export function compareDelegatedBaseline(
+  unreadable: readonly string[],
+  baseline: readonly string[]
+): { added: string[]; stale: string[] } {
+  const live = new Set(unreadable);
+  const known = new Set(baseline);
+
+  return {
+    added: [...live].filter((table) => !known.has(table)).sort(),
+    stale: [...known].filter((table) => !live.has(table)).sort()
+  };
+}
+
 /**
  * Does any migration grant `privilege` on `table` to the worker?
  *
@@ -151,7 +192,29 @@ if (import.meta.main) {
     process.exit(1);
   }
 
+  const delegated = compareDelegatedBaseline(
+    findUnreadableDelegatedTables(listModules(), sql),
+    KNOWN_UNREADABLE_DELEGATED_TABLES
+  );
+
+  if (delegated.added.length > 0 || delegated.stale.length > 0) {
+    console.error(
+      "data-lifecycle:worker-grants:check FAILED — the delegated-snapshot baseline moved (Issue #1040):"
+    );
+    for (const table of delegated.added) {
+      console.error(
+        `  - NEW unreadable delegated descriptor: ${table} — ${WORKER_ROLE} has no SELECT, so its dry-run snapshot fails every run. Grant SELECT (only if the worker may read that data) or use a count-only SECURITY DEFINER snapshot; do not add it to the baseline to silence this.`
+      );
+    }
+    for (const table of delegated.stale) {
+      console.error(
+        `  - STALE baseline entry: ${table} — now readable or no longer delegated. Remove it from KNOWN_UNREADABLE_DELEGATED_TABLES.`
+      );
+    }
+    process.exit(1);
+  }
+
   console.log(
-    `data-lifecycle:worker-grants:check OK — ${required.length} lifecycle table(s), every required ${WORKER_ROLE} privilege granted in sql/.`
+    `data-lifecycle:worker-grants:check OK — ${required.length} lifecycle table(s), every required ${WORKER_ROLE} privilege granted in sql/; ${KNOWN_UNREADABLE_DELEGATED_TABLES.length} known unreadable delegated snapshot(s) (baseline, shrink-only).`
   );
 }

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f45af4e3bcfc9909dcd50ed2ec31dfff3b24d10db5a982c77b8b0995ffeddc93 -->
+<!-- i18n-source-hash: sha256:2196360a3ccc4ffda300164ff935159fdb3c86e96eab8187e1cf1c934f39c1c0 -->
 
 # Data Lifecycle
 
@@ -295,6 +295,30 @@ di sini.
 
 ## Keterbatasan yang diketahui
 
+- **Snapshot delegated yang tak bisa dibaca worker (Issue #1040).** Per tenant,
+  `data-lifecycle:archive-purge` mencatat snapshot backlog dry-run untuk setiap
+  deskriptor `delegated`, yang men-`SELECT` tabelnya sebagai `awcms_worker`. 29
+  tabel inventori, procurement, HR, dan booking sengaja TIDAK dapat dibaca worker
+  (batas payroll menjauhkan role worker dari data itu), sehingga snapshot-nya
+  gagal. Deskriptor yang gagal diisolasi: dicatat di log
+  (`data_lifecycle.descriptor_failed`, hanya kunci deskriptor dan SQLSTATE,
+  tanpa data baris), direkam sebagai run `dry_run` dengan `status: failed` dan
+  `errorCount: 1`, lalu pass berlanjut, termasuk ke deskriptor generik. Isolasi
+  yang sama berlaku bagi deskriptor generik yang melempar error. Kegagalan
+  snapshot DIHARAPKAN hanya bila tabelnya ada di baseline DAN SQLSTATE-nya
+  `42501`; yang demikian dihitung sebagai `knownUnreadableDelegated` (hasil,
+  telemetri, dan detail job), tetap direkam sebagai run `failed`
+  (`awcms_data_lifecycle_runs` hanya mengizinkan `completed`, `partial`, dan
+  `failed`), dan TIDAK membuat job `partial`, sehingga job harian keluar 0. Hal
+  lain (SQLSTATE berbeda, tabel di luar baseline, kegagalan generik apa pun)
+  membuat job `partial` dan keluar non-nol. Himpunan ini adalah baseline
+  shrink-only di `scripts/data-lifecycle-worker-grants-check.ts`
+  (`KNOWN_UNREADABLE_DELEGATED_TABLES`); deskriptor delegated baru yang tak
+  terbaca atau entri basi menggagalkan `data-lifecycle:worker-grants:check`.
+  Tindak lanjut: snapshot `SECURITY DEFINER` hanya-hitung per modul pemilik
+  (pola sql/217), agar snapshot berjalan tanpa worker membaca baris. Sampai
+  itu, tabel-tabel tersebut menampilkan dry-run gagal, bukan hitungan backlog;
+  purge sebenarnya tidak terpengaruh (job milik modul pemiliknya).
 - **Eksekusi lintas-tenant/ber-scope global**: deskriptor `scope: "global"`
   diterima oleh validator registry (pengetikan kompatibel-ke-depan) tetapi
   perencana dry-run dan engine archive/purge hanya mengimplementasikan jalur
