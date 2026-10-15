@@ -28,7 +28,8 @@
  */
 import type {
   SubjectPlan,
-  SubjectPlanEntry
+  SubjectPlanEntry,
+  SubjectPlanMatch
 } from "../domain/subject-data-plan";
 import { erasureTargets } from "../domain/subject-data-plan";
 
@@ -231,19 +232,19 @@ export type SubjectExportOptions = {
 };
 
 /**
- * The `WHERE` fragment matching a row to the subject, as SQL text plus its
+ * The OR-ed `WHERE` clauses for a list of subject matches, as SQL text plus its
  * bound values.
  *
  * Several subject columns are OR-ed, not AND-ed. A row naming the person as
  * both actor and target is one row that appears once; requiring every column to
  * match would return nothing at all for the ordinary case where only one does.
  */
-function subjectPredicate(
-  entry: SubjectPlanEntry,
+function matchClauses(
+  matches: readonly SubjectPlanMatch[],
   firstParameterIndex: number
 ): { sql: string; values: string[] } {
   const values: string[] = [];
-  const clauses = entry.matches.map((match) => {
+  const clauses = matches.map((match) => {
     const column = quoted(match.column);
     const placeholder = `$${firstParameterIndex + values.length}`;
     values.push(match.value);
@@ -257,6 +258,40 @@ function subjectPredicate(
   });
 
   return { sql: `(${clauses.join(" OR ")})`, values };
+}
+
+/**
+ * The `WHERE` fragment matching a row to the subject.
+ *
+ * A `via` entry (ADR-0142) matches through its parent:
+ * `<column> IN (SELECT id FROM <parent> WHERE <tenant> = $1 AND <parent match>)`.
+ * The tenant predicate is repeated INSIDE the subquery, for the same reason it
+ * is written at all under RLS: a statement that leans on policy alone is one
+ * `SET ROLE` from another tenant. Soft-deleted parents are deliberately not
+ * filtered out - a person's terminated employment is still their history.
+ */
+function subjectPredicate(
+  entry: SubjectPlanEntry,
+  firstParameterIndex: number
+): { sql: string; values: string[] } {
+  if (entry.via) {
+    if (entry.via.parentMatches.length === 0) {
+      throw new Error(
+        `Subject-data entry ${entry.key} reaches the subject through a join but binds no parent column.`
+      );
+    }
+
+    const inner = matchClauses(entry.via.parentMatches, firstParameterIndex);
+
+    return {
+      sql:
+        `${quoted(entry.via.column)} IN (SELECT "id" FROM ${quoted(entry.via.parentTableName)} ` +
+        `WHERE ${quoted(entry.via.parentTenantColumn)} = $1::uuid AND ${inner.sql})`,
+      values: inner.values
+    };
+  }
+
+  return matchClauses(entry.matches, firstParameterIndex);
 }
 
 /**
@@ -370,6 +405,12 @@ export async function runSubjectErasure(
   const skipped: string[] = [];
 
   for (const entry of erasureTargets(plan)) {
+    if (entry.via) {
+      throw new Error(
+        `Subject-data entry ${entry.key} reaches the subject through a join; erasure does not follow a join (ADR-0142).`
+      );
+    }
+
     const table = quoted(entry.tableName);
     const tenantColumn = quoted(entry.tenantColumn);
     const predicate = subjectPredicate(entry, 2);

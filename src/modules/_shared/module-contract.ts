@@ -1077,6 +1077,61 @@ export type SubjectDataColumn = {
   match?: "equals" | "jsonb_array_contains";
 };
 
+/**
+ * An INDIRECT path from a row to the subject — ADR-0142, Issue #985.
+ *
+ * Some tables never carry a person's id. `awcms_hr_employment_terms` and
+ * `awcms_hr_shift_assignments` carry `employment_id`, and only the employment
+ * they point at names the person (`profile_id` / `tenant_user_id`). A direct
+ * subject column cannot say that, so before this the two were `exportable:
+ * false` and a subject-access export omitted the employee's own terms history
+ * and schedule.
+ *
+ * ## One hop, by design
+ *
+ * The path is exactly one foreign key to ONE other descriptor's table, whose
+ * own subject columns are the ones named. It is not a graph language: a
+ * second hop would be a join planner on the privacy path, and no table in this
+ * schema needs it.
+ *
+ * ## Why `parentColumns` is explicit
+ *
+ * The parent's `subjectColumns` mix identity columns (`profile_id`) with actor
+ * stamps (`created_by`). Following ALL of them would make an HR administrator's
+ * export include every employment history they merely created for somebody
+ * else — a disclosure of other people's data under the administrator's own
+ * request. So the descriptor names which of the parent's columns say "this row
+ * IS about the person"; the registry gate refuses a name the parent does not
+ * declare.
+ *
+ * ## It replaces the table's own `subjectColumns`
+ *
+ * A descriptor with `subjectVia` has NO `subjectColumns` (gate-enforced). The
+ * same stamp problem applies to the child: OR-ing `created_by` with the join
+ * would hand the person every row they scheduled for others. The stamps are
+ * answered by `severed_with_subject_row` semantics on their own and stay
+ * described in the `rationale`.
+ *
+ * ## Erasure does NOT follow the join
+ *
+ * A descriptor with `subjectVia` must answer `retain_under_obligation`; the
+ * registry gate refuses any other mode. Rewriting or deleting a child row
+ * because of a parent match is a different and more dangerous operation than
+ * the direct case (the parent could be matched by a stamp-free identity but the
+ * child may be append-only evidence). Until a table needs it and an ADR
+ * decides it, the safe default is the one these two tables already have: kept
+ * under the employer's obligations, resolving to nobody once the profile is
+ * anonymised.
+ */
+export type SubjectDataJoin = {
+  /** Column on THIS table holding the parent's `id` (e.g. `employment_id`). */
+  column: string;
+  /** `key` of the parent descriptor (e.g. `hr_workforce.employments`). Must itself be a direct (non-`subjectVia`) tenant-scoped descriptor. */
+  parentKey: string;
+  /** Which of the parent's `subjectColumns` mean "the row IS about the person". A non-empty subset of the parent's declared columns. */
+  parentColumns: readonly string[];
+};
+
 export type SubjectDataDescriptor = {
   /** Stable, unique across the whole registry, e.g. `"identity_access.sessions"` (`<ownerModuleKey>.<table_shortname>`). */
   key: string;
@@ -1099,6 +1154,11 @@ export type SubjectDataDescriptor = {
    * silently omit every row where they are the second.
    */
   subjectColumns: readonly SubjectDataColumn[];
+  /**
+   * Reach the subject through a parent row instead of a column of this table —
+   * see `SubjectDataJoin`. Mutually exclusive with `subjectColumns`.
+   */
+  subjectVia?: SubjectDataJoin;
   /**
    * The table holds data about people, but NO column can be matched to a
    * per-tenant subject — so `subjectColumns` is empty ON PURPOSE.
@@ -1336,8 +1396,16 @@ export type SubjectDataDescriptor = {
  * is what every existing rule already meant. It lets a projection carry a
  * quantity (the first user is `booking`: unit-nights and seconds booked) through
  * the same `cursor_table` engine instead of a second one.
+ *
+ * `4.6.0` (ADR-0142, Issue #985) — added the optional
+ * `SubjectDataDescriptor.subjectVia` field plus the `SubjectDataJoin` type, so a
+ * table that reaches the subject only through a parent row (a foreign key to
+ * another descriptor's table) can be exported. MINOR: purely additive, and no
+ * existing descriptor changes meaning. Erasure deliberately does not follow the
+ * join (the registry gate requires `retain_under_obligation`); the first users
+ * are `awcms_hr_employment_terms` and `awcms_hr_shift_assignments`.
  */
-export const MODULE_CONTRACT_VERSION = "4.5.0";
+export const MODULE_CONTRACT_VERSION = "4.6.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

@@ -126,6 +126,11 @@ describe("the registered descriptors say something real", () => {
         expect(descriptor.subjectColumns).toHaveLength(0);
         expect(descriptor.exportable).toBe(false);
         expect(descriptor.erasure).toBe("retain_under_obligation");
+      } else if (descriptor.subjectVia) {
+        // ADR-0142: reached through a parent row instead, and then the table's
+        // own columns are deliberately empty (the registry gate enforces it).
+        expect(descriptor.subjectColumns).toHaveLength(0);
+        expect(descriptor.erasure).toBe("retain_under_obligation");
       } else {
         expect(descriptor.subjectColumns.length).toBeGreaterThan(0);
       }
@@ -405,7 +410,7 @@ describe("the plan binds the RIGHT id, which is the whole point of two kinds", (
 });
 
 describe("the contract version records the addition", () => {
-  test("MINOR bumps: `anonymizedColumns` (ADR-0108, 4.1.0), then `domainEventConsumers` (ADR-0134, 4.2.0)", () => {
+  test("MINOR bumps: `anonymizedColumns` (ADR-0108, 4.1.0), then `domainEventConsumers` (ADR-0134, 4.2.0), then `subjectVia` (ADR-0142, 4.4.0)", () => {
     // 4.0.0 was wave 2 — a widened erasure union plus a retyped `tenantColumn`,
     // both MAJOR because the consumers that matter are exhaustive switches.
     // 4.1.0 adds an OPTIONAL field, so MINOR by this contract's own rule; the
@@ -418,6 +423,8 @@ describe("the contract version records the addition", () => {
     // 4.4.0 (ADR-0140) adds `handlesPayrollData` and
     // `ModuleNavigationEntry.requiredAnyPermission`; likewise nothing here.
     // 4.5.0 (Issue #944) adds `ProjectionCursorMetricRule.sumColumn`; likewise.
-    expect(MODULE_CONTRACT_VERSION).toBe("4.5.0");
+    // 4.6.0 (ADR-0142) adds `SubjectDataDescriptor.subjectVia`: an indirect,
+    // one-hop path to the subject through a parent row. Optional, so MINOR.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.6.0");
   });
 });

@@ -381,7 +381,8 @@ export function findSubjectRegistryProblems(
     // way to opt a perfectly reachable table out of every export.
     if (
       descriptor.subjectColumns.length === 0 &&
-      descriptor.unreachableBySubject !== true
+      descriptor.unreachableBySubject !== true &&
+      !descriptor.subjectVia
     ) {
       report(
         `\`${key}\` tidak menamai satu pun kolom subjek. Deskriptor tanpa kolom subjek ` +
@@ -391,6 +392,110 @@ export function findSubjectRegistryProblems(
           "dengan sengaja; bila ia tidak memuat apa pun tentang seseorang, tempatnya " +
           "`NO_SUBJECT_DATA`."
       );
+    }
+
+    // ADR-0142 - a table that reaches the subject through a parent row. Every
+    // rule below exists because the failure is silent: a join on a column that
+    // is not a foreign key to the parent reads zero rows (or, worse, matches
+    // the wrong table's ids) and the report still signs as complete.
+    if (descriptor.subjectVia) {
+      const join = descriptor.subjectVia;
+      const parent = all.find(
+        (entry) => entry.descriptor.key === join.parentKey
+      )?.descriptor;
+
+      if (descriptor.subjectColumns.length > 0) {
+        report(
+          `\`${key}\` menyatakan \`subjectVia\` DAN \`subjectColumns\`. Keduanya ` +
+            "tidak boleh bersama: menggabungkan keduanya dengan OR membuat cap pelaku " +
+            "(`created_by`) menarik baris orang lain ke ekspor si pembuat (ADR-0142)."
+        );
+      }
+
+      if (descriptor.unreachableBySubject === true) {
+        report(
+          `\`${key}\` menyatakan \`subjectVia\` TAPI \`unreachableBySubject\`. ` +
+            "Jalur lewat induk membuktikan tabelnya terjangkau."
+        );
+      }
+
+      if (descriptor.tenantColumn === null) {
+        report(
+          `\`${key}\` global TAPI memakai \`subjectVia\`. Join lintas-tenant adalah ` +
+            "pembacaan yang ditolak FORCE RLS (ADR-0094 Keputusan 1)."
+        );
+      }
+
+      if (descriptor.erasure !== "retain_under_obligation") {
+        report(
+          `\`${key}\` memakai \`subjectVia\` TAPI menjawab \`erasure: "${descriptor.erasure}"\`. ` +
+            "Penghapusan TIDAK mengikuti join (ADR-0142) - eksekutor tidak menulis ke baris " +
+            "yang dicocokkan lewat induk. Jawabannya wajib `retain_under_obligation`."
+        );
+      }
+
+      if (!columns.has(join.column)) {
+        report(
+          `\`${key}\` menamai kolom join \`${join.column}\` yang tidak ada di ` +
+            `\`${descriptor.tableName}\`. Gagal DIAM-DIAM: nol baris, laporan sukses.`
+        );
+      }
+
+      if (!parent) {
+        report(
+          `\`${key}\` menamai induk \`${join.parentKey}\` yang bukan deskriptor subjek ` +
+            "terdaftar."
+        );
+      } else {
+        if (parent.subjectVia) {
+          report(
+            `\`${key}\` bergabung ke \`${join.parentKey}\` yang sendiri memakai ` +
+              "`subjectVia`. Jalur hanya satu lompatan (ADR-0142)."
+          );
+        }
+
+        if (parent.tenantColumn === null || parent.unreachableBySubject) {
+          report(
+            `\`${key}\` bergabung ke \`${join.parentKey}\` yang global atau tak ` +
+              "terjangkau - tidak ada yang bisa dicocokkan di induknya."
+          );
+        }
+
+        const target = input.foreignKeys.get(
+          `${descriptor.tableName}.${join.column}`
+        );
+
+        if (target !== parent.tableName) {
+          report(
+            `\`${key}\`.\`${join.column}\` harus berupa foreign key ke ` +
+              `\`${parent.tableName}\` (induk \`${join.parentKey}\`), tetapi ` +
+              (target
+                ? `foreign key-nya menunjuk \`${target}\`.`
+                : "tidak ada foreign key yang terdeteksi.") +
+              " Tanpa itu join mencocokkan uuid yang tidak berhubungan."
+          );
+        }
+
+        const parentColumnNames = new Set(
+          parent.subjectColumns.map((column) => column.column)
+        );
+
+        if (join.parentColumns.length === 0) {
+          report(
+            `\`${key}\` tidak menamai \`parentColumns\`. Join tanpa kolom induk ` +
+              "tidak mencocokkan siapa pun."
+          );
+        }
+
+        for (const parentColumn of join.parentColumns) {
+          if (!parentColumnNames.has(parentColumn)) {
+            report(
+              `\`${key}\` memakai kolom induk \`${parentColumn}\` yang tidak dideklarasikan ` +
+                `sebagai kolom subjek oleh \`${join.parentKey}\`.`
+            );
+          }
+        }
+      }
     }
 
     if (

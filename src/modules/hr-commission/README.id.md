@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:d5ba25fa55120753de0d5816a5ee0568829d69c9931579d30b639e8a9059e875 -->
+<!-- i18n-source-hash: sha256:25f188676c26b693e015af33b91ba9c0f782d33c6f17d28d03f4b38d68ece9cc -->
 
 # `hr_commission`
 
@@ -254,10 +254,11 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes men
   permission biasa: jalur "karyawan melihat akrualnya sendiri" (ownership grant pada
   login employment) dan business scope `office` adalah tindak lanjut bersama
   permukaan swalayan.
-- **Mengekspor riwayat akrual seseorang** (dilacak di issue #985) membutuhkan join employment-ke-subjek yang
-  tak dapat diungkapkan kolom subjek langsung registri (batas yang dicatat
-  `hr_workforce.employment_terms`); descriptor hanya menamai stempel aktor dan
-  `exportable: false` sampai join itu ada.
+- **Mengekspor riwayat akrual seseorang** (dilacak di issue #985) membutuhkan join employment-ke-subjek; registri
+  kini punya satu (`subjectVia`, ADR-0142, dipakai pertama oleh
+  `hr_workforce.employment_terms`), tetapi descriptor komisi masih hanya menamai
+  stempel aktor dan `exportable: false`: mengadopsinya adalah keputusan modul ini
+  sendiri, karena penghasilan berada di batas penggajian.
 - **Retensi: disimpan selama hidup tenant, tanpa periode yang diklaim.** Sengaja
   TIDAK ada descriptor `dataLifecycle` untuk ketiga tabel (descriptor harus
   mengklaim periode dan mode purge, dan tak ada yang mem-purge): tabel buku besar

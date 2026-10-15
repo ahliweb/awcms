@@ -52,6 +52,13 @@ family:
 # FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
 # given teeth by a SEMANTIC contract test that goes RED if the control drifts.
 contracts:
+  # 4.6.0 sejak ADR-0142 (Issue #985): field opsional
+  # `SubjectDataDescriptor.subjectVia` (+ tipe `SubjectDataJoin`) DITAMBAHKAN
+  # (penambahan murni, jadi MINOR). Tabel yang hanya terjangkau subjek lewat
+  # baris induk (satu lompatan, foreign key ke tabel deskriptor lain) kini bisa
+  # diekspor; PENGHAPUSAN tidak mengikuti join (gerbang registry mewajibkan
+  # `retain_under_obligation`).
+  #
   # 4.5.0 sejak Issue #944 (ADR-0143): field opsional
   # `ProjectionCursorMetricRule.sumColumn` DITAMBAHKAN (penambahan murni, jadi
   # MINOR). Aturan metrik projection menjumlahkan sebuah kolom (kuantitas:
@@ -124,7 +131,7 @@ contracts:
   # DIHAPUS dari union `ModuleDeploymentProfile` — union yang menyempit adalah
   # penarikan kemampuan, jadi MAJOR (preseden 2.0.0, yang menghapus tipe
   # ekspor). Nilai ini di-cross-check gerbang terhadap MODULE_CONTRACT_VERSION.
-  moduleDescriptorContractVersion: "4.5.0"
+  moduleDescriptorContractVersion: "4.6.0"
   # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base
