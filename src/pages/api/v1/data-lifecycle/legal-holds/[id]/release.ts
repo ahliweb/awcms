@@ -15,7 +15,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../../modules/_shared/idempotency";
 import { releaseLegalHold } from "../../../../../../modules/data-lifecycle/application/legal-hold-service";
 import {
@@ -102,7 +103,8 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existingIdempotency) {
@@ -151,6 +153,7 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       successBody

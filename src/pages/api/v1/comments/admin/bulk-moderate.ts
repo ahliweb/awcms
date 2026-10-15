@@ -16,7 +16,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { bulkModerateComments } from "../../../../../modules/comments/application/comment-moderation";
 import {
@@ -133,7 +134,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tx,
       tenantId,
       "comments_bulk_moderate",
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
     if (existing) {
       if (existing.requestHash !== requestHash) {
@@ -207,6 +209,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tenantId,
       "comments_bulk_moderate",
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       successBody

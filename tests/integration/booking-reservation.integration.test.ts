@@ -94,7 +94,7 @@ function workerTx<T>(
 function ctxOf(tenantId: string) {
   return {
     tenantId,
-    actorTenantUserId: ACTORS.get(tenantId) ?? null,
+    actorTenantUserId: ACTORS.get(tenantId)!,
     correlationId: crypto.randomUUID()
   };
 }
@@ -1541,6 +1541,7 @@ suite("booking reservation transitions (Issue #941, ADR-0131)", () => {
           bookingPort.confirm(tx, {
             ...common,
             reservationId: crypto.randomUUID(),
+            actorTenantUserId: ACTORS.get(TENANT_A)!,
             idempotencyKey: "k-missing"
           })
         )
@@ -1658,6 +1659,7 @@ suite("booking reservation transitions (Issue #941, ADR-0131)", () => {
           correlationId: crypto.randomUUID(),
           reservationId: reservation.id,
           reasonCode: "The guest phoned us at 9pm",
+          actorTenantUserId: ACTORS.get(TENANT_A)!,
           idempotencyKey: `cancel-${crypto.randomUUID()}`
         })
       );

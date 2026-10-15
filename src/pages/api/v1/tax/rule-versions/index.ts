@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../../modules/_shared/idempotency";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { computeRequestHash } from "../../../../../modules/_shared/idempotency";
 import { decodeKeysetCursor } from "../../../../../modules/_shared/keyset-pagination";
@@ -119,6 +120,7 @@ export const POST = defineTenantRoute<CreatePrepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       computeRequestHash(prepared.input),
       async () => {
         const version = await createDraftVersion(

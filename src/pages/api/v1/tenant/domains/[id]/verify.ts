@@ -17,7 +17,8 @@ import { checkSharedRateLimit } from "../../../../../../lib/security/rate-limit"
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../../modules/_shared/idempotency";
 import {
   beginTenantDomainVerification,
@@ -124,7 +125,8 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existingIdempotency) {
@@ -286,7 +288,8 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      begun.idempotencyKey
+      begun.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (replayed && replayed.requestHash === requestHash) {
@@ -347,6 +350,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       begun.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       passed ? 200 : 409,
       responseBody

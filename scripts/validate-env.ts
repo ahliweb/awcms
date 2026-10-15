@@ -14,6 +14,7 @@
  */
 import { readFile } from "node:fs/promises";
 
+import { describeIdempotencySecretProblem } from "../src/lib/security/idempotency-hmac";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { parseVapidConfig } from "../src/modules/push-delivery/domain/vapid-config";
 import { parseRecipientHashKeys } from "../src/modules/whatsapp-delivery/domain/whatsapp-recipient";
@@ -104,6 +105,14 @@ const RULES: readonly Rule[] = [
   { name: "TRUSTED_PROXY_HOP_COUNT", required: false, type: "int", min: 1 },
   {
     name: "AUTH_IP_HASH_SECRET",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  // Keys the HMAC of the idempotency request hash (ADR-0129 amendment 1).
+  // Required in production by the cross-rule below; the runtime fails closed too.
+  {
+    name: "IDEMPOTENCY_HMAC_SECRET",
     required: false,
     type: "string",
     secret: true
@@ -683,6 +692,21 @@ export function validateEnv(env: EnvBag): string[] {
     if (rule.secret && isProduction && PLACEHOLDER_SECRETS.has(value)) {
       problems.push(
         `${rule.name} masih bernilai placeholder ("${value}") — dilarang di produksi.`
+      );
+    }
+  }
+
+  // Idempotency request hash is an HMAC (ADR-0129 amendment 1, issue #1000).
+  // Production refuses idempotent mutations without a real key, so surface it
+  // here rather than as a 500 on the first mutation.
+  if (isProduction) {
+    const problem = describeIdempotencySecretProblem(
+      env.IDEMPOTENCY_HMAC_SECRET
+    );
+
+    if (problem !== null) {
+      problems.push(
+        `IDEMPOTENCY_HMAC_SECRET wajib berisi secret nyata (>= 32 karakter) di produksi, tetapi ${problem} (mis. \`openssl rand -base64 48\`).`
       );
     }
   }

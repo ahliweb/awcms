@@ -19,7 +19,8 @@
 import { fail, jsonResponse } from "../../_shared/api-response";
 import {
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  type IdempotencyActor
 } from "../../_shared/idempotency";
 
 export type IdempotentOutcome =
@@ -30,6 +31,7 @@ export async function runIdempotent(
   tenantId: string,
   scope: string,
   idempotencyKey: string,
+  actor: IdempotencyActor,
   requestHash: string,
   run: () => Promise<IdempotentOutcome>
 ): Promise<Response> {
@@ -37,7 +39,8 @@ export async function runIdempotent(
     tx,
     tenantId,
     scope,
-    idempotencyKey
+    idempotencyKey,
+    actor
   );
 
   if (existing) {
@@ -63,6 +66,7 @@ export async function runIdempotent(
     tenantId,
     scope,
     idempotencyKey,
+    actor,
     requestHash,
     outcome.status,
     outcome.body

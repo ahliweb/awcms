@@ -41,7 +41,8 @@ import {
   computeRequestHash,
   IdempotencyRaceLostError,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../_shared/idempotency";
 import type { PlaceHoldInput } from "../domain/booking-allocation";
 import {
@@ -115,11 +116,11 @@ function outcomeOf(
 function contextOf(input: {
   tenantId: string;
   correlationId: string;
-  actorTenantUserId?: string | null;
+  actorTenantUserId: string;
 }): ReservationContext {
   return {
     tenantId: input.tenantId,
-    actorTenantUserId: input.actorTenantUserId ?? null,
+    actorTenantUserId: input.actorTenantUserId,
     correlationId: input.correlationId
   };
 }
@@ -135,24 +136,32 @@ async function once(
   tenantId: string,
   scope: string,
   idempotencyKey: string,
-  actor: string | null | undefined,
+  actor: string,
   payload: unknown,
   produce: () => Promise<BookingOutcome>
 ): Promise<BookingOutcome> {
   const requestHash = computeRequestHash({
-    actor: actor ?? "system",
+    actor,
     request: payload
   });
+  const idempotencyActor = userIdempotencyActor(actor);
 
   // Concurrent calls with one key queue here, so a retry replays the winner's
   // outcome instead of being refused by the winner's uncommitted booking.
-  await lockIdempotencyKey(tx, tenantId, scope, idempotencyKey);
+  await lockIdempotencyKey(
+    tx,
+    tenantId,
+    scope,
+    idempotencyKey,
+    idempotencyActor
+  );
 
   const existing = await findIdempotencyRecord(
     tx,
     tenantId,
     scope,
-    idempotencyKey
+    idempotencyKey,
+    idempotencyActor
   );
 
   if (existing) {
@@ -175,6 +184,7 @@ async function once(
         tenantId,
         scope,
         idempotencyKey,
+        idempotencyActor,
         requestHash,
         200,
         produced
@@ -457,7 +467,7 @@ async function transition(
     reservationId: string;
     idempotencyKey: string;
     correlationId: string;
-    actorTenantUserId?: string | null;
+    actorTenantUserId: string;
   },
   reasonCode: string | null
 ): Promise<BookingOutcome> {

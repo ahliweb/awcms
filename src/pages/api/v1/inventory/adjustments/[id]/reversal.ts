@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../../../modules/_shared/idempotency";
 import { fail } from "../../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import { reverseAdjustment } from "../../../../../../modules/inventory/application/inventory-ledger";
@@ -56,6 +57,7 @@ export const POST = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       { id: prepared.id, input: prepared.input },
       async () => {
         const actor = {

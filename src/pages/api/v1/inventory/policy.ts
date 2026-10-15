@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../modules/_shared/idempotency";
 import { ok } from "../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../modules/_shared/tenant-route";
 import { recordAuditEvent } from "../../../../modules/logging/application/audit-log";
@@ -58,6 +59,7 @@ export const PUT = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       prepared.input,
       async () => {
         const { before, after } = await setTenantPolicy(

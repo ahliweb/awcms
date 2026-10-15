@@ -796,8 +796,9 @@ suite("booking reservation HTTP surface (Issue #941)", () => {
       expect(conflict.body.error?.code).toBe("IDEMPOTENCY_CONFLICT");
       expect(await writes(env.tenantId)).toEqual(before);
 
-      // A different USER presenting the same key does not get the first user's
-      // response (the acting user is part of the request hash).
+      // A different USER presenting the same key holds a separate record
+      // (ADR-0145): never handed the first user's response, and never told the
+      // key is taken either (no squat, no oracle).
       const other = await seedUser(env.tenantId, "thief", [
         "booking.reservations.create"
       ]);
@@ -806,8 +807,8 @@ suite("booking reservation HTTP surface (Issue #941)", () => {
         { key, token: other.token }
       );
 
-      expect(stolen.status).toBe(409);
-      expect(stolen.body.error?.code).toBe("IDEMPOTENCY_CONFLICT");
+      expect(stolen.body.error?.code).not.toBe("IDEMPOTENCY_CONFLICT");
+      expect(stolen.body).not.toEqual(first.body);
     });
 
     test("(T4, capacity 1) five concurrent requests with one key ALL answer 201 with the same body: a retry never sees its own booking as a conflict", async () => {

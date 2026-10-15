@@ -168,7 +168,7 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
   {
     table: "awcms_idempotency_keys",
     reason:
-      "The replay guard for high-risk mutations: a scope, a key, a request hash and the response that was returned. It holds no column linking a row to a person — the key is chosen by the CALLER and the tenant is the only identity on it — so no subject request can find its rows. The cached `response_body` can echo personal data from the mutation it replays, which is why this table carries a short retention of its own rather than a subject answer it cannot honour."
+      "The replay guard for high-risk mutations: a scope, a key, a request hash and the response that was returned. The only identity on a row is `actor_key` (ADR-0145), the acting tenant user id (or `machine:`/`anonymous`) that scopes the key; the key itself is chosen by the CALLER, and the request hash is an HMAC, so no subject request can find the rows by content, and the id is a pseudonym. The cached `response_body` can echo personal data from the mutation it replays. No retention job exists for this table today, so rows currently persist; retention and a subject-data classification are tracked in ahliweb/awcms#1034 and this entry must be revisited when that lands."
   },
   {
     table: "awcms_omes_servers",

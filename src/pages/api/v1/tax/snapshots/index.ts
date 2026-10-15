@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../../modules/_shared/idempotency";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { computeRequestHash } from "../../../../../modules/_shared/idempotency";
 import { decodeKeysetCursor } from "../../../../../modules/_shared/keyset-pagination";
@@ -147,6 +148,7 @@ export const POST = defineTenantRoute<CreatePrepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       inputHash,
       async () => {
         // A tax date outside the server-date window needs its own permission,

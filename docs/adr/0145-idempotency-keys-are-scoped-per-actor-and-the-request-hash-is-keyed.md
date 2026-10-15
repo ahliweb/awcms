@@ -1,0 +1,39 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0145-idempotency-keys-are-scoped-per-actor-and-the-request-hash-is-keyed.id.md)
+
+# ADR-0145 — Idempotency keys are scoped per actor, and the request hash is keyed
+
+- **Status:** Accepted
+- **Date:** 2026-10-15
+- **Decision maker:** ahliweb
+- **Amends:** [ADR-0129](0129-idempotency-key-is-a-shared-openapi-parameter-component.md) (which fixed the shape and bound of the `Idempotency-Key` header; this fixes what the stored record is keyed on) — an amendment, not a supersession
+- **Related:** Issue #1000; audit F4 of #990 (#947); migration `sql/256_awcms_idempotency_actor_scope.sql`; `src/modules/_shared/idempotency.ts`; `src/lib/security/idempotency-hmac.ts`; skill `awcms-idempotency`
+
+## Context
+
+`awcms_idempotency_keys` was unique on `(tenant_id, request_scope, idempotency_key)`. The actor appeared only in the request hash, and only in the callers that remembered to put it there (booking, procurement, hr-commission, hr-workforce did; workflow decisions, blog lifecycle, media, tax and about eighty other routes did not). Two defects followed:
+
+1. **A colleague could squat a predictable key.** The first user to present `clock-in-2026-10-15` owned it for everyone in the tenant. The victim's request then answered `409 IDEMPOTENCY_CONFLICT`: a denial of service on, for example, clock-in, and an oracle confirming that the key was in use. Where the hash did not include the actor, a colleague with the same body would instead be replayed the victim's stored response.
+2. **The stored hash was a plain SHA-256 of the body.** A body can carry sensitive free text (an attendance-correction `reason`, a rejection reason, a commercial note). A short or guessable value is recoverable offline by anyone who can read the table (a backup, a replica, a reporting role): hash the candidates and compare.
+
+## Decision
+
+1. **The actor joins the unique key.** The table gains `actor_key text NOT NULL`, and the unique index becomes `(tenant_id, request_scope, actor_key, idempotency_key)`. Two actors presenting one key hold two independent records. Rejected: leaving the key tenant-wide and only adding the actor to the hash, because that keeps the squat (the victim still hits the colleague's row) and leaves every route that omits the actor from its hash open to cross-user replay.
+2. **The actor is explicit and opaque.** `findIdempotencyRecord` and `saveIdempotencyRecord` take a branded `IdempotencyActor`, built only by `userIdempotencyActor(tenantUserId)` (`user:<id>`), `machineIdempotencyActor(id)` (`machine:<id>`, for a non-user caller that has no tenant user) or `ANONYMOUS_IDEMPOTENCY_ACTOR` (`anonymous`). A raw string is a compile error (the idempotency key, also a string, sits next to it in every call), and an empty id throws instead of silently sharing one namespace. A database CHECK constrains the shape. A machine-credential bearer is scoped by its linked service-account tenant user (`user:<id>`), so the namespace is per service account, not per credential: two credentials of one service account share it. Threading the credential id through the authorised context and the module helpers would touch most call sites for no isolation between humans, and was left out. Anonymous callers (the public comment form) keep one shared namespace per `(tenant, scope)` by necessity; they rely on client-generated unguessable keys and store no response private to a caller.
+3. **The advisory lock follows the key.** `lockIdempotencyKey` (booking) hashes `tenant:scope:actor:key`, so it serialises exactly the requests that can collide on the unique key and no others.
+4. **The request hash is an HMAC-SHA-256 with a server secret.** `computeRequestHash` keeps its signature and its 64-hex shape (about 100 call sites, one column) and now returns `HMAC(IDEMPOTENCY_HMAC_SECRET, domain tag + canonical JSON)`. The secret is configuration only, never stored.
+5. **Fail closed in production.** With `APP_ENV=production`, an unset, placeholder or under-32-character secret makes `computeRequestHash` throw `IdempotencyConfigurationError` (the mutation is refused, not stored with a weak hash), and `config:validate` fails the same condition up front. Elsewhere an unset secret falls back to a per-process random key with one warning: a replay after a restart or on another instance answers `409`, never a double execution and never a leaked response.
+6. **Rotation.** Replace the secret. Stored hashes made under the old one no longer match, so a retry of a request recorded before the change answers `409 IDEMPOTENCY_CONFLICT`. That is safe: the unique row still exists, so the mutation cannot run twice. Rotate in a quiet period (client retries are minutes, not days), or accept the `409` for the few that straddle it. A two-secret ring was considered and rejected: callers compare `existing.requestHash !== requestHash` in about a hundred places and only hold the digest, not the payload, so verifying against a previous key needs a signature change everywhere for a window of minutes.
+7. **Migration `256` (expand and contract in one step).** Add `actor_key` with default `legacy:unscoped`, drop the default, add the shape CHECK, create the new unique index, drop the old one. Existing rows become `legacy:unscoped`, which is never replayed to anyone. A legacy row for the same `(tenant, scope, key)` created within the last 24 hours makes the lookup answer a conflict, so `409 IDEMPOTENCY_CONFLICT` and no second execution for a client that retries a create-type mutation across the deploy (audit M1); after 24 hours it blocks nothing. A legacy row cannot be replayed because it cannot be bound to an actor, which is the defect being fixed. **Timing and rollback.** The migration runs before the new code starts, so run migrate and redeploy back-to-back (or in a maintenance window); an old instance still serving traffic fails its idempotent mutations closed (its `ON CONFLICT` target no longer exists) until replaced. The new unique index is built under a SHARE lock (reads continue, idempotent writes wait for the single scan). **Rollback is forward-fix only:** re-adding the old `(tenant, scope, key)` index would re-open the cross-actor squat and fail on rows that now legitimately repeat a key, so a bad release is fixed forward. Retention of the table is tracked separately in #1034 (no retention job exists today).
+
+## Consequences
+
+- **Positive:** no cross-user squat or replay on any route, including the ones that never bound the actor into their hash; the sensitive text in a body is no longer guessable from the table; a missing production secret is caught at config time and at runtime.
+- **Neutral:** callers that already bound the actor into the hash keep doing so (defence in depth). No endpoint, event or response shape changes; OpenAPI is unchanged. A new required production variable, `IDEMPOTENCY_HMAC_SECRET`.
+- **Negative:** one extra argument at ~100 call sites. A 24-hour window after the migration in which a same-key retry of a pre-migration request answers `409`. Rotation causes `409` for retries that straddle it. The subject-data inventory entry for the table is reworded: the table now carries a pseudonymous actor id.
+
+## Alternatives considered
+
+- **Actor in the hash only.** Rejected above (squat remains).
+- **Ambient actor via `AsyncLocalStorage` or a session GUC.** Rejected: implicit state that a route can forget, and the public routes would silently get a missing actor. An explicit branded argument fails at compile time.
+- **Hash the actor too (keyed).** Rejected: a rotation would then change the actor key, so the same user's retry would miss its row and run the mutation again, the opposite of fail-safe.
+- **Unkeyed fallback in production.** Rejected: restores the weakness while looking healthy.

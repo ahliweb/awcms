@@ -15,7 +15,8 @@ import { hashSessionToken } from "../../../../lib/auth/session-token";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../modules/_shared/idempotency";
 import { evaluateManagedMediaReadiness } from "../../../../modules/media-library/domain/managed-media-readiness";
 import { isManagedMediaEnforcedForTenant } from "../../../../modules/media-library/application/media-library-tenant-state";
@@ -185,7 +186,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existingIdempotency) {
@@ -240,6 +242,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       successBody

@@ -21,7 +21,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../modules/_shared/idempotency";
 import { validateSeoTenantSettings } from "../../../../modules/seo-distribution/domain/seo-config";
 import {
@@ -177,7 +178,8 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existingIdempotency) {
@@ -241,6 +243,7 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       successBody

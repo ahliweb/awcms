@@ -720,7 +720,7 @@ suite("booking block HTTP surface (Issue #1012)", () => {
       expect(await counts(env.tenantId)).toEqual(before);
     });
 
-    test("a reused key with a different request (or by another user) is 409 IDEMPOTENCY_CONFLICT and writes nothing", async () => {
+    test("a reused key with a different request is 409 IDEMPOTENCY_CONFLICT; another user's same key is its own request (ADR-0145) and writes nothing", async () => {
       if (!handlerReady) return;
       const fixture = await newFixture(env.tenantId);
       const key = nextKey();
@@ -740,8 +740,12 @@ suite("booking block HTTP surface (Issue #1012)", () => {
 
       expect(different.status).toBe(409);
       expect(different.body.error?.code).toBe("IDEMPOTENCY_CONFLICT");
+      // Keys are scoped per actor (ADR-0145): another user's identical key is
+      // NOT a replay of the first user's response. It runs as its own request,
+      // which the first block refuses for those nights.
       expect(otherUser.status).toBe(409);
-      expect(otherUser.body.error?.code).toBe("IDEMPOTENCY_CONFLICT");
+      expect(otherUser.body.error?.code).toBe("BLOCK_CONFLICT");
+      expect(otherUser.body.data).toBeUndefined();
       expect(await counts(env.tenantId)).toEqual(before);
     });
 

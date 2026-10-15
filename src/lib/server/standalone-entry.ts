@@ -67,6 +67,7 @@ import https from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { log } from "../logging/logger";
+import { resolveIdempotencyHmacKey } from "../security/idempotency-hmac";
 import { buildSecurityHeaders } from "../security/security-headers";
 import { isTurnstileRequired } from "../security/turnstile";
 import { isVideoEmbedEnabled } from "../security/video-embed";
@@ -127,7 +128,22 @@ export function createRequestListener(handler: AstroNodeHandler) {
   };
 }
 
+/**
+ * Refuse to start in production without a usable idempotency HMAC secret
+ * (ADR-0145). The runtime also fails closed per request, but that would show up
+ * as a 500 on the first idempotent mutation, long after the deploy looked
+ * healthy; `bun run dev`/`start` never run `config:validate`. Throws only when
+ * `APP_ENV=production`.
+ */
+export function assertStartupConfig(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  resolveIdempotencyHmacKey(env);
+}
+
 async function main(): Promise<void> {
+  assertStartupConfig();
+
   // Must precede the import below: the adapter's built entry calls
   // `startServer()` at module scope unless this is set, which would bind the
   // port with the un-wrapped handler and make this file a no-op.

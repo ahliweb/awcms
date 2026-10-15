@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1bf183db8d16456f69c370f1fce456a9cff44d95e0ffb304524074939ca364e6 -->
+<!-- i18n-source-hash: sha256:a9a741db5d76ca500f151e5d6eec5825b2cfd6161d5bb1499ed96f01a0c0c920 -->
 
 # `omes_control`
 
@@ -57,7 +57,7 @@ Setiap operasi digerbangi permission-nya sendiri (`OMES_OPERATION_GUARD`, guard 
 
 Setiap mutasi mewajibkan `Idempotency-Key` dan me-replay respons tersimpan pada percobaan ulang dengan key+payload yang sama (penyimpanan bersama `awcms_idempotency_keys`, `modules/_shared/idempotency.ts`) — `409 IDEMPOTENCY_CONFLICT` untuk key yang sama dengan payload berbeda. Registrasi, penerbitan enrollment-challenge, pengajuan operasi, dan restore backup tambahan di-rate-limit per aktor terautentikasi (`checkSharedRateLimit`). Setiap field evidence jsonb (`target`/`payload`/`result`/`parameters`/`desiredState`/`observedState`/`checks`/`manifest`/`evidence`) dilewatkan melalui `redactSensitiveAttributes` sebelum meninggalkan modul ini, sebagai defense-in-depth di atas apa pun yang menulisnya. Setiap endpoint mutasi juga mencatat baris `awcms_audit_events` pada REPLAY (tidak hanya pada mutasi yang benar-benar berjalan), ditandai `idempotencyReplay: true` pada attributes-nya, sehingga percobaan replay oleh aktor kedua tidak pernah tak-terlihat.
 
-**Keterbatasan cakupan yang diketahui**: `awcms_idempotency_keys` di-key dengan `(tenant_id, request_scope, idempotency_key)` — tenant-scoped, bukan actor-scoped. Pengguna tenant mana pun yang mengetahui nilai `Idempotency-Key` pengguna lain untuk key yang masih hidup dapat memicu jalur replay (tidak pernah mutasi kedua, hanya respons tersimpan) dan kini akan muncul di jejak audit sebagai aktor yang me-replay, berbeda dari aktor asli. Apakah idempotency key sebaiknya juga di-scope per-aktor adalah keputusan produk untuk issue lanjutan, tidak diputuskan oleh issue ini — modul ini mewarisi kontrak penyimpanan bersama apa adanya.
+**Scoping idempotency**: `awcms_idempotency_keys` di-key `(tenant_id, request_scope, actor_key, idempotency_key)` (migrasi 256, ADR-0145), sehingga pengguna tenant lain yang menyajikan `Idempotency-Key` sama memegang record terpisah: ia tak bisa me-replay respons tersimpan aktor asli maupun memblokir key-nya.
 
 ## Postur privasi AI dan owner-approval egress (`ahliweb/omes#232`, OMES issue #217)
 

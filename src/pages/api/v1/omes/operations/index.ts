@@ -10,7 +10,8 @@ import type { KeysetCursor } from "../../../../../modules/_shared/keyset-paginat
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { checkSharedRateLimit } from "../../../../../lib/security/rate-limit";
 import {
@@ -172,7 +173,8 @@ export const POST = defineTenantRoute<SubmitPrepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existing) {
@@ -265,6 +267,7 @@ export const POST = defineTenantRoute<SubmitPrepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       201,
       responseBody

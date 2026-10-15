@@ -7,7 +7,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../modules/_shared/idempotency";
 import { decodeKeysetCursor } from "../../../../modules/_shared/keyset-pagination";
 import { jsonResponse } from "../../../../modules/_shared/api-response";
@@ -203,7 +204,8 @@ export const POST = defineTenantRoute<CreatePrepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      prepared.idempotencyKey
+      prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
     if (existing) {
       if (existing.requestHash !== requestHash) {
@@ -274,6 +276,7 @@ export const POST = defineTenantRoute<CreatePrepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       201,
       body
