@@ -227,5 +227,15 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_commission.accruals.accrue",
   "hr_commission.accruals.pay",
   "hr_commission.accruals.read",
-  "hr_commission.accruals.release"
+  "hr_commission.accruals.release",
+  // hr_workforce attendance (7) — ADR-0132 / Issue #947. Same posture: API-first
+  // and `experimental`; the attendance and correction-inbox screens are the
+  // recorded follow-up that flips the module to `active`.
+  "hr_workforce.attendance.create",
+  "hr_workforce.attendance.read",
+  "hr_workforce.clock.create",
+  "hr_workforce.corrections.approve",
+  "hr_workforce.corrections.cancel",
+  "hr_workforce.corrections.create",
+  "hr_workforce.corrections.read"
 ];

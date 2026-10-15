@@ -687,6 +687,31 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/hr-workforce/attendance-corrections/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/attendance-corrections/[id]/settle.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/attendance-corrections/[id]/withdraw.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/attendance-corrections/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/attendance-events/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/hr-workforce/employments/[id].ts",
       "workClass": "interactive",
       "source": "factory"

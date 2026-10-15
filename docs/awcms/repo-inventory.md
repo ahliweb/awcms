@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 32    |
-| Migrations                          | 192   |
-| `awcms_*` tables                    | 208   |
-| Tables with `FORCE` RLS             | 190   |
+| Migrations                          | 194   |
+| `awcms_*` tables                    | 210   |
+| Tables with `FORCE` RLS             | 192   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 636   |
-| Route files                         | 512   |
+| Test files                          | 639   |
+| Route files                         | 517   |
 | ADR                                 | 284   |
 
 ### Modules
@@ -246,9 +246,11 @@
 | 187 | `sql/187_awcms_hr_commission_rules_backdated.sql`                  |
 | 188 | `sql/188_awcms_hr_commission_accruals_schema.sql`                  |
 | 189 | `sql/189_awcms_hr_commission_accrual_permissions.sql`              |
-| 190 | `sql/200_awcms_booking_hold_expiry_sweep.sql`                      |
-| 191 | `sql/204_awcms_booking_stay_blocks.sql`                            |
-| 192 | `sql/224_awcms_sensitive_read_windows.sql`                         |
+| 190 | `sql/198_awcms_hr_attendance_schema.sql`                           |
+| 191 | `sql/199_awcms_hr_attendance_permissions.sql`                      |
+| 192 | `sql/200_awcms_booking_hold_expiry_sweep.sql`                      |
+| 193 | `sql/204_awcms_booking_stay_blocks.sql`                            |
+| 194 | `sql/224_awcms_sensitive_read_windows.sql`                         |
 
 ### Tables & Row-Level Security
 
@@ -319,6 +321,8 @@
 | `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
 | `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
 | `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
+| `awcms_hr_attendance_corrections`        | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
+| `awcms_hr_attendance_events`             | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
 | `awcms_hr_commission_accruals`           | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
 | `awcms_hr_commission_rules`              | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
 | `awcms_hr_commission_transitions`        | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
@@ -467,16 +471,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 497        |
+| `(root)`      | 498        |
 | `e2e`         | 25         |
-| `integration` | 113        |
+| `integration` | 115        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 413   |
+| `/api/v1/**`    | 418   |
 | `/admin/**`     | 69    |
 | publik / anonim | 30    |
 

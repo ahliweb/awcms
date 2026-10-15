@@ -21,8 +21,10 @@
  * Issue #946 adds shift templates, shift assignments and the generic
  * `StaffAvailabilityPort` adapter (`sql/184`-`sql/185`).
  *
- * IS NOT: attendance, corrections, commission or payroll (later issues of the
- * same ADR), and **never** a photo,
+ * Issue #947 adds attendance events and corrections with approval
+ * (`sql/198`-`sql/199`).
+ *
+ * IS NOT: commission or payroll (later issues of the same ADR), and **never** a photo,
  * biometric or device-fingerprint field (owner decision O6).
  *
  * ## Dependencies
@@ -31,6 +33,9 @@
  * rows go through `logging`, the cross-cutting foundation every module may call.
  * `identity_access` is NOT a declared dependency: the chokepoint is reached
  * through the shared route factory (`defineTenantRoute`), not imported here.
+ * `workflow_approval` is NOT a dependency either: a correction's approval is a
+ * soft, fail-closed integration (tests/module-boundary.test.ts), so a tenant
+ * without it can still record attendance and is simply refused a correction.
  */
 import {
   defineModule,
@@ -112,7 +117,7 @@ export const hrWorkforceModule = defineModule({
   // screens land".
   status: "experimental",
   description:
-    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or reason (the assign row carries only the login's UUID). Shifts (Issue #946): shift templates are patterns (local start, elapsed duration, one optional break, IANA zone) and a shift assignment is one UTC half-open interval per employment, work or time off (a coarse category, never a reason; no free-text field exists), draft then published then cancelled, never deleted. The database refuses two overlapping non-cancelled assignments of one employment, across kinds, even for two concurrent writers (a per-employment advisory lock inside the trigger), and a published or cancelled row is immutable. Publish and cancel are high-risk, idempotent and audited with ids only; an employee reads their own published schedule through an ownership grant. The module's StaffAvailabilityPort adapter exposes working intervals per opaque staff reference (published work, minus breaks and time off, while the terms are active) and nothing else, read-only in the caller's tenant transaction. Attendance, corrections, commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
+    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or reason (the assign row carries only the login's UUID). Shifts (Issue #946): shift templates are patterns (local start, elapsed duration, one optional break, IANA zone) and a shift assignment is one UTC half-open interval per employment, work or time off (a coarse category, never a reason; no free-text field exists), draft then published then cancelled, never deleted. The database refuses two overlapping non-cancelled assignments of one employment, across kinds, even for two concurrent writers (a per-employment advisory lock inside the trigger), and a published or cancelled row is immutable. Publish and cancel are high-risk, idempotent and audited with ids only; an employee reads their own published schedule through an ownership grant. The module's StaffAvailabilityPort adapter exposes working intervals per opaque staff reference (published work, minus breaks and time off, while the terms are active) and nothing else, read-only in the caller's tenant transaction. Attendance (Issue #947): an append-only event table (no UPDATE or DELETE for the runtime role, plus triggers) whose recorded time is the database clock, whose claimed time is bounded by the tenant's clock-skew setting (self and supervisor events cannot be back-dated; kiosk and import replays are accepted up to seven days and flagged late), replay-safe by a client event key, with no location, photo, device or network column (owner decision O6; location evidence is a separate table, Issue #970). A correction never edits an event: it proposes an add or a replace with a mandatory reason, starts a workflow_approval instance (fail-closed when none is published), and on approval appends a new event that supersedes the old one; the correction row only changes status, follows the workflow verdict (enforced by the database), and the requester can never be the approver (CHECK, trigger over the workflow decision rows including delegation, and the chokepoint). An employee reads their own events and a supervisor their reports' (the manager chain, ten levels, a deleted employment breaks it) through ownership grants; the correction reason is sensitive and never reaches an audit row, event, log or the workflow store. Commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
   dependencies: ["tenant_admin", "profile_identity"],
   type: "domain",
   api: {
@@ -197,6 +202,47 @@ export const hrWorkforceModule = defineModule({
       description: "Soft-delete a shift template — high-risk"
     },
     {
+      activityCode: "clock",
+      action: "create",
+      description:
+        "Record your own clock-in, clock-out and break events; the employment must be linked to your login"
+    },
+    {
+      activityCode: "attendance",
+      action: "create",
+      description:
+        "Record an attendance event for another employment (supervisor, kiosk or import source)"
+    },
+    {
+      activityCode: "attendance",
+      action: "read",
+      description:
+        "Read attendance events of any employment; an employee reads their own and a supervisor their reports without this"
+    },
+    {
+      activityCode: "corrections",
+      action: "create",
+      description:
+        "Request a correction to attendance (add or replace an event), starting an approval workflow instance"
+    },
+    {
+      activityCode: "corrections",
+      action: "read",
+      description:
+        "Read attendance corrections and their reasons; the requester and the workflow assignees read theirs without this"
+    },
+    {
+      activityCode: "corrections",
+      action: "cancel",
+      description: "Withdraw your own pending attendance correction — high-risk"
+    },
+    {
+      activityCode: "corrections",
+      action: "approve",
+      description:
+        "Apply the approval workflow's verdict on an attendance correction, appending the superseding event — high-risk; the requester is refused"
+    },
+    {
       activityCode: "settings",
       action: "read",
       description:
@@ -263,6 +309,33 @@ export const hrWorkforceModule = defineModule({
         "awcms_hr_shift_assignments_list_idx (sql/184) — the time-ordered listing and any future bounded scan."
     }),
     retained({
+      key: "hr_workforce.attendance_events",
+      tableName: "awcms_hr_attendance_events",
+      personal: true,
+      retentionClass: "financial_tax",
+      deletionMode: "status_transition_then_purge",
+      cursorColumn: "occurred_at",
+      why: "One row per clock-in, clock-out or break event, so its ceiling is employments times events per day times days worked: the busiest HR table. Attendance can support the employer's pay and working-hours records, so it follows the same retention class as the employment history; the actual period is the employer's counsel's, not asserted here.",
+      deletionWhy:
+        "Append-only: awcms_app holds no UPDATE or DELETE and a trigger refuses both. NO purge exists yet (recorded follow-up with the other HR rows; the keyset list is bounded by LIMIT and a cursor in the meantime), so nothing is removed today. A future purge must be a reviewed, privileged job.",
+      indexColumns: ["tenant_id", "occurred_at"],
+      indexPurpose:
+        "awcms_hr_attendance_events_list_idx (sql/198) — the newest-first listing and any future bounded scan."
+    }),
+    retained({
+      key: "hr_workforce.attendance_corrections",
+      tableName: "awcms_hr_attendance_corrections",
+      personal: true,
+      retentionClass: "financial_tax",
+      deletionMode: "status_transition_then_purge",
+      why: "One row per requested correction, so its ceiling is the number of corrections people ask for. The row is the justification for a superseding event that pay may rely on, so it is retained with the events; the reason text is sensitive and has no shorter lifetime of its own yet.",
+      deletionWhy:
+        "A status-only table: pending moves to approved, rejected or withdrawn and stays; a trigger refuses DELETE and awcms_app holds none. NO purge exists yet (recorded follow-up), so nothing is removed today.",
+      indexColumns: ["tenant_id", "created_at"],
+      indexPurpose:
+        "awcms_hr_attendance_corrections_list_idx (sql/198) — the newest-first listing and any future bounded scan."
+    }),
+    retained({
       key: "hr_workforce.settings",
       tableName: "awcms_hr_workforce_settings",
       personal: false,
@@ -274,6 +347,29 @@ export const hrWorkforceModule = defineModule({
     })
   ],
   subjectData: [
+    {
+      key: "hr_workforce.attendance_events",
+      tableName: "awcms_hr_attendance_events",
+      ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      subjectColumns: [{ column: "recorded_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "When a person clocked in and out (behavioural data). The row reaches the person only through `employment_id`, which the registry's direct subject columns cannot express, so the descriptor names only the actor stamp — the same open item the employment terms and the shift assignments carry (tracked as issue 985, which covers all three tables). The subject reads their own events through the ownership-granted GET /api/v1/hr-workforce/attendance-events?mine=true. Append-only by privilege and trigger and retained under the employer's working-hours and pay obligations (ADR-0132 section 13.2), so an erasure could not rewrite it; the anonymised profile makes the record resolve to nobody. It holds no location, photo, device or network value (owner decision O6, ADR-0138)."
+    },
+    {
+      key: "hr_workforce.attendance_corrections",
+      tableName: "awcms_hr_attendance_corrections",
+      ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      subjectColumns: [
+        { column: "requested_by", references: "tenant_user" },
+        { column: "decided_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "A request to change when a person is recorded as having worked, with a free-text reason that may describe health or family circumstances (SENSITIVE: never in an audit row, an event or the workflow store). The row reaches the employee it is about only through `employment_id` (issue 985 again); the descriptor names the requester and the decider. The requester reads their own through GET /api/v1/hr-workforce/attendance-corrections/{id}. Status-only and never deleted; retained with the events it justifies under the employer's obligations (ADR-0132 section 13.2). Exporting the reason to the subject is a recorded follow-up, together with the employment join."
+    },
     {
       key: "hr_workforce.shift_assignments",
       tableName: "awcms_hr_shift_assignments",

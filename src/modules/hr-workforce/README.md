@@ -11,10 +11,13 @@ of the `hr_*` family). The design pack is
 ## What is here, and what is not
 
 This is the **foundation** (employments, effective-dated terms, settings and
-employee-sees-own) plus **shifts and the staff-availability port** (Issue #946).
-**Not here yet:** attendance, corrections, commission and payroll (later issues of
-the same ADR) —
+employee-sees-own), **shifts and the staff-availability port** (Issue #946) and
+**attendance events and corrections with approval** (Issue #947).
+**Not here yet:** commission and payroll (later issues of the same ADR) —
 and **never** a photo, biometric or device-fingerprint field (owner decision O6).
+Geolocation evidence (ADR-0138, Issue #970) is NOT part of attendance: it will be
+a separate append-only table keyed to an event id, so no location column ever
+exists on `awcms_hr_attendance_events`.
 
 Status is `experimental`: the flag is off, no admin screen exists, and the module
 declares no `navigation`. It flips to `active` with its first screen.
@@ -96,45 +99,187 @@ America/New_York and a half-hour zone).
   names a compensation, payroll, commission or payout table. No Booking code is
   imported anywhere; Booking (a later issue) will consume the port type.
 
+## Attendance and corrections (Issue #947, `sql/198`-`sql/199`)
+
+`awcms_hr_attendance_events` is one fact per row: an employment clocked in, out,
+started or ended a break, at a **claimed** instant (`occurred_at`), **recorded** by
+the database at its own instant (`recorded_at`), from a `source` (`self`,
+`supervisor`, `kiosk`, `import`, or `correction`). `awcms_hr_attendance_corrections`
+is a **proposed change** (`add` a missing event, or `replace` one) with a mandatory
+reason and a `workflow_approval` instance. The effective record is "events not
+superseded".
+
+- **Append-only, in the database.** `awcms_app` holds only `SELECT` and `INSERT` on
+  events (registered in `RETIRED_TENANT_TABLE_PRIVILEGES`), and a trigger refuses
+  `UPDATE` and `DELETE` for any other role too. A correction row only ever changes
+  its **status**; its proposal, reason, requester and instance are immutable.
+- **The server clock.** A trigger overwrites `recorded_at` with `clock_timestamp()`;
+  a client cannot supply it (nor `late`: both are unknown keys and refused). The
+  claimed time is bounded by the tenant's `clock_skew_seconds`
+  (`awcms_hr_workforce_settings`, default 300): **in the future** beyond it is
+  refused for every source (`422 ATTENDANCE_TIME_IN_FUTURE`).
+- **Back-dating, reconciled.** The design pack says an offline event is accepted
+  and flagged `late`; the issue says back-dated events beyond the skew are refused.
+  Both hold, by source: a **`self`/`supervisor`** event claims "now", so a claimed
+  time older than the skew is refused (`ATTENDANCE_BACKDATED`: file a correction); a
+  **`kiosk`/`import`** event is a replayed offline queue, so a stale time is accepted
+  up to **7 days** (older: `ATTENDANCE_TOO_OLD`) and flagged `late` past 15 minutes.
+  The 7 days and 15 minutes are constants in the guard; making them tenant settings
+  is a recorded follow-up.
+- **Replay.** `(tenant_id, employment_id, client_event_key)` is unique. A replay
+  returns the **original** (`200`, not `201`); a different event under a used key is
+  `409 CLIENT_EVENT_KEY_CONFLICT`. Concurrent posts of one key record once
+  (`ON CONFLICT DO NOTHING` plus a read of the winner).
+- **Who records for whom.** `source: self` needs `hr_workforce.clock.create` AND an
+  employment linked to the caller's login (anything else is `403`, existent or not:
+  S3). It is a permission and not an `ownershipGrant` because a grant may only widen
+  a read. `supervisor`/`kiosk`/`import` need `hr_workforce.attendance.create` and can
+  never use `self`. `attendance.create` is a **trusted** power (an `import` can claim
+  a time up to 7 days old, flagged `late`, with no approval): granted to no role by
+  default, and per-office scoping of it waits for the scope adapter.
+- **A correction never edits the original.** Approval appends a NEW event
+  (`source = correction`, `supersedes_event_id`, `correction_id`); the database
+  refuses a correction-sourced event unless its correction is `approved` and the
+  event matches kind, instant, employment and target exactly, once. An event is
+  superseded at most once (unique index), and only by a correction; one **pending**
+  correction per target event (unique index).
+- **Approval is required and fail-closed.** With the `workflow` module off or no
+  published definition under `correction_workflow_key`
+  (default `hr.attendance_correction`): `409 APPROVAL_WORKFLOW_NOT_CONFIGURED` and
+  nothing is created (no row, no instance). The instance is started with **no
+  facts**, so neither the reason nor the proposed time enters the workflow store.
+- **A proposed instant that could never be applied is refused up front.** Approval
+  appends an event, and the event guard refuses a claimed time beyond the tenant's
+  skew in the future, so a correction proposing one would be approved and then stay
+  pending for good (`409 CORRECTION_NOT_APPLICABLE` at settle). Creating a correction
+  therefore applies the same bound to `proposedOccurredAt`: further than
+  `clock_skew_seconds` ahead of now is `422 ATTENDANCE_TIME_IN_FUTURE` (the event
+  path's code) and nothing is created. The employment's hire and termination dates
+  are not checked: the event guard checks neither the start date nor, for a
+  `correction`-sourced event, the termination (a terminated employment can still be
+  corrected), so neither does this. `CORRECTION_NOT_APPLICABLE` remains for what can
+  change between request and approval: the employment soft-deleted meanwhile, or the
+  tenant lowering its skew below the proposal.
+  Approvers are the definition's assignees; the decision itself is a workflow
+  decision (`POST /workflows/tasks/{id}/decisions`).
+- **`settle` applies the verdict (pull, like procurement).** `POST
+.../attendance-corrections/{id}/settle` (`corrections.approve`, high-risk) reads the
+  instance: pending -> `409 CORRECTION_STILL_PENDING`; approved -> the status moves
+  to `approved` **and** the superseding event is appended in one savepoint; rejected
+  -> `rejected`; cancelled elsewhere -> `withdrawn`. Calling it is a step somebody
+  with `corrections.approve` takes (a domain-event consumer that settles
+  automatically is a recorded follow-up).
+- **Segregation of duties, four layers.** (1) the workflow engine's own guard stops
+  the requester deciding; (2) the chokepoint's self-approval guard refuses the
+  requester **settling** (`403`); (3) the handler refuses an approved instance that
+  has no human approving decision (`409 CORRECTION_NO_APPROVER`: a graph with no
+  approval node would make the requester their own approver) or in which the
+  requester **or the employee the correction is about** took part **directly or as
+  the delegator whose standing a delegate used**, or which that employee settles
+  (`409 CORRECTION_SELF_APPROVED`: the engine's guard compares only the acting user,
+  so a delegate approving on someone's behalf passes it, and a colleague filing a
+  correction for an employee would otherwise let that employee approve it). The
+  subject is the login linked to the employment when the correction was requested
+  (snapshotted in `subject_tenant_user_id`, stamped by the trigger) AND the one
+  linked now, so a re-link in between does not shed the exclusion; there is no
+  transitive manager-chain exclusion; (4) the database: a `CHECK` that
+  `decided_by` is neither the requester nor the subject, and a trigger that
+  re-reads the workflow's own decision rows (decided by and on behalf of). The correction's status can only follow
+  the instance's verdict (`approved`/`rejected`/`cancelled`), and an `approved` row
+  without its event cannot commit (deferred constraint trigger).
+- **Who sees what.** `?mine=true` (every live employment of the caller, terminated ones included: a
+  rehired person reads the old employment's events and corrections and the current
+  one's, never anyone else's) and
+  `?reports=true` (the **current manager chain** below the caller's own live,
+  non-terminated employment) are `ownershipGrant`s on the READ routes only; the
+  unrestricted list needs `attendance.read` / `corrections.read` ("HR sees all"). An
+  `employmentId` outside the chosen basis is `403`. `awcms_hr_report_ids` walks at
+  most ten levels and **neither returns nor walks through a soft-deleted employment**:
+  the deleted-manager posture below is fail-closed (a skip-level manager loses sight
+  of the people under a deleted middle manager until HR rewrites their terms).
+  A malformed request is held until authorization has decided, so an unauthorised
+  caller is told `403` before `400`.
+- **The reason is sensitive.** It is selected only on `GET .../{id}` and only for the
+  requester, a LIVE workflow assignee of the instance (a seat that was reassigned or
+  skipped sees nothing), or a caller whose roles grant
+  `corrections.read`; a supervisor reading a report's correction through the chain
+  alone sees everything but the reason. No write response carries it (so the
+  idempotency store holds none), the list never does, and no audit row, domain event,
+  log or workflow fact does (source-text and runtime tests scan for a sentinel).
+- **Guards take the parent row `FOR SHARE`** (employment, workflow instance,
+  correction), so a concurrent delete or termination serialises with the insert
+  instead of racing it (a test holds an uncommitted soft-delete open and proves the
+  insert waits and is refused). The events table itself cannot be locked `FOR SHARE`
+  by `awcms_app` (no `UPDATE` privilege), which is why the supersession target is
+  read plainly: the table is immutable.
+- **Audit and idempotency.** Request, withdraw and settle are audited with ids and
+  statuses only (`info`; settle `warning` when approved); recording an event is not
+  audited (high volume: the event is the record). Every write requires an
+  `Idempotency-Key`. Recording, requesting, withdrawing and settling are idempotent
+  on top of that.
+- **No domain event yet.** `awcms.hr.attendance.recorded` stays provisional until a
+  consumer exists (as for shifts).
+
 ## Subject-rights decision (ADR-0094 coverage)
 
-| Table                         | `subjectData`                                              | Why                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `awcms_hr_employments`        | covered: `profile_id`, `tenant_user_id` + stamps; exported | The subject's own employment record. Retained under the employer's labour/tax/social-security obligations (`retain_under_obligation`); the link stays and resolves to the anonymised profile.                                                                                                                                   |
-| `awcms_hr_employment_terms`   | covered: actor stamp only; **not exported**; retained      | Reaches the person only through `employment_id`, which a direct subject column cannot express. The subject reads their own history through the ownership-granted `GET .../terms`. Append-only, so an erasure could not rewrite it. A direct employment-to-subject join in the export is a recorded follow-up (see Limitations). |
-| `awcms_hr_shift_assignments`  | covered: actor stamps only; **not exported**; retained     | When a person was scheduled and when away (coarse category, never a reason). Reaches the person only through `employment_id`, the same open item as the terms (below). The subject reads their own published schedule through `?mine=true`. Never deleted, published rows immutable.                                            |
-| `awcms_hr_shift_templates`    | `NO_SUBJECT_DATA` (reason recorded)                        | A pattern with no person; only actor stamps.                                                                                                                                                                                                                                                                                    |
-| `awcms_hr_workforce_settings` | `NO_SUBJECT_DATA` (reason recorded)                        | A tenant configuration row; only an `updated_by` stamp.                                                                                                                                                                                                                                                                         |
+| Table                             | `subjectData`                                                     | Why                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `awcms_hr_employments`            | covered: `profile_id`, `tenant_user_id` + stamps; exported        | The subject's own employment record. Retained under the employer's labour/tax/social-security obligations (`retain_under_obligation`); the link stays and resolves to the anonymised profile.                                                                                                                                   |
+| `awcms_hr_employment_terms`       | covered: actor stamp only; **not exported**; retained             | Reaches the person only through `employment_id`, which a direct subject column cannot express. The subject reads their own history through the ownership-granted `GET .../terms`. Append-only, so an erasure could not rewrite it. A direct employment-to-subject join in the export is a recorded follow-up (see Limitations). |
+| `awcms_hr_shift_assignments`      | covered: actor stamps only; **not exported**; retained            | When a person was scheduled and when away (coarse category, never a reason). Reaches the person only through `employment_id`, the same open item as the terms (below). The subject reads their own published schedule through `?mine=true`. Never deleted, published rows immutable.                                            |
+| `awcms_hr_attendance_events`      | covered: `recorded_by` stamp only; **not exported**; retained     | When a person clocked in and out (behavioural data), reaching the person only through `employment_id` (issue 985, as for terms and shifts). Append-only. The subject reads their own through `?mine=true`. Holds no location, photo, device or network value.                                                                   |
+| `awcms_hr_attendance_corrections` | covered: `requested_by`, `decided_by`; **not exported**; retained | A request to change when a person is recorded as having worked, with a sensitive reason. Reaches the employee only through `employment_id` (issue 985). Exporting the reason to the subject is a recorded follow-up with that join.                                                                                             |
+| `awcms_hr_shift_templates`        | `NO_SUBJECT_DATA` (reason recorded)                               | A pattern with no person; only actor stamps.                                                                                                                                                                                                                                                                                    |
+| `awcms_hr_workforce_settings`     | `NO_SUBJECT_DATA` (reason recorded)                               | A tenant configuration row; only an `updated_by` stamp.                                                                                                                                                                                                                                                                         |
 
-All five tables are registered with `data_lifecycle` as `delegated`, with no
+All seven tables are registered with `data_lifecycle` as `delegated`, with no
 purge: HR history is retained for the employer's legal periods (counsel's, not
 asserted here); archive-then-purge for HR rows is a recorded follow-up.
 
 ## Layout
 
-| Path                                        | What it is                                                                |
-| ------------------------------------------- | ------------------------------------------------------------------------- |
-| `module.ts`                                 | Descriptor: 16 permissions, `dataLifecycle` + `subjectData`               |
-| `domain/hr-shift-types.ts`                  | Shift kinds, statuses, limits — pure                                      |
-| `domain/hr-shift-time.ts`                   | Wall-clock to UTC resolution, DST gap/overlap rules — pure                |
-| `domain/availability-intervals.ts`          | Interval algebra and the working-time rule — pure                         |
-| `domain/hr-shift-validation.ts`             | Strict template and assignment validators (no free text) — pure           |
-| `application/hr-shift-directory.ts`         | Template and assignment SQL: draft, publish, cancel, lists                |
-| `application/staff-availability-adapter.ts` | The `StaffAvailabilityPort` adapter (read-only)                           |
-| `domain/hr-workforce-types.ts`              | Employment types and statuses — pure                                      |
-| `domain/hr-workforce-validation.ts`         | Strict request validators (no personal field, no derived end date) — pure |
-| `domain/hr-workforce-permissions.ts`        | Literal guard objects passed to `authorizeInTransaction`                  |
-| `application/hr-workforce-directory.ts`     | All SQL: list/get, create, terms change, assign, delete/restore, settings |
-| `application/hr-workforce-route-support.ts` | Idempotency, body validation and the ownership basis shared by the routes |
-| `src/pages/api/v1/hr-workforce/**`          | 11 thin route files, each authorizing through `defineTenantRoute`         |
+| Path                                        | What it is                                                                               |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `module.ts`                                 | Descriptor: 23 permissions, `dataLifecycle` + `subjectData`                              |
+| `domain/hr-shift-types.ts`                  | Shift kinds, statuses, limits — pure                                                     |
+| `domain/hr-shift-time.ts`                   | Wall-clock to UTC resolution, DST gap/overlap rules — pure                               |
+| `domain/availability-intervals.ts`          | Interval algebra and the working-time rule — pure                                        |
+| `domain/hr-shift-validation.ts`             | Strict template and assignment validators (no free text) — pure                          |
+| `application/hr-shift-directory.ts`         | Template and assignment SQL: draft, publish, cancel, lists                               |
+| `application/staff-availability-adapter.ts` | The `StaffAvailabilityPort` adapter (read-only)                                          |
+| `domain/hr-workforce-types.ts`              | Employment types and statuses — pure                                                     |
+| `domain/hr-workforce-validation.ts`         | Strict request validators (no personal field, no derived end date) — pure                |
+| `domain/hr-workforce-permissions.ts`        | Literal guard objects passed to `authorizeInTransaction`                                 |
+| `application/hr-workforce-directory.ts`     | All SQL: list/get, create, terms change, assign, delete/restore, settings                |
+| `application/hr-workforce-route-support.ts` | Idempotency, body validation and the ownership basis shared by the routes                |
+| `domain/hr-attendance-types.ts`             | Attendance kinds, sources, correction statuses and limits — pure                         |
+| `domain/hr-attendance-validation.ts`        | Strict event and correction validators (no location, no free text but the reason) — pure |
+| `application/hr-attendance-directory.ts`    | Events, corrections, the read bases (own, reports), settle and withdraw                  |
+| `src/pages/api/v1/hr-workforce/**`          | 16 thin route files, each authorizing through `defineTenantRoute`                        |
 
 ## Open items and recorded phase-1 postures
 
 Open (tracked, not hidden):
 
-- **Shift assignments are not joined into the subject export** either (issue 985
-  covers both tables), for the same reason as the terms (`exportable: false`; the employee reads their own
-  published schedule through `?mine=true`). The same follow-up closes both.
+- **Shift assignments, attendance events and corrections are not joined into the
+  subject export** either (issue 985 covers all of them), for the same reason as the
+  terms (`exportable: false`; the employee reads their own published schedule and
+  attendance through `?mine=true`). The same follow-up closes all of them, and adds
+  the reason of a correction to the subject's own export.
+- **Attendance, deferred and recorded:** no `void` (a correction removing an event
+  with no replacement) yet: a ghost clock-in is replaced by the true event; no
+  sequence validation (a `clock_out` with no `clock_in` is recorded as claimed; the
+  effective record is read, not enforced); the 7-day replay window and the 15-minute
+  `late` threshold are constants, not tenant settings; **settle is a pull** (no
+  consumer applies an approval automatically); the manager chain gives read access
+  only, so a supervisor still cannot record for a report without
+  `attendance.create`; **no per-office scope** on `attendance.read`/`create` (the
+  scope adapter is a later issue, as for employments); no domain event; no admin
+  screen; the correction workflow's approvers are the definition's fixed assignees,
+  not "the requester's manager" (the engine has no such assignee type).
+- **No `data_lifecycle` purge for attendance** (declared `delegated`, class
+  `financial_tax`, period the employer's counsel's); the events list is
+  keyset-paginated at 100 per page in the meantime.
 - **No `data_lifecycle` purge for shift rows** (declared `delegated`, retention
   class `financial_tax` as the other HR rows; the period is the employer's
   counsel's). **No domain event** (`awcms.hr.shift.assigned` stays provisional
@@ -177,7 +322,7 @@ Known phase-1 posture (documented, no further code in this PR):
 
 ## Limitations
 
-- No admin screen; `experimental`. Existing tenants also need the backfill for the `shifts.*` and `templates.*` permissions.
+- No admin screen; `experimental`. Existing tenants also need the backfill for the `shifts.*`, `templates.*`, `clock.*`, `attendance.*` and `corrections.*` permissions, and an operator must **publish a workflow** under `hr.attendance_correction` (or the tenant's key) before a correction can be requested.
 - Existing tenants need `bun run identity-access:permissions:backfill` to receive
   the seeded permissions (the limitation every permission seed carries).
 - The employee number and hire date cannot be edited in place (delete and recreate
