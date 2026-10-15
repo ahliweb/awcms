@@ -8,7 +8,8 @@ import { fail, jsonResponse } from "../../_shared/api-response";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../_shared/idempotency";
 import {
   bodyTooLargeResponse,
@@ -228,7 +229,8 @@ export async function runIdempotent(
     tx,
     tenantId,
     scope,
-    idempotencyKey
+    idempotencyKey,
+    userIdempotencyActor(actorTenantUserId)
   );
 
   if (existing) {
@@ -258,6 +260,7 @@ export async function runIdempotent(
     tenantId,
     scope,
     idempotencyKey,
+    userIdempotencyActor(actorTenantUserId),
     requestHash,
     produced.status,
     body

@@ -5,7 +5,7 @@ description: Terapkan idempotency pada mutation high-risk AWCMS agar aman dari d
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:d61ae59e73b9e8c5a22addafb52d1852fd73c77780556ffd6a2192b22383b4b9 -->
+<!-- i18n-source-hash: sha256:be82baae27ffe34f477e1a9a8febe7554bd709a523abce15d334b63592e3ffd9 -->
 
 # AWCMS — Idempotent High-Risk Mutation
 
@@ -34,10 +34,11 @@ flowchart TD
 7. Deadlock retry harus aman karena idempotency.
 8. Retention key: 7–30 hari.
 9. **Hash WAJIB terikat ke identitas resource** — lihat §"Bind hash ke resource id" di bawah, ini bukan opsional dan sudah menyebabkan bug nyata berulang kali.
+10. **Aktor adalah bagian key tersimpan** (ADR-0145, migrasi 256): `findIdempotencyRecord`/`saveIdempotencyRecord` menerima `IdempotencyActor` yang dibuat dengan `userIdempotencyActor(auth.context.tenantUserId)`, `machineIdempotencyActor(id)` atau `ANONYMOUS_IDEMPOTENCY_ACTOR`. Jangan pernah mengoper string mentah; jangan membuat lock/store lokal-rute yang melewatkan aktor. `IDEMPOTENCY_HMAC_SECRET` wajib di produksi (fail closed).
 
 ## CRITICAL — bind request hash ke resource id (Issue #750, #795 — recurring 4x)
 
-`computeRequestHash(payload: unknown)` (`src/modules/_shared/idempotency.ts:36`) **tidak menegakkan apa pun sendiri** — ia cuma SHA-256 dari JSON body yang key-nya sudah diurutkan. Ia TIDAK tahu resource mana yang sedang dimutasi. Store key di `awcms_idempotency_keys` adalah `(tenant_id, request_scope, idempotency_key)`, dan `request_scope` itu **dibagi rata di seluruh resource bertipe sama dalam satu tenant** (bukan per-resource) — jadi kalau `computeRequestHash` hanya di-hash dari `body` mentah (atau body kosong `{}` untuk endpoint `restore`/`cancel`/`commit` yang tidak punya field lain), maka `Idempotency-Key` yang sama dipakai ulang klien untuk DUA resource berbeda dengan tipe endpoint sama akan mereplay respons resource pertama untuk request yang seharusnya memutasi resource kedua — **silent no-op yang terlihat seperti sukses (200 dengan body resource A), padahal resource B tidak pernah termutasi.**
+`computeRequestHash(payload: unknown)` (`src/modules/_shared/idempotency.ts:36`) **tidak menegakkan apa pun sendiri** — ia cuma HMAC-SHA-256 (di-key `IDEMPOTENCY_HMAC_SECRET`) dari JSON body yang key-nya sudah diurutkan. Ia TIDAK tahu resource mana yang sedang dimutasi. Store key di `awcms_idempotency_keys` adalah `(tenant_id, request_scope, idempotency_key)`, dan `request_scope` itu **dibagi rata di seluruh resource bertipe sama dalam satu tenant** (bukan per-resource) — jadi kalau `computeRequestHash` hanya di-hash dari `body` mentah (atau body kosong `{}` untuk endpoint `restore`/`cancel`/`commit` yang tidak punya field lain), maka `Idempotency-Key` yang sama dipakai ulang klien untuk DUA resource berbeda dengan tipe endpoint sama akan mereplay respons resource pertama untuk request yang seharusnya memutasi resource kedua — **silent no-op yang terlihat seperti sukses (200 dengan body resource A), padahal resource B tidak pernah termutasi.**
 
 Bug class ini muncul 4 kali di repo ini: Issue #750 (reference-data, PR #783, 3 ronde perbaikan), lalu Issue #795 menemukan pola yang sama BELUM diperbaiki di modul lain (document-infrastructure PR #798, business-scope/organization-structure PR #801, identity-access/data-lifecycle/reports PR lain) lewat `grep -rn "computeRequestHash(" src/pages/api/` menyeluruh — audit pertama yang hanya menyasar endpoint yang "kelihatan jelas" (body kosong) melewatkan endpoint `PATCH`/action lain yang body-nya ADA tapi tidak menyertakan `id` dari path param.
 

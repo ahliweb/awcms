@@ -63,7 +63,8 @@ import { ingestAiPrivacyPosture } from "../../src/modules/omes-control/applicati
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../src/modules/_shared/idempotency";
 import { POST as postureWorkerPOST } from "../../src/pages/api/v1/omes/worker/ai-privacy-posture";
 
@@ -529,7 +530,8 @@ suite(
               tx,
               TENANT_A,
               "omes_ai_egress_approval",
-              idempotencyKey
+              idempotencyKey,
+              userIdempotencyActor("00000000-0000-4000-8000-000000000001")
             );
             expect(existing).toBeNull();
 
@@ -548,6 +550,7 @@ suite(
                 TENANT_A,
                 "omes_ai_egress_approval",
                 idempotencyKey,
+                userIdempotencyActor("00000000-0000-4000-8000-000000000001"),
                 requestHash,
                 201,
                 { approval: outcome.approval }
@@ -568,7 +571,8 @@ suite(
               tx,
               TENANT_A,
               "omes_ai_egress_approval",
-              idempotencyKey
+              idempotencyKey,
+              userIdempotencyActor("00000000-0000-4000-8000-000000000001")
             )
         );
 

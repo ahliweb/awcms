@@ -7,7 +7,8 @@ import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import {
   bodyTooLargeResponse,
@@ -118,7 +119,8 @@ export const DELETE = defineTenantRoute<Prepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      prepared.idempotencyKey
+      prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existing) {
@@ -167,6 +169,7 @@ export const DELETE = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       body
@@ -428,7 +431,8 @@ export const PATCH = defineTenantRoute<RightsPrepared>({
       tx,
       tenantId,
       RIGHTS_IDEMPOTENCY_SCOPE,
-      prepared.idempotencyKey
+      prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existing) {
@@ -476,6 +480,7 @@ export const PATCH = defineTenantRoute<RightsPrepared>({
       tenantId,
       RIGHTS_IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       body

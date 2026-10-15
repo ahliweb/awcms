@@ -12,7 +12,7 @@
  * IMMUTABLE — publish INSERTs a new version, rollback/retire only move the active
  * pointer (`awcms_theming_tenant_state`), never touching a version row.
  */
-import { computeRequestHash } from "../../_shared/idempotency";
+import { canonicalSha256 } from "../../_shared/idempotency";
 import type { ThemeConfig } from "../domain/theme-config";
 import type { ThemeDescriptor } from "../domain/theme-descriptor";
 import { isValidRollbackTarget } from "../domain/theme-lifecycle";
@@ -41,7 +41,7 @@ export type ThemeAuditHook = (
 
 /** Canonical config hash — the idempotent-replay / change-detection fingerprint. */
 export function hashThemeConfig(themeKey: string, config: ThemeConfig): string {
-  return computeRequestHash({ themeKey, config });
+  return canonicalSha256({ themeKey, config });
 }
 
 /**

@@ -14,7 +14,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import { findProjectionDescriptor } from "../../../../../modules/reporting/application/projection-directory";
@@ -185,7 +186,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      held.idempotencyKey
+      held.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existingIdempotency) {
@@ -262,6 +264,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       preCheck.input.idempotencyKey,
+      userIdempotencyActor(preCheck.actorTenantUserId),
       requestHash,
       200,
       successBody

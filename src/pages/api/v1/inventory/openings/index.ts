@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../../modules/_shared/idempotency";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import { postMovement } from "../../../../../modules/inventory/application/inventory-ledger";
 import {
@@ -52,6 +53,7 @@ export const POST = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       prepared.input,
       async () => {
         const actor = {

@@ -7,7 +7,8 @@ import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { log } from "../../../../../lib/logging/logger";
 import { restoreParty } from "../../../../../modules/profile-identity/application/party-directory";
@@ -71,7 +72,8 @@ export const POST = defineTenantRoute<Prepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      prepared.idempotencyKey
+      prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existing) {
@@ -118,6 +120,7 @@ export const POST = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       body

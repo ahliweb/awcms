@@ -70,7 +70,8 @@ import { recordAuditEvent } from "../../src/modules/logging/application/audit-lo
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../src/modules/_shared/idempotency";
 
 const suite = integrationEnabled ? describe : describe.skip;
@@ -450,7 +451,8 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
             tx,
             TENANT_A,
             "omes_server_register",
-            idempotencyKey
+            idempotencyKey,
+            userIdempotencyActor("00000000-0000-4000-8000-000000000001")
           );
           expect(existing).toBeNull();
 
@@ -460,6 +462,7 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
             TENANT_A,
             "omes_server_register",
             idempotencyKey,
+            userIdempotencyActor("00000000-0000-4000-8000-000000000001"),
             requestHash,
             201,
             { server: outcome.server }
@@ -478,7 +481,8 @@ suite("omes_control owner/operator API (real PostgreSQL)", () => {
           tx,
           TENANT_A,
           "omes_server_register",
-          idempotencyKey
+          idempotencyKey,
+          userIdempotencyActor("00000000-0000-4000-8000-000000000001")
         )
       );
 

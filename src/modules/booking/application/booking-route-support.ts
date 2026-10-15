@@ -8,7 +8,9 @@ import { fail, jsonResponse } from "../../_shared/api-response";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor,
+  type IdempotencyActor
 } from "../../_shared/idempotency";
 import {
   bodyTooLargeResponse,
@@ -130,10 +132,14 @@ export async function lockIdempotencyKey(
   tx: Bun.SQL,
   tenantId: string,
   scope: string,
-  idempotencyKey: string
+  idempotencyKey: string,
+  actor: IdempotencyActor
 ): Promise<void> {
+  // The actor is part of the lock identity because it is part of the store's
+  // unique key (migration 256): two actors presenting one key hold DIFFERENT
+  // records, so they have no reason to queue behind each other.
   await tx`
-    SELECT pg_advisory_xact_lock(hashtextextended(${`idem:${tenantId}:${scope}:${idempotencyKey}`}, 0))
+    SELECT pg_advisory_xact_lock(hashtextextended(${`idem:${tenantId}:${scope}:${actor}:${idempotencyKey}`}, 0))
   `;
 }
 
@@ -145,10 +151,10 @@ export async function lockIdempotencyKey(
  *   * same key + different hash     -> 409 IDEMPOTENCY_CONFLICT;
  *   * unseen key                    -> `produce()`, and a SUCCESS is stored.
  *
- * The store row is keyed on tenant, scope and key; the ACTING USER is only part
- * of the request hash. So another user presenting a key already used gets
- * `409 IDEMPOTENCY_CONFLICT` (their hash differs), never the first user's
- * response. A refusal is NOT stored: the caller fixes something and retries, and
+ * The store row is keyed on tenant, scope, ACTING USER and key (migration 256),
+ * and the actor is also bound into the request hash. So another user presenting
+ * a key already used holds a different record: they never see the first user's
+ * response and can never block their key. A refusal is NOT stored: the caller fixes something and retries, and
  * a refusal produced inside `produce` is a returned value that rolled back what
  * it wrote (it never reaches the store). Concurrent same-key requests are
  * serialised by {@link lockIdempotencyKey}.
@@ -166,13 +172,20 @@ export async function runIdempotent(
     actor: actorTenantUserId,
     request: requestPayload
   });
-  await lockIdempotencyKey(tx, tenantId, scope, idempotencyKey);
+  await lockIdempotencyKey(
+    tx,
+    tenantId,
+    scope,
+    idempotencyKey,
+    userIdempotencyActor(actorTenantUserId)
+  );
 
   const existing = await findIdempotencyRecord(
     tx,
     tenantId,
     scope,
-    idempotencyKey
+    idempotencyKey,
+    userIdempotencyActor(actorTenantUserId)
   );
 
   if (existing) {
@@ -202,6 +215,7 @@ export async function runIdempotent(
     tenantId,
     scope,
     idempotencyKey,
+    userIdempotencyActor(actorTenantUserId),
     requestHash,
     produced.status,
     body

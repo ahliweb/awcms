@@ -16,6 +16,7 @@ import { fail, ok } from "../../../../modules/_shared/api-response";
 import {
   computeRequestHash,
   findIdempotencyRecord,
+  ANONYMOUS_IDEMPOTENCY_ACTOR,
   saveIdempotencyRecord
 } from "../../../../modules/_shared/idempotency";
 import { getRegisteredCommentableResources } from "../../../../modules/comments/presentation/commentable-resources";
@@ -181,7 +182,8 @@ export const POST: APIRoute = async ({
         tx,
         tenant.tenantId,
         "comments_submit",
-        idempotencyKey
+        idempotencyKey,
+        ANONYMOUS_IDEMPOTENCY_ACTOR
       );
       if (existing) {
         if (existing.requestHash !== requestHash) {
@@ -290,6 +292,7 @@ export const POST: APIRoute = async ({
         tenant.tenantId,
         "comments_submit",
         idempotencyKey,
+        ANONYMOUS_IDEMPOTENCY_ACTOR,
         requestHash,
         200,
         successBody

@@ -13,7 +13,8 @@ import { fail, jsonResponse } from "../../_shared/api-response";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  type IdempotencyActor
 } from "../../_shared/idempotency";
 import {
   bodyTooLargeResponse,
@@ -112,6 +113,7 @@ export async function runIdempotent(
   tenantId: string,
   scope: string,
   idempotencyKey: string,
+  actor: IdempotencyActor,
   requestPayload: unknown,
   produce: () => Promise<{ status: number; body: unknown } | Response>
 ): Promise<Response> {
@@ -120,7 +122,8 @@ export async function runIdempotent(
     tx,
     tenantId,
     scope,
-    idempotencyKey
+    idempotencyKey,
+    actor
   );
 
   if (existing) {
@@ -150,6 +153,7 @@ export async function runIdempotent(
     tenantId,
     scope,
     idempotencyKey,
+    actor,
     requestHash,
     produced.status,
     body

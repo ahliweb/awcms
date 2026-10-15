@@ -8,7 +8,8 @@ import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-rout
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../../modules/_shared/idempotency";
 import { log } from "../../../../../../lib/logging/logger";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
@@ -78,7 +79,8 @@ export const POST = defineTenantRoute<Prepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      prepared.idempotencyKey
+      prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existing) {
@@ -154,6 +156,7 @@ export const POST = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       body

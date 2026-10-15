@@ -49,7 +49,8 @@ import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../_shared/idempotency";
 import type { NewsMediaR2Config } from "../domain/media-r2-config";
 import {
@@ -166,7 +167,8 @@ export async function finalizeNewsMediaUploadSession(
         tx,
         tenantId,
         IDEMPOTENCY_SCOPE,
-        idempotencyKey
+        idempotencyKey,
+        userIdempotencyActor(auth.context.tenantUserId)
       );
 
       if (existingIdempotency) {
@@ -386,6 +388,7 @@ export async function finalizeNewsMediaUploadSession(
           tenantId,
           IDEMPOTENCY_SCOPE,
           idempotencyKey,
+          userIdempotencyActor(precheck.actorTenantUserId),
           requestHash,
           422,
           rejectedBody
@@ -422,6 +425,7 @@ export async function finalizeNewsMediaUploadSession(
         tenantId,
         IDEMPOTENCY_SCOPE,
         idempotencyKey,
+        userIdempotencyActor(precheck.actorTenantUserId),
         requestHash,
         200,
         successBody

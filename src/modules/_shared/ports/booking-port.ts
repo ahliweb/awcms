@@ -143,8 +143,12 @@ export type BookingHoldInput = BookingWhen & {
   externalRef?: { type: string; id: string };
   idempotencyKey: string;
   correlationId: string;
-  /** The acting tenant user, for the stamps and the audit row; `null` for a system caller. */
-  actorTenantUserId?: string | null;
+  /**
+   * The acting tenant user, for the stamps, the audit row and the idempotency
+   * namespace (ADR-0145). REQUIRED: a caller without a user (a system job) must
+   * pass its own service-account tenant user, never an anonymous placeholder.
+   */
+  actorTenantUserId: string;
 };
 
 export type BookingOutcome =
@@ -162,7 +166,7 @@ type Targeted = {
   reservationId: string;
   idempotencyKey: string;
   correlationId: string;
-  actorTenantUserId?: string | null;
+  actorTenantUserId: string;
 };
 
 export interface BookingPort {

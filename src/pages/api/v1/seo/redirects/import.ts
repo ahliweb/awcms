@@ -20,7 +20,8 @@ import { recordAuditEvent } from "../../../../../modules/logging/application/aud
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { createRedirect } from "../../../../../modules/seo-distribution/application/redirect-directory";
 import { checkRedirectSafety } from "../../../../../modules/seo-distribution/application/redirect-safety";
@@ -126,7 +127,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         tx,
         tenantId,
         IDEMPOTENCY_SCOPE,
-        idempotencyKey
+        idempotencyKey,
+        userIdempotencyActor(auth.context.tenantUserId)
       );
       if (existing) {
         if (existing.requestHash !== requestHash) {
@@ -254,6 +256,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       responseBody

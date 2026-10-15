@@ -7,7 +7,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { OMES_GUARDS } from "../../../../../modules/omes-control/domain/permissions";
 import {
@@ -84,7 +85,8 @@ export const DELETE = defineTenantRoute<DecommissionPrepared>({
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      prepared.idempotencyKey
+      prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
 
     if (existing) {
@@ -141,6 +143,7 @@ export const DELETE = defineTenantRoute<DecommissionPrepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       responseBody

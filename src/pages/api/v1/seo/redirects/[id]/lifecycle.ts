@@ -22,7 +22,8 @@ import { recordAuditEvent } from "../../../../../../modules/logging/application/
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../../modules/_shared/idempotency";
 import {
   purgeRedirect,
@@ -119,7 +120,8 @@ export const POST: APIRoute = async ({ request, cookies, params, locals }) => {
       tx,
       tenantId,
       IDEMPOTENCY_SCOPE,
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
     if (existing) {
       if (existing.requestHash !== requestHash) {
@@ -203,6 +205,7 @@ export const POST: APIRoute = async ({ request, cookies, params, locals }) => {
       tenantId,
       IDEMPOTENCY_SCOPE,
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       responseStatus,
       responseBody

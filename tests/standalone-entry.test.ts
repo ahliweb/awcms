@@ -30,6 +30,7 @@ import type { AddressInfo } from "node:net";
 
 import {
   applySecurityHeaders,
+  assertStartupConfig,
   createRequestListener
 } from "../src/lib/server/standalone-entry";
 
@@ -155,5 +156,28 @@ describe("standalone entry — the deployment path actually uses it", () => {
 
     expect(assignment).toBeGreaterThan(-1);
     expect(dynamicImport).toBeGreaterThan(assignment);
+  });
+});
+
+describe("assertStartupConfig (ADR-0145)", () => {
+  test("production refuses to boot without a real IDEMPOTENCY_HMAC_SECRET", () => {
+    for (const value of [undefined, "", "change-me", "too-short"]) {
+      expect(() =>
+        assertStartupConfig({
+          APP_ENV: "production",
+          IDEMPOTENCY_HMAC_SECRET: value
+        })
+      ).toThrow(/IDEMPOTENCY_HMAC_SECRET/);
+    }
+  });
+
+  test("production boots with a real secret; other environments boot without one", () => {
+    expect(() =>
+      assertStartupConfig({
+        APP_ENV: "production",
+        IDEMPOTENCY_HMAC_SECRET: "k".repeat(48)
+      })
+    ).not.toThrow();
+    expect(() => assertStartupConfig({ APP_ENV: "development" })).not.toThrow();
   });
 });

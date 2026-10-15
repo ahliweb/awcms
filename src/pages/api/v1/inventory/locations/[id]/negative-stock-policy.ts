@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../../../modules/_shared/idempotency";
 import { fail } from "../../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
@@ -57,6 +58,7 @@ export const PUT = defineTenantRoute<Prepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       { id: prepared.id, input: prepared.input },
       async () => {
         const result = await setLocationPolicy(

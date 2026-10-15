@@ -1675,7 +1675,7 @@ suite("procurement HTTP surface (Issue #888)", () => {
       expect(rows[0]!.n).toBe(1);
     });
 
-    test("a second user presenting the first user's Idempotency-Key does not get the first user's response", async () => {
+    test("a second user presenting the first user's Idempotency-Key does not get the first user's response and cannot block its key", async () => {
       if (!handlerReady) return;
       const other = await seedUser(
         env.tenantId,
@@ -1704,7 +1704,10 @@ suite("procurement HTTP surface (Issue #888)", () => {
       });
       expect(retry.status).toBe(200);
 
-      // ... a DIFFERENT user with the same key is a conflict, not a replay.
+      // ... a DIFFERENT user with the same key holds a separate record (ADR-0145):
+      // not told the key is taken (no squat/oracle) and never handed the first
+      // user's stored response. The submit really runs for them, against a
+      // document that is already submitted, so the service refuses it on state.
       const stolen = await call<Doc>(submitDocument, {
         method: "POST",
         path: `/api/v1/procurement/documents/${doc.id}/submit`,
@@ -1712,8 +1715,8 @@ suite("procurement HTTP surface (Issue #888)", () => {
         token: other.token,
         idempotencyKey: key
       });
-      expect(stolen.status).toBe(409);
-      expect(stolen.body.error!.code).toBe("IDEMPOTENCY_CONFLICT");
+      expect(stolen.body.error?.code).not.toBe("IDEMPOTENCY_CONFLICT");
+      expect(stolen.body.success).not.toBe(true);
       expect(JSON.stringify(stolen.body)).not.toContain(doc.documentNo);
     });
 

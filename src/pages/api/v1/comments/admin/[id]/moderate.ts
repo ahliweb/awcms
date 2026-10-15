@@ -16,7 +16,8 @@ import {
 import {
   computeRequestHash,
   findIdempotencyRecord,
-  saveIdempotencyRecord
+  saveIdempotencyRecord,
+  userIdempotencyActor
 } from "../../../../../../modules/_shared/idempotency";
 import { moderateComment } from "../../../../../../modules/comments/application/comment-moderation";
 import {
@@ -120,7 +121,8 @@ export const POST: APIRoute = async ({ request, cookies, params, locals }) => {
       tx,
       tenantId,
       "comments_moderate",
-      idempotencyKey
+      idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId)
     );
     if (existing) {
       if (existing.requestHash !== requestHash) {
@@ -188,6 +190,7 @@ export const POST: APIRoute = async ({ request, cookies, params, locals }) => {
       tenantId,
       "comments_moderate",
       idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       requestHash,
       200,
       successBody

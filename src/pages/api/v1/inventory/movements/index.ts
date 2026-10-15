@@ -1,3 +1,4 @@
+import { userIdempotencyActor } from "../../../../../modules/_shared/idempotency";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import { postMovement } from "../../../../../modules/inventory/application/inventory-ledger";
@@ -159,6 +160,7 @@ export const POST = defineTenantRoute<PostPrepared>({
       tenantId,
       IDEMPOTENCY_SCOPE,
       prepared.idempotencyKey,
+      userIdempotencyActor(auth.context.tenantUserId),
       prepared.input,
       async () => {
         const tooOld = await enforceBackdateWindow(
