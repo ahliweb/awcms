@@ -88,16 +88,18 @@ describe("route↔contract parity mutation", () => {
 });
 
 describe("api-docs generator determinism", () => {
+  // Whole-repo scan: regenerates the full API reference; exceeds the 5 s default under load.
   test("generating the reference twice yields byte-identical Markdown", async () => {
     const first = await buildApiReferenceMarkdown(ROOT);
     const second = await buildApiReferenceMarkdown(ROOT);
     expect(second).toBe(first);
-  });
+  }, 60_000);
 
+  // Whole-repo scan: regenerates the full API reference; exceeds the 5 s default under load.
   test("the reference contains the standard envelope and every module section", async () => {
     const md = await buildApiReferenceMarkdown(ROOT);
     expect(md).toContain("### Standard error envelope");
     expect(md).toContain("## REST operations by module");
     expect(md).toContain("## Domain events");
-  });
+  }, 60_000);
 });
