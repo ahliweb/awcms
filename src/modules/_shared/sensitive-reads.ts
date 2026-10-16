@@ -270,6 +270,12 @@ export const PAYROLL_TABLE_SOURCE_EXEMPTIONS: Readonly<Record<string, string>> =
   {
     "src/modules/hr-commission/application/hr-commission-accrual-ledger.ts":
       "the data-access layer of the ledger (writes and reads alike). Its read entry points, listAccruals and getAccrual, are called by the accruals GET routes AND by the POST accrue route (which returns the stored accrual on a replay); each of those call sites calls recordSensitiveRead for hr_commission.accruals.read (and no other file may import those functions: PAYROLL_READ_FUNCTION_IMPORTS, Issue #1015): the GETs always, the POST on both its replayed branch and its Idempotency-Key replay (tests/hr-commission-read-audit.test.ts)",
+    "src/modules/_shared/payroll-data-boundary.ts":
+      "the boundary's own definition: it names the payroll tables in comments and in PAYROLL_REQUIRED_TABLES so the catalog layer can assert they exist (Issue #1077, M1). It has no imports and runs no query, so it reads no row",
+    "scripts/security-readiness.ts":
+      "the operator readiness report. It names the ledger in a grants table and in reportSelfSettledCommissionAccruals, which selects ONLY accrual ids (no amount, no beneficiary, no status) per active tenant under RLS to flag settlement by the beneficiary themselves (Issue #1019); the output is a count and a capped id list for the operator, not a read of earnings (Issue #1077, M7: scripts are now scanned)",
+    "scripts/data-lifecycle-table-coverage-check.ts":
+      "a static registry of table NAMES with their retention rationale; it runs no query and reads no row (Issue #1077, M7: scripts are now scanned)",
     "src/modules/hr-workforce/application/hr-workforce-directory.ts":
       "assignAccount runs a single EXISTS over the commission accrual ledger (status not paid or voided) to decide whether re-linking an employment's login needs the ADR-0141 step-up (Issue #1019). It returns one boolean, never a row, an amount, a rule or a status, so no accrual data reaches a caller or a response; the mutation itself is audited at critical with the before/after login ids"
   };
@@ -375,6 +381,16 @@ export type PayrollReadFunctionImport = {
   functions: readonly string[];
   permission: string;
   allowedImporters: readonly string[];
+  /**
+   * Allow-listed importers that need NOT audit `permission` themselves, each
+   * with the reason (Issue #1077, M7). For the write-path functions
+   * (`accrueCommission`, `transitionAccrual`): their callers are mutations
+   * audited by their own events, and a NEW caller is still refused because it
+   * is not in `allowedImporters`.
+   */
+  auditExemptImporters?: Readonly<Record<string, string>>;
+  /** The functions of `functions` that a mutation calls; an exempt importer may import only these. */
+  writePathFunctions?: readonly string[];
 };
 
 export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[] =
@@ -382,12 +398,57 @@ export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[]
     {
       source:
         "src/modules/hr-commission/application/hr-commission-accrual-ledger.ts",
-      functions: ["listAccruals", "getAccrual", "reconcileAccruals"],
+      // The write path RETURNS the accrual too (Issue #1077, M7):
+      // `accrueCommission` gives back the stored row, `transitionAccrual` the row
+      // after the edge. They were outside this list, so a new route could return
+      // an accrual to a caller that no read audit ever saw. Now a new caller of
+      // ANY of the five must be named below.
+      functions: [
+        "listAccruals",
+        "getAccrual",
+        "reconcileAccruals",
+        "accrueCommission",
+        "transitionAccrual"
+      ],
       permission: "hr_commission.accruals.read",
       allowedImporters: [
         "src/pages/api/v1/hr-commission/accruals/index.ts",
-        "src/pages/api/v1/hr-commission/accruals/[id].ts"
-      ]
+        "src/pages/api/v1/hr-commission/accruals/[id].ts",
+        "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts",
+        "src/pages/api/v1/hr-commission/accruals/[id]/release.ts",
+        "src/pages/api/v1/hr-commission/accruals/[id]/pay.ts",
+        "src/pages/api/v1/hr-commission/accruals/[id]/void.ts",
+        "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts"
+      ],
+      // The existing mutation callers are audited as mutations by their own
+      // high-risk events. Whether they should ALSO record a read, or return a
+      // masked shape to a caller who holds only the transition power, is a
+      // product decision recorded as a remaining limit in hr-payroll.md section
+      // 13.3. The exemption covers an importer only while it imports nothing but
+      // these functions.
+      writePathFunctions: ["accrueCommission", "transitionAccrual"],
+      auditExemptImporters: {
+        "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts":
+          "a mutation audited at warning severity by its own event (never with an amount); returns the transitioned accrual to the actor who holds the approve power",
+        "src/pages/api/v1/hr-commission/accruals/[id]/release.ts":
+          "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the release power",
+        "src/pages/api/v1/hr-commission/accruals/[id]/pay.ts":
+          "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the pay power",
+        "src/pages/api/v1/hr-commission/accruals/[id]/void.ts":
+          "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the void power",
+        "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts":
+          "the in-process CommissionAccrualPort for other modules; it maps the ledger result to the port shape and exposes no HTTP surface"
+      }
+    },
+    {
+      // The in-process port wraps `accrueCommission`, so whoever calls it
+      // accrues commission and gets the stored accrual back (Issue #1077 audit,
+      // M6). Nothing imports it today; the first importer must be named here.
+      source:
+        "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts",
+      functions: ["createCommissionAccrualPort"],
+      permission: "hr_commission.accruals.read",
+      allowedImporters: []
     }
   ];
 

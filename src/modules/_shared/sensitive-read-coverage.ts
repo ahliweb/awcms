@@ -660,6 +660,10 @@ export function findForbiddenReadImports(
           problem: `imports ${reads.join(", ")} from ${entry.source} but is not in PAYROLL_READ_FUNCTION_IMPORTS allowedImporters. Those functions return payroll-boundary rows; a new caller is a new read path and must be added there together with its audit`
         });
       } else if (
+        !(
+          Object.hasOwn(entry.auditExemptImporters ?? {}, name) &&
+          reads.every((fn) => entry.writePathFunctions?.includes(fn))
+        ) &&
         !collectAuditedPermissions(source, constantsFor(source)).has(
           entry.permission
         )

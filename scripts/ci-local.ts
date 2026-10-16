@@ -1426,6 +1426,11 @@ echo "OK: tidak ada berkas .env yang ter-track."`
       },
       {
         kind: "shell",
+        step: "Payroll catalog boundary (the migrated database)",
+        run: "bun run payroll:catalog-boundary:check"
+      },
+      {
+        kind: "shell",
         step: "Run DB-gated integration tests",
         run: "bun test tests/integration/ --timeout 60000"
       },

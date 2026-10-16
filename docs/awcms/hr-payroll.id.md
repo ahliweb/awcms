@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:86cb60d7386b82f211b3efa8b76b38245bf02822d33984c492957cc7af23c09e -->
+<!-- i18n-source-hash: sha256:f46bb7b5bd8ac0dbeb473a986132a32994ee3edc078f6f7a7549570a255d906e -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1171,17 +1171,128 @@ atas.
   data sekali-jalan yang tidak meninggalkan objek tak terlihat oleh katalog dan
   ditahan lapisan statis untuk nama yang dapat diselesaikannya; nama yang baru
   ada saat runtime ditahan katalog begitu ia menjadi relasi atau fungsi.
-  **Yang tersisa (batas yang diketahui, dilacak di #1077):** katalog
-  tidak membaca policy atau CHECK constraint yang menyebut payroll, hak yang
-  dipegang lewat keanggotaan role, maupun objek ekstensi; salinan sekali-jalan
-  lewat nama yang dirakit saat runtime di dalam blok `DO` yang diizinkan;
-  `import(ident)` dinamis yang specifier-nya tak menampakkan bagian nama berkas
-  ledger; penyamaran literal memperlakukan `${ ... }` di dalam template literal
-  sebagai teks (panggilan audit asli di sana tidak terlihat) dan tidak memahami
-  literal regex; dan gerbang masih membuktikan panggilan audit ada di berkas,
-  bukan di setiap jalur handler. Fungsi mutasi ledger (`accrueCommission`,
-  `transitionAccrual`) mengembalikan accrual dan berada di luar daftar impor
-  fungsi baca karena diaudit sebagai mutasi.
+  **Celah yang ditutup oleh Issue #1077** (sisa temuan Medium dari tinjauan
+  keamanan #1015, masing-masing dibuktikan probe di
+  `tests/payroll-catalog-boundary-1077.test.ts` dan, terhadap katalog nyata, di
+  tes integrasi): _M1_, keluarga itu sebuah nama, sehingga tabel yang di-rename
+  keluar membuat kedua lapisan diam: kedua tabel ledger kini membawa `COMMENT ON
+TABLE ... IS 'payroll-boundary: ...'` (`sql/311`), lapisan katalog menggagalkan
+  relasi bertanda tanpa nama keluarga, tabel keluarga tanpa tanda, dan tabel di
+  `PAYROLL_REQUIRED_TABLES` yang tidak ada di `public` (sehingga rename yang juga
+  menghapus komentar tetap tertangkap); lapisan statis menggagalkan `ALTER ...
+RENAME TO` dan `SET SCHEMA` yang keluar dari keluarga (tabel, view, foreign
+  table, fungsi), tabel baru berawalan `awcms_hr_commission_` /
+  `awcms_hr_payroll_` yang namanya bukan nama keluarga, dan setiap tabel yang
+  ditulis atau dideklarasikan modul pemilik payroll yang bukan nama keluarga
+  maupun entri beralasan di `PAYROLL_OWNED_NON_PAYROLL_TABLES` (saat ini
+  `awcms_hr_commission_rules`), sehingga tabel fase-3 (baris run, periode,
+  aturan) tidak bisa jatuh keluar karena penamaan yang kurang beruntung. _M2_,
+  fungsi SECURITY DEFINER non-keluarga tidak boleh memakai `schema_to_xml`,
+  `query_to_xml`, `table_to_xml`, `regclass`, `format()`, `ts_stat`, `dblink`,
+  atau identifier `U&"..."` (katalog: `function-indirect-read`, dikecualikan
+  hanya lewat `PAYROLL_CATALOG_EXEMPTIONS`; statis: token yang sama di migrasi,
+  dan `U&"..."` di mana pun). _M4_, lapisan katalog kini membaca kepemilikan
+  relasi dan fungsi (role runtime tidak boleh memiliki payroll), `pg_auth_members`
+  (tak ada role yang boleh mewarisi `awcms_app` atau pemilik payroll, secara
+  transitif), publication (`FOR ALL TABLES`, tabel payroll, atau skema `public`),
+  dan foreign table (nama payroll atau tabel remote payroll di opsinya); lapisan
+  statis menggagalkan `COPY <payroll> TO` dan `COPY (SELECT ... payroll) TO`. _M5_
+  DIPERSEMPIT untuk migrasi, belum ditutup: blok `DO` yang menjalankan
+  `EXECUTE`, SETIAP fungsi dinilai saat dibuat (pernyataan di badannya dijalankan
+  lewat analisis yang sama dengan blok `DO`, sehingga create-call-drop fungsi
+  `LANGUAGE sql` atau plpgsql yang me-rename, menyalin, atau membaca payroll
+  tertangkap), setiap `UPDATE ... SET (SELECT ... payroll)` / `UPDATE ... FROM
+payroll` / `MERGE ... USING payroll`, dan setiap pemakaian helper yang
+  menjalankan teks query atau membaca di luar SQL (`query_to_xml` dan
+  saudaranya, `ts_stat`, `ts_rewrite`, `crosstab`, `connectby`, `dblink`,
+  `lo_from_bytea`, `lo_import`, `lo_export`, `lo_put`, `pg_read_file`,
+  `pg_read_binary_file`; dikutip atau tidak, dengan atau tanpa `(`) gagal
+  kecuali migrasinya ada di `PAYROLL_DO_EXECUTE_ALLOWLIST`. Daftar helper itu
+  hanyalah daftar: helper yang menjalankan teks query dan belum ada di sana
+  adalah celah sampai ditambahkan. _M6_,
+  sapuan `pg_depend` generik (`dependent-on-payroll`) menggagalkan setiap policy,
+  constraint CHECK atau FOREIGN KEY, default kolom, ekspresi indeks, statistik
+  tambahan, atau kolom bertipe baris payroll yang berada pada tabel non-keluarga
+  dan bergantung pada relasi, fungsi, atau tipe baris payroll. _M7_, `scripts/`
+  kini dipindai `sensitive-reads:check` (query id-saja pada laporan kesiapan dan
+  registri lifecycle terdaftar di `PAYROLL_TABLE_SOURCE_EXEMPTIONS` beserta
+  alasan), dan `accrueCommission` / `transitionAccrual` menjadi impor yang
+  dijaga, sehingga pemanggil BARU harus disebut. Info: fungsi dalam bahasa selain
+  `sql`/`plpgsql` adalah temuan (`function-opaque-language`), dan
+  `payroll:catalog-boundary:check` kini berjalan di job CI dan rilis terhadap
+  database yang dimigrasikan.
+  **Pengerasan setelah audit keamanan #1077** (masing-masing dengan probe di
+  `tests/fixtures/payroll-boundary-probes.ts`): _H1_, trik rename tertangkap di
+  lebih banyak pintu masuk daripada `ALTER TABLE`: `ALTER INDEX|SEQUENCE|VIEW|
+MATERIALIZED VIEW|FOREIGN TABLE|TYPE ... RENAME TO / SET SCHEMA`, `COMMENT ON
+TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
+  `DROP TRIGGER` pada tabel payroll ditolak dan `DISABLE TRIGGER` harus
+  diaktifkan lagi di migrasi yang sama, dan lapisan katalog menegaskan setiap
+  tabel wajib membawa trigger yang diharapkan (`PAYROLL_REQUIRED_TRIGGERS`) serta
+  tak ada indeks, constraint, policy, atau trigger bernama keluarga pada relasi
+  non-keluarga. _M3_, pola indirect-read mencocokkan nama yang dikutip dan
+  berkualifikasi skema (`pg_catalog."format"(...)`) serta `ts_rewrite`,
+  `crosstab`, `connectby`, `lo_*`, `pg_read_*file`. _M4_, anggota
+  `pg_read_all_data`, `pg_write_all_data`, `pg_maintain`, dan role superuser atau
+  `BYPASSRLS` apa pun adalah temuan, begitu juga role runtime ber-`BYPASSRLS`.
+  _M5_ (pemilik), pemilik relasi payroll atau fungsi keluarga harus pemilik
+  ledger migrasi (`awcms_schema_migrations`, ditemukan dari katalog) atau ada di
+  `PAYROLL_EXPECTED_OWNERS`; `ALTER ... OWNER TO` pada objek keluarga dan
+  `REASSIGN OWNED` ditolak secara statis. _M6_, port komisi dalam-proses
+  (`createCommissionAccrualPort`) menjadi impor yang dijaga tersendiri tanpa
+  pengimpor yang diizinkan. _L1_, `ALTER EXTENSION ... ADD` ditolak. _L2_,
+  constraint CHECK domain masuk sapuan dependensi. _L3_, pemindaian baca-sensitif
+  juga membaca `.mts`, `.cts`, `.jsx`, dan `.cjs`.
+  **Modelnya, dinyatakan jujur.** Pemindaian statis dan pemeriksaan katalog
+  adalah pertahanan berlapis terhadap kebocoran yang TIDAK SENGAJA dan yang
+  KASAT MATA. Penulis migrasi bertekad yang lolos tinjauan masih bisa mengelabui
+  pemindai teks, sehingga **tinjauan setiap perubahan `sql/` yang menyentuh
+  payroll (CODEOWNERS dan tinjauan keamanan yang diwajibkan AGENTS.md untuk modul
+  sensitif) tetap kendali utama**; tak ada yang di sini menggantikannya.
+  Pengerasan audit kedua: literal ber-escape (`E'...'`, `U&'...'`) sebagai badan
+  `DO` atau fungsi ditolak langsung (escape-nya bisa mengeja nama payroll yang tak
+  didekode pemindai mana pun); `DISABLE TRIGGER` dipasangkan per trigger
+  (`ALL`/`USER` diperluas ke semua trigger wajib) dan katalog menggagalkan
+  trigger wajib yang `tgenabled`-nya bukan `O`; katalog menggagalkan foreign key
+  wajib yang hilang (log transisi harus tetap merujuk ledger) dan relasi
+  non-keluarga yang memiliki 70% kolom tabel wajib (ledger yang di-rename atau
+  disalin); ledger migrasi yang hilang tanpa pemilik terkonfigurasi adalah
+  temuan (gagal-tertutup); `session_replication_role`, target rename tiruan
+  berkutip (`"AWCMS_..."`, spasi di ujung), `ALTER TRIGGER ... RENAME` pada
+  tabel payroll, dan tulis langsung ke `pg_class` / `pg_trigger` ditolak
+  secara statis; penanda diterima dalam bentuk biasa dan dollar-quoted.
+  **Operator:** pemilik yang diharapkan untuk objek payroll adalah pemilik
+  ledger migrasi. Pada deployment PEMISAH-ROLE (migrasi dijalankan satu role,
+  objek dimiliki role lain) setel `PAYROLL_EXPECTED_OWNERS=role1,role2` untuk
+  `bun run payroll:catalog-boundary:check` (`.env.example`), jika tidak
+  pemeriksaan melaporkan `payroll-owner`.
+  **Sisa (dipersempit, belum ditutup):** migrasi yang ditinjau dapat membangun
+  ulang tabel payroll di balik konstruksi yang tak dimodelkan pemindai, setelah
+  itu lapisan katalog MENDETEKSI (trigger hilang, foreign key hilang, kolom
+  tiruan, objek bernama keluarga yang tertinggal) tetapi tidak mencegah; daftar
+  helper di atas terbatas; tabel non-keluarga dengan RLS mati yang diberi grant
+  ke `awcms_worker` atau `PUBLIC` tidak ditandai secara umum (terlalu banyak
+  tabel global yang sah), hanya bila menyerupai tabel payroll wajib; pembangunan
+  ulang kolom-demi-kolom yang mengubah lebih dari 30% kolom ledger lolos dari
+  pemeriksaan tiruan; SLOT replikasi logis PostgreSQL tidak dibaca (slot dengan plugin
+  decoding membaca WAL, jadi setiap baris payroll, tanpa publication maupun entri
+  ACL; slot milik operator dan tidak ada di lapisan katalog); dan superuser
+  dipercaya secara definisi. Selain itu: katalog tidak membaca objek
+  ekstensi, superuser, atau role `BYPASSRLS` (mereka melewati setiap grant
+  secara definisi); `NO FORCE` / `DISABLE ROW LEVEL SECURITY` pada tabel payroll
+  adalah urusan gerbang RLS lain; pemeriksaan belum dijadwalkan terhadap
+  database yang DIDEPLOI (butuh kredensial dan cron operator, keputusan
+  operasional); route mutasi yang ada (`approve`, `release`, `pay`, `void`, dan
+  adapter port) diizinkan TANPA audit baca (`auditExemptImporters`): mereka
+  mengembalikan accrual yang ditransisikan kepada pemanggil yang hanya memegang
+  hak transisi, sehingga apakah mereka harus mencatat pembacaan atau
+  mengembalikan bentuk tersamar adalah keputusan produk, tidak diambil di sini;
+  fungsi yang tak pernah dipanggil namun berisi `recordSensitiveRead` tetap
+  memenuhi gerbang baca-sensitif (batas dead-branch); `import(ident)` dinamis
+  yang specifier-nya tak menampakkan bagian nama berkas ledger; penyamaran
+  literal memperlakukan `${ ... }` di dalam template literal sebagai teks dan
+  tidak memahami literal regex; dan gerbang membuktikan panggilan audit ada di
+  berkas, bukan di setiap jalur handler.
   Pengecualian ada di `PAYROLL_CATALOG_EXEMPTIONS` (kosong; jalan keluarnya
   adalah nama keluarga payroll).
 - _Komisi ada di dalam batas (keputusan pemilik)._ `awcms_hr_commission_accruals`
