@@ -134,7 +134,7 @@ async function seedApprovalInstance(
       (tenant_id, workflow_key, name, version, lifecycle_status, graph)
     VALUES (${tenantId}, ${`procurement.document_approval.${crypto.randomUUID()}`},
             'Approval', 1, 'active',
-            ${{ startNodeId: "e", nodes: [{ id: "e", type: "end", outcome: "approved" }] }}::jsonb)
+            ${APPROVAL_GRAPH}::jsonb)
     RETURNING id
   `) as { id: string }[];
   const instance = (await sql`
@@ -142,17 +142,80 @@ async function seedApprovalInstance(
       (tenant_id, workflow_definition_id, resource_type, resource_id, status,
        requested_by_tenant_user_id)
     VALUES (${tenantId}, ${definition[0]!.id},
-            ${spec.resourceType ?? "procurement_document"}, ${spec.resourceId}, ${spec.status ?? "pending"}, ${spec.requestedBy})
+            ${spec.resourceType ?? "procurement_document"}, ${spec.resourceId}, 'pending', ${spec.requestedBy})
     RETURNING id
   `) as { id: string }[];
+  await sql`
+    INSERT INTO awcms_workflow_tasks (tenant_id, workflow_instance_id, node_id)
+    VALUES (${tenantId}, ${instance[0]!.id}, 'approval')
+  `;
+
+  // A verdict "the workflow already reached" is reached the way the engine
+  // reaches it, not written in at creation (sql/301 refuses that).
+  if (spec.status !== undefined && spec.status !== "pending") {
+    await setInstanceStatus(instance[0]!.id, spec.status);
+  }
 
   return instance[0]!.id;
 }
 
+/**
+ * One approval node whose verdict picks the end, as the engine's graph would:
+ * the database accepts an `approved` / `rejected` instance only when the
+ * decisions of its completed tasks lead to that end (sql/301).
+ */
+const APPROVAL_GRAPH = {
+  startNodeId: "approval",
+  nodes: [
+    { id: "approval", type: "approval", onApprove: "ok", onReject: "no" },
+    { id: "ok", type: "end", outcome: "approved" },
+    { id: "no", type: "end", outcome: "rejected" }
+  ]
+};
+
+/**
+ * Gives an instance a verdict through the writes the engine makes, in one
+ * transaction (sql/252, sql/301): a seated user of the tenant decides, the task
+ * completes, the instance takes the verdict. A bare
+ * `UPDATE awcms_workflow_instances SET status = 'approved'` is refused.
+ * `cancelled` is not a verdict of the decisions and is written directly.
+ */
 async function setInstanceStatus(instanceId: string, status: string) {
-  await getAdminSql()`
-    UPDATE awcms_workflow_instances SET status = ${status} WHERE id = ${instanceId}
-  `;
+  await getAdminSql().begin(async (tx) => {
+    const found = (await tx`
+      SELECT i.tenant_id, t.id AS task_id
+      FROM awcms_workflow_instances i
+      JOIN awcms_workflow_tasks t ON t.workflow_instance_id = i.id
+      WHERE i.id = ${instanceId}
+    `) as { tenant_id: string; task_id: string }[];
+
+    if (status === "approved" || status === "rejected") {
+      const { tenant_id: tenantId, task_id: taskId } = found[0]!;
+      const decider = ACTOR_IDS.get(tenantId)!;
+      const decision = status === "approved" ? "approve" : "reject";
+
+      await tx`
+        INSERT INTO awcms_workflow_task_assignments
+          (tenant_id, workflow_task_id, tenant_user_id)
+        VALUES (${tenantId}, ${taskId}, ${decider})
+      `;
+      await tx`
+        INSERT INTO awcms_workflow_decisions
+          (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
+        VALUES (${tenantId}, ${taskId}, ${decision}, ${decider})
+      `;
+      await tx`
+        UPDATE awcms_workflow_task_assignments
+        SET status = 'decided', decided_at = now()
+        WHERE workflow_task_id = ${taskId} AND tenant_user_id = ${decider}
+      `;
+      await tx`UPDATE awcms_workflow_tasks SET status = 'completed' WHERE id = ${taskId}`;
+    }
+
+    await tx`
+      UPDATE awcms_workflow_instances SET status = ${status} WHERE id = ${instanceId}
+    `;
+  });
 }
 
 const ITEM = { itemType: "commerce.variant", unitCode: "unit" };

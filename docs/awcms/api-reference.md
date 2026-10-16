@@ -7998,7 +7998,7 @@ ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.create and it ERASE
 - **operationId**: `dataLifecycleSubjectExport`
 - **Security**: bearerAuth + tenantHeader
 
-ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export.
+ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. A table inside the payroll data boundary (today the commission accruals, a person's earnings) additionally needs its own read permission (hr_commission.accruals.read); without it the table is WITHHELD and named under `withheld`, and a read that does happen is recorded as a sensitive read. The stored Idempotency-Key record keeps no payroll rows, only their ids: a replay re-checks the permission, re-reads those rows and records the read again, so a replay may differ from the first answer by having payroll tables withheld. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export.
 
 **Parameters**
 
@@ -8011,14 +8011,14 @@ ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission,
 
 **Responses**
 
-| Status | Description                                                                     | Schema                                 |
-| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The subject's data, or replay of a prior identical request.                     | object                                 |
-| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
-| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The subject's data, or replay of a prior identical request. On a replay the payroll-boundary tables are re-read under a fresh permission check and may come back under `withheld` instead. | object                                 |
+| 400    | Validation error.                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).                                                                                                            | [`ApiError`](#standard-error-envelope) |
 
 ## SEO & Distribution
 

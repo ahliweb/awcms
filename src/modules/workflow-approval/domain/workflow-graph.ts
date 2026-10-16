@@ -317,7 +317,65 @@ export function validateWorkflowGraph(
     return { valid: false, errors: [cycleError] };
   }
 
+  const escapeError = detectBranchApprovalEscape(nodes);
+
+  if (escapeError) {
+    return { valid: false, errors: [escapeError] };
+  }
+
   return { valid: true, value: { startNodeId: startNodeId as string, nodes } };
+}
+
+/**
+ * A parallel branch may END THE INSTANCE ONLY BY REJECTING it (a rejection on
+ * any branch is a hard stop). A branch that can reach an `end` node with
+ * outcome `approved` without passing its join would approve the instance while
+ * the sibling branches' tasks are still open: the engine refuses that finish
+ * (the instance cannot approve with an open task, `sql/301`), so such a graph
+ * would publish fine and then never be approvable. Refuse it at publish time.
+ */
+function detectBranchApprovalEscape(
+  nodes: WorkflowNode[]
+): GraphValidationError | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  for (const parallel of nodes) {
+    if (parallel.type !== "parallel") {
+      continue;
+    }
+
+    const seen = new Set<string>();
+    const stack = [...parallel.branchNodeIds];
+
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+
+      if (id === parallel.joinNodeId || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+
+      const node = byId.get(id);
+
+      if (!node) {
+        continue;
+      }
+
+      if (node.type === "end") {
+        if (node.outcome === "approved") {
+          return {
+            field: `graph.nodes[${parallel.id}]`,
+            message: `a branch of parallel node "${parallel.id}" reaches the approved end node "${node.id}" without passing its join "${parallel.joinNodeId}"; a branch may only leave the join by rejecting.`
+          };
+        }
+        continue;
+      }
+
+      stack.push(...outboundNodeIds(node));
+    }
+  }
+
+  return null;
 }
 
 function validateOneNode(

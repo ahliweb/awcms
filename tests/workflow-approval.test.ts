@@ -225,8 +225,41 @@ describe("validateWorkflowGraph", () => {
     expect(result.valid).toBe(true);
   });
 
+  const branchApproval = (id: string, onApprove: string, onReject: string) => ({
+    id,
+    type: "approval",
+    name: id,
+    assigneeTenantUserIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+    quorumRule: "any",
+    onApprove,
+    onReject
+  });
+
   test("validates parallel/join branch-set matching", () => {
-    const validParallel = validateWorkflowGraph(
+    const build = (awaited: string[]) => ({
+      startNodeId: "fanout",
+      nodes: [
+        {
+          id: "fanout",
+          type: "parallel",
+          branchNodeIds: ["a", "b"],
+          joinNodeId: "joiner"
+        },
+        branchApproval("a", "joiner", "end_rejected"),
+        branchApproval("b", "joiner", "end_rejected"),
+        { id: "joiner", type: "join", awaitNodeIds: awaited, next: "end_ok" },
+        { id: "end_ok", type: "end", outcome: "approved" },
+        { id: "end_rejected", type: "end", outcome: "rejected" }
+      ]
+    });
+
+    // A branch may leave the join only by REJECTING (a hard stop).
+    expect(validateWorkflowGraph(build(["a", "b"]), []).valid).toBe(true);
+    expect(validateWorkflowGraph(build(["a", "c"]), []).valid).toBe(false);
+  });
+
+  test("refuses a parallel branch that reaches an approved end without its join (it could never be approved)", () => {
+    const result = validateWorkflowGraph(
       {
         startNodeId: "fanout",
         nodes: [
@@ -236,38 +269,24 @@ describe("validateWorkflowGraph", () => {
             branchNodeIds: ["a", "b"],
             joinNodeId: "joiner"
           },
-          { id: "a", type: "end", outcome: "approved" },
-          { id: "b", type: "end", outcome: "approved" },
-          { id: "joiner", type: "join", awaitNodeIds: ["a", "b"], next: "a" }
-        ]
-      },
-      []
-    );
-
-    // Note: a/b are already `end` nodes here purely to keep this fixture
-    // small — joiner.awaitNodeIds matching fanout.branchNodeIds is the
-    // thing under test, not a realistic executable graph.
-    expect(validParallel.valid).toBe(true);
-
-    const mismatched = validateWorkflowGraph(
-      {
-        startNodeId: "fanout",
-        nodes: [
+          // a's approve edge skips the join straight to an approved end.
+          branchApproval("a", "end_ok", "end_rejected"),
+          branchApproval("b", "joiner", "end_rejected"),
           {
-            id: "fanout",
-            type: "parallel",
-            branchNodeIds: ["a", "b"],
-            joinNodeId: "joiner"
+            id: "joiner",
+            type: "join",
+            awaitNodeIds: ["a", "b"],
+            next: "end_ok"
           },
-          { id: "a", type: "end", outcome: "approved" },
-          { id: "b", type: "end", outcome: "approved" },
-          { id: "joiner", type: "join", awaitNodeIds: ["a", "c"], next: "a" }
+          { id: "end_ok", type: "end", outcome: "approved" },
+          { id: "end_rejected", type: "end", outcome: "rejected" }
         ]
       },
       []
     );
 
-    expect(mismatched.valid).toBe(false);
+    expect(result.valid).toBe(false);
+    expect(JSON.stringify(result)).toContain("without passing its join");
   });
 });
 

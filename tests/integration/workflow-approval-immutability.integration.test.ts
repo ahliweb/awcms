@@ -61,12 +61,30 @@ function asOwner<T>(fn: (tx: Bun.TransactionSQL) => Promise<T>): Promise<T> {
   return withTenantOrThrow(getOwnerSql(), TENANT, fn);
 }
 
+/** One approval node (any-quorum) leading to an approved end or a rejected end. */
+const APPROVAL_GRAPH = {
+  startNodeId: "approval",
+  nodes: [
+    {
+      id: "approval",
+      type: "approval",
+      name: "Approval",
+      assigneeTenantUserIds: [APPROVER],
+      quorumRule: "any",
+      onApprove: "end_ok",
+      onReject: "end_no"
+    },
+    { id: "end_ok", type: "end", outcome: "approved" },
+    { id: "end_no", type: "end", outcome: "rejected" }
+  ]
+};
+
 async function seedDefinition(): Promise<string> {
   const rows = (await getAdminSql()`
     INSERT INTO awcms_workflow_definitions
       (tenant_id, workflow_key, name, version, lifecycle_status, graph)
     VALUES (${TENANT}, ${`wf.${crypto.randomUUID()}`}, 'Immutability', 1, 'active',
-            ${{ startNodeId: "e", nodes: [{ id: "e", type: "end", outcome: "approved" }] }}::jsonb)
+            ${APPROVAL_GRAPH}::jsonb)
     RETURNING id
   `) as { id: string }[];
 
@@ -91,21 +109,44 @@ async function startInstance(
       VALUES (${TENANT}, ${instance[0]!.id}, 'approval')
       RETURNING id
     `) as { id: string }[];
+    await tx`
+      INSERT INTO awcms_workflow_task_assignments
+        (tenant_id, workflow_task_id, tenant_user_id, status)
+      VALUES (${TENANT}, ${task[0]!.id}, ${APPROVER}, 'pending')
+    `;
 
     return { instanceId: instance[0]!.id, taskId: task[0]!.id };
   });
 }
 
-function recordDecision(taskId: string): Promise<string> {
+function recordDecision(
+  taskId: string,
+  decision: "approve" | "reject" = "approve"
+): Promise<string> {
   return inTenant(async (tx) => {
     const rows = (await tx`
       INSERT INTO awcms_workflow_decisions
         (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
-      VALUES (${TENANT}, ${taskId}, 'approve', ${APPROVER})
+      VALUES (${TENANT}, ${taskId}, ${decision}, ${APPROVER})
       RETURNING id
     `) as { id: string }[];
 
     return rows[0]!.id;
+  });
+}
+
+/** The engine's path to a verdict: decision, task completed, instance moved. */
+async function settle(
+  instance: { instanceId: string; taskId: string },
+  status: "approved" | "rejected"
+): Promise<void> {
+  await recordDecision(
+    instance.taskId,
+    status === "approved" ? "approve" : "reject"
+  );
+  await inTenant(async (tx) => {
+    await tx`UPDATE awcms_workflow_tasks SET status = 'completed' WHERE id = ${instance.taskId}`;
+    await tx`UPDATE awcms_workflow_instances SET status = ${status}, updated_at = now() WHERE id = ${instance.instanceId} AND status = 'pending'`;
   });
 }
 
@@ -125,6 +166,21 @@ suite("workflow_approval immutability (Issue #999)", () => {
     await getAdminSql()`
       INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
       VALUES (${TENANT}, 'wf-imm', 'Workflow immutability')
+    `;
+    // The approver is a real, active user of the tenant (a seat requires one).
+    const sql = getAdminSql();
+    const profile = (await sql`
+      INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+      VALUES (${TENANT}, 'person', 'approver') RETURNING id
+    `) as { id: string }[];
+    const identity = (await sql`
+      INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
+      VALUES (${TENANT}, ${profile[0]!.id}, 'approver@example.test', 'x') RETURNING id
+    `) as { id: string }[];
+
+    await sql`
+      INSERT INTO awcms_tenant_users (id, tenant_id, identity_id)
+      VALUES (${APPROVER}, ${TENANT}, ${identity[0]!.id})
     `;
     definitionId = await seedDefinition();
   });
@@ -243,31 +299,37 @@ suite("workflow_approval immutability (Issue #999)", () => {
   describe("instances: terminal is final", () => {
     test("the engine's legitimate moves keep working: pending -> approved | rejected | cancelled", async () => {
       for (const status of ["approved", "rejected", "cancelled"]) {
-        const { instanceId } = await startInstance(definitionId);
-        const rows = (await inTenant(
-          (tx) => tx`
-            UPDATE awcms_workflow_instances
-            SET status = ${status}, updated_at = now()
-            WHERE tenant_id = ${TENANT} AND id = ${instanceId} AND status = 'pending'
-            RETURNING id
-          `
-        )) as { id: string }[];
+        const started = await startInstance(definitionId);
 
-        expect(rows).toHaveLength(1);
+        if (status !== "cancelled") {
+          await settle(started, status as "approved" | "rejected");
+        } else {
+          await inTenant(
+            (tx) => tx`
+              UPDATE awcms_workflow_instances
+              SET status = 'cancelled', updated_at = now()
+              WHERE tenant_id = ${TENANT} AND id = ${started.instanceId} AND status = 'pending'
+            `
+          );
+        }
+
+        const rows = (await getAdminSql()`
+          SELECT status FROM awcms_workflow_instances WHERE id = ${started.instanceId}
+        `) as { status: string }[];
+
+        expect(rows[0]!.status).toBe(status);
       }
     });
 
     test("a pending instance may still change its due date, but not move back to pending", async () => {
-      const { instanceId } = await startInstance(definitionId);
+      const started = await startInstance(definitionId);
+      const { instanceId } = started;
 
       await inTenant(
         (tx) =>
           tx`UPDATE awcms_workflow_instances SET due_at = now(), updated_at = now() WHERE id = ${instanceId}`
       );
-      await inTenant(
-        (tx) =>
-          tx`UPDATE awcms_workflow_instances SET status = 'approved' WHERE id = ${instanceId}`
-      );
+      await settle(started, "approved");
       await assertRejected(
         inTenant(
           (tx) =>
@@ -279,12 +341,17 @@ suite("workflow_approval immutability (Issue #999)", () => {
 
     test("every terminal status refuses any UPDATE, for the runtime role and for the owner", async () => {
       for (const status of ["approved", "rejected", "cancelled"]) {
-        const { instanceId } = await startInstance(definitionId);
+        const started = await startInstance(definitionId);
+        const { instanceId } = started;
 
-        await inTenant(
-          (tx) =>
-            tx`UPDATE awcms_workflow_instances SET status = ${status} WHERE id = ${instanceId}`
-        );
+        if (status === "cancelled") {
+          await inTenant(
+            (tx) =>
+              tx`UPDATE awcms_workflow_instances SET status = 'cancelled' WHERE id = ${instanceId}`
+          );
+        } else {
+          await settle(started, status as "approved" | "rejected");
+        }
 
         // Flip the verdict (rejected -> approved is the abuse that matters).
         await assertRejected(
@@ -370,10 +437,7 @@ suite("workflow_approval immutability (Issue #999)", () => {
       const pending = await startInstance(definitionId);
       const done = await startInstance(definitionId);
 
-      await inTenant(
-        (tx) =>
-          tx`UPDATE awcms_workflow_instances SET status = 'approved' WHERE id = ${done.instanceId}`
-      );
+      await settle(done, "approved");
 
       for (const id of [pending.instanceId, done.instanceId]) {
         await assertRejected(
@@ -424,6 +488,15 @@ suite("workflow_approval immutability (Issue #999)", () => {
       for (const status of ["completed", "cancelled"]) {
         const { instanceId, taskId } = await startInstance(definitionId);
 
+        if (status === "completed") {
+          await recordDecision(taskId);
+        } else {
+          // A task is cancelled only once its instance is (sql/301).
+          await inTenant(
+            (tx) =>
+              tx`UPDATE awcms_workflow_instances SET status = 'cancelled' WHERE id = ${instanceId}`
+          );
+        }
         await inTenant(
           (tx) =>
             tx`UPDATE awcms_workflow_tasks SET status = ${status} WHERE id = ${taskId}`
@@ -454,6 +527,7 @@ suite("workflow_approval immutability (Issue #999)", () => {
              SET escalation_step = 1, escalated_at = now(), due_at = now()
              WHERE id = ${taskId} AND status = 'pending'`
       );
+      await recordDecision(taskId);
       await inTenant(
         (tx) =>
           tx`UPDATE awcms_workflow_tasks SET status = 'completed' WHERE id = ${taskId}`
