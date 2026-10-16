@@ -391,6 +391,45 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **IDENTITY_ACCESS BUG HUNT — 16 October 2026: 13 of 15 fix groups landed
+  (#1057–#1069, docs #1070, tracking #1055 closed); one follow-up open, #1056.**
+  An external bug hunt over `src/modules/identity-access` at `78acbe8` confirmed
+  21 bugs and delivered 15 fix groups as a git bundle. The bundle was built
+  without tsc, prettier or Postgres, and its regression tests use fake
+  transactions. Checks before landing:
+  - rebase onto main and prettier, applied per commit;
+  - the full `bun run check`;
+  - against Postgres 18.4, `tests/integration/` (2,025 pass, 0 fail) and the
+    17 legacy DB suites (172 pass, 0 fail);
+  - an independent security review.
+
+  **Not landed, and why:**
+  - **g03** (password change revokes the other sessions before the epoch bump)
+    duplicated #1053 (#1035), which was already on main.
+  - **g07** (a lapsed grant blocks re-granting the same role) is **rejected as a
+    fix**. Its pre-check predicate never reaches the partial unique index
+    `WHERE status = 'active'` (`sql/102`, `sql/104`), so the 409 stays. The bug
+    itself is real and permanent, because nothing moves `awcms_access_policies`
+    rows to `expired`. The options and a recommendation are in #1056.
+
+  **Corrected during review:**
+  - g14 did not compile: `savepoint` exists only on `Bun.TransactionSQL`.
+  - g08's changeset now carries the upgrade query for stored DSL policies with
+    offset-less date-times. Such policies fail closed (deny) after the upgrade.
+
+  **Never checked:** about 60 lower-rated suspicions from the same hunt were
+  never given to a prover. The hunt's report is not in the repo, so these
+  examples are recorded here so they are not lost:
+  - `evaluateAccess` skips the scope check when the scope fields are malformed,
+    which fails open.
+  - `planEntitlementBackfill` grants the entitlement when a date is invalid.
+  - `isPasswordLoginDisabledForIdentity` ignores `sso_required`.
+  - `validateForgotIdentifierInput` returns the identifier untrimmed.
+  - `revokeDelegatedAccess` leaves the role policy active.
+
+  Treat each of these as a lead, not a finding: check it against the code and
+  write a failing DB-backed test before fixing it.
+
 - **BOOKING BUILD-OUT — slices #937 to #941 and #1012 (the block
   create/release routes, `sql/240`/`sql/241`) landed; next #942 (the admin
   screens, which are what lets the module leave `experimental`).** #937 schema (`sql/180`, `sql/181`), #938
