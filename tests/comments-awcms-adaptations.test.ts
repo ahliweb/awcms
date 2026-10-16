@@ -12,7 +12,10 @@ import { buildCommentableResourceUrl } from "../src/modules/comments/application
 import { applyModerationAction } from "../src/modules/comments/domain/comment-status";
 import { getRegisteredCommentableResources } from "../src/modules/comments/presentation/commentable-resources";
 import { listModules } from "../src/modules";
-import { WORKER_ROLE_GRANTS } from "../scripts/security-readiness";
+import {
+  WORKER_COLUMN_GRANTS,
+  WORKER_ROLE_GRANTS
+} from "../scripts/security-readiness";
 import type { CommentableResourceDescriptor } from "../src/modules/_shared/module-contract";
 
 const BLOG_POST_DESCRIPTOR: CommentableResourceDescriptor = {
@@ -180,7 +183,16 @@ describe("worker grant matrix covers every comments table sql/066 grants", () =>
         matrixVerbs,
         `${table} is granted in sql/066 but absent from WORKER_ROLE_GRANTS`
       ).toBeDefined();
-      expect(new Set(matrixVerbs)).toEqual(verbs);
+      // sql/304 (Issue #1078) narrowed SELECT on the reply-subscription table to
+      // a column list because the table holds `unsubscribe_token_hash`; the
+      // table-level matrix therefore lists DELETE only, and the SELECT columns
+      // are pinned in WORKER_COLUMN_GRANTS.
+      const expected = new Set(verbs);
+      if (table === "awcms_comments_reply_subscriptions") {
+        expected.delete("SELECT");
+        expect(WORKER_COLUMN_GRANTS[table]?.SELECT).toBeDefined();
+      }
+      expect(new Set(matrixVerbs)).toEqual(expected);
     }
 
     // And nothing in the matrix claims a comments grant the migration never made.

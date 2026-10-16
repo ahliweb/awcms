@@ -1291,26 +1291,52 @@ suite("inventory ledger (Issue #887, ADR-0126)", () => {
   });
 
   describe("security review hardening (PR #891 findings)", () => {
-    test("M2: awcms_worker can SELECT every reporting projection source, and really runs the low-stock projection", async () => {
-      const sources = [
-        ...new Set(
-          collectProjectionDescriptors(listModules())
-            .flatMap((descriptor) => [
-              ...(descriptor.source.strategy === "cursor_table"
-                ? descriptor.source.streams
-                : []),
-              ...descriptor.rebuildSource.streams
-            ])
-            .map((stream) => stream.tableName)
-        )
-      ];
+    test("M2: awcms_worker can SELECT every column a reporting projection source reads, and really runs the low-stock projection", async () => {
+      // Column-level, not table-level: since #1078 the worker reads some
+      // source tables (e.g. awcms_identities) through a column grant only,
+      // so the engine needs exactly the tenant, cursor and metric columns.
+      const columnsByTable = new Map<string, Set<string>>();
 
-      for (const table of sources) {
-        const rows = (await getAdminSql()`
-          SELECT has_table_privilege('awcms_worker', ${table}, 'SELECT') AS ok
-        `) as { ok: boolean }[];
+      for (const descriptor of collectProjectionDescriptors(listModules())) {
+        const streams = [
+          ...(descriptor.source.strategy === "cursor_table"
+            ? descriptor.source.streams
+            : []),
+          ...descriptor.rebuildSource.streams
+        ];
 
-        expect({ table, ok: rows[0]!.ok }).toEqual({ table, ok: true });
+        for (const stream of streams) {
+          const columns =
+            columnsByTable.get(stream.tableName) ?? new Set<string>();
+          columns.add(stream.tenantColumn ?? "tenant_id");
+          columns.add(stream.cursorColumn);
+
+          for (const metric of stream.metrics) {
+            if (metric.matchColumn) {
+              columns.add(metric.matchColumn);
+            }
+
+            if (metric.sumColumn) {
+              columns.add(metric.sumColumn);
+            }
+          }
+
+          columnsByTable.set(stream.tableName, columns);
+        }
+      }
+
+      for (const [table, columns] of columnsByTable) {
+        for (const column of columns) {
+          const rows = (await getAdminSql()`
+            SELECT has_column_privilege('awcms_worker', ${table}, ${column}, 'SELECT') AS ok
+          `) as { ok: boolean }[];
+
+          expect({ table, column, ok: rows[0]!.ok }).toEqual({
+            table,
+            column,
+            ok: true
+          });
+        }
       }
 
       if (!harness.workerRoleActivated) {

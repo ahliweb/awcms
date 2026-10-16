@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 221   |
+| Migrations                          | 222   |
 | `awcms_*` tables                    | 216   |
 | Tables with `FORCE` RLS             | 198   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 703   |
+| Test files                          | 705   |
 | Route files                         | 559   |
 | ADR                                 | 292   |
 
@@ -279,6 +279,7 @@
 | 219 | `sql/301_awcms_workflow_engine_binding.sql`                        |
 | 220 | `sql/302_awcms_hr_attendance_notice_worker_grants.sql`             |
 | 221 | `sql/303_awcms_lifecycle_delegated_count_functions.sql`            |
+| 222 | `sql/304_awcms_worker_credential_column_revoke.sql`                |
 
 ### Tables & Row-Level Security
 
@@ -505,9 +506,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 540        |
+| `(root)`      | 541        |
 | `e2e`         | 26         |
-| `integration` | 136        |
+| `integration` | 137        |
 | `unit`        | 1          |
 
 ### Routes
