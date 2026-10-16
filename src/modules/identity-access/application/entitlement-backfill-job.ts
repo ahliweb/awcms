@@ -140,26 +140,18 @@ export async function runEntitlementBackfill(
   let granted = 0;
 
   for (const grant of plan.grants) {
-    await withTenantOrThrow(
+    const written = await withTenantOrThrow(
       sql,
       grant.tenantId,
       async (tx) => {
-        // `ON CONFLICT DO NOTHING` against the (tenant, entitlement) unique
-        // index: a second run, or a concurrent hand-grant, must be a no-op
-        // rather than a 23505 that aborts the transaction — the shape `sql/074`
-        // and `sql/106` both chose for the same reason.
-        await tx`
-          INSERT INTO awcms_tenant_entitlements
-            (tenant_id, entitlement_key, grant_reason)
-          VALUES (${grant.tenantId}, ${grant.entitlementKey},
-                  ${GRANDFATHER_GRANT_REASON})
-          ON CONFLICT (tenant_id, entitlement_key) DO NOTHING
-        `;
+        return grantEntitlementRow(tx, grant, options.now);
       },
       { workClass: "maintenance" }
     );
 
-    granted += 1;
+    if (written) {
+      granted += 1;
+    }
   }
 
   return {
@@ -169,4 +161,35 @@ export async function runEntitlementBackfill(
     granted,
     committed: true
   };
+}
+
+/**
+ * Writes one planned grant; returns whether a row was actually written.
+ *
+ * The plan treats an EXPIRED row as not held, so the conflict path must renew
+ * it (clear `expires_at`) — `DO NOTHING` would leave it inert while still being
+ * counted. Only expired rows are touched: a live row (e.g. a concurrent
+ * hand-grant) stays a no-op, keeping a second run idempotent.
+ */
+export async function grantEntitlementRow(
+  tx: Bun.TransactionSQL,
+  grant: { tenantId: string; entitlementKey: string },
+  now: Date
+): Promise<boolean> {
+  const rows = (await tx`
+    INSERT INTO awcms_tenant_entitlements
+      (tenant_id, entitlement_key, grant_reason)
+    VALUES (${grant.tenantId}, ${grant.entitlementKey},
+            ${GRANDFATHER_GRANT_REASON})
+    ON CONFLICT (tenant_id, entitlement_key) DO UPDATE
+      SET expires_at = NULL,
+          grant_reason = EXCLUDED.grant_reason,
+          granted_by_tenant_user_id = NULL,
+          updated_at = now()
+      WHERE awcms_tenant_entitlements.expires_at IS NOT NULL
+        AND awcms_tenant_entitlements.expires_at <= ${now}
+    RETURNING entitlement_key
+  `) as unknown[];
+
+  return rows.length > 0;
 }
