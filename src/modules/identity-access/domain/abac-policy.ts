@@ -220,7 +220,7 @@ const MAX_DEPTH = 32;
 const MAX_NODES = 512;
 
 const ISO_DATE_PATTERN =
-  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}))?$/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -231,7 +231,20 @@ function isIsoDateString(value: unknown): value is string {
     return false;
   }
   const parsed = Date.parse(value);
-  return Number.isFinite(parsed);
+  if (!Number.isFinite(parsed)) {
+    return false;
+  }
+  // Reject impossible calendar dates (e.g. 2024-02-31), which Date.parse
+  // silently rolls over in some engines.
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
 }
 
 /** Whether a literal `value` is compatible with an attribute category, for a
