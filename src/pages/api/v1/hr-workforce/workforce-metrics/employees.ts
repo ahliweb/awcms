@@ -1,5 +1,6 @@
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import {
   employmentWithinMetricsBasis,
   listEmployeeFacts,
@@ -111,7 +112,7 @@ export const GET = defineTenantRoute<Prepared>({
       : "supervisor reads their direct reports' workforce metrics"
   }),
   authorize: HR_WORKFORCE_GUARDS.workforceMetrics.read,
-  handler: async ({ tx, tenantId, prepared, auth, now }) => {
+  handler: async ({ tx, tenantId, prepared, auth, now, locals }) => {
     const tenantUserId = auth.context.tenantUserId;
     const basis: MetricsBasis = prepared.mine
       ? { mode: "mine", tenantUserId }
@@ -140,6 +141,26 @@ export const GET = defineTenantRoute<Prepared>({
       after: prepared.after,
       now
     });
+
+    // PS-18 / Issue #1083 M3: HR reading EVERY employee's attendance, hours and
+    // worked-to-scheduled ratio is an event somebody may later need to explain,
+    // and the decision log does not say which employments were read. Ids and a
+    // count only, coalesced per actor and window. A supervisor's reports read
+    // is recorded too, with mode "reports" (Issue #1083 M-2): the manager chain
+    // can make a director with no HR permission a reader of everyone. Only the
+    // employee's OWN read is unrecorded (reading yourself is not an event to
+    // explain); the decision log still holds it.
+    if (basis.mode !== "mine") {
+      await recordSensitiveRead(tx, {
+        mode: basis.mode,
+        tenantId,
+        actorTenantUserId: tenantUserId,
+        permission: "hr_workforce.workforce_metrics.read",
+        itemCount: page.employees.length,
+        resourceIds: page.employees.map((row) => row.employmentId),
+        correlationId: locals.correlationId
+      });
+    }
 
     return ok(
       {

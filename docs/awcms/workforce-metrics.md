@@ -162,8 +162,11 @@ misaligned window is refused.
 
 **Rule.** A per-office aggregate computed from **fewer than 5 contributing
 employees** is withheld entirely: the group is returned with `suppressed: true`
-and `reason: "small_group"` and **no number** — not the facts, and not the
-contributor count. A shown group reports only a **band** (`"5-9"`, `"10-19"`,
+and `reason: "small_group"` and **no number** — not the facts, not the
+contributor count, and **not the `officeId`** (Issue #1083, L2): a caller holding
+only `.analyze` must not learn which offices exist or which are under the
+threshold. Suppressed groups are listed after the shown ones, all alike, so
+neither the office nor its position in the list is revealed. A shown group reports only a **band** (`"5-9"`, `"10-19"`,
 `"20+"`), never the exact count, so adding or removing one person does not move
 the figure shown.
 
@@ -196,14 +199,42 @@ only worth anything if the aggregate cannot be narrowed to one.
 
 **Residual risks (stated, not solved).**
 
-1. Membership changes between buckets are visible by nature: if a group is shown
+0. **Withheld offices can be inferred by set difference (Issue #1083, L-3).**
+   A withheld group no longer names its office, but the shown groups still do.
+   A caller who knows the tenant's offices by another route (the office list,
+   their own site) learns which ones are absent from the response, hence
+   withheld. Closing it would mean returning every office as a band or hiding
+   the shown set too; the office's existence is not what the suppression
+   protects, the small cohort's figures are.
+
+1. **Combining permissions narrows an aggregate (Issue #1083, M1).** A caller
+   who also knows some members of a small group — as the supervisor of some of
+   them (`?reports=true`), or because they can plant or see the shifts that make
+   someone a contributor (`shifts.create`, `shifts.publish`, see the H2 fix in
+   #953) — can subtract what they know from a shown figure and learn the rest.
+   **Rule for tenants: do not give `.analyze` to someone who supervises, or
+   schedules, the same people** (an `.analyze` holder who is also a supervisor of
+   people in an office, or who holds `shifts.create`/`shifts.publish`).
+   **Why this is documented and not enforced:** the platform's SoD rules
+   (`ModuleDescriptor.sodRules`) are checked at the chokepoint only for
+   high-risk actions and are `global_within_tenant` or `same_scope_only` over
+   permission pairs. `.analyze` is not high-risk, "supervises the same office"
+   is a manager-link fact and not a permission, and the `owner` role of every
+   tenant holds every permission, so a rule over `analyze` + `shifts.publish`
+   would deny the owner's publish. A rule is therefore a decision for the
+   tenant's own role design (and a future ABAC condition on the manager link),
+   not something to ship as a default. The audit trail narrows the gap: an
+   `.analyze`/`.read` aggregate read and every all-employee read leave a
+   `sensitive_read.workforce_metrics` row (section 8).
+
+2. Membership changes between buckets are visible by nature: if a group is shown
    in week 12 and not in week 13, a person left or fell under the floor.
-2. A group of exactly five where four have identical figures reveals the fifth's
+3. A group of exactly five where four have identical figures reveals the fifth's
    to anyone who knows the four.
-3. A closed bucket can still change slightly afterwards: an offline kiosk replay
+4. A closed bucket can still change slightly afterwards: an offline kiosk replay
    (up to seven days late) or an approved correction can alter it. Two reads of a
    bucket made before and after such a change differ by that late record.
-4. The tenant-wide event-volume projection is HR-only because in a one-employee
+5. The tenant-wide event-volume projection is HR-only because in a one-employee
    tenant any counter is personal.
 
 ## 7. Governance review before any consequential use
@@ -265,8 +296,33 @@ the employer's decision (ADR-0132 section 13.2).
   aggregate takes only one whole closed ISO week (section 6).
 - A tenant above 10,000 employments gets `422 WORKFORCE_METRICS_SCOPE_TOO_LARGE`
   on the aggregate endpoint (decided from a COUNT before any page is read); chunked or precomputed aggregates are a follow-up.
-- Reads are not audited (own and supervisor reads are routine, like the attendance
-  list); the chokepoint's decision log records each authorisation.
+- **Read audit (Issue #1083, M3, M-2).** An ALL-employee read of person-level
+  facts (`employees` with neither `mine` nor `reports`) AND a manager-chain
+  `reports` read (up to ten levels on the attendance list, so a director with no
+  HR permission can read everyone) is a sensitive read, with the attribute
+  `mode` (`all` or `reports`): one audit
+  row of kind `sensitive_read.workforce_metrics` carries the employment ids and a
+  count, never a figure, coalesced per actor in a five-minute window (a further
+  `warning` row at 10/100/1000... reads or items in the window). The aggregate
+  route records the permission that actually granted: `.read` under the same
+  kind with its group count and no ids, `.analyze` under
+  `sensitive_read.workforce_metrics_aggregate` (a kind names one policy). The
+  attendance list is covered the same way (`sensitive_read.attendance_events`),
+  and so are attendance corrections (`sensitive_read.attendance_corrections`):
+  the LIST (every employee's proposed clock times) in the all and reports modes,
+  and the single record only when its free-text reason came from the
+  `corrections.read` role grant, not for the requester or an approval assignee.
+  Only the employee's OWN read is not recorded (the decision log still records
+  each authorisation). A window is per actor and kind, so a `reports` read whose
+  ids were already audited in the window as `all` adds no new row.
+  The location-evidence read keeps its own row (`hr_workforce.location_evidence.read`),
+  which now carries the employment ids of the page. The other `hr_workforce` read permissions are classified,
+  with a reason, in `NOT_SENSITIVE_READS` (`src/modules/_shared/sensitive-reads.ts`)
+  and `hr_workforce` is in `SENSITIVE_READ_MODULE_KEYS`, so a new read permission
+  of the module is unclassified (and `bun run sensitive-reads:check` red) until
+  someone decides.
+- The employee-facing screen for `?mine=true` (the transparency and challenge
+  route) is not built here; it belongs to #952.
 - Existing tenants must be granted the two new permissions
   (`bun run identity-access:permissions:backfill`), as for every permission-seed
   migration.

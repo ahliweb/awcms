@@ -143,7 +143,8 @@ export const GET = defineTenantRoute<Prepared>({
 
     await auditEvidenceRead(tx, tenantId, actor, basis, {
       employmentId: prepared.employmentId,
-      returned: page.evidence.length
+      returned: page.evidence.length,
+      employmentIds: page.evidence.map((entry) => entry.employmentId)
     });
 
     return ok(page, {}, { "cache-control": "no-store" });

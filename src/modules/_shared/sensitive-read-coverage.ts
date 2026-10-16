@@ -486,6 +486,35 @@ function collectAuthorizeRefs(source: string): string[] {
       // An inline object literal is read as a guard by `collectGuardTriples`.
       if (value.startsWith("{")) continue;
 
+      // The ANY-of array form (`authorize: [A, B]`, possibly multi-line): each
+      // identifier element is a reference of its own (Issue #1083). Before this
+      // the whole `[` was one unresolvable reference, so a route with two
+      // alternative permissions could not be held to the audit rule at all.
+      if (value.startsWith("[")) {
+        const open = after.indexOf("[");
+        const close = after.indexOf("]", open);
+        const raw = close === -1 ? "" : after.slice(open + 1, close);
+        // Skip `{ ... }` spans first (an inline guard object is read by
+        // `collectGuardTriples`; splitting on its inner commas would fragment
+        // it into bogus references): Issue #1083 L-5.
+        let body = "";
+        let depth = 0;
+
+        for (const char of raw) {
+          if (char === "{") depth += 1;
+          else if (char === "}") depth = Math.max(0, depth - 1);
+          else if (depth === 0) body += char;
+        }
+
+        for (const element of body.split(",")) {
+          const reference = element.trim();
+
+          if (reference && !reference.startsWith("{")) refs.push(reference);
+        }
+
+        continue;
+      }
+
       refs.push(value.replace(/,$/, "").trim());
       continue;
     }

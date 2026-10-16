@@ -78,7 +78,7 @@ type GroupsBody = {
   governance: string;
   suppression: { minContributors: number };
   groups: {
-    officeId: string | null;
+    officeId?: string | null;
     suppressed: boolean;
     reason?: string;
     contributorsBand?: string;
@@ -542,6 +542,131 @@ suite("hr_workforce workforce metrics HTTP surface (Issue #953)", () => {
     expect(
       all.body.data!.employees.map((row) => row.employmentId).sort()
     ).toEqual([a.employmentId, b.employmentId].sort());
+
+    // M3 (Issue #1083): the all-employee read leaves ONE sensitive-read audit
+    // row naming the employments and the count, never a figure.
+    const rows = (await admin()`
+      SELECT actor_tenant_user_id, severity, attributes
+      FROM awcms_audit_events
+      WHERE tenant_id = ${env.tenantId}
+        AND action = 'sensitive_read.workforce_metrics'
+    `) as {
+      actor_tenant_user_id: string;
+      severity: string;
+      attributes: Record<string, unknown> | string;
+    }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.actor_tenant_user_id).toBe(hr.tenantUserId);
+
+    const attributes =
+      typeof rows[0]!.attributes === "string"
+        ? JSON.parse(rows[0]!.attributes)
+        : rows[0]!.attributes;
+
+    expect((attributes.resourceIds as string[]).sort()).toEqual(
+      [a.employmentId, b.employmentId].sort()
+    );
+    expect(attributes.callItemCount).toBe(2);
+    expect(JSON.stringify(rows[0])).not.toContain("workedMinutes");
+
+    // A second read in the window is coalesced: still one audit row.
+    await employees("", hr.token);
+    expect(
+      (
+        (await admin()`
+          SELECT count(*)::int AS count FROM awcms_audit_events
+          WHERE tenant_id = ${env.tenantId}
+            AND action = 'sensitive_read.workforce_metrics'
+        `) as { count: number }[]
+      )[0]!.count
+    ).toBe(1);
+  });
+
+  test("an employee's OWN read is not recorded; a supervisor's reports read is, with mode reports (M-2)", async () => {
+    if (!handlerReady) return;
+    const boss = await employee("sra-boss");
+
+    await workedDay(boss.employmentId);
+    expect((await employees("mine=true", boss.token)).status).toBe(200);
+
+    const rowsOf = async () =>
+      (await admin()`
+        SELECT attributes FROM awcms_audit_events
+        WHERE tenant_id = ${env.tenantId}
+          AND action = 'sensitive_read.workforce_metrics'
+      `) as { attributes: Record<string, unknown> | string }[];
+
+    expect(await rowsOf()).toHaveLength(0);
+    expect((await employees("reports=true", boss.token)).status).toBe(200);
+
+    const rows = await rowsOf();
+
+    expect(rows).toHaveLength(1);
+
+    const attributes =
+      typeof rows[0]!.attributes === "string"
+        ? JSON.parse(rows[0]!.attributes)
+        : rows[0]!.attributes;
+
+    expect(attributes.mode).toBe("reports");
+  });
+
+  test("L-1: an .analyze-only aggregate read is recorded as the analyze permission, not read", async () => {
+    if (!handlerReady) return;
+    const analyst = await seedUser(env.tenantId, "analyst-l1", [
+      "hr_workforce.workforce_metrics.analyze"
+    ]);
+
+    await workedDay(await hire("l1", { officeId: env.hqOfficeId }), {
+      day: WEEK_DAY
+    });
+    expect((await groups(GROUP_QUERY, analyst.token)).status).toBe(200);
+
+    const rows = (await admin()`
+      SELECT action, attributes FROM awcms_audit_events
+      WHERE tenant_id = ${env.tenantId} AND action LIKE 'sensitive_read.workforce_metrics%'
+    `) as { action: string; attributes: Record<string, unknown> | string }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.action).toBe("sensitive_read.workforce_metrics_aggregate");
+
+    const attributes =
+      typeof rows[0]!.attributes === "string"
+        ? JSON.parse(rows[0]!.attributes)
+        : rows[0]!.attributes;
+
+    expect(attributes.permission).toBe(
+      "hr_workforce.workforce_metrics.analyze"
+    );
+  });
+
+  test("the aggregate read is audited under the same kind with a group count and no ids", async () => {
+    if (!handlerReady) return;
+    const hr = await seedUser(env.tenantId, "hr-agg", [
+      "hr_workforce.workforce_metrics.read"
+    ]);
+
+    await workedDay(await hire("agg", { officeId: env.hqOfficeId }), {
+      day: WEEK_DAY
+    });
+    expect((await groups(GROUP_QUERY, hr.token)).status).toBe(200);
+
+    const rows = (await admin()`
+      SELECT attributes FROM awcms_audit_events
+      WHERE tenant_id = ${env.tenantId}
+        AND action = 'sensitive_read.workforce_metrics'
+    `) as { attributes: Record<string, unknown> | string }[];
+
+    expect(rows).toHaveLength(1);
+
+    const attributes =
+      typeof rows[0]!.attributes === "string"
+        ? JSON.parse(rows[0]!.attributes)
+        : rows[0]!.attributes;
+
+    expect(attributes.resourceIds).toEqual([]);
+    expect(attributes.callItemCount).toBe(1);
   });
 
   test("the aggregate holder sees per-office figures and NO individual; a group under five carries no number", async () => {
@@ -573,9 +698,9 @@ suite("hr_workforce workforce metrics HTTP surface (Issue #953)", () => {
     const hq = response.body.data!.groups.find(
       (group) => group.officeId === env.hqOfficeId
     )!;
-    const branch = response.body.data!.groups.find(
-      (group) => group.officeId === second[0]!.id
-    )!;
+    const withheld = response.body.data!.groups.filter(
+      (group) => group.suppressed
+    );
 
     expect(hq.suppressed).toBe(false);
     expect(hq.contributorsBand).toBe("5-9");
@@ -586,11 +711,11 @@ suite("hr_workforce workforce metrics HTTP surface (Issue #953)", () => {
       coverageRatio: 1,
       workedMinutes: 5 * 8 * 60
     });
-    expect(branch).toEqual({
-      officeId: second[0]!.id,
-      suppressed: true,
-      reason: "small_group"
-    });
+    // L2 (Issue #1083): a withheld group does not name its office, and the
+    // shown groups come first.
+    expect(withheld).toEqual([{ suppressed: true, reason: "small_group" }]);
+    expect(JSON.stringify(response.body)).not.toContain(second[0]!.id);
+    expect(response.body.data!.groups[0]!.suppressed).toBe(false);
     // No individual row anywhere in the answer, and holding `analyze` does not
     // open the individual list.
     expect(JSON.stringify(response.body)).not.toContain("employmentId");
@@ -702,7 +827,7 @@ suite("hr_workforce workforce metrics HTTP surface (Issue #953)", () => {
     const response = await groups(GROUP_QUERY, analyst.token);
 
     expect(response.body.data!.groups).toEqual([
-      { officeId: env.hqOfficeId, suppressed: true, reason: "small_group" }
+      { suppressed: true, reason: "small_group" }
     ]);
   });
 
@@ -824,7 +949,7 @@ suite("hr_workforce workforce metrics HTTP surface (Issue #953)", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data!.groups).toEqual([
-      { officeId: env.hqOfficeId, suppressed: true, reason: "small_group" }
+      { suppressed: true, reason: "small_group" }
     ]);
   });
 

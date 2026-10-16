@@ -1035,7 +1035,12 @@ export async function auditEvidenceRead(
   tenantId: string,
   actor: Actor,
   basis: ReadBasis,
-  details: { employmentId?: string; returned: number }
+  details: {
+    employmentId?: string;
+    returned: number;
+    /** The employments whose verdicts this page carried (Issue #1083 L-2). */
+    employmentIds?: readonly string[];
+  }
 ): Promise<void> {
   if (basis.mode !== "all") {
     return;
@@ -1052,7 +1057,8 @@ export async function auditEvidenceRead(
     message: "Location-evidence verdicts of other employments were read.",
     attributes: {
       employmentId: details.employmentId ?? null,
-      returned: details.returned
+      returned: details.returned,
+      employmentIds: [...new Set(details.employmentIds ?? [])]
     },
     correlationId: actor.correlationId
   });
