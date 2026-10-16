@@ -416,6 +416,44 @@ async function resolveOrdinaryRbacFacts(
   }));
 }
 
+export type SoDAssignmentFactsOptions = {
+  /**
+   * Assignment-create only: count every active, not-yet-expired assignment
+   * whose effective period OVERLAPS this window (including ones that start in
+   * the future), instead of only the ones in force at `now`. Without it a
+   * future-dated conflicting assignment is invisible to the create-time check.
+   */
+  overlapWindow?: { effectiveFrom: Date; effectiveTo: Date | null };
+};
+
+function overlapsWindow(
+  assignment: {
+    status: "active" | "expired" | "revoked";
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
+  },
+  window: { effectiveFrom: Date; effectiveTo: Date | null },
+  now: Date
+): boolean {
+  if (assignment.status !== "active") return false;
+  if (assignment.effectiveTo !== null && now >= assignment.effectiveTo) {
+    return false;
+  }
+  if (
+    window.effectiveTo !== null &&
+    assignment.effectiveFrom >= window.effectiveTo
+  ) {
+    return false;
+  }
+  if (
+    assignment.effectiveTo !== null &&
+    assignment.effectiveTo <= window.effectiveFrom
+  ) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * The subject's currently-in-force SoD facts (`(permissionKey, scopeType,
  * scopeId)` triples) that conflict detection reasons about. Merges TWO sources
@@ -440,7 +478,8 @@ export async function resolveSoDAssignmentFacts(
   tenantId: string,
   tenantUserId: string,
   now: Date,
-  excludeAssignmentId: string | null = null
+  excludeAssignmentId: string | null = null,
+  options: SoDAssignmentFactsOptions = {}
 ): Promise<SoDAssignmentFact[]> {
   const rows = (await tx`
     SELECT bsa.scope_type, bsa.scope_id, bsa.effective_from, bsa.effective_to, bsa.status,
@@ -456,17 +495,18 @@ export async function resolveSoDAssignmentFacts(
 
   const facts: SoDAssignmentFact[] = [];
 
+  const overlap = options.overlapWindow;
+
   for (const row of rows) {
-    if (
-      !isBusinessScopeAssignmentCurrentlyActive(
-        {
-          status: row.status,
-          effectiveFrom: row.effective_from,
-          effectiveTo: row.effective_to
-        },
-        now
-      )
-    ) {
+    const assignment = {
+      status: row.status,
+      effectiveFrom: row.effective_from,
+      effectiveTo: row.effective_to
+    };
+    const counts = overlap
+      ? overlapsWindow(assignment, overlap, now)
+      : isBusinessScopeAssignmentCurrentlyActive(assignment, now);
+    if (!counts) {
       continue;
     }
 
