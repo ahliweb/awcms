@@ -91,6 +91,7 @@
     "edge-cache:surfaces:check": "bun scripts/edge-cache-surfaces-check.ts",
     "sensitive-reads:check": "bun scripts/sensitive-reads-check.ts",
     "payroll:sql-boundary:check": "bun scripts/payroll-sql-boundary-check.ts",
+    "payroll:catalog-boundary:check": "bun scripts/payroll-catalog-boundary-check.ts",
     "skills:check": "bun scripts/skills-check.ts",
     "graph:artifacts:check": "bun scripts/graph-artifacts-check.ts",
     "knowledge:graph:update": "graphify update .",

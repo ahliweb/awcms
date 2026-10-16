@@ -9,7 +9,11 @@ import {
 } from "./permission-enforcement-coverage";
 import {
   NOT_SENSITIVE_READS,
+  PAYROLL_READ_FUNCTION_IMPORTS,
   PAYROLL_TABLE_SOURCE_EXEMPTIONS,
+  auditCoversPayrollTable,
+  findPayrollTableReadMapping,
+  type PayrollReadFunctionImport,
   SENSITIVE_READ_MODULE_KEYS,
   SENSITIVE_READ_POLICIES,
   WRITE_SHAPED_ACTIONS,
@@ -41,12 +45,21 @@ import {
  *    `authorize:` reference that resolves to no static permission, or an
  *    `activityCode` that is not a string literal or resolvable constant, fails:
  *    a guard the gate cannot read is a guard it cannot hold to rule 1.
- * 4. **Table readers.** A source file whose text names a payroll-boundary table
- *    must call `recordSensitiveRead` or be listed, with a reason, in
- *    `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (a descriptor-only `module.ts`, the
- *    data-access layer whose callers audit). This catches a reader that got its
- *    data without going through a guarded route the gate could see.
- * 5. **Dead entries.** Once the module exists, a policy or exemption naming a
+ * 4. **Table readers, per table.** A source file whose text names a
+ *    payroll-boundary table must call `recordSensitiveRead` with a permission
+ *    that COVERS THAT TABLE (`PAYROLL_TABLE_READ_PERMISSIONS`), or be listed,
+ *    with a reason, in `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (a descriptor-only
+ *    `module.ts`, the data-access layer whose callers audit). Attribution is
+ *    per table: auditing `compensation.read` does not clear a file that also
+ *    reads `payslips` (Issue #1015; the first version cleared every table in a
+ *    file that audited anything).
+ * 5. **Imports of a data-access file's read functions.** An exempt
+ *    data-access file is trusted because its callers audit, so its read
+ *    functions may be imported only by `PAYROLL_READ_FUNCTION_IMPORTS`'s
+ *    allow-listed files, each of which must audit the permission itself
+ *    (Issue #1015). A re-export, a namespace import and a dynamic `import()`
+ *    count as importing all of them.
+ * 6. **Dead entries.** Once the module exists, a policy or exemption naming a
  *    permission it does not declare is reported.
  *
  * ## What it cannot prove (the known syntactic limit)
@@ -58,7 +71,74 @@ import {
  * `tests/integration/sensitive-read-audit.integration.test.ts`; a route's
  * behaviour by the route-level tests the #957/#961 acceptance wording requires
  * (hr-payroll.md section 13.3).
+ *
+ * Two more limits, recorded rather than closed (Issue #1015):
+ *
+ * - **A table name assembled from pieces** (`"awcms_hr_" + suffix`, a template
+ *   with an interpolated middle, a name read from the catalog) is not a token
+ *   the scan can see, so a file that builds one is invisible to rule 4. The
+ *   SQL side of the same evasion IS closed, by reading the migrated catalog
+ *   (`payroll:catalog-boundary:check`); the application side is held by review
+ *   and by the fact that a payroll table is reachable only through its module's
+ *   data-access file, which rule 5 gates.
+ * - **Import resolution is by file name**, not by the module graph: a path that
+ *   ends in the ledger's file name is the ledger. A copy of the file under
+ *   another name is a new data-access file, and rule 4 catches it (it names the
+ *   table).
  */
+/**
+ * `source` with the CONTENT of every string and template literal blanked out
+ * (the quotes stay, every character keeps its offset). A call that appears only
+ * inside a literal is text, not a call: `"await recordSensitiveRead(tx, ...)"`
+ * in a log message or a fixture must not stand for an audit (Issue #1015, M7).
+ * Offsets are preserved so arguments can still be read from the unmasked text.
+ */
+export function maskLiterals(source: string): string {
+  let out = "";
+  let index = 0;
+
+  while (index < source.length) {
+    const quote = source[index]!;
+
+    if (quote === '"' || quote === "'" || quote === "`") {
+      let end = index + 1;
+
+      while (end < source.length && source[end] !== quote) {
+        end += source[end] === "\\" ? 2 : 1;
+      }
+
+      end = Math.min(end, source.length);
+      out +=
+        quote +
+        " ".repeat(Math.max(0, end - index - 1)) +
+        (end < source.length ? quote : "");
+      index = end + 1;
+      continue;
+    }
+
+    out += quote;
+    index += 1;
+  }
+
+  return out;
+}
+
+/**
+ * True for a file that only DESCRIBES a module: `src/modules/<key>/module.ts`
+ * and not under `src/pages`, with no route-handler export. A `module.ts` that
+ * exports `GET`/`POST`/... is a route that happens to share the name, and the
+ * exemption for descriptors does not cover it (Issue #1015, M7).
+ */
+export function isModuleDescriptorFile(name: string, source: string): boolean {
+  return (
+    /^src\/modules\/[^/]+\/module\.ts$/.test(name) &&
+    !/\bexport\s+(?:async\s+)?(?:const|function)\s+(?:GET|POST|PUT|PATCH|DELETE|ALL|OPTIONS|HEAD)\b/.test(
+      source
+    ) &&
+    !/\bexport\s*\{[^}]*\b(?:GET|POST|PUT|PATCH|DELETE|ALL)\b/.test(source)
+  );
+}
+
 /**
  * Fail-closed shape of the audit call (Issue #1014 L6).
  *
@@ -73,7 +153,7 @@ import {
  * contract.test.ts` holds the reusable assertion).
  */
 export function findSwallowedSensitiveReads(source: string): string[] {
-  const clean = stripComments(source);
+  const clean = maskLiterals(stripComments(source));
   const problems: string[] = [];
 
   for (const call of clean.matchAll(/\brecordSensitiveRead\s*\(/g)) {
@@ -195,6 +275,20 @@ export type SensitiveReadCoverageResult = {
   computedGuards: string[];
   /** Files naming a payroll-boundary table that neither audit nor are exempt. */
   unauditedTableReaders: { source: string; tables: string[] }[];
+  /** Files that audit, but not with a permission that covers a payroll table they name (Issue #1015). */
+  uncoveredTableReaders: {
+    source: string;
+    tables: string[];
+    needs: Record<string, string[]>;
+  }[];
+  /** Files importing a guarded data-access read function without being allowed, or without auditing. */
+  forbiddenReadImports: {
+    source: string;
+    functions: string[];
+    problem: string;
+  }[];
+  /** Allow-listed importers that no longer import the function. */
+  staleImportAllowances: string[];
   /** Exemptions for a file that no longer exists or no longer names such a table. */
   staleSourceExemptions: string[];
   /** Calls of `recordSensitiveRead` that could swallow their own failure (Issue #1014 L6). */
@@ -207,6 +301,7 @@ export type SensitiveReadCoverageOptions = {
   notSensitive?: Readonly<Record<string, string>>;
   sensitiveModuleKeys?: readonly string[];
   tableSourceExemptions?: Readonly<Record<string, string>>;
+  readFunctionImports?: readonly PayrollReadFunctionImport[];
 };
 
 /** The text of a call's argument list, from just after `(` to its matching `)`. */
@@ -241,7 +336,10 @@ export function collectAuditedPermissions(
   const clean = stripComments(source);
   const audited = new Set<string>();
 
-  for (const call of clean.matchAll(/\brecordSensitiveRead\s*\(/g)) {
+  // Calls are found outside literals; their arguments are read from the real text.
+  for (const call of maskLiterals(clean).matchAll(
+    /\brecordSensitiveRead\s*\(/g
+  )) {
     const open = call.index! + call[0].length - 1;
     const args = callArguments(clean, open);
     const field =
@@ -399,6 +497,160 @@ function collectAuthorizeRefs(source: string): string[] {
   return refs;
 }
 
+/** The file-name stem of a module specifier or repo path: `../x/ledger.ts` -> `ledger`. */
+function moduleStem(specifier: string): string {
+  const last = specifier.split("/").pop() ?? specifier;
+
+  return last.replace(/\.(?:ts|tsx|js|mjs|astro)$/, "");
+}
+
+/** Original names in a `{ a, b as c, type d }` list. */
+function namedImports(list: string): string[] {
+  const names: string[] = [];
+
+  for (const item of list.split(",")) {
+    const entry = item.trim();
+
+    if (!entry || /^type\s/.test(entry)) continue;
+
+    names.push(entry.split(/\s+as\s+/)[0]!.trim());
+  }
+
+  return names;
+}
+
+/**
+ * The names `source` imports from a module whose file name is `stem`: a list of
+ * original names, or `"*"` when it takes the whole module (namespace import,
+ * default import, `export * from`, dynamic `import()`, `require`). Type-only
+ * imports are skipped: a type cannot read a row.
+ */
+export function importedNamesFrom(source: string, stem: string): string[] {
+  const clean = stripComments(source);
+  const names = new Set<string>();
+  const matches = (specifier: string): boolean =>
+    moduleStem(specifier) === stem;
+
+  for (const found of clean.matchAll(
+    /\bimport\s+(type\s+)?([^;'"]*?)\s*from\s*["']([^"']+)["']/g
+  )) {
+    if (!matches(found[3]!) || found[1]) continue;
+
+    const clause = found[2]!.trim();
+    const named = /\{([^}]*)\}/.exec(clause);
+    const outside = clause
+      .replace(/\{[^}]*\}/, "")
+      .replace(/,/g, " ")
+      .trim();
+
+    if (outside) names.add("*");
+
+    for (const name of namedImports(named?.[1] ?? "")) names.add(name);
+  }
+
+  for (const found of clean.matchAll(
+    /\bexport\s+(type\s+)?(\*(?:\s+as\s+\w+)?|\{[^}]*\})\s*from\s*["']([^"']+)["']/g
+  )) {
+    if (!matches(found[3]!) || found[1]) continue;
+
+    if (found[2]!.startsWith("*")) {
+      names.add("*");
+      continue;
+    }
+
+    for (const name of namedImports(found[2]!.slice(1, -1))) names.add(name);
+  }
+
+  for (const found of clean.matchAll(/\b(?:import|require)\s*\(([^)]*)\)/g)) {
+    const argument = found[1]!.trim();
+    const plain = /^(["'])([^"']*)\1$/.exec(argument);
+
+    if (plain) {
+      if (matches(plain[2]!)) names.add("*");
+      continue;
+    }
+
+    // A template literal or a computed expression: the specifier is not known
+    // until run time. If its visible pieces name the file (a prefix, a concat of
+    // fragments of the stem), it is importing everything. A bare identifier
+    // with no such piece is invisible to a text scan (documented limit).
+    const fragments = stem.split("-").filter((part) => part.length >= 6);
+
+    if (
+      argument.includes(stem) ||
+      fragments.some((fragment) => argument.includes(fragment))
+    ) {
+      names.add("*");
+    }
+  }
+
+  return [...names];
+}
+
+/**
+ * Rule 5 (Issue #1015): imports of a guarded data-access file's read
+ * functions. Returns the violations and the allow-listed importers that no
+ * longer import anything.
+ */
+export function findForbiddenReadImports(
+  sources: readonly string[],
+  sourceNames: readonly string[],
+  registry: readonly PayrollReadFunctionImport[],
+  constantsFor: (source: string) => ReadonlyMap<string, string | null>
+): {
+  forbidden: { source: string; functions: string[]; problem: string }[];
+  stale: string[];
+} {
+  const forbidden: { source: string; functions: string[]; problem: string }[] =
+    [];
+  const stale: string[] = [];
+  const scanned = new Set(sourceNames);
+
+  for (const entry of registry) {
+    const stem = moduleStem(entry.source);
+    const importers = new Set<string>();
+
+    for (const [index, source] of sources.entries()) {
+      const name = sourceNames[index];
+
+      if (!name || name === entry.source) continue;
+
+      const imported = importedNamesFrom(source, stem);
+      const reads = imported.includes("*")
+        ? [...entry.functions]
+        : entry.functions.filter((fn) => imported.includes(fn));
+
+      if (reads.length === 0) continue;
+
+      importers.add(name);
+
+      if (!entry.allowedImporters.includes(name)) {
+        forbidden.push({
+          source: name,
+          functions: reads,
+          problem: `imports ${reads.join(", ")} from ${entry.source} but is not in PAYROLL_READ_FUNCTION_IMPORTS allowedImporters. Those functions return payroll-boundary rows; a new caller is a new read path and must be added there together with its audit`
+        });
+      } else if (
+        !collectAuditedPermissions(source, constantsFor(source)).has(
+          entry.permission
+        )
+      ) {
+        forbidden.push({
+          source: name,
+          functions: reads,
+          problem: `imports ${reads.join(", ")} from ${entry.source} but never calls recordSensitiveRead({ permission: "${entry.permission}", ... })`
+        });
+      }
+    }
+
+    for (const allowed of entry.allowedImporters) {
+      if (scanned.has(allowed) && !importers.has(allowed)) stale.push(allowed);
+    }
+  }
+
+  return { forbidden, stale };
+}
+
 const SENSITIVE_MENTION = (keys: readonly string[]): RegExp =>
   new RegExp(`(?:${keys.map((key) => key.replace(/_/g, "[_-]")).join("|")})`);
 
@@ -422,6 +674,8 @@ export function evaluateSensitiveReadCoverage(
   const unauditedRoutes: UnauditedRoute[] = [];
   const computedGuards: string[] = [];
   const unauditedTableReaders: { source: string; tables: string[] }[] = [];
+  const uncoveredTableReaders: SensitiveReadCoverageResult["uncoveredTableReaders"] =
+    [];
   const swallowedAudits: { source: string; problem: string }[] = [];
   const usedTableExemptions = new Set<string>();
   let coveredGuardCount = 0;
@@ -503,19 +757,46 @@ export function evaluateSensitiveReadCoverage(
       )
     ];
 
-    if (tables.length > 0 && audited.size === 0) {
+    if (tables.length > 0) {
       const exempt =
         Object.hasOwn(tableExemptions, name) ||
-        name.endsWith("/module.ts") ||
+        isModuleDescriptorFile(name, clean) ||
         sourceNames.length === 0;
 
-      if (Object.hasOwn(tableExemptions, name)) usedTableExemptions.add(name);
+      if (audited.size === 0) {
+        if (Object.hasOwn(tableExemptions, name)) usedTableExemptions.add(name);
 
-      if (!exempt) {
-        unauditedTableReaders.push({ source: name, tables });
+        if (!exempt) {
+          unauditedTableReaders.push({ source: name, tables });
+        }
+      } else if (!exempt) {
+        // It audits something. Per table: does that audit stand for THIS table?
+        const uncovered = tables.filter(
+          (table) => !auditCoversPayrollTable(table, audited)
+        );
+
+        if (uncovered.length > 0) {
+          uncoveredTableReaders.push({
+            source: name,
+            tables: uncovered,
+            needs: Object.fromEntries(
+              uncovered.map((table) => [
+                table,
+                [...(findPayrollTableReadMapping(table)?.permissions ?? [])]
+              ])
+            )
+          });
+        }
       }
     }
   }
+
+  const importCheck = findForbiddenReadImports(
+    sources,
+    sourceNames,
+    options.readFunctionImports ?? PAYROLL_READ_FUNCTION_IMPORTS,
+    (source) => resolveConstantsForSource(source, crossFileConstants)
+  );
 
   // An exemption for a file that IS scanned but no longer names a payroll
   // table. (An exemption for a file that no longer exists is the script's check:
@@ -593,6 +874,9 @@ export function evaluateSensitiveReadCoverage(
       conflictingExemptions.length === 0 &&
       computedGuards.length === 0 &&
       unauditedTableReaders.length === 0 &&
+      uncoveredTableReaders.length === 0 &&
+      importCheck.forbidden.length === 0 &&
+      importCheck.stale.length === 0 &&
       staleSourceExemptions.length === 0 &&
       swallowedAudits.length === 0,
     policyProblems,
@@ -602,6 +886,9 @@ export function evaluateSensitiveReadCoverage(
     conflictingExemptions,
     computedGuards,
     unauditedTableReaders,
+    uncoveredTableReaders,
+    forbiddenReadImports: importCheck.forbidden,
+    staleImportAllowances: importCheck.stale,
     staleSourceExemptions,
     swallowedAudits,
     coveredGuardCount

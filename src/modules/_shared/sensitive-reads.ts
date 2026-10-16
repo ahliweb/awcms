@@ -219,10 +219,127 @@ export const NOT_SENSITIVE_READS: Readonly<Record<string, string>> = {
 export const PAYROLL_TABLE_SOURCE_EXEMPTIONS: Readonly<Record<string, string>> =
   {
     "src/modules/hr-commission/application/hr-commission-accrual-ledger.ts":
-      "the data-access layer of the ledger (writes and reads alike). Its read entry points, listAccruals and getAccrual, are called by the accruals GET routes AND by the POST accrue route (which returns the stored accrual on a replay); each of those call sites calls recordSensitiveRead for hr_commission.accruals.read: the GETs always, the POST on both its replayed branch and its Idempotency-Key replay (tests/hr-commission-read-audit.test.ts)",
+      "the data-access layer of the ledger (writes and reads alike). Its read entry points, listAccruals and getAccrual, are called by the accruals GET routes AND by the POST accrue route (which returns the stored accrual on a replay); each of those call sites calls recordSensitiveRead for hr_commission.accruals.read (and no other file may import those functions: PAYROLL_READ_FUNCTION_IMPORTS, Issue #1015): the GETs always, the POST on both its replayed branch and its Idempotency-Key replay (tests/hr-commission-read-audit.test.ts)",
     "src/modules/hr-workforce/application/hr-workforce-directory.ts":
       "assignAccount runs a single EXISTS over the commission accrual ledger (status not paid or voided) to decide whether re-linking an employment's login needs the ADR-0141 step-up (Issue #1019). It returns one boolean, never a row, an amount, a rule or a status, so no accrual data reaches a caller or a response; the mutation itself is audited at critical with the before/after login ids"
   };
+
+/**
+ * Which permission's audit covers a read of which payroll-boundary table
+ * (Issue #1015, M-A remainder). The first gate asked only "does this file call
+ * `recordSensitiveRead` at all", so a file that audited `compensation.read`
+ * was exempt for EVERY payroll table it read, `payslips` included. The gate now
+ * attributes per table: each payroll table a source names needs an audit call
+ * whose permission is in the list below (an `export` or `download` audit of the
+ * same module also counts: one file out is the loudest record there is).
+ *
+ * First match wins. An EMPTY `permissions` list means no `recordSensitiveRead`
+ * can stand for the table (a payout account's clear disclosure has its own
+ * warning audit row, `payout_accounts.reveal`), so a file naming it must be in
+ * {@link PAYROLL_TABLE_SOURCE_EXEMPTIONS} with the reason. A payroll-boundary
+ * table that matches no entry is the same: default-deny, the mapping is the
+ * decision.
+ */
+export type PayrollTableReadMapping = {
+  table: RegExp;
+  module: string;
+  permissions: readonly string[];
+};
+
+export const PAYROLL_TABLE_READ_PERMISSIONS: readonly PayrollTableReadMapping[] =
+  [
+    {
+      table: /^awcms_hr_commission_(?:accruals?|transitions)$/,
+      module: "hr_commission",
+      permissions: ["hr_commission.accruals.read"]
+    },
+    {
+      table: /payslips?/,
+      module: "hr_payroll",
+      permissions: ["hr_payroll.payslips.read"]
+    },
+    {
+      table: /payouts?/,
+      module: "hr_payroll",
+      permissions: []
+    },
+    {
+      table: /compensations?|salary|salaries|wages?/,
+      module: "hr_payroll",
+      permissions: ["hr_payroll.compensation.read"]
+    },
+    {
+      table: /payrolls?/,
+      module: "hr_payroll",
+      permissions: ["hr_payroll.runs.read"]
+    }
+  ];
+
+/** The mapping that governs `table` (lower-cased, schema-stripped), or undefined. */
+export function findPayrollTableReadMapping(
+  table: string
+): PayrollTableReadMapping | undefined {
+  const name = table.replace(/"/g, "").toLowerCase().split(".").pop()!;
+
+  return PAYROLL_TABLE_READ_PERMISSIONS.find((entry) => entry.table.test(name));
+}
+
+/** True when a `recordSensitiveRead` for any of `audited` stands for a read of `table`. */
+export function auditCoversPayrollTable(
+  table: string,
+  audited: ReadonlySet<string>
+): boolean {
+  const mapping = findPayrollTableReadMapping(table);
+
+  if (!mapping) return false;
+
+  for (const permission of audited) {
+    if (mapping.permissions.includes(permission)) return true;
+
+    const [moduleKey, , action] = permission.split(".");
+
+    if (
+      moduleKey === mapping.module &&
+      mapping.permissions.length > 0 &&
+      (action === "export" || action === "download")
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Read functions of a payroll data-access file that may be imported only by the
+ * files named here (Issue #1015, M-A remainder). The exempt ledger file is
+ * trusted because "its callers audit"; that was a written reason, and nothing
+ * made it true of a NEW caller. Now it is checked: a source that imports one of
+ * `functions` from `source` (named, namespace, default, re-exported, dynamic)
+ * must be in `allowedImporters` AND call `recordSensitiveRead` for
+ * `permission` itself. Tests are not scanned (the gate reads `src/`).
+ */
+export type PayrollReadFunctionImport = {
+  /** Repo path of the data-access file. */
+  source: string;
+  functions: readonly string[];
+  permission: string;
+  allowedImporters: readonly string[];
+};
+
+export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[] =
+  [
+    {
+      source:
+        "src/modules/hr-commission/application/hr-commission-accrual-ledger.ts",
+      functions: ["listAccruals", "getAccrual", "reconcileAccruals"],
+      permission: "hr_commission.accruals.read",
+      allowedImporters: [
+        "src/pages/api/v1/hr-commission/accruals/index.ts",
+        "src/pages/api/v1/hr-commission/accruals/[id].ts"
+      ]
+    }
+  ];
 
 export function findSensitiveReadPolicy(
   permission: string,
