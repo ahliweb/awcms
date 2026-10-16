@@ -8,7 +8,10 @@
  */
 
 /** What a person may see about their own session. Never a token, never a raw IP or User-Agent. */
-import { sessionCredentialCurrent } from "./session-credential-epoch";
+import {
+  currentCredentialEpoch,
+  sessionCredentialCurrent
+} from "./session-credential-epoch";
 
 export type OwnSessionSummary = {
   id: string;
@@ -148,6 +151,32 @@ export async function revokeOwnSession(
   `) as { id: string }[];
 
   return revoked.length > 0 ? { outcome: "revoked" } : { outcome: "not_found" };
+}
+
+/**
+ * Re-stamps ONE session with the person's current credential epoch (#1035).
+ *
+ * Called by `changeOwnPassword` right after `setPrincipalCredential` bumped the
+ * epoch: the bump ends every session of the person, including the one that made
+ * the change, and that caller has just proved the old password. Narrow on
+ * purpose - one token hash, only if it is still unrevoked - so it cannot be used
+ * to resurrect anything else; the epoch it writes is the current one, never a
+ * caller-chosen value.
+ */
+export async function restampOwnSessionAfterCredentialChange(
+  tx: Bun.SQL,
+  tenantId: string,
+  identityId: string,
+  tokenHash: string
+): Promise<void> {
+  await tx`
+    UPDATE awcms_sessions
+    SET credential_epoch = ${currentCredentialEpoch(tx, tenantId, identityId)}
+    WHERE tenant_id = ${tenantId}
+      AND identity_id = ${identityId}
+      AND token_hash = ${tokenHash}
+      AND revoked_at IS NULL
+  `;
 }
 
 export type RevokeOtherOwnSessionsResult =

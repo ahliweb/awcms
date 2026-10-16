@@ -434,9 +434,36 @@ export async function setPrincipalCredentialForIdentity(
   identityId: string,
   passwordHash: string
 ): Promise<void> {
-  const principalId = await resolvePrincipalIdForIdentity(tx, identityId);
+  let principalId = await resolvePrincipalIdForIdentity(tx, identityId);
 
-  if (principalId) await setPrincipalCredential(tx, principalId, passwordHash);
+  if (!principalId) {
+    // #1035 follow-up. An identity that was never linked (ADR-0085's
+    // missed-writer case) is still the same PERSON as the principal of its
+    // address - that is how `login.ts` and `verifyCurrentPassword` find the
+    // credential. Skipping the write here left the reset silently doing nothing
+    // where it matters: login kept verifying the OLD principal credential, the
+    // epoch never moved, and an attacker's old password kept working everywhere.
+    //
+    // So resolve by address exactly as they do, and LINK the identity while we
+    // are here. Linking is what `requirePrincipalIdForEnrollment` already does
+    // for the same case, it is idempotent, and without it the identity's own
+    // sessions never join the epoch check (the fragment joins through
+    // `principal_id`), so the reset could not end them.
+    const rows = (await tx`
+      SELECT login_identifier FROM awcms_identities WHERE id = ${identityId}
+    `) as { login_identifier: string }[];
+    const loginIdentifier = rows[0]?.login_identifier;
+
+    if (!loginIdentifier) return;
+
+    principalId = await linkIdentityToPrincipal(
+      tx,
+      identityId,
+      loginIdentifier
+    );
+  }
+
+  await setPrincipalCredential(tx, principalId, passwordHash);
 }
 
 /**

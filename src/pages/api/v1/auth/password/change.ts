@@ -177,6 +177,28 @@ export const POST = defineSelfServiceTenantRoute<CredentialChangeInput>({
       userAgent: summarizeUserAgent(request)
     };
 
+    if (result.outcome === "locked") {
+      await recordAuditEvent(tx, {
+        tenantId,
+        moduleKey: "identity_access",
+        action: "password_change_failed",
+        resourceType: "identity",
+        resourceId: result.identityId,
+        severity: "warning",
+        message: "Password change refused: the person is locked out.",
+        attributes: { ...source, reason: "locked" }
+      });
+
+      return fail(
+        429,
+        "RATE_LIMITED",
+        "Too many failed attempts. Try again later.",
+        {},
+        undefined,
+        NO_STORE_HEADERS
+      );
+    }
+
     if (result.outcome === "invalid_credentials") {
       // Audited from INSIDE the transaction, which commits — the same shape
       // `reset.ts` uses for a failed redemption. A wrong current password
@@ -188,6 +210,7 @@ export const POST = defineSelfServiceTenantRoute<CredentialChangeInput>({
         moduleKey: "identity_access",
         action: "password_change_failed",
         resourceType: "identity",
+        resourceId: result.identityId,
         severity: "warning",
         message:
           "Password change attempt failed: currentPassword did not match.",

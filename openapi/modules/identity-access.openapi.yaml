@@ -1644,6 +1644,11 @@ paths:
         identifier-keyed bucket would instead let anyone reaching the endpoint
         hold one person's own password change hostage.
 
+        currentPassword is verified exactly as login verifies it (#1035): against the
+        person's own credential once one exists, never against another tenant's
+        stale per-tenant copy. A change replaces that credential for every tenant;
+        the calling session keeps working and the person's sessions elsewhere end - except sessions of an identity in another tenant that was never linked to the person's record, which a change from here cannot reach (they end when that identity is next linked, for example by a reset or an enrolment, or when they expire).
+
         Audited on both the success and the failure, with the device shape and IP
         pseudonym, and with no password-shaped attribute — not even a length.
       requestBody:
@@ -1705,7 +1710,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "429":
-          description: Too many password change attempts from this source.
+          description: Too many password change attempts from this source, or the person is locked out by failed password attempts (a wrong currentPassword counts toward the same principal lockout as a failed login).
           content:
             application/json:
               schema:

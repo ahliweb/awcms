@@ -27,6 +27,7 @@ import { POST as loginPOST } from "../src/pages/api/v1/auth/login";
 import { POST as challengeVerifyPOST } from "../src/pages/api/v1/auth/mfa/totp/verify";
 import { POST as enrollStartPOST } from "../src/pages/api/v1/auth/mfa/totp/enroll/start";
 import { POST as enrollVerifyPOST } from "../src/pages/api/v1/auth/mfa/totp/enroll/verify";
+import { POST as passwordChangePOST } from "../src/pages/api/v1/auth/password/change";
 import { POST as switchPOST } from "../src/pages/api/v1/auth/session/switch";
 import { POST as stepUpPOST } from "../src/pages/api/v1/auth/mfa/step-up";
 import { POST as adminResetPOST } from "../src/pages/api/v1/auth/mfa/admin/reset";
@@ -45,6 +46,13 @@ import {
   linkIdentityToPrincipal,
   setPrincipalCredential
 } from "../src/modules/identity-access/application/principal-store";
+import { completePasswordReset } from "../src/modules/identity-access/application/password-reset";
+import {
+  generateResetToken,
+  hashResetToken
+} from "../src/lib/auth/reset-token";
+import { restampOwnSessionAfterCredentialChange } from "../src/modules/identity-access/application/session-directory";
+import { resolveActiveSession } from "../src/modules/identity-access/application/session-lookup";
 import { PENDING_ENROLLMENT_MAX_FAILURES } from "../src/modules/identity-access/application/mfa";
 
 const DATABASE_URL =
@@ -157,6 +165,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       await sql`DELETE FROM awcms_sessions WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_email_messages WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_email_templates WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_password_reset_tokens WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_audit_events WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_abac_decision_logs WHERE tenant_id = ${tenantId}`;
       // ADR-0078 — bootstrap's owner grant lands in `awcms_access_policies`,
@@ -421,11 +430,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       generateTotpSecret()
     );
     // With a factor, login stops at the challenge; mint a session directly.
-    const sessionToken = await mintSession(
-      tenantId,
-      user.identityId,
-      "password"
-    );
+    const sessionToken = await mintSession(tenantId, user.identityId, "local");
 
     // Even with the correct password: 409, the factor is untouched.
     const res = await callRoute(enrollStartPOST, {
@@ -445,9 +450,11 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   async function mintSession(
     tenantId: string,
     identityId: string,
-    originAuth: "password" | "sso",
+    origin: "local" | "sso",
     lastAuthenticatedAt: Date = new Date()
   ): Promise<string> {
+    // "local" is the password login method; the stored value is 'password'.
+    const originAuth = origin === "sso" ? "sso" : "password";
     const token = `t1004-${crypto.randomUUID()}`;
     await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
     await sql`
@@ -465,8 +472,10 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   async function mintSessionRaw(
     tenantId: string,
     identityId: string,
-    originAuth: "password" | "sso"
+    origin: "local" | "sso"
   ): Promise<string> {
+    // "local" is the password login method; the stored value is 'password'.
+    const originAuth = origin === "sso" ? "sso" : "password";
     const token = `t1004-${crypto.randomUUID()}`;
     await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
     await sql`
@@ -582,7 +591,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
 
   test("#1004 H1: re-authentication uses the CURRENT credential, not a tenant's stale hash", async () => {
     const { tenantB, userB } = await twoTenantsPasswordChangedInA();
-    const token = await mintSession(tenantB, userB.identityId, "password");
+    const token = await mintSession(tenantB, userB.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
 
     // The password this tenant's own row still carries is no longer the password.
@@ -609,7 +618,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
     const principalId = await principalOf(user.identityId);
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
 
     await callRoute(enrollStartPOST, {
@@ -637,7 +646,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   test("#1004 M1: a per-session bucket bounds guesses whatever the source address", async () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
     // Reset the lockout each time so only the bucket can be what stops us.
     let last = 0;
@@ -682,7 +691,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     tenantId: string,
     user: { identityId: string }
   ) {
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
     const start = await callRoute(enrollStartPOST, {
       tenantId,
@@ -713,7 +722,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     const user = await seedUser(tenantId);
     const { bearer, secret } = await startedEnrolment(tenantId, user);
     const other = {
-      authorization: `Bearer ${await mintSession(tenantId, user.identityId, "password")}`
+      authorization: `Bearer ${await mintSession(tenantId, user.identityId, "local")}`
     };
     const code = generateTotpCode(secret, Date.now(), CODE_OPTS);
 
@@ -791,7 +800,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   test("#1004 H3: enroll/verify is rate limited per session", async () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
     let last = 0;
     for (let i = 0; i < 40; i += 1) {
@@ -814,7 +823,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       VALUES (${tenantB}, 'required_for_all')
     `;
     // The attacker holds nothing but a (stolen) password-origin session in A.
-    const stolen = await mintSession(tenantA, userA.identityId, "password");
+    const stolen = await mintSession(tenantA, userA.identityId, "local");
     const switched = await callRoute(switchPOST, {
       tenantId: tenantA,
       ip: nextIp(),
@@ -988,6 +997,288 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       body: { currentPassword: OTHER_PASSWORD }
     });
     expect(current.status).toBe(200);
+  });
+
+  // ---- #1035: password change verifies the CURRENT credential ----
+
+  const NEW_PASSWORD = "brand new passphrase for alice 99";
+
+  function changeCall(
+    tenantId: string,
+    token: string,
+    currentPassword: string,
+    newPassword: string = NEW_PASSWORD
+  ) {
+    return callRoute(passwordChangePOST, {
+      tenantId,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${token}` },
+      body: { currentPassword, newPassword }
+    });
+  }
+
+  async function alicePair() {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const loginIdentifier = `alice-${Math.random().toString(36).slice(2)}`;
+    const userA = await seedUser(tenantA, loginIdentifier);
+    const userB = await seedUser(tenantB, loginIdentifier);
+    return { tenantA, tenantB, userA, userB, loginIdentifier };
+  }
+
+  test("#1035: after Alice changes her password in tenant A, her OLD password is dead in tenant B", async () => {
+    const { tenantA, tenantB, userA, userB, loginIdentifier } =
+      await alicePair();
+    const sessionA = await mintSession(tenantA, userA.identityId, "local");
+
+    const changed = await changeCall(tenantA, sessionA, PASSWORD);
+    expect(changed.status).toBe(200);
+
+    // The attacker's tenant-B session (minted after the change; the epoch bump
+    // ended the ones from before) holds her OLD password.
+    const attackerB = await mintSession(tenantB, userB.identityId, "local");
+    const takeover = await changeCall(
+      tenantB,
+      attackerB,
+      PASSWORD,
+      "attacker chosen passphrase 1"
+    );
+    expect(takeover.status).toBe(400);
+    expect(takeover.body.error.code).toBe("INVALID_CREDENTIALS");
+
+    // And no other current-password check accepts it either (enrolment).
+    const enrol = await callRoute(enrollStartPOST, {
+      tenantId: tenantB,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${attackerB}` },
+      body: { currentPassword: PASSWORD }
+    });
+    expect(enrol.status).toBe(400);
+    expect(enrol.body.error.code).toBe("INVALID_CREDENTIALS");
+
+    // The NEW password logs in in BOTH tenants, the old one in neither.
+    for (const tenantId of [tenantA, tenantB]) {
+      const fresh = await callRoute(loginPOST, {
+        tenantId,
+        ip: nextIp(),
+        body: { loginIdentifier, password: NEW_PASSWORD }
+      });
+      expect(fresh.status).toBe(200);
+      const stale = await callRoute(loginPOST, {
+        tenantId,
+        ip: nextIp(),
+        body: { loginIdentifier, password: PASSWORD }
+      });
+      expect(stale.status).toBe(401);
+    }
+  });
+
+  test("#1035: the caller keeps working after a change, and a change in B with the NEW password succeeds", async () => {
+    const { tenantA, tenantB, userA, userB } = await alicePair();
+    const sessionA = await mintSession(tenantA, userA.identityId, "local");
+    expect((await changeCall(tenantA, sessionA, PASSWORD)).status).toBe(200);
+
+    // Her own session survived the epoch bump (it proved the old password).
+    const stillMine = await callRoute(enrollStartPOST, {
+      tenantId: tenantA,
+      ip: nextIp(),
+      headers: { authorization: `Bearer ${sessionA}` },
+      body: { currentPassword: NEW_PASSWORD }
+    });
+    expect(stillMine.status).toBe(200);
+
+    const sessionB = await mintSession(tenantB, userB.identityId, "local");
+    const second = await changeCall(
+      tenantB,
+      sessionB,
+      NEW_PASSWORD,
+      "yet another passphrase 77"
+    );
+    expect(second.status).toBe(200);
+  });
+
+  test("#1035: wrong current passwords count toward the principal lockout", async () => {
+    const prior = process.env.AUTH_LOGIN_MAX_ATTEMPTS;
+    process.env.AUTH_LOGIN_MAX_ATTEMPTS = "3";
+    try {
+      const { tenantB, userB } = await alicePair();
+      const principalId = await principalOf(userB.identityId);
+      const session = await mintSession(tenantB, userB.identityId, "local");
+
+      for (let i = 0; i < 3; i += 1) {
+        const wrong = await changeCall(tenantB, session, "not the password");
+        expect(wrong.status).toBe(400);
+      }
+      const rows = (await sql`
+        SELECT failed_login_count, locked_until FROM awcms_principals WHERE id = ${principalId}
+      `) as { failed_login_count: number; locked_until: Date | null }[];
+      expect(rows[0]!.failed_login_count).toBe(3);
+      expect(rows[0]!.locked_until).not.toBeNull();
+
+      // Locked: even the right password is refused, and nothing changed.
+      const locked = await changeCall(tenantB, session, PASSWORD);
+      expect(locked.status).toBe(429);
+    } finally {
+      if (prior === undefined) delete process.env.AUTH_LOGIN_MAX_ATTEMPTS;
+      else process.env.AUTH_LOGIN_MAX_ATTEMPTS = prior;
+    }
+  });
+
+  test("#1035: the audit trail records the change and the refusal with no secrets", async () => {
+    const { tenantA, userA } = await alicePair();
+    const session = await mintSession(tenantA, userA.identityId, "local");
+
+    expect((await changeCall(tenantA, session, "wrong guess 123")).status).toBe(
+      400
+    );
+    expect((await changeCall(tenantA, session, PASSWORD)).status).toBe(200);
+
+    const rows = (await sql`
+      SELECT action, severity, message, attributes::text AS attributes
+      FROM awcms_audit_events
+      WHERE tenant_id = ${tenantA}
+        AND action IN ('password_changed', 'password_change_failed')
+    `) as {
+      action: string;
+      severity: string;
+      message: string;
+      attributes: string;
+    }[];
+
+    expect(rows.map((row) => row.action).sort()).toEqual([
+      "password_change_failed",
+      "password_changed"
+    ]);
+    for (const row of rows) {
+      const blob = `${row.message} ${row.attributes}`;
+      for (const secret of [
+        PASSWORD,
+        NEW_PASSWORD,
+        "wrong guess 123",
+        "$argon2"
+      ]) {
+        expect(blob).not.toContain(secret);
+      }
+    }
+  });
+
+  test("#1035 follow-up: a reset on an UNLINKED identity still replaces the principal credential everywhere", async () => {
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const loginIdentifier = `reset-${Math.random().toString(36).slice(2)}`;
+    const userA = await seedUser(tenantA, loginIdentifier);
+    const userB = await seedUser(tenantB, loginIdentifier);
+    const principalId = await principalOf(userA.identityId);
+    // The person's live credential is the PRINCIPAL's (the leaked password).
+    await setPrincipalCredential(
+      sql,
+      principalId,
+      await hashPassword(PASSWORD)
+    );
+
+    // Tenant B's identity was never linked (the missed-writer case).
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantB}, false)`;
+    await sql`UPDATE awcms_identities SET principal_id = NULL WHERE id = ${userB.identityId}`;
+    const oldSessionA = await mintSession(tenantA, userA.identityId, "local");
+    const oldSessionB = await mintSessionRaw(
+      tenantB,
+      userB.identityId,
+      "local"
+    );
+
+    const rawToken = generateResetToken();
+    await sql`
+      INSERT INTO awcms_password_reset_tokens (tenant_id, identity_id, token_hash, expires_at)
+      VALUES (${tenantB}, ${userB.identityId}, ${hashResetToken(rawToken)}, now() + interval '30 minutes')
+    `;
+    const reset = await completePasswordReset(
+      sql,
+      tenantB,
+      rawToken,
+      NEW_PASSWORD,
+      new Date()
+    );
+    expect(reset.outcome).toBe("success");
+
+    // The identity is now linked, so its sessions join the epoch check.
+    const linked =
+      (await sql`SELECT principal_id FROM awcms_identities WHERE id = ${userB.identityId}`) as {
+        principal_id: string | null;
+      }[];
+    expect(linked[0]!.principal_id).toBe(principalId);
+
+    for (const tenantId of [tenantA, tenantB]) {
+      const fresh = await callRoute(loginPOST, {
+        tenantId,
+        ip: nextIp(),
+        body: { loginIdentifier, password: NEW_PASSWORD }
+      });
+      expect(fresh.status).toBe(200);
+      const stale = await callRoute(loginPOST, {
+        tenantId,
+        ip: nextIp(),
+        body: { loginIdentifier, password: PASSWORD }
+      });
+      expect(stale.status).toBe(401);
+    }
+
+    // Sessions from before the reset are dead in both tenants.
+    expect(
+      await resolveActiveSession(
+        sql,
+        tenantA,
+        hashSessionToken(oldSessionA),
+        new Date()
+      )
+    ).toBeNull();
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantB}, false)`;
+    expect(
+      await resolveActiveSession(
+        sql,
+        tenantB,
+        hashSessionToken(oldSessionB),
+        new Date()
+      )
+    ).toBeNull();
+  });
+
+  test("#1035 L1: re-stamping the caller's session resurrects no other session of the same identity", async () => {
+    const tenantId = await createTenant();
+    const user = await seedUser(tenantId);
+    const principalId = await principalOf(user.identityId);
+    const mine = await mintSession(tenantId, user.identityId, "local");
+    const thiefs = await mintSession(tenantId, user.identityId, "local");
+
+    // The credential changes: both sessions are now behind the new epoch.
+    await setPrincipalCredential(
+      sql,
+      principalId,
+      await hashPassword(NEW_PASSWORD)
+    );
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+    await restampOwnSessionAfterCredentialChange(
+      sql,
+      tenantId,
+      user.identityId,
+      hashSessionToken(mine)
+    );
+
+    expect(
+      await resolveActiveSession(
+        sql,
+        tenantId,
+        hashSessionToken(mine),
+        new Date()
+      )
+    ).not.toBeNull();
+    expect(
+      await resolveActiveSession(
+        sql,
+        tenantId,
+        hashSessionToken(thiefs),
+        new Date()
+      )
+    ).toBeNull();
   });
 
   test("F7: login -> MFA -> stale step-up blocks admin action -> step-up -> action succeeds", async () => {

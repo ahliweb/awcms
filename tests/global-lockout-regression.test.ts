@@ -109,14 +109,16 @@ describe("recovery moved with the writer", () => {
     expect(await code(RESET)).toContain("setPrincipalCredentialForIdentity(");
   });
 
-  test("password change does the same, via the id it already read", async () => {
+  test("password change does the same, via the principal the shared verifier already resolved", async () => {
     const source = await code(CHANGE);
 
     expect(source).toMatch(/setPrincipalCredential\(\s*\n?\s*tx/);
-    // It must NOT pay for a second identity read to find the principal: the
-    // first shape did, and the extra statement moved a neighbouring test's
-    // revoked-session count from 2 to 0.
-    expect(source).toContain("SELECT password_hash, principal_id");
+    // #1035: the current password is checked by the ONE shared verifier (the
+    // login rule), which also returns the principal it resolved, so the change
+    // neither pays for a second identity read nor reads a per-tenant hash itself.
+    expect(source).toContain("verifyCurrentPassword(");
+    expect(source).toContain("verified.principalId");
+    expect(source).not.toContain("SELECT password_hash");
   });
 
   test("a successful login clears it too", async () => {
