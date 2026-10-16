@@ -486,6 +486,22 @@ async function activateWorkerRole(): Promise<void> {
 }
 
 /**
+ * Re-asserts the LOGIN grant on the two cluster-scoped runtime roles. They are
+ * shared by every process on the cluster, and another process's teardown puts
+ * them back to NOLOGIN, so a LONG-running consumer (the `bench:booking`
+ * benchmark, minutes) that opens a NEW connection late can find them shut.
+ * Idempotent and the same statement setup runs; a short test file never needs it.
+ */
+export async function reassertRuntimeRoleLogins(): Promise<void> {
+  if (!integrationEnabled) {
+    return;
+  }
+
+  await activateAppRole();
+  await activateWorkerRole();
+}
+
+/**
  * `beforeAll` entry point for WORLD-1 files. Ref-counted + memoized: the first
  * caller provisions role + database + schema + `awcms_app`; later files reuse
  * it until the ref-count drops to zero. Does NOT touch `process.env`.

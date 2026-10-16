@@ -38,6 +38,7 @@
     "build:inline-scripts:check": "bun scripts/build-inline-script-check.ts",
     "build:server-entry": "bun build src/lib/server/standalone-entry.ts --target=bun --outfile=dist/standalone-entry.mjs",
     "build:asset-budget:check": "bun scripts/client-asset-budget.ts",
+    "bench:booking": "bun scripts/bench-booking.ts",
     "build:preview-overlay": "bun scripts/build-preview-overlay.ts",
     "build:preview-overlay:check": "bun scripts/build-preview-overlay.ts --check",
     "preview": "bun --bun astro preview",
