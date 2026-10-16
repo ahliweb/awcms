@@ -7,10 +7,11 @@
  * only rows past the 30-day default, leaves recent rows (and the 24 hour
  * `legacy:unscoped` window) alone, and never crosses tenants.
  *
- * No extra grants are made (Issue #1040): the worker cannot SELECT the delegated
- * tables (inventory, procurement, HR, booking) and must not be able to, so their
- * dry-run snapshots fail, are recorded as `failed` runs, and the generic purge
- * still runs.
+ * No extra grants are made: the worker cannot SELECT the delegated tables
+ * (inventory, procurement, HR, booking) and must not be able to. Since #1042
+ * their dry-run snapshots read ONE integer through the count-only SECURITY
+ * DEFINER functions of sql/303, so they are recorded as `completed` runs with
+ * counts, and the generic purge still runs.
  *
  * Gated on `DATABASE_URL` (harness section Gating).
  */
@@ -96,6 +97,10 @@ suite("idempotency keys retention (integration)", () => {
       return;
     }
 
+    await getAdminSql()`
+      INSERT INTO awcms_inventory_settings (tenant_id, created_at)
+      VALUES (${TENANT_A}, now() - interval '7300 days')
+    `;
     await seed(TENANT_A, "old-user", "user:u-1", 45);
     await seed(TENANT_A, "old-legacy", "legacy:unscoped", 45);
     await seed(TENANT_A, "recent-user", "user:u-1", 5);
@@ -114,25 +119,50 @@ suite("idempotency keys retention (integration)", () => {
 
     expect(result.totalPurged).toBeGreaterThanOrEqual(3);
 
-    // The delegated snapshots failed with 42501 on baseline tables: they are
-    // EXPECTED, counted as known-unreadable, and do not make the job partial.
+    // The delegated snapshots go through the count-only functions (Issue
+    // #1042, sql/303): nothing fails, nothing is skipped as known-unreadable,
+    // and each delegated descriptor is recorded as a COMPLETED dry run.
     expect(result.descriptorFailures).toEqual([]);
-    expect(result.knownUnreadableDelegated).toContain(
-      `${TENANT_A}:inventory.movements`
-    );
-    expect(result.knownUnreadableDelegated.length).toBe(
-      KNOWN_UNREADABLE_DELEGATED_TABLES.length * 2
-    );
+    expect(result.knownUnreadableDelegated).toEqual([]);
+    expect(KNOWN_UNREADABLE_DELEGATED_TABLES).toEqual([]);
     expect(summarizeArchivePurgeOutcome(result).status).toBe("success");
-    // Each is still recorded, as a failed dry-run with errorCount 1.
     const failed = (await getAdminSql()`
-      SELECT descriptor_key, run_type, error_count
-      FROM awcms_data_lifecycle_runs
+      SELECT 1 FROM awcms_data_lifecycle_runs
       WHERE tenant_id = ${TENANT_A} AND status = 'failed'
-    `) as { descriptor_key: string; run_type: string; error_count: number }[];
-    expect(failed.length).toBe(KNOWN_UNREADABLE_DELEGATED_TABLES.length);
-    expect(failed.every((r) => r.run_type === "dry_run")).toBe(true);
-    expect(failed.every((r) => r.error_count === 1)).toBe(true);
+    `) as unknown[];
+    expect(failed.length).toBe(0);
+    const snapshots = (await getAdminSql()`
+      SELECT descriptor_key, eligible_count, purgeable_count
+      FROM awcms_data_lifecycle_runs
+      WHERE tenant_id = ${TENANT_A} AND status = 'completed'
+        AND run_type = 'dry_run'
+        AND descriptor_key IN ('inventory.movements', 'inventory.settings',
+          'procurement.documents', 'hr_workforce.shift_assignments',
+          'booking.reservations')
+      ORDER BY descriptor_key
+    `) as {
+      descriptor_key: string;
+      eligible_count: number;
+      purgeable_count: number;
+    }[];
+    expect(snapshots.map((r) => r.descriptor_key)).toEqual([
+      "booking.reservations",
+      "hr_workforce.shift_assignments",
+      "inventory.movements",
+      "inventory.settings",
+      "procurement.documents"
+    ]);
+    // The seeded settings row is 20 years old: counted, never read.
+    const settings = snapshots.find(
+      (r) => r.descriptor_key === "inventory.settings"
+    );
+    expect(settings?.eligible_count).toBe(1);
+    expect(settings?.purgeable_count).toBe(1);
+    expect(
+      snapshots.find((r) => r.descriptor_key === "inventory.movements")
+        ?.eligible_count
+    ).toBe(0);
+
     // The generic idempotency purge ran and is recorded as completed.
     const completed = (await getAdminSql()`
       SELECT 1 FROM awcms_data_lifecycle_runs
@@ -156,5 +186,47 @@ suite("idempotency keys retention (integration)", () => {
     );
 
     expect(await keysOf(TENANT_A)).toContain("old-dry");
+  });
+
+  test("the count functions return one integer and open nothing else", async () => {
+    if (!workerRoleActivated) return;
+
+    await getAdminSql()`
+      INSERT INTO awcms_inventory_settings (tenant_id, created_at)
+      VALUES (${TENANT_A}, now() - interval '7300 days')
+      ON CONFLICT (tenant_id) DO NOTHING
+    `;
+
+    const worker = getWorkerRoleSql();
+    const cutoff = new Date();
+
+    // No row-level SELECT was granted: the table itself stays closed.
+    await expect(
+      (async () =>
+        await worker`SELECT count(*) FROM awcms_inventory_settings`)()
+    ).rejects.toThrow(/permission denied/i);
+
+    const count = async (tenant: string, table: string, asTenant = tenant) =>
+      worker.begin(async (tx) => {
+        await tx`SELECT set_config('app.current_tenant_id', ${asTenant}, true)`;
+        const rows = (await tx`
+          SELECT awcms_inventory_lifecycle_eligible_count(
+            ${table}, ${tenant}::uuid, ${cutoff}::timestamptz) AS n
+        `) as { n: number }[];
+        return rows[0]!.n;
+      });
+
+    expect(await count(TENANT_A, "awcms_inventory_settings")).toBe(1);
+    // Naming another tenant's id inside this tenant's context sees nothing.
+    expect(await count(TENANT_A, "awcms_inventory_settings", TENANT_B)).toBe(0);
+    expect(await count(TENANT_B, "awcms_inventory_settings")).toBe(0);
+
+    // A table that is not one of the module's descriptors is refused.
+    await expect(count(TENANT_A, "awcms_identities")).rejects.toThrow(
+      /not one of this module/i
+    );
+    await expect(count(TENANT_A, "awcms_hr_payroll_runs")).rejects.toThrow(
+      /not one of this module/i
+    );
   });
 });

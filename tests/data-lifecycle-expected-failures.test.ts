@@ -5,7 +5,14 @@
  * A delegated snapshot of a baseline table failing with 42501 must not make the
  * daily job exit non-zero (a permanent false alarm). Anything else must.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test
+} from "bun:test";
 
 import { applyJobExitCode } from "../src/lib/jobs/job-runner";
 import type { JobResult } from "../src/lib/jobs/job-runner";
@@ -17,7 +24,20 @@ import {
 } from "../src/modules/data-lifecycle/application/archive-purge-job";
 import { KNOWN_UNREADABLE_DELEGATED_TABLES } from "../src/modules/data-lifecycle/domain/known-unreadable-delegated";
 
-const BASELINE_TABLE = KNOWN_UNREADABLE_DELEGATED_TABLES[0]!;
+// The shipped baseline is EMPTY since #1042 (count-only functions, sql/303), but
+// the mechanism stays; exercise it with a fixture entry added for this file only.
+const BASELINE_TABLE = "awcms_fixture_unreadable_delegated";
+
+beforeAll(() => {
+  KNOWN_UNREADABLE_DELEGATED_TABLES.push(BASELINE_TABLE);
+});
+
+afterAll(() => {
+  KNOWN_UNREADABLE_DELEGATED_TABLES.splice(
+    KNOWN_UNREADABLE_DELEGATED_TABLES.indexOf(BASELINE_TABLE),
+    1
+  );
+});
 
 function pgError(sqlstate: string): Error {
   return Object.assign(new Error("secret row text must never be logged"), {
