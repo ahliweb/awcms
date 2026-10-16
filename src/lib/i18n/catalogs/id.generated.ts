@@ -1663,6 +1663,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Push Delivery": ["Pengiriman Push"],
   "Push delivery is switched off on this deployment ({setting} is not {value}), so the dispatcher claims nothing and no notification will be sent. This is the expected state on an offline/LAN deployment.": ["Pengiriman push dimatikan pada deployment ini ({setting} bukan {value}), jadi dispatcher tidak mengklaim apa pun dan tidak ada notifikasi yang akan dikirim. Ini keadaan yang diharapkan pada deployment offline/LAN."],
   "Push is enabled but no valid VAPID key pair is configured, so a browser cannot subscribe. Generate one with": ["Push aktif tetapi tidak ada pasangan kunci VAPID valid yang dikonfigurasi, sehingga peramban tidak bisa berlangganan. Hasilkan satu dengan"],
+  "Push is enabled but no valid auth-secret key ring ({setting}) is configured, so a browser cannot subscribe: its subscription secret could not be stored.": ["Push diaktifkan tetapi tidak ada cincin kunci rahasia-auth yang valid ({setting}), jadi peramban tidak dapat berlangganan: rahasia langganannya tidak dapat disimpan."],
   "Push notifications": ["Notifikasi push"],
   "Quantity": ["Jumlah"],
   "Quantity and cost are exact decimals (up to 6 decimals). A receipt and a supplier return need a unit cost; an item appears once per document.": ["Jumlah dan biaya adalah desimal persis (hingga 6 desimal). Penerimaan dan retur pemasok memerlukan biaya satuan; satu barang muncul sekali per dokumen."],

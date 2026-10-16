@@ -80,6 +80,10 @@ The VAPID token is cached per **origin**, so one batch of 500 Firefox subscriber
 
 `bun run push:vapid:generate` prints one key pair in exactly the shape `.env` wants — together with the warning that **rotating it does not re-key existing subscriptions**, it makes all of them permanently undeliverable until their users subscribe again.
 
+## The Web Push auth secret is encrypted at rest
+
+The RFC 8291 `auth_secret` is stored as `auth_secret_ciphertext` (AES-256-GCM, ADR-0137 helper, ring `PUSH_AUTH_SECRET_ENCRYPTION_KEYS`, AAD = tenant + `endpoint_hash`; Issue #1089, `sql/314`). Registration fails closed (`503 PUSH_MISCONFIGURED`) without the ring; the dispatcher decrypts and falls back to the legacy plaintext column only for a row with no ciphertext; `bun run push:auth-secret:backfill` converts the remainder. Full design, trade-offs and the rollout order: [`docs/awcms/push-notifications.md`](../../../docs/awcms/push-notifications.md).
+
 ## HTTP surface
 
 Two classes of endpoint, and the split is an authorization decision — not file arrangement.

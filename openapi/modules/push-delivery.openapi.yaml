@@ -119,6 +119,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "503":
+          description: >-
+            Code PUSH_MISCONFIGURED. A web_push registration needs the
+            PUSH_AUTH_SECRET_ENCRYPTION_KEYS key ring (the RFC 8291 auth secret
+            is stored encrypted, never in the clear) and the deployment has none
+            usable. Fail closed: nothing is stored. The GET capability reports
+            webPush.enabled=false in the same situation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/push/subscriptions/{id}:
     delete:
       operationId: revokeOwnPushSubscription

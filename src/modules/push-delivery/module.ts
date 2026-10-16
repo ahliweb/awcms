@@ -90,6 +90,21 @@ export const pushDeliveryModule = defineModule({
   ],
   jobs: [
     {
+      command: "bun run push:auth-secret:backfill",
+      schedule: {
+        mode: "manual",
+        because:
+          "A one-time data migration (Issue #1089) run during the rollout that encrypts the RFC 8291 auth secret at rest, after PUSH_AUTH_SECRET_ENCRYPTION_KEYS is set and the release is deployed. Re-running is harmless (idempotent) but pointless once `security:readiness` reports zero plaintext rows, so a timer would be dead weight."
+      },
+      purpose:
+        "Encrypt every legacy plaintext `awcms_push_subscriptions.auth_secret` under the key ring and NULL the plaintext, in bounded keyset batches. Idempotent and resumable; refuses to run (exit 1) without the key ring.",
+      recommendedSchedule:
+        "once per deployment, right after the release that adds auth_secret_ciphertext; verify with `bun run security:readiness`",
+      environmentNotes:
+        "Pure PostgreSQL operation as `awcms_worker` (UPDATE on exactly auth_secret and auth_secret_ciphertext, sql/314) - no network egress. Needs PUSH_AUTH_SECRET_ENCRYPTION_KEYS. Safe in offline/LAN deployments.",
+      safeInOfflineLan: true
+    },
+    {
       command: "bun run push:dispatch",
       schedule: {
         mode: "cron",
@@ -147,7 +162,12 @@ export const pushDeliveryModule = defineModule({
       erasure: "hard_delete",
       rationale:
         "Which devices this person registered for notifications, with the browser summary captured at registration. Exported as the masked endpoint so they can recognise a device they no longer use; deleted on erasure because a surviving subscription is a working line to them.",
-      redactedColumns: ["endpoint", "endpoint_hash", "auth_secret"]
+      redactedColumns: [
+        "endpoint",
+        "endpoint_hash",
+        "auth_secret",
+        "auth_secret_ciphertext"
+      ]
     },
     {
       key: "push_delivery.push_messages",

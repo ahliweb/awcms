@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:20418139fefabfe6c3394dc97e727589072a1c07df1086671f8684f71e1369ce -->
+<!-- i18n-source-hash: sha256:ae93056164bac2fb6bcc8ec4b260ec0f6f2318427bc03791f8a31000bee598a2 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-145 target menjalankan berkas di `scripts/`; 63 di antaranya
+146 target menjalankan berkas di `scripts/`; 63 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -147,6 +147,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `payroll:sql-boundary:check`              | `payroll-sql-boundary-check.ts`                | ✅   |
 | `project-state:inventory:check`           | `project-state-inventory.ts`                   | ✅   |
 | `project-state:inventory:generate`        | `project-state-inventory.ts`                   | —    |
+| `push:auth-secret:backfill`               | `push-auth-secret-backfill.ts`                 | —    |
 | `push:dispatch`                           | `push-dispatch.ts`                             | —    |
 | `push:queue:purge`                        | `push-queue-purge.ts`                          | —    |
 | `push:vapid:generate`                     | `push-vapid-generate.ts`                       | —    |

@@ -50,6 +50,7 @@ import {
   type PushSubscriptionSummary
 } from "../../modules/push-delivery/application/subscription-directory";
 import { isPushEnabled } from "../../modules/push-delivery/domain/push-config";
+import { resolvePushAuthSecretRing } from "../../modules/push-delivery/domain/push-auth-secret";
 import { parseVapidConfig } from "../../modules/push-delivery/domain/vapid-config";
 import { getTranslatorFor } from "../../lib/i18n";
 
@@ -131,7 +132,10 @@ const canSendTest = screen.state === "allowed" && screen.data.canSendTest;
 const vapid = parseVapidConfig(process.env);
 const pushEnabled = isPushEnabled();
 const applicationServerKey = vapid.ok ? vapid.config.publicKey : "";
-const webPushReady = pushEnabled && vapid.ok;
+// Issue #1089: with no auth-secret key ring a registration is refused (503), so
+// the browser must not be offered a subscription it could not store.
+const authSecretRingOk = resolvePushAuthSecretRing(process.env).ok;
+const webPushReady = pushEnabled && vapid.ok && authSecretRingOk;
 
 const STATUS_VARIANT: Record<string, string> = {
   queued: "info",
@@ -247,6 +251,15 @@ const messageColumns = canCancel ? 8 : 7;
             {t("Then set the three")}
             <code>{t("PUSH_VAPID_*")}</code>
             {t("variables.")}
+          </p>
+        )}
+
+        {pushEnabled && vapid.ok && !authSecretRingOk && (
+          <p class="state-notice" id="push-notifications-no-key-ring">
+            {t(
+              "Push is enabled but no valid auth-secret key ring ({setting}) is configured, so a browser cannot subscribe: its subscription secret could not be stored.",
+              { setting: "PUSH_AUTH_SECRET_ENCRYPTION_KEYS" }
+            )}
           </p>
         )}
 

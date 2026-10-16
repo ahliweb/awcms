@@ -16,6 +16,7 @@ import {
 } from "../../../../../modules/push-delivery/application/subscription-directory";
 import { validateSubscriptionInput } from "../../../../../modules/push-delivery/domain/subscription-input";
 import { isPushEnabled } from "../../../../../modules/push-delivery/domain/push-config";
+import { resolvePushAuthSecretRing } from "../../../../../modules/push-delivery/domain/push-auth-secret";
 import { parseVapidConfig } from "../../../../../modules/push-delivery/domain/vapid-config";
 import { summarizeUserAgent } from "../../../../../lib/security/client-fingerprint";
 
@@ -102,6 +103,13 @@ function webPushCapability(): {
 
   const vapid = parseVapidConfig(process.env);
 
+  // Issue #1089: with no auth-secret key ring a registration would be refused
+  // (503), so the capability is reported OFF and the client never offers a
+  // subscription it could not store.
+  if (!resolvePushAuthSecretRing(process.env).ok) {
+    return { enabled: false, applicationServerKey: null };
+  }
+
   return vapid.ok
     ? { enabled: true, applicationServerKey: vapid.config.publicKey }
     : { enabled: false, applicationServerKey: null };
@@ -176,11 +184,33 @@ export const POST = defineSelfServiceTenantRoute({
       );
     }
 
-    const subscription = await registerPushSubscription(tx, tenantId, {
-      tenantUserId: principal.context.tenantUserId,
-      ...validation.value,
-      userAgentSummary: summarizeUserAgent(request)
-    });
+    // Issue #1089: the auth secret is stored as ciphertext ONLY. No key ring
+    // means no registration: fail closed (503) instead of writing the secret
+    // in the clear. A plaintext fallback would also keep adding rows the
+    // backfill has to chase, so the rollout could never converge.
+    const authSecretRing = resolvePushAuthSecretRing(process.env);
+
+    if (validation.value.authSecret !== undefined && !authSecretRing.ok) {
+      return fail(
+        503,
+        "PUSH_MISCONFIGURED",
+        "Push notifications are not fully configured on this deployment, so this device cannot be registered.",
+        {},
+        undefined,
+        NO_STORE_HEADERS
+      );
+    }
+
+    const subscription = await registerPushSubscription(
+      tx,
+      tenantId,
+      {
+        tenantUserId: principal.context.tenantUserId,
+        ...validation.value,
+        userAgentSummary: summarizeUserAgent(request)
+      },
+      authSecretRing.ok ? authSecretRing : undefined
+    );
 
     // 201 even when the row already existed and was merely re-activated.
     // Browsers re-issue `PushManager.subscribe()` on every page load once
