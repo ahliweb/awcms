@@ -809,13 +809,34 @@ export async function authorizeInTransaction(
       )
     : null;
 
+  // Issue #181 — segregation-of-duties conflict enforcement, deny-only and
+  // additive to the ABAC decision (it can only turn an already-`allowed`
+  // HIGH-RISK decision into a deny). ACTION-TIME enforcement; see
+  // `high-risk-sod-guard.ts`. Evaluated BEFORE the decision-log write and folded
+  // into the logged decision (like the MFA refusal) so a SoD block is recorded
+  // as a deny with its reason, never as an allow contradicting the 403.
+  const sodCheck =
+    rbacDecision.allowed && !mfaRefusal && isHighRiskAction(guard.action)
+      ? await checkHighRiskSoDConflicts(tx, tenantId, context, guard, now, {
+          hierarchyPort: options?.hierarchyPort,
+          rules: options?.sodRules
+        })
+      : null;
+  const sodBlock = sodCheck?.blocked ? sodCheck : null;
+
   const decision = mfaRefusal
     ? {
         allowed: false,
         reason: mfaRefusal.message,
         matchedPolicy: MFA_ENROLMENT_REQUIRED_POLICY
       }
-    : rbacDecision;
+    : sodBlock
+      ? {
+          allowed: false,
+          reason: sodBlock.reason,
+          matchedPolicy: "sod_conflict"
+        }
+      : rbacDecision;
 
   await recordDecisionLog(
     tx,
@@ -841,37 +862,18 @@ export async function authorizeInTransaction(
     };
   }
 
+  if (sodBlock) {
+    return {
+      allowed: false,
+      denied: fail(403, "SOD_CONFLICT", sodBlock.reason)
+    };
+  }
+
   if (!decision.allowed) {
     return {
       allowed: false,
       denied: fail(403, "ACCESS_DENIED", decision.reason)
     };
-  }
-
-  // Issue #181 — segregation-of-duties conflict enforcement, additive to the
-  // ordinary ABAC decision above (deny-overrides-allow: this can only turn an
-  // already-`allowed` HIGH-RISK decision into a deny, never the reverse). This
-  // is ACTION-TIME enforcement — a subject holding both halves of a registered
-  // conflict is denied at execution, not only at assignment. See
-  // `high-risk-sod-guard.ts`'s header (it reasons about permissions held via
-  // BOTH the business-scope-assignment path AND ordinary RBAC role grants, and
-  // short-circuits at zero cost when no rule references the requested key).
-  if (isHighRiskAction(guard.action)) {
-    const sodCheck = await checkHighRiskSoDConflicts(
-      tx,
-      tenantId,
-      context,
-      guard,
-      now,
-      { hierarchyPort: options?.hierarchyPort, rules: options?.sodRules }
-    );
-
-    if (sodCheck.blocked) {
-      return {
-        allowed: false,
-        denied: fail(403, "SOD_CONFLICT", sodCheck.reason)
-      };
-    }
   }
 
   return {

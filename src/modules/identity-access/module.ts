@@ -146,7 +146,10 @@ export const identityAccessModule = defineModule({
     {
       labelKey: "admin.layout.nav_registrations",
       path: "/admin/registrations",
-      order: 23,
+      // 44, not 23: `nav_access_policies` holds 23, and 20–43 are all taken
+      // across modules; two entries with the same order leave the sidebar's
+      // sequence to whatever the sort happened to do that build.
+      order: 44,
       requiredPermission: "identity_access.registration_requests.read"
     },
     // Same reasoning as the entry above, different key: `sso_policy` seeds its

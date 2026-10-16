@@ -63,6 +63,7 @@ async function fetchPolicyById(
     SELECT id, policy_code, effect, description, is_active
     FROM awcms_abac_policies
     WHERE tenant_id = ${tenantId} AND id = ${policyId}
+      AND is_dsl_managed = false
   `) as AbacPolicyRow[];
   return rows[0] ?? null;
 }
@@ -152,6 +153,7 @@ export async function updatePolicy(
       is_active = ${nextIsActive},
       updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${policyId}
+      AND is_dsl_managed = false
     RETURNING id, policy_code, effect, description, is_active
   `) as AbacPolicyRow[];
 
