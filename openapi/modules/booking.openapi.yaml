@@ -2876,6 +2876,19 @@ components:
         truncated:
           type: boolean
           description: True when more slots exist than `limit` returned.
+        staffAvailability:
+          type: string
+          enum:
+            - checked
+            - unchecked
+          description: |
+            `checked` when the resource names the people who serve it
+            (`required_staff_refs`) AND the workforce capability (`hr_workforce`)
+            is on for the tenant: every slot listed has at least one such person
+            working for the whole service interval and not already serving a live
+            claim. `unchecked` otherwise (no staff constraint at all). The answer
+            is advisory; a claim that finds no free person is refused
+            `SLOT_UNAVAILABLE` with nothing allocated.
     BookingStayAvailability:
       type: object
       properties:

@@ -85,6 +85,7 @@ import {
   deriveStay
 } from "../domain/booking-stay";
 import { parseLocalTime } from "../domain/booking-time";
+import type { StaffAvailabilityConsumer } from "../domain/booking-staff-availability";
 import { asUuid } from "../domain/booking-validation";
 import {
   ContentionError,
@@ -98,6 +99,7 @@ import {
   type PendingReservationEvent
 } from "./booking-event-emit";
 import { reclaimExpiredHolds } from "./booking-hold-expiry";
+import { claimStaff } from "./booking-staff-claim";
 
 type Sql = Bun.SQL;
 
@@ -106,6 +108,13 @@ export type PlaceHoldContext = {
   /** The acting tenant user, for the stamps and the audit row; `null` for a system caller. */
   actorTenantUserId: string | null;
   correlationId?: string;
+  /**
+   * The staff constraint (Issue #949), resolved by the composition root: a real
+   * consumer only when `hr_workforce` is on for the tenant, else
+   * `NO_OP_STAFF_AVAILABILITY`. REQUIRED, with no default: a caller that forgets
+   * it would silently skip the constraint, so "no constraint" must be spelled.
+   */
+  staff: StaffAvailabilityConsumer;
 };
 
 /**
@@ -556,6 +565,28 @@ async function writeClaim(
     resourceIds,
     quantity: input.quantity
   });
+
+  // Staff (Issue #949): a slot resource that names the people who serve it needs
+  // one of them, won in THIS savepoint under the staff exclusion constraint. No
+  // free person is the same refusal as no free unit, and the savepoint takes the
+  // units and the reservation down with it.
+  if (window.kind === "time") {
+    const staffWon = await claimStaff(tx, ctx.staff, {
+      tenantId: ctx.tenantId,
+      itemId: items[0]!.id,
+      resourceIds: [...new Set(units.map((unit) => unit.resourceId))],
+      startsIso: window.startsIso,
+      endsIso: window.endsIso,
+      ...(ctx.correlationId ? { correlationId: ctx.correlationId } : {})
+    });
+
+    if (!staffWon) {
+      throw new PlacementRefusedError(
+        "SLOT_UNAVAILABLE",
+        "That time is no longer available."
+      );
+    }
+  }
 
   // The caps are checked AFTER the units are won, not before. The tenant lock
   // below is held until commit, so taking it first would serialise every hold of

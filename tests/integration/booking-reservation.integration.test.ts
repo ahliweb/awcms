@@ -26,6 +26,7 @@
  *
  * Gated on `DATABASE_URL` (harness section Gating).
  */
+import { NO_OP_STAFF_AVAILABILITY } from "../../src/modules/booking/domain/booking-staff-availability";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
@@ -52,11 +53,12 @@ import {
   type TransitionAction,
   type TransitionOutcome
 } from "../../src/modules/booking/application/booking-reservation-service";
-import { bookingPort } from "../../src/modules/booking/application/booking-port-adapter";
+import { createBookingPort } from "../../src/modules/booking/application/booking-port-adapter";
 import type { PlaceHoldInput } from "../../src/modules/booking/domain/booking-allocation";
 
 const TENANT_A = "b9410000-0000-4000-8000-00000000000a";
 const TENANT_B = "b9410000-0000-4000-8000-00000000000b";
+const bookingPort = createBookingPort(async () => NO_OP_STAFF_AVAILABILITY);
 const ACTORS = new Map<string, string>();
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -94,6 +96,7 @@ function workerTx<T>(
 function ctxOf(tenantId: string) {
   return {
     tenantId,
+    staff: NO_OP_STAFF_AVAILABILITY,
     actorTenantUserId: ACTORS.get(tenantId)!,
     correlationId: crypto.randomUUID()
   };
@@ -1396,6 +1399,7 @@ suite("booking reservation transitions (Issue #941, ADR-0131)", () => {
       const common = {
         tenantId: TENANT_A,
         correlationId: crypto.randomUUID(),
+        staff: NO_OP_STAFF_AVAILABILITY,
         actorTenantUserId: ACTORS.get(TENANT_A)!
       };
       const holdKey = `hold-${crypto.randomUUID()}`;

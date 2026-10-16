@@ -1082,6 +1082,70 @@ here; the later change is surfaced by the §7.3 conflict report, not by
 cancelling. `unknown` is **not bookable** (fail closed): `STAFF_UNAVAILABLE`.
 `staffRef` is opaque to booking and resolved only by the port.
 
+**As built (Issue #949, `sql/305`).** The port is consumed as an optional
+capability `staff_availability` provided by `hr_workforce` (a soft edge in the
+module descriptor, never a `dependencies` entry; the DAG has no cycle). The
+adapter is imported lazily in `booking/module.ts` only
+(`loadStaffAvailabilityPort`, ADR-0011); `application/**` sees the port type from
+`_shared/ports` and a `StaffAvailabilityConsumer`.
+
+- **When a resource "requires staff".** `awcms_booking_resources.required_staff_refs`
+  (text[], at most 50) names the opaque references of the people who can serve
+  it. Empty (the default) means the resource needs nobody and no staff query ever
+  runs. There is no admin route or screen for the column yet (a follow-up); it is
+  written by a migration or an operator today.
+- **On or off.** `resolveStaffAvailability(tx, tenantId, loadPort)` decides once
+  per request: `hr_workforce` enabled for the tenant AND the adapter loadable,
+  else `NO_OP_STAFF_AVAILABILITY`: **no staff constraint at all** (no staff row is
+  written either), the booking that existed before this change. A loader that
+  throws degrades to the same no-op. Once the constraint is on it fails closed: a
+  resource whose people are all `unknown` to the port (or on leave, or outside a
+  shift) is unbookable, and a port error is a 500, not a silent skip.
+- **Read.** `GET /availability` offers a slot only if some named person is working
+  for the whole service interval (one merged working interval) and is not already
+  serving a live claim; the slot answer carries `staffAvailability: "checked" |
+"unchecked"`.
+- **Claim.** After `claimUnits`, in the same savepoint, the port-eligible people
+  are tried in order with `INSERT ... ON CONFLICT DO NOTHING` into
+  `awcms_booking_staff_assignments`, whose single exclusion constraint on
+  `(tenant_id, staff_ref, occupied range)` refuses two live overlapping
+  assignments of one person (among the assignments that were recorded; see the
+  enable-later gap below). No free person throws inside the savepoint, which rolls back the
+  units, the item and the reservation: **`SLOT_UNAVAILABLE`, nothing allocated
+  partially**. One person serves the whole claim of one resource, whatever the
+  quantity; the staff interval is the service interval, not the setup/cleanup
+  widened range. Stays carry no staff.
+- **Release.** A trigger on `awcms_booking_resource_allocations` releases the
+  assignment, with the same reason, when the last live allocation of the (item,
+  resource) is released, so cancel, expiry (lazy and the worker sweep) and
+  reschedule need no staff code.
+- **The `BookingPort` adapter is staff-aware.** `PlaceHoldContext.staff` is
+  required (no default, so "no constraint" must be spelled
+  `NO_OP_STAFF_AVAILABILITY`). `createBookingPort(resolveStaff)` takes the
+  resolver; `createComposedBookingPort()` in `booking/module.ts` is the composed
+  instance (loader injected, `application/**` never imports `hr_workforce`).
+  Transitions (confirm, cancel) claim nothing and pass the no-op on purpose.
+- **Occupancy does not depend on the reaper.** The busy read ignores an assignment
+  whose reservation is an elapsed hold, and the claim reclaims elapsed holds by
+  staff reference (`reclaimExpiredHoldsForStaff`) before racing for a person, so
+  an unreaped hold on one resource does not block the same person on another.
+- **Enable-later gap (operator guidance).** Staff rows are written only while
+  `hr_workforce` is on for the tenant. Reservations made while it was OFF have no
+  staff assignment, so after enabling it the person is **not protected against
+  them**: a new claim can overlap an old reservation that nobody recorded as
+  theirs. Before enabling for a tenant that names staff on resources, either
+  enable the module before taking bookings on those resources, or review
+  existing future reservations of those resources and reassign or move any that
+  overlap a rostered person. There is no backfill: booking never learns who
+  served an unrecorded reservation.
+- **Not covered yet.** A shift edited after the claim is surfaced by the §7.3
+  report, not applied; `service_requirements.staff_role` is still design.
+
+Tests: `tests/booking-staff-availability.test.ts` (pure rules, the composition
+boundary) and `tests/integration/booking-staff-availability.integration.test.ts`
+(with and without the module, fail closed, the conflict leaving nothing behind,
+twelve parallel claims for one person, release follows the allocation).
+
 ### 10.4 Module registration (design)
 
 `type: "domain"`; `dependencies`: tenant-admin / identity-access only;
@@ -1169,7 +1233,7 @@ design above is the contract; this section is the map from it to the code
 | **Admin screens**    | #942  | The six screens of §3.0.3 (`src/pages/admin/booking/*.astro`), the shared sender `src/lib/ui/booking-admin-client.ts`, the translated messages `src/lib/booking-admin-messages.ts` and labels `src/lib/booking-admin-labels.ts`, six `navigation` entries and the status flip to `active`, 218 catalogue entries in `locales/en.po` / `id.po`, the coverage ledger down to seven keys, and `APP_BUDGET_BYTES` raised by the 11,259 B of the seven new script files. No migration, no API change. Tests: `tests/admin-booking-page-contract.test.ts`, the navigation registry, `tests/e2e/admin-booking.e2e.ts` (keyboard-only, every action), and the booking screens in `a11y-axe.e2e.ts` and the 360 px sweep.                                                                                                                                                                                                                                                                                                                                                        |
 | **Reminders**        | #943  | The job `booking:reminders:dispatch` (§7.5) over `booking-reminder-dispatch.ts` / `booking-reminder-job.ts`, the intents table `sql/284` and the three narrow reads of `sql/285`, the `BookingReminderRecipientPort`, the templates `booking.confirmation` / `booking.reminder`, handed to `whatsapp_delivery` through `WhatsappDeliveryPort`. Inert until a deployment registers a recipient resolver.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-**Still design (not in the code):** the `extend` route of §5.1; `service_requirements`, `staff_assignments` and test T8; the
+**Still design (not in the code):** the `extend` route of §5.1; `service_requirements` (`staff_assignments` exists since #949, §10.3, without a `staff_role`) and the full T8 matrix (its concurrency half is in `booking-staff-availability.integration.test.ts`); the
 `reservations/reconciliation` route; the screens for reservation create / reschedule / override, availability, notes and reports (§3.0.3 says why each is absent).
 
 **Seams the next slices attach to**

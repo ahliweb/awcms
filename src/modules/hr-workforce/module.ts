@@ -128,6 +128,10 @@ export const hrWorkforceModule = defineModule({
    * and the settlement is unaffected.
    */
   capabilities: {
+    // #949: the shift roster, as working intervals per opaque staff reference
+    // (`_shared/ports/staff-availability-port.ts`; adapter
+    // `application/staff-availability-adapter.ts`), consumed by `booking`.
+    provides: ["staff_availability"],
     consumes: [
       {
         capability: "workflow_notification",

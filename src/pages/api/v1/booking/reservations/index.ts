@@ -8,6 +8,8 @@ import {
   type ReservationListFilters
 } from "../../../../../modules/booking/application/booking-reservation-directory";
 import { createReservation } from "../../../../../modules/booking/application/booking-reservation-service";
+import { resolveStaffAvailability } from "../../../../../modules/booking/application/booking-staff-availability-consumer";
+import { loadStaffAvailabilityPort } from "../../../../../modules/booking/module";
 import {
   asUuid,
   readIdempotencyKey,
@@ -185,6 +187,11 @@ export const POST = defineTenantRoute<CreatePrepared>({
           {
             tenantId,
             actorTenantUserId: actor,
+            staff: await resolveStaffAvailability(
+              tx,
+              tenantId,
+              loadStaffAvailabilityPort
+            ),
             ...(locals.correlationId
               ? { correlationId: locals.correlationId }
               : {})

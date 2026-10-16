@@ -459,6 +459,79 @@ export async function reclaimExpiredHolds(
 }
 
 /**
+ * Staff-keyed lazy reclaim (Issue #949): expires the elapsed holds whose LIVE
+ * staff assignment names one of `staffRefs` over `[fromMs, toMs)`, wherever
+ * their resource is. A person's occupancy must not depend on the reaper: an
+ * elapsed-but-unreaped hold on resource R1 would otherwise block the same person
+ * on R2 until the next sweep. Same locking and expiry path as
+ * `reclaimExpiredHolds`; the allocation release frees the assignment by trigger.
+ */
+export async function reclaimExpiredHoldsForStaff(
+  tx: Sql,
+  tenantId: string,
+  staffRefs: readonly string[],
+  fromMs: number,
+  toMs: number,
+  batchLimit: number = RECLAIM_BATCH_LIMIT,
+  correlationId?: string
+): Promise<ExpiryOutcome> {
+  if (staffRefs.length === 0) {
+    return NOTHING_EXPIRED;
+  }
+
+  const refs = tx.array([...staffRefs], "text");
+  const fromIso = new Date(fromMs).toISOString();
+  const toIso = new Date(toMs).toISOString();
+  const batch = Math.max(1, Math.floor(batchLimit));
+  let cursor = NIL_UUID;
+  let expired = 0;
+  let released = 0;
+
+  for (;;) {
+    const locked = (await tx`
+      SELECT r.id
+      FROM awcms_booking_reservations r
+      WHERE r.tenant_id = ${tenantId}
+        AND r.id > ${cursor}::uuid
+        AND r.status = 'held'
+        AND r.hold_expires_at <= statement_timestamp()
+        AND r.hold_expires_at <= clock_timestamp()
+        AND EXISTS (
+          SELECT 1
+          FROM awcms_booking_reservation_items i
+          JOIN awcms_booking_staff_assignments s
+            ON s.tenant_id = i.tenant_id AND s.item_id = i.id
+          WHERE i.tenant_id = r.tenant_id
+            AND i.reservation_id = r.id
+            AND s.released_at IS NULL
+            AND s.staff_ref = ANY(${refs}::text[])
+            AND tstzrange(s.occupied_from, s.occupied_to, '[)')
+                && tstzrange(${fromIso}::timestamptz, ${toIso}::timestamptz, '[)')
+        )
+      ORDER BY r.id
+      LIMIT ${batch}
+      FOR UPDATE OF r
+    `) as { id: string }[];
+
+    if (locked.length === 0) {
+      return { expired, releasedAllocations: released };
+    }
+
+    const outcome = await applyExpiry(
+      tx,
+      tenantId,
+      locked.map((row) => row.id),
+      "lazy_reclaim",
+      correlationId
+    );
+
+    expired += outcome.expired;
+    released += outcome.releasedAllocations;
+    cursor = locked[locked.length - 1]!.id;
+  }
+}
+
+/**
  * Read-only backlog count for `--dry-run`: elapsed holds the next pass would
  * expire. Through `awcms_booking_count_due_holds` (`sql/200`): the worker holds
  * no privilege on reservations, which carry the customer reference and the note.

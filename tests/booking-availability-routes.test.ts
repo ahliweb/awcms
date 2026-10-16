@@ -105,23 +105,23 @@ describe("the calculation is pure", () => {
     expect(source).not.toMatch(/process\.env/);
   });
 
-  test("the staff seam does not import the hr_workforce port", () => {
+  test("the staff seam imports the port TYPE from neutral ground, never hr_workforce", () => {
     const source = code(join(DOMAIN, "booking-staff-availability.ts"));
 
-    expect(source).not.toMatch(/_shared\/ports/);
+    expect(source).not.toMatch(/hr-workforce|hr_workforce/);
+    expect(source).toMatch(/_shared\/ports\/staff-availability-port/);
   });
 
   test("the no-op seam imposes no constraint", async () => {
     const { NO_OP_STAFF_AVAILABILITY } =
       await import("../src/modules/booking/domain/booking-staff-availability");
 
-    expect(
-      await NO_OP_STAFF_AVAILABILITY.resolve({
-        tenantId: "t",
-        staffRole: null,
-        fromMs: 0,
-        toMs: 1
-      })
-    ).toBeNull();
+    const request = { tenantId: "t", resourceId: "r", fromMs: 0, toMs: 1 };
+    const tx = {} as never;
+
+    expect(await NO_OP_STAFF_AVAILABILITY.resolve(tx, request)).toBeNull();
+    expect(await NO_OP_STAFF_AVAILABILITY.eligibleStaff(tx, request)).toEqual({
+      required: false
+    });
   });
 });

@@ -2,6 +2,8 @@ import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-rout
 import { resolveClientIp } from "../../../../../../lib/security/rate-limit";
 import { authorizeInTransaction } from "../../../../../../modules/identity-access/application/access-guard";
 import { rescheduleReservation } from "../../../../../../modules/booking/application/booking-reservation-service";
+import { resolveStaffAvailability } from "../../../../../../modules/booking/application/booking-staff-availability-consumer";
+import { loadStaffAvailabilityPort } from "../../../../../../modules/booking/module";
 import {
   asUuid,
   badId,
@@ -118,6 +120,11 @@ export const POST = defineTenantRoute<Prepared>({
           {
             tenantId,
             actorTenantUserId: actor,
+            staff: await resolveStaffAvailability(
+              tx,
+              tenantId,
+              loadStaffAvailabilityPort
+            ),
             ...(locals.correlationId
               ? { correlationId: locals.correlationId }
               : {})

@@ -51,6 +51,10 @@ import {
 } from "../domain/booking-reservation-validation";
 import { parseInstant } from "../domain/booking-validation";
 import { lockIdempotencyKey } from "./booking-route-support";
+import {
+  NO_OP_STAFF_AVAILABILITY,
+  type StaffAvailabilityConsumer
+} from "../domain/booking-staff-availability";
 import { answerAvailability } from "./booking-availability-directory";
 import { evaluateClaimPolicy } from "./booking-reservation-policy";
 import {
@@ -113,15 +117,29 @@ function outcomeOf(
   };
 }
 
-function contextOf(input: {
-  tenantId: string;
-  correlationId: string;
-  actorTenantUserId: string;
-}): ReservationContext {
+/**
+ * Resolves the staff constraint for a tenant. Injected by the composition root
+ * (`booking/module.ts` owns the lazy import of the hr_workforce adapter,
+ * ADR-0011); this file never reaches `hr_workforce`.
+ */
+export type StaffResolver = (
+  tx: Sql,
+  tenantId: string
+) => Promise<StaffAvailabilityConsumer>;
+
+function contextOf(
+  input: {
+    tenantId: string;
+    correlationId: string;
+    actorTenantUserId: string;
+  },
+  staff: StaffAvailabilityConsumer
+): ReservationContext {
   return {
     tenantId: input.tenantId,
     actorTenantUserId: input.actorTenantUserId,
-    correlationId: input.correlationId
+    correlationId: input.correlationId,
+    staff
   };
 }
 
@@ -276,7 +294,8 @@ const STAY_REASON_TO_REFUSAL: Readonly<Record<string, BookingRefusal>> = {
 
 async function quote(
   tx: Sql,
-  input: BookingQuoteInput
+  input: BookingQuoteInput,
+  resolveStaff: StaffResolver
 ): Promise<BookingQuoteResult> {
   const payment = paymentField(input);
 
@@ -362,15 +381,21 @@ async function quote(
   }
 
   const endMs = when.startsAtMs + Number(offering.duration_seconds) * 1000;
-  const answered = await answerAvailability(tx, input.tenantId, {
-    mode: "slot",
-    resourceId: input.resourceId,
-    offeringId: input.offeringId,
-    quantity,
-    fromMs: when.startsAtMs,
-    toMs: endMs,
-    limit: 1
-  });
+  const staff = await resolveStaff(tx, input.tenantId);
+  const answered = await answerAvailability(
+    tx,
+    input.tenantId,
+    {
+      mode: "slot",
+      resourceId: input.resourceId,
+      offeringId: input.offeringId,
+      quantity,
+      fromMs: when.startsAtMs,
+      toMs: endMs,
+      limit: 1
+    },
+    staff
+  );
 
   if (answered.outcome !== "ok") {
     return refused(
@@ -400,7 +425,11 @@ async function quote(
   };
 }
 
-async function hold(tx: Sql, input: BookingHoldInput): Promise<BookingOutcome> {
+async function hold(
+  tx: Sql,
+  input: BookingHoldInput,
+  resolveStaff: StaffResolver
+): Promise<BookingOutcome> {
   if (paymentField(input)) {
     return refused("PAYMENT_FIELD_NOT_ACCEPTED");
   }
@@ -436,7 +465,7 @@ async function hold(tx: Sql, input: BookingHoldInput): Promise<BookingOutcome> {
     async () => {
       const result = await createReservation(
         tx,
-        contextOf(input),
+        contextOf(input, await resolveStaff(tx, input.tenantId)),
         { claim, overridePolicy: false },
         false
       );
@@ -481,7 +510,8 @@ async function transition(
     async () => {
       const result = await transitionReservation(
         tx,
-        contextOf(input),
+        // A transition claims nothing: no staff constraint is intended here.
+        contextOf(input, NO_OP_STAFF_AVAILABILITY),
         input.reservationId,
         action,
         { reasonCode }
@@ -498,63 +528,76 @@ async function transition(
   );
 }
 
-export const bookingPort: BookingPort = {
-  quote,
-  hold,
-  confirm: (tx, input) =>
-    transition(tx, "booking_port_confirm", "confirm", input, null),
-  cancel: async (tx, input) =>
-    // A short code, never free text (the same rule as the route's body).
-    typeof input.reasonCode === "string" &&
-    REASON_CODE_PATTERN.test(input.reasonCode)
-      ? transition(tx, "booking_port_cancel", "cancel", input, input.reasonCode)
-      : refused("VALIDATION_ERROR"),
-  reschedule: async (tx, input) => {
-    if (paymentField(input)) {
-      return refused("PAYMENT_FIELD_NOT_ACCEPTED");
-    }
-
-    const when = whenOf(input);
-
-    if (!when) {
-      return refused("VALIDATION_ERROR");
-    }
-
-    return once(
-      tx,
-      input.tenantId,
-      "booking_port_reschedule",
-      input.idempotencyKey,
-      input.actorTenantUserId,
-      withoutBookkeeping(input),
-      async () => {
-        const result = await rescheduleReservation(
-          tx,
-          contextOf(input),
-          input.reservationId,
-          {
-            ...when,
-            ...(input.resourceId === undefined
-              ? {}
-              : { resourceId: input.resourceId }),
-            ...(input.poolId === undefined ? {} : { poolId: input.poolId }),
-            overridePolicy: false
-          },
-          false
-        );
-
-        if (result.outcome === "ok") {
-          return outcomeOf(result.reservation, result.replayed);
-        }
-
-        if (result.outcome === "invalid") {
-          return refused("VALIDATION_ERROR");
-        }
-
-        return result.outcome === "not_found"
-          ? refused("RESERVATION_NOT_FOUND")
-          : refused(result.code);
+/**
+ * Builds the port. `resolveStaff` is the composition root's one decision about
+ * the staff constraint (`booking/module.ts` `createComposedBookingPort`); pass
+ * `async () => NO_OP_STAFF_AVAILABILITY` to say "no constraint" out loud.
+ */
+export function createBookingPort(resolveStaff: StaffResolver): BookingPort {
+  return {
+    quote: (tx, input) => quote(tx, input, resolveStaff),
+    hold: (tx, input) => hold(tx, input, resolveStaff),
+    confirm: (tx, input) =>
+      transition(tx, "booking_port_confirm", "confirm", input, null),
+    cancel: async (tx, input) =>
+      // A short code, never free text (the same rule as the route's body).
+      typeof input.reasonCode === "string" &&
+      REASON_CODE_PATTERN.test(input.reasonCode)
+        ? transition(
+            tx,
+            "booking_port_cancel",
+            "cancel",
+            input,
+            input.reasonCode
+          )
+        : refused("VALIDATION_ERROR"),
+    reschedule: async (tx, input) => {
+      if (paymentField(input)) {
+        return refused("PAYMENT_FIELD_NOT_ACCEPTED");
       }
-    );
-  }
-};
+
+      const when = whenOf(input);
+
+      if (!when) {
+        return refused("VALIDATION_ERROR");
+      }
+
+      return once(
+        tx,
+        input.tenantId,
+        "booking_port_reschedule",
+        input.idempotencyKey,
+        input.actorTenantUserId,
+        withoutBookkeeping(input),
+        async () => {
+          const result = await rescheduleReservation(
+            tx,
+            contextOf(input, await resolveStaff(tx, input.tenantId)),
+            input.reservationId,
+            {
+              ...when,
+              ...(input.resourceId === undefined
+                ? {}
+                : { resourceId: input.resourceId }),
+              ...(input.poolId === undefined ? {} : { poolId: input.poolId }),
+              overridePolicy: false
+            },
+            false
+          );
+
+          if (result.outcome === "ok") {
+            return outcomeOf(result.reservation, result.replayed);
+          }
+
+          if (result.outcome === "invalid") {
+            return refused("VALIDATION_ERROR");
+          }
+
+          return result.outcome === "not_found"
+            ? refused("RESERVATION_NOT_FOUND")
+            : refused(result.code);
+        }
+      );
+    }
+  };
+}

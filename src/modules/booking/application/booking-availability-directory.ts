@@ -73,6 +73,12 @@ export type SlotAnswer = {
   to: string;
   slots: { startsAt: string; endsAt: string; freeUnits: number }[];
   truncated: boolean;
+  /**
+   * `checked` when the staff port narrowed the answer (the resource names the
+   * people who serve it and `hr_workforce` is on); `unchecked` otherwise
+   * (booking.md section 10.3).
+   */
+  staffAvailability: "checked" | "unchecked";
 };
 
 export type StayAnswer = {
@@ -324,9 +330,9 @@ export async function answerAvailability(
       occupied: occupiedByUnit.get(unit.id) ?? [],
       stays: []
     }));
-    const staffAllows = await staff.resolve({
+    const staffAllows = await staff.resolve(tx, {
       tenantId,
-      staffRole: null,
+      resourceId: resource.id,
       fromMs: request.fromMs,
       toMs: request.toMs
     });
@@ -368,7 +374,8 @@ export async function answerAvailability(
           endsAt: toIso(slot.endMs),
           freeUnits: slot.freeUnits
         })),
-        truncated: result.truncated
+        truncated: result.truncated,
+        staffAvailability: staffAllows ? "checked" : "unchecked"
       }
     };
   }

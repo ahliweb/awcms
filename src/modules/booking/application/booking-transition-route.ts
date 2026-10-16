@@ -16,6 +16,7 @@
  *   3. the transition: a refusal is returned as a value and stored nowhere, a
  *      success is stored with its status.
  */
+import { NO_OP_STAFF_AVAILABILITY } from "../domain/booking-staff-availability";
 import type { AuthorizedAccess } from "../../_shared/tenant-route";
 import {
   transitionReservation,
@@ -58,6 +59,8 @@ export async function runTransitionRoute(
         {
           tenantId,
           actorTenantUserId: actor,
+          // A transition claims nothing: no staff constraint is intended.
+          staff: NO_OP_STAFF_AVAILABILITY,
           ...(locals.correlationId
             ? { correlationId: locals.correlationId }
             : {})

@@ -126,6 +126,11 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
       "ADR-0131 / Issue #937. One row per claimed unit: item id, resource and unit ids, an interval or date range and a release stamp. No actor and no person column -- it records that a unit was occupied, never by whom; the reservation it hangs off has its own descriptor."
   },
   {
+    table: "awcms_booking_staff_assignments",
+    reason:
+      "ADR-0131, ADR-0132 / Issue #949. One row per claimed (item, resource) of a resource that names the people who serve it: item and resource ids, an OPAQUE staff reference (an employment id, resolved only by the hr_workforce port; no name, contact or number), an interval and a release stamp. No actor stamp and no free text. The person is an employment of hr_workforce, which has its own descriptors; erasing the person there leaves this row naming nobody."
+  },
+  {
     table: "awcms_hr_shift_templates",
     reason:
       "ADR-0132 / Issue #946. A shift pattern: a code, a label, a local start time, a duration, a break and a zone. It names no person; the only person-shaped columns are the actor stamps (`created_by`, `updated_by`, `deleted_by`) on a configuration row, which are the tenant's own administration, not data it holds about someone."

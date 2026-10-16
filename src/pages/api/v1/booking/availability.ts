@@ -2,6 +2,8 @@ import { fail, ok } from "../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../modules/_shared/tenant-route";
 import { checkSharedRateLimit } from "../../../../lib/security/rate-limit";
 import { answerAvailability } from "../../../../modules/booking/application/booking-availability-directory";
+import { resolveStaffAvailability } from "../../../../modules/booking/application/booking-staff-availability-consumer";
+import { loadStaffAvailabilityPort } from "../../../../modules/booking/module";
 import { BOOKING_GUARDS } from "../../../../modules/booking/domain/booking-permissions";
 import {
   parseAvailabilityQuery,
@@ -58,7 +60,12 @@ export const GET = defineTenantRoute<AvailabilityRequest>({
       );
     }
 
-    const result = await answerAvailability(tx, tenantId, prepared);
+    const staff = await resolveStaffAvailability(
+      tx,
+      tenantId,
+      loadStaffAvailabilityPort
+    );
+    const result = await answerAvailability(tx, tenantId, prepared, staff);
 
     switch (result.outcome) {
       case "ok":

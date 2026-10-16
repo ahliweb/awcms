@@ -31,6 +31,7 @@
  *
  * Gated on `DATABASE_URL` (harness section Gating).
  */
+import { NO_OP_STAFF_AVAILABILITY } from "../../src/modules/booking/domain/booking-staff-availability";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
@@ -110,6 +111,7 @@ function tenantTx<T>(
 function ctxOf(tenantId: string) {
   return {
     tenantId,
+    staff: NO_OP_STAFF_AVAILABILITY,
     actorTenantUserId: ACTORS.get(tenantId) ?? null,
     correlationId: crypto.randomUUID()
   };

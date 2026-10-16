@@ -76,7 +76,9 @@ const BOOKING_TABLES = [
   "awcms_booking_resource_blocks",
   "awcms_booking_reservation_events",
   // Issue #943 (sql/284).
-  "awcms_booking_reminder_intents"
+  "awcms_booking_reminder_intents",
+  // Issue #949 (sql/305).
+  "awcms_booking_staff_assignments"
 ] as const;
 
 const ACTORS = new Map<string, string>();
@@ -408,7 +410,10 @@ suite("booking database invariants (Issue #937, ADR-0131)", () => {
           table !== "awcms_booking_schedules" &&
           table !== "awcms_booking_schedule_exceptions" &&
           // Blocks are covered by booking-availability.integration.test.ts.
-          table !== "awcms_booking_resource_blocks"
+          table !== "awcms_booking_resource_blocks" &&
+          // Staff assignments are covered by
+          // booking-staff-availability.integration.test.ts (Issue #949).
+          table !== "awcms_booking_staff_assignments"
         ) {
           expect(asA[0]!.n).toBeGreaterThan(0);
         }
