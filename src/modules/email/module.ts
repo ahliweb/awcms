@@ -32,12 +32,14 @@ export const emailModule = defineModule({
    * exactly the relationship here — the consumer degrades (reports
    * `enqueued: false` and audits it) rather than failing.
    *
-   * `workflow_notification` (`_shared/ports/workflow-notification-port.ts`) is
-   * NOT listed: its adapter exists but no composition root wires it yet, so
-   * declaring it would claim a relationship no import actually makes.
+   * `workflow_notification` (`_shared/ports/workflow-notification-port.ts`) —
+   * listed since #1044, the first caller that actually imports its adapter:
+   * `hr_workforce`'s attendance-correction settler tells the requester the
+   * outcome through it. (The workflow `notify` node still does not wire it.)
+   * Enqueue only: the adapter writes outbox rows, `email:dispatch` sends later.
    */
   capabilities: {
-    provides: ["auth_notification"]
+    provides: ["auth_notification", "workflow_notification"]
   },
   api: {
     openApiPath: "openapi/modules/email.openapi.yaml",

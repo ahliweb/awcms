@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9222b421f5b47914a2b41cbbf34ca40dc4d647df972eb7fe16e9c0b86de4d63e -->
+<!-- i18n-source-hash: sha256:2a8b3e251103b83386efc5a7361aaa46956f000055421d04b7711af9886cb61f -->
 
 # `hr_workforce`
 
@@ -194,8 +194,28 @@ digantikan".
   ini dirilis tidak punya delivery dan diselesaikan manual sekali.
   Route manual `POST .../attendance-corrections/{id}/settle` (`corrections.approve`,
   berisiko tinggi) membaca instance: pending -> `409 CORRECTION_STILL_PENDING`,
-  lalu penerapan yang sama. Belum ada **notifikasi** ke pemohon: itu butuh template
-  notifikasi dan kebijakan penerima, keputusan tersendiri.
+  lalu penerapan yang sama.
+  **Pemohon diberi tahu (#1044).** Setelah consumer menyelesaikan koreksi, ia
+  mengantrekan satu e-mail ke pemohon lewat capability opsional
+  `workflow_notification` (adapter `email`, `enqueueAnnouncement`): INSERT outbox
+  dalam transaksi consumer sendiri, dikirim kemudian oleh `bun run email:dispatch`,
+  tak pernah panggilan provider di jalur penyelesaian, dan dibungkus savepoint
+  sehingga kegagalan dicatat (hanya kelas dan kode) dan tak pernah membatalkan
+  penyelesaian. Tiga template EN/ID, satu per hasil
+  (`hr.attendance_correction_applied` / `_rejected` / `_cancelled`), memuat nama
+  tampilan pegawai dan tanggal (UTC) dan **tak pernah alasan** (daftar variabel
+  template tak punya slot untuknya, dan worker tak dapat membaca kolomnya). Satu
+  pemberitahuan per (koreksi, hasil): hanya transisi `pending` -> selesai yang
+  memberi tahu, ledger efek menyerap delivery yang diulang, dan baris outbox
+  membawa correlation id `hr_workforce.attendance_correction:<id>:<hasil>`. Tenant
+  memilih ikut dengan mengaktifkan template itu (`bun run
+email:templates:seed-defaults`); tanpanya port tidak melakukan apa-apa secara
+  diam-diam. INSERT worker pada `awcms_email_messages` dibatasi per kolom
+  (`sql/302`). Koreksi yang diselesaikan manual lewat route tidak memberi tahu
+  siapa pun (pemanggil sudah melihat hasilnya). Telegram dan WhatsApp belum
+  dihubungkan: belum ada template Telegram terdaftar-modul yang sampai ke proses
+  dispatcher dan jenis variabelnya tak dapat membawa nama, serta tak ada resolver
+  nomor telepon staf untuk WhatsApp.
 - **Pemisahan tugas, empat lapis.** (1) guard milik engine workflow mencegah
   pemohon memutuskan; (2) guard self-approval chokepoint menolak pemohon
   **menyelesaikan koreksi yang approved (atau masih pending)** (`403`); ia dilewati

@@ -106,7 +106,12 @@ export function renderEmailTemplate(
   );
 
   return {
-    subject: substitute(subjectTemplate, safeVariables, false),
+    // A subject is one header line: a CR/LF/TAB inside a substituted value
+    // (a display name) must not break it or inject a header (audit L2 of #1044).
+    subject: substitute(subjectTemplate, safeVariables, false).replace(
+      /[\r\n\t]+/g,
+      " "
+    ),
     textBody: textBodyVariant
       ? substitute(textBodyVariant, safeVariables, false)
       : undefined,

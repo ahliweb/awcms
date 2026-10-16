@@ -190,9 +190,28 @@ workflow_event`; `decided_by` is the human who approved or rejected (NULL for a 
   consumer shipped has no delivery and is settled by hand once.
   The manual route `POST .../attendance-corrections/{id}/settle`
   (`corrections.approve`, high-risk) reads the instance: pending -> `409
-CORRECTION_STILL_PENDING`, then the same application. There is **no push
-  notification** to the requester yet: that needs a notification template and
-  recipient policy, a separate decision.
+CORRECTION_STILL_PENDING`, then the same application.
+  **The requester is told (#1044).** After the consumer settles a correction it
+  queues one e-mail to the requester through the optional `workflow_notification`
+  capability (`email`'s adapter, `enqueueAnnouncement`): an outbox INSERT in the
+  consumer's own transaction, sent later by `bun run email:dispatch`, never a
+  provider call on the settlement path, and wrapped in a savepoint so a failure
+  is logged (class and code only) and can never undo the settlement. Three
+  translated EN/ID templates, one per outcome (`hr.attendance_correction_applied`
+  / `_rejected` / `_cancelled`), carry the employee's display name and the
+  date (UTC) and **never the reason** (the templates' variable allow-list has no
+  slot for it, and the worker cannot read the column). One notice per
+  (correction, outcome): only the `pending` -> settled transition notifies, the
+  effect ledger absorbs a retried delivery, and the outbox row carries the
+  correlation id `hr_workforce.attendance_correction:<id>:<outcome>`. A tenant
+  opts in by having those templates active (`bun run
+email:templates:seed-defaults`); with none the port is a silent no-op. The
+  worker's INSERT on `awcms_email_messages` is column-scoped (`sql/302`). A
+  correction settled by hand through the manual route notifies nobody (the
+  caller is already looking at the result). Telegram and WhatsApp are not wired:
+  no module-registered Telegram template reaches the dispatcher process today and
+  its variable kinds cannot carry a name, and there is no staff-phone resolver
+  for WhatsApp.
 - **Segregation of duties, four layers.** (1) the workflow engine's own guard stops
   the requester deciding; (2) the chokepoint's self-approval guard refuses the
   requester **settling an approved (or still pending) correction** (`403`); it is

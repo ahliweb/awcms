@@ -104,5 +104,41 @@ export const DEFAULT_EMAIL_TEMPLATES: readonly DefaultEmailTemplate[] = [
       en: "Hi {{userName}},\n\n{{requestedBy}} requested your decision on: {{workflowName}}\n\n{{decisionUrl}}",
       id: "Halo {{userName}},\n\n{{requestedBy}} meminta keputusan Anda pada: {{workflowName}}\n\n{{decisionUrl}}"
     }
+  },
+  {
+    templateKey: "hr.attendance_correction_applied",
+    name: "Attendance correction applied",
+    subjectTemplate: {
+      en: "Your attendance correction for {{employeeName}} was approved",
+      id: "Koreksi absensi {{employeeName}} Anda disetujui"
+    },
+    textBodyTemplate: {
+      en: "Hi {{userName}},\n\nThe attendance correction you requested for {{employeeName}} on {{correctionDate}} (UTC) was approved and has been applied.",
+      id: "Halo {{userName}},\n\nKoreksi absensi yang Anda ajukan untuk {{employeeName}} pada {{correctionDate}} (UTC) telah disetujui dan diterapkan."
+    }
+  },
+  {
+    templateKey: "hr.attendance_correction_rejected",
+    name: "Attendance correction rejected",
+    subjectTemplate: {
+      en: "Your attendance correction for {{employeeName}} was rejected",
+      id: "Koreksi absensi {{employeeName}} Anda ditolak"
+    },
+    textBodyTemplate: {
+      en: "Hi {{userName}},\n\nThe attendance correction you requested for {{employeeName}} on {{correctionDate}} (UTC) was rejected. The attendance record was not changed.",
+      id: "Halo {{userName}},\n\nKoreksi absensi yang Anda ajukan untuk {{employeeName}} pada {{correctionDate}} (UTC) ditolak. Catatan absensi tidak diubah."
+    }
+  },
+  {
+    templateKey: "hr.attendance_correction_cancelled",
+    name: "Attendance correction cancelled",
+    subjectTemplate: {
+      en: "Your attendance correction for {{employeeName}} was cancelled",
+      id: "Koreksi absensi {{employeeName}} Anda dibatalkan"
+    },
+    textBodyTemplate: {
+      en: "Hi {{userName}},\n\nThe approval of the attendance correction you requested for {{employeeName}} on {{correctionDate}} (UTC) was cancelled before a decision. The attendance record was not changed.",
+      id: "Halo {{userName}},\n\nPersetujuan koreksi absensi yang Anda ajukan untuk {{employeeName}} pada {{correctionDate}} (UTC) dibatalkan sebelum ada keputusan. Catatan absensi tidak diubah."
+    }
   }
 ];

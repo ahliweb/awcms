@@ -20,6 +20,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  WORKER_COLUMN_GRANTS,
   checkWorkerSetupRoleGrants,
   defaultWorkerSetupRoleGrantsPolicy
 } from "../scripts/security-readiness";
@@ -50,6 +51,51 @@ describeOrSkip(
       // sql/022), or they are absent and the check is non-blocking-pass by the
       // opt-in design. Neither is a critical failure.
       expect(result.status).toBe("pass");
+    });
+
+    test("a COLUMN grant wider than the pinned list FAILS (audit M2 of #1044)", async () => {
+      if (!(await awcmsWorkerExists())) {
+        return;
+      }
+
+      // Pin one column fewer than the role really holds: the extra column is a
+      // column-only grant the table-level matrix cannot see.
+      const base = defaultWorkerSetupRoleGrantsPolicy();
+      const narrowed = structuredClone(WORKER_COLUMN_GRANTS);
+      narrowed.awcms_email_messages!.INSERT =
+        narrowed.awcms_email_messages!.INSERT!.filter(
+          (column) => column !== "subject"
+        );
+      const result = await checkWorkerSetupRoleGrants({
+        ...base,
+        workerColumns: narrowed
+      });
+
+      expect(result.status).toBe("fail");
+      expect(result.evidence).toContain("column grant over-granted");
+      expect(result.evidence).toContain(
+        "INSERT on awcms_email_messages(subject)"
+      );
+    });
+
+    test("a pinned COLUMN the role does not hold FAILS", async () => {
+      if (!(await awcmsWorkerExists())) {
+        return;
+      }
+
+      const base = defaultWorkerSetupRoleGrantsPolicy();
+      const widened = structuredClone(WORKER_COLUMN_GRANTS);
+      widened.awcms_profiles!.SELECT!.push("profile_type");
+      const result = await checkWorkerSetupRoleGrants({
+        ...base,
+        workerColumns: widened
+      });
+
+      expect(result.status).toBe("fail");
+      expect(result.evidence).toContain("column grant under-granted");
+      expect(result.evidence).toContain(
+        "SELECT on awcms_profiles(profile_type)"
+      );
     });
 
     test("an UNDER-granted matrix (expects a privilege the role lacks) FAILS", async () => {

@@ -66,7 +66,12 @@ re-claim can never abort the pass. Templates are looked up once per distinct
 (`domain/email-template-categories.ts`). Six fixed base categories
 (`auth.password_reset`, `system.announcement`, `system.security_notice`,
 `system.maintenance`, `workflow.task_assigned`, `workflow.decision_required`)
-plus `derived.transactional` each carry an allowed-variable list. A derived
+plus `derived.transactional` each carry an allowed-variable list, and (#1044) the
+three `hr.attendance_correction_{applied,rejected,cancelled}` categories
+(`userName`, `employeeName`, `correctionDate`; never a reason) that
+`hr_workforce` sends through the `workflow_notification` capability this module
+now provides (`application/workflow-notification-port-adapter.ts`, subject
+rendered in the tenant's default locale). A derived
 app registers its own `derived.<name>` category via
 `registerDerivedEmailTemplateCategory` before use; an unknown category is
 rejected at create (fail-closed).

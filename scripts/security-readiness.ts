@@ -1749,9 +1749,77 @@ export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
   awcms_access_policy_events: ["INSERT"]
 };
 
+/**
+ * COLUMN-ONLY grants `awcms_worker` holds: table -> privilege -> exact column
+ * list. `has_table_privilege` cannot see these (it is false for a column grant),
+ * so a column list that quietly grew by one (a `reason`, a `status`) passed the
+ * table-level matrix above untouched (audit M2 of #1044). "Column-only" means
+ * the columns the role holds the privilege on WITHOUT holding it table-wide.
+ *
+ * Pinned to `sql/280` (attendance settlement) and `sql/302` (requester notice).
+ * A table-wide grant elsewhere in `WORKER_ROLE_GRANTS` is not repeated here.
+ */
+export const WORKER_COLUMN_GRANTS: Record<
+  string,
+  Partial<Record<"SELECT" | "INSERT" | "UPDATE", string[]>>
+> = {
+  awcms_hr_attendance_corrections: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "employment_id",
+      "kind",
+      "target_event_id",
+      "proposed_kind",
+      "proposed_occurred_at",
+      "status",
+      "workflow_instance_id",
+      "requested_by",
+      "subject_tenant_user_id",
+      "decided_by",
+      "decided_at",
+      "created_at",
+      "updated_at"
+    ],
+    UPDATE: ["status", "decided_by", "decided_at", "updated_at"]
+  },
+  awcms_hr_employments: { UPDATE: ["updated_at"] },
+  awcms_workflow_instances: { UPDATE: ["updated_at"] },
+  awcms_workflow_decisions: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "workflow_task_id",
+      "decision",
+      "decided_by_tenant_user_id",
+      "on_behalf_of_tenant_user_id",
+      "is_administrative_override",
+      "created_at"
+    ]
+  },
+  awcms_email_messages: {
+    INSERT: [
+      "tenant_id",
+      "correlation_id",
+      "category",
+      "template_key",
+      "to_address",
+      "to_address_hash",
+      "to_address_masked",
+      "subject",
+      "variables",
+      "priority"
+    ]
+  },
+  awcms_tenant_users: { SELECT: ["id", "tenant_id", "identity_id", "status"] },
+  awcms_profiles: { SELECT: ["id", "tenant_id", "display_name"] }
+};
+
 export type WorkerSetupRoleGrantsPolicy = {
   worker: Record<string, string[]>;
   setup: Record<string, string[]>;
+  /** Optional: defaults to `WORKER_COLUMN_GRANTS`. */
+  workerColumns?: typeof WORKER_COLUMN_GRANTS;
 };
 
 /**
@@ -1762,7 +1830,11 @@ export type WorkerSetupRoleGrantsPolicy = {
  * cross-file-leak trap the L2 test already documents).
  */
 export function defaultWorkerSetupRoleGrantsPolicy(): WorkerSetupRoleGrantsPolicy {
-  return { worker: WORKER_ROLE_GRANTS, setup: SETUP_ROLE_GRANTS };
+  return {
+    worker: WORKER_ROLE_GRANTS,
+    setup: SETUP_ROLE_GRANTS,
+    workerColumns: WORKER_COLUMN_GRANTS
+  };
 }
 
 const ALL_FOUR_PRIVILEGES = ["SELECT", "INSERT", "UPDATE", "DELETE"];
@@ -1883,6 +1955,41 @@ export async function checkWorkerSetupRoleGrants(
               ? `${role} over-granted on ${row.relname} (holds ${extra.join(", ")} but this table is NOT in its least-privilege matrix — isolation breach)`
               : `${role} over-granted on ${row.relname} (holds ${extra.join(", ")} beyond its matrix)`
           );
+        }
+      }
+    }
+
+    // Column-only grants (audit M2 of #1044): exact, both directions. Worker only.
+    if (present.includes(WORKER_ROLE)) {
+      const columnPolicy = policy?.workerColumns ?? WORKER_COLUMN_GRANTS;
+
+      for (const [table, privileges] of Object.entries(columnPolicy)) {
+        for (const privilege of ["SELECT", "INSERT", "UPDATE"] as const) {
+          const expected = [...(privileges[privilege] ?? [])].sort();
+          const held = (
+            (await sql`
+              SELECT a.attname AS column_name
+              FROM pg_attribute a
+              WHERE a.attrelid = to_regclass(${table})
+                AND a.attnum > 0 AND NOT a.attisdropped
+                AND has_column_privilege(${WORKER_ROLE}, a.attrelid, a.attnum, ${privilege})
+                AND NOT has_table_privilege(${WORKER_ROLE}, a.attrelid, ${privilege})
+              ORDER BY a.attname
+            `) as { column_name: string }[]
+          ).map((row) => row.column_name);
+          const extra = held.filter((column) => !expected.includes(column));
+          const missing = expected.filter((column) => !held.includes(column));
+
+          if (extra.length > 0) {
+            findings.push(
+              `${WORKER_ROLE} column grant over-granted: ${privilege} on ${table}(${extra.join(", ")}) is not in the pinned column list`
+            );
+          }
+          if (missing.length > 0) {
+            findings.push(
+              `${WORKER_ROLE} column grant under-granted: ${privilege} on ${table}(${missing.join(", ")}) is pinned but not held`
+            );
+          }
         }
       }
     }
