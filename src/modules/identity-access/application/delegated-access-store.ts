@@ -158,21 +158,44 @@ export async function redeemDelegatedAccess(
   tenantId: string,
   accessCode: string,
   principalId: string,
-  now: Date
+  now: Date,
+  /** Tenant ASAL penebus; kode hanya sah untuk partner yang disetujui. */
+  partnerTenantId: string
 ): Promise<RedeemDelegatedAccessResult> {
   const codeHash = hashDelegatedAccessCode(accessCode);
+  // The code lives DELEGATED_ACCESS_CODE_TTL_SEC from approval (`created_at`),
+  // independent of the grant's own (longer) expiry.
+  const codeIssuedAfter = new Date(
+    now.getTime() - DELEGATED_ACCESS_CODE_TTL_SEC * 1000
+  );
 
   const grantRows = (await tx`
-    SELECT id, role_id, expires_at
+    SELECT id, role_id, expires_at, created_at, partner_tenant_id
     FROM awcms_delegated_access_grants
     WHERE tenant_id = ${tenantId}
+      AND partner_tenant_id = ${partnerTenantId}
       AND access_code_hash = ${codeHash}
       AND revoked_at IS NULL
+      AND created_at > ${codeIssuedAfter}
     FOR UPDATE
-  `) as { id: string; role_id: string; expires_at: string }[];
+  `) as {
+    id: string;
+    role_id: string;
+    expires_at: string;
+    created_at: string;
+    partner_tenant_id: string;
+  }[];
 
   const grant = grantRows[0];
   if (!grant) return { ok: false, code: "CODE_INVALID" };
+  const createdMs = new Date(grant.created_at).getTime();
+  if (
+    grant.partner_tenant_id !== partnerTenantId ||
+    !Number.isFinite(createdMs) ||
+    createdMs <= codeIssuedAfter.getTime()
+  ) {
+    return { ok: false, code: "CODE_INVALID" };
+  }
 
   if (new Date(grant.expires_at).getTime() <= now.getTime()) {
     return { ok: false, code: "GRANT_EXPIRED" };
@@ -232,9 +255,11 @@ export async function redeemDelegatedAccess(
         updated_at = ${now}
     WHERE tenant_id = ${tenantId}
       AND id = ${grant.id}
+      AND partner_tenant_id = ${partnerTenantId}
       AND access_code_hash = ${codeHash}
       AND revoked_at IS NULL
       AND expires_at > ${now}
+      AND created_at > ${codeIssuedAfter}
     RETURNING id
   `) as { id: string }[];
 
