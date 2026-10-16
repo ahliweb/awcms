@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0078-a-grant-carries-its-own-scope.md)
 
-<!-- i18n-source-hash: sha256:283151de597b527ddeb507a5d48a4679834252b8f5c9a0424ff718d81425c4c2 -->
+<!-- i18n-source-hash: sha256:d533dd0d126fdfc6dbdce1da3adb5ba932604bcaaccde87be753b95277c9c2e3 -->
 
 # ADR-0078 — Sebuah grant membawa scope-nya sendiri
 
@@ -111,3 +111,32 @@ header `sql/027`.
   mengualifikasi scope saat evaluasi. Sebelum itu, sebuah Policy dan sebuah
   assignment memberi jawaban yang sama persis — yang membuat PR 3.3 bisa
   memindahkan baris tanpa mengubah satu pun keputusan.
+
+## Amandemen (issue #1056 — grant yang sudah lewat tidak boleh memblokir grant ulang)
+
+`awcms_access_policies_active_key` dan `_group_active_key` bersifat parsial pada
+`status = 'active'`, dan indeks parsial tidak bisa menyebut `now()`. Grant yang
+`effective_to`-nya sudah lewat karenanya tetap menempati slot (subjek, role,
+scope)-nya padahal semua pembaca sudah mengabaikannya, sehingga memberi role yang
+sama lagi memunculkan `23505` dan tampil sebagai `409` selama baris mati itu ada.
+Menjadikan pra-pemeriksaan `subjectHoldsRole` / `groupHoldsRole` sadar-waktu saja
+tidak memperbaikinya: INSERT tetap bertabrakan dengan indeks.
+
+Keputusan: penulis grant tunggal (`grantRolePolicy` / `grantGroupRolePolicy`)
+lebih dulu memindahkan semua grant subjek yang sudah lewat untuk **role itu**, di scope mana pun, dari
+`active` ke `expired` (status yang sudah didefinisikan `sql/102`), baru
+menyisipkan. Baris tetap disimpan sebagai riwayat, tidak pernah dihapus; setiap
+lapse menulis event siklus-hidup `expired` (tanpa aktor — waktu yang melakukannya)
+dan baris audit `identity_access.expire` (atribut mencatat scope tiap baris) yang menyebut aktor yang grant-nya
+memicunya. Pra-pemeriksaan mengabaikan baris yang sudah lewat sehingga tidak lagi
+menjawab "sudah memegang" untuk role yang tidak dipegang subjek. Grant
+berjadwal-masa-depan itu tertunda, bukan lapse, dan tetap `409`.
+
+Ditolak: constraint unik sadar-waktu (exclusion constraint pada kunci unik
+terpanas tabel otorisasi, dan `status` tetap berbohong kepada setiap pembaca);
+sweep terjadwal sebagai _perbaikan_ (sebelum ia berjalan, grant ulang tetap
+ditolak, dan `awcms_worker` memerlukan hak tulis yang juga bisa membatalkan
+revoke atau fungsi `SECURITY DEFINER` baru — permukaan berhak-istimewa untuk
+urusan pembukuan, karena pembaca sudah menegakkan `effective_to > now()` saat
+keputusan). Sweep boleh ditambahkan kelak murni sebagai pembersihan; ia akan
+menulis event dan baris audit yang sama.

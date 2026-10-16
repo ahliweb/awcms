@@ -107,3 +107,31 @@ full in the `sql/027` header.
   at evaluation time. Before then, a Policy and an assignment give exactly the
   same answer — which is what lets PR 3.3 move rows without changing a single
   decision.
+
+## Amendment (issue #1056 — a lapsed grant must not block a re-grant)
+
+`awcms_access_policies_active_key` and `_group_active_key` are partial on
+`status = 'active'`, and a partial index cannot mention `now()`. A grant whose
+`effective_to` had passed therefore kept occupying its (subject, role, scope)
+slot while every reader already ignored it, so granting the same role again
+raised `23505` and surfaced as `409` for as long as the dead row lived. Making
+only the `subjectHoldsRole` / `groupHoldsRole` pre-check time-aware does not fix
+this: the INSERT still collides with the index.
+
+Decision: the one grant writer (`grantRolePolicy` / `grantGroupRolePolicy`)
+first transitions all of the subject's elapsed grants of **that role**, at any scope, from `active` to
+`expired` (a status `sql/102` already defines), then inserts. The row is kept as
+history, never deleted; each lapse writes an `expired` lifecycle event (no actor
+— time did it) and an `identity_access.expire` audit row (attributes record each row's scope) naming the actor whose
+grant triggered it. The pre-checks ignore elapsed rows so they no longer answer
+"already holds" for a role the subject does not hold. A future-dated grant is
+pending, not lapsed, and keeps its `409`.
+
+Rejected: a time-aware unique constraint (an exclusion constraint on the
+hottest unique key of the authorization table, and `status` would still lie to
+every reader); a scheduled sweep as the _fix_ (until it runs the re-grant is
+still refused, and `awcms_worker` would need either a write privilege that can
+also un-revoke grants or a new `SECURITY DEFINER` function — a privileged
+surface for what is bookkeeping, since the readers already enforce
+`effective_to > now()` at decision time). A sweep may be added later as pure
+cleanup; it would write the same event and audit row.
