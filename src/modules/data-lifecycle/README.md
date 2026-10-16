@@ -273,30 +273,38 @@ var (e.g. `AUDIT_LOG_RETENTION_DAYS`) — never re-declared here.
 
 ## Known limitations
 
-- **Delegated snapshots the worker cannot read (Issue #1040).** Per tenant,
-  `data-lifecycle:archive-purge` records a dry-run backlog snapshot for every
-  `delegated` descriptor, which `SELECT`s that table as `awcms_worker`. 25
-  inventory, procurement, HR and booking tables are deliberately NOT readable by
-  the worker (the payroll boundary keeps worker roles away from that data), so
-  their snapshots fail. A failing descriptor is isolated: it is logged
+- **Delegated snapshots the worker cannot read (Issue #1040, resolved by
+  #1042).** Per tenant, `data-lifecycle:archive-purge` records a dry-run backlog
+  snapshot for every `delegated` descriptor. 25 inventory, procurement, HR and
+  booking tables are deliberately NOT readable by `awcms_worker` (the payroll
+  boundary keeps worker roles away from that data), so the snapshot does not
+  `SELECT` them: it calls a count-only `SECURITY DEFINER` function from
+  `sql/303` (`awcms_{inventory,procurement,hr_workforce,booking}_lifecycle_eligible_count(p_table,
+p_tenant_id, p_cutoff)`), which returns ONE integer, the tenant's rows older
+  than the cutoff. Held, purgeable and blocked are derived in TypeScript from
+  that number and the legal-hold records, so no hold key enters SQL (these
+  descriptors are all non-archivable, so eligible equals purgeable). The
+  mapping is `DELEGATED_COUNT_FUNCTIONS` in
+  `domain/known-unreadable-delegated.ts`. Safeguards: `search_path` pinned to
+  `public, pg_temp`; `EXECUTE` granted to `awcms_worker` only; a dedicated
+  NOLOGIN owner role per module with column-level `SELECT (tenant_id, cursor
+column)` only; RLS untouched (tenant scoping relies on the caller's own `app.current_tenant_id` plus `p_tenant_id`; this adds no capability beyond the worker's existing per-tenant iteration and is not a boundary against the worker);
+  static SQL per table, an unknown table raises `22023`. No payroll relation is
+  involved. The snapshots are recorded as `completed` runs with counts.
+  A failing descriptor is still isolated: it is logged
   (`data_lifecycle.descriptor_failed`, descriptor key and SQLSTATE only, never
   row data), recorded as a `dry_run` run with `status: failed` and
   `errorCount: 1`, and the pass continues, including to the generic descriptors.
-  The same isolation applies to a generic descriptor that throws. A snapshot
+  The same isolation applies to a generic descriptor that throws. The
+  shrink-only baseline `KNOWN_UNREADABLE_DELEGATED_TABLES` is now EMPTY; the
+  mechanism stays for a future descriptor the worker may not read. A snapshot
   failure is EXPECTED only when its table is in the baseline AND the SQLSTATE is
-  `42501`; those are counted as `knownUnreadableDelegated` (result, telemetry
-  and job detail), still recorded as `failed` runs (`awcms_data_lifecycle_runs`
-  allows only `completed`, `partial` and `failed`), and do NOT make the job
-  `partial`, so the daily job exits 0. Anything else (another SQLSTATE, a table
-  outside the baseline, any generic failure) makes the job `partial` and exit
-  non-zero. The set is a shrink-only baseline in
-  `scripts/data-lifecycle-worker-grants-check.ts`
-  (`KNOWN_UNREADABLE_DELEGATED_TABLES`); a new unreadable delegated descriptor or
-  a stale entry fails `data-lifecycle:worker-grants:check`. Follow-up: a
-  count-only `SECURITY DEFINER` snapshot per owning module (sql/217 pattern), so
-  the snapshot works without the worker reading rows. Until then those tables
-  show failed dry-runs, not backlog counts; their real purges are unaffected
-  (each owning module's own job).
+  `42501` (then counted as `knownUnreadableDelegated` and not making the job
+  `partial`); anything else makes the job `partial` and exit non-zero.
+  `data-lifecycle:worker-grants:check` fails on an unreadable delegated
+  descriptor with neither a worker `SELECT` nor a mapped count function granted
+  to the worker with a branch for its table, and on a stale baseline entry.
+  Real purges are unaffected (each owning module's own job).
 - **Cross-tenant/global-scope execution**: `scope: "global"` descriptors are
   accepted by the registry validator (forward-compatible typing) but the dry-run
   planner and archive/purge engine only implement the `scope: "tenant"` path

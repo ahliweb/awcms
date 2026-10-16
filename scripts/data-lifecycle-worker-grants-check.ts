@@ -39,7 +39,11 @@
  * the kind of statement that gets mistaken for "the job can run".
  */
 import { listModules } from "../src/modules";
-import { KNOWN_UNREADABLE_DELEGATED_TABLES } from "../src/modules/data-lifecycle/domain/known-unreadable-delegated";
+import {
+  COUNT_FUNCTION_PATTERN,
+  DELEGATED_COUNT_FUNCTIONS,
+  KNOWN_UNREADABLE_DELEGATED_TABLES
+} from "../src/modules/data-lifecycle/domain/known-unreadable-delegated";
 import { loadMigrations } from "./lib/migrations";
 import { grantsPrivilegeToRole } from "./sql-grants";
 
@@ -107,6 +111,123 @@ export function deriveRequiredGrants(
 // the gate and its tests keep one import path.
 export { KNOWN_UNREADABLE_DELEGATED_TABLES };
 
+function stripSqlComments(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+}
+
+/**
+ * Does `sql/` give the worker a count-only function that covers `tableName`
+ * (Issue #1042)? Judged on the comment-stripped migrations, and on the LAST
+ * definition of the one function the table is mapped to, never on a substring
+ * anywhere in `sql/` (a commented-out branch, or a branch in another function,
+ * would otherwise turn the gate green):
+ *
+ * - the table is mapped in `DELEGATED_COUNT_FUNCTIONS` to a valid name;
+ * - that function is `SECURITY DEFINER` with `SET search_path` whose last
+ *   element is `pg_temp`;
+ * - ITS body has a `p_table = '<table>'` branch that reads FROM the table
+ *   filtering `<tenantColumn> = p_tenant_id AND <cursorColumn> < p_cutoff`
+ *   (the descriptor's own columns, so a drifted cursor goes red);
+ * - `REVOKE ALL ... FROM PUBLIC` and `GRANT EXECUTE ... TO awcms_worker`;
+ * - `ALTER FUNCTION ... OWNER TO <owner>` and that owner holds column-level
+ *   `SELECT` on both columns of the table.
+ */
+export function hasWorkerCountFunction(
+  migrationSql: string,
+  tableName: string,
+  cursorColumn = "created_at",
+  tenantColumn = "tenant_id"
+): boolean {
+  const fn = DELEGATED_COUNT_FUNCTIONS[tableName];
+
+  if (fn === undefined || !COUNT_FUNCTION_PATTERN.test(fn)) return false;
+  if (
+    !/^[a-z][a-z0-9_]*$/.test(cursorColumn) ||
+    !/^[a-z][a-z0-9_]*$/.test(tenantColumn)
+  ) {
+    return false;
+  }
+
+  const sql = stripSqlComments(migrationSql);
+  const args = String.raw`\s*\([^)]*\)`;
+
+  const definitions = [
+    ...sql.matchAll(
+      new RegExp(
+        String.raw`CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+${fn}${args}([\s\S]*?)\bAS\s+\$function\$([\s\S]*?)\$function\$\s*;`,
+        "gi"
+      )
+    )
+  ];
+  const definition = definitions[definitions.length - 1];
+
+  if (definition === undefined) return false;
+
+  const header = definition[1]!;
+  const body = definition[2]!;
+
+  if (!/\bSECURITY\s+DEFINER\b/i.test(header)) return false;
+
+  const pin = /\bSET\s+search_path\s*(?:=|TO)\s*([\w\s,"]+?)\s*$/i.exec(header);
+  const pinned = pin?.[1]?.split(",").map((part) => part.trim().toLowerCase());
+
+  if (pinned === undefined || pinned[pinned.length - 1] !== "pg_temp") {
+    return false;
+  }
+
+  const branch = new RegExp(
+    String.raw`p_table\s*=\s*'${tableName}'\s*THEN([\s\S]*?)(?=\bELSIF\b|\bELSE\b|\bEND\s+IF\b)`,
+    "i"
+  ).exec(body)?.[1];
+
+  if (
+    branch === undefined ||
+    !new RegExp(String.raw`\bFROM\s+${tableName}\b`, "i").test(branch) ||
+    !new RegExp(
+      String.raw`\b${tenantColumn}\s*=\s*p_tenant_id\b[\s\S]*?\b${cursorColumn}\s*<\s*p_cutoff\b`,
+      "i"
+    ).test(branch)
+  ) {
+    return false;
+  }
+
+  const revoked = new RegExp(
+    String.raw`REVOKE\s+ALL\s+ON\s+FUNCTION\s+${fn}${args}\s+FROM\s+PUBLIC\s*;`,
+    "i"
+  ).test(sql);
+  const granted = new RegExp(
+    String.raw`GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+${fn}${args}\s+TO\s+${WORKER_ROLE}\s*;`,
+    "i"
+  ).test(sql);
+
+  if (!revoked || !granted) return false;
+
+  const owners = [
+    ...sql.matchAll(
+      new RegExp(
+        String.raw`ALTER\s+FUNCTION\s+${fn}${args}\s+OWNER\s+TO\s+(\w+)\s*;`,
+        "gi"
+      )
+    )
+  ];
+  const owner = owners[owners.length - 1]?.[1];
+
+  if (owner === undefined || owner === WORKER_ROLE) return false;
+
+  return [
+    ...sql.matchAll(
+      new RegExp(
+        String.raw`GRANT\s+SELECT\s*\(([^)]*)\)\s+ON\s+${tableName}\s+TO\s+${owner}\s*;`,
+        "gi"
+      )
+    )
+  ].some((grant) => {
+    const columns = grant[1]!.split(",").map((c) => c.trim().toLowerCase());
+
+    return columns.includes(tenantColumn) && columns.includes(cursorColumn);
+  });
+}
+
 /** Delegated, tenant-scoped descriptor tables the worker holds no SELECT on. */
 export function findUnreadableDelegatedTables(
   modules: ReturnType<typeof listModules>,
@@ -118,6 +239,16 @@ export function findUnreadableDelegatedTables(
     for (const descriptor of module.dataLifecycle ?? []) {
       if (descriptor.executionMode !== "delegated") continue;
       if (descriptor.scope !== "tenant") continue;
+      if (
+        hasWorkerCountFunction(
+          migrationSql,
+          descriptor.tableName,
+          descriptor.cursorColumn,
+          descriptor.tenantColumn ?? "tenant_id"
+        )
+      ) {
+        continue;
+      }
       if (!grantsPrivilege(migrationSql, descriptor.tableName, "SELECT")) {
         unreadable.add(descriptor.tableName);
       }
@@ -203,7 +334,7 @@ if (import.meta.main) {
     );
     for (const table of delegated.added) {
       console.error(
-        `  - NEW unreadable delegated descriptor: ${table} — ${WORKER_ROLE} has no SELECT, so its dry-run snapshot fails every run. Grant SELECT (only if the worker may read that data) or use a count-only SECURITY DEFINER snapshot; do not add it to the baseline to silence this.`
+        `  - NEW unreadable delegated descriptor: ${table} — ${WORKER_ROLE} has no SELECT, so its dry-run snapshot fails every run. Grant SELECT (only if the worker may read that data) or add a count-only SECURITY DEFINER function and declare it in DELEGATED_COUNT_FUNCTIONS (sql/303 is the pattern); do not add it to the baseline to silence this.`
       );
     }
     for (const table of delegated.stale) {
@@ -215,6 +346,6 @@ if (import.meta.main) {
   }
 
   console.log(
-    `data-lifecycle:worker-grants:check OK — ${required.length} lifecycle table(s), every required ${WORKER_ROLE} privilege granted in sql/; ${KNOWN_UNREADABLE_DELEGATED_TABLES.length} known unreadable delegated snapshot(s) (baseline, shrink-only).`
+    `data-lifecycle:worker-grants:check OK — ${required.length} lifecycle table(s), every required ${WORKER_ROLE} privilege granted in sql/; ${KNOWN_UNREADABLE_DELEGATED_TABLES.length} known unreadable delegated snapshot(s) (baseline, shrink-only); delegated tables with a worker count function are counted, not skipped.`
   );
 }

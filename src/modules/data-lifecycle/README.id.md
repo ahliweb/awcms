@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8037cfc9038f3eed9e9de99f5e9dc58f093c19a5887d8d7f8f4acf8ed73c26e9 -->
+<!-- i18n-source-hash: sha256:213ba1790689ede029c520694d9f6747797ef32cbc47b92e29688c59acc5607f -->
 
 # Data Lifecycle
 
@@ -295,30 +295,40 @@ di sini.
 
 ## Keterbatasan yang diketahui
 
-- **Snapshot delegated yang tak bisa dibaca worker (Issue #1040).** Per tenant,
-  `data-lifecycle:archive-purge` mencatat snapshot backlog dry-run untuk setiap
-  deskriptor `delegated`, yang men-`SELECT` tabelnya sebagai `awcms_worker`. 25
-  tabel inventori, procurement, HR, dan booking sengaja TIDAK dapat dibaca worker
-  (batas payroll menjauhkan role worker dari data itu), sehingga snapshot-nya
-  gagal. Deskriptor yang gagal diisolasi: dicatat di log
+- **Snapshot delegated yang tak bisa dibaca worker (Issue #1040, diselesaikan
+  oleh #1042).** Per tenant, `data-lifecycle:archive-purge` mencatat snapshot
+  backlog dry-run untuk setiap deskriptor `delegated`. 25 tabel inventori,
+  procurement, HR, dan booking sengaja TIDAK dapat dibaca `awcms_worker` (batas
+  payroll menjauhkan role worker dari data itu), sehingga snapshot tidak
+  men-`SELECT`-nya: ia memanggil fungsi `SECURITY DEFINER` hanya-hitung dari
+  `sql/303` (`awcms_{inventory,procurement,hr_workforce,booking}_lifecycle_eligible_count(p_table,
+p_tenant_id, p_cutoff)`) yang mengembalikan SATU integer, jumlah baris tenant
+  yang lebih tua dari cutoff. Held, purgeable, dan blocked diturunkan di
+  TypeScript dari angka itu dan catatan legal hold, sehingga kunci hold tidak
+  masuk ke SQL (semua deskriptor ini tidak dapat diarsipkan, jadi eligible sama
+  dengan purgeable). Pemetaannya adalah `DELEGATED_COUNT_FUNCTIONS` di
+  `domain/known-unreadable-delegated.ts`. Pengaman: `search_path` dipin ke
+  `public, pg_temp`; `EXECUTE` hanya untuk `awcms_worker`; satu role pemilik
+  NOLOGIN khusus per modul dengan `SELECT` tingkat kolom `(tenant_id, kolom
+cursor)` saja; RLS tidak diubah (pembatasan tenant bertumpu pada `app.current_tenant_id` milik pemanggil
+  ditambah `p_tenant_id`; ini tidak menambah kemampuan di luar iterasi per-tenant yang sudah
+  dilakukan worker dan bukan batas terhadap worker); SQL statis per tabel, tabel tak dikenal memunculkan `22023`.
+  Tidak ada relasi payroll yang terlibat. Snapshot direkam sebagai run
+  `completed` beserta hitungan.
+  Deskriptor yang gagal tetap diisolasi: dicatat di log
   (`data_lifecycle.descriptor_failed`, hanya kunci deskriptor dan SQLSTATE,
   tanpa data baris), direkam sebagai run `dry_run` dengan `status: failed` dan
   `errorCount: 1`, lalu pass berlanjut, termasuk ke deskriptor generik. Isolasi
-  yang sama berlaku bagi deskriptor generik yang melempar error. Kegagalan
-  snapshot DIHARAPKAN hanya bila tabelnya ada di baseline DAN SQLSTATE-nya
-  `42501`; yang demikian dihitung sebagai `knownUnreadableDelegated` (hasil,
-  telemetri, dan detail job), tetap direkam sebagai run `failed`
-  (`awcms_data_lifecycle_runs` hanya mengizinkan `completed`, `partial`, dan
-  `failed`), dan TIDAK membuat job `partial`, sehingga job harian keluar 0. Hal
-  lain (SQLSTATE berbeda, tabel di luar baseline, kegagalan generik apa pun)
-  membuat job `partial` dan keluar non-nol. Himpunan ini adalah baseline
-  shrink-only di `scripts/data-lifecycle-worker-grants-check.ts`
-  (`KNOWN_UNREADABLE_DELEGATED_TABLES`); deskriptor delegated baru yang tak
-  terbaca atau entri basi menggagalkan `data-lifecycle:worker-grants:check`.
-  Tindak lanjut: snapshot `SECURITY DEFINER` hanya-hitung per modul pemilik
-  (pola sql/217), agar snapshot berjalan tanpa worker membaca baris. Sampai
-  itu, tabel-tabel tersebut menampilkan dry-run gagal, bukan hitungan backlog;
-  purge sebenarnya tidak terpengaruh (job milik modul pemiliknya).
+  yang sama berlaku bagi deskriptor generik yang melempar error. Baseline
+  shrink-only `KNOWN_UNREADABLE_DELEGATED_TABLES` kini KOSONG; mekanismenya
+  dipertahankan untuk deskriptor mendatang yang tak boleh dibaca worker.
+  Kegagalan snapshot DIHARAPKAN hanya bila tabelnya ada di baseline DAN
+  SQLSTATE-nya `42501` (dihitung sebagai `knownUnreadableDelegated` dan tidak
+  membuat job `partial`); hal lain membuat job `partial` dan keluar non-nol.
+  `data-lifecycle:worker-grants:check` gagal untuk deskriptor delegated tak
+  terbaca yang tidak punya `SELECT` worker maupun fungsi hitung terpetakan yang
+  di-grant ke worker dengan cabang untuk tabelnya, dan untuk entri baseline
+  basi. Purge sebenarnya tidak terpengaruh (job milik modul pemiliknya).
 - **Eksekusi lintas-tenant/ber-scope global**: deskriptor `scope: "global"`
   diterima oleh validator registry (pengetikan kompatibel-ke-depan) tetapi
   perencana dry-run dan engine archive/purge hanya mengimplementasikan jalur

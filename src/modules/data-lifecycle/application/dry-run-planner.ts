@@ -25,6 +25,10 @@ import {
   type LegalHoldRecord
 } from "../domain/legal-hold";
 import { applyCursorBoundarySafetyMargin } from "../domain/cursor-boundary";
+import {
+  COUNT_FUNCTION_PATTERN,
+  DELEGATED_COUNT_FUNCTIONS
+} from "../domain/known-unreadable-delegated";
 import { findArchivedThroughCursor } from "./manifest-store";
 
 const TABLE_NAME_PATTERN = /^awcms_[a-z][a-z0-9_]*$/;
@@ -103,11 +107,41 @@ export async function planLifecycleDryRun(
     descriptor.key
   );
 
-  const eligibleRows = (await tx.unsafe(
-    `SELECT count(*)::int AS count FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2`,
-    [tenantId, cutoff]
-  )) as { count: number }[];
-  const eligibleCount = eligibleRows[0]?.count ?? 0;
+  const countFunction =
+    descriptor.executionMode === "delegated"
+      ? DELEGATED_COUNT_FUNCTIONS[descriptor.tableName]
+      : undefined;
+  let eligibleCount: number;
+
+  if (countFunction !== undefined) {
+    // Issue #1042: the worker may not SELECT this module's tables, so the
+    // eligible count comes from the owner's count-only SECURITY DEFINER
+    // function (sql/303). It returns one integer; held/purgeable/blocked are
+    // derived below exactly as for any other descriptor.
+    if (!COUNT_FUNCTION_PATTERN.test(countFunction)) {
+      throw new Error(
+        `planLifecycleDryRun: refusing to call an unsafe count function name: ${JSON.stringify(countFunction)}.`
+      );
+    }
+
+    if (descriptor.archive.archivable) {
+      throw new Error(
+        `planLifecycleDryRun: "${descriptor.key}" is archivable, but the count function only reports the eligible backlog; it cannot compute the archived boundary.`
+      );
+    }
+
+    const rows = (await tx.unsafe(
+      `SELECT ${countFunction}($1, $2, $3) AS count`,
+      [tableName, tenantId, cutoff]
+    )) as { count: number }[];
+    eligibleCount = rows[0]?.count ?? 0;
+  } else {
+    const eligibleRows = (await tx.unsafe(
+      `SELECT count(*)::int AS count FROM ${tableName} WHERE ${tenantColumn} = $1 AND ${cursorColumn} < $2`,
+      [tenantId, cutoff]
+    )) as { count: number }[];
+    eligibleCount = eligibleRows[0]?.count ?? 0;
+  }
 
   if (evaluation.held) {
     return {

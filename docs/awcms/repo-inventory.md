@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 220   |
+| Migrations                          | 221   |
 | `awcms_*` tables                    | 216   |
 | Tables with `FORCE` RLS             | 198   |
 | RLS-free tables (global, by design) | 18    |
@@ -278,6 +278,7 @@
 | 218 | `sql/300_awcms_procurement_approval_binding.sql`                   |
 | 219 | `sql/301_awcms_workflow_engine_binding.sql`                        |
 | 220 | `sql/302_awcms_hr_attendance_notice_worker_grants.sql`             |
+| 221 | `sql/303_awcms_lifecycle_delegated_count_functions.sql`            |
 
 ### Tables & Row-Level Security
 
