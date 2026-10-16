@@ -19,12 +19,18 @@
  * NOBODY sees both the request form and the decide buttons. The page is built
  * for that to be the normal state rather than treating it as an edge case.
  *
- * ## The export result is shown, never stored
+ * ## The export result is shown, not offered for download
  *
- * The report is rendered into the page and nowhere else — no download, no
- * server-side file. A subject-access export is the single most concentrated
+ * The report is rendered into the page — no download, no server-side file, no
+ * URL of its own. A subject-access export is the single most concentrated
  * disclosure this system can produce, and giving it a URL would give it a life
  * beyond the session that was authorised and audited.
+ *
+ * It is NOT true that nothing is kept: a retried request is answered from the
+ * `Idempotency-Key` record, which lives for up to 30 days. That record holds the
+ * report EXCEPT the rows of payroll-boundary tables (a person's earnings), which
+ * it keeps as ids only and which a replay re-reads under a fresh permission
+ * check (Issue #1018). The page says so rather than claiming "never stored".
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
@@ -41,6 +47,26 @@ type SubjectRequestStatus = SubjectRequestRow["status"];
 
 const ssr = Astro.locals.ssrContext!;
 const { t } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The strings the export-result script renders. Translated HERE and handed to
+ * the script as data attributes, because the script is bundled and cannot call
+ * `t()`. The placeholders are passed as themselves so they survive into the
+ * attribute; the script substitutes the counts.
+ */
+const exportText = {
+  summary: t(
+    "{rows} row(s) across {tables} table(s). {unanswered} table(s) are not covered, {withheld} withheld for lack of permission, {truncated} cut short by the row cap. See below.",
+    {
+      rows: "{rows}",
+      tables: "{tables}",
+      unanswered: "{unanswered}",
+      withheld: "{withheld}",
+      truncated: "{truncated}"
+    }
+  ),
+  columnsWithheld: t("Withheld columns:")
+};
 
 /**
  * `requestType`/`status` are rendered raw only on this one screen, so their
@@ -165,7 +191,7 @@ const pending = requests.filter(
               {t("This is a")}
               <strong>{t("disclosure")}</strong>
               {t(
-                ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable."
+                ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is not offered for download. A retried request is answered from a short-lived record (up to 30 days) that holds no pay data."
               )}
             </p>
 
@@ -195,7 +221,12 @@ const pending = requests.filter(
             </button>
           </form>
 
-          <div id="subject-export-result" hidden>
+          <div
+            id="subject-export-result"
+            data-summary={exportText.summary}
+            data-columns-withheld={exportText.columnsWithheld}
+            hidden
+          >
             <h3>{t("Export result")}</h3>
             <p id="subject-export-summary" class="page-description" />
             <div id="subject-export-tables" />
@@ -396,10 +427,20 @@ const pending = requests.filter(
     rows: Record<string, unknown>[];
   };
   type Unanswered = { tableName: string; reason: string; rationale: string };
+  type Withheld = { key: string; reason: string };
+
+  const items = (lines: readonly string[]): HTMLLIElement[] =>
+    lines.map((line) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      return item;
+    });
 
   function renderExport(payload: {
     tables: ExportTable[];
     unanswered: Unanswered[];
+    withheld?: Withheld[];
+    truncatedTables?: string[];
   }): void {
     const result = document.getElementById("subject-export-result");
     const summary = document.getElementById("subject-export-summary");
@@ -411,7 +452,21 @@ const pending = requests.filter(
       (total, table) => total + table.rows.length,
       0
     );
-    summary.textContent = `${rowCount} row(s) across ${payload.tables.length} table(s). ${payload.unanswered.length} table(s) are not covered — see below.`;
+    const withheld = payload.withheld ?? [];
+    const truncated = payload.truncatedTables ?? [];
+    // The template was translated server-side; only the counts are filled in.
+    const counts = [
+      rowCount,
+      payload.tables.length,
+      payload.unanswered.length,
+      withheld.length,
+      truncated.length
+    ];
+    const names = ["rows", "tables", "unanswered", "withheld", "truncated"];
+    summary.textContent = (result.dataset.summary ?? "").replace(
+      /\{(\w+)\}/g,
+      (_match, name: string) => String(counts[names.indexOf(name)] ?? 0)
+    );
 
     // `textContent` throughout: the report is other people's data, and a
     // subject-access export is the last place to build HTML from stored values.
@@ -427,7 +482,7 @@ const pending = requests.filter(
         if (table.redactedColumns.length > 0) {
           const note = document.createElement("p");
           note.className = "page-description";
-          note.textContent = `Withheld: ${table.redactedColumns.join(", ")}`;
+          note.textContent = `${result.dataset.columnsWithheld ?? "Withheld columns:"} ${table.redactedColumns.join(", ")}`;
           section.append(note);
         }
 
@@ -436,12 +491,16 @@ const pending = requests.filter(
       })
     );
 
+    // What this answer does not cover: the tables no column reaches, the payroll
+    // tables the caller may not read (withheld) and the ones cut short.
     unanswered.replaceChildren(
-      ...payload.unanswered.map((entry) => {
-        const item = document.createElement("li");
-        item.textContent = `${entry.tableName} (${entry.reason}) — ${entry.rationale}`;
-        return item;
-      })
+      ...items([
+        ...payload.unanswered.map(
+          (entry) => `${entry.tableName} (${entry.reason}) — ${entry.rationale}`
+        ),
+        ...withheld.map((entry) => `${entry.key} (withheld) — ${entry.reason}`),
+        ...truncated.map((key) => `${key} (row cap) — incomplete`)
+      ])
     );
 
     result.hidden = false;
@@ -464,7 +523,12 @@ const pending = requests.filter(
 
     if (result.ok) {
       renderExport(
-        result.data as { tables: ExportTable[]; unanswered: Unanswered[] }
+        result.data as {
+          tables: ExportTable[];
+          unanswered: Unanswered[];
+          withheld?: Withheld[];
+          truncatedTables?: string[];
+        }
       );
       noticeBox.show("Disclosure recorded and audited.");
       unlock();

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:25f188676c26b693e015af33b91ba9c0f782d33c6f17d28d03f4b38d68ece9cc -->
+<!-- i18n-source-hash: sha256:199d6d7be6e4fe69806b035b3eda7d1cb037090cc3ab57e613624b8c0f297f90 -->
 
 # `hr_commission`
 
@@ -254,11 +254,26 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes men
   permission biasa: jalur "karyawan melihat akrualnya sendiri" (ownership grant pada
   login employment) dan business scope `office` adalah tindak lanjut bersama
   permukaan swalayan.
-- **Mengekspor riwayat akrual seseorang** (dilacak di issue #985) membutuhkan join employment-ke-subjek; registri
-  kini punya satu (`subjectVia`, ADR-0142, dipakai pertama oleh
-  `hr_workforce.employment_terms`), tetapi descriptor komisi masih hanya menamai
-  stempel aktor dan `exportable: false`: mengadopsinya adalah keputusan modul ini
-  sendiri, karena penghasilan berada di batas penggajian.
+- **Riwayat akrual seseorang diekspor kepada orang itu** (Issue #1018,
+  ADR-0142): `hr_commission.accruals` menjangkau penerima lewat `employment_id`
+  (`subjectVia`) dan `exportable: true`; stempel aktor bukan kolom subjek. Karena
+  penghasilan berada di batas penggajian, rute ekspor subjek **tidak** menyerahkannya
+  hanya dengan `data_lifecycle.subject_request.export`: pemanggil juga harus memegang
+  `hr_commission.accruals.read`, jika tidak tabelnya ditahan dan disebut di
+  `withheld` pada respons (default-deny, juga untuk replay ekspor tersimpan). Setiap
+  pembacaan yang terjadi dicatat sebagai sensitive read (id dan jumlah, tak pernah
+  nominal). `hr_commission.transitions` tetap `exportable: false`: ia butuh lompatan
+  kedua dan tidak menambah apa pun tentang penerima yang belum dibawa akrual. Apakah
+  penghasilan boleh diekspor kepada subjek adalah keputusan produk/hukum yang tercatat
+  di adendum ADR-0142.
+  Join memakai `profile_id` SAJA (login yang salah tertaut ke employment orang lain
+  lalu dikoreksi akan memasukkan akrual employment itu ke ekspor login tersebut).
+  Catatan `Idempotency-Key` yang tersimpan hanya menyimpan id baris ini dan replay
+  membacanya ulang di bawah pemeriksaan `accruals.read` yang baru. Snapshot
+  `beneficiary_tenant_user_id` (`sql/236`) adalah kolom yang disamarkan pada ekspor
+  dan tidak ada di respons API mana pun: komentar header `sql/236` yang menyatakan
+  "tidak diekspos API apa pun" benar hanya karena penyamaran itu, dan migrasi yang
+  sudah diterapkan tidak dapat disunting untuk menyatakannya.
 - **Retensi: disimpan selama hidup tenant, tanpa periode yang diklaim.** Sengaja
   TIDAK ada descriptor `dataLifecycle` untuk ketiga tabel (descriptor harus
   mengklaim periode dan mode purge, dan tak ada yang mem-purge): tabel buku besar

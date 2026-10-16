@@ -365,6 +365,50 @@ export async function readSubjectExport(
   return results;
 }
 
+/**
+ * Re-read specific rows of ONE planned table by id, with the same redaction as
+ * {@link readSubjectExport} (Issue #1018, audit M2): the replay of a stored
+ * export stores no payroll rows, only their ids, and gets the rows back here.
+ *
+ * The tenant predicate is explicit, and the SUBJECT predicate is kept as well,
+ * so an id in a tampered stored body cannot read a row that is not the
+ * subject's.
+ */
+export async function readSubjectRowsByIds(
+  tx: Bun.SQL,
+  tenantId: string,
+  entry: SubjectPlanEntry,
+  columnTypes: ReadonlyMap<string, ColumnType[]>,
+  ids: readonly string[]
+): Promise<Record<string, unknown>[]> {
+  // Bound as one Postgres array literal. Ids come from a stored body, so each
+  // is checked to be a UUID before it is placed in the literal.
+  const safeIds = ids.filter((id) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  );
+
+  if (safeIds.length === 0) return [];
+
+  const redacted = new Set(entry.redactedColumns);
+  const selected = (columnTypes.get(entry.tableName) ?? [])
+    .map((column) => column.column)
+    .filter((column) => !redacted.has(column))
+    .map(quoted);
+
+  if (selected.length === 0) return [];
+
+  const predicate = subjectPredicate(entry, 2);
+  const idsPlaceholder = `$${2 + predicate.values.length}`;
+
+  return (await tx.unsafe(
+    `SELECT ${selected.join(", ")} FROM ${quoted(entry.tableName)} ` +
+      `WHERE ${quoted(entry.tenantColumn)} = $1::uuid ` +
+      `AND "id" = ANY(${idsPlaceholder}::uuid[]) ` +
+      `AND ${predicate.sql}`,
+    [tenantId, ...predicate.values, `{${safeIds.join(",")}}`]
+  )) as Record<string, unknown>[];
+}
+
 export type SubjectErasureOutcome = {
   key: string;
   tableName: string;

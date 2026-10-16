@@ -2283,7 +2283,13 @@ msgstr ""
 msgid "not applicable"
 msgstr ""
 
-msgid ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable."
+msgid ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is not offered for download. A retried request is answered from a short-lived record (up to 30 days) that holds no pay data."
+msgstr ""
+
+msgid "{rows} row(s) across {tables} table(s). {unanswered} table(s) are not covered, {withheld} withheld for lack of permission, {truncated} cut short by the row cap. See below."
+msgstr ""
+
+msgid "Withheld columns:"
 msgstr ""
 
 msgid "Not covered by this answer"

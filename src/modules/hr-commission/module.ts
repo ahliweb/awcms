@@ -155,17 +155,25 @@ export const hrCommissionModule = defineModule({
       key: "hr_commission.accruals",
       tableName: "awcms_hr_commission_accruals",
       ownerModuleKey: HR_COMMISSION_MODULE_KEY,
-      subjectColumns: [
-        { column: "created_by", references: "tenant_user" },
-        { column: "approved_by", references: "tenant_user" },
-        { column: "released_by", references: "tenant_user" },
-        { column: "paid_by", references: "tenant_user" },
-        { column: "voided_by", references: "tenant_user" }
-      ],
-      exportable: false,
+      // ADR-0142 / Issue #1018: the beneficiary is reached through the
+      // employment, never through the actor stamps (`created_by`,
+      // `approved_by`, `released_by`, `paid_by`, `voided_by`), which name the
+      // people who moved the accrual and would put every accrual a manager
+      // approved into the manager's own export.
+      subjectColumns: [],
+      subjectVia: {
+        column: "employment_id",
+        parentKey: "hr_workforce.employments",
+        parentColumns: ["profile_id"]
+      },
+      exportable: true,
+      // The login stamped at birth for segregation of duties (sql/236). An
+      // internal snapshot, not information for the subject, and after a corrected
+      // mislink it can be somebody ELSE'S login: never handed out.
+      redactedColumns: ["beneficiary_tenant_user_id"],
       erasure: "retain_under_obligation",
       rationale:
-        "A person's commission EARNINGS. The row reaches the beneficiary only through `employment_id` (an hr_workforce employment, which the registry's direct subject columns cannot express — the same limit `hr_workforce.employment_terms` records), so this descriptor names only the actor stamps; no name, identifier, contact or free text is stored. The monetary facts are immutable by trigger and the row is undeletable, retained under the employer's labour, tax and social-security obligations (ADR-0132 section 13.2; the periods are the employer's counsel's, not asserted here), so an erasure could not rewrite them; anonymising the profile leaves the row resolving to no recognisable person. A direct employment-to-subject join in the export, so a person can obtain their own accrual history, is the recorded follow-up tracked in issue #985 (extended to cover accruals) and docs/awcms/hr-payroll.md section 15."
+        "A person's commission EARNINGS. The row reaches the beneficiary through `employment_id` -> `awcms_hr_employments` (`profile_id` ONLY, Issue #1018: the login columns would also match a login mislinked to somebody else's employment), the indirect path ADR-0142 added to the subject-data model, so a person's own accrual history is part of their subject-access export and another person's is not. This table sits INSIDE the payroll data boundary, so the export route does not hand it out on `data_lifecycle.subject_request.export` alone: it requires the caller to ALSO hold `hr_commission.accruals.read`, withholds the table (and says so in the response) otherwise, and records the read as a sensitive read in the audit trail (Issue #1018). The actor stamps are deliberately not subject columns: they name the approver and the payer. No name, identifier, contact or free text is stored (`void_reason_code` is a code). The monetary facts are immutable by trigger and the row is undeletable, retained under the employer's labour, tax and social-security obligations (ADR-0132 section 13.2; the periods are the employer's counsel's, not asserted here), so an erasure could not rewrite them and does NOT follow the join; anonymising the profile leaves the row resolving to no recognisable person."
     },
     {
       key: "hr_commission.transitions",
@@ -177,7 +185,7 @@ export const hrCommissionModule = defineModule({
       exportable: false,
       erasure: "retain_under_obligation",
       rationale:
-        "The append-only log of who moved an accrual when: a status, a coded reason and the acting login. No amount and no beneficiary column (the accrual it belongs to carries those). Append-only by trigger and privileges and retained with the ledger, so the stamp is not rewritten; the actor resolves to nobody once the identity is anonymised."
+        "The append-only log of who moved an accrual when: a status, a coded reason and the acting login. No amount and no beneficiary column (the accrual it belongs to carries those). NOT exported (Issue #1018): the row reaches the beneficiary only through its accrual, a SECOND hop that ADR-0142 deliberately does not provide, and it would add nothing about the beneficiary that the exported accrual does not already carry (the status, the timestamps and the void reason code are on the accrual itself); what it adds is who acted, and that is the actor's data. Append-only by trigger and privileges and retained with the ledger, so the stamp is not rewritten; the actor resolves to nobody once the identity is anonymised."
     }
   ]
 });

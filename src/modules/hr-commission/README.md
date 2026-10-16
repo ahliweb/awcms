@@ -241,11 +241,26 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test remove
   permission: the "employee sees their own accruals" path (an ownership grant on
   the employment's login) and the `office` business scope are follow-ups with the
   self-service surface.
-- **Exporting a person's accrual history** (tracked in issue #985) needs an employment-to-subject join; the registry now has one
-  (`subjectVia`, ADR-0142, first used by `hr_workforce.employment_terms`), but the
-  commission descriptor still names only the actor stamps and is
-  `exportable: false`: adopting it is this module's own decision, because earnings
-  sit on the payroll boundary.
+- **A person's accrual history is exported to that person** (Issue #1018,
+  ADR-0142): `hr_commission.accruals` reaches the beneficiary through
+  `employment_id` (`subjectVia`) and is `exportable: true`; the actor stamps are not
+  subject columns. Because earnings sit on the payroll boundary, the subject-export
+  route does **not** hand them out on `data_lifecycle.subject_request.export`
+  alone: the caller must ALSO hold `hr_commission.accruals.read`, otherwise the
+  table is withheld and named under `withheld` in the response (default-deny, also
+  for a replay of a stored export). Every read that does happen is recorded as a
+  sensitive read (ids and a count, never an amount). `hr_commission.transitions`
+  stays `exportable: false`: it needs a second hop and adds nothing about the
+  beneficiary the accrual does not carry. Whether earnings may be exported to the
+  subject at all is a product/legal decision recorded in the ADR-0142 addendum.
+  The join uses `profile_id` ONLY (a login mislinked to somebody else's employment
+  and later corrected would otherwise put that employment's accruals into the
+  login's export). The stored `Idempotency-Key` record keeps these rows as ids only
+  and a replay re-reads them under a fresh `accruals.read` check. The
+  `beneficiary_tenant_user_id` snapshot (`sql/236`) is a redacted column of the
+  export and is in no API response: the header comment of `sql/236` that says it
+  "is not exposed by any API" stays true only because of that redaction, and the
+  applied migration cannot be edited to say so.
 - **Retention: retained for the life of the tenant, no period asserted.** There is
   deliberately NO `dataLifecycle` descriptor for any of the three tables (a
   descriptor must assert a period and a purge mode, and nothing purges): the ledger

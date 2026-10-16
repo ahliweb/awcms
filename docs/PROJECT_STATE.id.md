@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:958e85367a4249abe02356180318037e18f9213ebdef5a3471aa4e8d534d4865 -->
+<!-- i18n-source-hash: sha256:f8f98977640e2dee949c87f21370a643a198a6f2d5f5d4e0d00cb51f2176b081 -->
 
 # AWCMS — Project State & Continuation
 
@@ -123,7 +123,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **219** (`sql/001`–`301`)                                                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0145** (`0000` = template; status ADR tertinggi: **Accepted**)                                               | `ls docs/adr/`                                                                          |
 | Layar admin                        | **75** berkas `.astro` di `src/pages/admin/`; **2 dari 33** modul tanpa `navigation:` (`hr-commission`, `hr-workforce`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **92** (56.369 baris) — soal typecheck lihat §6                                                                         | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **92** (56.433 baris) — soal typecheck lihat §6                                                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **67** di rantai `bun run check`                                                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

@@ -327,7 +327,7 @@ paths:
       tags:
         - Data Lifecycle
       summary: Export everything this tenant holds about a data subject
-      description: "ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export."
+      description: "ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. A table inside the payroll data boundary (today the commission accruals, a person's earnings) additionally needs its own read permission (hr_commission.accruals.read); without it the table is WITHHELD and named under `withheld`, and a read that does happen is recorded as a sensitive read. The stored Idempotency-Key record keeps no payroll rows, only their ids: a replay re-checks the permission, re-reads those rows and records the read again, so a replay may differ from the first answer by having payroll tables withheld. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export."
       operationId: dataLifecycleSubjectExport
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -340,7 +340,7 @@ paths:
               $ref: "#/components/schemas/DataLifecycleSubjectRequestInput"
       responses:
         "200":
-          description: The subject's data, or replay of a prior identical request.
+          description: The subject's data, or replay of a prior identical request. On a replay the payroll-boundary tables are re-read under a fresh permission check and may come back under `withheld` instead.
           content:
             application/json:
               schema:
@@ -378,6 +378,27 @@ paths:
                           be mistaken for the whole one.
                         items:
                           type: string
+                      withheld:
+                        type: array
+                        description: >-
+                          Exportable tables inside the payroll data boundary
+                          (today `hr_commission.accruals`, a person's
+                          earnings) that this caller may not read, so the
+                          report is INCOMPLETE for them and says why. Such a
+                          table needs its own read permission on top of
+                          `data_lifecycle.subject_request.export` (Issue
+                          #1018); when the caller holds it the table is in
+                          `tables` and the read is recorded as a sensitive
+                          read. Empty means nothing was held back for lack of
+                          permission.
+                        items:
+                          type: object
+                          required: [key, reason]
+                          properties:
+                            key:
+                              type: string
+                            reason:
+                              type: string
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
