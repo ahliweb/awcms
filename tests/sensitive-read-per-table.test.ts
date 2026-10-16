@@ -210,7 +210,12 @@ describe("imports of the exempt ledger's read functions", () => {
     (_name, code, functions) => {
       const result = evaluate({ [NEW_ROUTE]: code });
 
-      expect(result.forbiddenReadImports).toHaveLength(1);
+      // A wildcard import (`ALL`) reaches BOTH registered reader sets, the
+      // all-accruals readers and the own-only readers (Issue #952, audit M-2);
+      // a named import of one reader is exactly one violation.
+      expect(result.forbiddenReadImports).toHaveLength(
+        functions === ALL ? 2 : 1
+      );
       expect(result.forbiddenReadImports[0]!.functions).toEqual(functions);
       expect(result.valid).toBe(false);
     }

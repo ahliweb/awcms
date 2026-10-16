@@ -116,7 +116,14 @@ const ROUTES = [
   { path: "/admin/booking/offerings", label: "booking offerings (form)" },
   { path: "/admin/booking/schedules", label: "booking schedules + closures" },
   { path: "/admin/booking/blocks", label: "booking blocked nights" },
-  { path: "/admin/booking/policy", label: "booking policy (SettingsSaveBar)" }
+  { path: "/admin/booking/policy", label: "booking policy (SettingsSaveBar)" },
+  // Issue #952 — the employee self-service, supervisor and HR screens: stacked
+  // tables, a segmented period filter, stat cards and a correction request form.
+  { path: "/admin/hr/my-work", label: "hr my work (shifts, attendance, form)" },
+  { path: "/admin/hr/my-metrics", label: "hr my workforce metrics" },
+  { path: "/admin/hr/my-commission", label: "hr my commission" },
+  { path: "/admin/hr/team", label: "hr my team" },
+  { path: "/admin/hr/workforce", label: "hr workforce (HR view)" }
 ] as const;
 
 const tenantId = process.env.E2E_TENANT_ID;

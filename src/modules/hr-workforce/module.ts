@@ -111,15 +111,13 @@ function retained(input: {
 export const hrWorkforceModule = defineModule({
   key: HR_WORKFORCE_MODULE_KEY,
   name: "HR Workforce",
-  version: "0.1.0",
-  // `experimental` = the flag is OFF: no admin screen exists yet (ADR-0021
-  // criterion 1 requires every ACTIVE module to declare one), and the module is
-  // not enabled for a tenant until it is. The family's rollout rule
-  // (docs/awcms/hr-payroll.md section 14) is "experimental until its admin
-  // screens land".
-  status: "experimental",
+  version: "0.2.0",
+  // `active` since Issue #952: the module was `experimental` while it had no
+  // admin screen (ADR-0021 criterion 1: every ACTIVE module declares one), and
+  // it now declares four (the employee's, the supervisor's and HR's).
+  status: "active",
   description:
-    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or reason (the assign row carries only the login's UUID). Shifts (Issue #946): shift templates are patterns (local start, elapsed duration, one optional break, IANA zone) and a shift assignment is one UTC half-open interval per employment, work or time off (a coarse category, never a reason; no free-text field exists), draft then published then cancelled, never deleted. The database refuses two overlapping non-cancelled assignments of one employment, across kinds, even for two concurrent writers (a per-employment advisory lock inside the trigger), and a published or cancelled row is immutable. Publish and cancel are high-risk, idempotent and audited with ids only; an employee reads their own published schedule through an ownership grant. The module's StaffAvailabilityPort adapter exposes working intervals per opaque staff reference (published work, minus breaks and time off, while the terms are active) and nothing else, read-only in the caller's tenant transaction. Attendance (Issue #947): an append-only event table (no UPDATE or DELETE for the runtime role, plus triggers) whose recorded time is the database clock, whose claimed time is bounded by the tenant's clock-skew setting (self and supervisor events cannot be back-dated; kiosk and import replays are accepted up to seven days and flagged late), replay-safe by a client event key, with no location, photo, device or network column (owner decision O6; location evidence is a separate table, Issue #970). A correction never edits an event: it proposes an add or a replace with a mandatory reason, starts a workflow_approval instance (fail-closed when none is published), and on approval appends a new event that supersedes the old one; the correction row only changes status, follows the workflow verdict (enforced by the database), and the requester can never be the approver (CHECK, trigger over the workflow decision rows including delegation, and the chokepoint). An employee reads their own events and a supervisor their reports' (the manager chain, ten levels, a deleted employment breaks it) through ownership grants; the correction reason is sensitive and never reaches an audit row, event, log or the workflow store. Workforce metrics (Issue #953): transparent attendance, hours, shift-coverage and productivity facts (no composite score; no photo, biometric, device, location or payroll data) read by the employee (own), the supervisor (direct reports) and HR through default-deny permissions and ownership grants, with per-office aggregates withheld below five contributing employees and one registered reporting projection (event volume). Commission and payroll are later phases of the same ADR. No admin screen yet: the module stays experimental until one lands.",
+    "The employment context (Issue #945, ADR-0132): who works here, where, under whom and since when, for any module that schedules or books people. An employment REFERENCES a profile_identity party by composite foreign key and never copies its name, contact, birth date or national id, and no photo, biometric or device-fingerprint column exists anywhere (owner decision O6). Terms (office, manager, job title, employment type, status) are effective-dated and append-only: a change closes the open row and inserts the next, terms never overlap, the manager chain is acyclic and at most ten edges deep (counting the reports below an employee, not only the managers above), manager-edge writes are serialised per tenant, and a terminated term is terminal. The database enforces one active employment per profile and per login, and refuses a profile merge between two actively employed profiles. An employee reads their own employment through an ownership grant on the persisted login link (the link itself is a high-risk, audited assign); everyone else needs employments.read. Of the actions, assign, delete, restore and configure are high-risk (the platform classification); create and the terms change are not, yet they are idempotent too, and every write is audited without any name, title, number or reason (the assign row carries only the login's UUID). Shifts (Issue #946): shift templates are patterns (local start, elapsed duration, one optional break, IANA zone) and a shift assignment is one UTC half-open interval per employment, work or time off (a coarse category, never a reason; no free-text field exists), draft then published then cancelled, never deleted. The database refuses two overlapping non-cancelled assignments of one employment, across kinds, even for two concurrent writers (a per-employment advisory lock inside the trigger), and a published or cancelled row is immutable. Publish and cancel are high-risk, idempotent and audited with ids only; an employee reads their own published schedule through an ownership grant. The module's StaffAvailabilityPort adapter exposes working intervals per opaque staff reference (published work, minus breaks and time off, while the terms are active) and nothing else, read-only in the caller's tenant transaction. Attendance (Issue #947): an append-only event table (no UPDATE or DELETE for the runtime role, plus triggers) whose recorded time is the database clock, whose claimed time is bounded by the tenant's clock-skew setting (self and supervisor events cannot be back-dated; kiosk and import replays are accepted up to seven days and flagged late), replay-safe by a client event key, with no location, photo, device or network column (owner decision O6; location evidence is a separate table, Issue #970). A correction never edits an event: it proposes an add or a replace with a mandatory reason, starts a workflow_approval instance (fail-closed when none is published), and on approval appends a new event that supersedes the old one; the correction row only changes status, follows the workflow verdict (enforced by the database), and the requester can never be the approver (CHECK, trigger over the workflow decision rows including delegation, and the chokepoint). An employee reads their own events and a supervisor their reports' (the manager chain, ten levels, a deleted employment breaks it) through ownership grants; the correction reason is sensitive and never reaches an audit row, event, log or the workflow store. Workforce metrics (Issue #953): transparent attendance, hours, shift-coverage and productivity facts (no composite score; no photo, biometric, device, location or payroll data) read by the employee (own), the supervisor (direct reports) and HR through default-deny permissions and ownership grants, with per-office aggregates withheld below five contributing employees and one registered reporting projection (event volume). Commission and payroll are later phases of the same ADR. Self-service and supervisor screens (Issue #952): /admin/hr/my-work (own shifts, attendance and correction requests), /admin/hr/my-metrics (own workforce facts, the employee-facing transparency and challenge screen of workforce-metrics.md section 7), /admin/hr/team (the direct reports' facts and the reports' attendance) and /admin/hr/workforce (the HR view). The first three are opened by the new self_service.read permission, a screen and GET /api/v1/hr-workforce/me gate only: the DATA stays bound to the persisted login link and the manager chain through the ownership grants of the existing routes, so the permission widens nothing. No screen exports anyone's data.",
   dependencies: ["tenant_admin", "profile_identity", "domain_event_runtime"],
   /**
    * #1044: the settler tells a correction's requester the outcome by e-mail.
@@ -187,6 +185,32 @@ export const hrWorkforceModule = defineModule({
           createEmailWorkflowNotificationAdapter()
         );
       }
+    }
+  ],
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_hr_my_work",
+      path: "/admin/hr/my-work",
+      order: 45,
+      requiredPermission: "hr_workforce.self_service.read"
+    },
+    {
+      labelKey: "admin.layout.nav_hr_my_metrics",
+      path: "/admin/hr/my-metrics",
+      order: 46,
+      requiredPermission: "hr_workforce.self_service.read"
+    },
+    {
+      labelKey: "admin.layout.nav_hr_team",
+      path: "/admin/hr/team",
+      order: 47,
+      requiredPermission: "hr_workforce.self_service.read"
+    },
+    {
+      labelKey: "admin.layout.nav_hr_workforce",
+      path: "/admin/hr/workforce",
+      order: 48,
+      requiredPermission: "hr_workforce.employments.read"
     }
   ],
   permissions: [
@@ -330,6 +354,12 @@ export const hrWorkforceModule = defineModule({
       action: "configure",
       description:
         "Switch geolocation attendance evidence on or off and manage its geofences, notice version and accuracy ceiling — high-risk; not granted by default"
+    },
+    {
+      activityCode: "self_service",
+      action: "read",
+      description:
+        "Open the employee self-service and supervisor screens and read your own employment summary; the data itself stays bound to your linked employment and your reports, not to this permission"
     },
     {
       activityCode: "settings",

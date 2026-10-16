@@ -8422,3 +8422,377 @@ msgstr[0] "{min}–{max} malam"
 
 msgid "Continue"
 msgstr "Lanjutkan"
+
+msgid "My work"
+msgstr "Pekerjaan saya"
+
+msgid "Your upcoming shifts, your attendance record and your correction requests."
+msgstr "Shift Anda yang akan datang, catatan kehadiran Anda, dan permintaan koreksi Anda."
+
+msgid "You do not have permission to view this page."
+msgstr "Anda tidak memiliki izin untuk melihat halaman ini."
+
+msgid "Your schedule could not be loaded right now. Please try again later."
+msgstr "Jadwal Anda tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "No employment is linked to your login"
+msgstr "Belum ada data kepegawaian yang ditautkan ke akun Anda"
+
+msgid "Ask your administrator to link your login to your employment record."
+msgstr "Minta administrator untuk menautkan akun Anda ke data kepegawaian Anda."
+
+msgid "Upcoming shifts"
+msgstr "Shift yang akan datang"
+
+msgid "Starts"
+msgstr "Mulai"
+
+msgid "No upcoming shifts"
+msgstr "Tidak ada shift yang akan datang"
+
+msgid "Published shifts for the next 14 days appear here."
+msgstr "Shift yang sudah dipublikasikan untuk 14 hari ke depan muncul di sini."
+
+msgid "My attendance"
+msgstr "Kehadiran saya"
+
+msgid "Time (UTC)"
+msgstr "Waktu (UTC)"
+
+msgid "No attendance recorded"
+msgstr "Belum ada kehadiran tercatat"
+
+msgid "Your clock-ins, clock-outs and breaks of the last 14 days appear here."
+msgstr "Absen masuk, absen pulang, dan istirahat Anda dalam 14 hari terakhir muncul di sini."
+
+msgid "My correction requests"
+msgstr "Permintaan koreksi saya"
+
+msgid "Request a correction"
+msgstr "Ajukan koreksi"
+
+msgid "A correction never edits the original record. If it is approved, a new event replaces it. Your reason is seen only by you and the people who decide."
+msgstr "Koreksi tidak pernah mengubah catatan asli. Jika disetujui, sebuah kejadian baru menggantikannya. Alasan Anda hanya terlihat oleh Anda dan pihak yang memutuskan."
+
+msgid "What do you want to do?"
+msgstr "Apa yang ingin Anda lakukan?"
+
+msgid "Event to replace"
+msgstr "Kejadian yang diganti"
+
+msgid "Not applicable"
+msgstr "Tidak berlaku"
+
+msgid "Correct event"
+msgstr "Kejadian yang benar"
+
+msgid "Correct time"
+msgstr "Waktu yang benar"
+
+msgid "No correction requests"
+msgstr "Tidak ada permintaan koreksi"
+
+msgid "Requests you make appear here with their status."
+msgstr "Permintaan yang Anda buat muncul di sini beserta statusnya."
+
+msgid "My workforce metrics"
+msgstr "Metrik tenaga kerja saya"
+
+msgid "The attendance, hours and shift facts recorded about you, and how each one is counted."
+msgstr "Fakta kehadiran, jam kerja, dan shift yang tercatat tentang Anda, serta cara masing-masing dihitung."
+
+msgid "Your metrics could not be loaded right now. Please try again later."
+msgstr "Metrik Anda tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "These are business facts about recorded attendance and published shifts, not an assessment of you. Nothing here is used for a decision about you without a governance review."
+msgstr "Ini adalah fakta bisnis tentang kehadiran yang tercatat dan shift yang dipublikasikan, bukan penilaian terhadap Anda. Tidak ada yang di sini dipakai untuk keputusan tentang Anda tanpa tinjauan tata kelola."
+
+msgid "Period"
+msgstr "Periode"
+
+msgid "Employee no. {employeeNo}"
+msgstr "No. pegawai {employeeNo}"
+
+msgid "If a figure looks wrong, ask for the underlying record to be corrected."
+msgstr "Jika sebuah angka tampak salah, minta agar catatan dasarnya dikoreksi."
+
+msgid "My commission"
+msgstr "Komisi saya"
+
+msgid "The commission you have earned and where each one stands. This page is read-only."
+msgstr "Komisi yang telah Anda peroleh dan posisi masing-masing. Halaman ini hanya untuk dibaca."
+
+msgid "Your commission could not be loaded right now. Please try again later."
+msgstr "Komisi Anda tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Commission status"
+msgstr "Status komisi"
+
+msgid "Amount"
+msgstr "Jumlah"
+
+msgid "No commission yet"
+msgstr "Belum ada komisi"
+
+msgid "Commission you earn will appear here."
+msgstr "Komisi yang Anda peroleh akan muncul di sini."
+
+msgid "My team"
+msgstr "Tim saya"
+
+msgid "The attendance and shift facts of the people who report to you, and the corrections they have asked for."
+msgstr "Fakta kehadiran dan shift dari orang-orang yang melapor kepada Anda, serta koreksi yang mereka minta."
+
+msgid "Your team could not be loaded right now. Please try again later."
+msgstr "Tim Anda tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "These are business facts about recorded attendance and published shifts, not an assessment of a person. Do not use them for a decision about pay, discipline, promotion or termination without the governance review."
+msgstr "Ini adalah fakta bisnis tentang kehadiran yang tercatat dan shift yang dipublikasikan, bukan penilaian terhadap seseorang. Jangan dipakai untuk keputusan tentang gaji, disiplin, promosi, atau pemutusan hubungan kerja tanpa tinjauan tata kelola."
+
+msgid "Direct reports"
+msgstr "Bawahan langsung"
+
+msgid "Employee no."
+msgstr "No. pegawai"
+
+msgid "Scheduled shifts"
+msgstr "Shift terjadwal"
+
+msgid "Attended shifts"
+msgstr "Shift dihadiri"
+
+msgid "Missed shifts"
+msgstr "Shift terlewat"
+
+msgid "Late arrivals"
+msgstr "Keterlambatan"
+
+msgid "Worked time"
+msgstr "Waktu kerja"
+
+msgid "Worked against scheduled"
+msgstr "Waktu kerja terhadap jadwal"
+
+msgid "No direct reports"
+msgstr "Tidak ada bawahan langsung"
+
+msgid "People who report to you appear here."
+msgstr "Orang-orang yang melapor kepada Anda muncul di sini."
+
+msgid "Recent attendance"
+msgstr "Kehadiran terbaru"
+
+msgid "Events of your direct reports in this period appear here."
+msgstr "Kejadian kehadiran bawahan langsung Anda pada periode ini muncul di sini."
+
+msgid "Corrections waiting for a decision"
+msgstr "Koreksi yang menunggu keputusan"
+
+msgid "Requests from your direct reports that are waiting appear here."
+msgstr "Permintaan dari bawahan langsung Anda yang sedang menunggu muncul di sini."
+
+msgid "Terminated"
+msgstr "Berakhir"
+
+msgid "Workforce"
+msgstr "Tenaga kerja"
+
+msgid "Employments, attendance and the correction requests waiting for a decision."
+msgstr "Data kepegawaian, kehadiran, dan permintaan koreksi yang menunggu keputusan."
+
+msgid "The workforce could not be loaded right now. Please try again later."
+msgstr "Data tenaga kerja tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Employment state"
+msgstr "Status kepegawaian"
+
+msgid "Employments"
+msgstr "Data kepegawaian"
+
+msgid "Job title"
+msgstr "Jabatan"
+
+msgid "Hired on"
+msgstr "Tanggal masuk"
+
+msgid "Login linked"
+msgstr "Akun tertaut"
+
+msgid "No employments"
+msgstr "Tidak ada data kepegawaian"
+
+msgid "Employments created through the API appear here."
+msgstr "Data kepegawaian yang dibuat melalui API muncul di sini."
+
+msgid "No"
+msgstr "Tidak"
+
+msgid "Requests that are waiting for a decision appear here."
+msgstr "Permintaan yang sedang menunggu keputusan muncul di sini."
+
+msgid "Events of the last 7 days appear here."
+msgstr "Kejadian 7 hari terakhir muncul di sini."
+
+msgid "Published work shifts that started in this period."
+msgstr "Shift kerja yang dipublikasikan dan dimulai pada periode ini."
+
+msgid "Of those, the ones with a clock-in."
+msgstr "Dari jumlah itu, yang memiliki absen masuk."
+
+msgid "Shifts that ended with no clock-in."
+msgstr "Shift yang berakhir tanpa absen masuk."
+
+msgid "Clock-ins after the grace period."
+msgstr "Absen masuk setelah masa toleransi."
+
+msgid "From clock-in to clock-out, less breaks taken."
+msgstr "Dari absen masuk sampai absen pulang, dikurangi istirahat yang diambil."
+
+msgid "Scheduled time"
+msgstr "Waktu terjadwal"
+
+msgid "Planned length of shifts that ended, less planned breaks."
+msgstr "Panjang shift yang direncanakan dan sudah berakhir, dikurangi istirahat terencana."
+
+msgid "Break time"
+msgstr "Waktu istirahat"
+
+msgid "Breaks taken inside completed sessions."
+msgstr "Istirahat yang diambil dalam sesi yang selesai."
+
+msgid "Incomplete sessions"
+msgstr "Sesi tidak lengkap"
+
+msgid "Clock-ins that never got a clock-out."
+msgstr "Absen masuk yang tidak pernah mendapat absen pulang."
+
+msgid "Shift coverage"
+msgstr "Cakupan shift"
+
+msgid "Attended shifts out of attended plus missed."
+msgstr "Shift dihadiri dibagi shift dihadiri ditambah shift terlewat."
+
+msgid "Worked time out of scheduled time; can exceed 100%."
+msgstr "Waktu kerja dibagi waktu terjadwal; bisa melebihi 100%."
+
+msgid "Last 7 days"
+msgstr "7 hari terakhir"
+
+msgid "Last 14 days"
+msgstr "14 hari terakhir"
+
+msgid "Last 30 days"
+msgstr "30 hari terakhir"
+
+msgid "Clock in"
+msgstr "Absen masuk"
+
+msgid "Clock out"
+msgstr "Absen pulang"
+
+msgid "Break start"
+msgstr "Mulai istirahat"
+
+msgid "Break end"
+msgstr "Selesai istirahat"
+
+msgid "Add a missing event"
+msgstr "Tambah kejadian yang hilang"
+
+msgid "Replace an event"
+msgstr "Ganti sebuah kejadian"
+
+msgid "Withdrawn"
+msgstr "Ditarik"
+
+msgid "Work"
+msgstr "Kerja"
+
+msgid "Time off"
+msgstr "Cuti"
+
+msgid "Leave"
+msgstr "Izin"
+
+msgid "Permanent"
+msgstr "Tetap"
+
+msgid "Fixed term"
+msgstr "Kontrak"
+
+msgid "Part time"
+msgstr "Paruh waktu"
+
+msgid "Casual"
+msgstr "Lepas"
+
+msgid "On leave"
+msgstr "Sedang cuti"
+
+msgid "Payable"
+msgstr "Dapat dibayar"
+
+msgid "Paid"
+msgstr "Dibayar"
+
+msgid "Voided"
+msgstr "Dibatalkan"
+
+msgid "{hours} h {minutes} min"
+msgstr "{hours} j {minutes} mnt"
+
+msgid "The request could not be sent. Please try again."
+msgstr "Permintaan tidak dapat dikirim. Silakan coba lagi."
+
+msgid "Corrections need an approval workflow and none is set up yet. Ask your administrator."
+msgstr "Koreksi membutuhkan alur persetujuan dan belum ada yang diatur. Tanyakan kepada administrator Anda."
+
+msgid "A correction for that event is already waiting for a decision."
+msgstr "Koreksi untuk kejadian itu sudah menunggu keputusan."
+
+msgid "That event could not be found."
+msgstr "Kejadian itu tidak ditemukan."
+
+msgid "That event was already replaced by an approved correction."
+msgstr "Kejadian itu sudah diganti oleh koreksi yang disetujui."
+
+msgid "The proposed time cannot be in the future."
+msgstr "Waktu yang diusulkan tidak boleh di masa depan."
+
+msgid "Your employment could not be found."
+msgstr "Data kepegawaian Anda tidak ditemukan."
+
+msgid "{count} shift in the next 14 days"
+msgid_plural "{count} shifts in the next 14 days"
+msgstr[0] "{count} shift dalam 14 hari ke depan"
+
+msgid "{count} event in the last 14 days (UTC)"
+msgid_plural "{count} events in the last 14 days (UTC)"
+msgstr[0] "{count} kejadian dalam 14 hari terakhir (UTC)"
+
+msgid "{count} request"
+msgid_plural "{count} requests"
+msgstr[0] "{count} permintaan"
+
+msgid "{count} commission"
+msgid_plural "{count} commissions"
+msgstr[0] "{count} komisi"
+
+msgid "{count} direct report"
+msgid_plural "{count} direct reports"
+msgstr[0] "{count} bawahan langsung"
+
+msgid "{count} event in this period (UTC)"
+msgid_plural "{count} events in this period (UTC)"
+msgstr[0] "{count} kejadian pada periode ini (UTC)"
+
+msgid "{count} employment"
+msgid_plural "{count} employments"
+msgstr[0] "{count} data kepegawaian"
+
+msgid "{count} event in the last 7 days (UTC)"
+msgid_plural "{count} events in the last 7 days (UTC)"
+msgstr[0] "{count} kejadian dalam 7 hari terakhir (UTC)"
+
+msgid "Some sections are not available to you."
+msgstr "Beberapa bagian tidak tersedia untuk Anda."

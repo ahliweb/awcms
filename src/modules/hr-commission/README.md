@@ -20,8 +20,10 @@ one), the `awcms.hr.commission.*` events, and the payroll claim of an accrual
 beneficiary here is always an employment) and carries **no country's or
 jurisdiction's rules**: a tenant authors its own.
 
-Status is `experimental`: the flag is off, no admin screen exists, and the module
-declares no `navigation`. It flips to `active` with its first screen.
+Status is `active` since Issue #952: the module declares one admin screen,
+`/admin/hr/my-commission`, where an employee reads their OWN accruals (read-only;
+`GET /api/v1/hr-commission/my-accruals`, `docs/awcms/workforce-self-service.md`).
+The rule and ledger-management screens are still API-only.
 
 ## The rules that make it safe
 
@@ -273,7 +275,7 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test remove
 
 ## Limitations
 
-- No admin screen; `experimental`. The accrual screens (list, approve / release / void / pay) are the follow-up that flips the module to `active`.
+- Only the employee's own-commission screen exists (Issue #952); the rule screens and the accrual screens (list, approve / release / void / pay) are the follow-up.
 - Existing tenants need `bun run identity-access:permissions:backfill` to receive
   the seeded permissions (the limitation every permission seed carries).
 - A draft can only be changed by replacing every editable field (`PUT`); there is

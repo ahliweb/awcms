@@ -8446,3 +8446,385 @@ msgstr[1] ""
 
 msgid "Continue"
 msgstr ""
+
+msgid "My work"
+msgstr ""
+
+msgid "Your upcoming shifts, your attendance record and your correction requests."
+msgstr ""
+
+msgid "You do not have permission to view this page."
+msgstr ""
+
+msgid "Your schedule could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "No employment is linked to your login"
+msgstr ""
+
+msgid "Ask your administrator to link your login to your employment record."
+msgstr ""
+
+msgid "Upcoming shifts"
+msgstr ""
+
+msgid "Starts"
+msgstr ""
+
+msgid "No upcoming shifts"
+msgstr ""
+
+msgid "Published shifts for the next 14 days appear here."
+msgstr ""
+
+msgid "My attendance"
+msgstr ""
+
+msgid "Time (UTC)"
+msgstr ""
+
+msgid "No attendance recorded"
+msgstr ""
+
+msgid "Your clock-ins, clock-outs and breaks of the last 14 days appear here."
+msgstr ""
+
+msgid "My correction requests"
+msgstr ""
+
+msgid "Request a correction"
+msgstr ""
+
+msgid "A correction never edits the original record. If it is approved, a new event replaces it. Your reason is seen only by you and the people who decide."
+msgstr ""
+
+msgid "What do you want to do?"
+msgstr ""
+
+msgid "Event to replace"
+msgstr ""
+
+msgid "Not applicable"
+msgstr ""
+
+msgid "Correct event"
+msgstr ""
+
+msgid "Correct time"
+msgstr ""
+
+msgid "No correction requests"
+msgstr ""
+
+msgid "Requests you make appear here with their status."
+msgstr ""
+
+msgid "My workforce metrics"
+msgstr ""
+
+msgid "The attendance, hours and shift facts recorded about you, and how each one is counted."
+msgstr ""
+
+msgid "Your metrics could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "These are business facts about recorded attendance and published shifts, not an assessment of you. Nothing here is used for a decision about you without a governance review."
+msgstr ""
+
+msgid "Period"
+msgstr ""
+
+msgid "Employee no. {employeeNo}"
+msgstr ""
+
+msgid "If a figure looks wrong, ask for the underlying record to be corrected."
+msgstr ""
+
+msgid "My commission"
+msgstr ""
+
+msgid "The commission you have earned and where each one stands. This page is read-only."
+msgstr ""
+
+msgid "Your commission could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Commission status"
+msgstr ""
+
+msgid "Amount"
+msgstr ""
+
+msgid "No commission yet"
+msgstr ""
+
+msgid "Commission you earn will appear here."
+msgstr ""
+
+msgid "My team"
+msgstr ""
+
+msgid "The attendance and shift facts of the people who report to you, and the corrections they have asked for."
+msgstr ""
+
+msgid "Your team could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "These are business facts about recorded attendance and published shifts, not an assessment of a person. Do not use them for a decision about pay, discipline, promotion or termination without the governance review."
+msgstr ""
+
+msgid "Direct reports"
+msgstr ""
+
+msgid "Employee no."
+msgstr ""
+
+msgid "Scheduled shifts"
+msgstr ""
+
+msgid "Attended shifts"
+msgstr ""
+
+msgid "Missed shifts"
+msgstr ""
+
+msgid "Late arrivals"
+msgstr ""
+
+msgid "Worked time"
+msgstr ""
+
+msgid "Worked against scheduled"
+msgstr ""
+
+msgid "No direct reports"
+msgstr ""
+
+msgid "People who report to you appear here."
+msgstr ""
+
+msgid "Recent attendance"
+msgstr ""
+
+msgid "Events of your direct reports in this period appear here."
+msgstr ""
+
+msgid "Corrections waiting for a decision"
+msgstr ""
+
+msgid "Requests from your direct reports that are waiting appear here."
+msgstr ""
+
+msgid "Terminated"
+msgstr ""
+
+msgid "Workforce"
+msgstr ""
+
+msgid "Employments, attendance and the correction requests waiting for a decision."
+msgstr ""
+
+msgid "The workforce could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Employment state"
+msgstr ""
+
+msgid "Employments"
+msgstr ""
+
+msgid "Job title"
+msgstr ""
+
+msgid "Hired on"
+msgstr ""
+
+msgid "Login linked"
+msgstr ""
+
+msgid "No employments"
+msgstr ""
+
+msgid "Employments created through the API appear here."
+msgstr ""
+
+msgid "No"
+msgstr ""
+
+msgid "Requests that are waiting for a decision appear here."
+msgstr ""
+
+msgid "Events of the last 7 days appear here."
+msgstr ""
+
+msgid "Published work shifts that started in this period."
+msgstr ""
+
+msgid "Of those, the ones with a clock-in."
+msgstr ""
+
+msgid "Shifts that ended with no clock-in."
+msgstr ""
+
+msgid "Clock-ins after the grace period."
+msgstr ""
+
+msgid "From clock-in to clock-out, less breaks taken."
+msgstr ""
+
+msgid "Scheduled time"
+msgstr ""
+
+msgid "Planned length of shifts that ended, less planned breaks."
+msgstr ""
+
+msgid "Break time"
+msgstr ""
+
+msgid "Breaks taken inside completed sessions."
+msgstr ""
+
+msgid "Incomplete sessions"
+msgstr ""
+
+msgid "Clock-ins that never got a clock-out."
+msgstr ""
+
+msgid "Shift coverage"
+msgstr ""
+
+msgid "Attended shifts out of attended plus missed."
+msgstr ""
+
+msgid "Worked time out of scheduled time; can exceed 100%."
+msgstr ""
+
+msgid "Last 7 days"
+msgstr ""
+
+msgid "Last 14 days"
+msgstr ""
+
+msgid "Last 30 days"
+msgstr ""
+
+msgid "Clock in"
+msgstr ""
+
+msgid "Clock out"
+msgstr ""
+
+msgid "Break start"
+msgstr ""
+
+msgid "Break end"
+msgstr ""
+
+msgid "Add a missing event"
+msgstr ""
+
+msgid "Replace an event"
+msgstr ""
+
+msgid "Withdrawn"
+msgstr ""
+
+msgid "Work"
+msgstr ""
+
+msgid "Time off"
+msgstr ""
+
+msgid "Leave"
+msgstr ""
+
+msgid "Permanent"
+msgstr ""
+
+msgid "Fixed term"
+msgstr ""
+
+msgid "Part time"
+msgstr ""
+
+msgid "Casual"
+msgstr ""
+
+msgid "On leave"
+msgstr ""
+
+msgid "Payable"
+msgstr ""
+
+msgid "Paid"
+msgstr ""
+
+msgid "Voided"
+msgstr ""
+
+msgid "{hours} h {minutes} min"
+msgstr ""
+
+msgid "The request could not be sent. Please try again."
+msgstr ""
+
+msgid "Corrections need an approval workflow and none is set up yet. Ask your administrator."
+msgstr ""
+
+msgid "A correction for that event is already waiting for a decision."
+msgstr ""
+
+msgid "That event could not be found."
+msgstr ""
+
+msgid "That event was already replaced by an approved correction."
+msgstr ""
+
+msgid "The proposed time cannot be in the future."
+msgstr ""
+
+msgid "Your employment could not be found."
+msgstr ""
+
+msgid "{count} shift in the next 14 days"
+msgid_plural "{count} shifts in the next 14 days"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} event in the last 14 days (UTC)"
+msgid_plural "{count} events in the last 14 days (UTC)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} request"
+msgid_plural "{count} requests"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} commission"
+msgid_plural "{count} commissions"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} direct report"
+msgid_plural "{count} direct reports"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} event in this period (UTC)"
+msgid_plural "{count} events in this period (UTC)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} employment"
+msgid_plural "{count} employments"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} event in the last 7 days (UTC)"
+msgid_plural "{count} events in the last 7 days (UTC)"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Some sections are not available to you."
+msgstr ""

@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](workforce-metrics.md)
 
-<!-- i18n-source-hash: sha256:c192ae84767dd184b45b2141e6b7532266789a83bc57a8143385d6ad529839fb -->
+<!-- i18n-source-hash: sha256:8756f89682144ebcfe149c683c2f747f9bcbc4c69279ce92d867dffbeb00cefa -->
 
 # Metrik tenaga kerja — fakta kehadiran, jam kerja, cakupan shift, dan produktivitas
 
 > **Status:** sudah dibangun (Issue #953, Wave D epik platform; bertumpu pada data
 > kehadiran dan shift dari Issue #946/#947). Modul: `hr_workforce` (experimental,
-> belum ada layar admin). **Dokumen ini adalah kontrak acuan untuk metrik tenaga
+> layar karyawan, supervisor, dan HR sudah ada sejak Issue #952, lihat `workforce-self-service.md`). **Dokumen ini adalah kontrak acuan untuk metrik tenaga
 > kerja.** Katalog metrik hulu yang dirujuk issue
 > (`docs/aw-business-platform-metrics.md`) tidak ada di repositori ini; bila di
 > sana sebuah metrik tenaga kerja didefinisikan berbeda, samakan dengan mengubah
@@ -300,7 +300,7 @@ adalah keputusan pemberi kerja (ADR-0132 bagian 13.2).
 
 ## 9. Keterbatasan
 
-- Belum ada layar admin (modul `experimental`); permukaannya adalah API.
+- Layar baca untuk karyawan, supervisor, dan HR sudah ada (Issue #952, `workforce-self-service.md`); pembacaan mode `all` per orang oleh HR tetap hanya lewat API sampai audit baca Issue #1083 selesai.
 - Aritmetika jendela memakai instan UTC; klien yang butuh jendela hari lokal
   mengonversinya. Pengelompokan office memakai terms **saat ini**, bukan terms pada
   saat tiap shift.

@@ -157,6 +157,13 @@ export const HR_WORKFORCE_GUARDS = {
       action: "configure" as const
     }
   },
+  selfService: {
+    read: {
+      moduleKey: "hr_workforce",
+      activityCode: "self_service",
+      action: "read" as const
+    }
+  },
   settings: {
     read: {
       moduleKey: "hr_workforce",

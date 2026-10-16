@@ -72,5 +72,12 @@ export const HR_COMMISSION_GUARDS = {
       activityCode: "accruals",
       action: "pay" as const
     }
+  },
+  myAccruals: {
+    read: {
+      moduleKey: "hr_commission",
+      activityCode: "my_accruals",
+      action: "read" as const
+    }
   }
 } as const;

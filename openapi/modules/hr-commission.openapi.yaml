@@ -723,8 +723,180 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-commission/my-accruals:
+    get:
+      operationId: hrCommissionMyAccrualsList
+      tags:
+        - HR Commission
+      summary: List your own commission accruals
+      description: "Gated by `hr_commission.my_accruals.read` (default-deny; separate from `accruals.read`). The caller's OWN accruals only, newest first, keyset paginated (`cursor`), optionally filtered by `status`. There is no `employmentId` or person parameter: the query joins the live employment linked to the caller's login, so another person's rows cannot be requested. Read-only. The view omits the approver, the payer, the payment reference, the rule row id and the employment id. Amounts are decimal strings. An employee reading their own earnings is not an audited sensitive read; anyone else's go through `GET /accruals`, which is. Never cached. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/HrCommissionAccrualStatus"
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: A page of the caller's own accruals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accruals:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrCommissionOwnAccrual"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+  /api/v1/hr-commission/my-accruals/{id}:
+    get:
+      operationId: hrCommissionMyAccrualGet
+      tags:
+        - HR Commission
+      summary: Get one of your own commission accruals with its history
+      description: "Gated by `hr_commission.my_accruals.read`. An id that does not exist and an id that belongs to somebody else are the SAME 404 (`RESOURCE_NOT_FOUND`), so the route is not an existence oracle for another person's earnings. The transition history omits who moved the accrual. Never cached."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The caller's own accrual and its transition log.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accrual:
+                        $ref: "#/components/schemas/HrCommissionOwnAccrual"
+                      transitions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            seq:
+                              type: integer
+                            fromStatus:
+                              $ref: "#/components/schemas/HrCommissionAccrualStatus"
+                            toStatus:
+                              $ref: "#/components/schemas/HrCommissionAccrualStatus"
+                            reasonCode:
+                              type: string
+                              nullable: true
+                            occurredAt:
+                              type: string
+                              format: date-time
+                  meta:
+                    type: object
+        "404":
+          description: RESOURCE_NOT_FOUND (missing, or not yours).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    HrCommissionOwnAccrual:
+      type: object
+      description: "What an employee sees of their OWN accrual: the earning and how it was computed. No approver, payer, payment reference, rule row id or employment id. Money is a decimal string."
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/HrCommissionAccrualStatus"
+        amount:
+          type: string
+        currencyCode:
+          type: string
+        ruleKey:
+          type: string
+        ruleVersion:
+          type: integer
+        sourceType:
+          type: string
+        sourceRef:
+          type: string
+        calculation:
+          type: string
+        baseAmount:
+          type: string
+          nullable: true
+        units:
+          type: integer
+          nullable: true
+        rate:
+          type: string
+          nullable: true
+        fixedAmount:
+          type: string
+          nullable: true
+        occurredOn:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        releasedAt:
+          type: string
+          format: date-time
+          nullable: true
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        voidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        voidReasonCode:
+          type: string
+          nullable: true
     HrCommissionRuleFields:
       type: object
       description:

@@ -1,0 +1,159 @@
+---
+/**
+ * "My workforce metrics" (Issue #952, and the employee-facing screen of #1083
+ * M4): the person's OWN attendance, hours, shift-coverage and productivity
+ * facts, with the definition of every figure and the way to challenge one.
+ * `docs/awcms/workforce-metrics.md` section 7 (transparency and challenge) is
+ * satisfied by THIS screen: a figure the employee disputes is challenged by a
+ * correction request on `/admin/hr/my-work`, which an approver decides.
+ *
+ * Read server-side with the SAME function the JSON route uses
+ * (`listEmployeeFacts`) in basis `mine`, inside `loadAdminScreen`. The basis is
+ * the persisted login link, computed in the query, so this page can never show
+ * another person: there is no id or filter on it. The entry gate is
+ * `hr_workforce.self_service.read` (a screen gate; the data is bound by the
+ * link, not by the key). The page has no export and no mutation.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import HrMetricFacts from "../../../components/HrMetricFacts.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { loadMyMetrics } from "../../../lib/hr-self-service-loaders";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+
+import {
+  pastWindow,
+  parsePeriod,
+  periodLabels,
+  HR_PERIODS
+} from "../../../lib/hr-self-service";
+import type { EmployeeFigure } from "../../../modules/hr-workforce/application/hr-workforce-metrics-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t } = getTranslatorFor(locale);
+
+const period = parsePeriod(Astro.url.searchParams.get("period"));
+const periodLabel = periodLabels(t);
+const now = new Date();
+const range = pastWindow(period, now);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "hr_workforce",
+    activityCode: "self_service",
+    action: "read"
+  },
+  load: async ({ tx, auth, can }) =>
+    loadMyMetrics({
+      tx,
+      tenantId: ssr.tenantId,
+      tenantUserId: auth.context.tenantUserId,
+      can,
+      now,
+      correlationId: Astro.locals.correlationId,
+      range
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/hr/my-metrics.astro: failed to load the metrics",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const employees: EmployeeFigure[] =
+  screen.state === "allowed" ? screen.data.employees : [];
+const withheld = screen.state === "allowed" && screen.data.withheld;
+---
+
+<AdminLayout
+  title={t("My workforce metrics")}
+  description={t(
+    "The attendance, hours and shift facts recorded about you, and how each one is counted."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="my-metrics-denied" role="alert">
+      {t("You do not have permission to view this page.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="my-metrics-error" role="alert">
+      {t("Your metrics could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <>
+      <p class="state-notice" id="my-metrics-notice" role="note">
+        {t(
+          "These are business facts about recorded attendance and published shifts, not an assessment of you. Nothing here is used for a decision about you without a governance review."
+        )}
+      </p>
+
+      {withheld && (
+        <p class="state-notice" id="my-metrics-withheld" role="note">
+          {t("Some sections are not available to you.")}
+        </p>
+      )}
+
+      <nav class="admin-segmented" aria-label={t("Period")}>
+        {HR_PERIODS.map((option) => (
+          <a
+            class="admin-segmented-option"
+            href={`/admin/hr/my-metrics?period=${option}`}
+            aria-current={period === option ? "page" : undefined}
+          >
+            {periodLabel[option]}
+          </a>
+        ))}
+      </nav>
+
+      {employees.length === 0 ? (
+        <div class="empty-state" id="my-metrics-empty">
+          <span class="empty-state-title">
+            {t("No employment is linked to your login")}
+          </span>
+          <span class="empty-state-text">
+            {t(
+              "Ask your administrator to link your login to your employment record."
+            )}
+          </span>
+        </div>
+      ) : (
+        employees.map((employee) => (
+          <section
+            class="admin-section"
+            aria-labelledby={`metrics-title-${employee.employmentId}`}
+            data-employment-id={employee.employmentId}
+          >
+            <h2
+              class="admin-section-title"
+              id={`metrics-title-${employee.employmentId}`}
+            >
+              {t("Employee no. {employeeNo}", {
+                employeeNo: employee.employeeNo
+              })}
+            </h2>
+            <HrMetricFacts facts={employee.facts} t={t} />
+          </section>
+        ))
+      )}
+
+      <p class="form-hint" id="my-metrics-challenge">
+        {t(
+          "If a figure looks wrong, ask for the underlying record to be corrected."
+        )}{" "}
+        <a href="/admin/hr/my-work#corrections">{t("Request a correction")}</a>
+      </p>
+    </>
+  )}
+</AdminLayout>

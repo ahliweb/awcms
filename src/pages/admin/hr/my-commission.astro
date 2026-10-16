@@ -1,0 +1,215 @@
+---
+/**
+ * "My commission" (Issue #952): the employee's OWN commission accruals,
+ * read-only.
+ *
+ * Read server-side with `listOwnAccruals`, the function behind `GET /api/v1/
+ * hr-commission/my-accruals`, inside `loadAdminScreen`. The query joins the live
+ * employment linked to the caller's login, so the page has no person or
+ * employment parameter and cannot show anyone else's earnings. The entry gate is
+ * `hr_commission.my_accruals.read`. The view carries no approver, payer or
+ * payment reference, the page has no mutation and no export, and an amount is
+ * only ever formatted, never summed (money stays a decimal string).
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import {
+  formatCurrency,
+  formatDate,
+  getTranslatorFor
+} from "../../../lib/i18n";
+import {
+  ACCRUAL_STATUS_TONE,
+  accrualStatusLabels,
+  labelOf
+} from "../../../lib/hr-self-service";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import {
+  listOwnAccruals,
+  type OwnCommissionAccrual
+} from "../../../modules/hr-commission/application/hr-commission-accrual-ledger";
+import {
+  isAccrualStatus,
+  type AccrualStatus
+} from "../../../modules/hr-commission/domain/hr-commission-accrual-state";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t, tn } = getTranslatorFor(locale);
+
+const STATUS_LABEL = accrualStatusLabels(t);
+const statusParam = Astro.url.searchParams.get("status");
+const status: AccrualStatus | null =
+  statusParam && isAccrualStatus(statusParam) ? statusParam : null;
+const cursorParam = Astro.url.searchParams.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "hr_commission",
+    activityCode: "my_accruals",
+    action: "read"
+  },
+  load: async ({ tx, auth }) =>
+    listOwnAccruals(
+      tx,
+      ssr.tenantId,
+      auth.context.tenantUserId,
+      status ? { status } : {},
+      cursor ?? undefined
+    ),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/hr/my-commission.astro: failed to load the accruals",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const accruals: OwnCommissionAccrual[] =
+  screen.state === "allowed" ? screen.data.accruals : [];
+const nextCursor = screen.state === "allowed" ? screen.data.nextCursor : null;
+const filters: { value: AccrualStatus | null; label: string }[] = [
+  { value: null, label: t("All") },
+  ...(Object.keys(STATUS_LABEL) as AccrualStatus[]).map((value) => ({
+    value,
+    label: STATUS_LABEL[value]
+  }))
+];
+---
+
+<AdminLayout
+  title={t("My commission")}
+  description={t(
+    "The commission you have earned and where each one stands. This page is read-only."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="my-commission-denied" role="alert">
+      {t("You do not have permission to view this page.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="my-commission-error" role="alert">
+      {t(
+        "Your commission could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <>
+      <nav class="admin-segmented" aria-label={t("Commission status")}>
+        {filters.map((filter) => (
+          <a
+            class="admin-segmented-option"
+            href={
+              filter.value
+                ? `/admin/hr/my-commission?status=${filter.value}`
+                : "/admin/hr/my-commission"
+            }
+            aria-current={status === filter.value ? "page" : undefined}
+          >
+            {filter.label}
+          </a>
+        ))}
+      </nav>
+
+      <div
+        class="data-table-scroll fade-in-up"
+        role="region"
+        tabindex="0"
+        aria-labelledby="my-commission-caption"
+      >
+        <table class="data-table data-table--stack" id="my-commission-table">
+          <caption id="my-commission-caption">
+            {tn("{count} commission", "{count} commissions", accruals.length, {
+              count: accruals.length
+            })}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Date")}</th>
+              <th scope="col">{t("Source")}</th>
+              <th scope="col">{t("Rule")}</th>
+              <th scope="col">{t("Amount")}</th>
+              <th scope="col">{t("Status")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accruals.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan="5">
+                  <div class="empty-state">
+                    <span class="empty-state-title">
+                      {t("No commission yet")}
+                    </span>
+                    <span class="empty-state-text">
+                      {t("Commission you earn will appear here.")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              accruals.map((accrual) => (
+                <tr data-accrual-row={accrual.id}>
+                  <td data-label={t("Date")}>
+                    <time datetime={accrual.occurredOn}>
+                      {formatDate(locale, accrual.occurredOn, "UTC")}
+                    </time>
+                  </td>
+                  <td data-label={t("Source")}>
+                    <code class="cell-code">
+                      {`${accrual.sourceType} · ${accrual.sourceRef}`}
+                    </code>
+                  </td>
+                  <td data-label={t("Rule")}>
+                    {`${accrual.ruleKey} v${accrual.ruleVersion}`}
+                  </td>
+                  <td data-label={t("Amount")}>
+                    {formatCurrency(
+                      locale,
+                      accrual.amount,
+                      accrual.currencyCode
+                    )}
+                  </td>
+                  <td data-label={t("Status")} data-status={accrual.status}>
+                    <span
+                      class="admin-status-pill"
+                      data-tone={
+                        ACCRUAL_STATUS_TONE[accrual.status] ?? "neutral"
+                      }
+                    >
+                      <span class="admin-status-pill-dot" aria-hidden="true" />
+                      {labelOf(STATUS_LABEL, accrual.status)}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )}
+
+  {canRead && !loadError && nextCursor && (
+    <p>
+      <a
+        class="btn btn-secondary"
+        id="my-commission-next"
+        href={`/admin/hr/my-commission?${status ? `status=${status}&` : ""}cursor=${nextCursor}`}
+      >
+        {t("Next page")}
+      </a>
+    </p>
+  )}
+</AdminLayout>

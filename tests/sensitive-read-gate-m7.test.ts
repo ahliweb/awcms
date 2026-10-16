@@ -146,6 +146,9 @@ describe("a dynamic import whose specifier is not a plain string", () => {
       ["src/pages/api/v1/other/route.ts"]
     );
 
-    expect(result.forbiddenReadImports).toHaveLength(2); // the ledger and the port adapter both share the "hr-commission" fragment;
+    // The fragment "hr-commission" matches three registered readers: the
+    // ledger's all-accruals readers, the ledger's own-only readers (Issue #952)
+    // and the port adapter (Issue #1077).
+    expect(result.forbiddenReadImports).toHaveLength(3);
   });
 });
