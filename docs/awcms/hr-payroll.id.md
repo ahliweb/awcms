@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:21a83685bce294f9efe88a16b4cb00cbd7f2ed68641552636d395c2f52bbbf91 -->
+<!-- i18n-source-hash: sha256:03e43a632f31aa80b6638370f8910c0e8f3e6b41c63178cebd3d1198687c185b -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -1108,9 +1108,21 @@ atas.
   `view`, `print`, atau `reveal` baru tidak lolos dari daftar kata kerja baca.
   Berkas yang menyebut modul sensitif dan punya referensi `authorize:` yang tidak
   terselesaikan, atau `activityCode` non-literal, gagal. Berkas sumber yang
-  menyebut tabel batas payroll harus memanggil `recordSensitiveRead` atau
+  menyebut tabel batas payroll harus memanggil `recordSensitiveRead` dengan
+  izin yang mencakup tabel ITU (`PAYROLL_TABLE_READ_PERMISSIONS`: mengaudit
+  `compensation.read` tidak lagi membersihkan berkas yang juga membaca
+  `payslips`; audit ekspor atau unduh dari modul yang sama dihitung) atau
   terdaftar beralasan di `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (`module.ts` hanya
-  deskriptor dan dikecualikan). **Batas sintaktis yang diketahui:** panggilan
+  deskriptor dan dikecualikan). Ledger yang dikecualikan dipercaya hanya karena
+  pemanggilnya mengaudit, dan itu kini diperiksa, bukan sekadar ditulis: fungsi
+  bacanya (`listAccruals`, `getAccrual`, `reconcileAccruals`) hanya boleh
+  diimpor (bernama, namespace, default, diekspor ulang, atau dinamis) oleh berkas
+  di `PAYROLL_READ_FUNCTION_IMPORTS`, dan masing-masing wajib memanggil
+  `recordSensitiveRead` untuk `hr_commission.accruals.read` sendiri
+  (Issue #1015). **Batas sintaktis yang diketahui:** nama tabel yang dirakit dari
+  potongan string bukan token yang dapat dilihat pemindai (sisi SQL dari siasat
+  itu ditutup lapisan katalog di bawah; sisi aplikasi ditahan review dan aturan
+  5); resolusi impor berdasarkan nama berkas, bukan graf modul; dan panggilan
   terbukti ada di berkas, bukan di setiap jalur handler; panggilan di cabang mati,
   setelah return awal, atau di bawah kondisi yang selalu salah lolos. Tes tingkat
   route yang diminta kata penerimaan #957 dan #961 yang menutup lapisan
@@ -1120,10 +1132,50 @@ atas.
   atau jamak, prefiks apa pun), sehingga `awcms_hr_compensations`,
   `awcms_hr_salary_history`, dan `awcms_hr_employee_compensation` termasuk.
   `bun run payroll:sql-boundary:check` membaca `sql/` dan menggagalkan view,
-  materialized view, atau `CREATE TABLE ... AS` atas tabel terlarang, serta
-  trigger pada tabel biasa yang fungsinya membaca salah satunya, kecuali relasi
-  baru itu sendiri bernama di keluarga payroll (maka setiap gerbang registry
-  menolaknya).
+  materialized view, `CREATE TABLE ... AS`, `SELECT ... INTO`, atau
+  `INSERT ... SELECT` atas tabel terlarang, rule yang melintasi batas, fungsi
+  (termasuk `SETOF <tabel payroll>`) yang membaca salah satunya atau memanggil
+  fungsi yang membacanya, serta trigger yang melintasi batas ke dua arah, kecuali
+  objek baru itu sendiri bernama di keluarga payroll (maka setiap gerbang
+  registry menolaknya). **Lapisan katalog (Issue #1015).** Pemindaian teks bisa
+  disiasati (nama dirakit di blok `DO`, `;` di dalam literal, view diganti nama
+  sesudahnya, rantai fungsi, badan trigger dalam kutip tunggal), jadi lapisan
+  statis kini sadar-kutip, tak peka huruf besar, melipat `'a' || 'b'`, mengikuti
+  penggantian nama dan rantai pemanggilan, serta memeriksa isi blok `DO` dan
+  literal `EXECUTE`; dan aturan yang sama ditegakkan pada KATALOG HASIL MIGRASI
+  oleh `tests/integration/payroll-catalog-boundary.integration.test.ts` (job
+  integrasi CI) dan `bun run payroll:catalog-boundary:check` (database mana
+  pun): `pg_rewrite`/`pg_depend` untuk view dan rule, `pg_proc` untuk fungsi yang
+  mengembalikan, menerima, menyebut, atau memanggil payroll (dan `EXECUTE` mana
+  pun di luar keluarga), `pg_trigger` untuk trigger, dan ACL, sehingga tabel
+  payroll (atau kolomnya) yang diberikan ke selain `awcms_app`
+  (`PAYROLL_ALLOWED_GRANTEES`; `PUBLIC` dan `awcms_worker` gagal) dan fungsi
+  payroll SECURITY DEFINER yang dapat dieksekusi `PUBLIC` atau role lain gagal.
+  Worker tanpa pengawasan hanya boleh menjalankan fungsi payroll bila namanya ada
+  di `PAYROLL_WORKER_EXECUTE_ALLOWLIST` (kosong saat ini), tidak mengembalikan
+  set, bertipe hasil `smallint`/`integer`/`bigint`/`boolean`, dan tanpa tipe baris
+  payroll pada signature-nya: hitungan, bukan baris. Pemanggilan dikenali
+  berkutip dan berkualifikasi skema (`public."awcms_x"()`). Lapisan statis juga
+  mengikuti `WITH ... INSERT ... SELECT`, `WITH ... SELECT ... INTO`, dan
+  `CREATE TABLE ... AS WITH`, serta menggagalkan blok `DO` migrasi mana pun yang
+  menjalankan `EXECUTE` kecuali migrasinya ada di `PAYROLL_DO_EXECUTE_ALLOWLIST`
+  beserta alasan (dua entri saat ini, tak satu pun terkait payroll). Salinan
+  data sekali-jalan yang tidak meninggalkan objek tak terlihat oleh katalog dan
+  ditahan lapisan statis untuk nama yang dapat diselesaikannya; nama yang baru
+  ada saat runtime ditahan katalog begitu ia menjadi relasi atau fungsi.
+  **Yang tersisa (batas yang diketahui, dilacak di #1077):** katalog
+  tidak membaca policy atau CHECK constraint yang menyebut payroll, hak yang
+  dipegang lewat keanggotaan role, maupun objek ekstensi; salinan sekali-jalan
+  lewat nama yang dirakit saat runtime di dalam blok `DO` yang diizinkan;
+  `import(ident)` dinamis yang specifier-nya tak menampakkan bagian nama berkas
+  ledger; penyamaran literal memperlakukan `${ ... }` di dalam template literal
+  sebagai teks (panggilan audit asli di sana tidak terlihat) dan tidak memahami
+  literal regex; dan gerbang masih membuktikan panggilan audit ada di berkas,
+  bukan di setiap jalur handler. Fungsi mutasi ledger (`accrueCommission`,
+  `transitionAccrual`) mengembalikan accrual dan berada di luar daftar impor
+  fungsi baca karena diaudit sebagai mutasi.
+  Pengecualian ada di `PAYROLL_CATALOG_EXEMPTIONS` (kosong; jalan keluarnya
+  adalah nama keluarga payroll).
 - _Komisi ada di dalam batas (keputusan pemilik)._ `awcms_hr_commission_accruals`
   (beserta log transisinya) dan modul `hr_commission` dilarang sebagai sumber
   proyeksi, pencarian, komentar, cache, dan ekspor, dan `hr_commission` adalah

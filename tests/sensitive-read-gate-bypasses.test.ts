@@ -337,13 +337,13 @@ describe("M2: the SQL boundary (views, CREATE TABLE AS, foreign triggers)", () =
     expect(failures.join("\n")).toContain("trigger t on awcms_blog_posts");
   });
 
-  test("a trigger on a payroll table reading payroll is the module's own business", () => {
+  test("a trigger on a payroll table running a payroll-family function is the module's own business", () => {
     expect(
       findPayrollSqlLeaks([
         {
           name: "1.sql",
-          sql: `CREATE FUNCTION f() RETURNS trigger AS $body$ BEGIN PERFORM 1 FROM awcms_hr_payslips; RETURN NEW; END; $body$ LANGUAGE plpgsql;
-                CREATE TRIGGER t BEFORE UPDATE ON awcms_hr_payslips FOR EACH ROW EXECUTE FUNCTION f();`
+          sql: `CREATE FUNCTION awcms_hr_payslips_guard() RETURNS trigger AS $body$ BEGIN PERFORM 1 FROM awcms_hr_payslips; RETURN NEW; END; $body$ LANGUAGE plpgsql;
+                CREATE TRIGGER t BEFORE UPDATE ON awcms_hr_payslips FOR EACH ROW EXECUTE FUNCTION awcms_hr_payslips_guard();`
         }
       ])
     ).toEqual([]);

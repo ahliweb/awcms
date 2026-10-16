@@ -1076,9 +1076,21 @@ design above.
   new `view`, `print` or `reveal` cannot slip past a list of read verbs. A file
   that mentions a sensitive module and has an `authorize:` reference that
   resolves to nothing, or a non-literal `activityCode`, fails. A source file that
-  names a payroll-boundary table must call `recordSensitiveRead` or be listed
-  with a reason in `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (a `module.ts` is
-  descriptor-only and exempt). **Known syntactic limit:** the call is proven to be
+  names a payroll-boundary table must call `recordSensitiveRead` with a
+  permission that covers THAT table (`PAYROLL_TABLE_READ_PERMISSIONS`: auditing
+  `compensation.read` no longer clears a file that also reads `payslips`; an
+  export or download audit of the same module counts) or be listed with a reason
+  in `PAYROLL_TABLE_SOURCE_EXEMPTIONS` (a `module.ts` is descriptor-only and
+  exempt). The exempt ledger is trusted only because its callers audit, so that is
+  now checked rather than written down: its read functions (`listAccruals`,
+  `getAccrual`, `reconcileAccruals`) can be imported (named, namespace, default,
+  re-exported or dynamic) only by the files in `PAYROLL_READ_FUNCTION_IMPORTS`,
+  and each of those must call `recordSensitiveRead` for
+  `hr_commission.accruals.read` itself (Issue #1015). **Known syntactic limits:**
+  a table name assembled from string pieces is not a token the scan can see
+  (the SQL side of that evasion is closed by the catalog layer below; the
+  application side is held by review and by rule 5); import resolution is by
+  file name, not the module graph; and the call is proven to be
   in the file, not on every path of the handler; a call in a dead branch, after an
   early return, or under an always-false condition passes. The route-level tests
   the #957 and #961 acceptance wording requires are what cover the next layer.
@@ -1086,10 +1098,49 @@ design above.
   segment (`payroll`, `compensation`, `salary`, `wage`, `payslip`, `payout`,
   singular or plural, any prefix), so `awcms_hr_compensations`, `awcms_hr_salary_history`
   and `awcms_hr_employee_compensation` are inside. `bun run payroll:sql-boundary:check`
-  reads `sql/` and fails a view, materialised view or `CREATE TABLE ... AS` over a
-  forbidden table, and a trigger on an ordinary table whose function reads one,
-  unless the new relation is itself named in the payroll family (then every
-  registry gate refuses it).
+  reads `sql/` and fails a view, materialised view, `CREATE TABLE ... AS`,
+  `SELECT ... INTO` or `INSERT ... SELECT` over a forbidden table, a rule that
+  crosses the boundary, a function (`SETOF <payroll table>` included) that reads
+  one or calls one that does, and a trigger that crosses it in either direction,
+  unless the new object is itself named in the payroll family (then every
+  registry gate refuses it). **The catalog layer (Issue #1015).** A text scan can
+  be written around (a name built in a `DO` block, a `;` in a literal, a view
+  renamed afterwards, a function chain, a trigger body in single quotes), so the
+  static layer is quote-aware, case-insensitive, folds `'a' || 'b'`, follows
+  renames and call chains, and looks inside `DO` blocks and `EXECUTE` literals;
+  and the same rule is enforced on the MIGRATED CATALOG by
+  `tests/integration/payroll-catalog-boundary.integration.test.ts` (the CI
+  integration job) and `bun run payroll:catalog-boundary:check` (any database):
+  `pg_rewrite`/`pg_depend` for views and rules, `pg_proc` for functions that
+  return, take, name or call payroll (and any `EXECUTE` outside the family),
+  `pg_trigger` for triggers, and the ACLs, so a payroll table (or one of its columns)
+  granted to anything but `awcms_app` (`PAYROLL_ALLOWED_GRANTEES`; `PUBLIC` and
+  `awcms_worker` fail) and a payroll SECURITY DEFINER function executable by
+  `PUBLIC` or another role fail. The unattended worker may run a payroll
+  function only if it is named in `PAYROLL_WORKER_EXECUTE_ALLOWLIST` (empty
+  today), does not return a set, returns `smallint`/`integer`/`bigint`/`boolean`
+  and has no payroll row type in its signature: a count, never a row. Calls are
+  recognised quoted and schema-qualified (`public."awcms_x"()`). The static
+  layer also follows `WITH ... INSERT ... SELECT`, `WITH ... SELECT ... INTO`
+  and `CREATE TABLE ... AS WITH`, and fails any migration `DO` block that runs
+  `EXECUTE` unless the migration is in `PAYROLL_DO_EXECUTE_ALLOWLIST` with a
+  reason (two entries today, neither payroll-adjacent). A one-shot data copy
+  that leaves no object behind is invisible to the catalog and is held by the
+  static layer for the names it can resolve; a name that exists only at run time
+  is held by the catalog the moment it becomes a relation or function.
+  **What remains (known limits, tracked in #1077):** the catalog
+  does not read policies or CHECK constraints that mention payroll, privileges
+  held through role membership, or extension objects; a one-shot copy through a
+  name built at run time inside an allow-listed `DO` block; a dynamic
+  `import(ident)` whose specifier shows no part of the ledger's file name; the
+  literal masking treats `${ ... }` inside a template literal as text (a real
+  audit call there is not seen) and does not understand regex literals; and the
+  gate still proves the audit call is in the file, not on every handler path.
+  Mutation functions of the ledger (`accrueCommission`, `transitionAccrual`)
+  return an accrual and are outside the read-function import allow-list because
+  they are audited as mutations.
+  Exemptions are `PAYROLL_CATALOG_EXEMPTIONS` (empty; the way out is the payroll
+  family name).
 - _Commission is inside the boundary (owner decision)._ `awcms_hr_commission_accruals`
   (with its transition log) and the module `hr_commission` are forbidden as
   projection, search, comment, cache and export sources, and `hr_commission` is a

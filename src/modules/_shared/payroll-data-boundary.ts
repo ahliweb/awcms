@@ -92,6 +92,63 @@ export const FORBIDDEN_PAYROLL_TABLE_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
+ * Database roles that may hold a privilege on a payroll relation (Issue #1015,
+ * the catalog layer in `scripts/lib/payroll-catalog-boundary.ts`): the request
+ * role only. The owner is implicit. Every OTHER role (`PUBLIC` included, the
+ * implicit grantee of a new function; and `awcms_worker`, which runs unattended
+ * jobs and so must never read a person's pay row by row) fails. Widening this
+ * list is a security decision made in a PR that says why.
+ */
+export const PAYROLL_ALLOWED_GRANTEES: readonly string[] = ["awcms_app"];
+
+/**
+ * Roles that may EXECUTE a payroll-family SECURITY DEFINER function only under
+ * the narrow terms below. A worker needs a COUNT (is anything due, how many
+ * rows would a purge touch), never a row.
+ *
+ * A function qualifies when ALL hold: it is named in
+ * {@link PAYROLL_WORKER_EXECUTE_ALLOWLIST} (bare function names, EMPTY today;
+ * an issue that needs a count adds its function here, in a PR that says why),
+ * it does not return a set, it returns one of
+ * {@link PAYROLL_WORKER_SCALAR_RETURN_TYPES}, and no payroll row type appears
+ * in its signature.
+ */
+export const PAYROLL_WORKER_ROLES: readonly string[] = ["awcms_worker"];
+
+export const PAYROLL_WORKER_EXECUTE_ALLOWLIST: readonly string[] = [];
+
+/** `regtype` spellings of int2, int4, int8 and bool. */
+export const PAYROLL_WORKER_SCALAR_RETURN_TYPES: readonly string[] = [
+  "smallint",
+  "integer",
+  "bigint",
+  "boolean"
+];
+
+/**
+ * Migration files (by name) whose `DO` block runs dynamic SQL (`EXECUTE`) and
+ * is accepted by the static payroll gate, each with the reason. A relation name
+ * built at run time is a name no text scan can hold to the boundary (the
+ * catalog layer still sees whatever object results), so every such block is
+ * named here deliberately. Empty today for payroll-adjacent migrations.
+ */
+export const PAYROLL_DO_EXECUTE_ALLOWLIST: Readonly<Record<string, string>> = {
+  "099_awcms_sync_outbox_retire.sql":
+    "a one-line row count over awcms_sync_outbox (a literal table, no payroll relation) to refuse retiring a non-empty table",
+  "142_awcms_delegated_access_expiry_sweep.sql":
+    "creates a policy per table of a fixed list of access-grant tables for the expiry-sweep role; the loop variable ranges over literals in the same file, none a payroll relation"
+};
+
+/**
+ * Catalog objects (`schema.name`) the catalog layer accepts although they sit
+ * across the boundary, each with the reason. Empty today and meant to stay so:
+ * an entry is the maintainer saying "this object may read payroll", which is
+ * what the payroll-family NAME is for. A stale entry (the object no longer
+ * exists) is reported.
+ */
+export const PAYROLL_CATALOG_EXEMPTIONS: Readonly<Record<string, string>> = {};
+
+/**
  * Modules that own payroll data. A derived surface they OWN is refused even if
  * the table it reads has a name the patterns above do not know — a renamed
  * table, a view, a materialised copy. The set is a list so a later

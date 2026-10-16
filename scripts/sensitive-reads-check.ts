@@ -26,6 +26,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { listModules } from "../src/modules";
 import { evaluateSensitiveReadCoverage } from "../src/modules/_shared/sensitive-read-coverage";
 import {
+  PAYROLL_READ_FUNCTION_IMPORTS,
   PAYROLL_TABLE_SOURCE_EXEMPTIONS,
   SENSITIVE_READ_MODULE_KEYS,
   SENSITIVE_READ_POLICIES
@@ -34,7 +35,7 @@ import { REPO_ROOT, listFilesRecursive } from "./lib/repo-files";
 
 function main(): void {
   const files = listFilesRecursive("src", {
-    extensions: [".ts", ".astro"],
+    extensions: [".ts", ".tsx", ".js", ".mjs", ".astro"],
     relativeTo: REPO_ROOT
   });
   const sources = files.map((file) =>
@@ -45,6 +46,15 @@ function main(): void {
   for (const path of Object.keys(PAYROLL_TABLE_SOURCE_EXEMPTIONS)) {
     if (!existsSync(`${REPO_ROOT}/${path}`)) {
       result.staleSourceExemptions.push(path);
+      result.valid = false;
+    }
+  }
+
+  for (const path of PAYROLL_READ_FUNCTION_IMPORTS.flatMap(
+    (entry) => entry.allowedImporters
+  )) {
+    if (!existsSync(`${REPO_ROOT}/${path}`)) {
+      result.staleImportAllowances.push(path);
       result.valid = false;
     }
   }
@@ -77,6 +87,30 @@ function main(): void {
   for (const reader of result.unauditedTableReaders) {
     console.error(
       `  ${reader.source} - names ${reader.tables.join(", ")} but never calls recordSensitiveRead and is not in PAYROLL_TABLE_SOURCE_EXEMPTIONS (src/modules/_shared/sensitive-reads.ts) with a reason.`
+    );
+  }
+
+  for (const reader of result.uncoveredTableReaders) {
+    for (const table of reader.tables) {
+      const needs = reader.needs[table] ?? [];
+
+      console.error(
+        `  ${reader.source} - names ${table} and audits, but no recordSensitiveRead in it covers that table (Issue #1015: attribution is per table). ${
+          needs.length > 0
+            ? `Call recordSensitiveRead for ${needs.join(" or ")} (or an export/download audit of the same module).`
+            : "No audit call can stand for this table: add it to PAYROLL_TABLE_READ_PERMISSIONS with the permission that covers it, or list the file in PAYROLL_TABLE_SOURCE_EXEMPTIONS with the reason."
+        }`
+      );
+    }
+  }
+
+  for (const entry of result.forbiddenReadImports) {
+    console.error(`  ${entry.source} - ${entry.problem} (Issue #1015).`);
+  }
+
+  for (const path of result.staleImportAllowances) {
+    console.error(
+      `  ${path} - stale PAYROLL_READ_FUNCTION_IMPORTS allowedImporters entry: the file no longer imports the guarded read functions.`
     );
   }
 
