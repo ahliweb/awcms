@@ -16,6 +16,15 @@
  */
 import { log } from "../../../lib/logging/logger";
 import {
+  FieldEncryptionError,
+  type KeyRing
+} from "../../../lib/security/field-encryption";
+import {
+  decryptPushAuthSecret,
+  encryptPushAuthSecret,
+  PushAuthSecretError
+} from "../domain/push-auth-secret";
+import {
   hashPushEndpoint,
   maskPushEndpoint,
   normalizePushEndpoint
@@ -90,20 +99,44 @@ function toSummary(row: SubscriptionRow): PushSubscriptionSummary {
 export async function registerPushSubscription(
   tx: Bun.TransactionSQL,
   tenantId: string,
-  input: RegisterPushSubscriptionInput
+  input: RegisterPushSubscriptionInput,
+  /**
+   * The auth-secret key ring (Issue #1089). Required whenever `authSecret` is
+   * present: there is NO plaintext fallback. A missing ring is a caller bug
+   * (the route answers 503 before reaching here), so this throws rather than
+   * quietly storing the secret in the clear.
+   */
+  authSecretRing?: KeyRing
 ): Promise<PushSubscriptionSummary> {
   const normalized = normalizePushEndpoint(input.endpoint);
   const endpointHash = hashPushEndpoint(normalized);
   const endpointMasked = maskPushEndpoint(normalized);
 
+  if (input.authSecret !== undefined && !authSecretRing) {
+    throw new PushAuthSecretError(
+      "Push auth-secret key ring is required to register a subscription.",
+      true
+    );
+  }
+
+  const authSecretCiphertext =
+    input.authSecret !== undefined && authSecretRing
+      ? encryptPushAuthSecret(
+          input.authSecret,
+          tenantId,
+          endpointHash,
+          authSecretRing
+        )
+      : null;
+
   const rows = (await tx`
     INSERT INTO awcms_push_subscriptions
       (tenant_id, tenant_user_id, transport, endpoint, endpoint_hash,
-       endpoint_masked, p256dh_key, auth_secret, user_agent_summary)
+       endpoint_masked, p256dh_key, auth_secret_ciphertext, user_agent_summary)
     VALUES (
       ${tenantId}, ${input.tenantUserId}, ${input.transport}, ${normalized},
       ${endpointHash}, ${endpointMasked}, ${input.p256dhKey ?? null},
-      ${input.authSecret ?? null}, ${input.userAgentSummary ?? null}
+      ${authSecretCiphertext}, ${input.userAgentSummary ?? null}
     )
     ON CONFLICT ON CONSTRAINT awcms_push_subscriptions_endpoint_unique
     DO UPDATE SET
@@ -118,7 +151,11 @@ export async function registerPushSubscription(
       -- undeliverable in fact, failing with a provider error that names nothing.
       endpoint = EXCLUDED.endpoint,
       p256dh_key = EXCLUDED.p256dh_key,
-      auth_secret = EXCLUDED.auth_secret,
+      -- Re-registering a legacy row migrates it: the fresh secret goes in as
+      -- ciphertext and the old plaintext is cleared in the same statement (the
+      -- CHECK requires exactly one of the two).
+      auth_secret = NULL,
+      auth_secret_ciphertext = EXCLUDED.auth_secret_ciphertext,
       user_agent_summary = EXCLUDED.user_agent_summary,
       status = 'active',
       disabled_reason = null,
@@ -220,9 +257,11 @@ export async function fetchActiveSubscriptionIdsForUsers(
 type TargetRow = {
   transport: PushTransport;
   endpoint: string;
+  endpoint_hash: string;
   endpoint_masked: string;
   p256dh_key: string | null;
   auth_secret: string | null;
+  auth_secret_ciphertext: string | null;
 };
 
 /**
@@ -235,29 +274,116 @@ type TargetRow = {
 export async function fetchDeliveryTarget(
   tx: Bun.TransactionSQL,
   tenantId: string,
-  subscriptionId: string
+  subscriptionId: string,
+  /** The auth-secret key ring, or `null` when it is not configured (Issue #1089). */
+  authSecretRing: KeyRing | null = null
 ): Promise<PushTarget | null> {
+  const row = await fetchDeliveryTargetRow(tx, tenantId, subscriptionId);
+
+  return row ? buildDeliveryTarget(row, tenantId, authSecretRing) : null;
+}
+
+/** The raw row, for a caller that decrypts OUTSIDE the transaction (Issue #1089, L1). */
+export type DeliveryTargetRow = TargetRow;
+
+export async function fetchDeliveryTargetRow(
+  tx: Bun.TransactionSQL,
+  tenantId: string,
+  subscriptionId: string
+): Promise<DeliveryTargetRow | null> {
   const rows = (await tx`
-    SELECT transport, endpoint, endpoint_masked, p256dh_key, auth_secret
+    SELECT transport, endpoint, endpoint_hash, endpoint_masked, p256dh_key,
+           auth_secret, auth_secret_ciphertext
     FROM awcms_push_subscriptions
     WHERE tenant_id = ${tenantId}
       AND id = ${subscriptionId}
       AND status = 'active'
   `) as TargetRow[];
 
-  const row = rows[0];
+  return rows[0] ?? null;
+}
 
-  if (!row) {
-    return null;
+/**
+ * Pure: turns a fetched row into a provider target. Two refusals, both
+ * `PushAuthSecretError` with fixed messages (no secret, endpoint or key
+ * material):
+ *
+ * - `endpoint` must hash to `endpoint_hash`. The hash is the row's identity and
+ *   the AAD of the ciphertext; a row whose endpoint was re-pointed (or inserted
+ *   with a forged one) would otherwise be delivered to the attacker's endpoint
+ *   with the victim's decrypted secret. Non-retryable.
+ * - the auth secret must be producible (see `resolveAuthSecret`).
+ *
+ * Runs outside any transaction, so a refusal is never counted as a database
+ * failure by the circuit breaker.
+ */
+export function buildDeliveryTarget(
+  row: DeliveryTargetRow,
+  tenantId: string,
+  authSecretRing: KeyRing | null
+): PushTarget {
+  if (hashPushEndpoint(row.endpoint) !== row.endpoint_hash) {
+    throw new PushAuthSecretError(
+      "Push subscription endpoint does not match its recorded identity; delivery refused.",
+      false
+    );
   }
+
+  const authSecret = resolveAuthSecret(row, tenantId, authSecretRing);
 
   return {
     transport: row.transport,
     endpoint: row.endpoint,
     endpointMasked: row.endpoint_masked,
     ...(row.p256dh_key ? { p256dhKey: row.p256dh_key } : {}),
-    ...(row.auth_secret ? { authSecret: row.auth_secret } : {})
+    ...(authSecret ? { authSecret } : {})
   };
+}
+
+/**
+ * Ciphertext wins; legacy plaintext is read ONLY while the row has no
+ * ciphertext (the transition window of Issue #1089, ended by the backfill and
+ * the later column drop). A row with ciphertext is never "repaired" by falling
+ * back to plaintext: that would let a stale plaintext shadow a failed
+ * decryption. Failures throw `PushAuthSecretError` WITHOUT the secret, the
+ * ciphertext or key material in the message.
+ */
+function resolveAuthSecret(
+  row: TargetRow,
+  tenantId: string,
+  ring: KeyRing | null
+): string | null {
+  if (row.auth_secret_ciphertext === null) {
+    return row.auth_secret;
+  }
+
+  if (!ring) {
+    throw new PushAuthSecretError(
+      "Push auth-secret key ring is not configured; cannot decrypt the subscription secret.",
+      true
+    );
+  }
+
+  try {
+    return decryptPushAuthSecret(
+      row.auth_secret_ciphertext,
+      tenantId,
+      row.endpoint_hash,
+      ring
+    );
+  } catch (error) {
+    const unknownKey =
+      error instanceof FieldEncryptionError &&
+      (error.code === "UNKNOWN_KEY_ID" ||
+        error.code === "KEY_RING_UNAVAILABLE");
+
+    throw new PushAuthSecretError(
+      unknownKey
+        ? "Push auth-secret key ring lacks the key this subscription was encrypted under."
+        : "Push subscription secret failed authentication.",
+      unknownKey
+    );
+  }
 }
 
 /**

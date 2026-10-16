@@ -324,6 +324,7 @@ describe("the module reached a complete surface in three steps", () => {
     const commands = (pushDeliveryModule.jobs ?? []).map((j) => j.command);
 
     expect(commands).toEqual([
+      "bun run push:auth-secret:backfill",
       "bun run push:dispatch",
       "bun run push:queue:purge"
     ]);

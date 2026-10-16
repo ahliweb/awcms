@@ -16,6 +16,7 @@ import { readFile } from "node:fs/promises";
 
 import { describeIdempotencySecretProblem } from "../src/lib/security/idempotency-hmac";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
+import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import { parseVapidConfig } from "../src/modules/push-delivery/domain/vapid-config";
 import { parseRecipientHashKeys } from "../src/modules/whatsapp-delivery/domain/whatsapp-recipient";
 import {
@@ -304,6 +305,12 @@ const RULES: readonly Rule[] = [
   { name: "PUSH_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
   { name: "PUSH_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
   { name: "PUSH_FCM_CREDENTIALS_BASE64", required: false, type: "string" },
+  {
+    name: "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
   { name: "PUSH_VAPID_PUBLIC_KEY", required: false, type: "string" },
   { name: "PUSH_VAPID_PRIVATE_KEY", required: false, type: "string" },
   { name: "PUSH_VAPID_SUBJECT", required: false, type: "string" },
@@ -818,6 +825,18 @@ export function validateEnv(env: EnvBag): string[] {
 
       if (!vapid.ok) {
         problems.push(`Konfigurasi VAPID tidak valid: ${vapid.reason}.`);
+      }
+
+      // Issue #1089: rahasia auth RFC 8291 disimpan terenkripsi; tanpa cincin
+      // kunci tidak ada langganan web_push yang dapat didaftarkan (gagal-tertutup).
+      const authSecretRing = resolvePushAuthSecretRing(
+        env as NodeJS.ProcessEnv
+      );
+
+      if (!authSecretRing.ok) {
+        problems.push(
+          `${authSecretRing.reason} Wajib valid saat PUSH_PROVIDER=web_push (tanpa kunci, perangkat tidak dapat didaftarkan dan rahasia auth tidak dapat didekripsi).`
+        );
       }
     }
   }

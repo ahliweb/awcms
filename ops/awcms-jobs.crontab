@@ -271,3 +271,10 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 
 # idn-regions:rollback
 #   A recovery action. A recovery action on a timer is not a recovery action.
+
+# push:auth-secret:backfill
+#   A one-time data migration (Issue #1089) run during the rollout that encrypts
+#   the RFC 8291 auth secret at rest, after PUSH_AUTH_SECRET_ENCRYPTION_KEYS is
+#   set and the release is deployed. Re-running is harmless (idempotent) but
+#   pointless once `security:readiness` reports zero plaintext rows, so a timer
+#   would be dead weight.

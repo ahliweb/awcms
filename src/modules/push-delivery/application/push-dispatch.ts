@@ -42,12 +42,20 @@ import {
   isPushEnabled,
   resolvePushSendMaxRetries
 } from "../domain/push-config";
+import {
+  PushAuthSecretError,
+  resolvePushAuthSecretRing
+} from "../domain/push-auth-secret";
 import { evaluatePushRetry } from "../domain/push-retry";
-import type { PushProvider } from "../domain/push-provider-contract";
+import type {
+  PushProvider,
+  PushTarget
+} from "../domain/push-provider-contract";
 import { resolvePushProvider } from "../infrastructure/push-provider-resolver";
 import {
   disablePushSubscription,
-  fetchDeliveryTarget,
+  buildDeliveryTarget,
+  fetchDeliveryTargetRow,
   markSubscriptionDelivered
 } from "./subscription-directory";
 
@@ -302,6 +310,7 @@ export async function dispatchPushQueue(
     return result;
   }
 
+  const authSecretRing = resolvePushAuthSecretRing(env);
   const provider = (options.resolveProvider ?? resolvePushProvider)(env);
   const providerName = env.PUSH_PROVIDER ?? "unknown";
 
@@ -317,12 +326,64 @@ export async function dispatchPushQueue(
     const attemptNo = retryCount + 1;
     const messageCorrelationId = entry.correlation_id ?? correlationId;
 
-    const target = await withTenantOrThrow(
-      sql,
-      tenantId,
-      (tx) => fetchDeliveryTarget(tx, tenantId, entry.subscription_id),
-      { workClass: "background_sync" }
-    );
+    let target: PushTarget | null;
+
+    try {
+      // Read the row inside the tenant transaction, build the target (hash
+      // check + decrypt) OUTSIDE it: a refusal here is not a database failure
+      // and must not feed the circuit breaker (Issue #1089, L1).
+      const targetRow = await withTenantOrThrow(
+        sql,
+        tenantId,
+        (tx) => fetchDeliveryTargetRow(tx, tenantId, entry.subscription_id),
+        { workClass: "background_sync" }
+      );
+
+      target = targetRow
+        ? buildDeliveryTarget(
+            targetRow,
+            tenantId,
+            authSecretRing.ok ? authSecretRing : null
+          )
+        : null;
+    } catch (error) {
+      // Issue #1089: a ciphertext row whose secret cannot be produced. The
+      // message is a fixed string (no secret, ciphertext or key material), so it
+      // is safe to persist as the attempt's error. Missing/rotated-away key is
+      // retryable (an operator can fix it); a failed authentication is not.
+      if (!(error instanceof PushAuthSecretError)) {
+        throw error;
+      }
+
+      await recordDeliveryAttempt(
+        sql,
+        tenantId,
+        entry.id,
+        attemptNo,
+        "failure",
+        providerName,
+        null,
+        error.message
+      );
+      const outcome = await finalizeFailure(
+        sql,
+        tenantId,
+        entry.id,
+        retryCount,
+        maxRetries,
+        error.retryable,
+        now,
+        error.message
+      );
+
+      if (outcome.eligible) {
+        result.retried += 1;
+      } else {
+        result.failed += 1;
+      }
+
+      continue;
+    }
 
     if (!target) {
       const reason = "Subscription is no longer active.";

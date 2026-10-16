@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 228   |
+| Migrations                          | 229   |
 | `awcms_*` tables                    | 222   |
 | Tables with `FORCE` RLS             | 204   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 724   |
+| Test files                          | 727   |
 | Route files                         | 577   |
 | ADR                                 | 292   |
 
@@ -286,6 +286,7 @@
 | 226 | `sql/310_awcms_setup_role_credential_column_revoke.sql`            |
 | 227 | `sql/311_awcms_payroll_boundary_markers.sql`                       |
 | 228 | `sql/313_awcms_hr_self_service_permissions.sql`                    |
+| 229 | `sql/314_awcms_push_subscription_auth_secret_ciphertext.sql`       |
 
 ### Tables & Row-Level Security
 
@@ -518,9 +519,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 552        |
+| `(root)`      | 554        |
 | `e2e`         | 26         |
-| `integration` | 145        |
+| `integration` | 146        |
 | `unit`        | 1          |
 
 ### Routes

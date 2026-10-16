@@ -110,6 +110,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Outbox dispatcher (email:dispatch), recommended every 1-2 minutes — matches sync/object dispatch's own background_sync classification."
   },
+  "scripts/push-auth-secret-backfill.ts": {
+    workClass: "maintenance",
+    rationale:
+      'One-time, re-runnable backfill (push:auth-secret:backfill, Issue #1089) that encrypts legacy plaintext push auth secrets; batched, tolerant of delay, and every withTenantOrThrow call inside push-auth-secret-backfill.ts passes workClass: "maintenance" explicitly.'
+  },
   "scripts/push-dispatch.ts": {
     workClass: "background_sync",
     rationale:

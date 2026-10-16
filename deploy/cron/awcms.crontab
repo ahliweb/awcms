@@ -277,6 +277,7 @@ AWCMS_LOG=/var/log/awcms
 #   email:templates:seed-defaults   once per tenant, after setup; needs args
 #   blog:ads:ingest                 one-shot legacy migration, retired after
 #   blog:ads:drop-readiness         by hand, before writing the drop migration
+#   push:auth-secret:backfill       once, after the release that encrypts push auth secrets
 #   idn-regions:import              on deploy when the vendored dataset changes
 #   idn-regions:activate            by a platform operator, after review
 #   idn-regions:rollback            by a platform operator, to undo an activation
