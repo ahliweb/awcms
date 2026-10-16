@@ -467,6 +467,28 @@ export async function setPrincipalCredentialForIdentity(
 }
 
 /**
+ * Creates the principal for an address if it does not exist and returns ONLY its
+ * id — Issue #1082.
+ *
+ * Goes through `awcms_ensure_principal_id(text)` (`sql/310`, SECURITY DEFINER),
+ * not a direct INSERT/SELECT: the setup wizard (`awcms_setup`) holds no privilege
+ * on `awcms_principals` at all, and `ensurePrincipalForEmail` also reads
+ * `password_hash`. The function does the same `ON CONFLICT DO NOTHING` + re-read
+ * and returns the id alone, so every caller converges on one principal per
+ * address with neither writing nor reading a secret.
+ */
+async function ensurePrincipalIdForEmail(
+  tx: Bun.SQL,
+  email: string
+): Promise<string> {
+  const rows = (await tx`
+    SELECT awcms_ensure_principal_id(${normalizePrincipalEmail(email)}) AS id
+  `) as { id: string }[];
+
+  return rows[0]!.id;
+}
+
+/**
  * Links a NEWLY CREATED identity to its principal, creating the principal when
  * this is the first tenant that address has ever appeared in.
  *
@@ -491,15 +513,15 @@ export async function linkIdentityToPrincipal(
   identityId: string,
   loginIdentifier: string
 ): Promise<string> {
-  const principal = await ensurePrincipalForEmail(tx, loginIdentifier);
+  const principalId = await ensurePrincipalIdForEmail(tx, loginIdentifier);
 
   await tx`
     UPDATE awcms_identities
-    SET principal_id = ${principal.id}
+    SET principal_id = ${principalId}
     WHERE id = ${identityId} AND principal_id IS NULL
   `;
 
-  return principal.id;
+  return principalId;
 }
 
 /**

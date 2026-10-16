@@ -19,6 +19,10 @@ import {
   WORKER_CREDENTIAL_COLUMN_EXCEPTIONS,
   WORKER_JOB_ROLES,
   WORKER_ROLE_GRANTS,
+  CREDENTIAL_CHECKED_ROLES,
+  SETUP_COLUMN_GRANTS,
+  SETUP_CREDENTIAL_COLUMN_EXCEPTIONS,
+  SETUP_ROLE_GRANTS,
   DEFINER_OWNER_ROLES,
   checkDefinerOwnerRolesNoLogin,
   checkWorkerCredentialColumnsUnreadable
@@ -392,6 +396,138 @@ describeOrSkip(
 
         expect(classified.status).toBe("pass");
       });
+    });
+  }
+);
+
+describe("awcms_setup is covered by the credential check (static, Issue #1082)", () => {
+  const setupMigration = readFileSync(
+    path.join(
+      repoRoot,
+      "sql/310_awcms_setup_role_credential_column_revoke.sql"
+    ),
+    "utf8"
+  )
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+
+  test("the checked roles are the worker job roles plus awcms_setup", () => {
+    expect(CREDENTIAL_CHECKED_ROLES).toEqual([
+      ...WORKER_JOB_ROLES,
+      "awcms_setup"
+    ]);
+  });
+
+  test("the setup role has NO credential-column exception", () => {
+    expect(Object.keys(SETUP_CREDENTIAL_COLUMN_EXCEPTIONS)).toEqual([]);
+  });
+
+  test("the setup matrix holds no table-level SELECT on identities, and no pinned column is a credential", () => {
+    expect(SETUP_ROLE_GRANTS.awcms_identities).toEqual(["INSERT"]);
+    expect(SETUP_ROLE_GRANTS.awcms_principals).toBeUndefined();
+
+    for (const [table, privileges] of Object.entries(SETUP_COLUMN_GRANTS)) {
+      for (const [privilege, columns] of Object.entries(privileges)) {
+        for (const column of columns ?? []) {
+          // INSERT of a credential is a write, not a read; none is pinned today.
+          expect(
+            CREDENTIAL_COLUMNS,
+            `${privilege} ${table}.${column}`
+          ).not.toContain(`${table}.${column}`);
+        }
+      }
+    }
+  });
+
+  test("sql/310 revokes the table SELECT and re-grants by column", () => {
+    expect(setupMigration).toContain(
+      "REVOKE SELECT ON awcms_identities FROM awcms_setup;"
+    );
+    expect(setupMigration).toContain(
+      "GRANT SELECT (id, principal_id) ON awcms_identities TO awcms_setup;"
+    );
+    expect(setupMigration).not.toMatch(/GRANT[^;]*password_hash/);
+    expect(setupMigration).not.toMatch(
+      /GRANT[^;]*ON awcms_principals TO awcms_setup/
+    );
+    expect(setupMigration).toContain("AS RESTRICTIVE");
+    expect(setupMigration).toContain("WITH CHECK (principal_id IS NOT NULL)");
+    expect(setupMigration).toContain("awcms_identities_principal_link_once");
+    expect(setupMigration).toContain("SECURITY DEFINER");
+    expect(setupMigration).not.toMatch(/GRANT SELECT ON awcms_/);
+  });
+});
+
+describeOrSkip(
+  "awcms_setup credential exposure (database, Issue #1082)",
+  () => {
+    async function setupExists(): Promise<boolean> {
+      const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+
+      try {
+        const rows = (await admin`
+        SELECT 1 AS present FROM pg_roles WHERE rolname = 'awcms_setup'
+      `) as unknown[];
+
+        return rows.length > 0;
+      } finally {
+        await admin.close({ timeout: 1 });
+      }
+    }
+
+    test("a credential column readable by awcms_setup FAILS the gate", async () => {
+      expect(await setupExists(), "awcms_setup must exist (sql/022)").toBe(
+        true
+      );
+
+      const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+
+      try {
+        await admin.unsafe(
+          "GRANT SELECT (password_hash) ON awcms_principals TO awcms_setup"
+        );
+        const result = await checkWorkerCredentialColumnsUnreadable();
+
+        expect(result.status).toBe("fail");
+        expect(result.evidence).toContain(
+          "awcms_setup can SELECT awcms_principals.password_hash"
+        );
+      } finally {
+        await admin.unsafe(
+          "REVOKE SELECT (password_hash) ON awcms_principals FROM awcms_setup"
+        );
+        await admin.close({ timeout: 1 });
+      }
+
+      expect((await checkWorkerCredentialColumnsUnreadable()).status).toBe(
+        "pass"
+      );
+    });
+
+    test("the worker exceptions do not extend to awcms_setup", async () => {
+      expect(await setupExists(), "awcms_setup must exist (sql/022)").toBe(
+        true
+      );
+
+      const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+
+      try {
+        await admin.unsafe(
+          "GRANT SELECT (auth_secret) ON awcms_push_subscriptions TO awcms_setup"
+        );
+        const result = await checkWorkerCredentialColumnsUnreadable();
+
+        expect(result.status).toBe("fail");
+        expect(result.evidence).toContain(
+          "awcms_setup can SELECT awcms_push_subscriptions.auth_secret"
+        );
+      } finally {
+        await admin.unsafe(
+          "REVOKE SELECT (auth_secret) ON awcms_push_subscriptions FROM awcms_setup"
+        );
+        await admin.close({ timeout: 1 });
+      }
     });
   }
 );

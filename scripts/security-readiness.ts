@@ -1765,7 +1765,10 @@ export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
   awcms_tenant_settings: ["INSERT"],
   awcms_offices: ["SELECT", "INSERT"],
   awcms_profiles: ["SELECT", "INSERT"],
-  awcms_identities: ["SELECT", "INSERT"],
+  // INSERT only since sql/310 (Issue #1082): the SELECT it used to hold was
+  // table-wide and so reached `password_hash`. What the wizard reads back is
+  // column-scoped: see SETUP_COLUMN_GRANTS.
+  awcms_identities: ["INSERT"],
   awcms_tenant_users: ["SELECT", "INSERT"],
   awcms_roles: ["SELECT", "INSERT"],
   awcms_role_permissions: ["INSERT"],
@@ -1786,7 +1789,7 @@ export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
  * table-level matrix above untouched (audit M2 of #1044). "Column-only" means
  * the columns the role holds the privilege on WITHOUT holding it table-wide.
  *
- * Pinned to `sql/280` (attendance settlement), `sql/302` (requester notice) and
+ * Pinned to `sql/280` (attendance settlement), `sql/284` (booking reminder intents), `sql/302` (requester notice) and
  * `sql/304` (credential-column revoke, Issue #1078: every table whose table-wide
  * SELECT reached a credential column now holds an explicit column list, and none
  * of those lists contains a credential column).
@@ -1817,6 +1820,20 @@ export const WORKER_COLUMN_GRANTS: Record<
     UPDATE: ["status", "decided_by", "decided_at", "updated_at"]
   },
   awcms_hr_employments: { UPDATE: ["updated_at"] },
+  // sql/284 (Issue #943): the booking reminder dispatcher settles an intent. The
+  // identity of the debt (reservation, kind, occurrence, due time) is not
+  // writable. Found unpinned by the column sweep added with Issue #1082.
+  awcms_booking_reminder_intents: {
+    UPDATE: [
+      "status",
+      "outcome_code",
+      "message_id",
+      "settled_at",
+      "attempts",
+      "reconciled_at",
+      "updated_at"
+    ]
+  },
   awcms_workflow_instances: { UPDATE: ["updated_at"] },
   awcms_workflow_decisions: {
     SELECT: [
@@ -1948,11 +1965,31 @@ export const WORKER_COLUMN_GRANTS: Record<
   }
 };
 
+/**
+ * COLUMN-ONLY grants `awcms_setup` holds (`sql/310`, Issue #1082), pinned in both
+ * directions exactly as `WORKER_COLUMN_GRANTS` is. The only flow is the setup
+ * wizard's owner creation and principal link (`bootstrapPlatformTenant`):
+ *
+ * - `awcms_identities`: `SELECT (id, principal_id)` and `UPDATE (principal_id)`
+ *   for `UPDATE ... SET principal_id = $1 WHERE id = $2 AND principal_id IS NULL`
+ *   (`linkIdentityToPrincipal`). INSERT is table-level in SETUP_ROLE_GRANTS.
+ * - `awcms_principals`: NOTHING. The find-or-create of the owner's principal is
+ *   the SECURITY DEFINER `awcms_ensure_principal_id(text)`.
+ */
+export const SETUP_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
+  awcms_identities: {
+    SELECT: ["id", "principal_id"],
+    UPDATE: ["principal_id"]
+  }
+};
+
 export type WorkerSetupRoleGrantsPolicy = {
   worker: Record<string, string[]>;
   setup: Record<string, string[]>;
   /** Optional: defaults to `WORKER_COLUMN_GRANTS`. */
   workerColumns?: typeof WORKER_COLUMN_GRANTS;
+  /** Optional: defaults to `SETUP_COLUMN_GRANTS`. */
+  setupColumns?: typeof WORKER_COLUMN_GRANTS;
 };
 
 /**
@@ -1966,7 +2003,8 @@ export function defaultWorkerSetupRoleGrantsPolicy(): WorkerSetupRoleGrantsPolic
   return {
     worker: WORKER_ROLE_GRANTS,
     setup: SETUP_ROLE_GRANTS,
-    workerColumns: WORKER_COLUMN_GRANTS
+    workerColumns: WORKER_COLUMN_GRANTS,
+    setupColumns: SETUP_COLUMN_GRANTS
   };
 }
 
@@ -2092,38 +2130,103 @@ export async function checkWorkerSetupRoleGrants(
       }
     }
 
-    // Column-only grants (audit M2 of #1044): exact, both directions. Worker only.
-    if (present.includes(WORKER_ROLE)) {
-      const columnPolicy = policy?.workerColumns ?? WORKER_COLUMN_GRANTS;
+    // Column-only grants (audit M2 of #1044): exact, both directions, for each
+    // provisioned role. The held side is a SWEEP of every awcms_% table, not a walk
+    // of the pinned tables: a column privilege on a table nobody pinned (a stray
+    // `SELECT (endpoint)` on push subscriptions, an `UPDATE (status)` on tenant
+    // users) is an over-grant too, and the table-level pass above cannot see it.
+    for (const { role, columns } of [
+      {
+        role: WORKER_ROLE,
+        columns: policy?.workerColumns ?? WORKER_COLUMN_GRANTS
+      },
+      {
+        role: SETUP_ROLE,
+        columns: policy?.setupColumns ?? SETUP_COLUMN_GRANTS
+      }
+    ]) {
+      if (!present.includes(role)) {
+        continue;
+      }
 
-      for (const [table, privileges] of Object.entries(columnPolicy)) {
-        for (const privilege of ["SELECT", "INSERT", "UPDATE"] as const) {
-          const expected = [...(privileges[privilege] ?? [])].sort();
-          const held = (
-            (await sql`
-              SELECT a.attname AS column_name
-              FROM pg_attribute a
-              WHERE a.attrelid = to_regclass(${table})
-                AND a.attnum > 0 AND NOT a.attisdropped
-                AND has_column_privilege(${WORKER_ROLE}, a.attrelid, a.attnum, ${privilege})
-                AND NOT has_table_privilege(${WORKER_ROLE}, a.attrelid, ${privilege})
-              ORDER BY a.attname
-            `) as { column_name: string }[]
-          ).map((row) => row.column_name);
+      for (const privilege of ["SELECT", "INSERT", "UPDATE"] as const) {
+        const heldRows = (await sql`
+          SELECT c.relname AS table_name, a.attname AS column_name
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relname LIKE 'awcms\\_%' AND c.relkind IN ('r', 'p')
+            AND n.nspname = current_schema()
+            AND a.attnum > 0 AND NOT a.attisdropped
+            AND has_column_privilege(${role}, c.oid, a.attnum, ${privilege})
+            AND NOT has_table_privilege(${role}, c.oid, ${privilege})
+          ORDER BY c.relname, a.attname
+        `) as { table_name: string; column_name: string }[];
+        const heldByTable = new Map<string, string[]>();
+
+        for (const row of heldRows) {
+          heldByTable.set(row.table_name, [
+            ...(heldByTable.get(row.table_name) ?? []),
+            row.column_name
+          ]);
+        }
+
+        const tables = new Set([
+          ...Object.keys(columns),
+          ...heldByTable.keys()
+        ]);
+
+        for (const table of tables) {
+          const expected = [...(columns[table]?.[privilege] ?? [])].sort();
+          const held = heldByTable.get(table) ?? [];
           const extra = held.filter((column) => !expected.includes(column));
           const missing = expected.filter((column) => !held.includes(column));
 
           if (extra.length > 0) {
             findings.push(
-              `${WORKER_ROLE} column grant over-granted: ${privilege} on ${table}(${extra.join(", ")}) is not in the pinned column list`
+              `${role} column grant over-granted: ${privilege} on ${table}(${extra.join(", ")}) is not in the pinned column list`
             );
           }
           if (missing.length > 0) {
             findings.push(
-              `${WORKER_ROLE} column grant under-granted: ${privilege} on ${table}(${missing.join(", ")}) is pinned but not held`
+              `${role} column grant under-granted: ${privilege} on ${table}(${missing.join(", ")}) is pinned but not held`
             );
           }
         }
+      }
+    }
+
+    // The setup role's identity link is one-way (sql/310, Issue #1082): without
+    // the trigger and the restrictive policy, UPDATE (principal_id) is an account
+    // takeover. Pinned so that dropping either is a finding, not a silent loss.
+    if (present.includes(SETUP_ROLE)) {
+      const guard = (await sql`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM pg_trigger t
+            WHERE t.tgrelid = to_regclass('awcms_identities')
+              AND t.tgname = 'awcms_identities_principal_link_once'
+              AND NOT t.tgisinternal AND t.tgenabled <> 'D'
+          ) AS has_trigger,
+          EXISTS (
+            SELECT 1 FROM pg_policy p
+            WHERE p.polrelid = to_regclass('awcms_identities')
+              AND p.polname = 'awcms_identities_setup_link_once'
+              AND NOT p.polpermissive AND p.polcmd = 'w'
+              AND p.polwithcheck IS NOT NULL AND p.polqual IS NOT NULL
+              AND p.polroles = ARRAY[to_regrole('awcms_setup')::oid]
+          ) AS has_policy
+      `) as { has_trigger: boolean; has_policy: boolean }[];
+
+      if (!guard[0]?.has_trigger) {
+        findings.push(
+          `awcms_identities trigger awcms_identities_principal_link_once is missing or disabled (a linked identity could be repointed to another principal)`
+        );
+      }
+      if (!guard[0]?.has_policy) {
+        findings.push(
+          `awcms_identities restrictive policy awcms_identities_setup_link_once (FOR UPDATE TO awcms_setup, USING and WITH CHECK) is missing`
+        );
       }
     }
 
@@ -2173,6 +2276,30 @@ export async function checkWorkerSetupRoleGrants(
  * nothing connects as them, they are reachable only through one narrow EXECUTE.
  */
 export const WORKER_JOB_ROLES: readonly string[] = [WORKER_ROLE];
+
+/**
+ * Every role the credential-column check covers: the job roles plus the one-time
+ * setup role (`awcms_setup`, Issue #1082). Like a worker, an operator can
+ * activate it for LOGIN, and RLS trusts a session setting the caller picks, so
+ * it must not read a credential hash either.
+ */
+export const CREDENTIAL_CHECKED_ROLES: readonly string[] = [
+  ...WORKER_JOB_ROLES,
+  SETUP_ROLE
+];
+
+/**
+ * Credential-looking columns `awcms_setup` MAY read. EMPTY, on purpose and
+ * explicitly: the wizard creates the owner's identity and principal and never
+ * verifies a login, so it reads no credential column (sql/310). The worker
+ * exceptions below (push `auth_secret`, OMES `secret_ref`, telegram
+ * `chat_ciphertext`) are job-specific and do NOT extend to this role: they are
+ * checked against it as ordinary credential columns. Adding an entry here is a
+ * security decision.
+ */
+export const SETUP_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
+  Record<string, string>
+> = {};
 
 /**
  * EVERY column that holds a credential or a secret: a password hash, the hash or
@@ -2323,7 +2450,10 @@ export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
 
 export type WorkerCredentialColumnPolicy = {
   credentialColumns?: readonly string[];
+  /** Worker-job exceptions: apply to `WORKER_JOB_ROLES` only. */
   exceptions?: Readonly<Record<string, string>>;
+  /** Setup-role exceptions: default `SETUP_CREDENTIAL_COLUMN_EXCEPTIONS` (none). */
+  setupExceptions?: Readonly<Record<string, string>>;
   lookalikes?: Readonly<Record<string, string>>;
   roles?: readonly string[];
 };
@@ -2346,12 +2476,14 @@ export type WorkerCredentialColumnPolicy = {
 export async function checkWorkerCredentialColumnsUnreadable(
   policy?: WorkerCredentialColumnPolicy
 ): Promise<SecurityCheckResult> {
-  const name = "Worker roles cannot read credential columns";
+  const name = "Worker and setup roles cannot read credential columns";
   const severity: CheckSeverity = "critical";
   const credentialColumns = policy?.credentialColumns ?? CREDENTIAL_COLUMNS;
   const exceptions = policy?.exceptions ?? WORKER_CREDENTIAL_COLUMN_EXCEPTIONS;
   const lookalikes = policy?.lookalikes ?? NON_CREDENTIAL_LOOKALIKES;
-  const roles = policy?.roles ?? WORKER_JOB_ROLES;
+  const setupExceptions =
+    policy?.setupExceptions ?? SETUP_CREDENTIAL_COLUMN_EXCEPTIONS;
+  const roles = policy?.roles ?? CREDENTIAL_CHECKED_ROLES;
 
   try {
     if (!process.env.DATABASE_URL) {
@@ -2436,7 +2568,19 @@ export async function checkWorkerCredentialColumnsUnreadable(
 
       provisioned.push(role);
 
-      for (const qualified of toCheck) {
+      // The worker exceptions are for the worker jobs: any other role is checked
+      // against them too, minus its own (setup: none) exceptions.
+      const ownExceptions = WORKER_JOB_ROLES.includes(role)
+        ? exceptions
+        : setupExceptions;
+      const roleCheck = [
+        ...new Set([...toCheck, ...Object.keys(exceptions)])
+      ].filter(
+        (qualified) =>
+          present.has(qualified) && ownExceptions[qualified] === undefined
+      );
+
+      for (const qualified of roleCheck) {
         const [table, column] = qualified.split(".") as [string, string];
         const rows = (await sql`
           SELECT has_column_privilege(${role}, ${table}, ${column}, 'SELECT') AS readable
@@ -2444,7 +2588,7 @@ export async function checkWorkerCredentialColumnsUnreadable(
 
         if (rows[0]?.readable) {
           findings.push(
-            `${role} can SELECT ${qualified}: a worker job must not read a credential column`
+            `${role} can SELECT ${qualified}: this role must not read a credential column`
           );
         }
       }
@@ -2455,7 +2599,7 @@ export async function checkWorkerCredentialColumnsUnreadable(
         name,
         severity,
         status: "fail",
-        evidence: `Credential exposure to worker role(s): ${findings.join("; ")}. Fix with a migration that REVOKEs the table-level SELECT and re-GRANTs only the columns a named job reads (sql/304 is the pattern).`
+        evidence: `Credential exposure to worker/setup role(s): ${findings.join("; ")}. Fix with a migration that REVOKEs the table-level SELECT and re-GRANTs only the columns a named job or flow reads (sql/304 and sql/310 are the pattern).`
       };
     }
 
@@ -2508,6 +2652,7 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   "awcms_hr_workforce_lifecycle_counter",
   "awcms_inventory_lifecycle_counter",
   "awcms_partner_view",
+  "awcms_principal_ensure",
   "awcms_principal_reach",
   "awcms_procurement_lifecycle_counter",
   "awcms_telegram_bootstrap"

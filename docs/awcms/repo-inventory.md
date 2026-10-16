@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 225   |
+| Migrations                          | 226   |
 | `awcms_*` tables                    | 222   |
 | Tables with `FORCE` RLS             | 204   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 715   |
+| Test files                          | 716   |
 | Route files                         | 569   |
 | ADR                                 | 292   |
 
@@ -283,6 +283,7 @@
 | 223 | `sql/305_awcms_booking_staff_assignments.sql`                      |
 | 224 | `sql/306_awcms_hr_geolocation_evidence.sql`                        |
 | 225 | `sql/308_awcms_hr_workforce_metrics_permissions.sql`               |
+| 226 | `sql/310_awcms_setup_role_credential_column_revoke.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -517,7 +518,7 @@
 | ------------- | ---------- |
 | `(root)`      | 546        |
 | `e2e`         | 26         |
-| `integration` | 142        |
+| `integration` | 143        |
 | `unit`        | 1          |
 
 ### Routes

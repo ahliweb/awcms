@@ -242,6 +242,25 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   }
 
   /** The human behind an identity — what every MFA row hangs from since sql/114. */
+  /**
+   * Forges the pre-ADR-0086 state "an identity never linked to a principal".
+   * `sql/310` makes `awcms_identities.principal_id` link-once, so a linked
+   * identity can no longer be unlinked by an ordinary UPDATE (unlink then relink
+   * is a repoint). The fixture bypasses the trigger deliberately with
+   * `session_replication_role = replica`, for this one statement in this one
+   * transaction, as production code never can.
+   */
+  async function forgeUnlinkedIdentity(
+    tenantId: string,
+    identityId: string
+  ): Promise<void> {
+    await sql.begin(async (tx) => {
+      await tx.unsafe("SET LOCAL session_replication_role = replica");
+      await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+      await tx`UPDATE awcms_identities SET principal_id = NULL WHERE id = ${identityId}`;
+    });
+  }
+
   async function principalOf(identityId: string): Promise<string> {
     const rows = (await sql`
       SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
@@ -970,7 +989,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     // Tenant B's identity for the same address was never linked to the principal.
     const userB = await seedUser(tenantB, loginIdentifier);
     await sql`SELECT set_config('app.current_tenant_id', ${tenantB}, false)`;
-    await sql`UPDATE awcms_identities SET principal_id = NULL WHERE id = ${userB.identityId}`;
+    await forgeUnlinkedIdentity(tenantB, userB.identityId);
 
     const sso = await mintSessionRaw(tenantB, userB.identityId, "sso");
     const bare = await callRoute(enrollStartPOST, {
@@ -1178,7 +1197,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
 
     // Tenant B's identity was never linked (the missed-writer case).
     await sql`SELECT set_config('app.current_tenant_id', ${tenantB}, false)`;
-    await sql`UPDATE awcms_identities SET principal_id = NULL WHERE id = ${userB.identityId}`;
+    await forgeUnlinkedIdentity(tenantB, userB.identityId);
     const oldSessionA = await mintSession(tenantA, userA.identityId, "local");
     const oldSessionB = await mintSessionRaw(
       tenantB,
