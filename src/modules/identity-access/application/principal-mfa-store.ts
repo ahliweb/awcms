@@ -274,7 +274,8 @@ export async function advanceLastUsedStep(
   const rows = (await tx`
     UPDATE awcms_principal_mfa_factors
     SET last_used_step = ${matchedStep}, updated_at = ${now}
-    WHERE id = ${factorId} AND last_used_step < ${matchedStep}
+    WHERE id = ${factorId} AND status = 'active'
+      AND last_used_step < ${matchedStep}
     RETURNING id
   `) as { id: string }[];
 
@@ -288,7 +289,9 @@ export async function advanceLastUsedStep(
  * stale snapshot, and concurrent wrong-code verifies across distinct
  * challenges/IPs lost-update so the factor never reaches the threshold —
  * re-opening the exact cross-challenge brute force the lockout exists to close
- * (ADR-0027 auditor HIGH-1 / F4). Keyed on `id =`.
+ * (ADR-0027 auditor HIGH-1 / F4). Keyed on `id =`. Re-asserts
+ * `status = 'active'` under the lock: `null` means the factor was disabled (or
+ * removed) after the caller's unlocked read and must not verify.
  */
 export async function lockFactorForVerify(
   tx: Bun.SQL,
@@ -297,7 +300,7 @@ export async function lockFactorForVerify(
   const rows = (await tx`
     SELECT failed_verify_count, locked_until
     FROM awcms_principal_mfa_factors
-    WHERE id = ${factorId}
+    WHERE id = ${factorId} AND status = 'active'
     FOR UPDATE
   `) as { failed_verify_count: number; locked_until: Date | null }[];
 
@@ -396,6 +399,10 @@ export async function consumeRecoveryCode(
     SET used_at = ${now}
     WHERE principal_id = ${principalId} AND factor_id = ${factorId}
       AND code_hash = ${codeHash} AND used_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM awcms_principal_mfa_factors f
+        WHERE f.id = ${factorId} AND f.status = 'active'
+      )
     RETURNING id
   `) as { id: string }[];
 
