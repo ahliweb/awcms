@@ -224,6 +224,48 @@ async function liveAllocations(resourceId: string): Promise<number> {
   return rows[0]!.n;
 }
 
+/**
+ * Post-hoc invariant (Issue #1087): every pair of LIVE `time` allocations that
+ * overlap on one unit, with enough per-row evidence (ids, ranges, `xmin`/`xmax`,
+ * `created_at`, release state, the owning reservation item/reservation, the
+ * txid snapshot at read time) to diagnose a violation of the GiST exclusion
+ * constraint from a single CI log. Empty when the invariant holds.
+ */
+async function overlappingLiveAllocations(
+  resourceId: string
+): Promise<Record<string, unknown>[]> {
+  return (await getAdminSql()`
+    SELECT a.resource_unit_id,
+           a.id AS a_id, b.id AS b_id,
+           a.item_id AS a_item, b.item_id AS b_item,
+           ai.reservation_id AS a_reservation, bi.reservation_id AS b_reservation,
+           a.granularity AS a_granularity, b.granularity AS b_granularity,
+           tstzrange(a.occupied_from, a.occupied_to, '[)')::text AS a_range,
+           tstzrange(b.occupied_from, b.occupied_to, '[)')::text AS b_range,
+           a.created_at::text AS a_created_at, b.created_at::text AS b_created_at,
+           a.xmin::text AS a_xmin, b.xmin::text AS b_xmin,
+           a.xmax::text AS a_xmax, b.xmax::text AS b_xmax,
+           a.released_at::text AS a_released_at, b.released_at::text AS b_released_at,
+           a.released_reason AS a_released_reason,
+           b.released_reason AS b_released_reason,
+           txid_current_snapshot()::text AS snapshot,
+           version() AS server_version
+    FROM awcms_booking_resource_allocations a
+    JOIN awcms_booking_resource_allocations b
+      ON a.resource_unit_id = b.resource_unit_id AND a.id < b.id
+    LEFT JOIN awcms_booking_reservation_items ai
+      ON ai.tenant_id = a.tenant_id AND ai.id = a.item_id
+    LEFT JOIN awcms_booking_reservation_items bi
+      ON bi.tenant_id = b.tenant_id AND bi.id = b.item_id
+    WHERE a.resource_id = ${resourceId}
+      AND a.released_at IS NULL AND b.released_at IS NULL
+      AND a.granularity = 'time' AND b.granularity = 'time'
+      AND tstzrange(a.occupied_from, a.occupied_to, '[)')
+          && tstzrange(b.occupied_from, b.occupied_to, '[)')
+    ORDER BY a.resource_unit_id, a.id, b.id
+  `) as Record<string, unknown>[];
+}
+
 async function reservationCount(tenantId: string): Promise<number> {
   const rows = (await getAdminSql()`
     SELECT count(*)::int AS n FROM awcms_booking_reservations
@@ -730,18 +772,28 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
           won.reduce((sum, entry) => sum + entry.quantity, 0)
         );
 
-        const overlapping = (await getAdminSql()`
-          SELECT count(*)::int AS n
-          FROM awcms_booking_resource_allocations a
-          JOIN awcms_booking_resource_allocations b
-            ON a.resource_unit_id = b.resource_unit_id AND a.id < b.id
-          WHERE a.resource_id = ${fixture.resourceId}
-            AND a.released_at IS NULL AND b.released_at IS NULL
-            AND tstzrange(a.occupied_from, a.occupied_to, '[)')
-                && tstzrange(b.occupied_from, b.occupied_to, '[)')
-        `) as { n: number }[];
+        // On a violation, fail with the offending rows and the round's
+        // winners spelled out (Issue #1087) -- never weakened, never retried.
+        const overlapping = await overlappingLiveAllocations(
+          fixture.resourceId
+        );
 
-        expect(overlapping[0]!.n).toBe(0);
+        if (overlapping.length > 0) {
+          throw new Error(
+            `soak round ${round}: ${overlapping.length} live overlapping allocation pair(s) on resource ${fixture.resourceId} ` +
+              `(exclusion constraint violated). Offending pairs: ${JSON.stringify(overlapping, null, 2)}\n` +
+              `Round requests (index: offsetMs/quantity/outcome): ${JSON.stringify(
+                requests.map((request, index) => ({
+                  index,
+                  offsetMs: request.offset,
+                  quantity: request.quantity,
+                  outcome: outcomes[index]!.outcome
+                }))
+              )}`
+          );
+        }
+
+        expect(overlapping).toHaveLength(0);
       }
     }, 120_000);
 
@@ -2149,18 +2201,17 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         expect(second.outcome).toBe("ok");
         live = await liveAllocations(fixture.resourceId);
 
-        const pairs = (await admin`
-          SELECT count(*)::int AS n
-          FROM awcms_booking_resource_allocations a
-          JOIN awcms_booking_resource_allocations b
-            ON a.resource_unit_id = b.resource_unit_id AND a.id < b.id
-          WHERE a.resource_id = ${fixture.resourceId}
-            AND a.released_at IS NULL AND b.released_at IS NULL
-            AND tstzrange(a.occupied_from, a.occupied_to, '[)')
-                && tstzrange(b.occupied_from, b.occupied_to, '[)')
-        `) as { n: number }[];
+        // The #1087 diagnostic query must SEE this pair, with its evidence.
+        const pairs = await overlappingLiveAllocations(fixture.resourceId);
 
-        overlappingPairs = pairs[0]!.n;
+        expect(pairs[0]).toMatchObject({
+          a_released_at: null,
+          b_released_at: null
+        });
+        expect(Object.keys(pairs[0] ?? {})).toEqual(
+          expect.arrayContaining(["a_xmin", "b_xmin", "a_range", "snapshot"])
+        );
+        overlappingPairs = pairs.length;
       } finally {
         // Put the schema back EXACTLY: the rows written without the constraint
         // violate it, so the booking tables are emptied first (test database
