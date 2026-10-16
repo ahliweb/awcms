@@ -1069,8 +1069,18 @@ export const READER_BUDGET_BYTES = 24_000;
  * shared `admin-idempotency-key.ts`. Measured actual total, no added margin.
  *
  * Stacked on #1004 (334,800 B): +626 B for #1008 in all, 335,426 B.
+ *
+ * **Raised for Issue #1018**: the subject-requests screen now says what an
+ * export did NOT contain for lack of permission (`withheld`, a payroll table the
+ * caller may not read) and what was cut short by the row cap (`truncatedTables`),
+ * and counts both in its summary; the strings arrive translated from the server
+ * as data attributes, so the script gains only the fill-in. The new lines reuse
+ * the existing list builder (it replaced the screen's own copy). +308 B, measured
+ * (334,800 -> 335,108 on its own base); no stylesheet grew.
+ *
+ * Stacked on #1008 (335,426 B): +308 B for #1018, 335,734 B.
  */
-export const APP_BUDGET_BYTES = 335_426;
+export const APP_BUDGET_BYTES = 335_734;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

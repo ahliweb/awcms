@@ -390,24 +390,45 @@ export const hrWorkforceModule = defineModule({
       key: "hr_workforce.attendance_events",
       tableName: "awcms_hr_attendance_events",
       ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
-      subjectColumns: [{ column: "recorded_by", references: "tenant_user" }],
-      exportable: false,
+      // ADR-0142 / Issue #1018: the person is reached through the employment,
+      // never through `recorded_by`, which names whoever RECORDED the event (a
+      // supervisor, a kiosk operator, an importer) and would pull every event
+      // that person entered for somebody else into their own export.
+      subjectColumns: [],
+      subjectVia: {
+        column: "employment_id",
+        parentKey: "hr_workforce.employments",
+        parentColumns: ["profile_id"]
+      },
+      exportable: true,
       erasure: "retain_under_obligation",
       rationale:
-        "When a person clocked in and out (behavioural data). The row reaches the person only through `employment_id`, which the registry's direct subject columns cannot express, so the descriptor names only the actor stamp — the same open item the employment terms and the shift assignments carry (a recorded follow-up of issue 985, which delivered the join for the employment terms and the shift assignments only). The subject reads their own events through the ownership-granted GET /api/v1/hr-workforce/attendance-events?mine=true. Append-only by privilege and trigger and retained under the employer's working-hours and pay obligations (ADR-0132 section 13.2), so an erasure could not rewrite it; the anonymised profile makes the record resolve to nobody. It holds no location, photo, device or network value (owner decision O6, ADR-0138)."
+        "When a person clocked in and out (behavioural data). The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` ONLY, Issue #1018: the login columns would also match a login mislinked to somebody else's employment), the indirect path ADR-0142 added to the subject-data model, so the employee's own events are part of their export and another person's are not. `recorded_by` (who entered the event) is deliberately not a subject column: it names the recorder. Erasure does NOT follow the join: the table is append-only by privilege and trigger and retained under the employer's working-hours and pay obligations (ADR-0132 section 13.2); the anonymised profile makes the record resolve to nobody. It holds no free text, location, photo, device or network value (owner decision O6, ADR-0138), so every column is exported."
     },
     {
       key: "hr_workforce.attendance_corrections",
       tableName: "awcms_hr_attendance_corrections",
       ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
-      subjectColumns: [
-        { column: "requested_by", references: "tenant_user" },
-        { column: "decided_by", references: "tenant_user" }
-      ],
-      exportable: false,
+      subjectColumns: [],
+      subjectVia: {
+        column: "employment_id",
+        parentKey: "hr_workforce.employments",
+        parentColumns: ["profile_id"]
+      },
+      exportable: true,
+      // Issue #1018: the free-text `reason` is withheld from the operator-run
+      // export. It is typed by the requester (who may be a supervisor, not the
+      // employee), can describe health or family circumstances including a
+      // THIRD party's, and is sensitive everywhere else in this module (never
+      // in an audit row, an event, a log or the workflow store). The subject
+      // still reads their own corrections, reason included, through the
+      // ownership-granted GET /api/v1/hr-workforce/attendance-corrections/{id}.
+      // Releasing it through the export is a recorded product/legal question,
+      // answered by removing this one line.
+      redactedColumns: ["reason"],
       erasure: "retain_under_obligation",
       rationale:
-        "A request to change when a person is recorded as having worked, with a free-text reason that may describe health or family circumstances (SENSITIVE: never in an audit row, an event or the workflow store). The row reaches the employee it is about only through `employment_id` (a recorded follow-up of issue 985, whose join landed for the terms and shifts only); the descriptor names the requester and the decider. The requester reads their own through GET /api/v1/hr-workforce/attendance-corrections/{id}. Status-only and never deleted; retained with the events it justifies under the employer's obligations (ADR-0132 section 13.2). Exporting the reason to the subject is a recorded follow-up, which can now use the employment join (ADR-0142)."
+        "A request to change when a person is recorded as having worked: kind, the proposed event, status, who decided and when. The row reaches the employee it is about through `employment_id` -> `awcms_hr_employments` (ADR-0142), so the employee's own corrections are part of their export and another person's are not. `requested_by` and `decided_by` (the requester and the approver) are deliberately not subject columns: they name other people. The free-text `reason` (SENSITIVE: may describe health or family circumstances, a third party's included; never in an audit row, an event or the workflow store) is a redacted column: the export says it was withheld, and the subject reads it through the ownership-granted GET /api/v1/hr-workforce/attendance-corrections/{id}. Whether the export itself may release it is an open product/legal decision (Issue #1018). Status-only and never deleted; retained with the events it justifies under the employer's obligations (ADR-0132 section 13.2); erasure does NOT follow the join."
     },
     {
       key: "hr_workforce.shift_assignments",
@@ -421,30 +442,30 @@ export const hrWorkforceModule = defineModule({
       subjectVia: {
         column: "employment_id",
         parentKey: "hr_workforce.employments",
-        parentColumns: ["profile_id", "tenant_user_id", "last_tenant_user_id"]
+        parentColumns: ["profile_id"]
       },
       exportable: true,
       erasure: "retain_under_obligation",
       rationale:
-        "When a person was scheduled to work and when they were away (a coarse category, never a reason). The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` / `tenant_user_id`), the indirect path ADR-0142 added to the subject-data model, so the employee's own schedule, drafts included, is part of their export and another person's is not. The actor stamps (`created_by`, `published_by`, `cancelled_by`) are deliberately not subject columns: they name the scheduler. Erasure does NOT follow the join: rows are never deleted, a published one is immutable, and they are retained under the employer's working-hours and pay obligations (ADR-0132 section 13.2); the anonymised profile makes the schedule resolve to nobody."
+        "When a person was scheduled to work and when they were away (a coarse category, never a reason). The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` ONLY, Issue #1018: the login columns would also match a login mislinked to somebody else's employment), the indirect path ADR-0142 added to the subject-data model, so the employee's own schedule, drafts included, is part of their export and another person's is not. The actor stamps (`created_by`, `published_by`, `cancelled_by`) are deliberately not subject columns: they name the scheduler. Erasure does NOT follow the join: rows are never deleted, a published one is immutable, and they are retained under the employer's working-hours and pay obligations (ADR-0132 section 13.2); the anonymised profile makes the schedule resolve to nobody."
     },
     {
       key: "hr_workforce.employments",
       tableName: "awcms_hr_employments",
       ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      // Issue #1018: only the columns that say the row IS ABOUT the person. The
+      // actor stamps (`created_by`, `updated_by`, `deleted_by`, `restored_by`)
+      // name the HR user who entered the header; matching on them put every
+      // employment an HR user had created for somebody else into THEIR export.
       subjectColumns: [
         { column: "profile_id", references: "profile" },
         { column: "tenant_user_id", references: "tenant_user" },
-        { column: "last_tenant_user_id", references: "tenant_user" },
-        { column: "created_by", references: "tenant_user" },
-        { column: "updated_by", references: "tenant_user" },
-        { column: "deleted_by", references: "tenant_user" },
-        { column: "restored_by", references: "tenant_user" }
+        { column: "last_tenant_user_id", references: "tenant_user" }
       ],
       exportable: true,
       erasure: "retain_under_obligation",
       rationale:
-        "The employer's record that a person was employed: employee number, hire and end dates, and the login that is the employee. It REFERENCES the party (`profile_id`) and copies none of its identity, which `profile_identity` owns, exports and anonymises. It is exported (the employee number and dates are the subject's own data) and retained under the employer's labour, tax and social-security obligations (ADR-0132 section 13.2; the periods are the employer's counsel's, not asserted here). Nothing in this module nulls `profile_id` on anonymisation: the link REMAINS but points at a profile whose name `profile_identity` has overwritten, so the row resolves to no recognisable person. The employee number is an HR identifier, not a national id, and stays."
+        "The employer's record that a person was employed: employee number, hire and end dates, and the login that is the employee. It REFERENCES the party (`profile_id`) and copies none of its identity, which `profile_identity` owns, exports and anonymises. It is exported (the employee number and dates are the subject's own data) and retained under the employer's labour, tax and social-security obligations (ADR-0132 section 13.2; the periods are the employer's counsel's, not asserted here). The actor stamps (`created_by`, `updated_by`, `deleted_by`, `restored_by`) are deliberately not subject columns (Issue #1018): they name the HR user who entered the row, and matching them would hand that user another person's employment header; they resolve to nobody once the identity is anonymised. KNOWN LIMIT (follow-up of Issue #1018): `tenant_user_id` and `last_tenant_user_id` still match, so a login mislinked to somebody else's employment (later corrected, the replaced login is kept in `last_tenant_user_id`) sees that HEADER (employee number, dates) in its export; the child tables use `profile_id` only and are unaffected. The registry has no conditional match (only when the login's profile equals the row's), and a descriptor change alone cannot express it. Nothing in this module nulls `profile_id` on anonymisation: the link REMAINS but points at a profile whose name `profile_identity` has overwritten, so the row resolves to no recognisable person. The employee number is an HR identifier, not a national id, and stays."
     },
     {
       key: "hr_workforce.employment_terms",
@@ -456,12 +477,12 @@ export const hrWorkforceModule = defineModule({
       subjectVia: {
         column: "employment_id",
         parentKey: "hr_workforce.employments",
-        parentColumns: ["profile_id", "tenant_user_id", "last_tenant_user_id"]
+        parentColumns: ["profile_id"]
       },
       exportable: true,
       erasure: "retain_under_obligation",
       rationale:
-        "The effective-dated history of where an employee worked, under whom and in what status. The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` / `tenant_user_id`), the indirect path ADR-0142 added to the subject-data model, so the employee's own whole history is part of their export and another person's is not. `created_by` (the HR user who recorded the term) is deliberately not a subject column. Erasure does NOT follow the join: the table is append-only by trigger and retained under the employer's legal obligations (ADR-0132 section 13.2); the anonymised profile makes the history resolve to nobody."
+        "The effective-dated history of where an employee worked, under whom and in what status. The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` ONLY, Issue #1018: the login columns would also match a login mislinked to somebody else's employment), the indirect path ADR-0142 added to the subject-data model, so the employee's own whole history is part of their export and another person's is not. `created_by` (the HR user who recorded the term) is deliberately not a subject column. Erasure does NOT follow the join: the table is append-only by trigger and retained under the employer's legal obligations (ADR-0132 section 13.2); the anonymised profile makes the history resolve to nobody."
     }
   ]
 });

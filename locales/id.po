@@ -2270,8 +2270,14 @@ msgstr "Tidak ada node sinkronisasi"
 msgid "not applicable"
 msgstr "tidak berlaku"
 
-msgid ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable."
-msgstr ", bukan pembacaan: ia diaudit sebagai tindakan, dan alasan yang Anda berikan adalah bagian dari catatan itu. Hasilnya muncul di bawah dan tidak pernah disimpan atau bisa diunduh."
+msgid ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is not offered for download. A retried request is answered from a short-lived record (up to 30 days) that holds no pay data."
+msgstr ", bukan pembacaan: ia diaudit sebagai tindakan, dan alasan yang Anda berikan adalah bagian dari catatan itu. Hasilnya muncul di bawah dan tidak ditawarkan untuk diunduh. Permintaan yang diulang dijawab dari catatan berumur pendek (sampai 30 hari) yang tidak memuat data gaji."
+
+msgid "{rows} row(s) across {tables} table(s). {unanswered} table(s) are not covered, {withheld} withheld for lack of permission, {truncated} cut short by the row cap. See below."
+msgstr "{rows} baris di {tables} tabel. {unanswered} tabel tidak tercakup, {withheld} ditahan karena kurang izin, {truncated} terpotong oleh batas baris. Lihat di bawah."
+
+msgid "Withheld columns:"
+msgstr "Kolom yang ditahan:"
 
 msgid "Not covered by this answer"
 msgstr "Tidak tercakup oleh jawaban ini"

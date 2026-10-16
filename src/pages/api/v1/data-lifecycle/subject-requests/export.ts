@@ -11,12 +11,22 @@ import {
   userIdempotencyActor
 } from "../../../../../modules/_shared/idempotency";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
+import { authorizeInTransaction } from "../../../../../modules/identity-access/application/access-guard";
+import type { AccessRequest } from "../../../../../modules/identity-access/domain/access-control";
+import {
+  isPayrollBoundaryTable,
+  stripPayrollRows,
+  storedRowIds,
+  type ExportedTable
+} from "../../../../../modules/data-lifecycle/domain/subject-export-payroll";
 import { listModules } from "../../../../../modules";
 import { buildSubjectPlan } from "../../../../../modules/data-lifecycle/domain/subject-data-plan";
 import { collectSubjectDataDescriptors } from "../../../../../modules/data-lifecycle/domain/subject-data-registry";
 import {
   loadColumnTypes,
-  readSubjectExport
+  readSubjectExport,
+  readSubjectRowsByIds
 } from "../../../../../modules/data-lifecycle/application/subject-data-executor";
 import {
   recordExportDisclosure,
@@ -41,6 +51,14 @@ import {
  * `awcms_subject_requests` in the same transaction. A read that left no trace
  * would make that sentence unverifiable.
  *
+ * ## Pay is gated twice (Issue #1018)
+ *
+ * A payroll-boundary table (today `awcms_hr_commission_accruals`) is read only
+ * for a caller who ALSO holds that table's own read permission
+ * (`PAYROLL_EXPORT_GUARDS`); otherwise it is WITHHELD and named in `withheld`,
+ * and a read that does happen is recorded through `recordSensitiveRead`. A
+ * stored replay is a read as well and re-checks both.
+ *
  * ## The response states its own coverage
  *
  * `unanswered` carries every table the plan deliberately does NOT reach —
@@ -53,6 +71,88 @@ import {
  * second `disclosed` row that reads like a second disclosure.
  */
 const IDEMPOTENCY_SCOPE = "data_lifecycle_subject_export";
+
+/**
+ * Payroll-boundary tables (Issue #1018, `payroll-data-boundary.ts`) and the
+ * SECOND permission each needs on top of `subject_request.export`.
+ *
+ * `subject_request.export` is a privacy-office authority, and a person's pay is
+ * guarded by a narrower one on purpose (small-cohort risk). Holding the first
+ * must not quietly hand over what only the second may read. So an exportable
+ * payroll table is read only when the caller ALSO passes its own read guard; if
+ * not, it is WITHHELD and the response says so (`withheld`), never silently
+ * dropped. A payroll table with no entry here is withheld too: a descriptor
+ * that turns `exportable` on cannot widen who sees pay by itself (default
+ * deny). Written as literal objects: `access:permissions:enforcement:check`
+ * recognises a guard by seeing the three fields together.
+ */
+const PAYROLL_EXPORT_GUARDS: Readonly<Record<string, AccessRequest>> = {
+  awcms_hr_commission_accruals: {
+    moduleKey: "hr_commission",
+    activityCode: "accruals",
+    action: "read"
+  }
+};
+
+async function authorizePayrollTable(
+  tx: Bun.SQL,
+  tenantId: string,
+  tokenHash: string,
+  now: Date,
+  tableName: string
+): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  const guard = PAYROLL_EXPORT_GUARDS[tableName];
+
+  if (!guard) {
+    return {
+      allowed: false,
+      reason:
+        "payroll_boundary: no read permission is registered for this table"
+    };
+  }
+
+  const decision = await authorizeInTransaction(
+    tx,
+    tenantId,
+    tokenHash,
+    now,
+    guard
+  );
+
+  return decision.allowed
+    ? { allowed: true }
+    : {
+        allowed: false,
+        reason: `payroll_boundary: the caller does not hold ${guard.moduleKey}.${guard.activityCode}.${guard.action}`
+      };
+}
+
+/**
+ * Records the sensitive read for a payroll table that was actually handed out.
+ * Today only the commission accruals have a policy; any other payroll-boundary
+ * table is withheld before it gets here (no registered guard).
+ */
+async function recordPayrollRead(
+  tx: Bun.SQL,
+  input: {
+    tenantId: string;
+    actorTenantUserId: string;
+    tableName: string | undefined;
+    rows: readonly Record<string, unknown>[];
+    correlationId: string | undefined;
+  }
+): Promise<void> {
+  if (input.tableName !== "awcms_hr_commission_accruals") return;
+
+  await recordSensitiveRead(tx, {
+    tenantId: input.tenantId,
+    actorTenantUserId: input.actorTenantUserId,
+    permission: "hr_commission.accruals.read",
+    itemCount: input.rows.length,
+    resourceIds: input.rows.map((row) => String(row.id)),
+    correlationId: input.correlationId
+  });
+}
 
 type Prepared = {
   idempotencyKey: string;
@@ -124,7 +224,7 @@ export const POST = defineTenantRoute<Prepared>({
     activityCode: "subject_request",
     action: "export"
   },
-  handler: async ({ tx, auth, prepared, tenantId, locals }) => {
+  handler: async ({ tx, auth, prepared, tenantId, locals, tokenHash, now }) => {
     const existing = await findIdempotencyRecord(
       tx,
       tenantId,
@@ -141,9 +241,114 @@ export const POST = defineTenantRoute<Prepared>({
           "Idempotency-Key was already used with a different request."
         );
       }
-      return jsonResponse(existing.responseBody, {
-        status: existing.responseStatus
-      });
+      // A replay hands back a body that stands for a person's earnings. The
+      // STORED body holds no payroll rows (audit M2, only their ids), so the
+      // rows are RE-READ here, after the caller's permission is checked NOW (it
+      // may have been revoked since), and the read is recorded again (the same
+      // rule the accrual replays follow, #978 re-audit L-A).
+      const stored = existing.responseBody as {
+        data?: {
+          subject?: { tenantUserId?: string };
+          tables?: ExportedTable[];
+          truncatedTables?: string[];
+          withheld?: { key: string; reason: string }[];
+        };
+      } | null;
+      const storedTables = stored?.data?.tables;
+
+      if (
+        !stored ||
+        !storedTables ||
+        !storedTables.some((table) => isPayrollBoundaryTable(table))
+      ) {
+        return jsonResponse(existing.responseBody, {
+          status: existing.responseStatus
+        });
+      }
+
+      const kept: ExportedTable[] = [];
+      const replayWithheld = [...(stored.data?.withheld ?? [])];
+      const replayTruncated = new Set(stored.data?.truncatedTables ?? []);
+      const replayResolution = await resolveSubject(
+        tx,
+        tenantId,
+        stored.data?.subject?.tenantUserId ?? prepared.subjectTenantUserId
+      );
+      const replayPlan = replayResolution.resolved
+        ? buildSubjectPlan(
+            collectSubjectDataDescriptors(listModules()),
+            replayResolution.subject
+          )
+        : null;
+
+      for (const table of storedTables) {
+        const name = table.tableName ?? "";
+        const key = table.key ?? name;
+
+        if (!isPayrollBoundaryTable(table)) {
+          kept.push(table);
+          continue;
+        }
+
+        const verdict = await authorizePayrollTable(
+          tx,
+          tenantId,
+          tokenHash,
+          now,
+          name
+        );
+        const entry = replayPlan?.exportEntries.find(
+          (candidate) => candidate.key === key
+        );
+
+        if (!verdict.allowed || !entry) {
+          replayWithheld.push({
+            key,
+            reason: verdict.allowed
+              ? "payroll_boundary: the table is no longer exportable for this subject"
+              : verdict.reason
+          });
+          // A table that is withheld was not cut short: never both lists.
+          replayTruncated.delete(key);
+          continue;
+        }
+
+        const rows = await readSubjectRowsByIds(
+          tx,
+          tenantId,
+          entry,
+          await loadColumnTypes(tx, [entry.tableName]),
+          storedRowIds(table)
+        );
+
+        await recordPayrollRead(tx, {
+          tenantId,
+          actorTenantUserId: auth.context.tenantUserId,
+          tableName: name,
+          rows,
+          correlationId: locals.correlationId ?? undefined
+        });
+
+        const {
+          payrollRowIds: _ids,
+          payrollRowsStripped: _marker,
+          ...rest
+        } = table;
+        kept.push({ ...rest, rows });
+      }
+
+      return jsonResponse(
+        {
+          ...(existing.responseBody as object),
+          data: {
+            ...stored.data,
+            tables: kept,
+            truncatedTables: [...replayTruncated],
+            withheld: replayWithheld
+          }
+        },
+        { status: existing.responseStatus }
+      );
     }
 
     const resolution = await resolveSubject(
@@ -164,11 +369,57 @@ export const POST = defineTenantRoute<Prepared>({
       collectSubjectDataDescriptors(listModules()),
       resolution.subject
     );
+    // Payroll-boundary tables need their own read permission (see
+    // PAYROLL_EXPORT_GUARDS). Decided per table, before anything is read.
+    const withheld: { key: string; reason: string }[] = [];
+    const readable: (typeof plan.exportEntries)[number][] = [];
+
+    for (const entry of plan.exportEntries) {
+      if (!isPayrollBoundaryTable(entry)) {
+        readable.push(entry);
+        continue;
+      }
+
+      const verdict = await authorizePayrollTable(
+        tx,
+        tenantId,
+        tokenHash,
+        now,
+        entry.tableName
+      );
+
+      if (verdict.allowed) {
+        readable.push(entry);
+      } else {
+        withheld.push({ key: entry.key, reason: verdict.reason });
+      }
+    }
+
+    const exportPlan = { ...plan, exportEntries: readable };
     const columnTypes = await loadColumnTypes(
       tx,
-      plan.exportEntries.map((entry) => entry.tableName)
+      exportPlan.exportEntries.map((entry) => entry.tableName)
     );
-    const tables = await readSubjectExport(tx, tenantId, plan, columnTypes);
+    const tables = await readSubjectExport(
+      tx,
+      tenantId,
+      exportPlan,
+      columnTypes
+    );
+    // The read of a person's earnings is itself an event (PS-18): one audit row
+    // per payroll table read, ids and a count and never an amount.
+    for (const table of tables) {
+      if (isPayrollBoundaryTable(table)) {
+        await recordPayrollRead(tx, {
+          tenantId,
+          actorTenantUserId: auth.context.tenantUserId,
+          tableName: table.tableName,
+          rows: table.rows,
+          correlationId: locals.correlationId ?? undefined
+        });
+      }
+    }
+
     const rowCount = tables.reduce((sum, table) => sum + table.rows.length, 0);
     // Finding C5 — the export is row-capped now, so "incomplete" is a state
     // that can occur and must never be silent. It rides in the response
@@ -210,7 +461,8 @@ export const POST = defineTenantRoute<Prepared>({
         tablesRead: tables.length,
         rowCount,
         tablesUnanswered: plan.unansweredEntries.length,
-        tablesTruncated: truncatedTables
+        tablesTruncated: truncatedTables,
+        tablesWithheld: withheld.map((entry) => entry.key)
       },
       correlationId: locals.correlationId ?? undefined
     });
@@ -224,9 +476,23 @@ export const POST = defineTenantRoute<Prepared>({
       // The second half of that statement (finding C5): which tables were cut
       // short. Empty means the report is complete, which is a claim worth being
       // able to make explicitly rather than by the absence of a warning.
-      truncatedTables
+      truncatedTables,
+      // Payroll-boundary tables the caller may not read (Issue #1018). Empty
+      // means nothing was held back for lack of permission.
+      withheld
     });
-    const successBody = await successResponse.clone().json();
+    const successBody = (await successResponse.clone().json()) as {
+      data: { tables: ExportedTable[] };
+    };
+    // Audit M2: the idempotency store lives 30 days outside the payroll
+    // boundary, so it keeps payroll ids and a marker, never the rows.
+    const storedBody = {
+      ...successBody,
+      data: {
+        ...successBody.data,
+        tables: stripPayrollRows(successBody.data.tables)
+      }
+    };
 
     await saveIdempotencyRecord(
       tx,
@@ -236,7 +502,7 @@ export const POST = defineTenantRoute<Prepared>({
       userIdempotencyActor(auth.context.tenantUserId),
       prepared.requestHash,
       200,
-      successBody
+      storedBody
     );
 
     return successResponse;

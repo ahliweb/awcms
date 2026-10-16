@@ -138,6 +138,59 @@ async function employ(
   });
 }
 
+const REASON = "SECRET-FREE-TEXT-REASON";
+
+/**
+ * Two attendance events, one correction (with a free-text reason) and two
+ * commission accruals for an employment (Issue #1018), stamped with `stamp`.
+ *
+ * Written as the superuser with triggers and foreign keys off for ONE
+ * transaction (`session_replication_role = replica`): the rows are fixtures for
+ * the export read, not subjects of the ledger's own invariants, which have
+ * their own tests (hr-attendance-database, hr-commission-accrual-database).
+ */
+async function seedHrExtras(
+  tenantId: string,
+  employmentId: string,
+  stamp: string,
+  tag: string
+): Promise<void> {
+  await getAdminSql().begin(async (tx) => {
+    await tx`SET LOCAL session_replication_role = replica`;
+    await tx`
+      INSERT INTO awcms_hr_attendance_events
+        (tenant_id, employment_id, kind, occurred_at, source, client_event_key,
+         recorded_by)
+      VALUES
+        (${tenantId}, ${employmentId}, 'clock_in', '2026-07-01T01:00:00Z',
+         'supervisor', ${`in-${tag}`}, ${stamp}),
+        (${tenantId}, ${employmentId}, 'clock_out', '2026-07-01T09:00:00Z',
+         'supervisor', ${`out-${tag}`}, ${stamp})
+    `;
+    await tx`
+      INSERT INTO awcms_hr_attendance_corrections
+        (tenant_id, employment_id, kind, proposed_kind, proposed_occurred_at,
+         reason, workflow_instance_id, requested_by)
+      VALUES (${tenantId}, ${employmentId}, 'add', 'clock_out',
+              '2026-07-02T09:00:00Z', ${`${REASON} ${tag}`},
+              ${crypto.randomUUID()}, ${stamp})
+    `;
+    await tx`
+      INSERT INTO awcms_hr_commission_accruals
+        (tenant_id, employment_id, rule_id, rule_key, rule_version, source_type,
+         source_ref, calculation, base_amount, rate, amount, currency_code,
+         occurred_at, occurred_on, request_digest, created_by)
+      VALUES
+        (${tenantId}, ${employmentId}, ${crypto.randomUUID()}, 'upsell', 1,
+         'sale_line', ${`ref-1-${tag}`}, 'percent', 100, 2.5, 2.5, 'XTS',
+         '2026-07-01T01:00:00Z', '2026-07-01', ${"a".repeat(64)}, ${stamp}),
+        (${tenantId}, ${employmentId}, ${crypto.randomUUID()}, 'upsell', 1,
+         'sale_line', ${`ref-2-${tag}`}, 'percent', 200, 2.5, 5, 'XTS',
+         '2026-07-02T01:00:00Z', '2026-07-02', ${"b".repeat(64)}, ${stamp})
+    `;
+  });
+}
+
 function planFor(tenantId: string, person: Person) {
   return planForIds({
     tenantId,
@@ -238,6 +291,10 @@ suite(
         outsider.userId,
         true
       );
+
+      await seedHrExtras(TENANT_A, employeeEmployment, hrUser.userId, "emp");
+      await seedHrExtras(TENANT_A, colleagueEmployment, hrUser.userId, "col");
+      await seedHrExtras(TENANT_B, outsiderEmployment, outsider.userId, "out");
     });
 
     test("the plan reaches both tables through the employment, with no stamp column", () => {
@@ -252,10 +309,10 @@ suite(
         expect(entry!.matches).toEqual([]);
         expect(entry!.via?.column).toBe("employment_id");
         expect(entry!.via?.parentTableName).toBe("awcms_hr_employments");
-        expect(entry!.via?.parentMatches.map((m) => m.column).sort()).toEqual([
-          "last_tenant_user_id",
-          "profile_id",
-          "tenant_user_id"
+        // Issue #1018: the PROFILE only. The login columns would also match a
+        // login mislinked to somebody else's employment.
+        expect(entry!.via?.parentMatches.map((m) => m.column)).toEqual([
+          "profile_id"
         ]);
       }
     });
@@ -346,6 +403,161 @@ suite(
       expect(crossedTerms?.rows).toEqual([]);
     });
 
+    test("attendance events, corrections and commission accruals are reached through the employment (#1018)", () => {
+      const plan = planFor(TENANT_A, employee);
+
+      for (const key of [
+        "hr_workforce.attendance_events",
+        "hr_workforce.attendance_corrections",
+        "hr_commission.accruals"
+      ]) {
+        const entry = plan.exportEntries.find((e) => e.key === key);
+        expect(entry).toBeDefined();
+        expect(entry!.matches).toEqual([]);
+        expect(entry!.via?.column).toBe("employment_id");
+        expect(entry!.via?.parentTableName).toBe("awcms_hr_employments");
+      }
+
+      // The transition log needs a SECOND hop (accrual -> employment): not exported.
+      expect(
+        plan.exportEntries.some((e) => e.key === "hr_commission.transitions")
+      ).toBe(false);
+    });
+
+    test("the employee's export carries their own events, corrections and accruals, never a colleague's", async () => {
+      const exported = await exportFor(TENANT_A, employee);
+
+      for (const table of [
+        "awcms_hr_attendance_events",
+        "awcms_hr_attendance_corrections",
+        "awcms_hr_commission_accruals"
+      ]) {
+        const rows = exported.get(table)!;
+        expect(rows.length).toBeGreaterThan(0);
+        expect(new Set(rows.map((row) => row.employment_id))).toEqual(
+          new Set([employeeEmployment])
+        );
+      }
+
+      expect(exported.get("awcms_hr_attendance_events")).toHaveLength(2);
+      expect(exported.get("awcms_hr_attendance_corrections")).toHaveLength(1);
+      expect(exported.get("awcms_hr_commission_accruals")).toHaveLength(2);
+    });
+
+    test("the correction's free-text reason is WITHHELD, and the report says so", async () => {
+      const tables = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_A,
+        async (tx) => {
+          const plan = planFor(TENANT_A, employee);
+          return readSubjectExport(
+            tx,
+            TENANT_A,
+            plan,
+            await loadColumnTypes(
+              tx,
+              plan.exportEntries.map((entry) => entry.tableName)
+            )
+          );
+        }
+      );
+      const corrections = tables.find(
+        (table) => table.tableName === "awcms_hr_attendance_corrections"
+      )!;
+
+      expect(corrections.redactedColumns).toContain("reason");
+      expect(corrections.rows).toHaveLength(1);
+      expect(Object.keys(corrections.rows[0]!)).not.toContain("reason");
+      expect(JSON.stringify(tables)).not.toContain(REASON);
+    });
+
+    test("the recorder/approver who stamped everything exports NONE of the new tables", async () => {
+      const exported = await exportFor(TENANT_A, hrUser);
+
+      expect(exported.get("awcms_hr_attendance_events")).toEqual([]);
+      expect(exported.get("awcms_hr_attendance_corrections")).toEqual([]);
+      expect(exported.get("awcms_hr_commission_accruals")).toEqual([]);
+    });
+
+    test("actor stamps no longer pull other people's employment headers into the HR user's export (#1018)", async () => {
+      // hrUser created BOTH headers. Before the change `created_by` matched.
+      const hr = await exportFor(TENANT_A, hrUser);
+      expect(hr.get("awcms_hr_employments")).toEqual([]);
+
+      // The people the headers are about still find them: by login, and by profile only.
+      const mine = await exportFor(TENANT_A, employee);
+      expect(mine.get("awcms_hr_employments")!.map((r) => r.id)).toEqual([
+        employeeEmployment
+      ]);
+      const theirs = await exportFor(TENANT_A, colleague);
+      expect(theirs.get("awcms_hr_employments")!.map((r) => r.id)).toEqual([
+        colleagueEmployment
+      ]);
+    });
+
+    test("a login MISLINKED to another person's employment does not export that person's rows (audit M1)", async () => {
+      // Alice is employed (profile link). Bob's login was linked to her
+      // employment by mistake and later replaced: it survives in
+      // `tenant_user_id` / `last_tenant_user_id`. Written with triggers off,
+      // because the link guard exists precisely to refuse this state today.
+      const alice = await seedPerson(
+        TENANT_A,
+        "alice",
+        "a9850000-0000-4000-8000-000000000011"
+      );
+      const bob = await seedPerson(
+        TENANT_A,
+        "bob",
+        "a9850000-0000-4000-8000-000000000012"
+      );
+      const aliceEmployment = await getAdminSql().begin(async (tx) => {
+        await tx`SET LOCAL session_replication_role = replica`;
+        const rows = (await tx`
+          INSERT INTO awcms_hr_employments
+            (tenant_id, profile_id, tenant_user_id, last_tenant_user_id,
+             employee_no, hired_on)
+          VALUES (${TENANT_A}, ${alice.profileId}, ${bob.userId}, ${bob.userId},
+                  'A-1', '2026-01-01')
+          RETURNING id
+        `) as { id: string }[];
+        return rows[0]!.id;
+      });
+      await seedHrExtras(TENANT_A, aliceEmployment, hrUser.userId, "alice");
+
+      const bobs = await exportFor(TENANT_A, bob);
+      for (const table of [
+        "awcms_hr_attendance_events",
+        "awcms_hr_attendance_corrections",
+        "awcms_hr_commission_accruals",
+        "awcms_hr_employment_terms",
+        "awcms_hr_shift_assignments"
+      ]) {
+        expect(bobs.get(table)).toEqual([]);
+      }
+
+      // Alice, the person it is about, finds every one of them by her profile.
+      const alices = await exportFor(TENANT_A, alice);
+      expect(alices.get("awcms_hr_attendance_events")).toHaveLength(2);
+      expect(alices.get("awcms_hr_attendance_corrections")).toHaveLength(1);
+      expect(alices.get("awcms_hr_commission_accruals")).toHaveLength(2);
+    });
+
+    test("another tenant's accruals and events never appear", async () => {
+      const mine = await exportFor(TENANT_A, employee);
+
+      for (const table of [
+        "awcms_hr_attendance_events",
+        "awcms_hr_commission_accruals"
+      ]) {
+        expect(mine.get(table)!.map((row) => row.employment_id)).not.toContain(
+          outsiderEmployment
+        );
+      }
+
+      const theirs = await exportFor(TENANT_B, outsider);
+      expect(theirs.get("awcms_hr_commission_accruals")).toHaveLength(2);
+    });
+
     test("erasure does NOT follow the join: the rows survive, and the executor is never handed them", async () => {
       const admin = getAdminSql();
 
@@ -374,6 +586,18 @@ suite(
     `) as { n: number }[];
       expect(terms[0]!.n).toBe(2);
       expect(shifts[0]!.n).toBe(2);
+
+      for (const table of [
+        "awcms_hr_attendance_events",
+        "awcms_hr_attendance_corrections",
+        "awcms_hr_commission_accruals"
+      ]) {
+        const kept = (await admin.unsafe(
+          `SELECT count(*)::int AS n FROM ${table} WHERE employment_id = $1`,
+          [employeeEmployment]
+        )) as { n: number }[];
+        expect(kept[0]!.n).toBeGreaterThan(0);
+      }
     });
   }
 );
