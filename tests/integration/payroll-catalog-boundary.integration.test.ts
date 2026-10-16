@@ -56,10 +56,19 @@ async function findingsAfter(
         await tx.unsafe(statement);
       }
 
-      findings = analysePayrollCatalog(
-        await loadPayrollCatalogSnapshot(tx as unknown as Tag),
-        { workerExecuteAllowlist }
-      );
+      // The probe objects are created by the admin connection, which is not the
+      // role that ran the migrations; that role is the expected owner here.
+      const [me] = (await tx`SELECT current_user::text AS name`) as {
+        name: string;
+      }[];
+
+      const snapshot = await loadPayrollCatalogSnapshot(tx as unknown as Tag);
+
+      // A probe that removes the migration ledger must see "no expected owner".
+      findings = analysePayrollCatalog(snapshot, {
+        workerExecuteAllowlist,
+        expectedOwners: snapshot.migrationOwner === null ? [] : [me!.name]
+      });
 
       throw new Rollback();
     });

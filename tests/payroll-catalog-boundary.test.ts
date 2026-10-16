@@ -14,7 +14,11 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { PAYROLL_WORKER_EXECUTE_ALLOWLIST } from "../src/modules/_shared/payroll-data-boundary";
+import {
+  PAYROLL_REQUIRED_FOREIGN_KEYS,
+  PAYROLL_REQUIRED_TRIGGERS,
+  PAYROLL_WORKER_EXECUTE_ALLOWLIST
+} from "../src/modules/_shared/payroll-data-boundary";
 import { findPayrollSqlLeaks } from "../scripts/payroll-sql-boundary-check";
 import {
   analysePayrollCatalog,
@@ -201,13 +205,50 @@ describe("sql-statements", () => {
   });
 });
 
+/** The marked, required payroll tables every healthy catalog has (Issue #1077, M1). */
+export const REQUIRED_RELATIONS: CatalogSnapshot["relations"] = [
+  "awcms_hr_commission_accruals",
+  "awcms_hr_commission_transitions"
+].map((name) => ({
+  name: `public.${name}`,
+  relkind: "r",
+  owner: "owner",
+  comment: "payroll-boundary: test"
+}));
+
+const REQUIRED_FKS: CatalogSnapshot["foreignKeys"] =
+  PAYROLL_REQUIRED_FOREIGN_KEYS.map((edge) => ({
+    from: `public.${edge.from}`,
+    to: `public.${edge.to}`
+  }));
+
+const REQUIRED_TRIGGERS: CatalogSnapshot["triggers"] = Object.entries(
+  PAYROLL_REQUIRED_TRIGGERS
+).flatMap(([table, names]) =>
+  names.map((name) => ({
+    relation: `public.${table}`,
+    name,
+    function: `public.${name}_fn`
+  }))
+);
+
 function snapshot(partial: Partial<CatalogSnapshot>): CatalogSnapshot {
   return {
+    migrationOwner: "owner",
+    columns: [],
+    foreignKeys: REQUIRED_FKS,
+    roles: [],
+    namedObjects: [],
     rules: [],
     functions: [],
-    triggers: [],
+    triggers: REQUIRED_TRIGGERS,
     grants: [],
     inheritance: [],
+    relations: REQUIRED_RELATIONS,
+    memberships: [],
+    publications: [],
+    foreignTables: [],
+    dependencies: [],
     ...partial
   };
 }
@@ -406,6 +447,7 @@ describe("catalog analyser", () => {
         snapshot({
           functions: [fn("awcms_hr_payroll_guard", { returnsTrigger: true })],
           triggers: [
+            ...REQUIRED_TRIGGERS,
             {
               relation: PAYROLL,
               name: "ok",

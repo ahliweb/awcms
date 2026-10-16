@@ -167,7 +167,13 @@ describe("imports of the exempt ledger's read functions", () => {
   const importer = (clause: string) =>
     `import ${clause} from "../../../../modules/hr-commission/application/hr-commission-accrual-ledger";\n`;
   const NEW_ROUTE = "src/pages/api/v1/other/route.ts";
-  const ALL = ["listAccruals", "getAccrual", "reconcileAccruals"];
+  const ALL = [
+    "listAccruals",
+    "getAccrual",
+    "reconcileAccruals",
+    "accrueCommission",
+    "transitionAccrual"
+  ];
 
   test.each([
     ["a named import", importer("{ listAccruals }"), ["listAccruals"]],
@@ -197,7 +203,7 @@ describe("imports of the exempt ledger's read functions", () => {
     [
       "a multi-line named import",
       `import {\n  accrueCommission,\n  listAccruals\n} from "../../x/hr-commission-accrual-ledger";`,
-      ["listAccruals"]
+      ["listAccruals", "accrueCommission"]
     ]
   ])(
     "%s from a file that is not allow-listed is refused",
@@ -210,16 +216,41 @@ describe("imports of the exempt ledger's read functions", () => {
     }
   );
 
-  test("a type import and a mutation-only import are not read paths", () => {
+  test("a type import is not a read path; a NEW caller of the write-path functions is (Issue #1077, M7)", () => {
+    expect(
+      evaluate({
+        [NEW_ROUTE]:
+          importer("type { CommissionAccrual }") +
+          importer("{ type AccrualListFilters }")
+      }).forbiddenReadImports
+    ).toEqual([]);
+
     const result = evaluate({
-      [NEW_ROUTE]:
-        importer("type { CommissionAccrual }") +
-        importer(
-          "{ type AccrualListFilters, accrueCommission, transitionAccrual }"
-        )
+      [NEW_ROUTE]: importer("{ accrueCommission, transitionAccrual }")
     });
 
-    expect(result.forbiddenReadImports).toEqual([]);
+    expect(result.forbiddenReadImports).toHaveLength(1);
+    expect(result.forbiddenReadImports[0]!.functions).toEqual([
+      "accrueCommission",
+      "transitionAccrual"
+    ]);
+  });
+
+  test("an allow-listed mutation route needs no read audit, but only while it imports nothing but the write path", () => {
+    const route = "src/pages/api/v1/hr-commission/accruals/[id]/approve.ts";
+
+    expect(
+      evaluate({ [route]: importer("{ transitionAccrual }") })
+        .forbiddenReadImports
+    ).toEqual([]);
+
+    const widened = evaluate({
+      [route]: importer("{ transitionAccrual, listAccruals }")
+    });
+
+    expect(widened.forbiddenReadImports[0]?.problem).toContain(
+      "never calls recordSensitiveRead"
+    );
   });
 
   test("an allow-listed importer must itself audit the permission", () => {

@@ -33,14 +33,43 @@ import {
 } from "../src/modules/_shared/sensitive-reads";
 import { REPO_ROOT, listFilesRecursive } from "./lib/repo-files";
 
-function main(): void {
-  const files = listFilesRecursive("src", {
-    extensions: [".ts", ".tsx", ".js", ".mjs", ".astro"],
-    relativeTo: REPO_ROOT
-  });
-  const sources = files.map((file) =>
-    readFileSync(`${REPO_ROOT}/${file}`, "utf8")
+/**
+ * Roots the gate reads (Issue #1077, M7). `scripts/` is in: an operator script
+ * that reads a payroll table is as much a read path as a route, and was
+ * invisible while only `src/` was scanned. `tests/` is out on purpose (probes
+ * and fixtures name payroll tables by design and run no production code).
+ */
+export const SENSITIVE_READ_SCAN_ROOTS: readonly string[] = ["src", "scripts"];
+
+export function collectSensitiveReadSources(): {
+  files: string[];
+  sources: string[];
+} {
+  const files = SENSITIVE_READ_SCAN_ROOTS.flatMap((root) =>
+    listFilesRecursive(root, {
+      extensions: [
+        ".ts",
+        ".tsx",
+        ".mts",
+        ".cts",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".astro"
+      ],
+      relativeTo: REPO_ROOT
+    })
   );
+
+  return {
+    files,
+    sources: files.map((file) => readFileSync(`${REPO_ROOT}/${file}`, "utf8"))
+  };
+}
+
+function main(): void {
+  const { files, sources } = collectSensitiveReadSources();
   const result = evaluateSensitiveReadCoverage(listModules(), sources, files);
 
   for (const path of Object.keys(PAYROLL_TABLE_SOURCE_EXEMPTIONS)) {

@@ -151,6 +151,163 @@ export const PAYROLL_DO_EXECUTE_ALLOWLIST: Readonly<Record<string, string>> = {
 export const PAYROLL_CATALOG_EXEMPTIONS: Readonly<Record<string, string>> = {};
 
 /**
+ * The marker a payroll table carries in the catalog (Issue #1077, M1):
+ * `COMMENT ON TABLE <t> IS 'payroll-boundary ...'`. The family is NAME-based, so
+ * a table renamed out of it would leave both layers silent; the comment travels
+ * with the table through `RENAME`, so the catalog layer can say "this marked
+ * relation no longer has a family name". The text after the marker is free.
+ */
+export const PAYROLL_BOUNDARY_MARKER = "payroll-boundary";
+
+/**
+ * Payroll tables that MUST exist in the migrated catalog, in `public`, carrying
+ * the marker (Issue #1077, M1). A rename (or a drop) of one is a finding even if
+ * the comment was also removed. A phase-3 payroll table is appended here in the
+ * migration that creates it, together with its marker.
+ */
+export const PAYROLL_REQUIRED_TABLES: readonly string[] = [
+  "awcms_hr_commission_accruals",
+  "awcms_hr_commission_transitions"
+];
+
+/**
+ * Tables written or declared by a payroll-owner module
+ * ({@link PAYROLL_OWNER_MODULE_KEYS}), or named with the module's own prefix,
+ * that are NOT payroll data, each with the reason (Issue #1077, M1). Every other
+ * table such a module owns must satisfy `isPayrollTable`, so a phase-3 table
+ * (run lines, periods, rules) cannot fall outside the family by being named
+ * unluckily. A stale entry is reported.
+ */
+export const PAYROLL_OWNED_NON_PAYROLL_TABLES: Readonly<
+  Record<string, string>
+> = {
+  awcms_hr_commission_rules:
+    "the tenant's commercial terms (a rule version, a rate); it names no employee and no amount earned by one. Accruals cite it but it carries no per-person pay (subject-data rationale in hr-commission/module.ts)"
+};
+
+/**
+ * Migrations (by name) that change the owner of a payroll object, each with the
+ * reason (Issue #1077 audit, M5). Empty: payroll objects are owned by the role
+ * that ran the migrations.
+ */
+export const PAYROLL_OWNER_CHANGE_ALLOWLIST: Readonly<Record<string, string>> =
+  {};
+
+/**
+ * Roles that may not OWN a payroll relation or a payroll-family function
+ * (Issue #1077, M4): an owner holds every privilege and can regrant it, so the
+ * request and worker roles must never be it.
+ */
+export const PAYROLL_FORBIDDEN_OWNERS: readonly string[] = [
+  "awcms_app",
+  "awcms_worker"
+];
+
+/**
+ * Roles that may be a MEMBER of a role that holds payroll privileges (an
+ * allowed grantee, or the owner of a payroll relation). Empty: membership is
+ * inheritance, so a role that is a member of `awcms_app` reads payroll without
+ * ever appearing in an ACL (Issue #1077, M4).
+ */
+export const PAYROLL_ALLOWED_ROLE_MEMBERS: readonly string[] = [];
+
+/**
+ * Publications accepted although they carry payroll tables (or every table),
+ * each with the reason (Issue #1077, M4). A logical-replication publication
+ * copies rows to another database, outside every grant here. Empty today.
+ */
+export const PAYROLL_PUBLICATION_EXEMPTIONS: Readonly<Record<string, string>> =
+  {};
+
+/**
+ * Functions and operators that read a relation named by a STRING or an OID, so
+ * the body never spells the table (Issue #1077, M2): the XML exporters, the
+ * regclass casts, `format()` assembling a name, `ts_stat()` and `dblink` running
+ * a query text, and a Unicode-escaped identifier `U&"..."`. A SECURITY DEFINER
+ * function outside the payroll family may not use them unless it is named in
+ * `PAYROLL_CATALOG_EXEMPTIONS`; the static layer refuses the same tokens in a
+ * migration's non-family SECURITY DEFINER function.
+ */
+export const PAYROLL_INDIRECT_READ_PATTERN =
+  /(?<![\w$])"?(?:(?:schema|table|query|database|cursor)_to_xml\w*|to_regclass|to_regtype|regclass|ts_stat|ts_rewrite|crosstab\w*|connectby|dblink\w*|lo_from_bytea|lo_import|lo_export|lo_put|pg_read_file|pg_read_binary_file)"?(?![\w$])|(?<![\w$])"?format"?\s*\(|\bU&\s*"/i;
+
+/**
+ * The subset that RUNS A QUERY TEXT or reads/writes outside the SQL text (Issue
+ * #1077 audit, H2): refused anywhere in a migration, quoted or not, whether or
+ * not a `(` follows (`"query_to_xml"(...)` and `pg_catalog."ts_rewrite"(...)`
+ * are the same call). Nothing in `sql/` uses one.
+ */
+export const PAYROLL_QUERY_TEXT_HELPER_PATTERN =
+  /(?<![\w$])"?(?:(?:schema|table|query|database|cursor)_to_xml\w*|ts_stat|ts_rewrite|crosstab\w*|connectby|dblink\w*|lo_from_bytea|lo_import|lo_export|lo_put|pg_read_file|pg_read_binary_file)"?(?![\w$])/i;
+
+/**
+ * Owners accepted for a payroll relation or family function in addition to the
+ * role that owns the migration ledger (`awcms_schema_migrations`), which is
+ * discovered from the catalog: the role that ran the migrations is the role
+ * that should own what they created (Issue #1077 audit, M5). Empty by default;
+ * a deployment whose objects are owned by a separate owner role names it here.
+ */
+export const PAYROLL_EXPECTED_OWNERS: readonly string[] = [];
+
+/** The migration ledger table whose owner is the expected owner. */
+export const PAYROLL_OWNER_REFERENCE_TABLE = "awcms_schema_migrations";
+
+/**
+ * Foreign keys between required payroll tables that must exist (Issue #1077
+ * audit, HIGH-1): when the real ledger is renamed away, the log that references
+ * it follows the rename, so the edge to the family name disappears.
+ */
+export const PAYROLL_REQUIRED_FOREIGN_KEYS: readonly {
+  from: string;
+  to: string;
+}[] = [
+  {
+    from: "awcms_hr_commission_transitions",
+    to: "awcms_hr_commission_accruals"
+  }
+];
+
+/**
+ * A non-family relation that shares at least this share of a required payroll
+ * table's columns (same name and type) is that table renamed away, or a copy of
+ * it (Issue #1077 audit, HIGH-1). The ledger has ~35 columns; no ordinary table
+ * comes near.
+ */
+export const PAYROLL_LOOKALIKE_COLUMN_SHARE = 0.7;
+export const PAYROLL_LOOKALIKE_MIN_COLUMNS = 5;
+
+/**
+ * Predefined roles that read or write every table without an ACL entry (Issue
+ * #1077 audit, M4). A member of one reads payroll; so is a member of any
+ * superuser or BYPASSRLS role (computed from `pg_roles`).
+ */
+export const PAYROLL_PRIVILEGED_PREDEFINED_ROLES: readonly string[] = [
+  "pg_read_all_data",
+  "pg_write_all_data",
+  "pg_maintain"
+];
+
+/**
+ * Triggers every required payroll table must carry (Issue #1077 audit, H1): a
+ * look-alike table created under the family name after the real one was renamed
+ * away has none of them. Keyed by bare table name.
+ */
+export const PAYROLL_REQUIRED_TRIGGERS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  awcms_hr_commission_accruals: [
+    "awcms_hr_commission_accruals_born_valid",
+    "awcms_hr_commission_accruals_immutable",
+    "awcms_hr_commission_accruals_log_birth",
+    "awcms_hr_commission_accruals_log_change"
+  ],
+  awcms_hr_commission_transitions: ["awcms_hr_commission_transitions_guard"]
+};
+
+/** Function languages the catalog layer can read the body of. */
+export const PAYROLL_READABLE_LANGUAGES: readonly string[] = ["sql", "plpgsql"];
+
+/**
  * Modules that own payroll data. A derived surface they OWN is refused even if
  * the table it reads has a name the patterns above do not know — a renamed
  * table, a view, a materialised copy. The set is a list so a later

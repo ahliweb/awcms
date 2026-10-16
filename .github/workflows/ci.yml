@@ -263,6 +263,14 @@ jobs:
         # connects to it directly and expects `sql/` already applied.
         run: bun run db:migrate
 
+      - name: Payroll catalog boundary (the migrated database)
+        # Issue #1077: the catalog half of the payroll boundary needs a database
+        # where every migration has run, so it cannot sit in `bun run check`
+        # (which has none). The same analysis runs, with its probes, in
+        # tests/integration/payroll-catalog-boundary.integration.test.ts; this
+        # step is the operator command against THIS migrated database.
+        run: bun run payroll:catalog-boundary:check
+
       - name: Run DB-gated integration tests
         # Scoped to `tests/integration/` (the harness-based suite, purpose-built
         # for concurrent execution against ITS OWN ephemeral per-run database —

@@ -104,6 +104,14 @@ jobs:
         env:
           DATABASE_URL: ""
 
+      - name: Payroll catalog boundary (the migrated database)
+        # Issue #1077: the catalog half of the payroll boundary needs a database
+        # where every migration has run, so it cannot sit in `bun run check`
+        # (which has none). The same analysis runs, with its probes, in
+        # tests/integration/payroll-catalog-boundary.integration.test.ts; this
+        # step is the operator command against THIS migrated database.
+        run: bun run payroll:catalog-boundary:check
+
       - name: Run DB-gated integration tests (RLS + DB role separation)
         # Scoped to `tests/integration/` (the harness-based suite — see
         # `tests/integration/harness.ts`), not a bare `bun test`. The legacy

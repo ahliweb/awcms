@@ -1135,17 +1135,124 @@ design above.
   that leaves no object behind is invisible to the catalog and is held by the
   static layer for the names it can resolve; a name that exists only at run time
   is held by the catalog the moment it becomes a relation or function.
-  **What remains (known limits, tracked in #1077):** the catalog
-  does not read policies or CHECK constraints that mention payroll, privileges
-  held through role membership, or extension objects; a one-shot copy through a
-  name built at run time inside an allow-listed `DO` block; a dynamic
-  `import(ident)` whose specifier shows no part of the ledger's file name; the
-  literal masking treats `${ ... }` inside a template literal as text (a real
-  audit call there is not seen) and does not understand regex literals; and the
-  gate still proves the audit call is in the file, not on every handler path.
-  Mutation functions of the ledger (`accrueCommission`, `transitionAccrual`)
-  return an accrual and are outside the read-function import allow-list because
-  they are audited as mutations.
+  **Gaps closed by Issue #1077** (the #1015 security review's remaining
+  Mediums, each proved by a probe in `tests/payroll-catalog-boundary-1077.test.ts`
+  and, against a real catalog, in the integration test):
+  _M1_, the family is a name, so a table renamed out of it left both layers
+  silent: the two ledger tables now carry `COMMENT ON TABLE ... IS
+'payroll-boundary: ...'` (`sql/311`), the catalog layer fails a marked relation
+  with no family name, a family table with no marker, and a table in
+  `PAYROLL_REQUIRED_TABLES` that is not in `public` (so a rename that also drops
+  the comment is still caught); the static layer fails `ALTER ... RENAME TO` and
+  `SET SCHEMA` that leave the family (tables, views, foreign tables, functions),
+  a new table with the `awcms_hr_commission_` / `awcms_hr_payroll_` prefix whose
+  name is not a family name, and every table a payroll-owner module writes or
+  declares that is neither a family name nor a reasoned entry of
+  `PAYROLL_OWNED_NON_PAYROLL_TABLES` (today `awcms_hr_commission_rules`), so a
+  phase-3 table (run lines, periods, rules) cannot fall outside by being named
+  unluckily. _M2_, a non-family SECURITY DEFINER function may not use
+  `schema_to_xml`, `query_to_xml`, `table_to_xml`, `regclass`, `format()`,
+  `ts_stat`, `dblink` or a `U&"..."` identifier (catalog: `function-indirect-read`,
+  exempt only through `PAYROLL_CATALOG_EXEMPTIONS`; static: the same tokens in a
+  migration, and `U&"..."` anywhere). _M4_, the catalog layer now reads relation
+  and function ownership (a runtime role may not own payroll), `pg_auth_members`
+  (no role may inherit `awcms_app` or a payroll owner, transitively),
+  publications (`FOR ALL TABLES`, a payroll table, or the `public` schema),
+  and foreign tables (a payroll name or a payroll remote table in the options);
+  the static layer fails `COPY <payroll> TO` and `COPY (SELECT ... payroll) TO`.
+  _M5_ is NARROWED for migrations, not closed: a `DO` block that runs `EXECUTE`,
+  EVERY function judged where it is created (body statements run through the
+  same analysers as a `DO` block, so create-call-drop of a `LANGUAGE sql` or
+  plpgsql function that renames, copies or reads payroll is caught), any
+  `UPDATE ... SET (SELECT ... payroll)` / `UPDATE ... FROM payroll` /
+  `MERGE ... USING payroll`, and any use of a helper that runs a query text or
+  reads outside the SQL (`query_to_xml` and its siblings, `ts_stat`,
+  `ts_rewrite`, `crosstab`, `connectby`, `dblink`, `lo_from_bytea`, `lo_import`,
+  `lo_export`, `lo_put`, `pg_read_file`, `pg_read_binary_file`; quoted or not,
+  with or without a `(`) fail unless the migration is in
+  `PAYROLL_DO_EXECUTE_ALLOWLIST`. The list of helpers is a list: a helper that
+  runs a query text and is not on it is a hole until it is added.
+  _M6_, a generic `pg_depend` sweep (`dependent-on-payroll`) fails any policy,
+  CHECK or FOREIGN KEY constraint, column default, index expression, extended
+  statistic or column of a payroll row type that sits on a non-family table and
+  depends on a payroll relation, function or row type. _M7_, `scripts/` is now
+  scanned by `sensitive-reads:check` (the readiness report's id-only query and
+  the lifecycle registry are listed in `PAYROLL_TABLE_SOURCE_EXEMPTIONS` with
+  reasons), and `accrueCommission` / `transitionAccrual` are guarded imports, so
+  a NEW caller must be named. Info: a function in any language other than
+  `sql`/`plpgsql` is a finding (`function-opaque-language`), and
+  `payroll:catalog-boundary:check` now runs in the CI and release jobs against
+  their migrated database.
+  **Hardening after the security audit of #1077** (each with a probe in
+  `tests/fixtures/payroll-boundary-probes.ts`): _H1_, the rename trick is caught at
+  more entry points than `ALTER TABLE`: `ALTER INDEX|SEQUENCE|VIEW|
+MATERIALIZED VIEW|FOREIGN TABLE|TYPE ... RENAME TO / SET SCHEMA`, the last
+  `COMMENT ON TABLE` of a family table must carry the `payroll-boundary` marker,
+  `DROP TRIGGER` on a payroll table is refused and `DISABLE TRIGGER` must be
+  re-enabled in the same migration, and the catalog layer asserts that each
+  required table carries its expected triggers (`PAYROLL_REQUIRED_TRIGGERS`) and
+  that no index, constraint, policy or trigger with a family name sits on a
+  non-family relation. _M3_, the indirect-read pattern matches quoted and
+  schema-qualified names (`pg_catalog."format"(...)`) and `ts_rewrite`,
+  `crosstab`, `connectby`, `lo_*`, `pg_read_*file`. _M4_, members of
+  `pg_read_all_data`, `pg_write_all_data`, `pg_maintain` and of any superuser or
+  `BYPASSRLS` role are findings, and so is a runtime role with `BYPASSRLS`.
+  _M5_ (owners), the owner of a payroll relation or family function must be the
+  owner of the migration ledger (`awcms_schema_migrations`, discovered from the
+  catalog) or in `PAYROLL_EXPECTED_OWNERS`; `ALTER ... OWNER TO` on a family
+  object and `REASSIGN OWNED` are refused statically. _M6_, the in-process
+  commission port (`createCommissionAccrualPort`) is its own guarded import with
+  no allowed importer. _L1_, `ALTER EXTENSION ... ADD` is refused. _L2_, domain
+  CHECK constraints are in the dependency sweep. _L3_, the sensitive-read scan
+  also reads `.mts`, `.cts`, `.jsx` and `.cjs`.
+  **The model, stated honestly.** The static scan and the catalog check are
+  defence in depth against ACCIDENTAL and OBVIOUS leaks. A determined author of
+  a reviewed migration can still evade a text scanner, so **review of every
+  `sql/` change that touches payroll (CODEOWNERS and the security review
+  AGENTS.md requires for sensitive modules) remains the primary control**;
+  nothing here replaces it. Second audit hardening: an escaped literal
+  (`E'...'`, `U&'...'`) used as a `DO` or function body is refused outright (its
+  escapes can spell a payroll name no scan decodes); `DISABLE TRIGGER` is paired
+  per trigger (`ALL`/`USER` expand to every required trigger) and the catalog
+  fails any required trigger whose `tgenabled` is not `O`; the catalog fails a
+  required foreign key that disappeared (the transition log must still reference
+  the ledger) and any non-family relation that shares 70% of a required table's
+  columns (the ledger renamed away or copied); a missing migration ledger with no
+  configured owner is a finding (fail closed); `session_replication_role`, a
+  quoted look-alike rename target (`"AWCMS_..."`, trailing space), an `ALTER
+TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
+  `pg_trigger` are refused statically; the marker is accepted in plain and
+  dollar-quoted form. **Operators:** the expected owner of the payroll objects is
+  the owner of the migration ledger. In a SPLIT-ROLE deployment (migrations run
+  as one role, objects owned by another) set `PAYROLL_EXPECTED_OWNERS=role1,role2`
+  for `bun run payroll:catalog-boundary:check` (`.env.example`), or the check
+  reports `payroll-owner`.
+  **Residuals (narrowed, not closed):** a reviewed migration can rebuild a
+  payroll table behind constructs the scanner does not model, after which the
+  catalog layer DETECTS (missing trigger, missing foreign key, look-alike columns,
+  leftover family-named objects) but does not prevent; the helper list above is
+  finite; a non-family table with RLS off that is granted to `awcms_worker` or
+  `PUBLIC` is not flagged in general (too many legitimate global tables), only
+  when it looks like a required payroll table; a column-for-column rebuild that
+  changes more than 30% of the ledger's columns evades the look-alike check; PostgreSQL logical
+  replication SLOTS are not read (a slot with a decoding plugin reads WAL, so
+  every payroll row, without a publication or an ACL entry; the slots belong to
+  the operator and are not in the catalog layer); and a superuser is trusted by
+  definition. Also: the catalog does not read extension objects,
+  superusers or `BYPASSRLS` roles (they bypass every grant by definition);
+  `NO FORCE` / `DISABLE ROW LEVEL SECURITY` on a payroll table are other RLS
+  gates' business; the check is not scheduled against a DEPLOYED database (that
+  needs a credential and an operator cron, an operations decision); the
+  existing mutation routes (`approve`, `release`, `pay`, `void`, and the port
+  adapter) are allow-listed WITHOUT a read audit (`auditExemptImporters`): they
+  return the transitioned accrual to a caller who holds only the transition
+  power, so whether they should record a read or return a masked shape is a
+  product decision, not made here; an uncalled function that contains
+  `recordSensitiveRead` still satisfies the sensitive-read gate (the dead-branch
+  limit); a dynamic `import(ident)` whose specifier shows no part of the
+  ledger's file name; the literal masking treats `${ ... }` inside a template
+  literal as text and does not understand regex literals; and the gate proves
+  the audit call is in the file, not on every handler path.
   Exemptions are `PAYROLL_CATALOG_EXEMPTIONS` (empty; the way out is the payroll
   family name).
 - _Commission is inside the boundary (owner decision)._ `awcms_hr_commission_accruals`

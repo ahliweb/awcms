@@ -14,6 +14,7 @@
  * CI `integration-tests` job executes; this command is the operator form
  * ("is THIS database clean"), for a deployed or restored database.
  */
+import { PAYROLL_EXPECTED_OWNERS } from "../src/modules/_shared/payroll-data-boundary";
 import {
   analysePayrollCatalog,
   loadPayrollCatalogSnapshot,
@@ -37,7 +38,16 @@ async function main(): Promise<void> {
     const snapshot = await loadPayrollCatalogSnapshot(
       sql as unknown as Parameters<typeof loadPayrollCatalogSnapshot>[0]
     );
-    const findings = analysePayrollCatalog(snapshot);
+    // Split-role deployments (migrations run by one role, payroll objects owned
+    // by another) name the owner role(s) here; the default is the owner of the
+    // migration ledger (docs/awcms/hr-payroll.md section 13.3).
+    const configuredOwners = (process.env.PAYROLL_EXPECTED_OWNERS ?? "")
+      .split(",")
+      .map((owner) => owner.trim())
+      .filter(Boolean);
+    const findings = analysePayrollCatalog(snapshot, {
+      expectedOwners: [...PAYROLL_EXPECTED_OWNERS, ...configuredOwners]
+    });
     const stale = staleCatalogExemptions(snapshot);
 
     if (findings.length > 0 || stale.length > 0) {
@@ -58,7 +68,7 @@ async function main(): Promise<void> {
     }
 
     console.log(
-      `payroll:catalog-boundary:check OK - ${snapshot.rules.length} rule(s), ${snapshot.functions.length} function(s), ${snapshot.triggers.length} trigger(s), ${snapshot.grants.length} grant(s) read from the catalog; nothing outside the payroll family reaches a payroll table.`
+      `payroll:catalog-boundary:check OK - ${snapshot.rules.length} rule(s), ${snapshot.functions.length} function(s), ${snapshot.triggers.length} trigger(s), ${snapshot.grants.length} grant(s), ${snapshot.relations.length} relation(s), ${snapshot.memberships.length} role membership(s), ${snapshot.publications.length} publication(s), ${snapshot.foreignTables.length} foreign table(s) and ${snapshot.dependencies.length} dependency row(s) read from the catalog; nothing outside the payroll family reaches a payroll table.`
     );
   } finally {
     await sql.close();
