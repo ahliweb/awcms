@@ -126,12 +126,16 @@ function newContext(): Context {
   };
 }
 
+/** Every RegExp metacharacter in `value` escaped, so a name is matched literally. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
 /** Names called in `text`: `name(` as a whole word. */
 function callsOf(text: string, name: string): boolean {
-  return new RegExp(
-    `(?<![\\w$])"?${name.replace(/\$/g, "\\$")}"?\\s*\\(`,
-    "i"
-  ).test(text);
+  return new RegExp(`(?<![\\w$])"?${escapeRegExp(name)}"?\\s*\\(`, "i").test(
+    text
+  );
 }
 
 function analyseStatement(

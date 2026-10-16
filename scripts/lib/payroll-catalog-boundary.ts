@@ -359,7 +359,7 @@ function bare(qualified: Qualified): string {
 }
 
 function calls(body: string, qualified: Qualified): boolean {
-  const name = bare(qualified).replace(/[$]/g, "\\$");
+  const name = bare(qualified).replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 
   // `name(`, `"name"(`, `public."name"(` and `public . name (` are all calls.
   return new RegExp(`(?<![\\w$])"?${name}"?\\s*\\(`, "i").test(body);
