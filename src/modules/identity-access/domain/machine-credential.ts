@@ -124,8 +124,11 @@ export function isIpInAnyCidr(ip: string, cidrs: readonly string[]): boolean {
     if (!base || base.length !== address.length) continue;
 
     const maxBits = base.length * 8;
-    const bits = slash === -1 ? maxBits : Number(entry.slice(slash + 1));
-    if (!Number.isInteger(bits) || bits < 0 || bits > maxBits) continue;
+    const suffix = slash === -1 ? null : entry.slice(slash + 1);
+    // Digits only: `Number("")` is 0, which would read `10.0.0.0/` as /0.
+    if (suffix !== null && !/^\d{1,3}$/.test(suffix)) continue;
+    const bits = suffix === null ? maxBits : Number(suffix);
+    if (bits > maxBits) continue;
 
     if (sharesPrefix(address, base, bits)) return true;
   }
