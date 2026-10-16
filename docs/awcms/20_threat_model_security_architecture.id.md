@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](20_threat_model_security_architecture.md)
 
-<!-- i18n-source-hash: sha256:a1224146feba6310ceb57b6156c283ffdb5e9de1f5e4aab9e94722f1c886dab1 -->
+<!-- i18n-source-hash: sha256:98b2c974b70956d9ae698e92b09fbf848212fabad12adcc0defa244450cc0c99 -->
 
 # Bagian 20 — Threat Model dan Arsitektur Keamanan
 
@@ -274,6 +274,7 @@ Lapis pembatas SoD generik (ADR-0031) — deteksi konflik + exception/override, 
 Pola berikut dari awcms-mini bersifat generik dan reusable langsung untuk awcms; detail penuh (nama fungsi/file, nomor issue) tidak direproduksi di sini karena spesifik-implementasi awcms-mini yang belum tentu identik strukturnya di awcms — akan didokumentasikan ulang dengan bukti konkret saat modul terkait dibangun:
 
 - **Pemisahan role DB** (app/worker/setup/migration), masing-masing least-privilege sesuai jalur kode yang benar-benar dipakainya, termasuk tabel global (non-RLS) yang harus dipersempit eksplisit dari default `ALTER DEFAULT PRIVILEGES` yang terlalu luas.
+- **Kolom kredensial tidak terbaca oleh role worker** (Issue #1078, `sql/304`). `awcms_worker` tidak memegang `SELECT` pada kolom kredensial mana pun (hash password, hash token/kode/PIN/challenge, rahasia MFA, client secret): `awcms_identities` kini di-grant per kolom ke enam kolom yang dibaca job (`id, tenant_id, profile_id, status, login_identifier, created_at`), dan tabel-tabel pembawa token dipersempit ke kolom yang dibaca purge retensi. Alasannya, RLS memercayai `app.current_tenant_id`, sehingga siapa pun yang bisa menjalankan SQL sebagai worker (skrip job yang diretas, SQL injection pada query worker) bisa membaca kredensial setiap tenant. Pemeriksaan `security:readiness` "Worker roles cannot read credential columns" (`critical`) menanyakan `has_column_privilege` untuk setiap kolom dalam daftar pusat `CREDENTIAL_COLUMNS`, dan juga gagal bila ada kolom bernama mirip kredensial yang belum diklasifikasi. Dua pengecualian terdokumentasi (`awcms_push_subscriptions.auth_secret`, `awcms_omes_repository_progress_config.secret_ref`) adalah materi kunci atau rujukan yang tanpanya job tak bisa bekerja. Pemindaian nama sengaja luas (`_hash`, ciphertext, encrypted, verifier, OTP, seed, salt, nonce), sehingga setiap kolom baru berbentuk itu wajib diklasifikasi, dan satu pemeriksaan `critical` kedua mewajibkan setiap role pemilik fungsi `SECURITY DEFINER` berstatus NOLOGIN dan tanpa anggota. Sisa yang diketahui (dilacak terpisah): `awcms_setup` masih memegang `SELECT` pada `awcms_identities.password_hash`.
 - **Hardening auth online** (rate limit + lockout, MFA/TOTP, SSO/OIDC dengan break-glass wajib, circuit breaker per-provider yang tidak menyamakan 4xx valid dengan kegagalan transport) — berlaku sama untuk awcms bila/ketika fitur online-auth serupa dibangun.
 - **Pertahanan request smuggling/Content-Length** pada endpoint upload/objek besar.
 - **Observability**: audit trail terstruktur, correlation ID, retensi + purge terjadwal, titik pemasangan sink log/audit eksternal (no-op default) untuk aplikasi turunan.

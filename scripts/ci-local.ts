@@ -1432,7 +1432,7 @@ echo "OK: tidak ada berkas .env yang ter-track."`
       {
         kind: "shell",
         step: "Run DB-gated integration tests (legacy ad-hoc suite)",
-        run: `bun test tests/audit-log-purge.test.ts tests/family-conformance-db.test.ts tests/keyset-pagination-precision-postgres.test.ts tests/mfa-integration.test.ts tests/mfa-login-e2e.test.ts tests/office-directory-postgres.test.ts tests/partner-delegated-access-e2e.test.ts tests/oidc-integration.test.ts tests/openapi-office-response-schema-postgres.test.ts tests/reporting-projection-rebuild-lock.test.ts tests/security-readiness-failclosed.test.ts tests/security-readiness-rls.test.ts tests/security-readiness-worker-setup-grants.test.ts tests/sync-hmac-versioned.test.ts tests/tenant-selection-e2e.test.ts tests/turnstile-login-e2e.test.ts tests/workflow-approval-concurrency.test.ts`
+        run: `bun test tests/audit-log-purge.test.ts tests/family-conformance-db.test.ts tests/keyset-pagination-precision-postgres.test.ts tests/mfa-integration.test.ts tests/mfa-login-e2e.test.ts tests/office-directory-postgres.test.ts tests/partner-delegated-access-e2e.test.ts tests/oidc-integration.test.ts tests/openapi-office-response-schema-postgres.test.ts tests/reporting-projection-rebuild-lock.test.ts tests/security-readiness-failclosed.test.ts tests/security-readiness-rls.test.ts tests/security-readiness-worker-setup-grants.test.ts tests/security-readiness-worker-credential-columns.test.ts tests/sync-hmac-versioned.test.ts tests/tenant-selection-e2e.test.ts tests/turnstile-login-e2e.test.ts tests/workflow-approval-concurrency.test.ts`
       }
     ],
     omitted: {

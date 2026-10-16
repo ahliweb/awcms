@@ -22,6 +22,7 @@ import { describe, expect, test } from "bun:test";
 import { stripComments } from "../scripts/access-chokepoint-check";
 import {
   SETUP_ROLE_GRANTS,
+  WORKER_COLUMN_GRANTS,
   WORKER_ROLE_GRANTS
 } from "../scripts/security-readiness";
 import { listModules } from "../src/modules";
@@ -179,7 +180,15 @@ describe("sql/108 — the grant the generic purge needs", () => {
     expect(sql).toContain(
       "GRANT SELECT, DELETE ON awcms_invitations TO awcms_worker;"
     );
-    expect(WORKER_ROLE_GRANTS.awcms_invitations).toEqual(["SELECT", "DELETE"]);
+    // sql/304 (Issue #1078) narrowed the SELECT to (id, tenant_id, created_at):
+    // the table holds `token_hash`, which no purge needs. The table-level matrix
+    // therefore lists DELETE only.
+    expect(WORKER_ROLE_GRANTS.awcms_invitations).toEqual(["DELETE"]);
+    expect(WORKER_COLUMN_GRANTS.awcms_invitations?.SELECT).toEqual([
+      "id",
+      "tenant_id",
+      "created_at"
+    ]);
   });
 
   test("the worker gets no INSERT and no UPDATE on the table", () => {
