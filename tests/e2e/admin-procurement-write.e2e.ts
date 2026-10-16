@@ -28,6 +28,34 @@ const secret = `TAX-${run}-123456789`;
 
 test.describe.configure({ mode: "serial" });
 
+/**
+ * Run `act` (which submits a form the page saves with `mutateAndReload`) and
+ * return only once the page's OWN follow-up reload has produced a fresh document.
+ *
+ * `waitForResponse` is not enough, and neither is `waitForLoadState("load")`
+ * straight after it: the client calls `window.location.reload()` AFTER the
+ * response lands, so at that instant the document is still the old, already
+ * loaded one. `"load"` resolves at once, and the next `goto` (or an assertion
+ * made on the stale DOM, or a `fill` the reload then wipes) races the reload.
+ * Playwright reports "Navigation … is interrupted by another navigation" (#1052).
+ *
+ * The marker lives on `window`, so it exists exactly until the reload replaces
+ * the document: its absence is the proof that the reload happened.
+ */
+async function actAndAwaitReload(
+  page: import("@playwright/test").Page,
+  act: () => Promise<void>
+): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __preReload?: boolean }).__preReload = true;
+  });
+  await act();
+  await page.waitForFunction(
+    () => !(window as unknown as { __preReload?: boolean }).__preReload
+  );
+  await page.waitForLoadState("load");
+}
+
 async function fillLine(
   page: import("@playwright/test").Page,
   cost: string
@@ -257,14 +285,15 @@ test.describe("procurement screen (owner, writes)", () => {
   test("sets and clears the approval threshold", async ({ page }) => {
     await page.goto("/admin/procurement?view=policy");
     await page.locator("#policy-threshold").fill("1000000");
-    const saved = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/v1/procurement/policy") &&
-        response.request().method() === "PUT"
-    );
-    await page.locator("#policy-submit").click();
-    expect((await saved).status()).toBe(200);
-    await page.waitForLoadState("load");
+    await actAndAwaitReload(page, async () => {
+      const saved = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v1/procurement/policy") &&
+          response.request().method() === "PUT"
+      );
+      await page.locator("#policy-submit").click();
+      expect((await saved).status()).toBe(200);
+    });
     await expect(page.locator("#procurement-policy-readout")).toHaveAttribute(
       "data-threshold",
       "1000000"
@@ -272,14 +301,15 @@ test.describe("procurement screen (owner, writes)", () => {
 
     // Leave the shared tenant as it was found: approval off.
     await page.locator("#policy-threshold").fill("");
-    const cleared = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/v1/procurement/policy") &&
-        response.request().method() === "PUT"
-    );
-    await page.locator("#policy-submit").click();
-    expect((await cleared).status()).toBe(200);
-    await page.waitForLoadState("load");
+    await actAndAwaitReload(page, async () => {
+      const cleared = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v1/procurement/policy") &&
+          response.request().method() === "PUT"
+      );
+      await page.locator("#policy-submit").click();
+      expect((await cleared).status()).toBe(200);
+    });
     await expect(page.locator("#procurement-policy-readout")).toHaveAttribute(
       "data-threshold",
       ""
@@ -294,16 +324,17 @@ test.describe("procurement screen (owner, writes)", () => {
       .first()
       .click();
     await page.locator("#supplier-delete").click();
-    // The client reloads on success; let that reload settle before navigating
-    // away, or the goto aborts it.
-    const deleted = page.waitForResponse(
-      (response) =>
-        response.url().includes("/api/v1/procurement/suppliers/") &&
-        response.request().method() === "DELETE"
-    );
-    await page.locator("#confirm-dialog-confirm").click();
-    expect((await deleted).status()).toBe(200);
-    await page.waitForLoadState("load");
+    // The client reloads on success; let that reload land before navigating
+    // away, or the goto is interrupted by it.
+    await actAndAwaitReload(page, async () => {
+      const deleted = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v1/procurement/suppliers/") &&
+          response.request().method() === "DELETE"
+      );
+      await page.locator("#confirm-dialog-confirm").click();
+      expect((await deleted).status()).toBe(200);
+    });
 
     await page.goto("/admin/procurement?view=suppliers&includeDeleted=1");
     const row = page.locator("#procurement-suppliers-table tbody tr", {

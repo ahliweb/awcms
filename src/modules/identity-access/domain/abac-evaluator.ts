@@ -253,7 +253,9 @@ function evaluateLeaf(
         const held = attr.value as readonly string[];
         member = held.some((element) => rhs.includes(element));
       } else {
-        member = rhs.includes(attr.value);
+        member = rhs.some((element) =>
+          scalarEquals(attr.category, attr.value, element)
+        );
       }
       return op === "in" ? member : !member;
     }
