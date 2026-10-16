@@ -501,9 +501,12 @@ export async function addUserGroupMember(
     // more existence check tells them apart without widening what a caller can
     // learn: they already know the group exists (they were not 404'd above).
     const existing = (await tx`
-      SELECT 1 FROM awcms_user_group_members
-      WHERE tenant_id = ${tenantId} AND user_group_id = ${input.userGroupId}
-        AND tenant_user_id = ${input.tenantUserId}
+      SELECT 1 FROM awcms_user_group_members m
+      JOIN awcms_user_groups g
+        ON g.tenant_id = m.tenant_id AND g.id = m.user_group_id
+      WHERE m.tenant_id = ${tenantId} AND m.user_group_id = ${input.userGroupId}
+        AND m.tenant_user_id = ${input.tenantUserId}
+        AND g.deleted_at IS NULL
     `) as unknown[];
 
     if (existing.length === 0) throw new GroupMembershipTargetNotFoundError();
@@ -553,7 +556,7 @@ export async function removeUserGroupMember(
     tenantId,
     actorTenantUserId,
     moduleKey: AUDIT_MODULE_KEY,
-    action: "assign",
+    action: "revoke",
     resourceType: "user_group",
     resourceId: input.userGroupId,
     severity: "warning",
