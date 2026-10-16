@@ -10,6 +10,7 @@ import {
   asUuid,
   badId
 } from "../../../../../modules/hr-workforce/application/hr-workforce-route-support";
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import { HR_WORKFORCE_GUARDS } from "../../../../../modules/hr-workforce/domain/hr-workforce-permissions";
 
 type IdPrepared = { id: string };
@@ -59,7 +60,7 @@ export const GET = defineTenantRoute<IdPrepared>({
     };
   },
   authorize: HR_WORKFORCE_GUARDS.corrections.read,
-  handler: async ({ tx, tenantId, prepared, auth, tokenHash, now }) => {
+  handler: async ({ tx, tenantId, prepared, auth, tokenHash, now, locals }) => {
     const tenantUserId = auth.context.tenantUserId;
     const facts = await correctionAccessFacts(
       tx,
@@ -78,9 +79,9 @@ export const GET = defineTenantRoute<IdPrepared>({
 
     // The reason is read only for the requester, an assignee, or a caller whose
     // ROLES grant `corrections.read` (asked without the ownership basis).
-    const includeReason =
-      facts.requestedBy === tenantUserId ||
-      facts.isAssignee ||
+    const ownReason = facts.requestedBy === tenantUserId || facts.isAssignee;
+    const roleGrant =
+      !ownReason &&
       (
         await authorizeInTransaction(
           tx,
@@ -90,6 +91,23 @@ export const GET = defineTenantRoute<IdPrepared>({
           HR_WORKFORCE_GUARDS.corrections.read
         )
       ).allowed;
+    const includeReason = ownReason || roleGrant;
+
+    // PS-18 / Issue #1083 M-1: the free-text reason is sensitive (health,
+    // family). Reading it through the ROLE grant is recorded (the correction's
+    // employment id, never the text); the requester's and an assignee's own
+    // read is not.
+    if (roleGrant) {
+      await recordSensitiveRead(tx, {
+        tenantId,
+        actorTenantUserId: tenantUserId,
+        permission: "hr_workforce.corrections.read",
+        mode: "role_grant",
+        itemCount: 1,
+        resourceIds: [facts.employmentId],
+        correlationId: locals.correlationId
+      });
+    }
 
     const correction = await getCorrection(tx, tenantId, prepared.id, {
       includeReason

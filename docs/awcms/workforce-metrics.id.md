@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](workforce-metrics.md)
 
-<!-- i18n-source-hash: sha256:79e6731516fb0835ecc87d9daca4e9e576c36fd90dd482ac0779aacdcef77232 -->
+<!-- i18n-source-hash: sha256:c192ae84767dd184b45b2141e6b7532266789a83bc57a8143385d6ad529839fb -->
 
 # Metrik tenaga kerja — fakta kehadiran, jam kerja, cakupan shift, dan produktivitas
 
@@ -170,8 +170,11 @@ ditolak.
 
 **Aturan.** Agregat per office yang dihitung dari **kurang dari 5 karyawan
 berkontribusi** ditahan seluruhnya: grup dikembalikan dengan `suppressed: true`
-dan `reason: "small_group"` dan **tanpa angka** — bukan fakta, dan bukan jumlah
-kontributor. Grup yang ditampilkan hanya melaporkan sebuah **band** (`"5-9"`,
+dan `reason: "small_group"` dan **tanpa angka** — bukan fakta, bukan jumlah
+kontributor, dan **bukan `officeId`** (Issue #1083, L2): pemegang `.analyze`
+saja tidak boleh tahu office mana yang ada atau mana yang di bawah ambang. Grup
+yang ditahan didaftar setelah grup yang tampil, semuanya serupa, sehingga office
+maupun posisinya dalam daftar tidak terbuka. Grup yang ditampilkan hanya melaporkan sebuah **band** (`"5-9"`,
 `"10-19"`, `"20+"`), tidak pernah jumlah persisnya, sehingga menambah atau
 mengurangi satu orang tidak menggeser angka yang tampil.
 
@@ -204,16 +207,42 @@ bernilai bila agregat tidak bisa dipersempit sampai satu orang.
 
 **Risiko sisa (disebut, tidak diselesaikan).**
 
-1. Perubahan keanggotaan antar bucket terlihat dengan sendirinya: bila grup tampil
+0. **Office yang ditahan dapat disimpulkan lewat selisih himpunan (Issue #1083,
+   L-3).** Grup yang ditahan tidak lagi menyebut office-nya, tetapi grup yang
+   tampil tetap menyebutnya. Pemanggil yang tahu daftar office tenant dari
+   jalur lain mengetahui mana yang tidak ada di respons, jadi ditahan.
+   Menutupnya berarti menampilkan setiap office sebagai band atau menyembunyikan
+   himpunan yang tampil juga; yang dilindungi penahanan bukan keberadaan
+   office, melainkan angka kohort kecil.
+
+1. **Menggabungkan izin mempersempit agregat (Issue #1083, M1).** Pemanggil yang
+   juga tahu sebagian anggota grup kecil — sebagai supervisor sebagian dari
+   mereka (`?reports=true`), atau karena dapat menanam atau melihat shift yang
+   membuat seseorang menjadi kontributor (`shifts.create`, `shifts.publish`,
+   lihat perbaikan H2 di #953) — dapat mengurangkan yang ia ketahui dari angka
+   yang tampil dan mengetahui sisanya. **Aturan bagi tenant: jangan beri
+   `.analyze` kepada orang yang menyupervisi, atau menjadwalkan, orang-orang
+   yang sama.** **Mengapa didokumentasikan dan tidak ditegakkan:** aturan SoD
+   platform (`ModuleDescriptor.sodRules`) diperiksa di chokepoint hanya untuk
+   aksi high-risk dan berupa pasangan izin. `.analyze` bukan high-risk,
+   "menyupervisi office yang sama" adalah fakta tautan manajer dan bukan izin,
+   dan peran `owner` setiap tenant memegang semua izin, sehingga aturan atas
+   `analyze` + `shifts.publish` akan menolak publish milik owner. Karena itu
+   aturan ini keputusan desain peran tenant (dan kelak kondisi ABAC pada tautan
+   manajer), bukan bawaan. Jejak audit menyempitkan celahnya: pembacaan agregat
+   dan setiap pembacaan seluruh karyawan meninggalkan baris
+   `sensitive_read.workforce_metrics` (bagian 9).
+
+2. Perubahan keanggotaan antar bucket terlihat dengan sendirinya: bila grup tampil
    di minggu 12 dan tidak di minggu 13, seseorang keluar atau turun di bawah
    lantai.
-2. Grup tepat lima dengan empat angka identik membuka angka kelima bagi yang
+3. Grup tepat lima dengan empat angka identik membuka angka kelima bagi yang
    mengenal keempatnya.
-3. Bucket yang sudah tutup masih bisa berubah sedikit sesudahnya: replay kiosk
+4. Bucket yang sudah tutup masih bisa berubah sedikit sesudahnya: replay kiosk
    offline (sampai tujuh hari terlambat) atau koreksi yang disetujui dapat
    mengubahnya. Dua pembacaan bucket sebelum dan sesudah perubahan itu berbeda
    sebesar catatan terlambat tersebut.
-4. Projection volume event seluruh-tenant hanya untuk HR karena di tenant satu
+5. Projection volume event seluruh-tenant hanya untuk HR karena di tenant satu
    karyawan penghitung apa pun menjadi bersifat pribadi.
 
 ## 7. Tinjauan tata kelola sebelum pemakaian yang berdampak
@@ -281,8 +310,34 @@ adalah keputusan pemberi kerja (ADR-0132 bagian 13.2).
 - Tenant di atas 10.000 employment mendapat `422 WORKFORCE_METRICS_SCOPE_TOO_LARGE`
   di endpoint agregat (diputuskan dari COUNT sebelum halaman apa pun dibaca); agregat yang dipecah atau dihitung-di-muka adalah tindak
   lanjut.
-- Pembacaan tidak diaudit (pembacaan sendiri dan oleh supervisor bersifat rutin,
-  seperti daftar kehadiran); decision log chokepoint mencatat tiap otorisasi.
+- **Audit pembacaan (Issue #1083, M3, M-2).** Pembacaan SELURUH karyawan atas
+  fakta tingkat-orang (`employees` tanpa `mine` maupun `reports`) DAN pembacaan
+  `reports` lewat rantai manajer (hingga sepuluh tingkat pada daftar kehadiran,
+  sehingga direktur tanpa izin HR dapat membaca semua orang) adalah sensitive
+  read, dengan atribut `mode` (`all` atau `reports`): satu baris audit berjenis `sensitive_read.workforce_metrics` memuat id
+  employment dan jumlah, tidak pernah angka, digabung per aktor dalam jendela
+  lima menit (baris `warning` tambahan pada kelipatan 10/100/1000 pembacaan atau
+  item dalam jendela). Rute agregat mencatat izin yang benar-benar
+  memberi akses: `.read` dengan jenis yang sama (jumlah grup, tanpa id),
+  `.analyze` dengan `sensitive_read.workforce_metrics_aggregate` (satu jenis
+  hanya untuk satu kebijakan). Daftar kehadiran dicakup dengan cara sama
+  (`sensitive_read.attendance_events`), begitu pula koreksi kehadiran
+  (`sensitive_read.attendance_corrections`): DAFTAR-nya (jam usulan semua
+  karyawan) pada mode all dan reports, dan satu catatan hanya bila alasan
+  bebasnya diperoleh dari grant peran `corrections.read`, bukan untuk pemohon
+  atau assignee persetujuan. Hanya pembacaan DIRI SENDIRI yang tidak dicatat
+  (decision log tetap mencatat tiap otorisasi). Jendela berlaku per aktor dan
+  jenis, sehingga pembacaan `reports` yang id-nya sudah diaudit di jendela itu
+  sebagai `all` tidak menambah baris. Pembacaan bukti lokasi mempertahankan
+  barisnya sendiri (`hr_workforce.location_evidence.read`), yang kini memuat id
+  employment pada halaman itu.
+  Izin baca `hr_workforce` lain diklasifikasi, beserta alasan, di
+  `NOT_SENSITIVE_READS` (`src/modules/_shared/sensitive-reads.ts`) dan
+  `hr_workforce` ada di `SENSITIVE_READ_MODULE_KEYS`, sehingga izin baca baru
+  modul ini belum terklasifikasi (dan `bun run sensitive-reads:check` merah)
+  sampai ada yang memutuskan.
+- Layar untuk karyawan atas `?mine=true` (jalur transparansi dan keberatan)
+  tidak dibangun di sini; itu milik #952.
 - Tenant yang sudah ada harus diberi dua izin baru
   (`bun run identity-access:permissions:backfill`), seperti setiap migrasi seed
   izin.

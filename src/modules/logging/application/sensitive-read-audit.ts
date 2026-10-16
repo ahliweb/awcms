@@ -85,6 +85,13 @@ export type SensitiveReadInput = {
   /** Ids (UUIDs) of the records the read covered. Capped in the row. */
   resourceIds?: readonly string[];
   correlationId?: string;
+  /**
+   * HOW the reader reached the records: `all` (a permission over everyone),
+   * `reports` (the manager chain), `role_grant`. Recorded as an attribute so a
+   * trail can tell an HR dump from a supervisor's look at their reports (Issue
+   * #1083, M-2). A short lower-case token, never free text.
+   */
+  mode?: string;
   /** Injectable clock for tests. */
   now?: Date;
 };
@@ -133,6 +140,10 @@ function assertInput(input: SensitiveReadInput): {
     );
   }
 
+  if (input.mode !== undefined && !/^[a-z_]{1,24}$/.test(input.mode)) {
+    throw new Error("sensitive read: mode must be a short lower-case token.");
+  }
+
   const resourceIds = [...(input.resourceIds ?? [])];
 
   for (const id of resourceIds) {
@@ -161,6 +172,7 @@ function auditAttributes(
   return {
     permission: input.permission,
     kind: policy.kind,
+    ...(input.mode ? { mode: input.mode } : {}),
     reason,
     callItemCount: itemCount,
     // Every id this row is responsible for, complete (the rows of one call are

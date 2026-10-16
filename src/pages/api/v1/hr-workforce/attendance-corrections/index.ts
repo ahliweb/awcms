@@ -16,6 +16,7 @@ import {
   readValidatedBody,
   runIdempotent
 } from "../../../../../modules/hr-workforce/application/hr-workforce-route-support";
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import { HR_WORKFORCE_GUARDS } from "../../../../../modules/hr-workforce/domain/hr-workforce-permissions";
 import {
   isCorrectionStatus,
@@ -102,7 +103,7 @@ export const GET = defineTenantRoute<ListPrepared>({
       : "supervisor lists their reports' attendance corrections"
   }),
   authorize: HR_WORKFORCE_GUARDS.corrections.read,
-  handler: async ({ tx, tenantId, prepared, auth }) => {
+  handler: async ({ tx, tenantId, prepared, auth, locals }) => {
     const tenantUserId = auth.context.tenantUserId;
     const basis: ReadBasis = prepared.mine
       ? { mode: "mine", tenantUserId }
@@ -121,15 +122,32 @@ export const GET = defineTenantRoute<ListPrepared>({
       );
     }
 
-    return ok(
-      await listCorrections(
-        tx,
-        tenantId,
-        basis,
-        { employmentId: prepared.employmentId, status: prepared.status },
-        prepared.cursor ?? undefined
-      )
+    const page = await listCorrections(
+      tx,
+      tenantId,
+      basis,
+      { employmentId: prepared.employmentId, status: prepared.status },
+      prepared.cursor ?? undefined
     );
+
+    // PS-18 / Issue #1083 M-1: the list carries every employee's proposed clock
+    // times. Recorded for the permission AND the manager chain (mode); only the
+    // employee's own read is not. Employment ids and a count, never a time.
+    if (basis.mode !== "mine") {
+      await recordSensitiveRead(tx, {
+        tenantId,
+        actorTenantUserId: tenantUserId,
+        permission: "hr_workforce.corrections.read",
+        mode: basis.mode,
+        itemCount: page.corrections.length,
+        resourceIds: [
+          ...new Set(page.corrections.map((entry) => entry.employmentId))
+        ],
+        correlationId: locals.correlationId
+      });
+    }
+
+    return ok(page);
   }
 });
 

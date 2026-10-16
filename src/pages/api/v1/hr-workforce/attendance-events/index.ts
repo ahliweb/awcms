@@ -9,6 +9,7 @@ import {
   recordEvent,
   type ReadBasis
 } from "../../../../../modules/hr-workforce/application/hr-attendance-directory";
+import { recordSensitiveRead } from "../../../../../modules/logging/application/sensitive-read-audit";
 import {
   captureLocationEvidence,
   readEvidenceVerdict
@@ -137,7 +138,7 @@ export const GET = defineTenantRoute<ListPrepared>({
       : "supervisor lists their reports' attendance"
   }),
   authorize: HR_WORKFORCE_GUARDS.attendance.read,
-  handler: async ({ tx, tenantId, prepared, auth }) => {
+  handler: async ({ tx, tenantId, prepared, auth, locals }) => {
     const tenantUserId = auth.context.tenantUserId;
     const basis: ReadBasis = prepared.mine
       ? { mode: "mine", tenantUserId }
@@ -156,20 +157,38 @@ export const GET = defineTenantRoute<ListPrepared>({
       );
     }
 
-    return ok(
-      await listEvents(
-        tx,
-        tenantId,
-        basis,
-        {
-          employmentId: prepared.employmentId,
-          from: prepared.from,
-          to: prepared.to,
-          effectiveOnly: prepared.effectiveOnly
-        },
-        prepared.cursor ?? undefined
-      )
+    const page = await listEvents(
+      tx,
+      tenantId,
+      basis,
+      {
+        employmentId: prepared.employmentId,
+        from: prepared.from,
+        to: prepared.to,
+        effectiveOnly: prepared.effectiveOnly
+      },
+      prepared.cursor ?? undefined
     );
+
+    // PS-18 / Issue #1083: an all-employee read of clock-in and clock-out times
+    // is recorded (employment ids and a count only, coalesced), whether it
+    // came from the permission or from the manager chain (mode "reports", up to
+    // ten levels: Issue #1083 M-2). Only the employee's own read is not.
+    if (basis.mode !== "mine") {
+      await recordSensitiveRead(tx, {
+        mode: basis.mode,
+        tenantId,
+        actorTenantUserId: tenantUserId,
+        permission: "hr_workforce.attendance.read",
+        itemCount: page.events.length,
+        resourceIds: [
+          ...new Set(page.events.map((event) => event.employmentId))
+        ],
+        correlationId: locals.correlationId
+      });
+    }
+
+    return ok(page);
   }
 });
 

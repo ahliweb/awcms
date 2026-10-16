@@ -1386,6 +1386,116 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
     });
   });
 
+  describe("sensitive-read audit (Issue #1083)", () => {
+    type AuditRow = {
+      action: string;
+      actor_tenant_user_id: string;
+      attributes: Record<string, unknown> | string;
+    };
+
+    async function auditRows(kind: string): Promise<AuditRow[]> {
+      return (await admin()`
+        SELECT action, actor_tenant_user_id, attributes
+        FROM awcms_audit_events
+        WHERE tenant_id = ${env.tenantId} AND action = ${kind}
+        ORDER BY created_at, id
+      `) as AuditRow[];
+    }
+
+    const attrs = (row: AuditRow) =>
+      (typeof row.attributes === "string"
+        ? JSON.parse(row.attributes)
+        : row.attributes) as Record<string, unknown>;
+
+    test("M-2: an all-employee list and a manager-chain (reports) list are recorded with their mode; mine is not", async () => {
+      if (!handlerReady) return;
+      const hr = await seedUser(env.tenantId, "hr-audit", [
+        "hr_workforce.attendance.read"
+      ]);
+      // A director with NO permission at all, who reads through the chain.
+      const boss = await employee("boss-audit", []);
+      const report = await employee(
+        "rep-audit",
+        ["hr_workforce.clock.create"],
+        boss.employmentId
+      );
+      await clock(report.employmentId, {}, report.token);
+
+      expect((await events("mine=true", report.token)).status).toBe(200);
+      expect(await auditRows("sensitive_read.attendance_events")).toHaveLength(
+        0
+      );
+
+      expect((await events("", hr.token)).status).toBe(200);
+      expect((await events("reports=true", boss.token)).status).toBe(200);
+
+      const rows = await auditRows("sensitive_read.attendance_events");
+      const byActor = new Map(
+        rows.map((row) => [row.actor_tenant_user_id, row])
+      );
+
+      expect(attrs(byActor.get(hr.tenantUserId)!).mode).toBe("all");
+      expect(attrs(byActor.get(boss.tenantUserId)!).mode).toBe("reports");
+      expect(attrs(byActor.get(boss.tenantUserId)!).resourceIds).toEqual([
+        report.employmentId
+      ]);
+    });
+
+    test("M-1: the corrections list is recorded; the single record only when the reason came from the role grant", async () => {
+      if (!handlerReady) return;
+      const approver = await seedUser(env.tenantId, "approver-a", [
+        WORKFLOW_DECIDE
+      ]);
+      await publishWorkflow([approver.tenantUserId]);
+      const hr = await seedUser(env.tenantId, "hr-corr", [
+        "hr_workforce.corrections.read"
+      ]);
+      const worker = await employee("worker-a", [
+        "hr_workforce.clock.create",
+        "hr_workforce.corrections.create"
+      ]);
+      const created = (
+        await requestCorrection(
+          { employmentId: worker.employmentId },
+          worker.token
+        )
+      ).body.data!;
+
+      // The requester reads their own correction: nothing recorded.
+      expect((await readCorrection(created.id, worker.token)).status).toBe(200);
+      expect(
+        await auditRows("sensitive_read.attendance_corrections")
+      ).toHaveLength(0);
+
+      // HR lists everyone's, then reads the record with its reason.
+      const list = await call(listCorrections, {
+        path: "/api/v1/hr-workforce/attendance-corrections",
+        token: hr.token
+      });
+
+      expect(list.status).toBe(200);
+
+      const single = await readCorrection(created.id, hr.token);
+
+      expect(single.status).toBe(200);
+      expect(single.body.data!.reason).toBe(REASON);
+
+      const rows = await auditRows("sensitive_read.attendance_corrections");
+
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(
+        rows.every((row) => row.actor_tenant_user_id === hr.tenantUserId)
+      ).toBe(true);
+      expect(JSON.stringify(rows)).not.toContain("SENTINEL-reason");
+      expect(rows.map((row) => attrs(row).mode)).toContain("all");
+      expect(
+        rows.some((row) =>
+          (attrs(row).resourceIds as string[]).includes(worker.employmentId)
+        )
+      ).toBe(true);
+    });
+  });
+
   describe("corrections", () => {
     async function setup() {
       const approver = await seedUser(env.tenantId, "approver", [

@@ -76,7 +76,10 @@ export const MAX_COALESCE_WINDOW_SECONDS = 86_400;
  */
 export const SENSITIVE_READ_MODULE_KEYS: readonly string[] = [
   "hr_payroll",
-  "hr_commission"
+  "hr_commission",
+  // Issue #1083 (M3 of the #953 review): HR reading every employee's time and
+  // productivity facts is an event somebody may later need to explain.
+  "hr_workforce"
 ];
 
 /**
@@ -148,6 +151,43 @@ export const SENSITIVE_READ_POLICIES: readonly SensitiveReadPolicy[] = [
       "Commission accruals are one employee's earnings: the same small-cohort risk as salary (owner decision on the #978 audit). Lists and single reads alike."
   },
   {
+    permission: "hr_workforce.workforce_metrics.read",
+    kind: "sensitive_read.workforce_metrics",
+    resourceType: "workforce_metrics",
+    coalesceWindowSeconds: 300,
+    severity: "info",
+    rationale:
+      "Every employee's attendance, hours and worked-to-scheduled ratio. Recorded in the ALL-employee mode and in the manager-chain `reports` mode (attribute `mode`); only the employee's own read is not recorded (the manager chain can make a director with no HR permission a reader of everyone: Issue #1083 M-2). The row carries employment ids and a count, never a figure. The per-office aggregate route is audited under the same kind with its group count and no ids."
+  },
+  {
+    permission: "hr_workforce.attendance.read",
+    kind: "sensitive_read.attendance_events",
+    // The recorded ids are EMPLOYMENT ids (Issue #1083 L-4).
+    resourceType: "hr_employment",
+    coalesceWindowSeconds: 300,
+    severity: "info",
+    rationale:
+      "Every employee's clock-in and clock-out times. Recorded in the ALL-employee mode and in the manager-chain `reports` mode (up to ten levels, attribute `mode`); only the employee's own read is not. Employment ids and a count, never a time."
+  },
+  {
+    permission: "hr_workforce.workforce_metrics.analyze",
+    kind: "sensitive_read.workforce_metrics_aggregate",
+    resourceType: "workforce_metrics",
+    coalesceWindowSeconds: 300,
+    severity: "info",
+    rationale:
+      "The per-office aggregate read by a caller who holds `.analyze` and not `.read`: its own kind (a kind names one policy), so the trail names the permission that actually granted (Issue #1083 L-1). Group count, no ids."
+  },
+  {
+    permission: "hr_workforce.corrections.read",
+    kind: "sensitive_read.attendance_corrections",
+    resourceType: "hr_employment",
+    coalesceWindowSeconds: 300,
+    severity: "info",
+    rationale:
+      "Attendance corrections: the LIST carries every employee's proposed clock times, and the single-record route carries the free-text reason (health, family) to a holder of the permission. The list is recorded in the all and reports modes; the single record only when the reason came from the role grant (not for the requester or an approval assignee). Employment ids and a count, never a time or a reason (Issue #1083 M-1)."
+  },
+  {
     permission: "hr_commission.*.export",
     kind: "sensitive_read.commission_export",
     resourceType: "commission_export",
@@ -191,6 +231,16 @@ export const SENSITIVE_READ_POLICIES: readonly SensitiveReadPolicy[] = [
  * the gate reports an entry whose permission is no longer declared as stale.
  */
 export const NOT_SENSITIVE_READS: Readonly<Record<string, string>> = {
+  "hr_workforce.employments.read":
+    "the employment directory: who works where, under whom and since when, and the employment STATUS (active, suspended, on_leave), the terminated_on date and the terms history (office, manager, title, type). That is organisational fact an HR or scheduling role needs to do the job, not a time, attendance, productivity, location or pay figure; an employee reads their own through an ownership grant. Recorded as a decision for review, not as a claim that nothing sensitive is in it (Issue #1083 L-4).",
+  "hr_workforce.shifts.read":
+    "the published roster: a planned interval per employment, shared with the team by design. A plan is not an outcome; nothing about attendance. (Issue #1083)",
+  "hr_workforce.templates.read":
+    "shift patterns (start, duration, break); no person at all. (Issue #1083)",
+  "hr_workforce.attendance_evidence.read":
+    "location evidence has its own purpose-bound audit row written by auditEvidenceRead on every all-employee read (ADR-0138), and since Issue #1083 L-2 that row carries the employment ids the page covered, so a second generic row would duplicate it.",
+  "hr_workforce.settings.read":
+    "tenant clock-skew and evidence settings; no person, no time. (Issue #1083)",
   "hr_commission.rules.read":
     "published commission rules (rates, tiers, windows); the same for every employee, no person and no amount earned",
   "hr_payroll.payout_accounts.reveal":
