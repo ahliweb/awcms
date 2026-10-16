@@ -11,6 +11,7 @@ import {
   type RedirectUriRejection
 } from "../domain/session-handoff";
 import { createSessionWithAssurance } from "./mfa-session-assurance";
+import { sessionCredentialCurrent } from "./session-credential-epoch";
 import type { SessionAssuranceLevel } from "../domain/mfa-policy";
 
 /**
@@ -319,14 +320,25 @@ export async function redeemHandoffCode(
     WHERE tenant_id = ${tenantId} AND id = ${row!.id}
       AND redeemed_at IS NULL
       AND expires_at > ${input.now}
+      -- The issuing session must still be live and credential-current: a code
+      -- minted before logout or a password reset must not outlive it.
+      AND EXISTS (
+        SELECT 1 FROM awcms_sessions s
+        WHERE s.tenant_id = ${tenantId}
+          AND s.id = awcms_session_handoff_codes.issued_by_session_id
+          AND s.revoked_at IS NULL
+          AND s.expires_at > ${input.now}
+          AND ${sessionCredentialCurrent(tx)}
+      )
     RETURNING identity_id, assurance_level
   `) as { identity_id: string; assurance_level: SessionAssuranceLevel }[];
 
   const won = claimed[0];
 
   if (!won) {
-    // Lost the race, or the code expired between the read and the claim. Both
-    // are "already redeemed" to the caller.
+    // Lost the race, the code expired between the read and the claim, or the
+    // issuing session is no longer live/credential-current. All are "already
+    // redeemed" to the caller (the route collapses every reason anyway).
     return { ok: false, reason: "already_redeemed" };
   }
 
