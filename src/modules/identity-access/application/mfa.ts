@@ -737,6 +737,13 @@ async function verifyFactorWithLockout(
   // cross-IP brute force this lockout exists to close (auditor HIGH-1 / F4).
   const current = await factorStore.lockFactorForVerify(tx, factor.id);
 
+  // `null` = the factor was disabled between the unlocked read and the lock.
+  // The stale snapshot must not verify; this is not a guess, so no failure is
+  // counted.
+  if (!current) {
+    return "failed";
+  }
+
   if (
     current?.locked_until &&
     new Date(current.locked_until).getTime() > now.getTime()
