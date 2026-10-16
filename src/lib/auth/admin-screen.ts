@@ -60,8 +60,10 @@ import type { WorkClass } from "../database/work-class";
 import { getDatabaseClient } from "../database/client";
 import { withTenantOrThrow } from "../database/tenant-context";
 import {
+  assertOwnershipGrantAppliesToRead,
   authorizeInTransaction,
-  type AuthorizeResult
+  type AuthorizeResult,
+  type OwnershipGrant
 } from "../../modules/identity-access/application/access-guard";
 import type { AccessRequest } from "../../modules/identity-access/domain/access-control";
 import { MFA_ENROLMENT_REQUIRED_CODE } from "../../modules/identity-access/domain/mfa-enrolment-refusal";
@@ -103,7 +105,10 @@ export type AdminScreenLoadContext = {
    * is still the authority — but "UX-only" is no longer an excuse for the
    * affordance to be decided by a different rule than the endpoint uses.
    */
-  can: (request: AccessRequest) => Promise<boolean>;
+  can: (
+    request: AccessRequest,
+    options?: { ownershipGrant?: OwnershipGrant }
+  ) => Promise<boolean>;
 };
 
 export type AdminScreenOutcome<TData> =
@@ -291,14 +296,23 @@ export async function loadAdminScreen<TData>(
 
         const { auth, entry } = outcome;
 
-        const can = async (request: AccessRequest): Promise<boolean> => {
+        const can = async (
+          request: AccessRequest,
+          options?: { ownershipGrant?: OwnershipGrant }
+        ): Promise<boolean> => {
+          // A screen hands `can` to every page generically, so an ownership
+          // grant here may only widen a READ guard (Issue #952 re-audit, N-1).
+          assertOwnershipGrantAppliesToRead(request, options?.ownershipGrant);
+
           const secondary = await authorizeInTransaction(
             tx,
             config.ssr.tenantId,
             config.ssr.tokenHash,
             now,
             request,
-            authorizeOptions
+            options?.ownershipGrant
+              ? { ...authorizeOptions, ownershipGrant: options.ownershipGrant }
+              : authorizeOptions
           );
 
           return secondary.allowed;

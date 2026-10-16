@@ -2189,6 +2189,70 @@ paths:
                           $ref: "#/components/schemas/HrWorkforceGroupFigure"
                   meta:
                     type: object
+  /api/v1/hr-workforce/me:
+    get:
+      operationId: hrWorkforceMeGet
+      tags:
+        - HR Workforce
+      summary: The caller's own employment summary
+      description: "Gated by `hr_workforce.self_service.read` (default-deny). Returns ONLY the employments linked to the caller's login (the persisted link, computed in the query; no parameter names another person) and whether anyone reports to them directly, so the employee and supervisor screens (Issue #952) know which employment a correction request is for and whether to offer the team view. No profile id, name or contact is returned. The permission is a screen gate: the data of the self-service reads stays bound to the login link and the manager chain through the ownership grants of the attendance, shift and metrics routes. Never cached. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The caller's own employments and the supervisor flag.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      employments:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            employeeNo:
+                              type: string
+                            hiredOn:
+                              type: string
+                              format: date
+                            terminatedOn:
+                              type: string
+                              format: date
+                              nullable: true
+                            currentTerm:
+                              type: object
+                              nullable: true
+                              properties:
+                                officeId:
+                                  type: string
+                                  format: uuid
+                                  nullable: true
+                                jobTitle:
+                                  type: string
+                                  nullable: true
+                                employmentType:
+                                  type: string
+                                status:
+                                  type: string
+                      hasDirectReports:
+                        type: boolean
+                  meta:
+                    type: object
 components:
   schemas:
     HrWorkforceFacts:

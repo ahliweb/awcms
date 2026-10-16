@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:199d6d7be6e4fe69806b035b3eda7d1cb037090cc3ab57e613624b8c0f297f90 -->
+<!-- i18n-source-hash: sha256:b133fb3db3f1242ff9948ffba7c84d0a4135030df2ebdb7e3ffe8c53b024781d -->
 
 # `hr_commission`
 
@@ -22,8 +22,10 @@ Ini **bukan komisi afiliasi** (hr-payroll.md 6.4: penerimanya di sini selalu seb
 employment) dan **tidak membawa aturan negara atau yurisdiksi mana pun**: tenant
 menyusun aturannya sendiri.
 
-Status `experimental`: flag mati, belum ada layar admin, dan modul tidak
-mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.
+Status `active` sejak Issue #952: modul mendeklarasikan satu layar admin,
+`/admin/hr/my-commission`, tempat karyawan membaca akrual MILIKNYA sendiri (hanya
+baca; `GET /api/v1/hr-commission/my-accruals`, `docs/awcms/workforce-self-service.md`).
+Layar aturan dan pengelolaan buku besar masih hanya lewat API.
 
 ## Aturan yang membuatnya aman
 
@@ -286,7 +288,7 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes men
 
 ## Keterbatasan
 
-- Tanpa layar admin; `experimental`. Layar akrual (daftar, approve / release / void / pay) adalah tindak lanjut yang membuat modul `active`.
+- Hanya layar komisi milik karyawan yang ada (Issue #952); layar aturan dan layar akrual (daftar, approve / release / void / pay) adalah tindak lanjut.
 - Tenant yang sudah ada perlu `bun run identity-access:permissions:backfill` untuk
   menerima permission yang di-seed (keterbatasan yang dibawa setiap seed permission).
 - Draft hanya dapat diubah dengan mengganti seluruh field yang dapat diedit (`PUT`);

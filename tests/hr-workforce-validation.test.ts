@@ -200,14 +200,23 @@ describe("small validators", () => {
 });
 
 describe("the descriptor", () => {
-  test("is experimental (flag off) and depends only on tenant_admin, profile_identity and domain_event_runtime", () => {
-    expect(hrWorkforceModule.status).toBe("experimental");
+  test("is active (it declares its admin screens, Issue #952) and depends only on tenant_admin, profile_identity and domain_event_runtime", () => {
+    expect(hrWorkforceModule.status).toBe("active");
     expect([...hrWorkforceModule.dependencies].sort()).toEqual([
       "domain_event_runtime",
       "profile_identity",
       "tenant_admin"
     ]);
-    expect(hrWorkforceModule.navigation ?? []).toEqual([]);
+    // ADR-0021 criterion 1: an ACTIVE module declares a screen, and every entry
+    // is gated by a permission this module (or its sibling) declares.
+    expect(
+      (hrWorkforceModule.navigation ?? []).map((entry) => entry.path).sort()
+    ).toEqual([
+      "/admin/hr/my-metrics",
+      "/admin/hr/my-work",
+      "/admin/hr/team",
+      "/admin/hr/workforce"
+    ]);
   });
 
   test("every table is registered with data_lifecycle and the person tables with subjectData", () => {

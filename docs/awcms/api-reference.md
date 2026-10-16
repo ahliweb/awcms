@@ -12319,6 +12319,27 @@ ENABLING needs `hr_workforce.geolocation_evidence.configure` (403 otherwise) and
 | 409    | IDEMPOTENCY_CONFLICT, GEOLOCATION_DPIA_REQUIRED, GEOLOCATION_NOTICE_REQUIRED or GEOLOCATION_GEOFENCE_REQUIRED. | [`ApiError`](#standard-error-envelope) |
 | 422    | NOTICE_NOT_FOUND.                                                                                              | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/hr-workforce/me` — The caller's own employment summary
+
+- **operationId**: `hrWorkforceMeGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.self_service.read` (default-deny). Returns ONLY the employments linked to the caller's login (the persisted link, computed in the query; no parameter names another person) and whether anyone reports to them directly, so the employee and supervisor screens (Issue #952) know which employment a correction request is for and whether to offer the team view. No profile id, name or contact is returned. The permission is a screen gate: the data of the self-service reads stays bound to the login link and the manager chain through the ownership grants of the attendance, shift and metrics routes. Never cached. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                           | Schema                                 |
+| ------ | ----------------------------------------------------- | -------------------------------------- |
+| 200    | The caller's own employments and the supervisor flag. | object                                 |
+| 401    | Missing or invalid session.                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                           | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/hr-workforce/settings` — Read the workforce settings
 
 - **operationId**: `hrWorkforceSettingsGet`
@@ -14242,6 +14263,54 @@ Gated by `hr_commission.accruals.cancel` (high-risk). `pending` or `approved` ->
 | 403    | Forbidden, or SEGREGATION_OF_DUTIES.           | [`ApiError`](#standard-error-envelope) |
 | 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-commission/my-accruals` — List your own commission accruals
+
+- **operationId**: `hrCommissionMyAccrualsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.my_accruals.read` (default-deny; separate from `accruals.read`). The caller's OWN accruals only, newest first, keyset paginated (`cursor`), optionally filtered by `status`. There is no `employmentId` or person parameter: the query joins the live employment linked to the caller's login, so another person's rows cannot be requested. Read-only. The view omits the approver, the payer, the payment reference, the rule row id and the employment id. Amounts are decimal strings. An employee reading their own earnings is not an audited sensitive read; anyone else's go through `GET /accruals`, which is. Never cached. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                             | Description |
+| ------------------ | ------ | -------- | ---------------------------------------------------------------- | ----------- |
+| `status`           | query  | no       | [`HrCommissionAccrualStatus`](#schema-hrcommissionaccrualstatus) |             |
+| `cursor`           | query  | no       | string                                                           |             |
+| `X-Correlation-ID` | header | no       | string                                                           |             |
+
+**Responses**
+
+| Status | Description                          | Schema                                 |
+| ------ | ------------------------------------ | -------------------------------------- |
+| 200    | A page of the caller's own accruals. | object                                 |
+| 400    | Validation error.                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.          | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-commission/my-accruals/{id}` — Get one of your own commission accruals with its history
+
+- **operationId**: `hrCommissionMyAccrualGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.my_accruals.read`. An id that does not exist and an id that belongs to somebody else are the SAME 404 (`RESOURCE_NOT_FOUND`), so the route is not an existence oracle for another person's earnings. The transition history omits who moved the accrual. Never cached.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 200    | The caller's own accrual and its transition log. | object                                 |
+| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND (missing, or not yours).      | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/hr-commission/rules` — List commission rule versions
 

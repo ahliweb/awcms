@@ -239,8 +239,12 @@ export const NOT_SENSITIVE_READS: Readonly<Record<string, string>> = {
     "shift patterns (start, duration, break); no person at all. (Issue #1083)",
   "hr_workforce.attendance_evidence.read":
     "location evidence has its own purpose-bound audit row written by auditEvidenceRead on every all-employee read (ADR-0138), and since Issue #1083 L-2 that row carries the employment ids the page covered, so a second generic row would duplicate it.",
+  "hr_workforce.self_service.read":
+    "a screen gate and the caller's own employment summary (GET /hr-workforce/me joins only the employments linked to the caller's login). The data the screens show is read through attendance.read, corrections.read, workforce_metrics.read and shifts.read, each of which is checked per panel and, outside the employee's own basis, audited per read (Issue #952)",
   "hr_workforce.settings.read":
     "tenant clock-skew and evidence settings; no person, no time. (Issue #1083)",
+  "hr_commission.my_accruals.read":
+    "an employee reading their OWN accruals (Issue #952): the query joins the live employment linked to the caller's login, so no other person's row can be asked for, the view omits the approver, payer and payment reference, and there is no export. The owner-reads-own precedent of payslips.read: an employee looking at their own earnings is not an event to explain; anyone else's accruals go through accruals.read, which is audited",
   "hr_commission.rules.read":
     "published commission rules (rates, tiers, windows); the same for every employee, no person and no amount earned",
   "hr_payroll.payout_accounts.reveal":
@@ -389,7 +393,13 @@ export type PayrollReadFunctionImport = {
    * is not in `allowedImporters`.
    */
   auditExemptImporters?: Readonly<Record<string, string>>;
-  /** The functions of `functions` that a mutation calls; an exempt importer may import only these. */
+  /**
+   * The functions of `functions` that an audit-exempt importer may import (and
+   * only these: one import of anything else puts the audit back). For the
+   * ledger's entry they are the mutations' functions; for the own-only entry
+   * (Issue #952) they are the own-only readers, whose query is bound to the
+   * caller's login and can return no other person's row.
+   */
   writePathFunctions?: readonly string[];
 };
 
@@ -449,6 +459,29 @@ export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[]
       functions: ["createCommissionAccrualPort"],
       permission: "hr_commission.accruals.read",
       allowedImporters: []
+    },
+    {
+      // Issue #952: the OWN-ONLY readers behind /my-accruals and the employee's
+      // own-commission screen. The query joins the live employment linked to the
+      // caller's login, so there is no way to ask for another person's row.
+      source:
+        "src/modules/hr-commission/application/hr-commission-accrual-ledger.ts",
+      functions: ["listOwnAccruals", "getOwnAccrual"],
+      permission: "hr_commission.my_accruals.read",
+      allowedImporters: [
+        "src/pages/api/v1/hr-commission/my-accruals/index.ts",
+        "src/pages/api/v1/hr-commission/my-accruals/[id].ts",
+        "src/pages/admin/hr/my-commission.astro"
+      ],
+      writePathFunctions: ["listOwnAccruals", "getOwnAccrual"],
+      auditExemptImporters: {
+        "src/pages/api/v1/hr-commission/my-accruals/index.ts":
+          "own-only: an employee reading their own earnings (owner-reads-own, as payslips.read); the query is bound to the caller's login",
+        "src/pages/api/v1/hr-commission/my-accruals/[id].ts":
+          "own-only: an employee reading their own earnings (owner-reads-own, as payslips.read); the query is bound to the caller's login",
+        "src/pages/admin/hr/my-commission.astro":
+          "own-only: the employee's own-commission screen; the query is bound to the caller's login"
+      }
     }
   ];
 

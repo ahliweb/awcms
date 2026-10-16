@@ -42,8 +42,10 @@ deleted while the switch is on. Enabling in any tenant waits for counsel's
 sign-off on erasure (ADR-0138). Erasure follows retention (ADR-0094 + ADR-0142); see ADR-0138 "Status of
 the implementation" for the open legal question.
 
-Status is `experimental`: the flag is off, no admin screen exists, and the module
-declares no `navigation`. It flips to `active` with its first screen.
+Status is `active` since Issue #952: the module declares four admin screens
+(the employee's `/admin/hr/my-work` and `/admin/hr/my-metrics`, the supervisor's
+`/admin/hr/team`, and HR's `/admin/hr/workforce`; `docs/awcms/workforce-self-service.md`). The employment
+write screens, the settings screens and the roster editor are still API-only.
 
 ## The rules that make it safe
 
@@ -447,7 +449,7 @@ Known phase-1 posture:
 
 ## Limitations
 
-- No admin screen; `experimental`. Existing tenants also need the backfill for the `shifts.*`, `templates.*`, `clock.*`, `attendance.*` and `corrections.*` permissions, and an operator must **publish a workflow** under `hr.attendance_correction` (or the tenant's key) before a correction can be requested.
+- The employment write, settings and roster screens do not exist yet (the self-service, supervisor and HR read screens do, Issue #952). Existing tenants also need the backfill for the `shifts.*`, `templates.*`, `clock.*`, `attendance.*` and `corrections.*` permissions, and an operator must **publish a workflow** under `hr.attendance_correction` (or the tenant's key) before a correction can be requested.
 - Existing tenants need `bun run identity-access:permissions:backfill` to receive
   the seeded permissions (the limitation every permission seed carries).
 - The employee number and hire date cannot be edited in place (delete and recreate

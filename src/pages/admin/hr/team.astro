@@ -1,0 +1,385 @@
+---
+/**
+ * "My team" (Issue #952): the supervisor's view of their DIRECT reports'
+ * workforce facts and recent attendance, and the correction requests their
+ * reports have made.
+ *
+ * Loaded by `loadTeam` (`src/lib/hr-self-service-loaders.ts`) inside
+ * `loadAdminScreen`, with the SAME read functions the JSON routes use. The
+ * subject is the caller's CURRENT manager link (their own live, non-terminated
+ * employment), computed in the query: a person who is not anyone's manager gets
+ * an empty page and a terminated manager supervises nobody. The metrics are read
+ * in basis `reports` (direct reports, one level); attendance and corrections are
+ * read for exactly the direct reports' ids and trimmed to when each reporting
+ * line began, so a supervisor never sees the history from before they managed
+ * that person (the manager chain below the direct reports is NOT read). Each
+ * panel is authorised with its route's guard and ownership grant, so an ABAC
+ * deny hides it, and each read is recorded as a sensitive read (mode `reports`)
+ * like the routes do. The page has no employment id or person parameter. The
+ * entry gate is `hr_workforce.self_service.read`, a SCREEN gate.
+ *
+ * The correction REASON is never shown here: the list does not carry it (the
+ * API's list does not either). The page has no mutation and no export; the
+ * decision on a correction belongs to the approval workflow.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { loadTeam } from "../../../lib/hr-self-service-loaders";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../../lib/i18n";
+import {
+  CORRECTION_STATUS_TONE,
+  HR_PERIODS,
+  attendanceKindLabels,
+  correctionKindLabels,
+  correctionStatusLabels,
+  formatMinutes,
+  formatRatioPercent,
+  labelOf,
+  parsePeriod,
+  pastWindow,
+  periodLabels
+} from "../../../lib/hr-self-service";
+import type {
+  AttendanceCorrection,
+  AttendanceEvent
+} from "../../../modules/hr-workforce/application/hr-attendance-directory";
+import type { EmployeeFigure } from "../../../modules/hr-workforce/application/hr-workforce-metrics-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t, tn } = getTranslatorFor(locale);
+
+const KIND_LABEL = attendanceKindLabels(t);
+const CORRECTION_KIND_LABEL = correctionKindLabels(t);
+const CORRECTION_STATUS_LABEL = correctionStatusLabels(t);
+const period = parsePeriod(Astro.url.searchParams.get("period"));
+const periodLabel = periodLabels(t);
+const now = new Date();
+const range = pastWindow(period, now);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "hr_workforce",
+    activityCode: "self_service",
+    action: "read"
+  },
+  load: async ({ tx, auth, can }) =>
+    loadTeam({
+      tx,
+      tenantId: ssr.tenantId,
+      tenantUserId: auth.context.tenantUserId,
+      can,
+      now,
+      correlationId: Astro.locals.correlationId,
+      range
+    }),
+  onError: (error) => {
+    logAdminPageError("admin/hr/team.astro: failed to load the team", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const employees: EmployeeFigure[] = data?.employees ?? [];
+// A report's number, for the rows below (a dash when the facts panel, the only
+// source of the number, is withheld). Events and corrections are already
+// limited to the direct reports and to the time since each line began.
+const numberOf = new Map(
+  employees.map((employee) => [employee.employmentId, employee.employeeNo])
+);
+const events: AttendanceEvent[] = data?.events ?? [];
+const corrections: AttendanceCorrection[] = data?.corrections ?? [];
+const withheld = data?.withheld ?? false;
+---
+
+<AdminLayout
+  title={t("My team")}
+  description={t(
+    "The attendance and shift facts of the people who report to you, and the corrections they have asked for."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="team-denied" role="alert">
+      {t("You do not have permission to view this page.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="team-error" role="alert">
+      {t("Your team could not be loaded right now. Please try again later.")}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <>
+      {withheld && (
+        <p class="state-notice" id="team-withheld" role="note">
+          {t("Some sections are not available to you.")}
+        </p>
+      )}
+
+      <p class="state-notice" id="team-notice" role="note">
+        {t(
+          "These are business facts about recorded attendance and published shifts, not an assessment of a person. Do not use them for a decision about pay, discipline, promotion or termination without the governance review."
+        )}
+      </p>
+
+      <nav class="admin-segmented" aria-label={t("Period")}>
+        {HR_PERIODS.map((option) => (
+          <a
+            class="admin-segmented-option"
+            href={`/admin/hr/team?period=${option}`}
+            aria-current={period === option ? "page" : undefined}
+          >
+            {periodLabel[option]}
+          </a>
+        ))}
+      </nav>
+
+      <section class="admin-section" aria-labelledby="team-facts-title">
+        <h2 class="admin-section-title" id="team-facts-title">
+          {t("Direct reports")}
+          <span class="count-pill">{employees.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="team-facts-caption"
+        >
+          <table class="data-table data-table--stack" id="team-facts-table">
+            <caption id="team-facts-caption">
+              {tn(
+                "{count} direct report",
+                "{count} direct reports",
+                employees.length,
+                { count: employees.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Employee no.")}</th>
+                <th scope="col">{t("Scheduled shifts")}</th>
+                <th scope="col">{t("Attended shifts")}</th>
+                <th scope="col">{t("Missed shifts")}</th>
+                <th scope="col">{t("Late arrivals")}</th>
+                <th scope="col">{t("Worked time")}</th>
+                <th scope="col">{t("Worked against scheduled")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="7">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No direct reports")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t("People who report to you appear here.")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                employees.map((employee) => (
+                  <tr data-report-row={employee.employmentId}>
+                    <td data-label={t("Employee no.")}>
+                      {employee.employeeNo}
+                    </td>
+                    <td data-label={t("Scheduled shifts")}>
+                      {employee.facts.scheduledShifts}
+                    </td>
+                    <td data-label={t("Attended shifts")}>
+                      {employee.facts.attendedShifts}
+                    </td>
+                    <td data-label={t("Missed shifts")}>
+                      {employee.facts.missedShifts}
+                    </td>
+                    <td data-label={t("Late arrivals")}>
+                      {employee.facts.lateArrivals}
+                    </td>
+                    <td data-label={t("Worked time")}>
+                      {formatMinutes(t, employee.facts.workedMinutes)}
+                    </td>
+                    <td data-label={t("Worked against scheduled")}>
+                      {formatRatioPercent(
+                        employee.facts.workedToScheduledRatio
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="team-attendance-title">
+        <h2 class="admin-section-title" id="team-attendance-title">
+          {t("Recent attendance")}
+          <span class="count-pill">{events.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="team-attendance-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="team-attendance-table"
+          >
+            <caption id="team-attendance-caption">
+              {tn(
+                "{count} event in this period (UTC)",
+                "{count} events in this period (UTC)",
+                events.length,
+                { count: events.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Employee no.")}</th>
+                <th scope="col">{t("Event")}</th>
+                <th scope="col">{t("Time (UTC)")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="3">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No attendance recorded")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Events of your direct reports in this period appear here."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                events.map((event) => (
+                  <tr data-event-row={event.id}>
+                    <td data-label={t("Employee no.")}>
+                      {numberOf.get(event.employmentId) ?? "—"}
+                    </td>
+                    <td data-label={t("Event")} data-kind={event.kind}>
+                      {labelOf(KIND_LABEL, event.kind)}
+                    </td>
+                    <td data-label={t("Time (UTC)")}>
+                      <time datetime={event.occurredAt}>
+                        {formatDateTime(locale, event.occurredAt, "UTC")}
+                      </time>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="team-corrections-title">
+        <h2 class="admin-section-title" id="team-corrections-title">
+          {t("Corrections waiting for a decision")}
+          <span class="count-pill">{corrections.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="team-corrections-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="team-corrections-table"
+          >
+            <caption id="team-corrections-caption">
+              {tn("{count} request", "{count} requests", corrections.length, {
+                count: corrections.length
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Employee no.")}</th>
+                <th scope="col">{t("Request")}</th>
+                <th scope="col">{t("Correct event")}</th>
+                <th scope="col">{t("Correct time")}</th>
+                <th scope="col">{t("Status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {corrections.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="5">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No correction requests")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Requests from your direct reports that are waiting appear here."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                corrections.map((correction) => (
+                  <tr data-correction-row={correction.id}>
+                    <td data-label={t("Employee no.")}>
+                      {numberOf.get(correction.employmentId) ?? "—"}
+                    </td>
+                    <td data-label={t("Request")}>
+                      {labelOf(CORRECTION_KIND_LABEL, correction.kind)}
+                    </td>
+                    <td data-label={t("Correct event")}>
+                      {labelOf(KIND_LABEL, correction.proposedKind)}
+                    </td>
+                    <td data-label={t("Correct time")}>
+                      <time datetime={correction.proposedOccurredAt}>
+                        {formatDateTime(
+                          locale,
+                          correction.proposedOccurredAt,
+                          "UTC"
+                        )}
+                      </time>
+                    </td>
+                    <td
+                      data-label={t("Status")}
+                      data-status={correction.status}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          CORRECTION_STATUS_TONE[correction.status] ?? "neutral"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {labelOf(CORRECTION_STATUS_LABEL, correction.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>

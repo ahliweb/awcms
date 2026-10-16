@@ -149,14 +149,16 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // a draft editor is a decision.
   "procurement.documents.update",
 
-  // hr_workforce (8) — ADR-0132 / Issue #945. Phase 1 foundation ships API-first
-  // and `experimental` (flag off): the employment, terms and settings screens
-  // are the recorded follow-up that flips the module to `active`, so each
-  // permission is listed here until a screen claims it.
+  // hr_workforce (7) — ADR-0132 / Issue #945. Phase 1 foundation shipped
+  // API-first. Issue #952 added the self-service, supervisor and HR screens
+  // (`/admin/hr/*`), flipped the module to `active`, and claimed
+  // `employments.read`, `attendance.read`, `corrections.create` and
+  // `corrections.read`; the employment WRITE screens (create, terms, assign,
+  // delete, restore) and the settings screens are still the recorded follow-up,
+  // so each of those permissions is listed here until a screen claims it.
   "hr_workforce.employments.assign",
   "hr_workforce.employments.create",
   "hr_workforce.employments.delete",
-  "hr_workforce.employments.read",
   "hr_workforce.employments.restore",
   "hr_workforce.employments.update",
   "hr_workforce.settings.configure",
@@ -215,12 +217,9 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // and `experimental`; the attendance and correction-inbox screens are the
   // recorded follow-up that flips the module to `active`.
   "hr_workforce.attendance.create",
-  "hr_workforce.attendance.read",
   "hr_workforce.clock.create",
   "hr_workforce.corrections.approve",
   "hr_workforce.corrections.cancel",
-  "hr_workforce.corrections.create",
-  "hr_workforce.corrections.read",
   // hr_workforce workforce metrics (2) — Issue #953. Same posture: API-first and
   // `experimental`; the metrics screen (per-employee list for `read`, per-office
   // aggregates for `analyze`) is part of the recorded follow-up that flips the

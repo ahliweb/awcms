@@ -787,6 +787,16 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/hr-commission/my-accruals/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/my-accruals/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/hr-commission/rules/[id].ts",
       "workClass": "interactive",
       "source": "factory"
@@ -893,6 +903,11 @@
     },
     {
       "path": "src/pages/api/v1/hr-workforce/geolocation/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/me.ts",
       "workClass": "interactive",
       "source": "factory"
     },

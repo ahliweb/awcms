@@ -1,0 +1,460 @@
+---
+/**
+ * "Workforce" (Issue #952): the HR view -- the employments of the tenant, the
+ * correction requests waiting for a decision, and recent attendance.
+ *
+ * Each panel is its OWN permission, decided by the SAME chokepoint the JSON
+ * routes use (`can`): the page opens on `hr_workforce.employments.read`, the
+ * corrections panel needs `corrections.read`, the attendance panel
+ * `attendance.read`. A panel the caller may not read is not rendered, and its
+ * query never runs. The reads are the routes' own functions in basis `all`.
+ *
+ * What is deliberately NOT here:
+ *   - no name, contact, national id or login (an employment REFERENCES a
+ *     profile; the page shows the employee number, title, type and status);
+ *   - no correction REASON (sensitive; only the single-correction read returns
+ *     it, to the people allowed);
+ *   - no per-person productivity facts: HR's `all`-mode metrics read is an audit
+ *     decision owned by Issue #1083 (M3), and a page that read them here would
+ *     bypass it, so they stay API-only until that lands;
+ *   - no export or download of anyone's data. An export of another person's
+ *     data needs its own high-risk permission and an audit row; none exists.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { recordSensitiveRead } from "../../../modules/logging/application/sensitive-read-audit";
+import { loadWorkforce } from "../../../lib/hr-self-service-loaders";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import {
+  formatDate,
+  formatDateTime,
+  getTranslatorFor
+} from "../../../lib/i18n";
+import {
+  CORRECTION_STATUS_TONE,
+  attendanceKindLabels,
+  correctionKindLabels,
+  correctionStatusLabels,
+  employmentStatusLabels,
+  employmentTypeLabels,
+  labelOf
+} from "../../../lib/hr-self-service";
+import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
+import type {
+  AttendanceCorrection,
+  AttendanceEvent
+} from "../../../modules/hr-workforce/application/hr-attendance-directory";
+import type { Employment } from "../../../modules/hr-workforce/application/hr-workforce-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t, tn } = getTranslatorFor(locale);
+
+const KIND_LABEL = attendanceKindLabels(t);
+const CORRECTION_KIND_LABEL = correctionKindLabels(t);
+const CORRECTION_STATUS_LABEL = correctionStatusLabels(t);
+const TYPE_LABEL = employmentTypeLabels(t);
+const STATUS_LABEL = employmentStatusLabels(t);
+
+const stateParam = Astro.url.searchParams.get("state");
+const state =
+  stateParam === "active" || stateParam === "terminated" ? stateParam : null;
+const cursorParam = Astro.url.searchParams.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+const now = new Date();
+const behind = new Date(now.getTime() - 7 * 86_400_000);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "hr_workforce",
+    activityCode: "employments",
+    action: "read"
+  },
+  load: async ({ tx, auth, can }) =>
+    loadWorkforce({
+      tx,
+      tenantId: ssr.tenantId,
+      tenantUserId: auth.context.tenantUserId,
+      can,
+      now,
+      correlationId: Astro.locals.correlationId,
+      state: state ?? undefined,
+      cursor: cursor ?? undefined,
+      eventsFrom: behind,
+      // HR's `all` basis is a sensitive read: recorded like the API routes do.
+      recordRead: async (read) => {
+        const base = {
+          mode: "all",
+          tenantId: ssr.tenantId,
+          actorTenantUserId: auth.context.tenantUserId,
+          itemCount: read.itemCount,
+          resourceIds: [...new Set(read.employmentIds)],
+          correlationId: Astro.locals.correlationId
+        };
+
+        if (read.permission === "hr_workforce.corrections.read") {
+          await recordSensitiveRead(tx, {
+            ...base,
+            permission: "hr_workforce.corrections.read"
+          });
+        } else {
+          await recordSensitiveRead(tx, {
+            ...base,
+            permission: "hr_workforce.attendance.read"
+          });
+        }
+      },
+      guards: {
+        corrections: {
+          moduleKey: "hr_workforce",
+          activityCode: "corrections",
+          action: "read"
+        },
+        attendance: {
+          moduleKey: "hr_workforce",
+          activityCode: "attendance",
+          action: "read"
+        }
+      }
+    }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/hr/workforce.astro: failed to load the workforce",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const employments: Employment[] = data?.employments ?? [];
+const corrections: AttendanceCorrection[] | null = data?.corrections ?? null;
+const events: AttendanceEvent[] | null = data?.events ?? null;
+// Employee numbers for the rows of the other panels. Only the page of
+// employments on screen is mapped; a row outside it shows a dash.
+const numberOf = new Map(
+  employments.map((employment) => [employment.id, employment.employeeNo])
+);
+const filters: { value: string | null; label: string }[] = [
+  { value: null, label: t("All") },
+  { value: "active", label: t("Active") },
+  { value: "terminated", label: t("Terminated") }
+];
+---
+
+<AdminLayout
+  title={t("Workforce")}
+  description={t(
+    "Employments, attendance and the correction requests waiting for a decision."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="workforce-denied" role="alert">
+      {t("You do not have permission to view this page.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="workforce-error" role="alert">
+      {t(
+        "The workforce could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <>
+      <nav class="admin-segmented" aria-label={t("Employment state")}>
+        {filters.map((filter) => (
+          <a
+            class="admin-segmented-option"
+            href={
+              filter.value
+                ? `/admin/hr/workforce?state=${filter.value}`
+                : "/admin/hr/workforce"
+            }
+            aria-current={state === filter.value ? "page" : undefined}
+          >
+            {filter.label}
+          </a>
+        ))}
+      </nav>
+
+      <section
+        class="admin-section"
+        aria-labelledby="workforce-employments-title"
+      >
+        <h2 class="admin-section-title" id="workforce-employments-title">
+          {t("Employments")}
+          <span class="count-pill">{employments.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="workforce-employments-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="workforce-employments-table"
+          >
+            <caption id="workforce-employments-caption">
+              {tn(
+                "{count} employment",
+                "{count} employments",
+                employments.length,
+                { count: employments.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Employee no.")}</th>
+                <th scope="col">{t("Job title")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Hired on")}</th>
+                <th scope="col">{t("Login linked")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employments.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="6">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No employments")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t("Employments created through the API appear here.")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                employments.map((employment) => (
+                  <tr data-employment-row={employment.id}>
+                    <td data-label={t("Employee no.")}>
+                      {employment.employeeNo}
+                    </td>
+                    <td data-label={t("Job title")}>
+                      {employment.currentTerm?.jobTitle ?? "—"}
+                    </td>
+                    <td data-label={t("Type")}>
+                      {employment.currentTerm
+                        ? labelOf(
+                            TYPE_LABEL,
+                            employment.currentTerm.employmentType
+                          )
+                        : "—"}
+                    </td>
+                    <td
+                      data-label={t("Status")}
+                      data-status={employment.currentTerm?.status ?? ""}
+                    >
+                      {employment.currentTerm
+                        ? labelOf(STATUS_LABEL, employment.currentTerm.status)
+                        : "—"}
+                    </td>
+                    <td data-label={t("Hired on")}>
+                      <time datetime={employment.hiredOn}>
+                        {formatDate(locale, employment.hiredOn, "UTC")}
+                      </time>
+                    </td>
+                    <td data-label={t("Login linked")}>
+                      {employment.accountLinked ? t("Yes") : t("No")}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {corrections && (
+        <section
+          class="admin-section"
+          aria-labelledby="workforce-corrections-title"
+        >
+          <h2 class="admin-section-title" id="workforce-corrections-title">
+            {t("Corrections waiting for a decision")}
+            <span class="count-pill">{corrections.length}</span>
+          </h2>
+          <div
+            class="data-table-scroll fade-in-up"
+            role="region"
+            tabindex="0"
+            aria-labelledby="workforce-corrections-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="workforce-corrections-table"
+            >
+              <caption id="workforce-corrections-caption">
+                {tn("{count} request", "{count} requests", corrections.length, {
+                  count: corrections.length
+                })}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Employee no.")}</th>
+                  <th scope="col">{t("Request")}</th>
+                  <th scope="col">{t("Correct event")}</th>
+                  <th scope="col">{t("Correct time")}</th>
+                  <th scope="col">{t("Status")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {corrections.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan="5">
+                      <div class="empty-state">
+                        <span class="empty-state-title">
+                          {t("No correction requests")}
+                        </span>
+                        <span class="empty-state-text">
+                          {t(
+                            "Requests that are waiting for a decision appear here."
+                          )}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  corrections.map((correction) => (
+                    <tr data-correction-row={correction.id}>
+                      <td data-label={t("Employee no.")}>
+                        {numberOf.get(correction.employmentId) ?? "—"}
+                      </td>
+                      <td data-label={t("Request")}>
+                        {labelOf(CORRECTION_KIND_LABEL, correction.kind)}
+                      </td>
+                      <td data-label={t("Correct event")}>
+                        {labelOf(KIND_LABEL, correction.proposedKind)}
+                      </td>
+                      <td data-label={t("Correct time")}>
+                        <time datetime={correction.proposedOccurredAt}>
+                          {formatDateTime(
+                            locale,
+                            correction.proposedOccurredAt,
+                            "UTC"
+                          )}
+                        </time>
+                      </td>
+                      <td
+                        data-label={t("Status")}
+                        data-status={correction.status}
+                      >
+                        <span
+                          class="admin-status-pill"
+                          data-tone={
+                            CORRECTION_STATUS_TONE[correction.status] ??
+                            "neutral"
+                          }
+                        >
+                          <span
+                            class="admin-status-pill-dot"
+                            aria-hidden="true"
+                          />
+                          {labelOf(CORRECTION_STATUS_LABEL, correction.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {events && (
+        <section
+          class="admin-section"
+          aria-labelledby="workforce-attendance-title"
+        >
+          <h2 class="admin-section-title" id="workforce-attendance-title">
+            {t("Recent attendance")}
+            <span class="count-pill">{events.length}</span>
+          </h2>
+          <div
+            class="data-table-scroll fade-in-up"
+            role="region"
+            tabindex="0"
+            aria-labelledby="workforce-attendance-caption"
+          >
+            <table
+              class="data-table data-table--stack"
+              id="workforce-attendance-table"
+            >
+              <caption id="workforce-attendance-caption">
+                {tn(
+                  "{count} event in the last 7 days (UTC)",
+                  "{count} events in the last 7 days (UTC)",
+                  events.length,
+                  { count: events.length }
+                )}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Employee no.")}</th>
+                  <th scope="col">{t("Event")}</th>
+                  <th scope="col">{t("Time (UTC)")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.length === 0 ? (
+                  <tr>
+                    <td class="data-table-empty" colspan="3">
+                      <div class="empty-state">
+                        <span class="empty-state-title">
+                          {t("No attendance recorded")}
+                        </span>
+                        <span class="empty-state-text">
+                          {t("Events of the last 7 days appear here.")}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  events.map((event) => (
+                    <tr data-event-row={event.id}>
+                      <td data-label={t("Employee no.")}>
+                        {numberOf.get(event.employmentId) ?? "—"}
+                      </td>
+                      <td data-label={t("Event")} data-kind={event.kind}>
+                        {labelOf(KIND_LABEL, event.kind)}
+                      </td>
+                      <td data-label={t("Time (UTC)")}>
+                        <time datetime={event.occurredAt}>
+                          {formatDateTime(locale, event.occurredAt, "UTC")}
+                        </time>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </>
+  )}
+
+  {canRead && !loadError && data?.nextCursor && (
+    <p>
+      <a
+        class="btn btn-secondary"
+        id="workforce-next"
+        href={`/admin/hr/workforce?${state ? `state=${state}&` : ""}cursor=${data.nextCursor}`}
+      >
+        {t("Next page")}
+      </a>
+    </p>
+  )}
+</AdminLayout>

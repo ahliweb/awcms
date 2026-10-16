@@ -147,6 +147,29 @@ export type OwnershipGrant = {
 };
 
 /**
+ * An ownership grant may only widen a `read` guard on surfaces that hand the
+ * grant to callers generically: `defineTenantRoute` (ADR-0063,
+ * `assertOwnershipGrantIsReadOnly`) and an admin screen's `can()` (Issue #952
+ * re-audit, N-1). Throws for any other action while a grant is supplied,
+ * whether or not it is `granted`: the mistake is in the call, not in the data.
+ *
+ * It is deliberately NOT enforced inside `authorizeInTransaction` itself:
+ * hand-written routes legitimately pass a write-scoped grant there after their
+ * own ownership check (e.g. a blog author updating or submitting their own
+ * unpublished post/page), and that path is reviewed per route.
+ */
+export function assertOwnershipGrantAppliesToRead(
+  guard: AccessRequest,
+  grant: OwnershipGrant | undefined
+): void {
+  if (grant && guard.action !== "read") {
+    throw new Error(
+      `authorizeInTransaction: an ownershipGrant may only widen a \`read\` guard; ${guard.moduleKey}.${guard.activityCode}.${guard.action} is not one.`
+    );
+  }
+}
+
+/**
  * Runs the full guard chain inside an existing tenant transaction: resolve
  * session -> fetch granted permission keys -> evaluate ABAC (default deny,
  * deny overrides allow) -> record the decision log. Returns the authorized

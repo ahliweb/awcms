@@ -301,15 +301,15 @@ describe("validateEmptyBody", () => {
 });
 
 describe("the hr_commission descriptor", () => {
-  test("is experimental (flag off) and depends only on tenant_admin and hr_workforce", () => {
-    expect(hrCommissionModule.status).toBe("experimental");
+  test("is active (it declares its own-commission screen, Issue #952) and depends only on tenant_admin and hr_workforce", () => {
+    expect(hrCommissionModule.status).toBe("active");
     expect([...hrCommissionModule.dependencies].sort()).toEqual([
       "hr_workforce",
       "tenant_admin"
     ]);
   });
 
-  test("declares the five rule permissions and the six accrual permissions, and no payroll or compensation power", () => {
+  test("declares the five rule permissions, the six accrual permissions and the one own-accrual read, and no payroll or compensation power", () => {
     const keys = (hrCommissionModule.permissions ?? []).map(
       (p) => `${p.activityCode}.${p.action}`
     );
@@ -321,6 +321,7 @@ describe("the hr_commission descriptor", () => {
       "accruals.pay",
       "accruals.read",
       "accruals.release",
+      "my_accruals.read",
       "rules.create",
       "rules.publish",
       "rules.read",

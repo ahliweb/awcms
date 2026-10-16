@@ -303,6 +303,170 @@ export async function getAccrual(
   };
 }
 
+// --- Self-service reads (Issue #952) --------------------------------------------
+
+/**
+ * What an employee sees of their OWN accrual: the earning and how it was
+ * computed, never the approver or payer (no actor stamps), the payment
+ * reference or the rule row id. A subset of {@link CommissionAccrual}, built
+ * field by field so a column added to the ledger later does not reach an
+ * employee by default.
+ */
+export type OwnCommissionAccrual = Pick<
+  CommissionAccrual,
+  | "id"
+  | "status"
+  | "amount"
+  | "currencyCode"
+  | "ruleKey"
+  | "ruleVersion"
+  | "sourceType"
+  | "sourceRef"
+  | "calculation"
+  | "baseAmount"
+  | "units"
+  | "rate"
+  | "fixedAmount"
+  | "occurredOn"
+  | "createdAt"
+  | "approvedAt"
+  | "releasedAt"
+  | "paidAt"
+  | "voidedAt"
+  | "voidReasonCode"
+>;
+
+export type OwnCommissionTransition = Pick<
+  CommissionTransition,
+  "seq" | "fromStatus" | "toStatus" | "reasonCode" | "occurredAt"
+>;
+
+function toOwn(accrual: CommissionAccrual): OwnCommissionAccrual {
+  return {
+    id: accrual.id,
+    status: accrual.status,
+    amount: accrual.amount,
+    currencyCode: accrual.currencyCode,
+    ruleKey: accrual.ruleKey,
+    ruleVersion: accrual.ruleVersion,
+    sourceType: accrual.sourceType,
+    sourceRef: accrual.sourceRef,
+    calculation: accrual.calculation,
+    baseAmount: accrual.baseAmount,
+    units: accrual.units,
+    rate: accrual.rate,
+    fixedAmount: accrual.fixedAmount,
+    occurredOn: accrual.occurredOn,
+    createdAt: accrual.createdAt,
+    approvedAt: accrual.approvedAt,
+    releasedAt: accrual.releasedAt,
+    paidAt: accrual.paidAt,
+    voidedAt: accrual.voidedAt,
+    voidReasonCode: accrual.voidReasonCode
+  };
+}
+
+/**
+ * The caller's OWN accruals, newest first, keyset paginated. The ownership is
+ * the persisted login link on a live employment (`tenant_user_id`), joined here
+ * in the query: there is no way to ask for another person's rows, so there is no
+ * id to be refused.
+ */
+export async function listOwnAccruals(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  filters: { status?: AccrualStatus },
+  cursor?: KeysetCursor
+): Promise<{ accruals: OwnCommissionAccrual[]; nextCursor: string | null }> {
+  const status = filters.status ?? null;
+  const cursorCreatedAt = cursor ? cursor.createdAt : null;
+  const cursorId = cursor ? cursor.id : null;
+
+  const rows = (await tx`
+    SELECT ${tx.unsafe(ACCRUAL_SELECT)},
+           ${tx.unsafe(keysetCursorCreatedAtSql("a"))} AS created_at_cursor
+    FROM awcms_hr_commission_accruals a
+    WHERE a.tenant_id = ${tenantId}
+      AND a.employment_id IN (
+        SELECT e.id FROM awcms_hr_employments e
+        WHERE e.tenant_id = ${tenantId}
+          AND e.tenant_user_id = ${tenantUserId} AND e.deleted_at IS NULL
+      )
+      AND (${status}::text IS NULL OR a.status = ${status}::text)
+      AND (
+        ${cursorCreatedAt}::timestamptz IS NULL
+        OR (a.created_at, a.id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+      )
+    ORDER BY a.created_at DESC, a.id DESC
+    LIMIT ${ACCRUAL_PAGE_SIZE}
+  `) as (AccrualRow & { created_at_cursor: string })[];
+
+  const last = rows[rows.length - 1];
+
+  return {
+    accruals: rows.map((row) => toOwn(mapAccrual(row))),
+    nextCursor:
+      rows.length === ACCRUAL_PAGE_SIZE && last
+        ? encodeKeysetCursor(last.created_at_cursor, last.id)
+        : null
+  };
+}
+
+/**
+ * One of the caller's OWN accruals with its transition history, or `null` when
+ * it does not exist OR belongs to somebody else: both answer 404 at the route,
+ * so the answer is not an existence oracle for another person's earnings.
+ */
+export async function getOwnAccrual(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  id: string
+): Promise<{
+  accrual: OwnCommissionAccrual;
+  transitions: OwnCommissionTransition[];
+} | null> {
+  const rows = (await tx`
+    SELECT ${tx.unsafe(ACCRUAL_SELECT)}
+    FROM awcms_hr_commission_accruals a
+    WHERE a.tenant_id = ${tenantId} AND a.id = ${id}
+      AND a.employment_id IN (
+        SELECT e.id FROM awcms_hr_employments e
+        WHERE e.tenant_id = ${tenantId}
+          AND e.tenant_user_id = ${tenantUserId} AND e.deleted_at IS NULL
+      )
+  `) as AccrualRow[];
+
+  if (!rows[0]) {
+    return null;
+  }
+
+  const transitions = (await tx`
+    SELECT seq::int AS seq, from_status, to_status, reason_code, occurred_at
+    FROM awcms_hr_commission_transitions
+    WHERE tenant_id = ${tenantId} AND accrual_id = ${id}
+    ORDER BY seq
+  `) as {
+    seq: number;
+    from_status: AccrualStatus | null;
+    to_status: AccrualStatus;
+    reason_code: string | null;
+    occurred_at: Date | string;
+  }[];
+
+  return {
+    accrual: toOwn(mapAccrual(rows[0])),
+    transitions: transitions.map((row) => ({
+      seq: Number(row.seq),
+      fromStatus: row.from_status,
+      toStatus: row.to_status,
+      reasonCode: row.reason_code,
+      occurredAt: iso(row.occurred_at)
+    }))
+  };
+}
+
 // --- Accrue -------------------------------------------------------------------
 
 type PublishedRuleRow = {

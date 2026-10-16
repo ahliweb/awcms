@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ce668eb418d0194f664401d5cc827a3b8aec7bda3a22a3c86090a0cf4376043f -->
+<!-- i18n-source-hash: sha256:23defb7d5764a0631d3ac795ab2a774b68c0f8ae6e3da67a4c249d712dde35d7 -->
 
 # `hr_workforce`
 
@@ -44,8 +44,10 @@ hidup terakhir tidak bisa dihapus selama saklar menyala. Mengaktifkan di tenant
 mana pun menunggu persetujuan penasihat hukum soal penghapusan (ADR-0138). Penghapusan mengikuti retensi (ADR-0094 + ADR-0142); lihat "Status
 implementasi" ADR-0138 untuk pertanyaan hukum yang masih terbuka.
 
-Status `experimental`: flag mati, belum ada layar admin, dan modul tidak
-mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.
+Status `active` sejak Issue #952: modul mendeklarasikan empat layar admin
+(`/admin/hr/my-work` dan `/admin/hr/my-metrics` untuk karyawan, `/admin/hr/team`
+untuk supervisor, dan `/admin/hr/workforce` untuk HR; `docs/awcms/workforce-self-service.md`).
+Layar tulis kepegawaian, layar pengaturan, dan editor roster masih hanya lewat API.
 
 ## Aturan yang membuatnya aman
 
@@ -455,7 +457,7 @@ Postur fase 1 yang diketahui:
 
 ## Keterbatasan
 
-- Belum ada layar admin; `experimental`. Tenant yang sudah ada juga perlu backfill untuk permission `shifts.*`, `templates.*`, `clock.*`, `attendance.*`, dan `corrections.*`, dan operator harus **menerbitkan workflow** di bawah `hr.attendance_correction` (atau kunci tenant) sebelum koreksi dapat diajukan.
+- Layar tulis kepegawaian, pengaturan, dan roster belum ada (layar baca swalayan, supervisor, dan HR sudah, Issue #952). Tenant yang sudah ada juga perlu backfill untuk permission `shifts.*`, `templates.*`, `clock.*`, `attendance.*`, dan `corrections.*`, dan operator harus **menerbitkan workflow** di bawah `hr.attendance_correction` (atau kunci tenant) sebelum koreksi dapat diajukan.
 - Tenant yang sudah ada perlu `bun run identity-access:permissions:backfill`
   untuk menerima permission yang di-seed (keterbatasan setiap seed permission).
 - Nomor karyawan dan tanggal masuk tidak bisa disunting langsung (hapus lalu buat

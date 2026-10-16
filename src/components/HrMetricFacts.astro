@@ -1,0 +1,93 @@
+---
+/**
+ * The transparent workforce facts of ONE employee over a window (Issue #952;
+ * `docs/awcms/workforce-metrics.md` section 4), as stat cards with the plain
+ * definition of each figure beneath it. Shared by `/admin/hr/my-metrics` and
+ * `/admin/hr/team` so the two cannot word the same figure differently.
+ *
+ * There is NO composite score, ranking, colour grade or "good/bad" tone here, by
+ * contract: every figure is a count, minutes or a ratio, and a missing ratio is
+ * an em dash, never 0%.
+ */
+import type { Translator } from "../lib/i18n";
+import { formatMinutes, formatRatioPercent } from "../lib/hr-self-service";
+import type { WorkforceFacts } from "../modules/hr-workforce/domain/hr-workforce-metrics";
+
+type Props = { facts: WorkforceFacts; t: Translator["t"] };
+
+const { facts, t } = Astro.props;
+
+const cards: { key: string; label: string; value: string; caption: string }[] =
+  [
+    {
+      key: "scheduled_shifts",
+      label: t("Scheduled shifts"),
+      value: String(facts.scheduledShifts),
+      caption: t("Published work shifts that started in this period.")
+    },
+    {
+      key: "attended_shifts",
+      label: t("Attended shifts"),
+      value: String(facts.attendedShifts),
+      caption: t("Of those, the ones with a clock-in.")
+    },
+    {
+      key: "missed_shifts",
+      label: t("Missed shifts"),
+      value: String(facts.missedShifts),
+      caption: t("Shifts that ended with no clock-in.")
+    },
+    {
+      key: "late_arrivals",
+      label: t("Late arrivals"),
+      value: String(facts.lateArrivals),
+      caption: t("Clock-ins after the grace period.")
+    },
+    {
+      key: "worked_minutes",
+      label: t("Worked time"),
+      value: formatMinutes(t, facts.workedMinutes),
+      caption: t("From clock-in to clock-out, less breaks taken.")
+    },
+    {
+      key: "scheduled_minutes",
+      label: t("Scheduled time"),
+      value: formatMinutes(t, facts.scheduledMinutes),
+      caption: t("Planned length of shifts that ended, less planned breaks.")
+    },
+    {
+      key: "break_minutes",
+      label: t("Break time"),
+      value: formatMinutes(t, facts.breakMinutes),
+      caption: t("Breaks taken inside completed sessions.")
+    },
+    {
+      key: "incomplete_sessions",
+      label: t("Incomplete sessions"),
+      value: String(facts.incompleteSessions),
+      caption: t("Clock-ins that never got a clock-out.")
+    },
+    {
+      key: "coverage_ratio",
+      label: t("Shift coverage"),
+      value: formatRatioPercent(facts.coverageRatio),
+      caption: t("Attended shifts out of attended plus missed.")
+    },
+    {
+      key: "worked_to_scheduled_ratio",
+      label: t("Worked against scheduled"),
+      value: formatRatioPercent(facts.workedToScheduledRatio),
+      caption: t("Worked time out of scheduled time; can exceed 100%.")
+    }
+  ];
+---
+
+<div class="admin-stat-card-grid">
+  {cards.map((card) => (
+    <div class="admin-stat-card" data-metric={card.key}>
+      <span class="admin-stat-card-label">{card.label}</span>
+      <span class="admin-stat-card-value">{card.value}</span>
+      <span class="admin-stat-card-caption">{card.caption}</span>
+    </div>
+  ))}
+</div>

@@ -43,24 +43,31 @@ import { HR_COMMISSION_MODULE_KEY } from "./domain/hr-commission-permissions";
 export const hrCommissionModule = defineModule({
   key: HR_COMMISSION_MODULE_KEY,
   name: "HR Commission",
-  version: "0.2.0",
+  version: "0.3.0",
   // Commission accruals are monetary pay facts: payroll data by any reading
   // (ADR-0132). Declared so that no channel that must keep payroll off it (the
   // Telegram registry and its CI gate, ADR-0140) has to guess from a name.
   handlesPayrollData: true,
-  // `experimental` = the flag is OFF: no admin screen exists yet (ADR-0021
-  // criterion 1 requires every ACTIVE module to declare one). The family's
-  // rollout rule (docs/awcms/hr-payroll.md section 14) is "experimental until
-  // its admin screens land".
-  status: "experimental",
+  // `active` since Issue #952: the module was `experimental` while it had no
+  // admin screen (ADR-0021 criterion 1: every ACTIVE module declares one), and
+  // it now declares the employee's own-commission screen.
+  status: "active",
   description:
-    "Versioned commission rules (Issue #950, ADR-0132): jurisdiction-neutral, tenant-authored terms saying how a share of a source amount becomes a commission — a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling. A rule changes only by a new version; the database enforces that a draft may be edited, a published or retired version is immutable (a published one may only become retired), no two published versions of one rule overlap (race-safe, advisory-locked), and no row is ever deleted. The version in force for an event is the one whose half-open window contains the event's own date, never now(). Evaluation is a pure function over bigint decimal strings: no float, no expression or script, no tiers, bounded by construction. Publish and retire are high-risk, separately grantable, idempotency-keyed and audited without any rate or amount; publish is bound to the content digest the reviewer saw and refuses the draft's creator and last editor (maker / checker), and a row is born a draft. A rule references no person or employment and carries no personal data. Issue #951 adds the accrual LEDGER: a commission earned by an employment from a source event is one row whose monetary facts (rule version, inputs, rate snapshot, amount, currency, instants) are immutable by trigger and whose status advances pending -> approved -> payable -> paid, or to voided from pending or approved (a voided accrual can never be paid); the transition log is append-only and written only by the accrual's own triggers, so status and log cannot diverge and a reconciliation proves it. The same source for the same employment is accrued exactly once (a database unique key, race-safe), a downstream adapter reports a sale through a neutral port (this module imports nothing from commerce) and a redelivery returns the original; the amount is computed from the published rule in force on the event's own date and can never be asserted by the caller; the employment and rule are validated under FOR SHARE by trigger; the beneficiary cannot approve their own accrual. Approve, release, void and pay are high-risk, separately grantable, idempotency-keyed and audited without any amount. A back-dated publish of a rule now needs a stated reason. Employee commission only (not affiliate); reversal and events are later phases. No admin screen yet: the module stays experimental until one lands.",
+    "Versioned commission rules (Issue #950, ADR-0132): jurisdiction-neutral, tenant-authored terms saying how a share of a source amount becomes a commission — a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling. A rule changes only by a new version; the database enforces that a draft may be edited, a published or retired version is immutable (a published one may only become retired), no two published versions of one rule overlap (race-safe, advisory-locked), and no row is ever deleted. The version in force for an event is the one whose half-open window contains the event's own date, never now(). Evaluation is a pure function over bigint decimal strings: no float, no expression or script, no tiers, bounded by construction. Publish and retire are high-risk, separately grantable, idempotency-keyed and audited without any rate or amount; publish is bound to the content digest the reviewer saw and refuses the draft's creator and last editor (maker / checker), and a row is born a draft. A rule references no person or employment and carries no personal data. Issue #951 adds the accrual LEDGER: a commission earned by an employment from a source event is one row whose monetary facts (rule version, inputs, rate snapshot, amount, currency, instants) are immutable by trigger and whose status advances pending -> approved -> payable -> paid, or to voided from pending or approved (a voided accrual can never be paid); the transition log is append-only and written only by the accrual's own triggers, so status and log cannot diverge and a reconciliation proves it. The same source for the same employment is accrued exactly once (a database unique key, race-safe), a downstream adapter reports a sale through a neutral port (this module imports nothing from commerce) and a redelivery returns the original; the amount is computed from the published rule in force on the event's own date and can never be asserted by the caller; the employment and rule are validated under FOR SHARE by trigger; the beneficiary cannot approve their own accrual. Approve, release, void and pay are high-risk, separately grantable, idempotency-keyed and audited without any amount. A back-dated publish of a rule now needs a stated reason. Employee commission only (not affiliate); reversal and events are later phases. Self-service (Issue #952): an employee reads their OWN accruals, read-only, at /admin/hr/my-commission through GET /api/v1/hr-commission/my-accruals, which joins the live employment linked to their login in the query itself (another person's accrual is a 404, never a 403, and there is no filter to widen it); the view carries no approver, payer or payment reference. No screen exports anyone's data.",
   dependencies: ["tenant_admin", "hr_workforce"],
   type: "domain",
   api: {
     openApiPath: "openapi/modules/hr-commission.openapi.yaml",
     basePath: "/api/v1/hr-commission"
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_hr_my_commission",
+      path: "/admin/hr/my-commission",
+      order: 49,
+      requiredPermission: "hr_commission.my_accruals.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "rules",
@@ -120,6 +127,12 @@ export const hrCommissionModule = defineModule({
       action: "cancel",
       description:
         "Void a pending or approved commission accrual (no money has moved) — audited, high-risk"
+    },
+    {
+      activityCode: "my_accruals",
+      action: "read",
+      description:
+        "Read your own commission accruals (the earning, how it was computed and its status); another person's are never returned"
     },
     {
       activityCode: "accruals",

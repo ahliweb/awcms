@@ -156,14 +156,14 @@
     {
       "key": "hr_commission",
       "name": "HR Commission",
-      "version": "0.2.0",
-      "status": "experimental",
+      "version": "0.3.0",
+      "status": "active",
       "type": "domain",
       "dependencies": ["tenant_admin", "hr_workforce"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
-      "permissionCount": 11,
-      "navigationCount": 0,
+      "permissionCount": 12,
+      "navigationCount": 1,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
@@ -172,8 +172,8 @@
     {
       "key": "hr_workforce",
       "name": "HR Workforce",
-      "version": "0.1.0",
-      "status": "experimental",
+      "version": "0.2.0",
+      "status": "active",
       "type": "domain",
       "dependencies": [
         "tenant_admin",
@@ -188,8 +188,8 @@
           "optional": true
         }
       ],
-      "permissionCount": 27,
-      "navigationCount": 0,
+      "permissionCount": 28,
+      "navigationCount": 4,
       "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

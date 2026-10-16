@@ -1,0 +1,496 @@
+---
+/**
+ * "My work" (Issue #952): the employee's OWN published shifts, their own
+ * attendance record, and the correction requests they have made or can make.
+ *
+ * Read server-side with the SAME functions the JSON routes use, in basis `mine`
+ * (`listAssignments` with `publishedOnly` and `ownedByTenantUserId`,
+ * `listEvents`, `listCorrections`, `listEmployments`), inside `loadAdminScreen`.
+ * The basis is the persisted login link, computed in the query: the page has no
+ * employment id, person or filter to widen it, so it cannot show another
+ * person's data. Drafts and cancelled shifts are never listed. The entry gate is
+ * `hr_workforce.self_service.read`, a SCREEN gate; the data is bound by the link.
+ *
+ * The one mutation is the correction request, `POST /api/v1/hr-workforce/
+ * attendance-corrections` with an `Idempotency-Key`: the route requires
+ * `corrections.create` and an employment that is the caller's own (anything else
+ * is 403), starts the approval workflow, and never edits the original event. The
+ * reason is sensitive: it is sent once, never rendered back, and the list below
+ * does not carry it (the API's list does not either). There is no export.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { loadMyWork } from "../../../lib/hr-self-service-loaders";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { formatDateTime, getTranslatorFor } from "../../../lib/i18n";
+import {
+  CORRECTION_STATUS_TONE,
+  attendanceKindLabels,
+  correctionKindLabels,
+  correctionStatusLabels,
+  labelOf,
+  shiftKindLabels,
+  timeOffKindLabels,
+  upcomingWindow
+} from "../../../lib/hr-self-service";
+import { hrMessages } from "../../../lib/hr-self-service-messages";
+import type {
+  AttendanceCorrection,
+  AttendanceEvent
+} from "../../../modules/hr-workforce/application/hr-attendance-directory";
+import type { ShiftAssignment } from "../../../modules/hr-workforce/application/hr-shift-directory";
+import type { Employment } from "../../../modules/hr-workforce/application/hr-workforce-directory";
+import { ATTENDANCE_KINDS } from "../../../modules/hr-workforce/domain/hr-attendance-types";
+
+const ssr = Astro.locals.ssrContext!;
+const locale = Astro.locals.locale;
+const { t, tn } = getTranslatorFor(locale);
+
+const KIND_LABEL = attendanceKindLabels(t);
+const CORRECTION_KIND_LABEL = correctionKindLabels(t);
+const CORRECTION_STATUS_LABEL = correctionStatusLabels(t);
+const SHIFT_KIND_LABEL = shiftKindLabels(t);
+const TIME_OFF_LABEL = timeOffKindLabels(t);
+
+const now = new Date();
+const ahead = upcomingWindow(14, now);
+const behind = new Date(now.getTime() - 14 * 86_400_000);
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "hr_workforce",
+    activityCode: "self_service",
+    action: "read"
+  },
+  load: async ({ tx, auth, can }) =>
+    loadMyWork({
+      tx,
+      tenantId: ssr.tenantId,
+      tenantUserId: auth.context.tenantUserId,
+      can,
+      now,
+      correlationId: Astro.locals.correlationId,
+      shiftsTo: ahead.to,
+      eventsFrom: behind,
+      requestGuard: {
+        moduleKey: "hr_workforce",
+        activityCode: "corrections",
+        action: "create"
+      }
+    }),
+  onError: (error) => {
+    logAdminPageError("admin/hr/my-work.astro: failed to load my work", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const employments: Employment[] = data?.employments ?? [];
+const shifts: ShiftAssignment[] = data?.shifts ?? [];
+const events: AttendanceEvent[] = data?.events ?? [];
+const corrections: AttendanceCorrection[] = data?.corrections ?? [];
+const canRequest = data?.canRequest ?? false;
+const partial = data?.partial ?? false;
+// The employment a request is for: the live one (not terminated), else none.
+const current = employments.find(
+  (employment) => employment.terminatedOn === null
+);
+const messages = hrMessages(t);
+---
+
+<AdminLayout
+  title={t("My work")}
+  description={t(
+    "Your upcoming shifts, your attendance record and your correction requests."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="my-work-denied" role="alert">
+      {t("You do not have permission to view this page.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="my-work-error" role="alert">
+      {t(
+        "Your schedule could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && (
+    <div id="hr-messages" hidden data-msgs={JSON.stringify(messages)} />
+  )}
+
+  {canRead && !loadError && partial && (
+    <p class="state-notice" id="my-work-partial" role="note">
+      {t("Some sections are not available to you.")}
+    </p>
+  )}
+
+  {canRead && !loadError && employments.length === 0 && (
+    <div class="empty-state" id="my-work-no-employment">
+      <span class="empty-state-title">
+        {t("No employment is linked to your login")}
+      </span>
+      <span class="empty-state-text">
+        {t(
+          "Ask your administrator to link your login to your employment record."
+        )}
+      </span>
+    </div>
+  )}
+
+  {canRead && !loadError && employments.length > 0 && (
+    <>
+      <section class="admin-section" aria-labelledby="my-shifts-title">
+        <h2 class="admin-section-title" id="my-shifts-title">
+          {t("Upcoming shifts")}
+          <span class="count-pill">{shifts.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="my-shifts-caption"
+        >
+          <table class="data-table data-table--stack" id="my-shifts-table">
+            <caption id="my-shifts-caption">
+              {tn(
+                "{count} shift in the next 14 days",
+                "{count} shifts in the next 14 days",
+                shifts.length,
+                { count: shifts.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Starts")}</th>
+                <th scope="col">{t("Ends")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shifts.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="3">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No upcoming shifts")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Published shifts for the next 14 days appear here."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                shifts.map((shift) => (
+                  <tr data-shift-row={shift.id}>
+                    <td data-label={t("Type")}>
+                      {shift.kind === "time_off" && shift.timeOffKind
+                        ? `${SHIFT_KIND_LABEL.time_off} · ${labelOf(TIME_OFF_LABEL, shift.timeOffKind)}`
+                        : labelOf(SHIFT_KIND_LABEL, shift.kind)}
+                    </td>
+                    <td data-label={t("Starts")}>
+                      <time datetime={shift.startsAt}>
+                        {formatDateTime(locale, shift.startsAt, shift.timeZone)}
+                      </time>
+                    </td>
+                    <td data-label={t("Ends")}>
+                      <time datetime={shift.endsAt}>
+                        {formatDateTime(locale, shift.endsAt, shift.timeZone)}
+                      </time>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="my-attendance-title">
+        <h2 class="admin-section-title" id="my-attendance-title">
+          {t("My attendance")}
+          <span class="count-pill">{events.length}</span>
+        </h2>
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="my-attendance-caption"
+        >
+          <table class="data-table data-table--stack" id="my-attendance-table">
+            <caption id="my-attendance-caption">
+              {tn(
+                "{count} event in the last 14 days (UTC)",
+                "{count} events in the last 14 days (UTC)",
+                events.length,
+                { count: events.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Event")}</th>
+                <th scope="col">{t("Time (UTC)")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="2">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No attendance recorded")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t(
+                          "Your clock-ins, clock-outs and breaks of the last 14 days appear here."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                events.map((event) => (
+                  <tr data-event-row={event.id}>
+                    <td data-label={t("Event")} data-kind={event.kind}>
+                      {labelOf(KIND_LABEL, event.kind)}
+                    </td>
+                    <td data-label={t("Time (UTC)")}>
+                      <time datetime={event.occurredAt}>
+                        {formatDateTime(locale, event.occurredAt, "UTC")}
+                      </time>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section"
+        id="corrections"
+        aria-labelledby="my-corrections-title"
+      >
+        <h2 class="admin-section-title" id="my-corrections-title">
+          {t("My correction requests")}
+          <span class="count-pill">{corrections.length}</span>
+        </h2>
+
+        {canRequest && current && (
+          <form id="correction-form" class="admin-create-form fade-in-up">
+            <p class="form-legend">{t("Request a correction")}</p>
+            <p
+              id="correction-form-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
+            <p class="form-hint">
+              {t(
+                "A correction never edits the original record. If it is approved, a new event replaces it. Your reason is seen only by you and the people who decide."
+              )}
+            </p>
+            <input
+              type="hidden"
+              id="correction-employment"
+              value={current.id}
+            />
+
+            <label for="correction-kind">{t("What do you want to do?")}</label>
+            <select id="correction-kind" required>
+              <option value="add">{CORRECTION_KIND_LABEL.add}</option>
+              <option value="replace">{CORRECTION_KIND_LABEL.replace}</option>
+            </select>
+
+            <label for="correction-target">{t("Event to replace")}</label>
+            <select id="correction-target">
+              <option value="">{t("Not applicable")}</option>
+              {events.map((event) => (
+                <option value={event.id}>
+                  {`${labelOf(KIND_LABEL, event.kind)} · ${formatDateTime(locale, event.occurredAt, "UTC")}`}
+                </option>
+              ))}
+            </select>
+
+            <label for="correction-proposed-kind">{t("Correct event")}</label>
+            <select id="correction-proposed-kind" required>
+              {ATTENDANCE_KINDS.map((kind) => (
+                <option value={kind}>{KIND_LABEL[kind]}</option>
+              ))}
+            </select>
+
+            <label for="correction-proposed-at">{t("Correct time")}</label>
+            <input id="correction-proposed-at" type="datetime-local" required />
+
+            <label for="correction-reason">{t("Reason")}</label>
+            <textarea
+              id="correction-reason"
+              rows="3"
+              maxlength="500"
+              required
+            />
+
+            <button type="submit" id="correction-submit">
+              {t("Send request")}
+            </button>
+          </form>
+        )}
+
+        <div
+          class="data-table-scroll fade-in-up"
+          role="region"
+          tabindex="0"
+          aria-labelledby="my-corrections-caption"
+        >
+          <table class="data-table data-table--stack" id="my-corrections-table">
+            <caption id="my-corrections-caption">
+              {tn("{count} request", "{count} requests", corrections.length, {
+                count: corrections.length
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Request")}</th>
+                <th scope="col">{t("Correct event")}</th>
+                <th scope="col">{t("Correct time")}</th>
+                <th scope="col">{t("Status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {corrections.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan="4">
+                    <div class="empty-state">
+                      <span class="empty-state-title">
+                        {t("No correction requests")}
+                      </span>
+                      <span class="empty-state-text">
+                        {t("Requests you make appear here with their status.")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                corrections.map((correction) => (
+                  <tr data-correction-row={correction.id}>
+                    <td data-label={t("Request")}>
+                      {labelOf(CORRECTION_KIND_LABEL, correction.kind)}
+                    </td>
+                    <td data-label={t("Correct event")}>
+                      {labelOf(KIND_LABEL, correction.proposedKind)}
+                    </td>
+                    <td data-label={t("Correct time")}>
+                      <time datetime={correction.proposedOccurredAt}>
+                        {formatDateTime(
+                          locale,
+                          correction.proposedOccurredAt,
+                          "UTC"
+                        )}
+                      </time>
+                    </td>
+                    <td
+                      data-label={t("Status")}
+                      data-status={correction.status}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={
+                          CORRECTION_STATUS_TONE[correction.status] ?? "neutral"
+                        }
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {labelOf(CORRECTION_STATUS_LABEL, correction.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP: it makes Astro bundle this script as an
+  // external file (an import-free script is inlined, and inline is blocked).
+  import {
+    inputValue,
+    localDateTimeToInstant,
+    onSubmit
+  } from "../../../lib/ui/admin-form-client";
+  import {
+    hrMutate,
+    messageBox,
+    readMessages
+  } from "../../../lib/ui/hr-self-service-client";
+
+  const messages = readMessages();
+  const formError = messageBox("correction-form-error");
+
+  // A target event only makes sense for "replace".
+  const kindSelect = document.getElementById("correction-kind");
+  const targetSelect = document.getElementById("correction-target");
+
+  function syncTarget(): void {
+    if (!(kindSelect instanceof HTMLSelectElement)) return;
+    if (!(targetSelect instanceof HTMLSelectElement)) return;
+
+    const replace = kindSelect.value === "replace";
+    targetSelect.disabled = !replace;
+    targetSelect.required = replace;
+
+    if (!replace) {
+      targetSelect.value = "";
+    }
+  }
+
+  kindSelect?.addEventListener("change", syncTarget);
+  syncTarget();
+
+  onSubmit("correction-form", async ({ submit }) => {
+    const proposedOccurredAt = localDateTimeToInstant("correction-proposed-at");
+
+    if (!proposedOccurredAt) {
+      formError.show(messages.VALIDATION_ERROR ?? "");
+      return;
+    }
+
+    const kind = inputValue("correction-kind");
+    const target = inputValue("correction-target");
+
+    await hrMutate(
+      submit,
+      formError,
+      messages,
+      "POST",
+      "/api/v1/hr-workforce/attendance-corrections",
+      {
+        employmentId: inputValue("correction-employment"),
+        kind,
+        ...(kind === "replace" && target ? { targetEventId: target } : {}),
+        proposedKind: inputValue("correction-proposed-kind"),
+        proposedOccurredAt,
+        reason: inputValue("correction-reason")
+      }
+    );
+  });
+</script>

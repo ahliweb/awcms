@@ -4,7 +4,7 @@
 
 > **Status:** built (Issue #953, Wave D of the platform epic; builds on the
 > attendance and shift data of Issues #946/#947). Module: `hr_workforce`
-> (experimental, no admin screen yet). **This document is the contract of record
+> (active; the employee, supervisor and HR screens landed with Issue #952, see `workforce-self-service.md`). **This document is the contract of record
 > for the workforce metrics.** The upstream metrics catalogue the issue refers to
 > (`docs/aw-business-platform-metrics.md`) is not in this repository; if it
 > defines a workforce metric differently, reconcile by changing this contract and
@@ -288,7 +288,7 @@ the employer's decision (ADR-0132 section 13.2).
 
 ## 9. Limitations
 
-- No admin screen yet (the module is `experimental`); the API is the surface.
+- The employee, supervisor and HR read screens exist (Issue #952, `workforce-self-service.md`); HR's per-person `all`-mode read stays API-only until the read audit of Issue #1083 lands.
 - Window arithmetic is in UTC instants; a client wanting local-day windows
   converts them. Office grouping uses the **current** terms, not the terms at the
   time of each shift.
