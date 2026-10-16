@@ -136,7 +136,9 @@ export const PAYROLL_DO_EXECUTE_ALLOWLIST: Readonly<Record<string, string>> = {
   "099_awcms_sync_outbox_retire.sql":
     "a one-line row count over awcms_sync_outbox (a literal table, no payroll relation) to refuse retiring a non-empty table",
   "142_awcms_delegated_access_expiry_sweep.sql":
-    "creates a policy per table of a fixed list of access-grant tables for the expiry-sweep role; the loop variable ranges over literals in the same file, none a payroll relation"
+    "creates a policy per table of a fixed list of access-grant tables for the expiry-sweep role; the loop variable ranges over literals in the same file, none a payroll relation",
+  "310_awcms_setup_role_credential_column_revoke.sql":
+    "one GRANT EXECUTE on awcms_ensure_principal_id(text) to the migration role (current_user); the only run-time part is a ROLE name, no relation, payroll or otherwise"
 };
 
 /**

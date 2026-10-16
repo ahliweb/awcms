@@ -20,6 +20,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  SETUP_COLUMN_GRANTS,
   WORKER_COLUMN_GRANTS,
   checkWorkerSetupRoleGrants,
   defaultWorkerSetupRoleGrantsPolicy
@@ -76,6 +77,122 @@ describeOrSkip(
       expect(result.evidence).toContain(
         "INSERT on awcms_email_messages(subject)"
       );
+    });
+
+    test("awcms_setup column grants are pinned in both directions (Issue #1082)", async () => {
+      const sql = new Bun.SQL(DATABASE_URL!, { max: 1 });
+      try {
+        const rows = (await sql`
+          SELECT 1 AS present FROM pg_roles WHERE rolname = 'awcms_setup'
+        `) as unknown[];
+        if (rows.length === 0) return;
+      } finally {
+        await sql.close({ timeout: 1 });
+      }
+
+      const base = defaultWorkerSetupRoleGrantsPolicy();
+      const real = await checkWorkerSetupRoleGrants(base);
+      expect(real.status).toBe("pass");
+
+      const narrowed = structuredClone(SETUP_COLUMN_GRANTS);
+      narrowed.awcms_identities!.SELECT = ["id"];
+      const over = await checkWorkerSetupRoleGrants({
+        ...base,
+        setupColumns: narrowed
+      });
+      expect(over.status).toBe("fail");
+      expect(over.evidence).toContain(
+        "awcms_setup column grant over-granted: SELECT on awcms_identities(principal_id)"
+      );
+
+      const widened = structuredClone(SETUP_COLUMN_GRANTS);
+      widened.awcms_identities!.SELECT!.push("password_hash");
+      const under = await checkWorkerSetupRoleGrants({
+        ...base,
+        setupColumns: widened
+      });
+      expect(under.status).toBe("fail");
+      expect(under.evidence).toContain(
+        "awcms_setup column grant under-granted: SELECT on awcms_identities(password_hash)"
+      );
+    });
+
+    for (const [role, table, column, privilege] of [
+      ["awcms_setup", "awcms_push_subscriptions", "endpoint", "SELECT"],
+      ["awcms_setup", "awcms_tenant_users", "status", "UPDATE"],
+      ["awcms_worker", "awcms_sessions", "token_hash", "SELECT"],
+      ["awcms_worker", "awcms_tenant_users", "status", "UPDATE"]
+    ] as const) {
+      test(`a stray column grant on an UNPINNED table fails: ${role} ${privilege} ${table}(${column})`, async () => {
+        const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+        try {
+          const rows = (await admin`
+            SELECT 1 AS present FROM pg_roles WHERE rolname = ${role}
+          `) as unknown[];
+          expect(rows.length, `${role} must exist (sql/022)`).toBe(1);
+
+          await admin.unsafe(
+            `GRANT ${privilege} (${column}) ON ${table} TO ${role}`
+          );
+          try {
+            const result = await checkWorkerSetupRoleGrants();
+
+            expect(result.status).toBe("fail");
+            expect(result.evidence).toContain(
+              `${role} column grant over-granted: ${privilege} on ${table}(${column})`
+            );
+          } finally {
+            await admin.unsafe(
+              `REVOKE ${privilege} (${column}) ON ${table} FROM ${role}`
+            );
+          }
+          expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+        } finally {
+          await admin.close({ timeout: 1 });
+        }
+      });
+    }
+
+    test("disabling the link-once trigger or dropping the restrictive policy FAILS", async () => {
+      const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+      try {
+        await admin.unsafe(
+          "ALTER TABLE awcms_identities DISABLE TRIGGER awcms_identities_principal_link_once"
+        );
+        let noTrigger;
+        try {
+          noTrigger = await checkWorkerSetupRoleGrants();
+        } finally {
+          await admin.unsafe(
+            "ALTER TABLE awcms_identities ENABLE TRIGGER awcms_identities_principal_link_once"
+          );
+        }
+
+        expect(noTrigger.status).toBe("fail");
+        expect(noTrigger.evidence).toContain(
+          "awcms_identities_principal_link_once is missing"
+        );
+
+        await admin.unsafe(
+          "DROP POLICY awcms_identities_setup_link_once ON awcms_identities"
+        );
+        let noPolicy;
+        try {
+          noPolicy = await checkWorkerSetupRoleGrants();
+        } finally {
+          await admin.unsafe(
+            `CREATE POLICY awcms_identities_setup_link_once ON awcms_identities
+             AS RESTRICTIVE FOR UPDATE TO awcms_setup
+             USING (principal_id IS NULL) WITH CHECK (principal_id IS NOT NULL)`
+          );
+        }
+
+        expect(noPolicy.status).toBe("fail");
+        expect(noPolicy.evidence).toContain("awcms_identities_setup_link_once");
+        expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+      } finally {
+        await admin.close({ timeout: 1 });
+      }
     });
 
     test("a pinned COLUMN the role does not hold FAILS", async () => {
