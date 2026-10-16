@@ -222,13 +222,15 @@ describe("validateProjectionRegistry (Issue #753)", () => {
     // `tax.snapshot_activity` (ADR-0127) — the first two projections DOMAIN
     // modules contribute to the engine — plus the two `procurement.*` counters
     // over its document-event log (ADR-0128), plus the three `booking.*`
-    // projections over its reservation history (Issue #944).
-    expect(result.descriptors.length).toBe(10);
+    // projections over its reservation history (Issue #944), plus
+    // `hr_workforce.attendance_events` over the attendance history (Issue #953).
+    expect(result.descriptors.length).toBe(11);
     expect(result.descriptors.map((d) => d.key)).toEqual(
       expect.arrayContaining([
         "booking.reservations",
         "booking.time",
-        "booking.nights"
+        "booking.nights",
+        "hr_workforce.attendance_events"
       ])
     );
     expect(result.descriptors.map((d) => d.key)).toContain(

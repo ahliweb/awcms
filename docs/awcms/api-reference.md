@@ -12293,6 +12293,59 @@ Gated by `hr_workforce.templates.delete` (high-risk). Soft delete; frees the cod
 | 404    | RESOURCE_NOT_FOUND.                       | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT or TEMPLATE_DELETED. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/hr-workforce/workforce-metrics/employees` — Workforce facts per employee
+
+- **operationId**: `hrWorkforceMetricsEmployeesList`
+- **Security**: bearerAuth + tenantHeader
+
+Transparent attendance, hours, shift-coverage and productivity FACTS per employee over a UTC window (`from` inclusive, `to` exclusive, both required, at most 31 days). Gated by `hr_workforce.workforce_metrics.read` (HR: every employee), EXCEPT `mine=true` (your OWN employments) and `reports=true` (your DIRECT reports only, one level, and only from when the reporting line began; a soft-deleted, terminated or re-assigned report, or a terminated manager, drops out), which need no permission (an ownership grant on the persisted login link / current manager link, ADR-0063; ABAC, scope and SoD still apply, and a machine credential never carries it). `mine` and `reports` cannot be combined, and an `employmentId` outside the chosen basis is 403, the same as an id that does not exist. Malformed input from a caller entitled to nothing is 403, not 400. Keyset paginated by employment id (`cursor`, 50 per page). There is NO composite score, ranking or flag; every figure is a count, minutes, or a ratio defined in `docs/awcms/workforce-metrics.md`. Reads attendance events (effective record only) and published work shifts only; no photo, biometric, device, location or payroll data exists in or is read by this surface. Never cached. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type               | Description |
+| ------------------ | ------ | -------- | ------------------ | ----------- |
+| `from`             | query  | yes      | string (date-time) |             |
+| `to`               | query  | yes      | string (date-time) |             |
+| `employmentId`     | query  | no       | string (uuid)      |             |
+| `mine`             | query  | no       | boolean            |             |
+| `reports`          | query  | no       | boolean            |             |
+| `cursor`           | query  | no       | string (uuid)      |             |
+| `X-Correlation-ID` | header | no       | string             |             |
+
+**Responses**
+
+| Status | Description                             | Schema                                 |
+| ------ | --------------------------------------- | -------------------------------------- |
+| 200    | A page of per-employee workforce facts. | object                                 |
+| 400    | Validation error.                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.             | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/workforce-metrics/groups` — Workforce aggregates per office, small groups withheld
+
+- **operationId**: `hrWorkforceMetricsGroupsList`
+- **Security**: bearerAuth + tenantHeader
+
+Per-OFFICE workforce aggregates (the office of each employee's current terms; `officeId: null` is no office assigned) over exactly ONE CLOSED UTC ISO week (`from` a Monday 00:00Z, `to` the next Monday); weeks are disjoint and never nest, so no two accepted windows can be subtracted to leave a slice. A calendar month, any other window, and a bucket that has not ended, is 400: free windows let two requests that differ by a tail slice isolate one person. Gated by `hr_workforce.workforce_metrics.analyze` (or `.read`); there is no ownership grant, an aggregate is not a person's own record. Returns NO individual row. A group with fewer than five CONTRIBUTING employees (at least four hours scheduled or worked in the bucket) is returned `suppressed: true` with no number at all; an employee under the four-hour floor is neither counted nor summed. A shown group reports only a contributor BAND (`5-9`, `10-19`, `20+`), never an exact count. There is deliberately no tenant-wide total, so a withheld group cannot be recovered by subtraction. Ratios are recomputed from the group sums, never averaged. 422 `WORKFORCE_METRICS_SCOPE_TOO_LARGE` when the tenant has more than 10000 employments (decided from a COUNT before any page is read). No composite score. Never cached. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type               | Description |
+| ------------------ | ------ | -------- | ------------------ | ----------- |
+| `from`             | query  | yes      | string (date-time) |             |
+| `to`               | query  | yes      | string (date-time) |             |
+| `X-Correlation-ID` | header | no       | string             |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | Per-office aggregates; small groups withheld.                  | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 422    | The tenant has too many employments for one aggregate request. | [`ApiError`](#standard-error-envelope) |
+
 ## Booking
 
 Availability and schedules of the generic booking module (booking module, Issues #937 and #938, ADR-0131, ADR-0135): schedules written in local wall-clock time in an IANA zone, closures and override-hours exceptions, and a read-only availability search for slot resources (UTC half-open intervals, RFC 5545 gap and fold rules, setup and cleanup buffers, lead time and horizon) and stay resources (local date intervals, nights by date arithmetic, same-day turnover allowed, blocked nights as a hard exclusion, closures as a soft one). Availability persists and claims nothing and may be stale when read; the allocator's database exclusion constraints, not this surface, prevent a double booking. Rate limited per principal. No price, payment or customer name exists in the module.

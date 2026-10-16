@@ -274,6 +274,32 @@ email:templates:seed-defaults`); with none the port is a silent no-op. The
 - **No domain event yet.** `awcms.hr.attendance.recorded` stays provisional until a
   consumer exists (as for shifts).
 
+## Workforce metrics (Issue #953, `sql/308`)
+
+Transparent business FACTS about attendance, hours, shift coverage and
+productivity, with the full contract in
+[`docs/awcms/workforce-metrics.md`](../../../docs/awcms/workforce-metrics.md).
+Two routes under `/api/v1/hr-workforce/workforce-metrics/`:
+
+- `employees` — per-employee facts. `?mine=true` (the employee, no permission) and
+  `?reports=true` (the supervisor, **direct** reports only, no permission) are
+  ownership grants; everyone else needs `workforce_metrics.read` (HR). An
+  `employmentId` outside the basis is 403, the same as a missing one.
+- `groups` — per-office aggregates for `workforce_metrics.analyze` (or `.read`),
+  returning no individual row. A group with fewer than five contributing
+  employees is `suppressed: true` with no number at all, and there is no
+  tenant-wide total to subtract from. The threshold is a code constant.
+
+No composite score, ranking or flag exists anywhere; no photo, biometric, device
+or location value is read (there is none on the source tables); no payroll table
+is read. Every response says that a figure is not an assessment and needs the
+governance review of section 7 of the contract before any consequential use.
+
+The module registers one reporting projection, `hr_workforce.attendance_events`
+(event volume per kind, HR-only), because the engine's tenant-wide counters cannot
+express "own only" or small-group suppression; the behavioural figures are
+computed live instead (`domain/hr-workforce-reporting.ts` explains the split).
+
 ## Subject-rights decision (ADR-0094 coverage)
 
 | Table                             | `subjectData`                                                                             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                     |

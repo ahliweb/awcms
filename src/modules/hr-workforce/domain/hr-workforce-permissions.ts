@@ -131,6 +131,18 @@ export const HR_WORKFORCE_GUARDS = {
       action: "approve" as const
     }
   },
+  workforceMetrics: {
+    read: {
+      moduleKey: "hr_workforce",
+      activityCode: "workforce_metrics",
+      action: "read" as const
+    },
+    analyze: {
+      moduleKey: "hr_workforce",
+      activityCode: "workforce_metrics",
+      action: "analyze" as const
+    }
+  },
   settings: {
     read: {
       moduleKey: "hr_workforce",

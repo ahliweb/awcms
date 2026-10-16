@@ -220,5 +220,12 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_workforce.corrections.approve",
   "hr_workforce.corrections.cancel",
   "hr_workforce.corrections.create",
-  "hr_workforce.corrections.read"
+  "hr_workforce.corrections.read",
+  // hr_workforce workforce metrics (2) — Issue #953. Same posture: API-first and
+  // `experimental`; the metrics screen (per-employee list for `read`, per-office
+  // aggregates for `analyze`) is part of the recorded follow-up that flips the
+  // module to `active`. The facts are reachable by their owners meanwhile
+  // through the ownership-granted routes (`?mine=true`, `?reports=true`).
+  "hr_workforce.workforce_metrics.analyze",
+  "hr_workforce.workforce_metrics.read"
 ];
