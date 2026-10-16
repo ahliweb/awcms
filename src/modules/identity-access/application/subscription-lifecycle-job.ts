@@ -145,8 +145,8 @@ async function applyTenantTransition(
   transition: SubscriptionTransition,
   now: Date,
   correlationId: string | undefined
-): Promise<void> {
-  await withTenantOrThrow(
+): Promise<boolean> {
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -155,7 +155,7 @@ async function applyTenantTransition(
       // applying a transition computed from a state that has since moved. The
       // ladder is already idempotent by anchor date; this covers the narrower
       // window between planning and applying inside one run.
-      await tx`
+      const updated = (await tx`
       UPDATE awcms_tenant_subscriptions
       SET status = ${transition.to},
           grace_ends_at = ${transition.graceEndsAt ?? row.grace_ends_at},
@@ -163,7 +163,12 @@ async function applyTenantTransition(
       WHERE tenant_id = ${tenantId}
         AND id = ${row.id}
         AND status = ${row.status}
-    `;
+      RETURNING id
+    `) as { id: string }[];
+
+      // Zero rows means the status moved since planning: nothing was applied,
+      // so nothing is audited or counted.
+      if (updated.length === 0) return false;
 
       // In the TENANT's own trail, not the operator's: a customer is entitled to
       // read why their plan stopped covering something. `actorTenantUserId` is
@@ -189,6 +194,8 @@ async function applyTenantTransition(
         },
         correlationId
       });
+
+      return true;
     },
     { workClass: "maintenance" }
   );
@@ -272,7 +279,7 @@ export async function runSubscriptionLifecycle(
       continue;
     }
 
-    await applyTenantTransition(
+    const applied = await applyTenantTransition(
       sql,
       tenantId,
       plan.row,
@@ -280,6 +287,8 @@ export async function runSubscriptionLifecycle(
       now,
       ctx.correlationId
     );
+
+    if (!applied) continue;
 
     transitionsApplied += 1;
     if (isLoss) entitlementLosses += 1;
