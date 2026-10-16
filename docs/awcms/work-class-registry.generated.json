@@ -857,6 +857,46 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/evidence.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/geofences/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/geofences/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/geofences/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/notice-acknowledgements.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/notice.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/notices.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-workforce/geolocation/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/hr-workforce/settings.ts",
       "workClass": "interactive",
       "source": "factory"

@@ -10,6 +10,10 @@ import {
   type ReadBasis
 } from "../../../../../modules/hr-workforce/application/hr-attendance-directory";
 import {
+  captureLocationEvidence,
+  readEvidenceVerdict
+} from "../../../../../modules/hr-workforce/application/hr-location-evidence";
+import {
   asUuid,
   badId,
   readIdempotencyKey,
@@ -190,7 +194,13 @@ const SCOPE = "hr_workforce_attendance_event_create";
  * a correction); a `kiosk`/`import` replay is accepted up to seven days old and
  * flagged `late` past fifteen minutes. A replay of the same `clientEventKey`
  * returns the ORIGINAL with 200 (a different event under a used key is 409).
- * There is no location, photo or device field. Idempotent; audited when recorded
+ * There is no location, photo or device field on the event, and none is stored.
+ * The one optional body field is `positionSample` (Issue #970, ADR-0138): only a
+ * `self` clock_in / clock_out may carry it (anything else is 400), the server
+ * evaluates it in the request against the office's geofences and DISCARDS it,
+ * and `locationVerdict` in the response is `inside` / `outside` / `not_provided`
+ * - or null while the tenant's switch is off (the default), when the sample is
+ * ignored. It never blocks clocking. Idempotent; audited when recorded
  * for somebody else (every `supervisor` event, a `kiosk`/`import` one flagged
  * `late`; `self` and punctual taps are not: high
  * volume: the event is the record).
@@ -270,7 +280,11 @@ export const POST = defineTenantRoute<CreatePrepared>({
       tenantUserId,
       {
         ...input,
-        occurredAt: input.occurredAt.toISOString()
+        occurredAt: input.occurredAt.toISOString(),
+        // ADR-0138: a position sample is personal data. The request hash is
+        // stored with the idempotency record, and a hash of a coordinate is a
+        // value a guess can be checked against, so only its PRESENCE is hashed.
+        positionSample: input.positionSample === null ? null : "present"
       },
       async () => {
         const result = await recordEvent(
@@ -284,11 +298,26 @@ export const POST = defineTenantRoute<CreatePrepared>({
         );
 
         switch (result.outcome) {
-          case "ok":
+          case "ok": {
+            // A replay is never re-evaluated. The sample is evaluated by the
+            // server here and dropped; only a verdict is kept (ADR-0138).
+            const evidence = result.replayed
+              ? await readEvidenceVerdict(tx, tenantId, result.event.id)
+              : await captureLocationEvidence(
+                  tx,
+                  tenantId,
+                  result.event,
+                  input.positionSample
+                );
+
             return {
               status: result.replayed ? 200 : 201,
-              body: result.event
+              body: {
+                ...result.event,
+                locationVerdict: evidence ? evidence.verdict : null
+              }
             };
+          }
           case "employment_not_found":
             return fail(
               422,

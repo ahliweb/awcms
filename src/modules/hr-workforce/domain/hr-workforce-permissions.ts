@@ -143,6 +143,20 @@ export const HR_WORKFORCE_GUARDS = {
       action: "analyze" as const
     }
   },
+  attendanceEvidence: {
+    read: {
+      moduleKey: "hr_workforce",
+      activityCode: "attendance_evidence",
+      action: "read" as const
+    }
+  },
+  geolocationEvidence: {
+    configure: {
+      moduleKey: "hr_workforce",
+      activityCode: "geolocation_evidence",
+      action: "configure" as const
+    }
+  },
   settings: {
     read: {
       moduleKey: "hr_workforce",

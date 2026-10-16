@@ -60,6 +60,7 @@ import {
   hashSessionToken
 } from "../src/lib/auth/session-token";
 import { linkIdentityToPrincipal } from "../src/modules/identity-access/application/principal-store";
+import { OWNER_GRANT_EXCLUDED_PERMISSION_KEYS } from "../src/modules/_shared/owner-grant-exclusions";
 
 const DATABASE_URL =
   process.env.PARTNER_SURFACE_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -310,7 +311,11 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
 
     await sql`
       INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
-      SELECT ${tenantId}, ${role[0]!.id}, id FROM awcms_permissions WHERE scope = 'tenant'
+      SELECT ${tenantId}, ${role[0]!.id}, id FROM awcms_permissions
+      WHERE scope = 'tenant'
+        AND (module_key || '.' || activity_code || '.' || action) NOT IN (
+          SELECT jsonb_array_elements_text(${[...OWNER_GRANT_EXCLUDED_PERMISSION_KEYS]}::jsonb)
+        )
     `;
 
     await sql`

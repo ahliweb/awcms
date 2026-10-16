@@ -227,5 +227,11 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // module to `active`. The facts are reachable by their owners meanwhile
   // through the ownership-granted routes (`?mine=true`, `?reports=true`).
   "hr_workforce.workforce_metrics.analyze",
-  "hr_workforce.workforce_metrics.read"
+  "hr_workforce.workforce_metrics.read",
+  // hr_workforce geolocation evidence (2) — ADR-0138 / Issue #970. API-first like
+  // the rest of the module: the issue asks for no screen. The configure screen
+  // (switch, DPIA reference, notice, geofences) and the evidence reader are the
+  // recorded follow-up; until then both are reachable only through the API.
+  "hr_workforce.attendance_evidence.read",
+  "hr_workforce.geolocation_evidence.configure"
 ];

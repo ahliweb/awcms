@@ -38,7 +38,7 @@ fiscal documents (annual return, withholding certificates); bank-file generation
 and any payment-provider call (a later issue, through the outbox, never inside a
 database transaction); leave balances and accrual; loans and benefits; applicant
 tracking; performance review; **affiliate commission** (a different beneficiary,
-not an employee); photo, biometric and device-fingerprint attendance evidence (never, O6); geolocation-only evidence is not part of the admitted phases; its design is decided in ADR-0138 and built only by a follow-up issue (§4.3).
+not an employee); photo, biometric and device-fingerprint attendance evidence (never, O6); geolocation-only evidence is decided in ADR-0138 and built by Issue #970, off for every tenant by default (§4.3).
 
 ## 2. PRD-lite
 
@@ -63,7 +63,7 @@ module (reads availability through the port); an auditor.
 | Employment stores a `profile_identity` reference and never copies name, contact, national id                           | §3, `profile_id` composite FK; no personal column in any HR table |
 | Org unit, manager, effective-dated status                                                                              | §4.1 `employment_terms`                                           |
 | Attendance events, corrections, approval via `workflow_approval`                                                       | §4.2                                                              |
-| Geolocation-only evidence is a separate feature, off by default per tenant; photo, biometric and device evidence never | §4.3 (decided in ADR-0138; absent in phase 1)                     |
+| Geolocation-only evidence is a separate feature, off by default per tenant; photo, biometric and device evidence never | §4.3 (ADR-0138, built by #970; off by default)                    |
 | Shift templates and assignments with conflict detection                                                                | §4.4                                                              |
 | A staff-availability port for Booking                                                                                  | §5                                                                |
 
@@ -209,10 +209,17 @@ list of deferrals.
 **Owner decision O6 (answered 2026-10-10, awcms-one DoR):** attendance **may**
 use **geolocation only** — **no photo, no biometric and no device fingerprint,
 ever** — and it is **off by default per tenant**. **Decided in ADR-0138
-(Accepted, 2026-10-12) — as a decision record only: no table, column, setting,
-permission or route exists, and phase 1 still ships none of it.** An
-implementation issue is created from the ADR and depends on the attendance
-implementation (#947). The decision:
+(Accepted, 2026-10-12) and implemented by Issue #970 (`sql/306`): the tables,
+the two permissions (`attendance_evidence.read`, `geolocation_evidence.configure`),
+the geofence evaluator and the routes under `/api/v1/hr-workforce/geolocation/*`
+exist, and the switch is off for every tenant until a person holding the
+dedicated permission enables it with a DPIA reference, a notice and a geofence.**
+A position reported by the client is forgeable: the verdict is a supporting
+indicator for human review, never proof, and decides nothing by itself.
+`attendance_evidence.read` is tenant-wide and HR-only (no supervisor scope
+yet). Erasure of the verdicts follows the retention bound pending counsel's
+decision, and enabling the feature in any tenant waits for that sign-off
+(ADR-0138, "Status of the implementation"). The decision:
 
 - **Verdict-only evidence.** At `clock_in`/`clock_out` only, the server evaluates
   one position sample against a tenant geofence and persists a verdict

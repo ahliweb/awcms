@@ -11773,7 +11773,7 @@ Gated by `hr_workforce.attendance.read` (every employee), EXCEPT `mine=true` (yo
 - **operationId**: `hrWorkforceAttendanceEventCreate`
 - **Security**: bearerAuth + tenantHeader
 
-`source: self` records YOUR OWN event and needs `hr_workforce.clock.create` plus an employment linked to your login (anything else is 403 whether the employment exists or not); `supervisor`, `kiosk` and `import` record for another employment and need `hr_workforce.attendance.create`. The SERVER clock decides `recordedAt`; `occurredAt` is bounded by the tenant clock-skew setting: in the future -> 422 `ATTENDANCE_TIME_IN_FUTURE`; for `self`/`supervisor`, older than the skew -> 422 `ATTENDANCE_BACKDATED` (request a correction); a `kiosk`/`import` replay is accepted up to seven days old (older -> 422 `ATTENDANCE_TOO_OLD`) and flagged `late` past fifteen minutes. A replay of the same `clientEventKey` for the same employment returns the ORIGINAL with 200 (a different event under a used key is 409 `CLIENT_EVENT_KEY_CONFLICT`). The body has NO location, photo, device or network field and an unknown field is refused. Requires an Idempotency-Key. Audited when recorded for somebody else: every `supervisor` event, and a `kiosk`/`import` event flagged `late` (ids, kind, source and claimed instant only; the actor is the recorder); a `self` event and a punctual kiosk/import tap are not (high volume: the event is the record). The seven-day replay window is NOT an approval path: it exists for offline queues, which is why the stale ones leave a trace.
+`source: self` records YOUR OWN event and needs `hr_workforce.clock.create` plus an employment linked to your login (anything else is 403 whether the employment exists or not); `supervisor`, `kiosk` and `import` record for another employment and need `hr_workforce.attendance.create`. The SERVER clock decides `recordedAt`; `occurredAt` is bounded by the tenant clock-skew setting: in the future -> 422 `ATTENDANCE_TIME_IN_FUTURE`; for `self`/`supervisor`, older than the skew -> 422 `ATTENDANCE_BACKDATED` (request a correction); a `kiosk`/`import` replay is accepted up to seven days old (older -> 422 `ATTENDANCE_TOO_OLD`) and flagged `late` past fifteen minutes. A replay of the same `clientEventKey` for the same employment returns the ORIGINAL with 200 (a different event under a used key is 409 `CLIENT_EVENT_KEY_CONFLICT`). The body has NO photo, device or network field and an unknown field is refused. The ONE optional position field is `positionSample` (Issue #970, ADR-0138): only a `self` clock_in / clock_out may carry it (any other source or kind -> 400), the server evaluates it IN THE REQUEST against the geofences of the event's office and DISCARDS it (no coordinate, raw accuracy, address or device value is ever stored, logged or audited), and the response carries `locationVerdict` (`inside`, `outside` or `not_provided`; `null` while the tenant's switch is off, the default, when the sample is ignored). A declined / absent / too-coarse / unacknowledged sample is `not_provided` and never blocks clocking. Requires an Idempotency-Key. Audited when recorded for somebody else: every `supervisor` event, and a `kiosk`/`import` event flagged `late` (ids, kind, source and claimed instant only; the actor is the recorder); a `self` event and a punctual kiosk/import tap are not (high volume: the event is the record). The seven-day replay window is NOT an approval path: it exists for offline queues, which is why the stale ones leave a trace.
 
 **Parameters**
 
@@ -12010,6 +12010,314 @@ Gated by `hr_workforce.employments.update`. Appends the next terms from `effecti
 | 404    | RESOURCE_NOT_FOUND.                                                                                                           | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT, EMPLOYMENT_DELETED, EMPLOYMENT_TERMINATED, TERMS_OUT_OF_ORDER, MANAGER_CYCLE or MANAGER_CHAIN_TOO_DEEP. | [`ApiError`](#standard-error-envelope) |
 | 422    | EFFECTIVE_BEFORE_HIRE, OFFICE_NOT_FOUND or MANAGER_NOT_FOUND.                                                                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/geolocation/evidence` — List location-evidence verdicts
+
+- **operationId**: `hrWorkforceLocationEvidenceList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.attendance_evidence.read` (tenant-wide and HR-only: there is no supervisor scope or manager-chain read yet, and never a scheduler, cashier, marketer or payroll operator), EXCEPT `mine=true` (your OWN verdicts), which needs no permission beyond an employment linked to your login (an ownership grant, ADR-0063). An `employmentId` outside your own under `mine` is 403. Each read of OTHER people's verdicts is audited (the reader, the employment filter and a count, never a verdict). A verdict is a SUPPORTING INDICATOR for human review, never proof, and changes no pay, status or approval by itself. There is no coordinate to return: none is ever stored. Newest first, keyset paginated; `from`/`to` bound the evaluation instant. Responses are `no-store`.
+
+**Parameters**
+
+| Name               | In     | Required | Type               | Description |
+| ------------------ | ------ | -------- | ------------------ | ----------- |
+| `mine`             | query  | no       | boolean            |             |
+| `employmentId`     | query  | no       | string (uuid)      |             |
+| `eventId`          | query  | no       | string (uuid)      |             |
+| `from`             | query  | no       | string (date-time) |             |
+| `to`               | query  | no       | string (date-time) |             |
+| `cursor`           | query  | no       | string             |             |
+| `X-Correlation-ID` | header | no       | string             |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of verdicts.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/geolocation/geofences` — List geofences
+
+- **operationId**: `hrWorkforceGeofencesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure`. `officeId` narrows to one office; `includeDeleted=true` includes soft-deleted ones. A geofence is a place of business, not a person.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `officeId`         | query  | no       | string (uuid) |             |
+| `includeDeleted`   | query  | no       | boolean       |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The geofences.              | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/geolocation/geofences` — Define a geofence
+
+- **operationId**: `hrWorkforceGeofenceCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). A circle (`latitude`, `longitude`, `radiusMeters` 50-5000) or a simple polygon (3-32 `[latitude, longitude]` vertices, no repeated vertex or crossing edge, at least 2,500 square metres, spanning at most 10 km) attached to a live office; at most 10 live geofences per office (409 `GEOFENCE_OFFICE_LIMIT`). Requires an Idempotency-Key. Audited at warning severity with ids, the revision and a geometry fingerprint, never coordinates.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrGeofenceInput`](#schema-hrgeofenceinput)
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 201    | The geofence.                                  | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                    | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or GEOFENCE_OFFICE_LIMIT. | [`ApiError`](#standard-error-envelope) |
+| 422    | OFFICE_NOT_FOUND.                              | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/hr-workforce/geolocation/geofences/{id}` — Replace a geofence
+
+- **operationId**: `hrWorkforceGeofenceReplace`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). Replaces label, office and geometry of a LIVE geofence. Evidence already recorded keeps naming it; it cannot be re-evaluated because no coordinate was kept. Requires an Idempotency-Key. Audited at warning severity with ids, the revision and a geometry fingerprint, never coordinates.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrGeofenceInput`](#schema-hrgeofenceinput)
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | The geofence.                                  | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                    | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or GEOFENCE_OFFICE_LIMIT. | [`ApiError`](#standard-error-envelope) |
+| 422    | OFFICE_NOT_FOUND.                              | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/hr-workforce/geolocation/geofences/{id}` — Soft-delete a geofence
+
+- **operationId**: `hrWorkforceGeofenceDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). SOFT delete: a verdict that names the geofence keeps its reference. Refused 409 `GEOFENCE_LAST_WHILE_ENABLED` while geolocation evidence is enabled and this is the last live geofence. Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                    | Schema                                 |
+| ------ | ------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The deleted geofence.                                                          | object                                 |
+| 400    | Validation error.                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, GEOFENCE_ALREADY_DELETED or GEOFENCE_LAST_WHILE_ENABLED. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/geolocation/geofences/{id}/restore` — Restore a geofence
+
+- **operationId**: `hrWorkforceGeofenceRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). Undoes a soft delete; refused 422 while its office is deleted. Requires an Idempotency-Key. Audited at warning severity.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                          | Schema                                 |
+| ------ | -------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The restored geofence.                                               | object                                 |
+| 400    | Validation error.                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | RESOURCE_NOT_FOUND.                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, GEOFENCE_NOT_DELETED or GEOFENCE_OFFICE_LIMIT. | [`ApiError`](#standard-error-envelope) |
+| 422    | OFFICE_NOT_FOUND.                                                    | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/geolocation/notice` — Read the notice status for the caller's employment
+
+- **operationId**: `hrWorkforceGeolocationNoticeStatus`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.clock.create` and an employment linked to the caller's login (anything else is 403). What the clock client needs BEFORE it offers a position: whether the tenant has the feature on, the accuracy ceiling, the current notice and whether this employee acknowledged it. While the feature is off, `enabled` is false and no notice is returned: the client must not ask for a position. `no-store`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `employmentId`     | query  | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The status.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/geolocation/notice-acknowledgements` — Acknowledge the current notice
+
+- **operationId**: `hrWorkforceGeolocationNoticeAcknowledge`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.clock.create` and an employment linked to the caller's login (anything else is 403). Records that the employee has seen the CURRENT notice version: evidence of notice, not a claim that consent is the lawful basis. A repeat is 200. Declining is simply not acknowledging: the employee still clocks in, with a `not_provided` verdict. Requires an Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrGeolocationAcknowledgeInput`](#schema-hrgeolocationacknowledgeinput)
+
+**Responses**
+
+| Status | Description                                 | Schema                                 |
+| ------ | ------------------------------------------- | -------------------------------------- |
+| 200    | Already acknowledged.                       | object                                 |
+| 201    | Acknowledged.                               | object                                 |
+| 400    | Validation error.                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                 | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or NOTICE_NOT_CURRENT. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/geolocation/notices` — List the notice versions
+
+- **operationId**: `hrWorkforceGeolocationNoticesList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure`. Newest version first.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The notice versions.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/hr-workforce/geolocation/notices` — Publish the next notice version
+
+- **operationId**: `hrWorkforceGeolocationNoticePublish`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). Append-only, numbered per tenant; the text (locale -> text) is the tenant's: what is captured (a position at clock-in and clock-out only), why, who can see it, how long it is kept, and that declining does not stop clocking in. Publishing does NOT make it current: `PUT .../settings` with `noticeId` does. Requires an Idempotency-Key. Audited at warning severity (the version, never the text).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrGeolocationNoticeInput`](#schema-hrgeolocationnoticeinput)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 201    | The notice version.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-workforce/geolocation/settings` — Read the geolocation evidence settings
+
+- **operationId**: `hrWorkforceGeolocationSettingsGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_workforce.geolocation_evidence.configure` (not granted to the tenant owner by default, ADR-0138 section 3). The switch is FALSE for every tenant until an authorised person enables it. Responses are `no-store`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The settings.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/hr-workforce/geolocation/settings` — Switch geolocation attendance evidence on or off
+
+- **operationId**: `hrWorkforceGeolocationSettingsSet`
+- **Security**: bearerAuth + tenantHeader
+
+ENABLING needs `hr_workforce.geolocation_evidence.configure` (403 otherwise) and, in the resulting state, a DPIA reference + date (409 `GEOLOCATION_DPIA_REQUIRED`), a published notice (409 `GEOLOCATION_NOTICE_REQUIRED`) and at least one live geofence (409 `GEOLOCATION_GEOFENCE_REQUIRED`). DISABLING has no precondition, and a holder of `hr_workforce.settings.configure` may send a bare `{ "enabled": false }`; anything else needs the dedicated permission. An omitted field keeps its value; `null` clears `dpiaReference`, `dpiaRecordedOn` or `noticeId`. Requires an Idempotency-Key. Audited at CRITICAL severity when the switch flips (warning otherwise) with the before/after STATE and the actor, never a location. Pointing `noticeId` at a newer version re-requests every employee's acknowledgement.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrGeolocationSettingsInput`](#schema-hrgeolocationsettingsinput)
+
+**Responses**
+
+| Status | Description                                                                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The settings.                                                                                                  | object                                 |
+| 400    | Validation error.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT, GEOLOCATION_DPIA_REQUIRED, GEOLOCATION_NOTICE_REQUIRED or GEOLOCATION_GEOFENCE_REQUIRED. | [`ApiError`](#standard-error-envelope) |
+| 422    | NOTICE_NOT_FOUND.                                                                                              | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/hr-workforce/settings` — Read the workforce settings
 
@@ -15645,14 +15953,15 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 
 ### Schema: HrAttendanceEventInput
 
-| Field            | Type                                                      | Required | Nullable | Description                |
-| ---------------- | --------------------------------------------------------- | -------- | -------- | -------------------------- |
-| `employmentId`   | string (uuid)                                             | yes      | no       |                            |
-| `kind`           | enum(`clock_in`, `clock_out`, `break_start`, `break_end`) | yes      | no       |                            |
-| `occurredAt`     | string (date-time)                                        | yes      | no       | A UTC instant ending in Z. |
-| `source`         | enum(`self`, `supervisor`, `kiosk`, `import`)             | yes      | no       |                            |
-| `clientEventKey` | string                                                    | yes      | no       |                            |
-| `officeId`       | string (uuid)                                             | no       | no       |                            |
+| Field            | Type                                                      | Required | Nullable | Description                                                                                                                                                                        |
+| ---------------- | --------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `employmentId`   | string (uuid)                                             | yes      | no       |                                                                                                                                                                                    |
+| `kind`           | enum(`clock_in`, `clock_out`, `break_start`, `break_end`) | yes      | no       |                                                                                                                                                                                    |
+| `occurredAt`     | string (date-time)                                        | yes      | no       | A UTC instant ending in Z.                                                                                                                                                         |
+| `source`         | enum(`self`, `supervisor`, `kiosk`, `import`)             | yes      | no       |                                                                                                                                                                                    |
+| `clientEventKey` | string                                                    | yes      | no       |                                                                                                                                                                                    |
+| `officeId`       | string (uuid)                                             | no       | no       |                                                                                                                                                                                    |
+| `positionSample` | [`HrPositionSample`](#schema-hrpositionsample)            | no       | yes      | Optional, `self` clock_in / clock_out only (any other source or kind -> 400). Evaluated by the server in the request and discarded (ADR-0138). `null` or absent is a declined fix. |
 
 **Example**
 
@@ -15663,7 +15972,12 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "occurredAt": "2026-01-01T00:00:00.000Z",
   "source": "self",
   "clientEventKey": "string",
-  "officeId": "00000000-0000-0000-0000-000000000000"
+  "officeId": "00000000-0000-0000-0000-000000000000",
+  "positionSample": {
+    "latitude": -90,
+    "longitude": -180,
+    "accuracyMeters": 0
+  }
 }
 ```
 
@@ -15980,6 +16294,104 @@ _No properties declared._
   "jobTitle": "string",
   "employmentType": "permanent",
   "status": "active"
+}
+```
+
+### Schema: HrGeofenceInput
+
+| Field          | Type                      | Required | Nullable | Description |
+| -------------- | ------------------------- | -------- | -------- | ----------- |
+| `officeId`     | string (uuid)             | yes      | no       |             |
+| `label`        | string                    | yes      | no       |             |
+| `shape`        | enum(`circle`, `polygon`) | yes      | no       |             |
+| `latitude`     | number                    | no       | no       |             |
+| `longitude`    | number                    | no       | no       |             |
+| `radiusMeters` | integer                   | no       | no       |             |
+| `vertices`     | array of array of number  | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "officeId": "00000000-0000-0000-0000-000000000000",
+  "label": "string",
+  "shape": "circle",
+  "latitude": -90,
+  "longitude": -180,
+  "radiusMeters": 50,
+  "vertices": [[0]]
+}
+```
+
+### Schema: HrGeolocationAcknowledgeInput
+
+| Field          | Type          | Required | Nullable | Description |
+| -------------- | ------------- | -------- | -------- | ----------- |
+| `employmentId` | string (uuid) | yes      | no       |             |
+| `noticeId`     | string (uuid) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "employmentId": "00000000-0000-0000-0000-000000000000",
+  "noticeId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: HrGeolocationNoticeInput
+
+| Field   | Type   | Required | Nullable | Description |
+| ------- | ------ | -------- | -------- | ----------- |
+| `texts` | object | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "texts": "(operation-specific payload)"
+}
+```
+
+### Schema: HrGeolocationSettingsInput
+
+| Field                   | Type          | Required | Nullable | Description |
+| ----------------------- | ------------- | -------- | -------- | ----------- |
+| `enabled`               | boolean       | yes      | no       |             |
+| `accuracyCeilingMeters` | integer       | no       | no       |             |
+| `dpiaReference`         | string        | no       | yes      |             |
+| `dpiaRecordedOn`        | string (date) | no       | yes      |             |
+| `noticeId`              | string (uuid) | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "enabled": false,
+  "accuracyCeilingMeters": 10,
+  "dpiaReference": "string",
+  "dpiaRecordedOn": "2026-01-01",
+  "noticeId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: HrPositionSample
+
+One position sample, evaluated by the server in the request and DISCARDED. It is never persisted, logged, audited, queued, cached or returned. Exactly these three numbers; an altitude, speed, heading, address or device value is refused.
+
+| Field            | Type   | Required | Nullable | Description |
+| ---------------- | ------ | -------- | -------- | ----------- |
+| `latitude`       | number | yes      | no       |             |
+| `longitude`      | number | yes      | no       |             |
+| `accuracyMeters` | number | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "latitude": -90,
+  "longitude": -180,
+  "accuracyMeters": 0
 }
 ```
 

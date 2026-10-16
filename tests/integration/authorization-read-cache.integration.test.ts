@@ -46,6 +46,7 @@ import {
   teardownIntegrationDatabase
 } from "./harness";
 import { countQueries } from "./query-budget";
+import { OWNER_GRANT_EXCLUDED_PERMISSION_KEYS } from "../../src/modules/_shared/owner-grant-exclusions";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { authorizeInTransaction } from "../../src/modules/identity-access/application/access-guard";
 import { createAuthorizationReadCache } from "../../src/modules/identity-access/application/authorization-read-cache";
@@ -140,13 +141,17 @@ async function seed(): Promise<void> {
   ownerRoleId = roles.find((row) => row.role_code === "owner")!.id;
   editorRoleId = roles.find((row) => row.role_code === "editor")!.id;
 
-  // The owner holds every permission; the editor holds NONE, which is what
-  // makes the deny comparison below non-vacuous.
-  await admin.unsafe(
-    `INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
-     SELECT $1, $2, id FROM awcms_permissions`,
-    [TENANT, ownerRoleId]
-  );
+  // The owner holds every permission it can hold — all but the deliberate
+  // owner-grant exclusions (#970, ADR-0138), which a trigger refuses on a system
+  // `owner` role; the editor holds NONE, which is what makes the deny comparison
+  // below non-vacuous.
+  await admin`
+    INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+    SELECT ${TENANT}, ${ownerRoleId}, id FROM awcms_permissions
+    WHERE (module_key || '.' || activity_code || '.' || action) NOT IN (
+      SELECT jsonb_array_elements_text(${[...OWNER_GRANT_EXCLUDED_PERMISSION_KEYS]}::jsonb)
+    )
+  `;
 
   sessionToken = (await makeMember("owner", ownerRoleId)).token;
 
