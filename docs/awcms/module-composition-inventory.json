@@ -53,6 +53,11 @@
           "capability": "whatsapp_delivery",
           "providedBy": "whatsapp_delivery",
           "optional": true
+        },
+        {
+          "capability": "staff_availability",
+          "providedBy": "hr_workforce",
+          "optional": true
         }
       ],
       "permissionCount": 32,
@@ -175,7 +180,7 @@
         "profile_identity",
         "domain_event_runtime"
       ],
-      "capabilitiesProvided": [],
+      "capabilitiesProvided": ["staff_availability"],
       "capabilitiesConsumed": [
         {
           "capability": "workflow_notification",

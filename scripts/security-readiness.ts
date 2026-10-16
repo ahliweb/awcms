@@ -750,6 +750,9 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // settles them. Never deleted: a trigger refuses it as the second layer.
   awcms_booking_reminder_intents: ["SELECT"],
   awcms_booking_resource_allocations: ["SELECT", "INSERT", "UPDATE"],
+  // Issue #949 (`sql/305`): the person serving a claim; released with the
+  // allocation (UPDATE of released_* only, a trigger), never deleted.
+  awcms_booking_staff_assignments: ["SELECT", "INSERT", "UPDATE"],
   awcms_booking_reservation_items: ["SELECT", "INSERT"],
   awcms_booking_reservation_events: ["SELECT", "INSERT"],
   // ADR-0132 / `sql/182`. NOT retired — a rule ends by being retired (a status

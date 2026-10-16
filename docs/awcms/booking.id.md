@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:92904b6d63b8adc47c5c13a79684eec20f5b46153910e1c3ec49fc9711fa1ccd -->
+<!-- i18n-source-hash: sha256:c0f075ea468e2c8b3fc63ad110a0ff648465716403150acaf9712b4b7b2dc532 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -1115,8 +1115,72 @@ dibatasi aturan eksklusi booking sendiri dan respons menyatakan
 point-in-time dan tanpa kunci, sehingga shift yang diedit di antara pembacaan dan
 commit tidak tertangkap di sini; perubahan kemudian dimunculkan laporan konflik
 §7.3, bukan dengan membatalkan. `unknown` **tidak dapat dibooking** (fail
-closed): `STAFF_UNAVAILABLE`. `staffRef` buram bagi booking dan hanya
-diselesaikan oleh port.
+closed): `STAFF_UNAVAILABLE`. `staffRef` buram bagi booking dan hanya diselesaikan oleh port.
+
+**Seperti yang dibangun (Issue #949, `sql/305`).** Port dikonsumsi sebagai
+kapabilitas opsional `staff_availability` yang disediakan `hr_workforce` (soft
+edge di deskriptor modul, bukan entri `dependencies`; DAG tidak punya siklus).
+Adapter diimpor secara lazy hanya di `booking/module.ts`
+(`loadStaffAvailabilityPort`, ADR-0011); `application/**` hanya melihat tipe port
+dari `_shared/ports` dan sebuah `StaffAvailabilityConsumer`.
+
+- **Kapan resource "membutuhkan staf".** `awcms_booking_resources.required_staff_refs`
+  (text[], maksimal 50) menamai referensi buram orang yang dapat melayaninya.
+  Kosong (default) berarti resource tidak butuh siapa pun dan tak ada kueri staf
+  yang berjalan. Belum ada route atau layar admin untuk kolom ini (tindak lanjut);
+  saat ini ditulis lewat migrasi atau operator.
+- **Hidup atau mati.** `resolveStaffAvailability(tx, tenantId, loadPort)` memutuskan
+  sekali per request: `hr_workforce` aktif untuk tenant DAN adapter dapat dimuat,
+  jika tidak `NO_OP_STAFF_AVAILABILITY`: **tanpa batasan staf sama sekali** (baris
+  staf pun tidak ditulis), booking seperti sebelum perubahan ini. Loader yang
+  melempar error turun ke no-op yang sama. Begitu batasan hidup ia fail closed:
+  resource yang semua orangnya `unknown` bagi port (atau cuti, atau di luar
+  shift) tidak dapat dibooking, dan galat port adalah 500, bukan dilewati diam-diam.
+- **Baca.** `GET /availability` menawarkan slot hanya jika ada orang bernama yang
+  bekerja selama seluruh interval layanan (satu interval kerja yang digabung) dan
+  belum melayani klaim hidup; jawaban slot membawa `staffAvailability: "checked" |
+"unchecked"`.
+- **Klaim.** Setelah `claimUnits`, di savepoint yang sama, orang yang layak menurut
+  port dicoba berurutan dengan `INSERT ... ON CONFLICT DO NOTHING` ke
+  `awcms_booking_staff_assignments`, yang satu exclusion constraint-nya pada
+  `(tenant_id, staff_ref, rentang terpakai)` menolak dua penugasan hidup yang
+  tumpang tindih untuk satu orang (di antara penugasan yang tercatat; lihat celah
+  aktifkan-belakangan di bawah). Tak ada orang bebas melempar error di dalam savepoint,
+  yang membatalkan unit, item, dan reservasi: **`SLOT_UNAVAILABLE`, tidak ada
+  alokasi parsial**. Satu orang melayani seluruh klaim satu resource berapa pun
+  kuantitasnya; interval staf adalah interval layanan, bukan rentang yang diperlebar
+  setup/cleanup. Stay tidak membawa staf.
+- **Pelepasan.** Trigger pada `awcms_booking_resource_allocations` melepas
+  penugasan, dengan alasan yang sama, ketika alokasi hidup terakhir dari (item,
+  resource) dilepas, sehingga cancel, kedaluwarsa (lazy dan sweep worker), dan
+  reschedule tidak butuh kode staf.
+- **Adapter `BookingPort` sadar-staf.** `PlaceHoldContext.staff` wajib (tanpa
+  default, jadi "tanpa batasan" harus dieja `NO_OP_STAFF_AVAILABILITY`).
+  `createBookingPort(resolveStaff)` menerima resolver; `createComposedBookingPort()`
+  di `booking/module.ts` adalah instans yang dirakit (loader disuntikkan,
+  `application/**` tidak pernah mengimpor `hr_workforce`). Transisi (confirm,
+  cancel) tidak mengklaim apa pun dan sengaja meneruskan no-op.
+- **Okupansi tidak bergantung pada reaper.** Pembacaan sibuk mengabaikan penugasan
+  yang reservasinya adalah hold kedaluwarsa, dan klaim mereklamasi hold
+  kedaluwarsa berdasarkan referensi staf (`reclaimExpiredHoldsForStaff`) sebelum
+  berebut orang, sehingga hold yang belum disapu pada satu resource tidak
+  menghalangi orang yang sama di resource lain.
+- **Celah aktifkan-belakangan (panduan operator).** Baris staf hanya ditulis saat
+  `hr_workforce` aktif untuk tenant. Reservasi yang dibuat saat modul MATI tidak
+  punya penugasan staf, sehingga setelah diaktifkan orang itu **tidak terlindungi
+  terhadapnya**: klaim baru dapat tumpang tindih dengan reservasi lama yang tak
+  tercatat milik siapa pun. Sebelum mengaktifkan untuk tenant yang menamai staf
+  pada resource, aktifkan modul sebelum menerima booking pada resource itu, atau
+  tinjau reservasi mendatang pada resource tersebut dan pindahkan/tugaskan ulang
+  yang tumpang tindih dengan orang berjadwal. Tidak ada backfill: booking tak
+  pernah tahu siapa yang melayani reservasi yang tak tercatat.
+- **Belum tercakup.** Shift yang diubah setelah klaim dimunculkan laporan §7.3,
+  tidak diterapkan; `service_requirements.staff_role` masih desain.
+
+Tes: `tests/booking-staff-availability.test.ts` (aturan murni, batas komposisi) dan
+`tests/integration/booking-staff-availability.integration.test.ts` (dengan dan tanpa
+modul, fail closed, konflik yang tak meninggalkan apa pun, dua belas klaim paralel
+untuk satu orang, pelepasan mengikuti alokasi).
 
 ### 10.4 Registrasi modul (desain)
 
@@ -1206,8 +1270,8 @@ dari desain ke kode (peta modul:
 | **Layar admin**       | #942  | Enam layar §3.0.3 (`src/pages/admin/booking/*.astro`), pengirim bersama `src/lib/ui/booking-admin-client.ts`, pesan terjemahan `src/lib/booking-admin-messages.ts` dan label `src/lib/booking-admin-labels.ts`, enam entri `navigation` dan perubahan status ke `active`, 218 entri katalog di `locales/en.po` / `id.po`, ledger cakupan turun menjadi tujuh kunci, dan `APP_BUDGET_BYTES` dinaikkan sebesar 11.259 B tujuh berkas skrip baru. Tanpa migrasi, tanpa perubahan API. Tes: `tests/admin-booking-page-contract.test.ts`, registry navigasi, `tests/e2e/admin-booking.e2e.ts` (hanya keyboard, setiap aksi), dan layar booking di `a11y-axe.e2e.ts` serta sapuan 360 px.                                                                                                                                                                                                                                                                                                                                                                              |
 | **Pengingat**         | #943  | Job `booking:reminders:dispatch` (§7.5) di atas `booking-reminder-dispatch.ts` / `booking-reminder-job.ts`, tabel intent `sql/284` dan tiga pembacaan sempit `sql/285`, `BookingReminderRecipientPort`, template `booking.confirmation` / `booking.reminder`, diserahkan ke `whatsapp_delivery` lewat `WhatsappDeliveryPort`. Inert sampai deployment mendaftarkan resolver penerima.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
-**Masih desain (belum ada di kode):** route `extend` §5.1; `service_requirements`, `staff_assignments`
-dan tes T8; route `reservations/reconciliation`; layar untuk create / reschedule / override reservasi, ketersediaan, catatan, dan laporan (§3.0.3 menjelaskan mengapa masing-masing tidak ada).
+**Masih desain (belum ada di kode):** route `extend` §5.1; `service_requirements` (`staff_assignments` ada sejak #949, §10.3, tanpa `staff_role`)
+dan matriks T8 penuh (separuh konkurensinya ada di `booking-staff-availability.integration.test.ts`); route `reservations/reconciliation`; layar untuk create / reschedule / override reservasi, ketersediaan, catatan, dan laporan (§3.0.3 menjelaskan mengapa masing-masing tidak ada).
 
 **Sambungan tempat irisan berikutnya menempel**
 

@@ -76,6 +76,10 @@ import {
   type HighVolumeTableDescriptor,
   type SubjectDataDescriptor
 } from "../_shared/module-contract";
+import type { BookingPort } from "../_shared/ports/booking-port";
+import { createBookingPort } from "./application/booking-port-adapter";
+import { resolveStaffAvailability } from "./application/booking-staff-availability-consumer";
+import type { StaffAvailabilityPort } from "../_shared/ports/staff-availability-port";
 import { BOOKING_MODULE_KEY } from "./domain/booking-permissions";
 import { BOOKING_REPORTING_PROJECTIONS } from "./domain/booking-reporting";
 import { BOOKING_EVENT_TYPES } from "./domain/booking-reservation-events";
@@ -163,6 +167,31 @@ function stamps(input: {
   };
 }
 
+/**
+ * The ONE place booking reaches the `hr_workforce` adapter of the
+ * `staff_availability` capability (ADR-0011): a lazy import, resolved at the
+ * composition roots (the availability, create and reschedule routes) and handed
+ * to `resolveStaffAvailability`, which decides whether the tenant has the
+ * provider on. `application/**` never imports it.
+ */
+export async function loadStaffAvailabilityPort(): Promise<StaffAvailabilityPort> {
+  const { staffAvailabilityAdapter } =
+    await import("../hr-workforce/application/staff-availability-adapter");
+
+  return staffAvailabilityAdapter;
+}
+
+/**
+ * The BookingPort a downstream adapter (commerce, a channel) is handed: the staff
+ * constraint is resolved per tenant exactly as the routes do, through the loader
+ * above, so a port reservation cannot double-book a person (Issue #949).
+ */
+export function createComposedBookingPort(): BookingPort {
+  return createBookingPort((tx, tenantId) =>
+    resolveStaffAvailability(tx, tenantId, loadStaffAvailabilityPort)
+  );
+}
+
 export const bookingModule = defineModule({
   key: BOOKING_MODULE_KEY,
   name: "Booking",
@@ -188,6 +217,16 @@ export const bookingModule = defineModule({
       {
         capability: "whatsapp_delivery",
         providedBy: "whatsapp_delivery",
+        optional: true
+      },
+      // Issue #949: a resource that names the people who serve it is narrowed by
+      // the workforce port (`StaffAvailabilityPort`, `_shared/ports`). A soft
+      // edge, NOT a `dependencies` entry: with `hr_workforce` off, or absent,
+      // booking applies no staff constraint at all. The adapter is imported
+      // lazily in `loadStaffAvailabilityPort` below, this file only (ADR-0011).
+      {
+        capability: "staff_availability",
+        providedBy: "hr_workforce",
         optional: true
       }
     ]
@@ -563,6 +602,16 @@ export const bookingModule = defineModule({
         "Not performed. A released allocation is retained as history; awcms_app is denied DELETE and a trigger rejects it.",
       indexColumns: ["tenant_id", "item_id"],
       indexPurpose: "awcms_booking_resource_allocations_item_idx (sql/180)."
+    }),
+    retained({
+      key: "booking.staff_assignments",
+      tableName: "awcms_booking_staff_assignments",
+      retentionClass: "system_event",
+      why: "At most one row per claimed (item, resource) of a resource that names the people who serve it, so volume is bounded by reservations, not by traffic. Released rows are kept as the record of who was committed.",
+      deletionWhy:
+        "Not performed and not permitted: awcms_app is denied DELETE and a trigger rejects it. An assignment is released with its allocation, never removed.",
+      indexColumns: ["tenant_id", "item_id"],
+      indexPurpose: "awcms_booking_staff_assignments_item_idx (sql/305)."
     }),
     retained({
       key: "booking.reminder_intents",

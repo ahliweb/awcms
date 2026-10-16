@@ -232,43 +232,46 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
 
 ## Layout
 
-| Path                                           | What it is                                                                                      |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `module.ts`                                    | Descriptor: 32 permissions, `dataLifecycle` and `subjectData` for the tables                    |
-| `domain/booking-reservation-state.ts`          | The reservation state machine as a pure function (no I/O, the caller passes the database clock) |
-| `domain/booking-permissions.ts`                | Literal guard objects for `authorizeInTransaction` (used from Issue #938)                       |
-| `domain/booking-audit.ts`                      | Audit event names and severities                                                                |
-| `domain/booking-time.ts`                       | Pure zone, date arithmetic and RFC 5545 gap/fold resolution                                     |
-| `domain/booking-schedule.ts`                   | Pure closed rules schema, schedule selection, expansion to UTC windows, closures                |
-| `domain/booking-availability.ts`               | Pure slot availability and stay evaluation (no I/O, no clock)                                   |
-| `domain/booking-validation.ts`                 | Strict request validation (RFC 3339 with offset, IANA zones)                                    |
-| `domain/booking-staff-availability.ts`         | The no-op StaffAvailabilityConsumer seam that Issue #949 wires                                  |
-| `application/*-directory.ts`                   | The only code that reads or writes rows (database clock, tenant-scoped, savepoints)             |
-| `domain/booking-allocation.ts`                 | Pure hold lifetime, slot window, unit ordering, SQLSTATE classification, retry backoff          |
-| `application/booking-allocator.ts`             | `claimUnits`: the units of one item, all-or-none, under the exclusion constraint                |
-| `application/booking-hold-expiry.ts`           | Lazy reclaim and the reaper pass: one statement per expiry (reservation, units, history)        |
-| `application/booking-hold-service.ts`          | `placeHold`: reservation, item snapshot, allocations, history, audit, in one savepoint          |
-| `application/booking-hold-expiry-job.ts`       | The per-tenant sweep behind `scripts/booking-holds-expire.ts`                                   |
-| `application/booking-reconciliation.ts`        | Read-only proof that reservations, allocations and blocks agree; the reaper lag                 |
-| `domain/booking-stay.ts`                       | Pure stay dates, night limits, pool terms and block validation (no I/O, no clock)               |
-| `application/booking-block-service.ts`         | `createBlock` / `releaseBlock`: blocked nights as allocation rows, `BLOCK_CONFLICT`, audit      |
-| `domain/booking-policy.ts`                     | Pure policy: slot hours/lead/horizon, late cancellation, no-show grace, the default hold caps   |
-| `domain/booking-reservation-events.ts`         | The nine event types and the closed payload builder (no person, no reason, no amount)           |
-| `domain/booking-reservation-validation.ts`     | Strict reservation bodies; payment fields refused by name                                       |
-| `application/booking-reservation-service.ts`   | `createReservation`, `transitionReservation`, `rescheduleReservation`                           |
-| `application/booking-reservation-policy.ts`    | Hours, lead time and horizon for a claim, from the same engine availability uses                |
-| `application/booking-reservation-directory.ts` | Reservation list, detail and history (the note is never read)                                   |
-| `application/booking-event-emit.ts`            | Outbox events from the one facts function, in the transition's transaction                      |
-| `application/booking-port-adapter.ts`          | The `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule   |
-| `application/booking-transition-route.ts`      | The handler body shared by the five in-place transition routes                                  |
-| `application/booking-block-routes.ts`          | The handler bodies of block create / release: `runIdempotent`, then the block service           |
-| `application/booking-block-directory.ts`       | Block reads for the routes: detail and keyset list                                              |
-| `domain/booking-reporting.ts`                  | The three reporting projection descriptors and why the event table is their source              |
-| `domain/booking-report.ts`                     | Pure report rules: Jakarta day windows, clipping, O8 statuses, small-group suppression          |
-| `application/booking-report-directory.ts`      | The only SQL of the report routes: aggregates only, tenant-scoped, no person                    |
+| Path                                                 | What it is                                                                                      |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `module.ts`                                          | Descriptor: 32 permissions, `dataLifecycle` and `subjectData` for the tables                    |
+| `domain/booking-reservation-state.ts`                | The reservation state machine as a pure function (no I/O, the caller passes the database clock) |
+| `domain/booking-permissions.ts`                      | Literal guard objects for `authorizeInTransaction` (used from Issue #938)                       |
+| `domain/booking-audit.ts`                            | Audit event names and severities                                                                |
+| `domain/booking-time.ts`                             | Pure zone, date arithmetic and RFC 5545 gap/fold resolution                                     |
+| `domain/booking-schedule.ts`                         | Pure closed rules schema, schedule selection, expansion to UTC windows, closures                |
+| `domain/booking-availability.ts`                     | Pure slot availability and stay evaluation (no I/O, no clock)                                   |
+| `domain/booking-validation.ts`                       | Strict request validation (RFC 3339 with offset, IANA zones)                                    |
+| `domain/booking-staff-availability.ts`               | The StaffAvailabilityConsumer seam, its no-op, and the pure staff rules (Issue #949)            |
+| `application/booking-staff-availability-consumer.ts` | The consumer over the hr_workforce port, and the one on/off decision                            |
+| `application/booking-staff-claim.ts`                 | The staff half of a slot claim: a person won under the staff exclusion constraint               |
+| `application/*-directory.ts`                         | The only code that reads or writes rows (database clock, tenant-scoped, savepoints)             |
+| `domain/booking-allocation.ts`                       | Pure hold lifetime, slot window, unit ordering, SQLSTATE classification, retry backoff          |
+| `application/booking-allocator.ts`                   | `claimUnits`: the units of one item, all-or-none, under the exclusion constraint                |
+| `application/booking-hold-expiry.ts`                 | Lazy reclaim and the reaper pass: one statement per expiry (reservation, units, history)        |
+| `application/booking-hold-service.ts`                | `placeHold`: reservation, item snapshot, allocations, history, audit, in one savepoint          |
+| `application/booking-hold-expiry-job.ts`             | The per-tenant sweep behind `scripts/booking-holds-expire.ts`                                   |
+| `application/booking-reconciliation.ts`              | Read-only proof that reservations, allocations and blocks agree; the reaper lag                 |
+| `domain/booking-stay.ts`                             | Pure stay dates, night limits, pool terms and block validation (no I/O, no clock)               |
+| `application/booking-block-service.ts`               | `createBlock` / `releaseBlock`: blocked nights as allocation rows, `BLOCK_CONFLICT`, audit      |
+| `domain/booking-policy.ts`                           | Pure policy: slot hours/lead/horizon, late cancellation, no-show grace, the default hold caps   |
+| `domain/booking-reservation-events.ts`               | The nine event types and the closed payload builder (no person, no reason, no amount)           |
+| `domain/booking-reservation-validation.ts`           | Strict reservation bodies; payment fields refused by name                                       |
+| `application/booking-reservation-service.ts`         | `createReservation`, `transitionReservation`, `rescheduleReservation`                           |
+| `application/booking-reservation-policy.ts`          | Hours, lead time and horizon for a claim, from the same engine availability uses                |
+| `application/booking-reservation-directory.ts`       | Reservation list, detail and history (the note is never read)                                   |
+| `application/booking-event-emit.ts`                  | Outbox events from the one facts function, in the transition's transaction                      |
+| `application/booking-port-adapter.ts`                | The `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule   |
+| `application/booking-transition-route.ts`            | The handler body shared by the five in-place transition routes                                  |
+| `application/booking-block-routes.ts`                | The handler bodies of block create / release: `runIdempotent`, then the block service           |
+| `application/booking-block-directory.ts`             | Block reads for the routes: detail and keyset list                                              |
+| `domain/booking-reporting.ts`                        | The three reporting projection descriptors and why the event table is their source              |
+| `domain/booking-report.ts`                           | Pure report rules: Jakarta day windows, clipping, O8 statuses, small-group suppression          |
+| `application/booking-report-directory.ts`            | The only SQL of the report routes: aggregates only, tenant-scoped, no person                    |
 
-Not in the schema yet and recorded as follow-ups: `service_requirements` and
-`staff_assignments` (booking.md section 4). `resource_blocks` arrived with
+Not in the schema yet and recorded as follow-ups: `service_requirements`
+(booking.md section 4). `staff_assignments` arrived with Issue #949 (`sql/305`,
+booking.md section 10.3). `resource_blocks` arrived with
 Issue #938 and its allocation rows and writer with Issue #940 (`sql/204`); the
 HTTP routes for blocks (`blocks.read` / `.create` / `.release`, seeded by
 `sql/181`) arrived with Issue #1012; the screens are #942. A resource-wide block

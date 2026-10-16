@@ -62,7 +62,8 @@ export const DELEGATED_COUNT_FUNCTIONS: Readonly<Record<string, string>> = {
   awcms_booking_schedule_exceptions: "awcms_booking_lifecycle_eligible_count",
   awcms_booking_schedules: "awcms_booking_lifecycle_eligible_count",
   awcms_booking_service_offerings: "awcms_booking_lifecycle_eligible_count",
-  awcms_booking_settings: "awcms_booking_lifecycle_eligible_count"
+  awcms_booking_settings: "awcms_booking_lifecycle_eligible_count",
+  awcms_booking_staff_assignments: "awcms_booking_lifecycle_eligible_count"
 };
 
 export const COUNT_FUNCTION_PATTERN =

@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 223   |
-| `awcms_*` tables                    | 216   |
-| Tables with `FORCE` RLS             | 198   |
+| Migrations                          | 224   |
+| `awcms_*` tables                    | 217   |
+| Tables with `FORCE` RLS             | 199   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 708   |
+| Test files                          | 710   |
 | Route files                         | 561   |
 | ADR                                 | 292   |
 
@@ -280,7 +280,8 @@
 | 220 | `sql/302_awcms_hr_attendance_notice_worker_grants.sql`             |
 | 221 | `sql/303_awcms_lifecycle_delegated_count_functions.sql`            |
 | 222 | `sql/304_awcms_worker_credential_column_revoke.sql`                |
-| 223 | `sql/308_awcms_hr_workforce_metrics_permissions.sql`               |
+| 223 | `sql/305_awcms_booking_staff_assignments.sql`                      |
+| 224 | `sql/308_awcms_hr_workforce_metrics_permissions.sql`               |
 
 ### Tables & Row-Level Security
 
@@ -324,6 +325,7 @@
 | `awcms_booking_schedules`                | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_service_offerings`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
 | `awcms_booking_settings`                 | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_staff_assignments`        | `sql/305_awcms_booking_staff_assignments.sql`              | yes | yes   |
 | `awcms_business_scope_assignment_events` | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
 | `awcms_business_scope_assignments`       | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
 | `awcms_comments_abuse_events`            | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
@@ -507,9 +509,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 542        |
+| `(root)`      | 543        |
 | `e2e`         | 26         |
-| `integration` | 139        |
+| `integration` | 140        |
 | `unit`        | 1          |
 
 ### Routes

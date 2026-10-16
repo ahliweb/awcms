@@ -37,6 +37,7 @@
  *
  * Gated on `DATABASE_URL` (harness section Gating).
  */
+import { NO_OP_STAFF_AVAILABILITY } from "../../src/modules/booking/domain/booking-staff-availability";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
@@ -99,6 +100,7 @@ function workerTx<T>(
 function ctxOf(tenantId: string) {
   return {
     tenantId,
+    staff: NO_OP_STAFF_AVAILABILITY,
     actorTenantUserId: ACTORS.get(tenantId) ?? null,
     correlationId: crypto.randomUUID()
   };
@@ -2790,7 +2792,7 @@ suite("booking stays and blocked nights (Issue #940, ADR-0135)", () => {
         await admin.unsafe(`
           TRUNCATE awcms_booking_reservation_events, awcms_booking_resource_allocations,
                    awcms_booking_reservation_items, awcms_booking_reminder_intents,
-                   awcms_booking_reservations
+                   awcms_booking_staff_assignments, awcms_booking_reservations
         `);
         await admin.unsafe(
           `ALTER TABLE awcms_booking_resource_allocations

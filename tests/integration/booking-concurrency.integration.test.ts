@@ -28,6 +28,7 @@
  *
  * Gated on `DATABASE_URL` (harness section Gating).
  */
+import { NO_OP_STAFF_AVAILABILITY } from "../../src/modules/booking/domain/booking-staff-availability";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
@@ -96,6 +97,7 @@ function place(
       tx,
       {
         tenantId,
+        staff: NO_OP_STAFF_AVAILABILITY,
         actorTenantUserId: ACTORS.get(tenantId) ?? null,
         correlationId: crypto.randomUUID()
       },
@@ -371,6 +373,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
           tx,
           {
             tenantId: TENANT_A,
+            staff: NO_OP_STAFF_AVAILABILITY,
             actorTenantUserId: ACTORS.get(TENANT_A)!
           },
           claim(fixture, { externalCustomerRef: "cust-a" })
@@ -418,6 +421,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
           tx,
           {
             tenantId: TENANT_A,
+            staff: NO_OP_STAFF_AVAILABILITY,
             actorTenantUserId: ACTORS.get(TENANT_A)!
           },
           claim(fixture)
@@ -1450,7 +1454,11 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
 
         return placeHold(
           victim.wrapped,
-          { tenantId, actorTenantUserId: ACTORS.get(tenantId) ?? null },
+          {
+            tenantId,
+            staff: NO_OP_STAFF_AVAILABILITY,
+            actorTenantUserId: ACTORS.get(tenantId) ?? null
+          },
           input
         );
       });
@@ -2113,7 +2121,11 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         const first = tenantTx(tenantId, async (tx) => {
           const outcome = await placeHold(
             tx,
-            { tenantId, actorTenantUserId: ACTORS.get(tenantId) ?? null },
+            {
+              tenantId,
+              staff: NO_OP_STAFF_AVAILABILITY,
+              actorTenantUserId: ACTORS.get(tenantId) ?? null
+            },
             claim(fixture)
           );
 
@@ -2156,7 +2168,7 @@ suite("booking allocator under real concurrency (Issue #939, ADR-0131)", () => {
         await admin.unsafe(`
           TRUNCATE awcms_booking_reservation_events, awcms_booking_resource_allocations,
                    awcms_booking_reservation_items, awcms_booking_reminder_intents,
-                   awcms_booking_reservations
+                   awcms_booking_staff_assignments, awcms_booking_reservations
         `);
         await admin.unsafe(
           `ALTER TABLE awcms_booking_resource_allocations
