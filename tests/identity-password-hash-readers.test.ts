@@ -52,7 +52,7 @@ const NAMES_IDENTITIES = /\b(?:public\.)?awcms_identities\b/i;
 const SELECTS_HASH = /\bSELECT\b[\s\S]*?\bpassword_hash\b/i;
 const SELECTS_STAR = /\bSELECT\s+(?:DISTINCT\s+)?(?:[a-z_]+\.)?\*/i;
 const RETURNS_HASH_OR_STAR =
-  /\bRETURNING\b[^;]*?(?:\bpassword_hash\b|(?:^|[\s,])(?:[a-z_]+\.)?\*)/i;
+  /\bRETURNING\b[^;]*?(?:\bpassword_hash\b|[\s,](?:[a-z_]+\.)?\*)/i;
 
 /** True when one SQL text reads an identity's stored password hash. */
 export function readsIdentityPasswordHash(sqlText: string): boolean {

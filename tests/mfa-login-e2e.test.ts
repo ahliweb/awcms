@@ -430,11 +430,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       generateTotpSecret()
     );
     // With a factor, login stops at the challenge; mint a session directly.
-    const sessionToken = await mintSession(
-      tenantId,
-      user.identityId,
-      "password"
-    );
+    const sessionToken = await mintSession(tenantId, user.identityId, "local");
 
     // Even with the correct password: 409, the factor is untouched.
     const res = await callRoute(enrollStartPOST, {
@@ -454,9 +450,11 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   async function mintSession(
     tenantId: string,
     identityId: string,
-    originAuth: "password" | "sso",
+    origin: "local" | "sso",
     lastAuthenticatedAt: Date = new Date()
   ): Promise<string> {
+    // "local" is the password login method; the stored value is 'password'.
+    const originAuth = origin === "sso" ? "sso" : "password";
     const token = `t1004-${crypto.randomUUID()}`;
     await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
     await sql`
@@ -474,8 +472,10 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   async function mintSessionRaw(
     tenantId: string,
     identityId: string,
-    originAuth: "password" | "sso"
+    origin: "local" | "sso"
   ): Promise<string> {
+    // "local" is the password login method; the stored value is 'password'.
+    const originAuth = origin === "sso" ? "sso" : "password";
     const token = `t1004-${crypto.randomUUID()}`;
     await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
     await sql`
@@ -591,7 +591,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
 
   test("#1004 H1: re-authentication uses the CURRENT credential, not a tenant's stale hash", async () => {
     const { tenantB, userB } = await twoTenantsPasswordChangedInA();
-    const token = await mintSession(tenantB, userB.identityId, "password");
+    const token = await mintSession(tenantB, userB.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
 
     // The password this tenant's own row still carries is no longer the password.
@@ -618,7 +618,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
     const principalId = await principalOf(user.identityId);
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
 
     await callRoute(enrollStartPOST, {
@@ -646,7 +646,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   test("#1004 M1: a per-session bucket bounds guesses whatever the source address", async () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
     // Reset the lockout each time so only the bucket can be what stops us.
     let last = 0;
@@ -691,7 +691,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     tenantId: string,
     user: { identityId: string }
   ) {
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
     const start = await callRoute(enrollStartPOST, {
       tenantId,
@@ -722,7 +722,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     const user = await seedUser(tenantId);
     const { bearer, secret } = await startedEnrolment(tenantId, user);
     const other = {
-      authorization: `Bearer ${await mintSession(tenantId, user.identityId, "password")}`
+      authorization: `Bearer ${await mintSession(tenantId, user.identityId, "local")}`
     };
     const code = generateTotpCode(secret, Date.now(), CODE_OPTS);
 
@@ -800,7 +800,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   test("#1004 H3: enroll/verify is rate limited per session", async () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
-    const token = await mintSession(tenantId, user.identityId, "password");
+    const token = await mintSession(tenantId, user.identityId, "local");
     const bearer = { authorization: `Bearer ${token}` };
     let last = 0;
     for (let i = 0; i < 40; i += 1) {
@@ -823,7 +823,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       VALUES (${tenantB}, 'required_for_all')
     `;
     // The attacker holds nothing but a (stolen) password-origin session in A.
-    const stolen = await mintSession(tenantA, userA.identityId, "password");
+    const stolen = await mintSession(tenantA, userA.identityId, "local");
     const switched = await callRoute(switchPOST, {
       tenantId: tenantA,
       ip: nextIp(),
@@ -1029,14 +1029,14 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
   test("#1035: after Alice changes her password in tenant A, her OLD password is dead in tenant B", async () => {
     const { tenantA, tenantB, userA, userB, loginIdentifier } =
       await alicePair();
-    const sessionA = await mintSession(tenantA, userA.identityId, "password");
+    const sessionA = await mintSession(tenantA, userA.identityId, "local");
 
     const changed = await changeCall(tenantA, sessionA, PASSWORD);
     expect(changed.status).toBe(200);
 
     // The attacker's tenant-B session (minted after the change; the epoch bump
     // ended the ones from before) holds her OLD password.
-    const attackerB = await mintSession(tenantB, userB.identityId, "password");
+    const attackerB = await mintSession(tenantB, userB.identityId, "local");
     const takeover = await changeCall(
       tenantB,
       attackerB,
@@ -1075,7 +1075,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
 
   test("#1035: the caller keeps working after a change, and a change in B with the NEW password succeeds", async () => {
     const { tenantA, tenantB, userA, userB } = await alicePair();
-    const sessionA = await mintSession(tenantA, userA.identityId, "password");
+    const sessionA = await mintSession(tenantA, userA.identityId, "local");
     expect((await changeCall(tenantA, sessionA, PASSWORD)).status).toBe(200);
 
     // Her own session survived the epoch bump (it proved the old password).
@@ -1087,7 +1087,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     });
     expect(stillMine.status).toBe(200);
 
-    const sessionB = await mintSession(tenantB, userB.identityId, "password");
+    const sessionB = await mintSession(tenantB, userB.identityId, "local");
     const second = await changeCall(
       tenantB,
       sessionB,
@@ -1103,7 +1103,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     try {
       const { tenantB, userB } = await alicePair();
       const principalId = await principalOf(userB.identityId);
-      const session = await mintSession(tenantB, userB.identityId, "password");
+      const session = await mintSession(tenantB, userB.identityId, "local");
 
       for (let i = 0; i < 3; i += 1) {
         const wrong = await changeCall(tenantB, session, "not the password");
@@ -1126,7 +1126,7 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
 
   test("#1035: the audit trail records the change and the refusal with no secrets", async () => {
     const { tenantA, userA } = await alicePair();
-    const session = await mintSession(tenantA, userA.identityId, "password");
+    const session = await mintSession(tenantA, userA.identityId, "local");
 
     expect((await changeCall(tenantA, session, "wrong guess 123")).status).toBe(
       400
@@ -1179,15 +1179,11 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     // Tenant B's identity was never linked (the missed-writer case).
     await sql`SELECT set_config('app.current_tenant_id', ${tenantB}, false)`;
     await sql`UPDATE awcms_identities SET principal_id = NULL WHERE id = ${userB.identityId}`;
-    const oldSessionA = await mintSession(
-      tenantA,
-      userA.identityId,
-      "password"
-    );
+    const oldSessionA = await mintSession(tenantA, userA.identityId, "local");
     const oldSessionB = await mintSessionRaw(
       tenantB,
       userB.identityId,
-      "password"
+      "local"
     );
 
     const rawToken = generateResetToken();
@@ -1250,8 +1246,8 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
     const principalId = await principalOf(user.identityId);
-    const mine = await mintSession(tenantId, user.identityId, "password");
-    const thiefs = await mintSession(tenantId, user.identityId, "password");
+    const mine = await mintSession(tenantId, user.identityId, "local");
+    const thiefs = await mintSession(tenantId, user.identityId, "local");
 
     // The credential changes: both sessions are now behind the new epoch.
     await setPrincipalCredential(
