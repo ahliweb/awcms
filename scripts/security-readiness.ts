@@ -776,6 +776,17 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // (a trigger allows exactly the status moves and nothing else) and is never
   // deleted (privilege plus trigger).
   awcms_hr_attendance_corrections: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0138 / `sql/306` (Issue #970). Geolocation evidence. The VERDICT rows,
+  // the published notice versions and the acknowledgements are APPEND-ONLY for
+  // awcms_app (no UPDATE or DELETE; a trigger refuses UPDATE for everyone, and
+  // a verdict leaves only through the retention engine as awcms_worker).
+  // Geofences are edited and soft-deleted, never DELETEd; the settings row is
+  // upserted, never deleted.
+  awcms_hr_attendance_location_evidence: ["SELECT", "INSERT"],
+  awcms_hr_geolocation_notices: ["SELECT", "INSERT"],
+  awcms_hr_geolocation_notice_acknowledgements: ["SELECT", "INSERT"],
+  awcms_hr_geofences: ["SELECT", "INSERT", "UPDATE"],
+  awcms_hr_geolocation_settings: ["SELECT", "INSERT", "UPDATE"],
   // #999 / `sql/252`. NOT retired. The decision log is APPEND-ONLY: a decision
   // is recorded once and never edited, because separation of duties (HR
   // attendance corrections, #947) reads `decided_by` / `on_behalf_of` from it.
@@ -1729,6 +1740,11 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // (neither `reason` nor `override_reason` is readable), so those two tables
   // are deliberately absent from this table-level map.
   awcms_hr_attendance_events: ["SELECT", "INSERT"],
+  // ADR-0138 / `sql/306`: the retention engine's generic hard_delete over the
+  // location-evidence verdicts. DELETE only at table level; its SELECT is
+  // COLUMN-scoped (id, tenant_id, evaluated_at: see WORKER_COLUMN_GRANTS), so a
+  // compromised worker cannot read a verdict, a band or an employment.
+  awcms_hr_attendance_location_evidence: ["DELETE"],
   awcms_hr_workforce_settings: ["SELECT"],
   awcms_hr_employments: ["SELECT"]
 };
@@ -1827,6 +1843,11 @@ export const WORKER_COLUMN_GRANTS: Record<
       "variables",
       "priority"
     ]
+  },
+  // sql/306 (Issue #970): the generic purge's candidate selection and delete
+  // subquery need the key, the tenant and the cursor, nothing about the verdict.
+  awcms_hr_attendance_location_evidence: {
+    SELECT: ["id", "tenant_id", "evaluated_at"]
   },
   awcms_tenant_users: { SELECT: ["id", "tenant_id", "identity_id", "status"] },
   awcms_profiles: { SELECT: ["id", "tenant_id", "display_name"] },
@@ -2481,6 +2502,9 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   "awcms_booking_reminders",
   "awcms_delegated_expiry",
   "awcms_domain_bootstrap",
+  // sql/306 (Issue #970): owns the operator-run erasure of one employment's
+  // location-evidence verdicts; DELETE and a two-column SELECT on that table.
+  "awcms_hr_geo_evidence_eraser",
   "awcms_hr_workforce_lifecycle_counter",
   "awcms_inventory_lifecycle_counter",
   "awcms_partner_view",

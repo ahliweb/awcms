@@ -320,6 +320,18 @@ export const hrWorkforceModule = defineModule({
         "Read per-office workforce aggregates; a group with fewer than five contributing employees is withheld entirely"
     },
     {
+      activityCode: "attendance_evidence",
+      action: "read",
+      description:
+        "Read the location-evidence verdicts of any employment; an employee reads their own without this"
+    },
+    {
+      activityCode: "geolocation_evidence",
+      action: "configure",
+      description:
+        "Switch geolocation attendance evidence on or off and manage its geofences, notice version and accuracy ceiling — high-risk; not granted by default"
+    },
+    {
       activityCode: "settings",
       action: "read",
       description:
@@ -418,6 +430,101 @@ export const hrWorkforceModule = defineModule({
       indexPurpose:
         "awcms_hr_attendance_corrections_list_idx (sql/198) — the newest-first listing and any future bounded scan."
     }),
+    // Issue #970 / ADR-0138 section 7: the location-evidence VERDICT rows are the
+    // one table in this module the retention engine really purges. 30 / 90 / 180
+    // days, hard delete, no archive (an archive would keep personal data past its
+    // purpose), legal hold overrides retention. A verdict row has no residual
+    // value once aged, and the event it describes is untouched.
+    {
+      key: "hr_workforce.attendance_location_evidence",
+      tableName: "awcms_hr_attendance_location_evidence",
+      ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      scope: "tenant",
+      cursorColumn: "evaluated_at",
+      // No `personal_data` class exists in the registry vocabulary; a verdict is
+      // the system's own record of an attendance check, so `system_event`.
+      retentionClass: "system_event",
+      retentionMinDays: 30,
+      retentionMaxDays: 180,
+      defaultRetentionDays: 90,
+      partition: {
+        eligible: false,
+        rationale:
+          "One verdict row per self clock-in/out of a tenant that switched the feature on (off by default), aged out within 180 days: a bounded, small table that a partition scheme would not repay."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "Archiving would keep a person's presence at a site past the purpose it was collected for (verifying a check-in during the correction and dispute window). ADR-0138 section 7: no archive."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "A verdict row (inside / outside / not_provided, two coarse bands) has no residual value once the correction window has passed, and holds no coordinate to anonymise. The attendance event it describes is separate and is not touched."
+      },
+      legalHold: { applicable: true, precedence: "overrides_retention" },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "evaluated_at"],
+          purpose:
+            "awcms_hr_attendance_location_evidence_retention_idx (sql/306) — the (tenant, cursor) composite the generic purge engine filters and orders by."
+        }
+      ],
+      batchLimit: 1000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore. A restore brings back verdicts that already aged out of the live table; the next purge run removes them again. No coordinate is in any backup, by construction (ADR-0138 section 1).",
+      executionMode: "generic"
+    },
+    retained({
+      key: "hr_workforce.geofences",
+      tableName: "awcms_hr_geofences",
+      personal: false,
+      retentionClass: "system_event",
+      deletionMode: "status_transition_then_purge",
+      why: "One row per authorised work site, authored by an administrator, so its ceiling is the number of sites a tenant defines. A geofence describes a place of business, not a person.",
+      deletionWhy:
+        "Soft delete (deleted_at) and restore; a row an evidence verdict references is never removed. NO purge exists, so nothing is removed today. awcms_app is denied DELETE and a trigger rejects it.",
+      indexColumns: ["tenant_id", "created_at"],
+      indexPurpose:
+        "awcms_hr_geofences_list_idx (sql/306) — the newest-first listing and any future bounded scan."
+    }),
+    retained({
+      key: "hr_workforce.geolocation_notices",
+      tableName: "awcms_hr_geolocation_notices",
+      personal: false,
+      retentionClass: "system_event",
+      deletionMode: "status_transition_then_purge",
+      why: "One row per published notice version, authored by an administrator, so its ceiling is the number of times a tenant rewrites its notice. Tenant-authored text, no person.",
+      deletionWhy:
+        "Append-only: awcms_app holds no UPDATE or DELETE and triggers refuse both. A notice version is the record of what employees were told, so it is kept; NO purge exists today.",
+      indexColumns: ["tenant_id", "created_at"],
+      indexPurpose:
+        "awcms_hr_geolocation_notices_list_idx (sql/306) — the newest-first listing."
+    }),
+    retained({
+      key: "hr_workforce.geolocation_notice_acknowledgements",
+      tableName: "awcms_hr_geolocation_notice_acknowledgements",
+      personal: true,
+      retentionClass: "financial_tax",
+      deletionMode: "status_transition_then_purge",
+      cursorColumn: "acknowledged_at",
+      why: "One row per (employment, notice version), so its ceiling is employments times notice versions. It is evidence that the employer gave the notice, kept with the employment record; the actual period is the employer's counsel's, not asserted here.",
+      deletionWhy:
+        "Append-only: awcms_app holds no UPDATE or DELETE and triggers refuse both. NO purge exists yet (recorded follow-up with the other HR rows), so nothing is removed today.",
+      indexColumns: ["tenant_id", "acknowledged_at"],
+      indexPurpose:
+        "awcms_hr_geolocation_acks_list_idx (sql/306) — the time-ordered scan."
+    }),
+    retained({
+      key: "hr_workforce.geolocation_settings",
+      tableName: "awcms_hr_geolocation_settings",
+      personal: false,
+      retentionClass: "system_event",
+      deletionMode: "hard_delete",
+      why: "One row per tenant, upserted. An age-based purge would silently switch a tenant's configuration back to its defaults for being old.",
+      deletionWhy:
+        "Not performed by any job: a live configuration row, not a record. Deleting it would reset the switch to OFF, which is the safe direction, but silently losing the recorded DPIA reference is not wanted, so no purge is declared."
+    }),
     retained({
       key: "hr_workforce.settings",
       tableName: "awcms_hr_workforce_settings",
@@ -473,6 +580,40 @@ export const hrWorkforceModule = defineModule({
       erasure: "retain_under_obligation",
       rationale:
         "A request to change when a person is recorded as having worked: kind, the proposed event, status, who decided and when. The row reaches the employee it is about through `employment_id` -> `awcms_hr_employments` (ADR-0142), so the employee's own corrections are part of their export and another person's are not. `requested_by` and `decided_by` (the requester and the approver) are deliberately not subject columns: they name other people. The free-text `reason` (SENSITIVE: may describe health or family circumstances, a third party's included; never in an audit row, an event or the workflow store) is a redacted column: the export says it was withheld, and the subject reads it through the ownership-granted GET /api/v1/hr-workforce/attendance-corrections/{id}. Whether the export itself may release it is an open product/legal decision (Issue #1018). Status-only and never deleted; retained with the events it justifies under the employer's obligations (ADR-0132 section 13.2); erasure does NOT follow the join."
+    },
+    {
+      key: "hr_workforce.attendance_location_evidence",
+      tableName: "awcms_hr_attendance_location_evidence",
+      ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      // ADR-0138 section 7 / ADR-0142: the person is reached through the
+      // employment (`profile_id` ONLY, like the events the verdict describes).
+      subjectColumns: [],
+      subjectVia: {
+        column: "employment_id",
+        parentKey: "hr_workforce.employments",
+        parentColumns: ["profile_id"]
+      },
+      exportable: true,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Whether a person's own clock-in or clock-out was at an authorised site: a verdict (inside / outside / not_provided), two coarse bands, the geofence and the rule version. The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` ONLY, ADR-0142), so the employee's own verdicts are part of their export and another person's are not; every column is exported because the row holds NO coordinate, raw accuracy, address, device or network value (ADR-0138 section 1). The registry's value `retain_under_obligation` is a REGISTRY LABEL here, not a claim that any law obliges the employer to keep these rows: nothing does, and they are kept only for the purpose they were collected for (checking a check-in during the correction and dispute window) and for the bounded retention below. Erasure does NOT follow the join: the registry gate allows only that value for an indirect path, and the table is append-only for the application role, so the subject-request executor cannot delete them. The rows leave through the retention engine at most 180 days after the check (30 / 90 / 180, hard delete, no archive; a tenant may only shorten the default), a legal hold overrides retention, and the anonymised profile makes a row resolve to nobody meanwhile. An operator-run immediate erasure exists but is not wired to the executor (awcms_hr_erase_location_evidence, sql/306). WHICH of the two an erasure request gets is PENDING counsel's decision and enabling the feature in any tenant is blocked until counsel signs off (ADR-0138, Deviations)."
+    },
+    {
+      key: "hr_workforce.geolocation_notice_acknowledgements",
+      tableName: "awcms_hr_geolocation_notice_acknowledgements",
+      ownerModuleKey: HR_WORKFORCE_MODULE_KEY,
+      // `acknowledged_by` names the employee's own login, but the person is
+      // reached through the employment like every other table of the module.
+      subjectColumns: [],
+      subjectVia: {
+        column: "employment_id",
+        parentKey: "hr_workforce.employments",
+        parentColumns: ["profile_id"]
+      },
+      exportable: true,
+      erasure: "retain_under_obligation",
+      rationale:
+        "That an employee was shown a notice version and when: evidence of NOTICE (not of consent as the lawful basis, ADR-0138 section 4). The row reaches the person through `employment_id` -> `awcms_hr_employments` (`profile_id` ONLY, ADR-0142), so the employee's own acknowledgements are part of their export. `acknowledged_by` is the employee's own login and adds nothing the employment does not. Erasure does NOT follow the join: the row is append-only (privilege and trigger) and is the employer's proof that the notice was given, kept with the employment record (ADR-0132 section 13.2); the anonymised profile makes it resolve to nobody."
     },
     {
       key: "hr_workforce.shift_assignments",

@@ -18,12 +18,30 @@ const REDACTION_KEYS = [
   "phone",
   "whatsapp",
   "email",
-  "cookie"
+  "cookie",
+  // Issue #970 / ADR-0138: a person's position is never logged or audited. The
+  // server evaluates a position sample in the request and discards it; these
+  // names are the second wall, so a sample that ever reached a log context or
+  // an audit attribute would print as [REDACTED].
+  "latitude",
+  "longitude",
+  "coordinate",
+  "geolocation",
+  "positionsample"
 ] as const;
 
 // Exact-match only (not substring) — a substring match on "ip" would also
 // mangle "description"/"shipping"/"recipient".
 const EXACT_SENSITIVE_KEY_SYNONYMS = new Set([
+  // Issue #970: short position aliases cannot be substring keys ("lat" is in
+  // "late", "latest", "translation"), so they match by exact name.
+  "lat",
+  "lng",
+  "lon",
+  "long",
+  "latlng",
+  "latlong",
+  "coords",
   "ip",
   "ipaddress",
   "clientip",
@@ -249,6 +267,14 @@ const TEXT_SECRET_PATTERNS: ReadonlyArray<{
   {
     pattern:
       /\b(password|passwordHash|token|accessToken|refreshToken|apiKey|secret|credential|authorization)\b(\s*[:=]\s*)(?!(?:Bearer|Basic)\b)("[^"]*"|'[^']*'|\S+)/gi,
+    replacement: "$1$2[REDACTED]"
+  },
+  {
+    // Issue #970 / ADR-0138: a position printed into free text (a thrown error
+    // that interpolated a request body, a pasted query string). Handles
+    // `latitude: -2.2`, `"longitude":113.9` and `positionSample={...}`.
+    pattern:
+      /((?:\\*["'])?\b(?:latitude|longitude|positionSample|lat|lng|lon|long)\b(?:\\*["'])?)(\s*[:=]\s*)(\{[^}]*\}|\\*"[^"]*\\*"|"[^"]*"|'[^']*'|[^\s,;&}]+)/gi,
     replacement: "$1$2[REDACTED]"
   }
 ];

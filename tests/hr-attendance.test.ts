@@ -231,11 +231,20 @@ describe("the permission catalogue", () => {
     }
   });
 
-  test("no permission can touch evidence or location (ADR-0138 is not built here)", () => {
+  test("the only permissions that touch evidence or location are ADR-0138's two (Issue #970); none for photo or biometric", () => {
+    const allowed = [
+      "attendance_evidence.read",
+      "geolocation_evidence.configure"
+    ];
+
     for (const p of hrWorkforceModule.permissions ?? []) {
-      expect(`${p.activityCode}.${p.action}`).not.toMatch(
-        /evidence|geolocation|location|photo|biometric/i
-      );
+      const key = `${p.activityCode}.${p.action}`;
+
+      expect(key).not.toMatch(/photo|biometric|fingerprint|device/i);
+
+      if (/evidence|geolocation|location/i.test(key)) {
+        expect(allowed).toContain(key);
+      }
     }
   });
 });

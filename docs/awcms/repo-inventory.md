@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 33    |
-| Migrations                          | 224   |
-| `awcms_*` tables                    | 217   |
-| Tables with `FORCE` RLS             | 199   |
+| Migrations                          | 225   |
+| `awcms_*` tables                    | 222   |
+| Tables with `FORCE` RLS             | 204   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 710   |
-| Route files                         | 561   |
+| Test files                          | 714   |
+| Route files                         | 569   |
 | ADR                                 | 292   |
 
 ### Modules
@@ -281,244 +281,250 @@
 | 221 | `sql/303_awcms_lifecycle_delegated_count_functions.sql`            |
 | 222 | `sql/304_awcms_worker_credential_column_revoke.sql`                |
 | 223 | `sql/305_awcms_booking_staff_assignments.sql`                      |
-| 224 | `sql/308_awcms_hr_workforce_metrics_permissions.sql`               |
+| 224 | `sql/306_awcms_hr_geolocation_evidence.sql`                        |
+| 225 | `sql/308_awcms_hr_workforce_metrics_permissions.sql`               |
 
 ### Tables & Row-Level Security
 
-| Table                                    | Created in                                                 | RLS | FORCE |
-| ---------------------------------------- | ---------------------------------------------------------- | --- | ----- |
-| `awcms_abac_decision_logs`               | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
-| `awcms_abac_policies`                    | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
-| `awcms_access_assignments`               | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
-| `awcms_access_policies`                  | `sql/102_awcms_access_policies_schema.sql`                 | yes | yes   |
-| `awcms_access_policy_events`             | `sql/102_awcms_access_policies_schema.sql`                 | yes | yes   |
-| `awcms_audit_events`                     | `sql/007_awcms_audit_logging_schema.sql`                   | yes | yes   |
-| `awcms_auth_providers`                   | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
-| `awcms_bff_clients`                      | `sql/088_awcms_session_handoff_schema.sql`                 | yes | yes   |
-| `awcms_blog_ad_placements`               | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_blog_ads`                         | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_blog_institutions`                | `sql/131_awcms_blog_content_classification_dimensions.sql` | yes | yes   |
-| `awcms_blog_internal_tag_link_settings`  | `sql/039_awcms_blog_content_internal_tag_links_schema.sql` | yes | yes   |
-| `awcms_blog_menu_items`                  | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_blog_menus`                       | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_blog_pages`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_post_institutions`           | `sql/131_awcms_blog_content_classification_dimensions.sql` | yes | yes   |
-| `awcms_blog_post_terms`                  | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_posts`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_redirects`                   | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_revisions`                   | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_settings`                    | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_templates`                   | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_blog_terms`                       | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
-| `awcms_blog_theme_settings`              | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_blog_widgets`                     | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
-| `awcms_booking_reminder_intents`         | `sql/284_awcms_booking_reminder_intents.sql`               | yes | yes   |
-| `awcms_booking_reservation_events`       | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_reservation_items`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_reservations`             | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_resource_allocations`     | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_resource_blocks`          | `sql/186_awcms_booking_availability.sql`                   | yes | yes   |
-| `awcms_booking_resource_pools`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_resource_units`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_resources`                | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_schedule_exceptions`      | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_schedules`                | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_service_offerings`        | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_settings`                 | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
-| `awcms_booking_staff_assignments`        | `sql/305_awcms_booking_staff_assignments.sql`              | yes | yes   |
-| `awcms_business_scope_assignment_events` | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
-| `awcms_business_scope_assignments`       | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
-| `awcms_comments_abuse_events`            | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_comments_comments`                | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_comments_moderation_events`       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_comments_reply_subscriptions`     | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_comments_reports`                 | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_comments_settings`                | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_comments_threads`                 | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
-| `awcms_data_lifecycle_archive_manifests` | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
-| `awcms_data_lifecycle_cursors`           | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
-| `awcms_data_lifecycle_legal_holds`       | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
-| `awcms_data_lifecycle_runs`              | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
-| `awcms_delegated_access_grants`          | `sql/117_awcms_delegated_access.sql`                       | yes | yes   |
-| `awcms_domain_event_activity_daily`      | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_domain_event_consumer_effects`    | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_domain_event_consumer_state`      | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_domain_event_deliveries`          | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_domain_event_replays`             | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_domain_events`                    | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_edge_cache_purges`                | `sql/068_awcms_edge_cache_purge_queue.sql`                 | yes | yes   |
-| `awcms_email_delivery_attempts`          | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
-| `awcms_email_messages`                   | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
-| `awcms_email_suppression_list`           | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
-| `awcms_email_templates`                  | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
-| `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
-| `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
-| `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
-| `awcms_hr_attendance_corrections`        | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
-| `awcms_hr_attendance_events`             | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
-| `awcms_hr_commission_accruals`           | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
-| `awcms_hr_commission_rules`              | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
-| `awcms_hr_commission_transitions`        | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
-| `awcms_hr_employment_terms`              | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
-| `awcms_hr_employments`                   | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
-| `awcms_hr_shift_assignments`             | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
-| `awcms_hr_shift_templates`               | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
-| `awcms_hr_workforce_settings`            | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
-| `awcms_idempotency_keys`                 | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
-| `awcms_identities`                       | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
-| `awcms_identity_mfa_factors`             | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
-| `awcms_identity_mfa_recovery_codes`      | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
-| `awcms_idn_admin_regions`                | `sql/080_awcms_idn_admin_regions_schema.sql`               | no  | no    |
-| `awcms_idn_region_datasets`              | `sql/080_awcms_idn_admin_regions_schema.sql`               | no  | no    |
-| `awcms_inventory_balances`               | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
-| `awcms_inventory_locations`              | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
-| `awcms_inventory_low_stock_signals`      | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
-| `awcms_inventory_movements`              | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
-| `awcms_inventory_settings`               | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
-| `awcms_invitation_policies`              | `sql/106_awcms_identity_invitations_schema.sql`            | yes | yes   |
-| `awcms_invitations`                      | `sql/106_awcms_identity_invitations_schema.sql`            | yes | yes   |
-| `awcms_machine_credentials`              | `sql/082_awcms_identity_machine_credentials_schema.sql`    | yes | yes   |
-| `awcms_media_library_tenant_state`       | `sql/053_awcms_media_library_tenant_state_schema.sql`      | yes | yes   |
-| `awcms_mfa_challenges`                   | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
-| `awcms_module_dependencies`              | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
-| `awcms_module_health_checks`             | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
-| `awcms_module_jobs`                      | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
-| `awcms_module_navigation`                | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
-| `awcms_module_settings`                  | `sql/008_awcms_module_management_schema.sql`               | yes | yes   |
-| `awcms_modules`                          | `sql/001_awcms_foundation_schema.sql`                      | no  | no    |
-| `awcms_news_media_objects`               | `sql/041_awcms_news_media_object_registry_schema.sql`      | yes | yes   |
-| `awcms_news_portal_ad_placements`        | `sql/045_awcms_news_portal_ad_placements_schema.sql`       | yes | yes   |
-| `awcms_news_portal_homepage_sections`    | `sql/044_awcms_news_portal_homepage_sections_schema.sql`   | yes | yes   |
-| `awcms_newsletter_subscribers`           | `sql/139_awcms_newsletter_schema.sql`                      | yes | yes   |
-| `awcms_object_sync_queue`                | `sql/012_awcms_object_sync_queue_schema.sql`               | yes | yes   |
-| `awcms_offices`                          | `sql/002_awcms_tenant_office_schema.sql`                   | yes | yes   |
-| `awcms_oidc_auth_requests`               | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
-| `awcms_omes_ai_egress_approvals`         | `sql/160_awcms_omes_ai_privacy_schema.sql`                 | yes | yes   |
-| `awcms_omes_ai_privacy_posture`          | `sql/160_awcms_omes_ai_privacy_schema.sql`                 | yes | yes   |
-| `awcms_omes_audit_projections`           | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_backup_snapshots`            | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_deployments`                 | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_enrollments`                 | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_health_snapshots`            | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_hermes_orchestration_events` | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
-| `awcms_omes_hermes_orchestration_trees`  | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
-| `awcms_omes_jobs`                        | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_operation_requests`          | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_repository_progress`         | `sql/166_awcms_omes_repository_progress_schema.sql`        | yes | yes   |
-| `awcms_omes_repository_progress_config`  | `sql/166_awcms_omes_repository_progress_schema.sql`        | yes | yes   |
-| `awcms_omes_servers`                     | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
-| `awcms_omes_worker_nonces`               | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
-| `awcms_omes_worker_results`              | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
-| `awcms_partner_managed_tenants`          | `sql/116_awcms_partners.sql`                               | yes | yes   |
-| `awcms_partners`                         | `sql/116_awcms_partners.sql`                               | yes | yes   |
-| `awcms_password_reset_tokens`            | `sql/073_awcms_identity_password_reset_schema.sql`         | yes | yes   |
-| `awcms_permissions`                      | `sql/005_awcms_abac_access_control_schema.sql`             | no  | no    |
-| `awcms_plan_entitlements`                | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
-| `awcms_plans`                            | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
-| `awcms_principal_mfa_factors`            | `sql/114_awcms_principal_mfa.sql`                          | no  | no    |
-| `awcms_principal_mfa_recovery_codes`     | `sql/114_awcms_principal_mfa.sql`                          | no  | no    |
-| `awcms_principal_preferences`            | `sql/128_awcms_principal_preferences.sql`                  | no  | no    |
-| `awcms_principals`                       | `sql/112_awcms_principals.sql`                             | no  | no    |
-| `awcms_procurement_document_events`      | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_document_lines`       | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_document_movements`   | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_documents`            | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_settings`             | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_supplier_identifiers` | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_supplier_labels`      | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_procurement_suppliers`            | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
-| `awcms_profile_entity_links`             | `sql/003_awcms_central_profile_schema.sql`                 | yes | yes   |
-| `awcms_profile_identifiers`              | `sql/003_awcms_central_profile_schema.sql`                 | yes | yes   |
-| `awcms_profiles`                         | `sql/003_awcms_central_profile_schema.sql`                 | yes | yes   |
-| `awcms_push_delivery_attempts`           | `sql/093_awcms_push_delivery_schema.sql`                   | yes | yes   |
-| `awcms_push_messages`                    | `sql/093_awcms_push_delivery_schema.sql`                   | yes | yes   |
-| `awcms_push_subscriptions`               | `sql/093_awcms_push_delivery_schema.sql`                   | yes | yes   |
-| `awcms_registration_requests`            | `sql/074_awcms_identity_self_registration_schema.sql`      | yes | yes   |
-| `awcms_reporting_export_runs`            | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_reporting_projection_cursors`     | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_reporting_projection_metrics`     | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_reporting_projection_state`       | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_reporting_rebuild_runs`           | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_reporting_reconciliation_runs`    | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_reporting_scheduled_exports`      | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
-| `awcms_role_permissions`                 | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
-| `awcms_roles`                            | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
-| `awcms_schema_migrations`                | `sql/001_awcms_foundation_schema.sql`                      | no  | no    |
-| `awcms_sensitive_read_windows`           | `sql/224_awcms_sensitive_read_windows.sql`                 | yes | yes   |
-| `awcms_seo_not_found_observations`       | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
-| `awcms_seo_redirect_settings`            | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
-| `awcms_seo_redirects`                    | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
-| `awcms_seo_tenant_settings`              | `sql/057_awcms_seo_distribution_config_schema.sql`         | yes | yes   |
-| `awcms_session_handoff_codes`            | `sql/088_awcms_session_handoff_schema.sql`                 | yes | yes   |
-| `awcms_sessions`                         | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
-| `awcms_setup_state`                      | `sql/006_awcms_setup_wizard_schema.sql`                    | no  | no    |
-| `awcms_sidebar_menu_items`               | `sql/071_awcms_sidebar_menu_schema.sql`                    | yes | yes   |
-| `awcms_sidebar_menu_types`               | `sql/071_awcms_sidebar_menu_schema.sql`                    | yes | yes   |
-| `awcms_site_profile`                     | `sql/135_awcms_site_profile_schema.sql`                    | yes | yes   |
-| `awcms_site_search_documents`            | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
-| `awcms_site_search_index_failures`       | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
-| `awcms_site_search_index_runs`           | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
-| `awcms_site_search_query_log`            | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
-| `awcms_site_search_settings`             | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
-| `awcms_sod_conflict_evaluations`         | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
-| `awcms_sod_conflict_exceptions`          | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
-| `awcms_subject_requests`                 | `sql/125_awcms_subject_requests.sql`                       | yes | yes   |
-| `awcms_sync_aggregate_versions`          | `sql/011_awcms_sync_storage_conflict_schema.sql`           | yes | yes   |
-| `awcms_sync_conflicts`                   | `sql/011_awcms_sync_storage_conflict_schema.sql`           | yes | yes   |
-| `awcms_sync_inbox`                       | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
-| `awcms_sync_nodes`                       | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
-| `awcms_sync_push_batches`                | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
-| `awcms_tax_rule_versions`                | `sql/171_awcms_tax_rule_versions_schema.sql`               | yes | yes   |
-| `awcms_tax_snapshots`                    | `sql/172_awcms_tax_snapshots_schema.sql`                   | yes | yes   |
-| `awcms_telegram_bindings`                | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
-| `awcms_telegram_delivery_attempts`       | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
-| `awcms_telegram_link_codes`              | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
-| `awcms_telegram_messages`                | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
-| `awcms_telegram_settings`                | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
-| `awcms_tenant_auth_policies`             | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
-| `awcms_tenant_domains`                   | `sql/046_awcms_tenant_domain_schema.sql`                   | yes | yes   |
-| `awcms_tenant_entitlements`              | `sql/109_awcms_entitlement_schema.sql`                     | yes | yes   |
-| `awcms_tenant_mfa_policies`              | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
-| `awcms_tenant_modules`                   | `sql/008_awcms_module_management_schema.sql`               | yes | yes   |
-| `awcms_tenant_settings`                  | `sql/002_awcms_tenant_office_schema.sql`                   | yes | yes   |
-| `awcms_tenant_status_transitions`        | `sql/092_awcms_tenant_lifecycle.sql`                       | yes | yes   |
-| `awcms_tenant_subscriptions`             | `sql/109_awcms_entitlement_schema.sql`                     | yes | yes   |
-| `awcms_tenant_users`                     | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
-| `awcms_tenants`                          | `sql/002_awcms_tenant_office_schema.sql`                   | no  | no    |
-| `awcms_theming_config_versions`          | `sql/033_awcms_theming_config_schema.sql`                  | yes | yes   |
-| `awcms_theming_preview_sessions`         | `sql/033_awcms_theming_config_schema.sql`                  | yes | yes   |
-| `awcms_theming_tenant_state`             | `sql/033_awcms_theming_config_schema.sql`                  | yes | yes   |
-| `awcms_user_group_members`               | `sql/104_awcms_user_groups_schema.sql`                     | yes | yes   |
-| `awcms_user_groups`                      | `sql/104_awcms_user_groups_schema.sql`                     | yes | yes   |
-| `awcms_visit_events`                     | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
-| `awcms_visitor_daily_rollups`            | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
-| `awcms_visitor_sessions`                 | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
-| `awcms_whatsapp_consents`                | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
-| `awcms_whatsapp_delivery_attempts`       | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
-| `awcms_whatsapp_messages`                | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
-| `awcms_whatsapp_suppressions`            | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
-| `awcms_workflow_decisions`               | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
-| `awcms_workflow_definitions`             | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
-| `awcms_workflow_delegations`             | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
-| `awcms_workflow_instances`               | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
-| `awcms_workflow_join_arrivals`           | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
-| `awcms_workflow_task_assignments`        | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
-| `awcms_workflow_tasks`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| Table                                          | Created in                                                 | RLS | FORCE |
+| ---------------------------------------------- | ---------------------------------------------------------- | --- | ----- |
+| `awcms_abac_decision_logs`                     | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
+| `awcms_abac_policies`                          | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
+| `awcms_access_assignments`                     | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
+| `awcms_access_policies`                        | `sql/102_awcms_access_policies_schema.sql`                 | yes | yes   |
+| `awcms_access_policy_events`                   | `sql/102_awcms_access_policies_schema.sql`                 | yes | yes   |
+| `awcms_audit_events`                           | `sql/007_awcms_audit_logging_schema.sql`                   | yes | yes   |
+| `awcms_auth_providers`                         | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
+| `awcms_bff_clients`                            | `sql/088_awcms_session_handoff_schema.sql`                 | yes | yes   |
+| `awcms_blog_ad_placements`                     | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_ads`                               | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_institutions`                      | `sql/131_awcms_blog_content_classification_dimensions.sql` | yes | yes   |
+| `awcms_blog_internal_tag_link_settings`        | `sql/039_awcms_blog_content_internal_tag_links_schema.sql` | yes | yes   |
+| `awcms_blog_menu_items`                        | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_menus`                             | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_pages`                             | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_post_institutions`                 | `sql/131_awcms_blog_content_classification_dimensions.sql` | yes | yes   |
+| `awcms_blog_post_terms`                        | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_posts`                             | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_redirects`                         | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_revisions`                         | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_settings`                          | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_templates`                         | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_terms`                             | `sql/035_awcms_blog_content_schema.sql`                    | yes | yes   |
+| `awcms_blog_theme_settings`                    | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_blog_widgets`                           | `sql/037_awcms_blog_content_presentation_schema.sql`       | yes | yes   |
+| `awcms_booking_reminder_intents`               | `sql/284_awcms_booking_reminder_intents.sql`               | yes | yes   |
+| `awcms_booking_reservation_events`             | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_reservation_items`              | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_reservations`                   | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_allocations`           | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_blocks`                | `sql/186_awcms_booking_availability.sql`                   | yes | yes   |
+| `awcms_booking_resource_pools`                 | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resource_units`                 | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_resources`                      | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_schedule_exceptions`            | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_schedules`                      | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_service_offerings`              | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_settings`                       | `sql/180_awcms_booking_schema.sql`                         | yes | yes   |
+| `awcms_booking_staff_assignments`              | `sql/305_awcms_booking_staff_assignments.sql`              | yes | yes   |
+| `awcms_business_scope_assignment_events`       | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
+| `awcms_business_scope_assignments`             | `sql/027_awcms_business_scope_assignments_schema.sql`      | yes | yes   |
+| `awcms_comments_abuse_events`                  | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_comments_comments`                      | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_comments_moderation_events`             | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_comments_reply_subscriptions`           | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_comments_reports`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_comments_settings`                      | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_comments_threads`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_data_lifecycle_archive_manifests`       | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
+| `awcms_data_lifecycle_cursors`                 | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
+| `awcms_data_lifecycle_legal_holds`             | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
+| `awcms_data_lifecycle_runs`                    | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
+| `awcms_delegated_access_grants`                | `sql/117_awcms_delegated_access.sql`                       | yes | yes   |
+| `awcms_domain_event_activity_daily`            | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_domain_event_consumer_effects`          | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_domain_event_consumer_state`            | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_domain_event_deliveries`                | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_domain_event_replays`                   | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_domain_events`                          | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_edge_cache_purges`                      | `sql/068_awcms_edge_cache_purge_queue.sql`                 | yes | yes   |
+| `awcms_email_delivery_attempts`                | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_messages`                         | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_suppression_list`                 | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_templates`                        | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_entitlements`                           | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
+| `awcms_external_identities`                    | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
+| `awcms_form_drafts`                            | `sql/062_awcms_form_drafts_schema.sql`                     | yes | yes   |
+| `awcms_hr_attendance_corrections`              | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
+| `awcms_hr_attendance_events`                   | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
+| `awcms_hr_attendance_location_evidence`        | `sql/306_awcms_hr_geolocation_evidence.sql`                | yes | yes   |
+| `awcms_hr_commission_accruals`                 | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
+| `awcms_hr_commission_rules`                    | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
+| `awcms_hr_commission_transitions`              | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
+| `awcms_hr_employment_terms`                    | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_hr_employments`                         | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_hr_geofences`                           | `sql/306_awcms_hr_geolocation_evidence.sql`                | yes | yes   |
+| `awcms_hr_geolocation_notice_acknowledgements` | `sql/306_awcms_hr_geolocation_evidence.sql`                | yes | yes   |
+| `awcms_hr_geolocation_notices`                 | `sql/306_awcms_hr_geolocation_evidence.sql`                | yes | yes   |
+| `awcms_hr_geolocation_settings`                | `sql/306_awcms_hr_geolocation_evidence.sql`                | yes | yes   |
+| `awcms_hr_shift_assignments`                   | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
+| `awcms_hr_shift_templates`                     | `sql/184_awcms_hr_shifts_schema.sql`                       | yes | yes   |
+| `awcms_hr_workforce_settings`                  | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
+| `awcms_idempotency_keys`                       | `sql/009_awcms_domain_event_runtime_schema.sql`            | yes | yes   |
+| `awcms_identities`                             | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
+| `awcms_identity_mfa_factors`                   | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
+| `awcms_identity_mfa_recovery_codes`            | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
+| `awcms_idn_admin_regions`                      | `sql/080_awcms_idn_admin_regions_schema.sql`               | no  | no    |
+| `awcms_idn_region_datasets`                    | `sql/080_awcms_idn_admin_regions_schema.sql`               | no  | no    |
+| `awcms_inventory_balances`                     | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
+| `awcms_inventory_locations`                    | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
+| `awcms_inventory_low_stock_signals`            | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
+| `awcms_inventory_movements`                    | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
+| `awcms_inventory_settings`                     | `sql/169_awcms_inventory_schema.sql`                       | yes | yes   |
+| `awcms_invitation_policies`                    | `sql/106_awcms_identity_invitations_schema.sql`            | yes | yes   |
+| `awcms_invitations`                            | `sql/106_awcms_identity_invitations_schema.sql`            | yes | yes   |
+| `awcms_machine_credentials`                    | `sql/082_awcms_identity_machine_credentials_schema.sql`    | yes | yes   |
+| `awcms_media_library_tenant_state`             | `sql/053_awcms_media_library_tenant_state_schema.sql`      | yes | yes   |
+| `awcms_mfa_challenges`                         | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
+| `awcms_module_dependencies`                    | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
+| `awcms_module_health_checks`                   | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
+| `awcms_module_jobs`                            | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
+| `awcms_module_navigation`                      | `sql/008_awcms_module_management_schema.sql`               | no  | no    |
+| `awcms_module_settings`                        | `sql/008_awcms_module_management_schema.sql`               | yes | yes   |
+| `awcms_modules`                                | `sql/001_awcms_foundation_schema.sql`                      | no  | no    |
+| `awcms_news_media_objects`                     | `sql/041_awcms_news_media_object_registry_schema.sql`      | yes | yes   |
+| `awcms_news_portal_ad_placements`              | `sql/045_awcms_news_portal_ad_placements_schema.sql`       | yes | yes   |
+| `awcms_news_portal_homepage_sections`          | `sql/044_awcms_news_portal_homepage_sections_schema.sql`   | yes | yes   |
+| `awcms_newsletter_subscribers`                 | `sql/139_awcms_newsletter_schema.sql`                      | yes | yes   |
+| `awcms_object_sync_queue`                      | `sql/012_awcms_object_sync_queue_schema.sql`               | yes | yes   |
+| `awcms_offices`                                | `sql/002_awcms_tenant_office_schema.sql`                   | yes | yes   |
+| `awcms_oidc_auth_requests`                     | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
+| `awcms_omes_ai_egress_approvals`               | `sql/160_awcms_omes_ai_privacy_schema.sql`                 | yes | yes   |
+| `awcms_omes_ai_privacy_posture`                | `sql/160_awcms_omes_ai_privacy_schema.sql`                 | yes | yes   |
+| `awcms_omes_audit_projections`                 | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_backup_snapshots`                  | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_deployments`                       | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_enrollments`                       | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_health_snapshots`                  | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_hermes_orchestration_events`       | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
+| `awcms_omes_hermes_orchestration_trees`        | `sql/163_awcms_omes_hermes_orchestration_schema.sql`       | yes | yes   |
+| `awcms_omes_jobs`                              | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_operation_requests`                | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_repository_progress`               | `sql/166_awcms_omes_repository_progress_schema.sql`        | yes | yes   |
+| `awcms_omes_repository_progress_config`        | `sql/166_awcms_omes_repository_progress_schema.sql`        | yes | yes   |
+| `awcms_omes_servers`                           | `sql/154_awcms_omes_control_schema.sql`                    | yes | yes   |
+| `awcms_omes_worker_nonces`                     | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
+| `awcms_omes_worker_results`                    | `sql/159_awcms_omes_control_worker_ingestion.sql`          | yes | yes   |
+| `awcms_partner_managed_tenants`                | `sql/116_awcms_partners.sql`                               | yes | yes   |
+| `awcms_partners`                               | `sql/116_awcms_partners.sql`                               | yes | yes   |
+| `awcms_password_reset_tokens`                  | `sql/073_awcms_identity_password_reset_schema.sql`         | yes | yes   |
+| `awcms_permissions`                            | `sql/005_awcms_abac_access_control_schema.sql`             | no  | no    |
+| `awcms_plan_entitlements`                      | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
+| `awcms_plans`                                  | `sql/109_awcms_entitlement_schema.sql`                     | no  | no    |
+| `awcms_principal_mfa_factors`                  | `sql/114_awcms_principal_mfa.sql`                          | no  | no    |
+| `awcms_principal_mfa_recovery_codes`           | `sql/114_awcms_principal_mfa.sql`                          | no  | no    |
+| `awcms_principal_preferences`                  | `sql/128_awcms_principal_preferences.sql`                  | no  | no    |
+| `awcms_principals`                             | `sql/112_awcms_principals.sql`                             | no  | no    |
+| `awcms_procurement_document_events`            | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_document_lines`             | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_document_movements`         | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_documents`                  | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_settings`                   | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_supplier_identifiers`       | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_supplier_labels`            | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_procurement_suppliers`                  | `sql/174_awcms_procurement_schema.sql`                     | yes | yes   |
+| `awcms_profile_entity_links`                   | `sql/003_awcms_central_profile_schema.sql`                 | yes | yes   |
+| `awcms_profile_identifiers`                    | `sql/003_awcms_central_profile_schema.sql`                 | yes | yes   |
+| `awcms_profiles`                               | `sql/003_awcms_central_profile_schema.sql`                 | yes | yes   |
+| `awcms_push_delivery_attempts`                 | `sql/093_awcms_push_delivery_schema.sql`                   | yes | yes   |
+| `awcms_push_messages`                          | `sql/093_awcms_push_delivery_schema.sql`                   | yes | yes   |
+| `awcms_push_subscriptions`                     | `sql/093_awcms_push_delivery_schema.sql`                   | yes | yes   |
+| `awcms_registration_requests`                  | `sql/074_awcms_identity_self_registration_schema.sql`      | yes | yes   |
+| `awcms_reporting_export_runs`                  | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_reporting_projection_cursors`           | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_reporting_projection_metrics`           | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_reporting_projection_state`             | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_reporting_rebuild_runs`                 | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_reporting_reconciliation_runs`          | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_reporting_scheduled_exports`            | `sql/015_awcms_reporting_projections_schema.sql`           | yes | yes   |
+| `awcms_role_permissions`                       | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
+| `awcms_roles`                                  | `sql/005_awcms_abac_access_control_schema.sql`             | yes | yes   |
+| `awcms_schema_migrations`                      | `sql/001_awcms_foundation_schema.sql`                      | no  | no    |
+| `awcms_sensitive_read_windows`                 | `sql/224_awcms_sensitive_read_windows.sql`                 | yes | yes   |
+| `awcms_seo_not_found_observations`             | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
+| `awcms_seo_redirect_settings`                  | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
+| `awcms_seo_redirects`                          | `sql/060_awcms_seo_distribution_redirect_schema.sql`       | yes | yes   |
+| `awcms_seo_tenant_settings`                    | `sql/057_awcms_seo_distribution_config_schema.sql`         | yes | yes   |
+| `awcms_session_handoff_codes`                  | `sql/088_awcms_session_handoff_schema.sql`                 | yes | yes   |
+| `awcms_sessions`                               | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
+| `awcms_setup_state`                            | `sql/006_awcms_setup_wizard_schema.sql`                    | no  | no    |
+| `awcms_sidebar_menu_items`                     | `sql/071_awcms_sidebar_menu_schema.sql`                    | yes | yes   |
+| `awcms_sidebar_menu_types`                     | `sql/071_awcms_sidebar_menu_schema.sql`                    | yes | yes   |
+| `awcms_site_profile`                           | `sql/135_awcms_site_profile_schema.sql`                    | yes | yes   |
+| `awcms_site_search_documents`                  | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_site_search_index_failures`             | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_site_search_index_runs`                 | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_site_search_query_log`                  | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_site_search_settings`                   | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_sod_conflict_evaluations`               | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
+| `awcms_sod_conflict_exceptions`                | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
+| `awcms_subject_requests`                       | `sql/125_awcms_subject_requests.sql`                       | yes | yes   |
+| `awcms_sync_aggregate_versions`                | `sql/011_awcms_sync_storage_conflict_schema.sql`           | yes | yes   |
+| `awcms_sync_conflicts`                         | `sql/011_awcms_sync_storage_conflict_schema.sql`           | yes | yes   |
+| `awcms_sync_inbox`                             | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
+| `awcms_sync_nodes`                             | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
+| `awcms_sync_push_batches`                      | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | yes | yes   |
+| `awcms_tax_rule_versions`                      | `sql/171_awcms_tax_rule_versions_schema.sql`               | yes | yes   |
+| `awcms_tax_snapshots`                          | `sql/172_awcms_tax_snapshots_schema.sql`                   | yes | yes   |
+| `awcms_telegram_bindings`                      | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_delivery_attempts`             | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_link_codes`                    | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_messages`                      | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_settings`                      | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_tenant_auth_policies`                   | `sql/025_awcms_oidc_sso_schema.sql`                        | yes | yes   |
+| `awcms_tenant_domains`                         | `sql/046_awcms_tenant_domain_schema.sql`                   | yes | yes   |
+| `awcms_tenant_entitlements`                    | `sql/109_awcms_entitlement_schema.sql`                     | yes | yes   |
+| `awcms_tenant_mfa_policies`                    | `sql/024_awcms_mfa_totp_schema.sql`                        | yes | yes   |
+| `awcms_tenant_modules`                         | `sql/008_awcms_module_management_schema.sql`               | yes | yes   |
+| `awcms_tenant_settings`                        | `sql/002_awcms_tenant_office_schema.sql`                   | yes | yes   |
+| `awcms_tenant_status_transitions`              | `sql/092_awcms_tenant_lifecycle.sql`                       | yes | yes   |
+| `awcms_tenant_subscriptions`                   | `sql/109_awcms_entitlement_schema.sql`                     | yes | yes   |
+| `awcms_tenant_users`                           | `sql/004_awcms_identity_login_schema.sql`                  | yes | yes   |
+| `awcms_tenants`                                | `sql/002_awcms_tenant_office_schema.sql`                   | no  | no    |
+| `awcms_theming_config_versions`                | `sql/033_awcms_theming_config_schema.sql`                  | yes | yes   |
+| `awcms_theming_preview_sessions`               | `sql/033_awcms_theming_config_schema.sql`                  | yes | yes   |
+| `awcms_theming_tenant_state`                   | `sql/033_awcms_theming_config_schema.sql`                  | yes | yes   |
+| `awcms_user_group_members`                     | `sql/104_awcms_user_groups_schema.sql`                     | yes | yes   |
+| `awcms_user_groups`                            | `sql/104_awcms_user_groups_schema.sql`                     | yes | yes   |
+| `awcms_visit_events`                           | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
+| `awcms_visitor_daily_rollups`                  | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
+| `awcms_visitor_sessions`                       | `sql/050_awcms_visitor_analytics_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_consents`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_delivery_attempts`             | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_messages`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_suppressions`                  | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_workflow_decisions`                     | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| `awcms_workflow_definitions`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| `awcms_workflow_delegations`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| `awcms_workflow_instances`                     | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| `awcms_workflow_join_arrivals`                 | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| `awcms_workflow_task_assignments`              | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
+| `awcms_workflow_tasks`                         | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 
 ### Tests
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 543        |
+| `(root)`      | 545        |
 | `e2e`         | 26         |
-| `integration` | 140        |
+| `integration` | 142        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 455   |
+| `/api/v1/**`    | 463   |
 | `/admin/**`     | 76    |
 | publik / anonim | 30    |
 

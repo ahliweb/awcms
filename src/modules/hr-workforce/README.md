@@ -15,9 +15,32 @@ employee-sees-own), **shifts and the staff-availability port** (Issue #946) and
 **attendance events and corrections with approval** (Issue #947).
 **Not here yet:** commission and payroll (later issues of the same ADR) —
 and **never** a photo, biometric or device-fingerprint field (owner decision O6).
-Geolocation evidence (ADR-0138, Issue #970) is NOT part of attendance: it will be
-a separate append-only table keyed to an event id, so no location column ever
-exists on `awcms_hr_attendance_events`.
+**Geolocation evidence** (ADR-0138, Issue #970, `sql/306`) is NOT part of attendance
+and is **off for every tenant** until a person holding
+`hr_workforce.geolocation_evidence.configure` (granted to nobody by default, not
+even the tenant owner) enables it with a DPIA reference, a published notice and a
+geofence. A `self` clock-in/out may then carry one `positionSample`
+(`latitude`, `longitude`, `accuracyMeters`); the server evaluates it in the request
+against the office's geofences and **discards it**. Only a verdict (`inside`,
+`outside`, `not_provided`), a coarse distance band, a coarse accuracy band, the
+geofence, the rule version and the database time are kept, in the separate
+append-only `awcms_hr_attendance_location_evidence` (30 / 90 / 180 days, hard
+delete, no archive, legal hold overrides) keyed to the event, so no location
+column ever exists on `awcms_hr_attendance_events`. No coordinate, raw accuracy,
+address, device or network value is stored, logged, audited, queued or exported.
+Routes: `/api/v1/hr-workforce/geolocation/{settings,geofences,notices,notice,notice-acknowledgements,evidence}`.
+Declining, a missing fix, a fix worse than the accuracy ceiling and an
+unacknowledged notice all record the clock event normally with `not_provided`;
+the verdict is a supporting indicator for human review and decides nothing by
+itself. **A client-reported position is forgeable: a verdict is a supporting
+indicator, never proof.** `attendance_evidence.read` is tenant-wide and HR-only:
+there is no supervisor scope or manager-chain read yet, so a supervisor reads
+nothing unless HR assigns the permission (and then reads every employee's
+verdicts). A geofence is a 50 m-5 km circle or a simple polygon (at least 2,500
+m2, at most 10 km), at most 10 live per office, and the last live one cannot be
+deleted while the switch is on. Enabling in any tenant waits for counsel's
+sign-off on erasure (ADR-0138). Erasure follows retention (ADR-0094 + ADR-0142); see ADR-0138 "Status of
+the implementation" for the open legal question.
 
 Status is `experimental`: the flag is off, no admin screen exists, and the module
 declares no `navigation`. It flips to `active` with its first screen.

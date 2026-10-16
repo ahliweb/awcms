@@ -52,6 +52,12 @@ export const DELEGATED_COUNT_FUNCTIONS: Readonly<Record<string, string>> = {
   awcms_hr_employment_terms: "awcms_hr_workforce_lifecycle_eligible_count",
   awcms_hr_shift_assignments: "awcms_hr_workforce_lifecycle_eligible_count",
   awcms_hr_shift_templates: "awcms_hr_workforce_lifecycle_eligible_count",
+  // Issue #970 (sql/306 replaces the function with four more branches).
+  awcms_hr_geofences: "awcms_hr_workforce_lifecycle_eligible_count",
+  awcms_hr_geolocation_notices: "awcms_hr_workforce_lifecycle_eligible_count",
+  awcms_hr_geolocation_settings: "awcms_hr_workforce_lifecycle_eligible_count",
+  awcms_hr_geolocation_notice_acknowledgements:
+    "awcms_hr_workforce_lifecycle_eligible_count",
   awcms_booking_reservation_items: "awcms_booking_lifecycle_eligible_count",
   awcms_booking_reservations: "awcms_booking_lifecycle_eligible_count",
   awcms_booking_resource_allocations: "awcms_booking_lifecycle_eligible_count",

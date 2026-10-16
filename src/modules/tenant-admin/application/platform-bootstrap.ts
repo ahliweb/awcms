@@ -1,5 +1,6 @@
 import { assertUuid } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import { OWNER_GRANT_EXCLUDED_PERMISSION_KEYS } from "../../_shared/owner-grant-exclusions";
 import { linkIdentityToPrincipal } from "../../identity-access/application/principal-store";
 import { hashPassword } from "../../../lib/auth/password";
 import type { SetupInitializeInput } from "../domain/setup-validation";
@@ -116,10 +117,18 @@ export async function createTenantWithOwner(
   // exactly how `idn_admin_regions.dataset.configure` came to be held by an
   // ordinary tenant owner (ADR-0052). Filtering here means a new platform
   // permission is safe the moment it is declared — nobody has to remember.
+  //
+  // Issue #970 / ADR-0138: a few tenant-scoped permissions are deliberately NOT
+  // in this blanket grant (`OWNER_GRANT_EXCLUDED_PERMISSION_KEYS`): the action is
+  // inside the tenant, but a person must be given it on purpose. The keys travel
+  // as ONE jsonb parameter (the JS array itself, never a JSON.stringify string).
   await tx`
     INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
     SELECT ${tenantId}, ${roleId}, id FROM awcms_permissions
     WHERE scope = 'tenant'
+      AND (module_key || '.' || activity_code || '.' || action) NOT IN (
+        SELECT jsonb_array_elements_text(${[...OWNER_GRANT_EXCLUDED_PERMISSION_KEYS]}::jsonb)
+      )
   `;
 
   if (options.grantPlatformScope) {

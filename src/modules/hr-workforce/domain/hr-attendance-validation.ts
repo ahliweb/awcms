@@ -5,7 +5,10 @@
  * **Strict bodies.** Every validator rejects a key it does not know. There is no
  * `recordedAt` (the database's clock), no `late` (the guard decides), and no
  * location, coordinate, photo, device or network field of any kind (owner
- * decision O6, ADR-0138): a client that sends one is refused, not ignored.
+ * decision O6, ADR-0138): a client that sends one is refused, not ignored. The
+ * ONE exception is `positionSample` (Issue #970): an optional
+ * `{ latitude, longitude, accuracyMeters }` that only a `self` clock_in /
+ * clock_out may carry, evaluated by the server in the request and discarded.
  */
 import {
   ATTENDANCE_LIMITS,
@@ -16,6 +19,11 @@ import {
   type AttendanceKind,
   type CorrectionKind
 } from "./hr-attendance-types";
+import { parsePositionSample } from "./hr-geolocation-validation";
+import {
+  isGeoEligibleEvent,
+  type PositionSample
+} from "./hr-geolocation-types";
 import type { Validated, ValidationError } from "./hr-workforce-validation";
 
 const UUID_PATTERN =
@@ -145,6 +153,12 @@ export type CreateAttendanceEventInput = {
   source: AttendanceClientSource;
   clientEventKey: string;
   officeId: string | null;
+  /**
+   * The position sample (Issue #970, ADR-0138), or `null` for none / declined.
+   * It lives only in the memory of the request: the route evaluates it and drops
+   * it, and it is excluded from the idempotency hash.
+   */
+  positionSample: PositionSample | null;
 };
 
 export function validateCreateAttendanceEvent(
@@ -159,7 +173,8 @@ export function validateCreateAttendanceEvent(
       "occurredAt",
       "source",
       "clientEventKey",
-      "officeId"
+      "officeId",
+      "positionSample"
     ],
     errors
   );
@@ -189,6 +204,23 @@ export function validateCreateAttendanceEvent(
     });
   }
 
+  const positionSample = parsePositionSample(body.positionSample, errors);
+
+  // Only the employee's own clock-in / clock-out may carry a position (ADR-0138
+  // section 9: a kiosk is a place, not a person; a break is not attendance).
+  if (
+    body.positionSample !== undefined &&
+    body.positionSample !== null &&
+    eventKind &&
+    isAttendanceClientSource(source) &&
+    !isGeoEligibleEvent(eventKind, source)
+  ) {
+    errors.push({
+      field: "positionSample",
+      message: "Only a self clock_in or clock_out may carry a positionSample."
+    });
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -201,7 +233,8 @@ export function validateCreateAttendanceEvent(
       occurredAt: occurredAt!,
       source: source as AttendanceClientSource,
       clientEventKey: key as string,
-      officeId
+      officeId,
+      positionSample
     }
   };
 }

@@ -5,7 +5,9 @@
 #
 # An employment REFERENCES a profile_identity party (`profileId`) and never
 # carries its name, contact or national id; no operation accepts or returns a
-# photo, biometric or device field (owner decision O6). `terminatedOn` is derived
+# photo, biometric or device field (owner decision O6); the one position input is the
+# optional `positionSample` of a self clock-in/out, evaluated and discarded (Issue #970,
+# ADR-0138). `terminatedOn` is derived
 # from a terminated term and can never be asserted by a client.
 #
 # NOT independently valid OpenAPI: $ref targets pointing at shared components
@@ -1102,7 +1104,7 @@ paths:
       tags:
         - HR Workforce
       summary: Record an attendance event
-      description: "`source: self` records YOUR OWN event and needs `hr_workforce.clock.create` plus an employment linked to your login (anything else is 403 whether the employment exists or not); `supervisor`, `kiosk` and `import` record for another employment and need `hr_workforce.attendance.create`. The SERVER clock decides `recordedAt`; `occurredAt` is bounded by the tenant clock-skew setting: in the future -> 422 `ATTENDANCE_TIME_IN_FUTURE`; for `self`/`supervisor`, older than the skew -> 422 `ATTENDANCE_BACKDATED` (request a correction); a `kiosk`/`import` replay is accepted up to seven days old (older -> 422 `ATTENDANCE_TOO_OLD`) and flagged `late` past fifteen minutes. A replay of the same `clientEventKey` for the same employment returns the ORIGINAL with 200 (a different event under a used key is 409 `CLIENT_EVENT_KEY_CONFLICT`). The body has NO location, photo, device or network field and an unknown field is refused. Requires an Idempotency-Key. Audited when recorded for somebody else: every `supervisor` event, and a `kiosk`/`import` event flagged `late` (ids, kind, source and claimed instant only; the actor is the recorder); a `self` event and a punctual kiosk/import tap are not (high volume: the event is the record). The seven-day replay window is NOT an approval path: it exists for offline queues, which is why the stale ones leave a trace."
+      description: "`source: self` records YOUR OWN event and needs `hr_workforce.clock.create` plus an employment linked to your login (anything else is 403 whether the employment exists or not); `supervisor`, `kiosk` and `import` record for another employment and need `hr_workforce.attendance.create`. The SERVER clock decides `recordedAt`; `occurredAt` is bounded by the tenant clock-skew setting: in the future -> 422 `ATTENDANCE_TIME_IN_FUTURE`; for `self`/`supervisor`, older than the skew -> 422 `ATTENDANCE_BACKDATED` (request a correction); a `kiosk`/`import` replay is accepted up to seven days old (older -> 422 `ATTENDANCE_TOO_OLD`) and flagged `late` past fifteen minutes. A replay of the same `clientEventKey` for the same employment returns the ORIGINAL with 200 (a different event under a used key is 409 `CLIENT_EVENT_KEY_CONFLICT`). The body has NO photo, device or network field and an unknown field is refused. The ONE optional position field is `positionSample` (Issue #970, ADR-0138): only a `self` clock_in / clock_out may carry it (any other source or kind -> 400), the server evaluates it IN THE REQUEST against the geofences of the event's office and DISCARDS it (no coordinate, raw accuracy, address or device value is ever stored, logged or audited), and the response carries `locationVerdict` (`inside`, `outside` or `not_provided`; `null` while the tenant's switch is off, the default, when the sample is ignored). A declined / absent / too-coarse / unacknowledged sample is `not_provided` and never blocks clocking. Requires an Idempotency-Key. Audited when recorded for somebody else: every `supervisor` event, and a `kiosk`/`import` event flagged `late` (ids, kind, source and claimed instant only; the actor is the recorder); a `self` event and a punctual kiosk/import tap are not (high volume: the event is the record). The seven-day replay window is NOT an approval path: it exists for offline queues, which is why the stale ones leave a trace."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"
@@ -1131,7 +1133,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/HrAttendanceEvent"
+                    $ref: "#/components/schemas/HrAttendanceEventRecorded"
                   meta:
                     type: object
         "200":
@@ -1146,7 +1148,7 @@ paths:
                     enum:
                       - true
                   data:
-                    $ref: "#/components/schemas/HrAttendanceEvent"
+                    $ref: "#/components/schemas/HrAttendanceEventRecorded"
                   meta:
                     type: object
         "409":
@@ -1423,6 +1425,597 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/settings:
+    get:
+      operationId: hrWorkforceGeolocationSettingsGet
+      tags:
+        - HR Workforce
+      summary: Read the geolocation evidence settings
+      description: "Gated by `hr_workforce.geolocation_evidence.configure` (not granted to the tenant owner by default, ADR-0138 section 3). The switch is FALSE for every tenant until an authorised person enables it. Responses are `no-store`."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeolocationSettings"
+                  meta:
+                    type: object
+    put:
+      operationId: hrWorkforceGeolocationSettingsSet
+      tags:
+        - HR Workforce
+      summary: Switch geolocation attendance evidence on or off
+      description: 'ENABLING needs `hr_workforce.geolocation_evidence.configure` (403 otherwise) and, in the resulting state, a DPIA reference + date (409 `GEOLOCATION_DPIA_REQUIRED`), a published notice (409 `GEOLOCATION_NOTICE_REQUIRED`) and at least one live geofence (409 `GEOLOCATION_GEOFENCE_REQUIRED`). DISABLING has no precondition, and a holder of `hr_workforce.settings.configure` may send a bare `{ "enabled": false }`; anything else needs the dedicated permission. An omitted field keeps its value; `null` clears `dpiaReference`, `dpiaRecordedOn` or `noticeId`. Requires an Idempotency-Key. Audited at CRITICAL severity when the switch flips (warning otherwise) with the before/after STATE and the actor, never a location. Pointing `noticeId` at a newer version re-requests every employee''s acknowledgement.'
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrGeolocationSettingsInput"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeolocationSettings"
+                  meta:
+                    type: object
+        "409":
+          description: IDEMPOTENCY_CONFLICT, GEOLOCATION_DPIA_REQUIRED, GEOLOCATION_NOTICE_REQUIRED or GEOLOCATION_GEOFENCE_REQUIRED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: NOTICE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/geofences:
+    get:
+      operationId: hrWorkforceGeofencesList
+      tags:
+        - HR Workforce
+      summary: List geofences
+      description: "Gated by `hr_workforce.geolocation_evidence.configure`. `officeId` narrows to one office; `includeDeleted=true` includes soft-deleted ones. A geofence is a place of business, not a person."
+      parameters:
+        - name: officeId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: includeDeleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The geofences.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      geofences:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrGeofence"
+                  meta:
+                    type: object
+    post:
+      operationId: hrWorkforceGeofenceCreate
+      tags:
+        - HR Workforce
+      summary: Define a geofence
+      description: "Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). A circle (`latitude`, `longitude`, `radiusMeters` 50-5000) or a simple polygon (3-32 `[latitude, longitude]` vertices, no repeated vertex or crossing edge, at least 2,500 square metres, spanning at most 10 km) attached to a live office; at most 10 live geofences per office (409 `GEOFENCE_OFFICE_LIMIT`). Requires an Idempotency-Key. Audited at warning severity with ids, the revision and a geometry fingerprint, never coordinates."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrGeofenceInput"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: The geofence.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeofence"
+                  meta:
+                    type: object
+        "409":
+          description: IDEMPOTENCY_CONFLICT or GEOFENCE_OFFICE_LIMIT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: OFFICE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/geofences/{id}:
+    put:
+      operationId: hrWorkforceGeofenceReplace
+      tags:
+        - HR Workforce
+      summary: Replace a geofence
+      description: "Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). Replaces label, office and geometry of a LIVE geofence. Evidence already recorded keeps naming it; it cannot be re-evaluated because no coordinate was kept. Requires an Idempotency-Key. Audited at warning severity with ids, the revision and a geometry fingerprint, never coordinates."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrGeofenceInput"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The geofence.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeofence"
+                  meta:
+                    type: object
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or GEOFENCE_OFFICE_LIMIT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: OFFICE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: hrWorkforceGeofenceDelete
+      tags:
+        - HR Workforce
+      summary: Soft-delete a geofence
+      description: "Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). SOFT delete: a verdict that names the geofence keeps its reference. Refused 409 `GEOFENCE_LAST_WHILE_ENABLED` while geolocation evidence is enabled and this is the last live geofence. Requires an Idempotency-Key. Audited at warning severity."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The deleted geofence.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeofence"
+                  meta:
+                    type: object
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, GEOFENCE_ALREADY_DELETED or GEOFENCE_LAST_WHILE_ENABLED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/geofences/{id}/restore:
+    post:
+      operationId: hrWorkforceGeofenceRestore
+      tags:
+        - HR Workforce
+      summary: Restore a geofence
+      description: "Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). Undoes a soft delete; refused 422 while its office is deleted. Requires an Idempotency-Key. Audited at warning severity."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The restored geofence.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeofence"
+                  meta:
+                    type: object
+        "404":
+          description: RESOURCE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: IDEMPOTENCY_CONFLICT, GEOFENCE_NOT_DELETED or GEOFENCE_OFFICE_LIMIT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: OFFICE_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/notices:
+    get:
+      operationId: hrWorkforceGeolocationNoticesList
+      tags:
+        - HR Workforce
+      summary: List the notice versions
+      description: "Gated by `hr_workforce.geolocation_evidence.configure`. Newest version first."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The notice versions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      notices:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrGeolocationNotice"
+                  meta:
+                    type: object
+    post:
+      operationId: hrWorkforceGeolocationNoticePublish
+      tags:
+        - HR Workforce
+      summary: Publish the next notice version
+      description: "Gated by `hr_workforce.geolocation_evidence.configure` (high-risk). Append-only, numbered per tenant; the text (locale -> text) is the tenant's: what is captured (a position at clock-in and clock-out only), why, who can see it, how long it is kept, and that declining does not stop clocking in. Publishing does NOT make it current: `PUT .../settings` with `noticeId` does. Requires an Idempotency-Key. Audited at warning severity (the version, never the text)."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrGeolocationNoticeInput"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: The notice version.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeolocationNotice"
+                  meta:
+                    type: object
+        "409":
+          description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/notice:
+    get:
+      operationId: hrWorkforceGeolocationNoticeStatus
+      tags:
+        - HR Workforce
+      summary: Read the notice status for the caller's employment
+      description: "Gated by `hr_workforce.clock.create` and an employment linked to the caller's login (anything else is 403). What the clock client needs BEFORE it offers a position: whether the tenant has the feature on, the accuracy ceiling, the current notice and whether this employee acknowledged it. While the feature is off, `enabled` is false and no notice is returned: the client must not ask for a position. `no-store`."
+      parameters:
+        - name: employmentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeolocationNoticeStatus"
+                  meta:
+                    type: object
+  /api/v1/hr-workforce/geolocation/notice-acknowledgements:
+    post:
+      operationId: hrWorkforceGeolocationNoticeAcknowledge
+      tags:
+        - HR Workforce
+      summary: Acknowledge the current notice
+      description: "Gated by `hr_workforce.clock.create` and an employment linked to the caller's login (anything else is 403). Records that the employee has seen the CURRENT notice version: evidence of notice, not a claim that consent is the lawful basis. A repeat is 200. Declining is simply not acknowledging: the employee still clocks in, with a `not_provided` verdict. Requires an Idempotency-Key."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrGeolocationAcknowledgeInput"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Acknowledged.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeolocationAcknowledgement"
+                  meta:
+                    type: object
+        "200":
+          description: Already acknowledged.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrGeolocationAcknowledgement"
+                  meta:
+                    type: object
+        "409":
+          description: IDEMPOTENCY_CONFLICT or NOTICE_NOT_CURRENT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-workforce/geolocation/evidence:
+    get:
+      operationId: hrWorkforceLocationEvidenceList
+      tags:
+        - HR Workforce
+      summary: List location-evidence verdicts
+      description: "Gated by `hr_workforce.attendance_evidence.read` (tenant-wide and HR-only: there is no supervisor scope or manager-chain read yet, and never a scheduler, cashier, marketer or payroll operator), EXCEPT `mine=true` (your OWN verdicts), which needs no permission beyond an employment linked to your login (an ownership grant, ADR-0063). An `employmentId` outside your own under `mine` is 403. Each read of OTHER people's verdicts is audited (the reader, the employment filter and a count, never a verdict). A verdict is a SUPPORTING INDICATOR for human review, never proof, and changes no pay, status or approval by itself. There is no coordinate to return: none is ever stored. Newest first, keyset paginated; `from`/`to` bound the evaluation instant. Responses are `no-store`."
+      parameters:
+        - name: mine
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: employmentId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: eventId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: A page of verdicts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      evidence:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HrLocationEvidence"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
   /api/v1/hr-workforce/workforce-metrics/employees:
     get:
       operationId: hrWorkforceMetricsEmployeesList
@@ -2155,6 +2748,301 @@ components:
         late:
           type: boolean
           description: An offline kiosk/import replay whose claimed time was more than fifteen minutes old; set by the server.
+    HrAttendanceEventRecorded:
+      description: A recorded attendance event plus the verdict of its location evidence (ADR-0138).
+      allOf:
+        - $ref: "#/components/schemas/HrAttendanceEvent"
+        - type: object
+          properties:
+            locationVerdict:
+              type: string
+              nullable: true
+              enum:
+                - inside
+                - outside
+                - not_provided
+                - null
+              description:
+                Null while the tenant's geolocation switch is off (the default). Otherwise the verdict of the
+                position sample for a self clock_in / clock_out. A supporting indicator, never proof.
+    HrPositionSample:
+      type: object
+      additionalProperties: false
+      description:
+        One position sample, evaluated by the server in the request and DISCARDED. It is never persisted,
+        logged, audited, queued, cached or returned. Exactly these three numbers; an altitude, speed, heading,
+        address or device value is refused.
+      required:
+        - latitude
+        - longitude
+        - accuracyMeters
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        accuracyMeters:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100000
+    HrGeolocationSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: FALSE for every tenant until an authorised person enables it.
+        accuracyCeilingMeters:
+          type: integer
+          minimum: 10
+          maximum: 500
+        dpiaReference:
+          type: string
+          nullable: true
+          description: A reference to the tenant's data-protection impact assessment, never its content.
+        dpiaRecordedOn:
+          type: string
+          format: date
+          nullable: true
+        noticeId:
+          type: string
+          format: uuid
+          nullable: true
+        noticeVersion:
+          type: integer
+          nullable: true
+    HrGeolocationSettingsInput:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        accuracyCeilingMeters:
+          type: integer
+          minimum: 10
+          maximum: 500
+        dpiaReference:
+          type: string
+          nullable: true
+          maxLength: 200
+        dpiaRecordedOn:
+          type: string
+          format: date
+          nullable: true
+        noticeId:
+          type: string
+          format: uuid
+          nullable: true
+    HrGeofence:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+          description: Bumped by every replace; the audit row carries it with a geometry fingerprint.
+        officeId:
+          type: string
+          format: uuid
+        label:
+          type: string
+        shape:
+          type: string
+          enum:
+            - circle
+            - polygon
+        latitude:
+          type: number
+          nullable: true
+          description: The CENTRE OF THE WORK SITE (circle); a place of business, not a person.
+        longitude:
+          type: number
+          nullable: true
+        radiusMeters:
+          type: integer
+          nullable: true
+        vertices:
+          type: array
+          nullable: true
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+    HrGeofenceInput:
+      type: object
+      additionalProperties: false
+      required:
+        - officeId
+        - label
+        - shape
+      properties:
+        officeId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        shape:
+          type: string
+          enum:
+            - circle
+            - polygon
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        radiusMeters:
+          type: integer
+          minimum: 50
+          maximum: 5000
+        vertices:
+          type: array
+          minItems: 3
+          maxItems: 32
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: number
+    HrGeolocationNotice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        texts:
+          type: object
+          additionalProperties:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+    HrGeolocationNoticeInput:
+      type: object
+      additionalProperties: false
+      required:
+        - texts
+      properties:
+        texts:
+          type: object
+          minProperties: 1
+          maxProperties: 10
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 4000
+    HrGeolocationNoticeStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        accuracyCeilingMeters:
+          type: integer
+        notice:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/HrGeolocationNotice"
+        acknowledged:
+          type: boolean
+    HrGeolocationAcknowledgeInput:
+      type: object
+      additionalProperties: false
+      required:
+        - employmentId
+        - noticeId
+      properties:
+        employmentId:
+          type: string
+          format: uuid
+        noticeId:
+          type: string
+          format: uuid
+    HrGeolocationAcknowledgement:
+      type: object
+      properties:
+        employmentId:
+          type: string
+          format: uuid
+        noticeId:
+          type: string
+          format: uuid
+        acknowledged:
+          type: boolean
+    HrLocationEvidence:
+      type: object
+      description:
+        One VERDICT for one self clock-in/out. RESTRICTED personal data; retained 30 / 90 / 180 days
+        and then hard-deleted. It holds NO coordinate, raw accuracy, address, device or network value.
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        employmentId:
+          type: string
+          format: uuid
+        verdict:
+          type: string
+          enum:
+            - inside
+            - outside
+            - not_provided
+        distanceBand:
+          type: string
+          nullable: true
+          enum:
+            - within
+            - lt_250m
+            - lt_1km
+            - gte_1km
+            - null
+        accuracyBand:
+          type: string
+          nullable: true
+          enum:
+            - lt_25m
+            - lt_100m
+            - lt_500m
+            - gte_500m
+            - null
+        geofenceId:
+          type: string
+          format: uuid
+          nullable: true
+        ruleVersion:
+          type: integer
+        evaluatedAt:
+          type: string
+          format: date-time
     HrAttendanceEventInput:
       type: object
       additionalProperties: false
@@ -2193,6 +3081,13 @@ components:
         officeId:
           type: string
           format: uuid
+        positionSample:
+          nullable: true
+          description:
+            Optional, `self` clock_in / clock_out only (any other source or kind -> 400). Evaluated by the
+            server in the request and discarded (ADR-0138). `null` or absent is a declined fix.
+          allOf:
+            - $ref: "#/components/schemas/HrPositionSample"
     HrAttendanceCorrection:
       type: object
       description:

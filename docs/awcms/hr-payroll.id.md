@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:ae7e03b9cc8c000af02095c581ad432017fa261477d5f871a70a8edc308eecd8 -->
+<!-- i18n-source-hash: sha256:86cb60d7386b82f211b3efa8b76b38245bf02822d33984c492957cc7af23c09e -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -39,7 +39,7 @@ pun; dokumen fiskal (SPT tahunan, bukti potong); pembuatan berkas bank dan
 panggilan penyedia pembayaran apa pun (isu berikutnya, lewat outbox, tidak
 pernah di dalam transaksi database); saldo dan akrual cuti; pinjaman dan
 tunjangan; pelacakan pelamar; penilaian kinerja; **komisi afiliasi** (penerima
-berbeda, bukan pegawai); bukti kehadiran foto, biometrik, dan sidik-jari perangkat (tidak pernah, O6); bukti geolokasi-saja tidak termasuk fase yang diterima; desainnya diputuskan di ADR-0138 dan dibangun hanya oleh issue tindak-lanjut (§4.3).
+berbeda, bukan pegawai); bukti kehadiran foto, biometrik, dan sidik-jari perangkat (tidak pernah, O6); bukti geolokasi-saja diputuskan di ADR-0138 dan dibangun oleh Issue #970, mati untuk setiap tenant secara default (§4.3).
 
 ## 2. PRD-lite
 
@@ -64,7 +64,7 @@ tautan akun); modul Booking (membaca ketersediaan lewat port); auditor.
 | Kepegawaian menyimpan referensi `profile_identity` dan tidak pernah menyalin nama, kontak, identitas nasional                 | §3, `profile_id` FK komposit; tak ada kolom pribadi di tabel HR mana pun |
 | Unit organisasi, atasan, status berlaku-efektif                                                                               | §4.1 `employment_terms`                                                  |
 | Event kehadiran, koreksi, persetujuan lewat `workflow_approval`                                                               | §4.2                                                                     |
-| Bukti geolokasi-saja adalah fitur terpisah, mati secara default per tenant; bukti foto, biometrik, dan perangkat tidak pernah | §4.3 (tidak ada di fase 1; O6 terjawab)                                  |
+| Bukti geolokasi-saja adalah fitur terpisah, mati secara default per tenant; bukti foto, biometrik, dan perangkat tidak pernah | §4.3 (ADR-0138, dibangun #970; mati default)                             |
 | Template dan penugasan shift dengan deteksi konflik                                                                           | §4.4                                                                     |
 | Port ketersediaan staf untuk Booking                                                                                          | §5                                                                       |
 
@@ -219,10 +219,18 @@ README modul.
 **Keputusan pemilik O6 (dijawab 2026-10-10, DoR awcms-one):** kehadiran
 **boleh** memakai **geolokasi saja** — **tanpa foto, tanpa biometrik, dan tanpa
 sidik-jari perangkat, selamanya** — dan **mati secara default per tenant**.
-**Diputuskan di ADR-0138 (Diterima, 2026-10-12) — hanya sebagai catatan
-keputusan: tidak ada tabel, kolom, pengaturan, permission, atau route, dan fase 1
-tetap tidak mengirim satu pun.** Issue implementasi dibuat dari ADR itu dan
-bergantung pada implementasi absensi (#947). Keputusannya:
+**Diputuskan di ADR-0138 (Diterima, 2026-10-12) dan diimplementasikan oleh
+Issue #970 (`sql/306`): tabel, dua permission (`attendance_evidence.read`,
+`geolocation_evidence.configure`), evaluator geofence, dan route di bawah
+`/api/v1/hr-workforce/geolocation/*` sudah ada, dan saklar mati untuk setiap tenant
+sampai seseorang yang memegang permission khusus mengaktifkannya dengan rujukan
+DPIA, pemberitahuan, dan geofence.**
+Posisi yang dilaporkan klien dapat dipalsukan: putusan adalah indikator
+pendukung untuk ditinjau manusia, bukan bukti, dan tidak memutuskan apa pun
+sendiri. `attendance_evidence.read` berlaku seluruh tenant dan khusus HR (belum
+ada scope atasan). Penghapusan putusan mengikuti batas retensi menunggu
+keputusan penasihat hukum, dan mengaktifkan fitur di tenant mana pun menunggu
+persetujuan itu (ADR-0138, "Status implementasi"). Keputusannya:
 
 - **Bukti hanya-putusan.** Hanya pada `clock_in`/`clock_out`, server
   mengevaluasi satu sampel posisi terhadap geofence tenant dan menyimpan putusan

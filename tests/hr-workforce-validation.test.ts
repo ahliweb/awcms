@@ -221,8 +221,13 @@ describe("the descriptor", () => {
     expect(lifecycle.sort()).toEqual([
       "awcms_hr_attendance_corrections",
       "awcms_hr_attendance_events",
+      "awcms_hr_attendance_location_evidence",
       "awcms_hr_employment_terms",
       "awcms_hr_employments",
+      "awcms_hr_geofences",
+      "awcms_hr_geolocation_notice_acknowledgements",
+      "awcms_hr_geolocation_notices",
+      "awcms_hr_geolocation_settings",
       "awcms_hr_shift_assignments",
       "awcms_hr_shift_templates",
       "awcms_hr_workforce_settings"
@@ -230,8 +235,10 @@ describe("the descriptor", () => {
     expect(subject.sort()).toEqual([
       "awcms_hr_attendance_corrections",
       "awcms_hr_attendance_events",
+      "awcms_hr_attendance_location_evidence",
       "awcms_hr_employment_terms",
       "awcms_hr_employments",
+      "awcms_hr_geolocation_notice_acknowledgements",
       "awcms_hr_shift_assignments"
     ]);
   });

@@ -813,7 +813,18 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         // access-controlled in responses and kept out of every audit row, event,
         // log and the workflow store (tests/integration/hr-attendance-*), and it
         // lives in this ONE column of this ONE table. Events carry no such column.
-        .filter((c) => c !== "awcms_hr_attendance_corrections.reason");
+        .filter((c) => c !== "awcms_hr_attendance_corrections.reason")
+        // Issue #970 (ADR-0138): the centre of a tenant's WORK SITE. A geofence
+        // describes a place of business, not a person, and it is the ONLY table
+        // with a coordinate; the evidence table keeps just a reference to it, and
+        // tests/hr-geolocation.test.ts pins that no other table of the feature
+        // has a coordinate-like column.
+        .filter(
+          (c) =>
+            c !== "awcms_hr_geofences.center_latitude" &&
+            c !== "awcms_hr_geofences.center_longitude" &&
+            c !== "awcms_hr_attendance_location_evidence.geofence_id"
+        );
 
       expect(offenders).toEqual([]);
     });

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:86874b8f5adcc3fa95f99d717742279eee7b60121c23395ba31b4f2c58474a64 -->
+<!-- i18n-source-hash: sha256:ce668eb418d0194f664401d5cc827a3b8aec7bda3a22a3c86090a0cf4376043f -->
 
 # `hr_workforce`
 
@@ -17,9 +17,32 @@ karyawan-melihat-miliknya), **shift dan port ketersediaan staf** (Issue #946), d
 **event kehadiran serta koreksi dengan persetujuan** (Issue #947).
 **Belum ada:** komisi dan payroll (issue berikutnya di bawah ADR yang sama) —
 dan **tidak akan pernah** ada field foto, biometrik, atau sidik-jari perangkat
-(keputusan pemilik O6). Bukti geolokasi (ADR-0138, Issue #970) BUKAN bagian dari
-kehadiran: ia akan menjadi tabel hanya-tambah terpisah yang dikunci pada id event,
-sehingga tidak pernah ada kolom lokasi di `awcms_hr_attendance_events`.
+(keputusan pemilik O6). **Bukti geolokasi** (ADR-0138, Issue #970, `sql/306`) BUKAN bagian dari
+kehadiran dan **mati untuk setiap tenant** sampai seseorang yang memegang
+`hr_workforce.geolocation_evidence.configure` (tidak diberikan ke siapa pun secara
+bawaan, termasuk owner tenant) mengaktifkannya dengan rujukan DPIA, pemberitahuan
+terbit, dan geofence. Clock-in/out `self` lalu boleh membawa satu `positionSample`
+(`latitude`, `longitude`, `accuracyMeters`); server mengevaluasinya di dalam request
+terhadap geofence kantor dan **membuangnya**. Yang disimpan hanya putusan (`inside`,
+`outside`, `not_provided`), pita jarak kasar, pita akurasi kasar, geofence, versi
+aturan, dan waktu database, di `awcms_hr_attendance_location_evidence` terpisah yang
+hanya-tambah (30 / 90 / 180 hari, hapus keras, tanpa arsip, legal hold menimpa)
+dan dikunci pada event, sehingga tidak pernah ada kolom lokasi di
+`awcms_hr_attendance_events`. Tidak ada koordinat, akurasi mentah, alamat, atau
+nilai perangkat atau jaringan yang disimpan, di-log, diaudit, diantrekan, atau
+diekspor. Route: `/api/v1/hr-workforce/geolocation/{settings,geofences,notices,notice,notice-acknowledgements,evidence}`.
+Menolak, tidak ada fix, fix lebih buruk dari batas akurasi, dan pemberitahuan yang
+belum diakui semuanya mencatat event clock seperti biasa dengan `not_provided`;
+putusan adalah indikator pendukung untuk ditinjau manusia dan tidak memutuskan apa
+pun sendiri. **Posisi yang dilaporkan klien dapat dipalsukan: putusan adalah
+indikator pendukung, bukan bukti.** `attendance_evidence.read` berlaku seluruh
+tenant dan khusus HR: belum ada scope atasan atau baca rantai atasan, sehingga
+atasan tidak membaca apa pun kecuali HR menugaskan permission itu (lalu membaca
+putusan semua pegawai). Geofence adalah lingkaran 50 m-5 km atau poligon sederhana
+(minimal 2.500 m2, maksimal 10 km), paling banyak 10 hidup per kantor, dan yang
+hidup terakhir tidak bisa dihapus selama saklar menyala. Mengaktifkan di tenant
+mana pun menunggu persetujuan penasihat hukum soal penghapusan (ADR-0138). Penghapusan mengikuti retensi (ADR-0094 + ADR-0142); lihat "Status
+implementasi" ADR-0138 untuk pertanyaan hukum yang masih terbuka.
 
 Status `experimental`: flag mati, belum ada layar admin, dan modul tidak
 mendeklarasikan `navigation`. Ia menjadi `active` bersama layar pertamanya.

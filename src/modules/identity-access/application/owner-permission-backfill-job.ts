@@ -1,5 +1,6 @@
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import { isOwnerGrantExcluded } from "../../_shared/owner-grant-exclusions";
 import {
   selectBackfillablePermissions,
   type CatalogPermissionRecord
@@ -99,11 +100,15 @@ export async function runOwnerPermissionBackfill(
         created_at: Date;
       }[];
 
-      const catalog: CatalogPermissionRecord[] = catalogRows.map((row) => ({
-        id: row.id,
-        key: `${row.module_key}.${row.activity_code}.${row.action}`,
-        createdAt: new Date(row.created_at)
-      }));
+      // Issue #970 / ADR-0138: a permission that must be assigned on purpose is
+      // never "a gap to repair" either.
+      const catalog: CatalogPermissionRecord[] = catalogRows
+        .map((row) => ({
+          id: row.id,
+          key: `${row.module_key}.${row.activity_code}.${row.action}`,
+          createdAt: new Date(row.created_at)
+        }))
+        .filter((entry) => !isOwnerGrantExcluded(entry.key));
 
       const grantedRows = (await tx`
         SELECT permission_id FROM awcms_role_permissions
