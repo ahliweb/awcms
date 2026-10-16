@@ -101,6 +101,37 @@ type Seeded = {
   requester: string;
 };
 
+/**
+ * One approval node whose verdict picks the end, as the engine's graph would:
+ * the database accepts an `approved` / `rejected` instance only when the
+ * decisions of its completed tasks lead to that end (sql/301).
+ */
+const APPROVAL_GRAPH = {
+  startNodeId: "approval",
+  nodes: [
+    { id: "approval", type: "approval", onApprove: "ok", onReject: "no" },
+    { id: "ok", type: "end", outcome: "approved" },
+    { id: "no", type: "end", outcome: "rejected" }
+  ]
+};
+
+/**
+ * For fixtures that deliberately carry a verdict the engine would never
+ * produce (a rejection nobody decided): the workflow bindings (sql/252,
+ * sql/301) refuse those writes, so these statements step outside them the way
+ * a superuser maintenance session does -- `session_replication_role =
+ * replica`, for the fixture statements only.
+ */
+async function asMaintenance<T>(
+  fn: (tx: Bun.TransactionSQL) => Promise<T>
+): Promise<T> {
+  return getAdminSql().begin(async (tx) => {
+    await tx.unsafe("SET LOCAL session_replication_role = replica");
+
+    return fn(tx);
+  }) as Promise<T>;
+}
+
 /** A pending correction with its workflow instance and one task, ready for a verdict. */
 async function pending(
   employmentId: string,
@@ -114,7 +145,7 @@ async function pending(
       (tenant_id, workflow_key, name, version, lifecycle_status, graph)
     VALUES (${TENANT}, ${`hr.attendance_correction.${crypto.randomUUID()}`},
             'Correction', 1, 'active',
-            ${{ startNodeId: "e", nodes: [{ id: "e", type: "end", outcome: "approved" }] }}::jsonb)
+            ${APPROVAL_GRAPH}::jsonb)
     RETURNING id
   `) as { id: string }[];
   const instance = (await sql`
@@ -151,28 +182,67 @@ async function pending(
   };
 }
 
+/**
+ * The writes the engine makes for one decision, in one transaction: the
+ * decider holds a pending seat on the task, records the decision, the seat is
+ * marked decided and the task completes (sql/301 binds each of them).
+ */
 async function decide(taskId: string, by: string, decision: string) {
-  await getAdminSql()`
-    INSERT INTO awcms_workflow_decisions
-      (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
-    VALUES (${TENANT}, ${taskId}, ${decision}, ${by})
-  `;
+  await getAdminSql().begin(async (tx) => {
+    await tx`
+      INSERT INTO awcms_workflow_task_assignments
+        (tenant_id, workflow_task_id, tenant_user_id)
+      VALUES (${TENANT}, ${taskId}, ${by})
+    `;
+    await tx`
+      INSERT INTO awcms_workflow_decisions
+        (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
+      VALUES (${TENANT}, ${taskId}, ${decision}, ${by})
+    `;
+    await tx`
+      UPDATE awcms_workflow_task_assignments
+      SET status = 'decided', decided_at = now()
+      WHERE workflow_task_id = ${taskId} AND tenant_user_id = ${by}
+    `;
+    await tx`UPDATE awcms_workflow_tasks SET status = 'completed' WHERE id = ${taskId}`;
+  });
 }
 
 type Verdict = "approved" | "rejected" | "cancelled";
 
-/** Finishes the instance and publishes the event, as the workflow engine does in one transaction. */
-async function finish(
-  seeded: Seeded,
+async function setVerdict(
+  instanceId: string,
   verdict: Verdict,
-  cancelledBy: string | null = null
+  cancelledBy: string | null = null,
+  forged = false
 ) {
-  await getAdminSql()`
+  const write = (tx: Bun.TransactionSQL) => tx`
     UPDATE awcms_workflow_instances
     SET status = ${verdict},
         cancelled_by_tenant_user_id = ${cancelledBy}
-    WHERE id = ${seeded.instanceId}
+    WHERE id = ${instanceId}
   `;
+
+  if (forged) {
+    await asMaintenance(write);
+  } else {
+    await getAdminSql().begin(write);
+  }
+}
+
+/**
+ * Finishes the instance and publishes the event, as the workflow engine does.
+ * `forged` is for a verdict no decision backs (a graph that "rejected" with no
+ * human decision): it is written in maintenance mode, because the database
+ * refuses it otherwise.
+ */
+async function finish(
+  seeded: Seeded,
+  verdict: Verdict,
+  cancelledBy: string | null = null,
+  forged = false
+) {
+  await setVerdict(seeded.instanceId, verdict, cancelledBy, forged);
   await inTenant(async (tx) => {
     await appendDomainEvent(tx, TENANT, {
       eventType: `awcms.workflow.instance.${verdict}`,
@@ -326,8 +396,9 @@ suite("hr_workforce automatic settlement of corrections (#998)", () => {
 
   test("a rejection or cancellation that names nobody is settled with decided_by NULL (never the settler), audited with the trigger", async () => {
     const rejected = await pending(employment);
-    // The graph rejected with no human decision recorded.
-    await finish(rejected, "rejected");
+    // The graph rejected with no human decision recorded: state the engine
+    // would never write, so it is forged in maintenance mode.
+    await finish(rejected, "rejected", null, true);
 
     const cancelled = await pending(employment);
     await finish(cancelled, "cancelled", null);
@@ -361,7 +432,7 @@ suite("hr_workforce automatic settlement of corrections (#998)", () => {
 
   test("a requester settling a rejection nobody decided is NOT recorded as its decider; the audit row names the settler", async () => {
     const seeded = await pending(employment);
-    await finish(seeded, "rejected");
+    await finish(seeded, "rejected", null, true);
     // Remove the delivery's effect: settle by hand, as the requester.
     await inTenant(async (tx) => {
       const { settleCorrection } =
@@ -389,9 +460,7 @@ suite("hr_workforce automatic settlement of corrections (#998)", () => {
   test("an event that is not a workflow-instance event, or whose instance is still pending, is ignored without a warning row", async () => {
     const spoofed = await pending(employment);
     await decide(spoofed.taskId, approver, "approve");
-    await getAdminSql()`
-      UPDATE awcms_workflow_instances SET status = 'approved'
-      WHERE id = ${spoofed.instanceId}`;
+    await setVerdict(spoofed.instanceId, "approved");
     await inTenant(async (tx) => {
       await appendDomainEvent(tx, TENANT, {
         eventType: "awcms.workflow.instance.approved",
@@ -451,6 +520,7 @@ suite("hr_workforce automatic settlement of corrections (#998)", () => {
 
   test("an instance that is not a correction's is ignored, and a redelivery changes nothing", async () => {
     const other = await pending(employment, "procurement_document");
+    await decide(other.taskId, approver, "approve");
     await finish(other, "approved");
     const done = await pending(employment);
     await decide(done.taskId, approver, "approve");

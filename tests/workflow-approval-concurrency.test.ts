@@ -446,12 +446,22 @@ describeOrSkip("workflow approval concurrency (real PostgreSQL)", () => {
     const graph = approvalGraph("all", [USER_A, USER_B]);
     const { tenantId, taskId } = await seed(graph, [USER_A, USER_B], "all");
 
-    // USER_A decides; USER_B keeps a live 'pending' seat.
-    await sql`
-      UPDATE awcms_workflow_task_assignments SET status = 'decided'
-      WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId}
-        AND tenant_user_id = ${USER_A}
-    `;
+    // USER_A decides (the decision row first, as the engine writes it);
+    // USER_B keeps a live 'pending' seat.
+    // One transaction, so the decision and the seat move together on one
+    // connection (two pooled statements raced on a loaded box).
+    await sql.begin(async (tx: Bun.SQL) => {
+      await tx`
+        INSERT INTO awcms_workflow_decisions
+          (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
+        VALUES (${tenantId}, ${taskId}, 'approve', ${USER_A})
+      `;
+      await tx`
+        UPDATE awcms_workflow_task_assignments SET status = 'decided'
+        WHERE tenant_id = ${tenantId} AND workflow_task_id = ${taskId}
+          AND tenant_user_id = ${USER_A}
+      `;
+    });
 
     // Mirror the route EXACTLY: it catches WorkflowRecoveryError INSIDE the
     // withTenant callback and returns a 409 response. Returning (rather than

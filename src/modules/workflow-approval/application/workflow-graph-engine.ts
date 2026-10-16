@@ -250,6 +250,19 @@ export async function activateNode(
       );
     }
 
+    // A rejection on one parallel branch finishes the instance while the
+    // sibling branches' approval tasks are still open. Cancel them now, in the
+    // same transaction: otherwise they stay `pending` on a finished instance,
+    // still decidable and still escalated by the worker (#1032). The database
+    // only lets a task be cancelled once its instance is no longer pending
+    // (`sql/301`), which is exactly the state this UPDATE just reached.
+    await tx`
+      UPDATE awcms_workflow_tasks
+      SET status = 'cancelled', cancelled_at = ${now}
+      WHERE tenant_id = ${tenantId} AND workflow_instance_id = ${instanceId}
+        AND status = 'pending'
+    `;
+
     return { finished: true, status: node.outcome };
   }
 
