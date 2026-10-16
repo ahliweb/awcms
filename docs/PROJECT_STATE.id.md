@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f8f98977640e2dee949c87f21370a643a198a6f2d5f5d4e0d00cb51f2176b081 -->
+<!-- i18n-source-hash: sha256:bfa0386a4e38a567aecf498c49ab8e54fefc0d80d7ac7274ca1ca4b24905322e -->
 
 # AWCMS — Project State & Continuation
 
@@ -393,6 +393,47 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **BUG HUNT IDENTITY_ACCESS — 16 Oktober 2026: 13 dari 15 grup perbaikan
+  masuk (#1057–#1069, docs #1070, pelacak #1055 ditutup); satu tindak lanjut
+  masih terbuka, #1056.** Bug hunt eksternal atas `src/modules/identity-access`
+  pada `78acbe8` mengonfirmasi 21 bug dan mengirim 15 grup perbaikan sebagai git
+  bundle. Bundle itu dibangun tanpa tsc, prettier, maupun Postgres, dan tes
+  regresinya memakai transaksi palsu. Pemeriksaan sebelum masuk:
+  - rebase ke main dan prettier, diterapkan per commit;
+  - `bun run check` penuh;
+  - terhadap Postgres 18.4, `tests/integration/` (2.025 lulus, 0 gagal) dan
+    17 suite DB lama (172 lulus, 0 gagal);
+  - review keamanan independen.
+
+  **Yang tidak masuk, dan alasannya:**
+  - **g03** (ganti kata sandi mencabut sesi lain sebelum epoch dinaikkan)
+    duplikat dari #1053 (#1035), yang sudah ada di main.
+  - **g07** (grant yang sudah lewat masa berlakunya memblokir pemberian ulang
+    role yang sama) **ditolak sebagai perbaikan**. Predikat pre-check-nya tidak
+    pernah sampai ke partial unique index `WHERE status = 'active'` (`sql/102`,
+    `sql/104`), jadi 409-nya tetap. Bug-nya sendiri nyata dan permanen, karena
+    tidak ada yang memindahkan baris `awcms_access_policies` ke `expired`. Opsi
+    dan rekomendasinya ada di #1056.
+
+  **Yang dikoreksi saat review:**
+  - g14 tidak terkompilasi: `savepoint` hanya ada di `Bun.TransactionSQL`.
+  - Changeset g08 kini memuat kueri upgrade untuk policy DSL tersimpan yang
+    memakai date-time tanpa offset. Policy seperti itu gagal-tertutup (deny)
+    setelah upgrade.
+
+  **Belum pernah diperiksa:** sekitar 60 dugaan berperingkat lebih rendah dari
+  bug hunt yang sama tidak pernah diberikan ke prover. Laporan bug hunt tidak ada
+  di repo, jadi contoh-contoh ini dicatat di sini agar tidak hilang:
+  - `evaluateAccess` melewati pemeriksaan scope saat field scope-nya cacat,
+    sehingga gagal-terbuka.
+  - `planEntitlementBackfill` memberi entitlement saat tanggalnya tidak valid.
+  - `isPasswordLoginDisabledForIdentity` mengabaikan `sso_required`.
+  - `validateForgotIdentifierInput` mengembalikan identifier tanpa di-trim.
+  - `revokeDelegatedAccess` membiarkan policy role tetap aktif.
+
+  Perlakukan masing-masing sebagai petunjuk, bukan temuan: cocokkan dulu dengan
+  kode dan tulis tes berbasis DB yang gagal sebelum memperbaikinya.
 
 - **PEMBANGUNAN BOOKING — irisan #937 sampai #941 dan #1012 (route buat/lepas
   blok, `sql/240`/`sql/241`) sudah masuk; berikutnya #942
