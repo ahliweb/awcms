@@ -262,6 +262,36 @@ function call<T = unknown>(
 
 const admin = () => getHandlerAdminSql();
 
+/**
+ * The owner (the node's assignee) decides, the task completes and the instance
+ * takes the verdict -- the writes the workflow engine makes, which the
+ * database binds an approval to (sql/301). A bare
+ * `UPDATE awcms_workflow_instances SET status = 'approved'` is refused.
+ */
+async function settleInstance(
+  instanceId: string,
+  decision: "approve" | "reject"
+): Promise<void> {
+  await admin().begin(async (tx) => {
+    const tasks = (await tx`
+      SELECT id FROM awcms_workflow_tasks
+      WHERE tenant_id = ${env.tenantId} AND workflow_instance_id = ${instanceId}
+    `) as { id: string }[];
+
+    await tx`
+      INSERT INTO awcms_workflow_decisions
+        (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
+      VALUES (${env.tenantId}, ${tasks[0]!.id}, ${decision}, ${env.ownerTenantUserId})
+    `;
+    await tx`UPDATE awcms_workflow_tasks SET status = 'completed' WHERE id = ${tasks[0]!.id}`;
+    await tx`
+      UPDATE awcms_workflow_instances
+      SET status = ${decision === "approve" ? "approved" : "rejected"}
+      WHERE tenant_id = ${env.tenantId} AND id = ${instanceId}
+    `;
+  });
+}
+
 async function newLocation(code: string): Promise<string> {
   const response = await call<{ id: string }>(createLocation, {
     method: "POST",
@@ -1857,10 +1887,7 @@ suite("procurement HTTP surface (Issue #888)", () => {
       expect(await onHand(main, "ap3")).toBe("none");
 
       const instance = (await getDoc(big.id)).approvalInstanceId;
-      await admin()`
-        UPDATE awcms_workflow_instances SET status = 'approved'
-        WHERE tenant_id = ${env.tenantId} AND id = ${instance}
-      `;
+      await settleInstance(instance, "approve");
       expect((await finalise(big.id)).status).toBe(201);
       expect(await onHand(main, "ap3")).toBe("10");
     });
@@ -1889,10 +1916,7 @@ suite("procurement HTTP surface (Issue #888)", () => {
       );
       await submit(doc.id);
       const instance = (await getDoc(doc.id)).approvalInstanceId;
-      await admin()`
-        UPDATE awcms_workflow_instances SET status = 'rejected'
-        WHERE tenant_id = ${env.tenantId} AND id = ${instance}
-      `;
+      await settleInstance(instance, "reject");
 
       const refused = await finalise(doc.id);
       expect(refused.status).toBe(409);

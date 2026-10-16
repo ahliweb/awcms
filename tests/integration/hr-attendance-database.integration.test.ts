@@ -160,13 +160,30 @@ type InstanceSpec = {
   resourceId: string;
 };
 
+/**
+ * HR's guard triggers are exercised with workflow rows the ENGINE would never
+ * produce (an approval with no decision, a decision by an arbitrary user). The
+ * workflow engine's own bindings (`sql/252`, `sql/301`) refuse those writes, so
+ * these fixtures step outside them the way a superuser maintenance session
+ * does: `session_replication_role = replica`, for the fixture statements only.
+ */
+async function asMaintenance<T>(
+  fn: (tx: Bun.TransactionSQL) => Promise<T>
+): Promise<T> {
+  return getAdminSql().begin(async (tx) => {
+    await tx.unsafe("SET LOCAL session_replication_role = replica");
+
+    return fn(tx);
+  }) as Promise<T>;
+}
+
 /** A workflow definition + instance (+ task) for a correction, written by the admin. */
 async function seedInstance(
   tenantId: string,
   spec: InstanceSpec
 ): Promise<{ instanceId: string; taskId: string }> {
-  const sql = getAdminSql();
-  const definition = (await sql`
+  return asMaintenance(async (sql) => {
+    const definition = (await sql`
     INSERT INTO awcms_workflow_definitions
       (tenant_id, workflow_key, name, version, lifecycle_status, graph)
     VALUES (${tenantId}, ${`hr.attendance_correction.${crypto.randomUUID()}`},
@@ -174,7 +191,7 @@ async function seedInstance(
             ${{ startNodeId: "e", nodes: [{ id: "e", type: "end", outcome: "approved" }] }}::jsonb)
     RETURNING id
   `) as { id: string }[];
-  const instance = (await sql`
+    const instance = (await sql`
     INSERT INTO awcms_workflow_instances
       (tenant_id, workflow_definition_id, resource_type, resource_id, status,
        requested_by_tenant_user_id)
@@ -182,13 +199,14 @@ async function seedInstance(
             ${spec.resourceId}, ${spec.status ?? "pending"}, ${spec.requestedBy})
     RETURNING id
   `) as { id: string }[];
-  const task = (await sql`
+    const task = (await sql`
     INSERT INTO awcms_workflow_tasks (tenant_id, workflow_instance_id, node_id)
     VALUES (${tenantId}, ${instance[0]!.id}, 'approval')
     RETURNING id
   `) as { id: string }[];
 
-  return { instanceId: instance[0]!.id, taskId: task[0]!.id };
+    return { instanceId: instance[0]!.id, taskId: task[0]!.id };
+  });
 }
 
 async function decide(
@@ -198,18 +216,22 @@ async function decide(
   decision = "approve",
   onBehalfOf: string | null = null
 ) {
-  await getAdminSql()`
+  await asMaintenance(
+    (tx) => tx`
     INSERT INTO awcms_workflow_decisions
       (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id,
        on_behalf_of_tenant_user_id)
     VALUES (${tenantId}, ${taskId}, ${decision}, ${by}, ${onBehalfOf})
-  `;
+  `
+  );
 }
 
 async function setInstanceStatus(instanceId: string, status: string) {
-  await getAdminSql()`
+  await asMaintenance(
+    (tx) => tx`
     UPDATE awcms_workflow_instances SET status = ${status} WHERE id = ${instanceId}
-  `;
+  `
+  );
 }
 
 type CorrectionSpec = {

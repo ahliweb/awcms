@@ -781,6 +781,13 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // instance and refuses DELETE on both as the second layer.
   awcms_workflow_decisions: ["SELECT", "INSERT"],
   awcms_workflow_instances: ["SELECT", "INSERT", "UPDATE"],
+  // #1032 / `sql/301`. The engine never deletes a task, a seat or a join arrival
+  // (it retires them by status). With DELETE open, a pending task could be
+  // erased from under a pending instance so that the verdict check saw "no
+  // approval needed".
+  awcms_workflow_tasks: ["SELECT", "INSERT", "UPDATE"],
+  awcms_workflow_task_assignments: ["SELECT", "INSERT", "UPDATE"],
+  awcms_workflow_join_arrivals: ["SELECT", "INSERT", "UPDATE"],
   // #978 / `sql/224`. NOT retired — one counter row per (tenant, actor, module,
   // kind) is overwritten in place each window, so the table is bounded by its
   // primary key and never needs a purge. DELETE is revoked so an actor cannot

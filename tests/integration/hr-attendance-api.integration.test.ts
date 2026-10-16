@@ -547,19 +547,25 @@ async function seedCorrection(
   `;
 
   if (options.status === "approved") {
-    const task = (await admin()`
-      INSERT INTO awcms_workflow_tasks (tenant_id, workflow_instance_id, node_id)
-      VALUES (${env.tenantId}, ${instance[0]!.id}, 'approval') RETURNING id
-    `) as { id: string }[];
+    // A verdict with no engine behind it: HR's own guard is what is under test,
+    // so step outside the workflow bindings (sql/252, sql/301) the way a
+    // superuser maintenance session does.
+    await admin().begin(async (tx) => {
+      await tx.unsafe("SET LOCAL session_replication_role = replica");
+      const task = (await tx`
+        INSERT INTO awcms_workflow_tasks (tenant_id, workflow_instance_id, node_id)
+        VALUES (${env.tenantId}, ${instance[0]!.id}, 'approval') RETURNING id
+      `) as { id: string }[];
 
-    await admin()`
-      INSERT INTO awcms_workflow_decisions
-        (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
-      VALUES (${env.tenantId}, ${task[0]!.id}, 'approve', ${options.approver!})
-    `;
-    await admin()`
-      UPDATE awcms_workflow_instances SET status = 'approved' WHERE id = ${instance[0]!.id}
-    `;
+      await tx`
+        INSERT INTO awcms_workflow_decisions
+          (tenant_id, workflow_task_id, decision, decided_by_tenant_user_id)
+        VALUES (${env.tenantId}, ${task[0]!.id}, 'approve', ${options.approver!})
+      `;
+      await tx`
+        UPDATE awcms_workflow_instances SET status = 'approved' WHERE id = ${instance[0]!.id}
+      `;
+    });
   }
 
   return { id, instanceId: instance[0]!.id };
@@ -2224,11 +2230,18 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
         )
       ).body.data!;
       const seat = async (status: string) => {
-        await admin()`
-          UPDATE awcms_workflow_task_assignments SET status = ${status}
-          WHERE tenant_id = ${env.tenantId}
-            AND tenant_user_id = ${approver.tenantUserId}
-            AND workflow_task_id = ${await taskOf(created.workflowInstanceId)}`;
+        const taskId = await taskOf(created.workflowInstanceId);
+
+        // A seat flipped in any direction is a state the engine never makes
+        // (sql/301 guards seat moves); it is a maintenance-level fixture.
+        await admin().begin(async (tx) => {
+          await tx.unsafe("SET LOCAL session_replication_role = replica");
+          await tx`
+            UPDATE awcms_workflow_task_assignments SET status = ${status}
+            WHERE tenant_id = ${env.tenantId}
+              AND tenant_user_id = ${approver.tenantUserId}
+              AND workflow_task_id = ${taskId}`;
+        });
 
         return readCorrection(created.id, approver.token);
       };
