@@ -110,7 +110,8 @@ export async function completeRedemption(
         targetTenantId,
         accessCode,
         redeemer.principalId,
-        now
+        now,
+        redeemer.sourceTenantId
       );
 
       if (outcome.ok) {

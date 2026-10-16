@@ -101,6 +101,11 @@ export const LIVE_SESSION_READERS: readonly SessionReaderEntry[] = [
       "MINTS a new session from an existing one. A stale session that could still switch tenants would launder itself into a fresh, fully-stamped session — the epoch's whole point, defeated in one hop."
   },
   {
+    file: "src/modules/identity-access/application/session-handoff-directory.ts",
+    reason:
+      "`redeemHandoffCode` MINTS a session from a code issued by an existing one. The claim requires the issuing session to be live and epoch-current, so a code minted before logout or a password reset dies with its session."
+  },
+  {
     file: "src/modules/identity-access/application/delegated-access-redemption.ts",
     reason:
       "Same hazard as the switch, across an organisation boundary: it turns a source-tenant session into access in a partner tenant."
