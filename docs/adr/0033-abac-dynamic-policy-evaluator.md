@@ -81,3 +81,9 @@ Every decision records `decision`, `reason`, `matched_policy` (code), and `match
 - **Allow-policies as permission granters (ABAC-primary)** — rejected: it violates "role permissions stay mandatory"; the allow-as-constraint + deny-overrides model was chosen instead.
 - **No cache (read on every request)** — rejected: per-request cost; a tenant-keyed cache with deterministic invalidation gives consistency without restarts.
 - **Replacing the flat #171 CRUD with the DSL (a single surface)** — rejected for atomicity: it would touch the #171 admin UI + its tests; keeping flat + adding the DSL was chosen, with cache invalidation on both surfaces.
+
+## Amendment (identity-access bug-hunt fixes)
+
+- The flat #171 surface (`PATCH /api/v1/abac/policies/{id}`, enable/disable) can only change flat rows: `updatePolicy` filters `is_dsl_managed = false`, so a DSL-managed policy returns 404 there and can only be changed through the DSL surface, where validation runs.
+- ISO date literals are either a date (`YYYY-MM-DD`) or a date-time with a mandatory offset (`Z` or `±hh:mm`). A date-time without an offset, or an impossible date such as `2024-02-31`, is rejected, so a decision never depends on the host's timezone.
+- `in`/`nin` on date attributes compare by instant (epoch), the same as `eq`/`ne`.

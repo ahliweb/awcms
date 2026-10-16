@@ -212,3 +212,7 @@ Never commit a key. Store it in a secrets manager / the deployment env, not the 
 - A.8.5 (secure authentication) — a second factor, assurance levels.
 - A.8.24 (cryptography) — secret encryption at rest, key management.
 - A.8.15 / A.5.28 (logging & evidence) — `mfa_*` audits including `critical` for an admin reset.
+
+### Factor status under the verify lock
+
+The per-factor verify row lock re-checks `status = 'active'`. A factor disabled between the unlocked read and the lock is treated as a non-match (`MFA_CHALLENGE_INVALID` / `MFA_INVALID_CODE`), and no lockout failure is counted. The replay-guard compare-and-swap and recovery-code consumption also require the factor to be active.

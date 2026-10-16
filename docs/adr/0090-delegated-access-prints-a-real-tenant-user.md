@@ -174,3 +174,9 @@ correctly on every reading until someone ran the full sequence.
 - **Using `setTenantUserStatus` to kill a delegated membership.**
 - **Letting a delegated session switch tenants.**
 - **A list of forbidden actions** instead of one sentence about one module.
+
+## Amendment (identity-access bug-hunt fixes)
+
+- The access code is redeemable for 24 hours from approval (`DELEGATED_ACCESS_CODE_TTL_SEC`, measured from the grant's `created_at`), not for the grant's whole life. No schema change: both the lookup and the compare-and-swap UPDATE check it.
+- Redemption is bound to the approved partner tenant: `redeemDelegatedAccess` takes the redeemer's source tenant and matches it against `partner_tenant_id`. A mismatch, like an expired code, returns `CODE_INVALID`.
+- `validateDelegatedGrantTtl` rejects an invalid (non-finite) expiry.
