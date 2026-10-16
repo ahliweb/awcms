@@ -120,6 +120,7 @@ export async function listUserGroups(
         SELECT count(*) FROM awcms_access_policies ap
         WHERE ap.tenant_id = g.tenant_id AND ap.user_group_id = g.id
           AND ap.status = 'active'
+          AND (ap.effective_to IS NULL OR ap.effective_to > now())
       )::int AS role_count
     FROM awcms_user_groups g
     WHERE g.tenant_id = ${tenantId} AND g.deleted_at IS NULL

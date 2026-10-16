@@ -24,6 +24,10 @@
  * only ever match rows nothing reads.
  */
 
+import { recordAuditEvent } from "../../logging/application/audit-log";
+
+const AUDIT_MODULE_KEY = "identity_access";
+
 /** `scope_type` for a grant that is not confined to any business scope. */
 const TENANT_WIDE_SCOPE_TYPE = "tenant";
 
@@ -80,6 +84,14 @@ export async function grantRolePolicy(
   tenantId: string,
   input: GrantRolePolicyInput
 ): Promise<{ id: string }> {
+  await lapseElapsedGrants(
+    tx,
+    tenantId,
+    { kind: "tenant_user", tenantUserId: input.tenantUserId },
+    input.roleId,
+    input.grantedByTenantUserId
+  );
+
   const rows = (await tx`
     INSERT INTO awcms_access_policies
       (tenant_id, subject_type, tenant_user_id, role_id, scope_type, scope_id,
@@ -125,6 +137,14 @@ export async function grantGroupRolePolicy(
   tenantId: string,
   input: GrantGroupRolePolicyInput
 ): Promise<{ id: string }> {
+  await lapseElapsedGrants(
+    tx,
+    tenantId,
+    { kind: "user_group", userGroupId: input.userGroupId },
+    input.roleId,
+    input.grantedByTenantUserId
+  );
+
   const rows = (await tx`
     INSERT INTO awcms_access_policies
       (tenant_id, subject_type, user_group_id, role_id, scope_type, scope_id,
@@ -189,7 +209,11 @@ export async function revokeGroupRoleGrants(
   return revoked.length > 0;
 }
 
-/** Whether the GROUP already holds this role through a live grant. */
+/**
+ * Whether the GROUP already holds this role through a live grant. A grant past
+ * its `effective_to` is not live, so it does not count (issue #1056) — the
+ * writer lapses it before inserting.
+ */
 export async function groupHoldsRole(
   tx: Bun.SQL,
   tenantId: string,
@@ -203,6 +227,7 @@ export async function groupHoldsRole(
       AND user_group_id = ${userGroupId}
       AND role_id = ${roleId}
       AND status = 'active'
+      AND (effective_to IS NULL OR effective_to > now())
     LIMIT 1
   `) as unknown[];
 
@@ -218,7 +243,8 @@ export async function groupHoldsRole(
  * check stays as the thing that answers "already holds this role" rather than
  * "already holds it here".
  *
- * Reads only ACTIVE rows, which is what makes re-granting a revoked role work at
+ * Reads only ACTIVE, not-yet-elapsed rows (issue #1056: an elapsed row is lapsed
+ * by the writer, so it must not answer "held"), which is what makes re-granting a revoked role work at
  * all: history must not answer a question about the present. That is also why
  * the retired `awcms_access_assignments` rows are not consulted — a legacy row
  * that outlived its revocation would otherwise block the re-grant permanently
@@ -237,6 +263,7 @@ export async function subjectHoldsRole(
       AND tenant_user_id = ${tenantUserId}
       AND role_id = ${roleId}
       AND status = 'active'
+      AND (effective_to IS NULL OR effective_to > now())
     LIMIT 1
   `) as unknown[];
 
@@ -288,4 +315,118 @@ export async function revokeRoleGrants(
   }
 
   return revoked.length > 0;
+}
+
+type LapseSubject =
+  | { kind: "tenant_user"; tenantUserId: string }
+  | { kind: "user_group"; userGroupId: string };
+
+/**
+ * Transitions the subject's grants of `roleId` whose `effective_to` has passed
+ * from `active` to `expired`, and records that it did (issue #1056).
+ *
+ * ## Why this exists: the unique index is keyed on `status`, not on time
+ *
+ * `awcms_access_policies_active_key` / `_group_active_key` (`sql/102`/`sql/104`)
+ * are partial on `status = 'active'`, and a partial index cannot mention
+ * `now()`. A grant whose end date has passed therefore keeps occupying the
+ * (subject, role, scope) slot until something flips its status — and nothing
+ * did. Every reader already ignores it (`effective_to > now()`), so the person
+ * does NOT hold the role, yet re-granting it raised `23505` -> `409` for as long
+ * as the dead row lived. Making only the pre-check time-aware (the first attempt
+ * at this, #1055/g07) moves the failure to the INSERT without removing it.
+ *
+ * ## Why it is a state transition and not a delete or an index change
+ *
+ * The row is history — it is the only record that the access once existed and
+ * until when. It becomes `expired` (a status `sql/102` already defines, with its
+ * own `expired` lifecycle event type) and is never deleted, so the audit trail
+ * survives intact. A time-aware index would need an exclusion constraint over a
+ * range, a migration on the authorization table's hottest unique key, and would
+ * still leave `status` lying to every reader that filters on it.
+ *
+ * ## Why in the write path
+ *
+ * Every grant goes through `grantRolePolicy` / `grantGroupRolePolicy`, so doing
+ * it there covers admin assignment, invitation acceptance, self-registration,
+ * membership materialization and delegated redemption with one change, and it is
+ * the only point at which a lapsed row can actually hurt anybody. It touches
+ * ONLY the exact subject and role being granted — ALL of that subject's elapsed
+ * grants of that role, at ANY scope (the key is tenant, subject, role; scope is
+ * deliberately not part of it, since an elapsed row is inert wherever it was
+ * scoped, and each lapsed row's scope is recorded in the audit attributes) —
+ * only rows that have already elapsed, and can only move `active -> expired`: it cannot widen access.
+ *
+ * `now()` is the database clock and the same one the readers compare against, so
+ * a row is never lapsed while a reader still counts it. The lifecycle event has
+ * no actor — the passage of time did it, not a person — and the audit row names
+ * the actor whose grant triggered the tidy-up.
+ */
+async function lapseElapsedGrants(
+  tx: Bun.SQL,
+  tenantId: string,
+  subject: LapseSubject,
+  roleId: string,
+  triggeredByTenantUserId: string | null
+): Promise<number> {
+  const lapsed = (await (subject.kind === "tenant_user"
+    ? tx`
+        UPDATE awcms_access_policies
+        SET status = 'expired', updated_at = now()
+        WHERE tenant_id = ${tenantId}
+          AND tenant_user_id = ${subject.tenantUserId}
+          AND role_id = ${roleId}
+          AND status = 'active'
+          AND effective_to IS NOT NULL
+          AND effective_to <= now()
+        RETURNING id, scope_type, scope_id
+      `
+    : tx`
+        UPDATE awcms_access_policies
+        SET status = 'expired', updated_at = now()
+        WHERE tenant_id = ${tenantId}
+          AND user_group_id = ${subject.userGroupId}
+          AND role_id = ${roleId}
+          AND status = 'active'
+          AND effective_to IS NOT NULL
+          AND effective_to <= now()
+        RETURNING id, scope_type, scope_id
+      `)) as { id: string; scope_type: string; scope_id: string }[];
+
+  if (lapsed.length === 0) return 0;
+
+  await tx`
+    INSERT INTO awcms_access_policy_events
+      (tenant_id, policy_id, event_type, actor_tenant_user_id, reason)
+    SELECT ${tenantId}, unnest(${tx.array(
+      lapsed.map((row) => row.id),
+      "uuid"
+    )}::uuid[]), 'expired', NULL,
+      'Lapsed (effective_to elapsed) while the same role was being granted again'
+  `;
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    ...(triggeredByTenantUserId
+      ? { actorTenantUserId: triggeredByTenantUserId }
+      : {}),
+    moduleKey: AUDIT_MODULE_KEY,
+    action: "expire",
+    resourceType: "access_policy",
+    resourceId: lapsed[0]!.id,
+    severity: "warning",
+    message: "Lapsed role grant marked expired ahead of a re-grant.",
+    attributes: {
+      roleId,
+      subjectType: subject.kind,
+      policyIds: lapsed.map((row) => row.id),
+      policies: lapsed.map((row) => ({
+        id: row.id,
+        scopeType: row.scope_type,
+        scopeId: row.scope_id
+      }))
+    }
+  });
+
+  return lapsed.length;
 }
