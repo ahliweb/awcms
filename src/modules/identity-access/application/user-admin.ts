@@ -540,7 +540,7 @@ export async function unassignRoleFromGroup(
     tenantId,
     actorTenantUserId,
     moduleKey: AUDIT_MODULE_KEY,
-    action: "assign",
+    action: "revoke",
     resourceType: "user_group",
     resourceId: userGroupId,
     severity: "warning",

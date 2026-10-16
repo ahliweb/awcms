@@ -110,6 +110,13 @@ export function validateDelegatedGrantTtl(
   now: Date,
   expiresAt: Date
 ): DelegatedGrantTtlProblem {
+  // Invalid Date → NaN, and every NaN comparison is false: fail closed.
+  if (
+    !Number.isFinite(expiresAt.getTime()) ||
+    !Number.isFinite(now.getTime())
+  ) {
+    return { ok: false, reason: "expires_in_the_past" };
+  }
   if (expiresAt.getTime() <= now.getTime()) {
     return { ok: false, reason: "expires_in_the_past" };
   }
