@@ -26,7 +26,7 @@
  * language instead of 500-ing the page. Writes are the opposite: an account
  * screen that reports success without persisting is worse than an error.
  */
-import type { SQL } from "bun";
+import type { SQL, TransactionSQL } from "bun";
 
 import { coerceLocale } from "../../../lib/i18n/negotiate";
 import type { Locale } from "../../../lib/i18n/locales";
@@ -125,17 +125,20 @@ interface PreferenceRow {
  * as an error.
  */
 export async function readPreferences(
-  tx: SQL,
+  tx: TransactionSQL,
   principalId: string | null
 ): Promise<PrincipalPreferences> {
   if (!principalId) return NO_PREFERENCES;
 
   try {
-    const rows = (await tx`
+    // Savepoint: a failed read must not abort the caller's transaction.
+    const rows = (await tx.savepoint(
+      (sp) => sp`
       SELECT locale, theme, time_zone
       FROM awcms_principal_preferences
       WHERE principal_id = ${principalId}
-    `) as PreferenceRow[];
+    `
+    )) as PreferenceRow[];
 
     const row = rows[0];
 
@@ -164,16 +167,19 @@ export async function readPreferences(
  * explicit query.
  */
 export async function resolvePrincipalIdForIdentity(
-  tx: SQL,
+  tx: TransactionSQL,
   tenantId: string,
   identityId: string
 ): Promise<string | null> {
   try {
-    const rows = (await tx`
+    // Savepoint: a failed read must not abort the caller's transaction.
+    const rows = (await tx.savepoint(
+      (sp) => sp`
       SELECT principal_id
       FROM awcms_identities
       WHERE tenant_id = ${tenantId} AND id = ${identityId}
-    `) as Array<{ principal_id: string | null }>;
+    `
+    )) as Array<{ principal_id: string | null }>;
 
     return rows[0]?.principal_id ?? null;
   } catch {

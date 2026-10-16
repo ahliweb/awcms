@@ -248,7 +248,13 @@ export async function createBusinessScopeAssignment(
       tenantId,
       input.tenantUserId,
       now,
-      null
+      null,
+      {
+        overlapWindow: {
+          effectiveFrom: input.effectiveFrom,
+          effectiveTo: input.effectiveTo
+        }
+      }
     );
 
     // Phase 1 — detect. The evaluator's indexes are built ONCE here and reused

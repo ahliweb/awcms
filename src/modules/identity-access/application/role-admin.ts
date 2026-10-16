@@ -419,7 +419,7 @@ export async function softDeleteRole(
  *   while it was deleted (the partial unique index fires on restore).
  */
 export async function restoreRole(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   roleId: string,
@@ -428,14 +428,18 @@ export async function restoreRole(
   let rows: RoleRow[];
 
   try {
-    rows = (await tx`
+    // Savepoint: a 23505 here must not abort the outer transaction, or the
+    // follow-up SELECT below fails with 25P02 and a 500 escapes.
+    rows = (await tx.savepoint(
+      (sp) => sp`
       UPDATE awcms_roles
       SET deleted_at = NULL, deleted_by = NULL,
           restored_at = now(), restored_by = ${actorTenantUserId},
           updated_at = now()
       WHERE tenant_id = ${tenantId} AND id = ${roleId} AND deleted_at IS NOT NULL
       RETURNING id, role_code, role_name, is_system, created_at, updated_at
-    `) as RoleRow[];
+    `
+    )) as RoleRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&
