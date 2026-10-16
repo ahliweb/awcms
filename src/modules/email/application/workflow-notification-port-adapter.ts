@@ -9,19 +9,21 @@
  * `scripts/workflow-escalations-dispatch.ts`) may import this file —
  * never `workflow-approval/application/**`/`domain/**`.
  *
- * ## NOTHING IMPORTS IT TODAY (finding D15)
+ * ## Who imports it (finding D15, then #1044)
  *
- * Zero importers, and the two composition roots that would inject it carried a
- * comment saying the `email` module "has not been ported yet" — so the adapter
- * and the comment were each other's alibi, and `notify` nodes silently did
- * nothing while every file involved appeared to explain why.
+ * For a long time nobody did, and the comments claimed the `email` module "has
+ * not been ported yet" — the adapter and the comment were each other's alibi.
+ * The workflow `notify` node still does not inject it. The first real caller is
+ * `hr_workforce`'s attendance-correction settler (#1044), which tells the
+ * requester the outcome through it (a lazy import from its `module.ts`
+ * consumer, declared as an optional `workflow_notification` capability).
  *
- * The comments are corrected; the injection is deliberately still not done.
- * Nothing can reach the path: `startWorkflowInstance` has no caller and no
- * route creates a workflow instance, so no task exists to decide on. This file
- * is kept rather than deleted because it is the correct wiring for the change
- * that gives instance creation a caller — at which point injecting it, and
- * testing that a `notify` node actually enqueues, belong together.
+ * ## Locale
+ *
+ * The subject is rendered here, at enqueue, and the dispatcher keeps the stored
+ * subject. So it is rendered in the TENANT's default locale (the same one the
+ * dispatcher renders the body in), not a fixed "en": an Indonesian tenant gets
+ * an Indonesian subject over an Indonesian body.
  */
 import { enqueueAnnouncement } from "./announcement-directory";
 import type {
@@ -29,19 +31,27 @@ import type {
   WorkflowNotificationRequest
 } from "../../_shared/ports/workflow-notification-port";
 
+const DEFAULT_RENDER_LOCALE = "en";
+
 export function createEmailWorkflowNotificationAdapter(): WorkflowNotificationPort {
   return {
     async enqueueNotification(
       tx: Bun.SQL,
       request: WorkflowNotificationRequest
     ): Promise<void> {
+      // `awcms_tenants` has no RLS (the root table), as in `email-dispatch.ts`.
+      const locales = (await tx`
+        SELECT default_locale FROM awcms_tenants WHERE id = ${request.tenantId}
+      `) as { default_locale: string }[];
+
       await enqueueAnnouncement(
         tx,
         request.tenantId,
         request.templateKey,
         request.variables,
         { type: "users", userIds: request.recipientTenantUserIds },
-        request.correlationId ?? crypto.randomUUID()
+        request.correlationId ?? crypto.randomUUID(),
+        locales[0]?.default_locale ?? DEFAULT_RENDER_LOCALE
       );
     }
   };

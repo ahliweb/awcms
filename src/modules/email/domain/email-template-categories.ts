@@ -21,6 +21,12 @@ export const BASE_EMAIL_TEMPLATE_CATEGORIES = [
   "system.maintenance",
   "workflow.task_assigned",
   "workflow.decision_required",
+  // #1044 — `hr_workforce` tells a correction's requester how it ended. One
+  // category per outcome so each is translated whole (no outcome word is ever
+  // passed in as a variable, where it would stay English in an Indonesian mail).
+  "hr.attendance_correction_applied",
+  "hr.attendance_correction_rejected",
+  "hr.attendance_correction_cancelled",
   "derived.transactional"
 ] as const;
 
@@ -63,6 +69,23 @@ const BASE_CATEGORY_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = {
     "workflowName",
     "requestedBy",
     "decisionUrl"
+  ],
+  // The employee and the date the correction is about. NEVER the correction's
+  // reason (sensitive free text): there is deliberately no variable for it.
+  "hr.attendance_correction_applied": [
+    "userName",
+    "employeeName",
+    "correctionDate"
+  ],
+  "hr.attendance_correction_rejected": [
+    "userName",
+    "employeeName",
+    "correctionDate"
+  ],
+  "hr.attendance_correction_cancelled": [
+    "userName",
+    "employeeName",
+    "correctionDate"
   ],
   "derived.transactional": ["userName", "subject", "body", "actionUrl"]
 };

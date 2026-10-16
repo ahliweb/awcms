@@ -88,6 +88,11 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // directly (that would close a cycle: `email` depends on
     // `identity_access`). First assigned number, not a stability milestone.
     auth_notification: "1.0.0",
+    // email provides (#1044) — the port and its adapter pre-date this entry
+    // (the workflow `notify` node's seam); it is listed now because
+    // `hr_workforce` is the first module to consume it, telling a correction's
+    // requester the outcome. First assigned number, not a stability milestone.
+    workflow_notification: "1.0.0",
     // tenant_admin provides (ADR-0060) — the office hierarchy resolver behind
     // `business_scope_hierarchy`. The port itself is unchanged from the day it
     // landed (#180); what changed is that a BASE module finally provides an

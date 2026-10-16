@@ -32,6 +32,7 @@ import {
   workerRoleActivated
 } from "./harness";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
+import { DEFAULT_EMAIL_TEMPLATES } from "../../src/modules/email/domain/email-default-templates";
 import { appendDomainEvent } from "../../src/modules/domain-event-runtime/application/append-domain-event";
 import { dispatchDomainEventsForTenant } from "../../src/modules/domain-event-runtime/application/dispatch-domain-events";
 import { buildDomainEventConsumerRegistry } from "../../src/modules/domain-event-runtime/infrastructure/consumer-registry";
@@ -307,6 +308,46 @@ async function deliveryStatuses(instanceId: string) {
   return rows.map((row) => row.status);
 }
 
+/** The tenant's active `hr.attendance_correction_*` e-mail templates (what turns the notice on). */
+async function seedNoticeTemplates(by: string): Promise<void> {
+  const sql = getAdminSql();
+
+  for (const template of DEFAULT_EMAIL_TEMPLATES.filter((entry) =>
+    entry.templateKey.startsWith("hr.attendance_correction_")
+  )) {
+    await sql`
+      INSERT INTO awcms_email_templates
+        (tenant_id, template_key, name, subject_template, text_body_template,
+         created_by, updated_by)
+      VALUES (${TENANT}, ${template.templateKey}, ${template.name},
+              ${template.subjectTemplate}, ${template.textBodyTemplate},
+              ${by}, ${by})
+    `;
+  }
+}
+
+type QueuedNotice = {
+  template_key: string;
+  correlation_id: string;
+  to_address: string;
+  subject: string;
+  status: string;
+  variables: Record<string, string>;
+  raw: string;
+};
+
+async function queuedNotices(correctionId?: string): Promise<QueuedNotice[]> {
+  return (await getAdminSql()`
+    SELECT template_key, correlation_id, to_address, subject, status,
+           variables, (variables::text || ' ' || subject) AS raw
+    FROM awcms_email_messages
+    WHERE tenant_id = ${TENANT} AND template_key LIKE 'hr.attendance_correction_%'
+      AND (${correctionId ?? null}::text IS NULL
+           OR correlation_id LIKE ${`%:${correctionId ?? ""}:%`})
+    ORDER BY created_at
+  `) as QueuedNotice[];
+}
+
 const suite = integrationEnabled ? describe : describe.skip;
 
 suite("hr_workforce automatic settlement of corrections (#998)", () => {
@@ -563,6 +604,275 @@ suite("hr_workforce automatic settlement of corrections (#998)", () => {
 
     expect(await correctionEvents(seeded.correctionId)).toHaveLength(1);
     expect(await deliveryStatuses(seeded.instanceId)).toEqual(["delivered"]);
+  });
+
+  describe("the requester is told how it ended (#1044)", () => {
+    test("approved: one e-mail is queued to the requester, in the outbox, naming the employee and the date and never the reason", async () => {
+      await seedNoticeTemplates(approver);
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, approver, "approve");
+      await finish(seeded, "approved");
+
+      await dispatch();
+
+      expect((await correction(seeded.correctionId)).status).toBe("approved");
+      const notices = await queuedNotices(seeded.correctionId);
+      expect(notices).toHaveLength(1);
+      const notice = notices[0]!;
+      expect(notice.template_key).toBe("hr.attendance_correction_applied");
+      expect(notice.correlation_id).toBe(
+        `hr_workforce.attendance_correction:${seeded.correctionId}:applied`
+      );
+      expect(notice.to_address).toContain("-requester@example.com");
+      // The outbox, not a send: the provider is called later, by email:dispatch.
+      expect(notice.status).toBe("queued");
+      expect(notice.variables.employeeName).toMatch(/^Employee \d+$/);
+      expect(notice.variables.correctionDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(notice.raw).not.toContain("SENTINEL");
+      expect(notice.raw).not.toContain("mother");
+      expect(Object.keys(notice.variables).sort()).toEqual([
+        "correctionDate",
+        "employeeName",
+        "userName"
+      ]);
+      expect(await deliveryStatuses(seeded.instanceId)).toEqual(["delivered"]);
+    });
+
+    test("a redelivered or second event for the same instance does not notify twice", async () => {
+      await seedNoticeTemplates(approver);
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, approver, "approve");
+      await finish(seeded, "approved");
+      await dispatch();
+
+      // A second event for the same instance (the settled correction is final).
+      await inTenant(async (tx) => {
+        await appendDomainEvent(tx, TENANT, {
+          eventType: "awcms.workflow.instance.approved",
+          eventVersion: "1.0",
+          aggregateType: "workflow_instance",
+          aggregateId: seeded.instanceId,
+          producerModule: "workflow",
+          payload: { workflowKey: "hr.attendance_correction" }
+        });
+      });
+      await dispatch();
+
+      // The same delivery put back to pending: the effect ledger makes it a no-op.
+      await getAdminSql()`
+        UPDATE awcms_domain_event_deliveries
+        SET status = 'pending', next_attempt_at = now()
+        WHERE tenant_id = ${TENANT} AND consumer_name = ${CONSUMER}
+      `;
+      await dispatch();
+
+      expect(await queuedNotices(seeded.correctionId)).toHaveLength(1);
+      expect(
+        await auditRows(
+          "hr_workforce.attendance_correction.settled",
+          seeded.correctionId
+        )
+      ).toHaveLength(1);
+    });
+
+    test("rejected and cancelled each queue one notice with their own outcome", async () => {
+      await seedNoticeTemplates(approver);
+      const rejected = await pending(employment);
+      await decide(rejected.taskId, approver, "reject");
+      await finish(rejected, "rejected");
+      const cancelled = await pending(employment);
+      await finish(cancelled, "cancelled", approver);
+
+      await dispatch();
+
+      const first = await queuedNotices(rejected.correctionId);
+      expect(first).toHaveLength(1);
+      expect(first[0]!.template_key).toBe("hr.attendance_correction_rejected");
+      expect(first[0]!.correlation_id).toEndWith(":rejected");
+      expect(first[0]!.raw).not.toContain("SENTINEL");
+
+      const second = await queuedNotices(cancelled.correctionId);
+      expect(second).toHaveLength(1);
+      expect(second[0]!.template_key).toBe(
+        "hr.attendance_correction_cancelled"
+      );
+      expect(second[0]!.correlation_id).toEndWith(":cancelled");
+      expect(second[0]!.raw).not.toContain("SENTINEL");
+    });
+
+    test("the subject is rendered in the tenant's default locale", async () => {
+      await seedNoticeTemplates(approver);
+      await getAdminSql()`
+        UPDATE awcms_tenants SET default_locale = 'id' WHERE id = ${TENANT}
+      `;
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, approver, "approve");
+      await finish(seeded, "approved");
+
+      await dispatch();
+
+      const notices = await queuedNotices(seeded.correctionId);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.subject).toContain("disetujui");
+    });
+
+    test("a tenant with no notice templates is unaffected: the correction settles and nothing is queued", async () => {
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, approver, "approve");
+      await finish(seeded, "approved");
+
+      await dispatch();
+
+      expect((await correction(seeded.correctionId)).status).toBe("approved");
+      expect(await queuedNotices()).toHaveLength(0);
+      expect(await deliveryStatuses(seeded.instanceId)).toEqual(["delivered"]);
+    });
+
+    test("a refused settlement (segregation of duties) tells nobody", async () => {
+      await seedNoticeTemplates(approver);
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, seeded.requester, "approve");
+      await finish(seeded, "approved");
+
+      await dispatch();
+
+      expect((await correction(seeded.correctionId)).status).toBe("pending");
+      expect(await queuedNotices()).toHaveLength(0);
+    });
+
+    test("an unmailable requester (inactive login) costs neither the settlement nor a notice", async () => {
+      await seedNoticeTemplates(approver);
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, approver, "approve");
+      await getAdminSql()`
+        UPDATE awcms_tenant_users SET status = 'inactive'
+        WHERE id = ${seeded.requester}
+      `;
+      await finish(seeded, "approved");
+
+      await dispatch();
+
+      expect((await correction(seeded.correctionId)).status).toBe("approved");
+      expect(await queuedNotices()).toHaveLength(0);
+    });
+
+    test("a notifier that throws, or fails in SQL, never costs the settlement (the savepoint)", async () => {
+      const { settleCorrectionForInstance } =
+        await import("../../src/modules/hr-workforce/application/hr-attendance-settlement");
+      const failures: Record<string, (tx: Bun.SQL) => Promise<void>> = {
+        throws: async () => {
+          throw new Error("provider exploded");
+        },
+        sql: async (tx) => {
+          await tx`SELECT * FROM awcms_table_that_does_not_exist`;
+        }
+      };
+
+      for (const [label, enqueue] of Object.entries(failures)) {
+        const seeded = await pending(employment);
+        await decide(seeded.taskId, approver, "approve");
+        await setVerdict(seeded.instanceId, "approved");
+
+        const result = await inTenant((tx) =>
+          settleCorrectionForInstance(
+            tx,
+            TENANT,
+            seeded.instanceId,
+            undefined,
+            new Date(),
+            { enqueueNotification: (sp) => enqueue(sp) }
+          )
+        );
+
+        expect(result.outcome, label).toBe("settled");
+        expect((await correction(seeded.correctionId)).status, label).toBe(
+          "approved"
+        );
+        expect(await correctionEvents(seeded.correctionId), label).toHaveLength(
+          1
+        );
+        expect(await queuedNotices(seeded.correctionId), label).toHaveLength(0);
+      }
+    });
+
+    test("a newline in the employee's name cannot break the subject", async () => {
+      await seedNoticeTemplates(approver);
+      await getAdminSql()`
+        UPDATE awcms_profiles SET display_name = E'Eve\r\nBcc: x@evil.test'
+        WHERE id = (SELECT profile_id FROM awcms_hr_employments WHERE id = ${employment})
+      `;
+      const seeded = await pending(employment);
+      await decide(seeded.taskId, approver, "approve");
+      await finish(seeded, "approved");
+
+      await dispatch();
+
+      const notices = await queuedNotices(seeded.correctionId);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.subject).not.toMatch(/[\r\n\t]/);
+      expect(notices[0]!.subject).toContain("Eve Bcc: x@evil.test");
+    });
+
+    test("the worker can queue only the allow-listed categories (row guard, sql/302)", async () => {
+      if (!workerRoleActivated) return;
+      const worker = getWorkerRoleSql();
+      const insert = (category: string) =>
+        withTenantOrThrow(
+          worker,
+          TENANT,
+          (tx) => tx`
+            INSERT INTO awcms_email_messages
+              (tenant_id, category, template_key, to_address, to_address_hash,
+               to_address_masked, subject)
+            VALUES (${TENANT}, ${category}, ${category}, 'a@b.test', 'h', 'm', 's')`
+        );
+
+      await assertRejected(
+        insert("derived.transactional"),
+        "EMAIL_WORKER_CATEGORY_NOT_ALLOWED|42501"
+      );
+      await assertRejected(
+        insert("system.announcement"),
+        "EMAIL_WORKER_CATEGORY_NOT_ALLOWED|42501"
+      );
+      await insert("hr.attendance_correction_applied");
+      expect(await queuedNotices()).toHaveLength(1);
+    });
+
+    test("the worker may queue the notice but not choose the state of the row it creates", async () => {
+      if (!workerRoleActivated) return;
+      const worker = getWorkerRoleSql();
+
+      await assertRejected(
+        withTenantOrThrow(
+          worker,
+          TENANT,
+          (tx) => tx`
+            INSERT INTO awcms_email_messages
+              (tenant_id, category, to_address, to_address_hash,
+               to_address_masked, subject, status)
+            VALUES (${TENANT}, 'hr.attendance_correction_applied', 'a@b.c',
+                    'h', 'm', 's', 'sent')`
+        ),
+        "permission denied|42501"
+      );
+      await assertRejected(
+        withTenantOrThrow(
+          worker,
+          TENANT,
+          (tx) => tx`SELECT created_at FROM awcms_tenant_users LIMIT 1`
+        ),
+        "permission denied|42501"
+      );
+      await assertRejected(
+        withTenantOrThrow(
+          worker,
+          TENANT,
+          (tx) => tx`SELECT profile_type FROM awcms_profiles LIMIT 1`
+        ),
+        "permission denied|42501"
+      );
+    });
   });
 
   describe("what the worker may NOT do (sql/280)", () => {

@@ -157,6 +157,9 @@ contracts:
     # because the reverse edge is impossible: `email` already depends on
     # `identity_access`, so a direct import would close a module cycle.
     auth_notification: "1.0.0"
+    # workflow_notification is owned (provided) by the base `email` module and
+    # consumed (optional) by `hr_workforce`'s attendance-correction settler (#1044).
+    workflow_notification: "1.0.0"
     # business_scope_hierarchy is owned (provided) by the base `tenant_admin`
     # module since ADR-0060, which resolves the `office` scope type against
     # `awcms_offices`. The port itself is unchanged since #180; what changed is

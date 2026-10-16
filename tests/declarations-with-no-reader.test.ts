@@ -128,12 +128,16 @@ describe("D15 — the workflow notification port, and two comments that were fal
     expect(force).toContain("it is live and owns the adapter");
   });
 
-  test("the adapter's own docblock says it has no importers", async () => {
+  test("the adapter's docblock names its one real importer (#1044), and that importer exists", async () => {
     const adapter = await Bun.file(ADAPTER).text();
+    const hr = await Bun.file("src/modules/hr-workforce/module.ts").text();
 
-    // Its header says "only a composition root may import this file", which
-    // reads as though one does. It now states that none does, and why.
-    expect(adapter).toContain("NOTHING IMPORTS IT TODAY");
+    // It used to say "NOTHING IMPORTS IT TODAY". That stopped being true when
+    // `hr_workforce`'s attendance-correction settler started using it, and the
+    // docblock must say who, not go on claiming nobody does.
+    expect(adapter).not.toContain("NOTHING IMPORTS IT TODAY");
+    expect(adapter).toContain("hr_workforce");
+    expect(hr).toContain("createEmailWorkflowNotificationAdapter");
   });
 
   test("the port is still not injected, and the path is still unreachable", async () => {

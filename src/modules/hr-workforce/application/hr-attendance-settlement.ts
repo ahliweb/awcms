@@ -31,13 +31,21 @@
  * guard refuses. A rejection or cancellation nobody is named for IS settled,
  * with `decided_by` NULL (it names who decided, never who settled).
  *
+ * ## The requester is told (#1044)
+ *
+ * After a successful settlement the consumer queues one e-mail to the
+ * requester through the `workflow_notification` port (`hr-attendance-notice.ts`):
+ * outbox only, in a savepoint, never the reason. See that file.
+ *
  * Anything that is NOT a refusal (a database outage, a deadlock) throws, so the
  * delivery rolls back, is retried with backoff and ends in the dead-letter
  * queue where an administrator can replay it.
  */
+import type { WorkflowNotificationPort } from "../../_shared/ports/workflow-notification-port";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { HR_WORKFORCE_MODULE_KEY } from "../domain/hr-workforce-permissions";
 import { settleCorrection } from "./hr-attendance-directory";
+import { notifyRequesterOfSettlement } from "./hr-attendance-notice";
 
 export type AutoSettleResult =
   | { outcome: "not_ours" }
@@ -56,7 +64,8 @@ export async function settleCorrectionForInstance(
   tenantId: string,
   workflowInstanceId: string,
   correlationId: string | undefined,
-  now: Date
+  now: Date,
+  notifier?: WorkflowNotificationPort
 ): Promise<AutoSettleResult> {
   const rows = (await tx`
     SELECT id, status FROM awcms_hr_attendance_corrections
@@ -82,6 +91,19 @@ export async function settleCorrectionForInstance(
 
   switch (result.outcome) {
     case "ok":
+      // #1044: tell the requester, through the e-mail outbox (never a provider
+      // call, never able to fail the settlement). Only the transition that just
+      // happened notifies; `already_settled` above never gets here.
+      if (notifier) {
+        await notifyRequesterOfSettlement(
+          tx,
+          tenantId,
+          correction.id,
+          result.correction.status,
+          notifier
+        );
+      }
+
       return { outcome: "settled", status: result.correction.status };
     case "not_found":
     case "not_pending":

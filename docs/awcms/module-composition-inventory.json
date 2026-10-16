@@ -123,7 +123,7 @@
       "status": "active",
       "type": null,
       "dependencies": ["tenant_admin", "profile_identity", "identity_access"],
-      "capabilitiesProvided": ["auth_notification"],
+      "capabilitiesProvided": ["auth_notification", "workflow_notification"],
       "capabilitiesConsumed": [],
       "permissionCount": 12,
       "navigationCount": 2,
@@ -176,7 +176,13 @@
         "domain_event_runtime"
       ],
       "capabilitiesProvided": [],
-      "capabilitiesConsumed": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "workflow_notification",
+          "providedBy": "email",
+          "optional": true
+        }
+      ],
       "permissionCount": 23,
       "navigationCount": 0,
       "jobCount": 0,
