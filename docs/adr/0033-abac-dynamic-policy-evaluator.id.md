@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0033-abac-dynamic-policy-evaluator.md)
 
-<!-- i18n-source-hash: sha256:58f05dde2e02db1265027ddc4979aa8237692394a77a9b48b4e5589bcbb68fd1 -->
+<!-- i18n-source-hash: sha256:c2a9730ca446aa2bbddab8b2609c19948b1d6b6787272cc5d2bf7481db85e5d7 -->
 
 # ADR-0033 — Dynamic ABAC policy evaluator (DSL, precedence, cache)
 
@@ -83,3 +83,9 @@ Setiap keputusan mencatat `decision`, `reason`, `matched_policy` (kode), dan `ma
 - **Allow-policy sebagai pemberi permission (ABAC-primary)** — ditolak: melanggar "permission peran tetap wajib"; dipilih model allow-as-constraint + deny-overrides.
 - **Tanpa cache (baca tiap request)** — ditolak: biaya per-request; cache tenant-keyed dengan invalidasi deterministik memberi konsistensi tanpa restart.
 - **Mengganti CRUD flat #171 dengan DSL (satu permukaan)** — ditolak untuk atomicity: akan menyentuh admin UI #171 + test-nya; dipilih pertahankan flat + tambah DSL, dengan cache-invalidation di kedua permukaan.
+
+## Amandemen (perbaikan bug-hunt identity-access)
+
+- Permukaan flat #171 (`PATCH /api/v1/abac/policies/{id}`, enable/disable) hanya dapat mengubah baris flat: `updatePolicy` memfilter `is_dsl_managed = false`, sehingga policy yang dikelola DSL menghasilkan 404 di sana dan hanya dapat diubah melalui permukaan DSL, tempat validasi dijalankan.
+- Literal tanggal ISO berupa tanggal (`YYYY-MM-DD`) atau date-time dengan offset wajib (`Z` atau `±hh:mm`). Date-time tanpa offset, atau tanggal mustahil seperti `2024-02-31`, ditolak, sehingga keputusan tidak pernah bergantung pada zona waktu host.
+- `in`/`nin` pada atribut tanggal membandingkan berdasarkan instan (epoch), sama seperti `eq`/`ne`.

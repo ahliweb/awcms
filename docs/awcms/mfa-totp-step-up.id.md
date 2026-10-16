@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](mfa-totp-step-up.md)
 
-<!-- i18n-source-hash: sha256:67a48aed4112b610ceffb90e72caff811a7f644d3f375bacb7cc8bab830fa1aa -->
+<!-- i18n-source-hash: sha256:217910084c97d14d6a29e0c3ac497ec11de1c0df01a2797d7c5f357fd2611892 -->
 
 # MFA TOTP, recovery codes, dan step-up authentication
 
@@ -214,3 +214,7 @@ Jangan pernah men-commit key. Simpan di secrets manager / env deployment, bukan 
 - A.8.5 (secure authentication) — faktor kedua, assurance level.
 - A.8.24 (kriptografi) — enkripsi secret at-rest, manajemen key.
 - A.8.15 / A.5.28 (logging & bukti) — audit `mfa_*` termasuk `critical` untuk admin reset.
+
+### Status faktor di bawah kunci verifikasi
+
+Kunci baris verifikasi per faktor memeriksa ulang `status = 'active'`. Faktor yang dinonaktifkan di antara pembacaan tanpa kunci dan penguncian diperlakukan sebagai tidak cocok (`MFA_CHALLENGE_INVALID` / `MFA_INVALID_CODE`), dan tidak dihitung sebagai kegagalan lockout. Compare-and-swap replay-guard dan konsumsi recovery code juga mensyaratkan faktor aktif.

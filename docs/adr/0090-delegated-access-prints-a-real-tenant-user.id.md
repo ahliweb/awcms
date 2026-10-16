@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0090-delegated-access-prints-a-real-tenant-user.md)
 
-<!-- i18n-source-hash: sha256:63fe693f734875d5b55504140f8b37a2bb336920143475bd75b792bec7c75363 -->
+<!-- i18n-source-hash: sha256:43eaf39af35ec086caab698ea70573a0a2e6ae274febe9334f5f85c8f9d32e0d -->
 
 # ADR-0090 — Akses terdelegasi mencetak tenant user SUNGGUHAN
 
@@ -174,3 +174,9 @@ benar di setiap pembacaan sampai ada yang menjalankan urutan lengkapnya.
 - **Memakai `setTenantUserStatus` untuk mematikan keanggotaan terdelegasi.**
 - **Membiarkan sesi terdelegasi berpindah tenant.**
 - **Daftar aksi terlarang** alih-alih satu kalimat tentang satu modul.
+
+## Amandemen (perbaikan bug-hunt identity-access)
+
+- Kode akses dapat ditukarkan selama 24 jam sejak persetujuan (`DELEGATED_ACCESS_CODE_TTL_SEC`, dihitung dari `created_at` grant), bukan sepanjang umur grant. Tidak ada perubahan skema: lookup dan UPDATE compare-and-swap sama-sama memeriksanya.
+- Penukaran terikat pada tenant partner yang disetujui: `redeemDelegatedAccess` menerima tenant asal penukar dan mencocokkannya dengan `partner_tenant_id`. Ketidakcocokan, seperti kode kedaluwarsa, menghasilkan `CODE_INVALID`.
+- `validateDelegatedGrantTtl` menolak masa berlaku yang tidak valid (non-finite).
