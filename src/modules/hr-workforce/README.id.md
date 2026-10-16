@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2a8b3e251103b83386efc5a7361aaa46956f000055421d04b7711af9886cb61f -->
+<!-- i18n-source-hash: sha256:86874b8f5adcc3fa95f99d717742279eee7b60121c23395ba31b4f2c58474a64 -->
 
 # `hr_workforce`
 
@@ -276,6 +276,33 @@ email:templates:seed-defaults`); tanpanya port tidak melakukan apa-apa secara
   Setiap tulis butuh `Idempotency-Key`.
 - **Belum ada domain event.** `awcms.hr.attendance.recorded` tetap provisional
   sampai ada consumer (seperti shift).
+
+## Metrik tenaga kerja (Issue #953, `sql/308`)
+
+FAKTA bisnis yang transparan tentang kehadiran, jam kerja, cakupan shift, dan
+produktivitas; kontrak lengkapnya di
+[`docs/awcms/workforce-metrics.id.md`](../../../docs/awcms/workforce-metrics.id.md).
+Dua route di `/api/v1/hr-workforce/workforce-metrics/`:
+
+- `employees` — fakta per karyawan. `?mine=true` (karyawan, tanpa izin) dan
+  `?reports=true` (supervisor, hanya bawahan **langsung**, tanpa izin) adalah
+  ownership grant; selain itu butuh `workforce_metrics.read` (HR). `employmentId`
+  di luar basis adalah 403, sama dengan yang tidak ada.
+- `groups` — agregat per office untuk `workforce_metrics.analyze` (atau `.read`),
+  tanpa baris individu. Grup dengan kurang dari lima karyawan berkontribusi adalah
+  `suppressed: true` tanpa angka sama sekali, dan tidak ada total seluruh-tenant
+  untuk dikurangkan. Ambangnya konstanta kode.
+
+Tidak ada skor komposit, peringkat, atau penanda di mana pun; tidak ada nilai
+foto, biometrik, perangkat, atau lokasi yang dibaca (tabel sumber tidak
+memilikinya); tidak ada tabel payroll yang dibaca. Setiap respons menyatakan bahwa
+sebuah angka bukan penilaian dan butuh tinjauan tata kelola §7 kontrak sebelum
+dipakai untuk keputusan berdampak.
+
+Modul mendaftarkan satu projection reporting, `hr_workforce.attendance_events`
+(volume event per jenis, khusus HR), karena penghitung seluruh-tenant milik engine
+tidak bisa menyatakan "hanya milik sendiri" atau supresi grup kecil; angka perilaku
+dihitung langsung (`domain/hr-workforce-reporting.ts` menjelaskan pemisahannya).
 
 ## Keputusan hak subjek data (cakupan ADR-0094)
 
