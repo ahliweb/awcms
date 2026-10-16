@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ci-local.md)
 
-<!-- i18n-source-hash: sha256:7bc49d2c9004ca620fd5860aabbde9226afb92c631694a1d818197fa0db9d0e6 -->
+<!-- i18n-source-hash: sha256:b2b9cf40622a209722f65d7d0c7b6e39d46dea8d02a3c9c78abb3ae1b0743d48 -->
 
 # Menjalankan setiap job CI secara lokal (`bun run ci:local`)
 
@@ -104,7 +104,7 @@ Jadi `bun run ci:local && git push` menolak push setelah sebuah skip, dengan sen
   juga jalan offline). Ia ditaruh paling depan di `PATH` hanya untuk job itu,
   sehingga setiap `bun run` bersarang memakainya. Bila keduanya gagal job
   **di-skip**, tidak pernah dijalankan di Bun yang salah. Job lain memakai `bun`
-  di `PATH`; runner mencetaknya di samping versi yang dipin CI (1.4.2), karena Bun
+  di `PATH`; runner mencetaknya di samping versi yang dipin CI (1.4.3), karena Bun
   yang berbeda adalah sumber "hijau di lokal, merah di GitHub".
 - **Chromium Playwright** untuk `e2e`. Workflow menjalankan
   `bun run test:e2e:install` (`playwright install --with-deps`), yang butuh
@@ -162,7 +162,7 @@ mem-parse `ci.yml` dan `changesets.yml` dan gagal ketika:
 - sebuah **step** workflow tidak dicerminkan dan tidak tercantum di `omitted`
   beserta alasannya, atau teks `run:` step yang dicerminkan berbeda dari workflow
   (step shell membawa teks workflow **apa adanya**);
-- fakta yang dipin bergeser: versi Bun (1.4.2 saat ini, 1.3.0 lantai), major
+- fakta yang dipin bergeser: versi Bun (1.4.3 saat ini, 1.3.0 lantai), major
   PostgreSQL, environment dan body seed e2e, ref base default.
 
 Ia mencocokkan step shell lewat apa yang dieksekusinya, bukan labelnya, sehingga

@@ -188,13 +188,13 @@ contracts:
 stack:
   bun:
     packageManager:
-      declared: "1.4.2"
+      declared: "1.4.3"
       source: package.json packageManager
     engines:
       declared: ">=1.3.0"
       source: package.json engines.bun
     ci:
-      declared: "1.4.2"
+      declared: "1.4.3"
       source: .github/workflows/ci.yml setup-bun bun-version (current pin)
     ciMinimum:
       declared: "1.3.0"

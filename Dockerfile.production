@@ -11,15 +11,25 @@
 # against a privileged connection before this container's first start
 # (docs/awcms/deployment-profiles.md §Model dua-peran basis data).
 
-FROM oven/bun:1.4.2 AS base
+FROM oven/bun:1.4.3 AS base
 
-# oven/bun:1.4.2's Debian (trixie) base ships perl-base 5.40.1-6, which
-# carries three CRITICAL, fixed-upstream CVEs (CVE-2026-13221,
-# CVE-2026-42496, CVE-2026-8376 — fixed in 5.40.1-6+deb13u1). Checked
-# 2026-09-27 (#833): `1.4.2`/`1`/`1.4`/`latest` all resolve to the SAME
-# digest (published 2026-09-05, before the fix existed) and `1.4.2-slim`
-# carries the same three — there is no newer stable oven/bun tag whose base
-# already has the fix, so waiting for upstream is not an option today.
+# The perl-base CVE workaround (#833) below is KEPT and was NOT re-verified
+# against the 1.4.3 image (2026-10-16, #1097): oven/bun:1.4.3 (index digest
+# sha256:ec06c3b6cea0..., amd64 sha256:c017a211c49a...) was published
+# 2026-10-10, AFTER the Debian fix (5.40.1-6+deb13u1) existed, so its base MAY
+# already carry it — but no container daemon was available to inspect the
+# image's dpkg status and the registry blob pull was rate-limited, so the
+# absence of the CVEs could not be proven. The step is `apt-get upgrade`: a
+# no-op when the base is already patched, and it closes any fixable Debian
+# CVE when it is not — keeping it costs one layer and loosens nothing. Remove
+# it only after `docker run --rm oven/bun:1.4.3 dpkg -s perl-base` shows
+# >= 5.40.1-6+deb13u1 (or a scanner shows the three CVEs gone).
+#
+# Original finding (#833, 2026-09-27) for oven/bun:1.4.2: its Debian (trixie)
+# base shipped perl-base 5.40.1-6 with three CRITICAL, fixed-upstream CVEs
+# (CVE-2026-13221, CVE-2026-42496, CVE-2026-8376 — fixed in 5.40.1-6+deb13u1);
+# every 1.4.2 tag resolved to one digest published 2026-09-05, before the fix
+# existed, so waiting for upstream was not an option then.
 # Applying the Debian security upgrade here, in `base`, instead of only in
 # the `runtime`/`jobs` stages that ship, means every derived stage (`deps`,
 # `build`, `prod-deps`, `jobs`, `runtime`) inherits it from one layer, and

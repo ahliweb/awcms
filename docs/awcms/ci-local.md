@@ -101,7 +101,7 @@ So `bun run ci:local && git push` refuses to push after a skip, on purpose.
   once cached it also works offline). It is placed first on `PATH` for that job
   only, so every nested `bun run` uses it. If neither works the job is
   **skipped**, never run on the wrong Bun. The other jobs use the `bun` on `PATH`;
-  the runner prints it next to the version CI pins (1.4.2), because a different
+  the runner prints it next to the version CI pins (1.4.3), because a different
   Bun is a source of "green locally, red on GitHub".
 - **Playwright Chromium** for `e2e`. The workflow runs
   `bun run test:e2e:install` (`playwright install --with-deps`), which needs
@@ -154,7 +154,7 @@ parses `ci.yml` and `changesets.yml` and fails when:
 - a workflow **step** is neither mirrored nor listed under `omitted` with a
   reason, or a mirrored step's `run:` text differs from the workflow's (shell
   steps carry the workflow text **verbatim**);
-- the pinned facts diverge: the Bun versions (1.4.2 current, 1.3.0 floor), the
+- the pinned facts diverge: the Bun versions (1.4.3 current, 1.3.0 floor), the
   PostgreSQL major, the e2e environment and seed body, the default base ref.
 
 It matches shell steps by what they execute rather than by label, so renaming a
