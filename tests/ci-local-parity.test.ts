@@ -318,7 +318,7 @@ describe("ci:local ↔ workflow facts it hard-codes", () => {
       .map((step) => String(step.with?.["bun-version"]));
 
   test("the Bun versions the runner reports are the ones CI pins", () => {
-    expect(CI_BUN_CURRENT).toBe("1.4.2");
+    expect(CI_BUN_CURRENT).toBe("1.4.3");
     for (const id of ["quality", "e2e-smoke", "integration-tests"]) {
       expect(bunVersionsOf(WORKFLOW_CI, id), id).toEqual([CI_BUN_CURRENT]);
     }

@@ -88,7 +88,7 @@ export const WORKFLOW_CI = ".github/workflows/ci.yml";
 export const WORKFLOW_CHANGESETS = ".github/workflows/changesets.yml";
 
 /** `bun-version:` of the `quality`, `e2e-smoke`, `integration-tests` jobs. */
-export const CI_BUN_CURRENT = "1.4.2";
+export const CI_BUN_CURRENT = "1.4.3";
 /** `bun-version:` of the `minimum-supported` job (`engines.bun >=1.3.0`). */
 export const CI_BUN_MINIMUM = "1.3.0";
 /** Major of the `postgres:<tag>` service image CI uses. */
