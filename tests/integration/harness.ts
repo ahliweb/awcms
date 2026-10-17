@@ -741,6 +741,27 @@ export async function assertRejected(
   throw new Error(`Expected PostgreSQL to reject ${what}, but it succeeded.`);
 }
 
+/**
+ * {@link assertRejected} for a statement issued INSIDE a transaction
+ * (Issue #1099). A rejected statement aborts the whole transaction, so a test
+ * that catches the rejection and lets the callback return normally gets a
+ * `COMMIT` on an aborted transaction: silently a `ROLLBACK` up to Bun 1.4.2,
+ * `ERR_POSTGRES_COMMIT_ROLLED_BACK` from Bun 1.4.3. Running the statement in a
+ * savepoint rolls only that statement back and leaves the transaction valid, so
+ * the test behaves the same on both. Pass the statement as a function of the
+ * savepoint handle: `assertRejectedInSavepoint(tx, (sp) => sp\`INSERT …\`, "…")`.
+ */
+export async function assertRejectedInSavepoint(
+  tx: Bun.TransactionSQL,
+  run: (sp: Bun.SQL) => Promise<unknown>,
+  what: string
+): Promise<Error> {
+  return assertRejected(
+    tx.savepoint((sp) => run(sp)),
+    what
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cookie jar — only login/logout write cookies, but `resolveAuthInputs` reads
 // them on every guarded route, so a jar must always be present.

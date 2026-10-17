@@ -284,7 +284,7 @@ export async function listRolePermissionsForRoles(
 
 /** @throws {DuplicateRoleCodeError} `roleCode` is already taken by a live role. */
 export async function createRole(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   input: { roleCode: string; roleName: string },
@@ -293,11 +293,13 @@ export async function createRole(
   let rows: RoleRow[];
 
   try {
-    rows = (await tx`
+    rows = (await tx.savepoint(
+      (sp) => sp`
       INSERT INTO awcms_roles (tenant_id, role_code, role_name, is_system)
       VALUES (${tenantId}, ${input.roleCode}, ${input.roleName}, false)
       RETURNING id, role_code, role_name, is_system, created_at, updated_at
-    `) as RoleRow[];
+    `
+    )) as RoleRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&
@@ -521,7 +523,7 @@ async function mayTenantHoldPermission(
  *   `permission_id` FK, 23503).
  */
 export async function grantPermissionToRole(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   roleId: string,
@@ -541,10 +543,12 @@ export async function grantPermissionToRole(
   }
 
   try {
-    await tx`
+    await tx.savepoint(
+      (sp) => sp`
       INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
       VALUES (${tenantId}, ${roleId}, ${permissionId})
-    `;
+    `
+    );
   } catch (error) {
     if (error instanceof Bun.SQL.PostgresError) {
       if (String(error.errno) === POSTGRES_UNIQUE_VIOLATION) {

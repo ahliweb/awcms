@@ -856,6 +856,10 @@ export async function createCorrection(
 
         instanceId = workflow.instanceId;
       } catch (error) {
+        // tx-swallow-ok: Raised by the workflow engine on a healthy
+        // transaction (WorkflowDefinitionNotActiveError /
+        // InvalidWorkflowFactsError are thrown after read-only checks; the
+        // engine catches no database error beneath them).
         if (error instanceof WorkflowDefinitionNotActiveError) {
           return { kind: "not_configured" };
         }
@@ -1004,6 +1008,9 @@ export async function withdrawCorrection(
       correlationId: actor.correlationId
     });
   } catch (error) {
+    // tx-swallow-ok: WorkflowRecoveryError is raised by the engine after
+    // read-only checks, on a healthy transaction; the engine catches no
+    // database error beneath it.
     if (error instanceof WorkflowRecoveryError) {
       // Already decided (or cancelled) in the engine; `settle` reconciles it.
       return { outcome: "workflow_already_decided" };

@@ -176,7 +176,10 @@ describeOrSkip("tenant SSO (real PostgreSQL + fake OIDC provider)", () => {
     await sql.close({ timeout: 5 });
   });
 
-  function tx<T>(tenantId: string, cb: (t: Bun.SQL) => Promise<T>): Promise<T> {
+  function tx<T>(
+    tenantId: string,
+    cb: (t: Bun.TransactionSQL) => Promise<T>
+  ): Promise<T> {
     return sql.begin(async (t) => {
       await t`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
       return cb(t);

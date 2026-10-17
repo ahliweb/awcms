@@ -5,7 +5,7 @@ description: Tambah atau ubah endpoint REST AWCMS di /api/v1 dengan benar. Gunak
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:595fdc2531e659ea5f3e388aecbc771fd6907cea146f825567b91b79fb0f7abd -->
+<!-- i18n-source-hash: sha256:615e19e1dd18d798954bbde37d846e23a0b1486ab884a29737ddd333f644b6df -->
 
 # AWCMS — New / Changed API Endpoint
 
@@ -94,6 +94,7 @@ export const GET = defineTenantRoute({
     - Endpoint **mutasi** pada modul yang punya permukaan ter-cache: enqueue purge di dalam transaksi yang sama (`enqueueModuleContentPurge`, `src/lib/edge-cache/content-purge.ts`). Melewatkannya = konten basi tersaji sampai TTL habis, tanpa satu pun test yang merah.
     - Endpoint **baca publik** yang ingin di-cache: daftarkan permukaannya di `src/lib/edge-cache/surface-registry.ts`. Lapisan ini **default-deny** — rute yang tidak terdaftar tidak akan pernah di-cache, yang aman tetapi diam. Jangan mendaftarkan permukaan yang belum bisa memenuhi syaratnya (mis. belum bisa me-resolve tenant): deklarasi mati lebih buruk daripada tidak mendeklarasikan. Gate `bun run edge-cache:surfaces:check` menegakkan daftar probe `MUST_NEVER_MATCH`.
 12. **Sebelum MENGUBAH endpoint yang sudah ada, cek apakah path-nya beku di `scripts/api-consumer-contract.ts`** (`CONSUMED_PATHS` — benar-benar dipanggil `awcms-astro`; `COMMITTED_PATHS` — dijanjikan lewat ADR). Mengubah bentuknya memerahkan `bun run api:consumer-contract:check` dan merusak build `awcms-astro`; **regenerasi kontrak bukan langkah rutin** — ia berarti konsumennya harus ikut berubah (ADR-0065/ADR-0068).
+13. **Statement yang _diharapkan_ gagal dijalankan di dalam savepoint (Issue #1099).** Memetakan `23505` / `23503` menjadi 409/404 bersih dari dalam `withTenant` / `defineTenantRoute` hanya sah bila statement itu berjalan di `tx.savepoint((sp) => …)` (atau fungsi aplikasi yang menerbitkannya yang melakukannya). PostgreSQL membatalkan seluruh transaction pada statement yang gagal; Bun ≤ 1.4.2 menyembunyikannya dengan menurunkan `COMMIT` menjadi `ROLLBACK`, dan **Bun 1.4.3 melempar `ERR_POSTGRES_COMMIT_ROLLED_BACK`**, sehingga `try { await createX(tx, …) } catch (e) { if (dup) return fail(409) }` tanpa penjaga menjadi 500 di sana. Tulis `try { x = await tx.savepoint((sp) => createX(sp, …)) } catch (e) { … }` — bungkus HANYA pemanggilan yang gagal (tipe parameternya menjadi `Bun.TransactionSQL`), atau masukkan kedua statement dari pasangan yang berkaitan ke satu savepoint, atau lempar ulang dan petakan di luar transaction. Jangan pernah menelan `ERR_POSTGRES_COMMIT_ROLLED_BACK` itu sendiri. Error domain yang dilempar pada transaction yang sehat (pemeriksaan baca-saja sebelum penulisan apa pun) boleh dipetakan di tempat, tetapi catch-nya harus menyatakannya: `// tx-swallow-ok: <alasan>` (komentar pertama catch itu, ≥20 karakter, menyebut kategori atau kelas error). `bun run db:transaction-swallow:check` (di `bun run check`) menegakkannya; konvensinya ada di `docs/awcms/16_backend_data_access_integration.md` §"Catching a failed statement inside a transaction".
 
 ## Response helper
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4052300aa290814cd761a12fdb6c3b0dc53efd25eaea2f1d14b2ee36c94065ec -->
+<!-- i18n-source-hash: sha256:9f8944a3ab1262a4c8bb2a938b6768552c91125acce54cf797d0b0d727b7132c -->
 
 # Tenant Admin
 
@@ -52,7 +52,7 @@ Dua lapis, tidak redundan:
 
 Ketiga sebab parent buruk — tidak ada, milik tenant lain, sudah soft-deleted — sengaja gagal **identik** (`ParentOfficeNotFoundError` → satu pesan yang sama). Membedakannya di response persis oracle yang ditutup advisory ini.
 
-**Aturan yang harus dijaga**: pemeriksaan parent wajib mendahului tulis pertama di `createOffice`. `withTenant` COMMIT saat callback-nya return normal, jadi route yang menangkap error di dalam transaksi lalu return 4xx akan **mem-persist** apa pun yang tertulis sebelum throw. Begitu juga `DuplicateOfficeCodeError` (23505 → `409 OFFICE_CODE_ALREADY_EXISTS`): ditangkap **di dalam** `withTenant` supaya tidak dihitung circuit breaker (`tenant-context.ts` mengecualikan kelas 23 lewat cek `instanceof PostgresError` yang tidak lagi cocok begitu error-nya dibungkus), dan setelah tertangkap **tidak boleh menulis apa pun lagi** ke `tx` — transaksinya sudah abort, audit event di situ akan gagal 25P02 dan mengubah 409 jadi 500.
+**Aturan yang harus dijaga**: pemeriksaan parent wajib mendahului tulis pertama di `createOffice`. `withTenant` COMMIT saat callback-nya return normal, jadi route yang menangkap error di dalam transaksi lalu return 4xx akan **mem-persist** apa pun yang tertulis sebelum throw. Begitu juga `DuplicateOfficeCodeError` (23505 → `409 OFFICE_CODE_ALREADY_EXISTS`): ditangkap **di dalam** `withTenant` supaya tidak dihitung circuit breaker (`tenant-context.ts` mengecualikan kelas 23 lewat cek `instanceof PostgresError` yang tidak lagi cocok begitu error-nya dibungkus), dan INSERT-nya berjalan di dalam **savepoint** (Issue #1099), sehingga 23505 di-rollback ke savepoint itu dan transaksi tetap valid: 409 ter-commit normal (dulu statement gagal membuat transaksi abort dan Bun >= 1.4.3 melempar error pada commit itu). Tidak ada audit event untuk percobaan yang ditolak.
 
 ## Belum tersedia
 

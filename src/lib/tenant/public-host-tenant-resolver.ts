@@ -294,6 +294,9 @@ export async function resolveDefaultPublicTenantFromEnv(
         return resolved;
       }
     } catch {
+      // tx-swallow-ok: The handle here is a pooled client, not a transaction
+      // (each statement autocommits), so a caught failure leaves nothing
+      // aborted.
       // Malformed PUBLIC_DEFAULT_TENANT_ID — fall through to the CODE check
       // below, never throw out of a public resolution path.
     }

@@ -176,7 +176,7 @@ export async function fetchOfficeById(
  *   tenant.
  */
 export async function createOffice(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   input: CreateOfficeInput,
@@ -200,14 +200,16 @@ export async function createOffice(
   let rows: OfficeRow[];
 
   try {
-    rows = (await tx`
+    rows = (await tx.savepoint(
+      (sp) => sp`
       INSERT INTO awcms_offices (tenant_id, office_code, office_name, office_type, parent_office_id, created_by, updated_by)
       VALUES (
         ${tenantId}, ${input.officeCode}, ${input.officeName}, ${input.officeType},
         ${input.parentOfficeId}, ${actorTenantUserId}, ${actorTenantUserId}
       )
       RETURNING id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at
-    `) as OfficeRow[];
+    `
+    )) as OfficeRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&
@@ -219,9 +221,8 @@ export async function createOffice(
     // Anything else — including a 23503 from the composite parent FK, which
     // means the parent was concurrently moved or hard-deleted between the
     // check above and this INSERT — propagates. That is deliberate: the FK
-    // firing here is a race, not caller error, and it has already aborted the
-    // transaction. Letting it out of `withTenant` rolls back and reports 500,
-    // which is the honest answer.
+    // firing here is a race, not caller error. Letting it out of `withTenant`
+    // rolls back and reports 500, which is the honest answer.
     throw error;
   }
 
@@ -364,7 +365,7 @@ export async function softDeleteOffice(
  *   conflicting office) so it must surface as 409, not 500.
  */
 export async function restoreOffice(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   officeId: string,
@@ -384,23 +385,24 @@ export async function restoreOffice(
   let rows: OfficeRow[];
 
   try {
-    rows = (await tx`
+    rows = (await tx.savepoint(
+      (sp) => sp`
       UPDATE awcms_offices
       SET deleted_at = NULL, deleted_by = NULL, delete_reason = NULL,
           restored_at = now(), restored_by = ${actorTenantUserId}, updated_at = now()
       WHERE tenant_id = ${tenantId} AND id = ${officeId} AND deleted_at IS NOT NULL
       RETURNING id, office_code, office_name, office_type, parent_office_id, status, created_at, updated_at
-    `) as OfficeRow[];
+    `
+    )) as OfficeRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&
       String(error.errno) === POSTGRES_UNIQUE_VIOLATION
     ) {
-      // The 23505 has already ABORTED this transaction. The route catches this
-      // and returns 409 on `withTenant`'s normal path, whose commit degrades
-      // to a rollback — and NO audit event may be written past this point, or
-      // it would fail 25P02 and turn the 409 into a 500 (same rule as
-      // createOffice's duplicate handling).
+      // The 23505 ran in a savepoint and was rolled back to it, so the
+      // transaction is still valid. The route catches this and returns 409 on
+      // `withTenant`'s normal path (no audit event is written for the rejected
+      // attempt — same rule as createOffice's duplicate handling).
       throw new DuplicateOfficeCodeError(officeCode);
     }
 

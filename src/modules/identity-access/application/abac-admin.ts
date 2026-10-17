@@ -70,11 +70,11 @@ async function fetchPolicyById(
 
 /**
  * @throws {DuplicatePolicyCodeError} `policyCode` already exists for the tenant.
- *   Raised from the unique-violation that has already ABORTED the transaction —
- *   the route must map it to 409 without writing anything further to `tx`.
+ *   Raised from a unique violation that ran in a savepoint — the transaction is
+ *   still valid, and the route maps it to 409 (Issue #1099).
  */
 export async function createPolicy(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   input: CreateAbacPolicyInput,
@@ -88,11 +88,13 @@ export async function createPolicy(
     // a flat policy is inert (its pre-#179 behavior), and cannot brick a tenant.
     // Only the DSL surface (`/api/v1/access/policies`) produces consumed
     // policies. See ADR-0033 §3.
-    rows = (await tx`
+    rows = (await tx.savepoint(
+      (sp) => sp`
       INSERT INTO awcms_abac_policies (tenant_id, policy_code, effect, description)
       VALUES (${tenantId}, ${input.policyCode}, ${input.effect}, ${input.description})
       RETURNING id, policy_code, effect, description, is_active
-    `) as AbacPolicyRow[];
+    `
+    )) as AbacPolicyRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&

@@ -67,6 +67,9 @@ export const GET = defineTenantRoute<ReplayQuery>({
       });
       return ok({ window });
     } catch (error) {
+      // tx-swallow-ok: The composition error is raised by pure validation
+      // after read-only queries, on a healthy transaction; no database error
+      // is caught beneath it.
       if (error instanceof MissionControlReplayInvalidError) {
         log("error", "omes.mission_control.replay_invalid", {
           correlationId: locals.correlationId,

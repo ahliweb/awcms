@@ -112,6 +112,9 @@ async function main() {
         `correlationId=${correlationId} tenants=${tenants.length} rows=${total}`
     );
   } catch (error) {
+    // tx-swallow-ok: The handle here is a pooled client, not a transaction
+    // (each statement autocommits), so a caught failure leaves nothing
+    // aborted.
     logScriptFailure("domain-events:deliveries:purge FAILED", error);
   } finally {
     await sql.close({ timeout: 1 });

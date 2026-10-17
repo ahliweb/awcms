@@ -77,18 +77,39 @@ export const POST = defineTenantRoute<EngagePrepared>({
   handler: async ({ tx, tenantId, auth, prepared, locals }) => {
     let result;
     try {
-      result = await engagePartner(
-        tx,
-        tenantId,
-        prepared.partnerTenantId,
-        auth.context.tenantUserId
+      result = await tx.savepoint((sp) =>
+        engagePartner(
+          sp,
+          tenantId,
+          prepared.partnerTenantId,
+          auth.context.tenantUserId
+        )
       );
-    } catch {
+    } catch (error) {
       // The FK into `awcms_partners` is what actually enforces "registered
       // partners only", and it fires as a constraint violation. Caught HERE,
-      // inside the transaction, so the 4xx below does not ride out on a
-      // transaction the database has already aborted.
-      return fail(404, "NOT_FOUND", "No such partner.");
+      // inside the transaction. tx-swallow-ok: `engagePartner` runs in a
+      // savepoint, so the failed statement is rolled back to it and the 4xx
+      // below is returned on a healthy transaction (Issue #1099). Only the two
+      // expected violations are answered; anything else propagates (500).
+      if (error instanceof Bun.SQL.PostgresError) {
+        // 23503: not a registered partner (the same 404 as NOT_A_PARTNER).
+        if (String(error.errno) === "23503") {
+          return fail(404, "NOT_FOUND", "No such partner.");
+        }
+
+        // 23505: two requests engaged the same partner at once and this one
+        // lost the `pair_key` race — the same 409 as ALREADY_ENGAGED.
+        if (String(error.errno) === "23505") {
+          return fail(
+            409,
+            "CONFLICT",
+            "That partner is already engaged for this tenant."
+          );
+        }
+      }
+
+      throw error;
     }
 
     if (!result.ok) {

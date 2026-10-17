@@ -80,10 +80,9 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       // escaping the callback is not a `Bun.SQL.PostgresError`, so
       // `tenant-context.ts`'s client-input carve-out would not recognise it and
       // a burst of duplicate submits would count against the shared database
-      // circuit breaker. The unique violation has already aborted this
-      // transaction — nothing further may be written to `tx` here (an audit
-      // event for the rejected attempt would itself fail with 25P02 and turn
-      // this 409 back into a 500), so we only translate and return.
+      // circuit breaker. tx-swallow-ok: `addIdentifierToProfile` runs its INSERT
+      // in a savepoint, so the unique violation was rolled back to it and this
+      // transaction is still valid (Issue #1099); we only translate and return.
       if (error instanceof DuplicateIdentifierError) {
         return fail(409, "IDENTIFIER_ALREADY_EXISTS", error.message);
       }

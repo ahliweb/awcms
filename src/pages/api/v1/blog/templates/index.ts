@@ -120,7 +120,9 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     let template;
 
     try {
-      template = await createTemplate(tx, tenantId, input);
+      template = await tx.savepoint((sp) =>
+        createTemplate(sp, tenantId, input)
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

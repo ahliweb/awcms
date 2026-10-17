@@ -167,6 +167,10 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
         return successResponse;
       } catch (error) {
+        // tx-swallow-ok: The workflow module raises this domain error from
+        // application code on a healthy transaction (it never catches a
+        // database error beneath it), so returning here commits a valid
+        // transaction.
         if (error instanceof WorkflowRecoveryError) {
           return fail(409, "INVALID_STATUS_TRANSITION", error.message);
         }

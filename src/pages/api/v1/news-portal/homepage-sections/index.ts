@@ -145,7 +145,9 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     let section;
 
     try {
-      section = await createHomepageSection(tx, tenantId, input);
+      section = await tx.savepoint((sp) =>
+        createHomepageSection(sp, tenantId, input)
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

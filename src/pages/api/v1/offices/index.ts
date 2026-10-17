@@ -113,6 +113,9 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       );
       return created(office);
     } catch (error) {
+      // tx-swallow-ok: The savepoint-guarded write (Issue #1099) rolled the
+      // failed statement back to its savepoint, so the transaction is valid
+      // and the commit succeeds.
       // Both branches are caught INSIDE `withTenant` on purpose: neither error
       // is a `Bun.SQL.PostgresError` by the time it gets here, so
       // `tenant-context.ts`'s client-input carve-out (which keys off exactly
@@ -123,11 +126,9 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       // Returning 4xx from in here is only safe because of what has NOT been
       // written. `ParentOfficeNotFoundError` is raised before `createOffice`
       // touches anything, so the commit that `withTenant` performs on this
-      // normal return commits nothing. `DuplicateOfficeCodeError` follows the
-      // unique violation that already aborted the transaction, so the commit
-      // degrades to a rollback. Neither may write anything further to `tx`
-      // here — an audit event for the rejected attempt would itself fail with
-      // 25P02 and turn this 409 back into a 500.
+      // normal return commits nothing. `DuplicateOfficeCodeError` follows a
+      // unique violation that `createOffice` ran in a savepoint, so the
+      // transaction is still valid and the commit succeeds (Issue #1099).
       if (error instanceof ParentOfficeNotFoundError) {
         return fail(
           400,

@@ -412,6 +412,9 @@ export async function continueRebuildPasses(
     );
     return { status: "completed", rowsProcessedThisInvocation };
   } catch (error) {
+    // tx-swallow-ok: The handle here is a pooled client, not a transaction
+    // (each statement autocommits), so a caught failure leaves nothing
+    // aborted.
     const message = error instanceof Error ? error.message : String(error);
     await withTenantOrThrow(
       sql,

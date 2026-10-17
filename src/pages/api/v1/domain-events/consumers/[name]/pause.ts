@@ -95,6 +95,9 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
         correlationId
       );
     } catch (error) {
+      // tx-swallow-ok: Raised by application code on a healthy transaction (a
+      // read-only precondition check; no database error is caught beneath
+      // it).
       if (error instanceof UnknownDomainEventConsumerError) {
         return fail(404, "RESOURCE_NOT_FOUND", error.message);
       }

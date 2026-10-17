@@ -232,6 +232,9 @@ async function main() {
       `db:migrate complete — ${result.applied.length} applied, ${result.skipped.length} skipped`
     );
   } catch (error) {
+    // tx-swallow-ok: The handle here is a pooled client, not a transaction
+    // (each statement autocommits), so a caught failure leaves nothing
+    // aborted.
     console.error(
       `db:migrate failed — ${safeErrorMessage(error, databaseUrl)}`
     );

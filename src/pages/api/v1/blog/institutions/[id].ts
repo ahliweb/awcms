@@ -122,7 +122,9 @@ export const PATCH = defineTenantRoute({
     let updated;
 
     try {
-      updated = await updateInstitution(tx, tenantId, institutionId, prepared);
+      updated = await tx.savepoint((sp) =>
+        updateInstitution(sp, tenantId, institutionId, prepared)
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

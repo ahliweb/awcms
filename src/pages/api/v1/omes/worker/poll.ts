@@ -159,11 +159,15 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       // failure here is not this poll's identity/security concern — swallow
       // and fall through to "nothing to lease" rather than turning a queue
       // bookkeeping hiccup into a re-enroll signal.
-      await promoteNextApprovedOperation(
-        tx,
-        verification.tenantId,
-        verification.serverId
-      ).catch(() => null);
+      await tx
+        .savepoint((sp) =>
+          promoteNextApprovedOperation(
+            sp,
+            verification.tenantId,
+            verification.serverId
+          )
+        )
+        .catch(() => null);
 
       const leased = await leaseNextQueuedJob(
         tx,

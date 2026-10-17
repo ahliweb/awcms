@@ -274,7 +274,9 @@ async function resolveHostBasedRedirect(
 
     // Best-effort hit projection on the entry rule — never breaks the response.
     try {
-      await incrementRedirectHit(tx, tenant.tenantId, outcome.hops[0]!.id, now);
+      await tx.savepoint((sp) =>
+        incrementRedirectHit(sp, tenant.tenantId, outcome.hops[0]!.id, now)
+      );
     } catch {
       // ignore — a projection failure must not fail the redirect
     }
@@ -351,6 +353,9 @@ export async function resolvePublicRedirect(
 
     return chooseRedirectOutcome(hostBased, retired);
   } catch (error) {
+    // tx-swallow-ok: The handle here is a pooled client, not a transaction
+    // (each statement autocommits), so a caught failure leaves nothing
+    // aborted.
     log("error", "seo_distribution.redirect.resolution_failed", {
       moduleKey: SEO_MODULE_KEY,
       error: error instanceof Error ? error.message : String(error)

@@ -73,10 +73,9 @@ export const POST = defineTenantRoute({
         )
       );
     } catch (error) {
-      // Caught INSIDE the transaction: the 23505 has already aborted it, so the
-      // commit degrades to a rollback and nothing further is written. Mapping it
-      // outside would leave the response correct and the transaction
-      // unaccounted for.
+      // tx-swallow-ok: `createUserGroup` runs its INSERT in a savepoint, so the
+      // 23505 has been rolled back to that savepoint before this error is
+      // raised: the transaction is valid and the commit below succeeds.
       if (error instanceof DuplicateGroupCodeError) {
         return fail(409, "GROUP_CODE_TAKEN", error.message);
       }

@@ -198,6 +198,10 @@ export async function submitOmesOperation(
 
     return { outcome: "created", operationRequest: toSummary(linkedRows[0]!) };
   } catch (error) {
+    // tx-swallow-ok: Raised by the workflow engine on a healthy transaction
+    // (WorkflowDefinitionNotActiveError / InvalidWorkflowFactsError are
+    // thrown after read-only checks; the engine catches no database error
+    // beneath them).
     if (error instanceof WorkflowDefinitionNotActiveError) {
       // Definition was retired between the pre-check and this call (race) —
       // same refusal as the pre-check, and the row inserted above is left in

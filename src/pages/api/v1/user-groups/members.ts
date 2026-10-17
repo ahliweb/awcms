@@ -67,6 +67,9 @@ export const POST = defineTenantRoute({
         )
       );
     } catch (error) {
+      // tx-swallow-ok: Raised by application code on a healthy transaction
+      // (an existence or managed-by check before any write; no database error
+      // is caught beneath it).
       if (error instanceof GroupExternallyManagedError) {
         return fail(409, "GROUP_EXTERNALLY_MANAGED", error.message);
       }
@@ -99,6 +102,9 @@ export const DELETE = defineTenantRoute({
 
       return ok(result);
     } catch (error) {
+      // tx-swallow-ok: Raised by application code on a healthy transaction
+      // (an existence or managed-by check before any write; no database error
+      // is caught beneath it).
       if (error instanceof GroupExternallyManagedError) {
         return fail(409, "GROUP_EXTERNALLY_MANAGED", error.message);
       }

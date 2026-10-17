@@ -218,11 +218,13 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
     let redirect;
     try {
-      redirect = await createRedirect(
-        tx,
-        tenantId,
-        auth.context.tenantUserId,
-        validation.value
+      redirect = await tx.savepoint((sp) =>
+        createRedirect(
+          sp,
+          tenantId,
+          auth.context.tenantUserId,
+          validation.value
+        )
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

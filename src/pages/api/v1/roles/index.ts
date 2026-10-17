@@ -115,11 +115,14 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       );
       return created(role);
     } catch (error) {
-      // Caught INSIDE `withTenant`: `DuplicateRoleCodeError` follows the unique
-      // violation that already aborted the transaction, so returning 409 here
-      // commits nothing (the commit degrades to a rollback), and — being no
-      // longer a `Bun.SQL.PostgresError` — it must not reach the shared DB
-      // circuit breaker as a server fault. No further write to `tx` may follow.
+      // tx-swallow-ok: The savepoint-guarded write (Issue #1099) rolled the
+      // failed statement back to its savepoint, so the transaction is valid
+      // and the commit succeeds.
+      // Caught INSIDE `withTenant`: `DuplicateRoleCodeError` follows a unique
+      // violation that `createRole` ran in a SAVEPOINT, so the transaction is
+      // still valid and the 409 commits normally — and, being no longer a
+      // `Bun.SQL.PostgresError`, it must not reach the shared DB circuit breaker
+      // as a server fault.
       if (error instanceof DuplicateRoleCodeError) {
         return fail(409, "ROLE_CODE_ALREADY_EXISTS", error.message);
       }
