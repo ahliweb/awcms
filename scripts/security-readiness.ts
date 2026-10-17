@@ -46,7 +46,10 @@ import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
+import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
+import { countTelegramChatsByKeyId } from "../src/modules/telegram-delivery/application/telegram-chat-rekey";
+import { resolveTelegramEncryptionRingUnchecked } from "../src/modules/telegram-delivery/domain/telegram-config";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
 import {
@@ -4513,6 +4516,132 @@ export function checkPushAuthSecretRingConfigured(
 }
 
 // ---------------------------------------------------------------------------
+// Ciphertext rows per key id, per ring (warning) — Issue #1098
+// ---------------------------------------------------------------------------
+
+type KeyIdCountInput = {
+  name: string;
+  ringEnv: string;
+  rekeyCommand: string;
+  ring: { ok: true; keys: { id: string }[] } | { ok: false };
+  count: typeof countPushAuthSecretsByKeyId;
+};
+
+/**
+ * Counts ciphertext rows per key id and warns while any row is still under a
+ * key that is not the ring's ACTIVE (first) one. That is the precondition the
+ * rotation runbook states for removing an old key ("until no row carries it"),
+ * and before Issue #1098 it could be neither re-keyed nor observed. Counts and
+ * key ids only (a key id is a short label, not key material); never a value.
+ */
+async function checkCiphertextKeyIdDistribution(
+  input: KeyIdCountInput
+): Promise<SecurityCheckResult> {
+  const severity: CheckSeverity = "warning";
+  const { name } = input;
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const tenants = (await sql`
+      SELECT id FROM awcms_tenants ORDER BY id
+    `) as { id: string }[];
+    const totals: Record<string, number> = {};
+
+    for (const tenant of tenants) {
+      const counts = await input.count(sql, tenant.id);
+
+      if (typeof counts !== "object" || counts === null) {
+        throw new Error(
+          `the database circuit breaker is open (tenant ${tenant.id}) — no conclusion can be drawn`
+        );
+      }
+
+      for (const [keyId, rows] of Object.entries(counts)) {
+        totals[keyId] = (totals[keyId] ?? 0) + rows;
+      }
+    }
+
+    const summary =
+      Object.entries(totals)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([keyId, rows]) => `${keyId}=${rows}`)
+        .join(", ") || "no ciphertext rows";
+
+    if (!input.ring.ok) {
+      return {
+        name,
+        severity,
+        status: Object.keys(totals).length > 0 ? "fail" : "pass",
+        evidence:
+          Object.keys(totals).length > 0
+            ? `${input.ringEnv} is unset or invalid, so the active key cannot be determined. Rows per key id: ${summary}.`
+            : "No ciphertext rows; no key ring is needed yet."
+      };
+    }
+
+    const activeKeyId = input.ring.keys[0]!.id;
+    const stale = Object.entries(totals)
+      .filter(([keyId]) => keyId !== activeKeyId)
+      .reduce((sum, [, rows]) => sum + rows, 0);
+
+    if (stale > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${stale} row(s) are still under a key id other than the active key "${activeKeyId}" (rows per key id: ${summary}). Run \`bun run ${input.rekeyCommand}\` (idempotent, resumable); an old key in ${input.ringEnv} may be removed only once this reaches zero.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Every ciphertext row is under the active key "${activeKeyId}" (rows per key id: ${summary}); no old key in ${input.ringEnv} is still needed.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not count rows per key id: ${errorMessage(error)}.`
+    };
+  }
+}
+
+export function checkPushAuthSecretKeyIds(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<SecurityCheckResult> {
+  const ring = resolvePushAuthSecretRing(env);
+
+  return checkCiphertextKeyIdDistribution({
+    name: "Push auth-secret ciphertexts are under the active key",
+    ringEnv: "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+    rekeyCommand: "push:auth-secret:rekey",
+    ring: ring.ok ? ring : { ok: false },
+    count: countPushAuthSecretsByKeyId
+  });
+}
+
+export function checkTelegramChatKeyIds(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<SecurityCheckResult> {
+  const ring = resolveTelegramEncryptionRingUnchecked(env);
+
+  return checkCiphertextKeyIdDistribution({
+    name: "Telegram chat ciphertexts are under the active key",
+    ringEnv: "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+    rekeyCommand: "telegram:chat:rekey",
+    ring: ring.ok ? ring : { ok: false },
+    count: countTelegramChatsByKeyId
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -4554,6 +4683,8 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkResponseCompressionOwnership(),
     await checkPushAuthSecretsEncryptedAtRest(),
     checkPushAuthSecretRingConfigured(),
+    await checkPushAuthSecretKeyIds(),
+    await checkTelegramChatKeyIds(),
     // MUST stay last: it closes the shared database pool when it finishes.
     await checkEntitlementBlastRadius()
   ];

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](push-notifications.md)
 
-<!-- i18n-source-hash: sha256:1ae39542b8769758f4b4a63b097f5a46e7e2a851bb06ba5f8b366b458f435fa9 -->
+<!-- i18n-source-hash: sha256:c51221ddd2a11ba3ca35c1f656fd79673d3d697e097e85a5ab709e33f3a59f71 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -69,10 +69,56 @@ menjatuhkan kolom sebelum langkah 5 menghilangkan rahasia.
 
 ### Rotasi
 
-Tambahkan kunci baru di depan (`k2:<baru>,k1:<lama>`), deploy, pertahankan `k1`
-sampai tidak ada baris yang membawanya. Membuang id kunci yang masih dipakai
-membuat baris itu tidak terkirim (kegagalan dapat diulang, "cincin tidak punya
-kunci"). Perangkat yang mendaftar ulang otomatis dienkripsi ulang dengan kunci aktif.
+Runbook operator (Issue #1098; prosedur yang sama berlaku untuk cincin Telegram,
+lihat di bawah):
+
+1. Tambahkan kunci baru di depan (`k2:<baru>,k1:<lama>`) pada
+   `PUSH_AUTH_SECRET_ENCRYPTION_KEYS` lalu deploy. Kunci pertama menulis, semua
+   kunci membaca, sehingga tidak ada yang rusak selama baris masih membawa `k1`.
+2. Jalankan `bun run push:auth-secret:rekey` (mode `--rekey` pada skrip backfill).
+   Ia mengenkripsi ulang setiap baris yang id kunci ciphertext-nya bukan kunci
+   aktif. Idempoten, dapat dilanjutkan, berbatch (keyset), berjalan sebagai
+   `awcms_worker`, dan tidak pernah mencetak materi kunci atau ciphertext. Kode
+   keluar: `1` tidak ada cincin valid, `2` ada tenant yang belum selesai (jalankan
+   lagi), `3` sebagian baris tidak dapat didekripsi dengan cincin (dihitung dan
+   dibiarkan; artinya kunci tempat baris itu ditulis sudah hilang dari cincin:
+   kembalikan kuncinya, jalankan ulang).
+3. Periksa `bun run security:readiness`, pemeriksaan "Push auth-secret
+   ciphertexts are under the active key". Ia mencetak jumlah baris per id kunci
+   (hanya hitungan) dan memberi peringatan selama masih ada baris di bawah kunci
+   selain yang aktif.
+4. Hanya bila pemeriksaan itu lulus, buang `k1` dari cincin lalu deploy. Membuang id
+   kunci yang masih dipakai membuat baris itu tidak terkirim (kegagalan dapat
+   diulang, "cincin tidak punya kunci"). Setelah kunci BOCOR, jalankan langkah 1-4
+   segera; kunci lama dipensiunkan begitu langkah 3 hijau.
+
+**Re-key hanya membungkus ulang; ia tidak membatalkan kebocoran.** Siapa pun yang
+memegang kunci lama dan salinan data (database, backup, replika) tetap dapat
+membaca secret yang disalinnya. Setelah kebocoran, anggap langganan push
+terpapar: paksa daftar ulang (nonaktifkan barisnya agar tiap perangkat mendaftar
+lagi dengan secret baru) dan hapus backup sesuai kebijakan. Chat id Telegram adalah
+PII yang terungkap.
+
+**Jalan terakhir untuk baris yang tidak dapat didekripsi** (kode keluar `3`, kuncinya
+hilang permanen): pemeriksaan readiness tidak bisa hijau selama baris itu ada.
+Nonaktifkan langganan push (`disablePushSubscription`, atau hapus lewat sweep
+retensi) agar perangkat mendaftar ulang; untuk Telegram, akhiri binding dengan
+`endBindings` agar pengguna menautkan ulang. Jangan menyunting ciphertext manual.
+
+Perangkat yang mendaftar ulang juga otomatis dienkripsi ulang dengan kunci aktif.
+
+#### Cincin chat Telegram
+
+`TELEGRAM_CHAT_ENCRYPTION_KEYS` (`awcms_telegram_bindings.chat_ciphertext`) punya
+celah dan prosedur yang sama dengan `bun run telegram:chat:rekey` dan pemeriksaan
+readiness "Telegram chat ciphertexts are under the active key". Satu perbedaan:
+job ini berjalan sebagai `awcms_app` (`DATABASE_URL`), bukan worker, karena
+trigger penjaga binding (`sql/216`) menolak semua role lain menulis ciphertext chat
+yang hidup, sehingga worker yang memegang cincin kunci tidak dapat mengarahkan
+binding ke chat lain. Trigger tidak dapat membedakan re-key dari penukaran, jadi
+sengaja dibiarkan. Binding yang dicabut atau terhapus tidak membawa ciphertext dan
+tidak disentuh; cincin hash `TELEGRAM_CHAT_HASH_KEYS` adalah cincin terpisah dan
+tidak terpengaruh.
 
 ### Rollback
 
@@ -84,8 +130,44 @@ ulang. Migrasinya aditif; tidak ada migrasi turun.
 
 ### Batasan yang diketahui
 
-- Rotasi belum punya mode re-key: baris dienkripsi ulang dengan kunci aktif hanya saat perangkat mendaftar ulang, dan tidak ada hitungan baris per kunci, jadi memastikan kunci yang dipensiunkan tak lagi dipakai dilakukan manual (L3, dicatat sebagai tindak lanjut).
-- Pendaftaran adalah upsert pada `(tenant_id, endpoint_hash)`; pengguna lain di tenant yang sama yang tahu endpoint persis sebuah perangkat dapat menimpa pemilik baris itu. Ini sudah ada sebelum #1089 dan tidak diubah di sini (L4, dicatat sebagai tindak lanjut).
+- ~~Rotasi belum punya mode re-key / hitungan baris per kunci~~ **Selesai (Issue #1098):** `bun run push:auth-secret:rekey`, `bun run telegram:chat:rekey`, dan pemeriksaan readiness per id kunci. Lihat Rotasi.
+- ~~Pendaftaran mengambil alih perangkat dari pengguna lain di tenant yang sama~~ **Diselesaikan sebagai transfer yang eksplisit dan diaudit (Issue #1098), lihat di bawah.** Risiko sisa diterima: pengguna tenant yang tahu endpoint persis pengguna lain (URL kapabilitas, di-mask di mana-mana) tetap dapat memindahkan perangkat itu ke dirinya; secret tidak terungkap.
+
+### Pendaftaran ulang endpoint oleh pengguna lain (Issue #1098)
+
+Pendaftaran dikunci pada `(tenant_id, endpoint_hash)`. Bila endpoint yang sama
+didaftarkan pengguna tenant yang berbeda dari pemegang baris (**apa pun
+statusnya**: aktif, nonaktif, atau dicabut), baris itu **pindah ke pengguna baru**. Pertimbangan, sudah diputuskan:
+
+| Opsi                                      | Pro                                                                                              | Kontra                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Tolak bila pemilik berbeda (ditolak)      | Menutup pengambilalihan sepenuhnya                                                               | Endpoint milik **profil browser**: di browser bersama, pengguna kedua tidak akan pernah menerima notifikasi, tanpa tahu sebabnya. |
+| Transfer diam-diam (sebelumnya)           | Berfungsi di browser bersama                                                                     | Pemilik lama berhenti menerima notifikasi dan tidak ada yang memberi tahu.                                                        |
+| **Transfer eksplisit dan diaudit (kini)** | Berfungsi di browser bersama; perpindahan terlihat, dapat diatribusikan, dan dapat dibalik admin | Pengguna tenant yang memegang endpoint mentah tetap dapat mengambil perangkat; deteksi, bukan pencegahan.                         |
+
+Yang dilakukan transfer, dalam **transaksi yang sama** dengan pendaftaran:
+
+- `tenant_user_id` baris menjadi pengguna baru; notifikasi pengguna lama yang masih
+  antre (`queued`, `retry_wait`) untuk perangkat itu dibatalkan dengan
+  `last_error = 'subscription_transferred'`, dan fan-out berikutnya untuk pengguna
+  lama melewati perangkat itu. Mencabut atau menonaktifkan perangkat membatalkan
+  pesan tertunda dengan cara yang sama. Pertahanan berlapis: setiap pesan membawa
+  `recipient_tenant_user_id` (`sql/315`, diisi saat enqueue), dan dispatcher menolak
+  (tidak dapat diulang, pesan tetap) pesan yang penerimanya bukan lagi pemilik
+  langganan. Jadi tidak ada yang ditujukan kepada pengguna lama sampai ke pemilik
+  baru, termasuk pesan yang sudah di-claim (`sending`) saat transfer commit dan
+  pesan dari perangkat yang dicabut lalu didaftarkan ulang orang lain. Sisa jendela
+  hanyalah transfer yang commit antara pemeriksaan pemilik dan panggilan provider;
+  itu terkirim dengan secret lama yang sudah basi dan tidak dapat didekripsi di
+  perangkat;
+- satu event audit `push_delivery` / `subscription.transfer` (`push_subscription`,
+  severity `warning`) mencatat id langganan serta `tenant_user_id` lama dan baru.
+  **Hanya id**: tidak pernah endpoint, kunci, atau secret. Bila penulisan audit
+  gagal, pendaftaran gagal dan di-rollback (gagal tertutup);
+- "pemilik lama" dibaca dengan baris **terkunci** (`SELECT ... FOR UPDATE` setelah
+  `INSERT ... ON CONFLICT DO NOTHING`), sehingga dua pendaftaran bersamaan tidak
+  dapat sama-sama mengira dirinya yang pertama. Mendaftar ulang perangkat sendiri,
+  atau perangkat baru tidak mencatat transfer.
 
 ### Logging
 

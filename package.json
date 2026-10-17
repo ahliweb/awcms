@@ -50,6 +50,8 @@
     "sync:objects:dispatch": "bun scripts/object-sync-dispatch.ts",
     "workflow:escalations:dispatch": "bun scripts/workflow-escalations-dispatch.ts",
     "push:auth-secret:backfill": "bun scripts/push-auth-secret-backfill.ts",
+    "push:auth-secret:rekey": "bun scripts/push-auth-secret-backfill.ts --rekey",
+    "telegram:chat:rekey": "bun scripts/telegram-chat-rekey.ts",
     "push:dispatch": "bun scripts/push-dispatch.ts",
     "push:queue:purge": "bun scripts/push-queue-purge.ts",
     "push:vapid:generate": "bun scripts/push-vapid-generate.ts",

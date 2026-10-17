@@ -10,6 +10,33 @@ import {
   WORKER_CREDENTIAL_COLUMN_EXCEPTIONS
 } from "../scripts/security-readiness";
 
+describe("security:readiness key-id distribution checks (Issue #1098)", () => {
+  test("both ring checks are registered before the shared pool is closed and are warnings", async () => {
+    const source = await Bun.file("scripts/security-readiness.ts").text();
+    const body = source.slice(
+      source.indexOf("export async function runSecurityReadinessChecks")
+    );
+    const close = body.indexOf("checkEntitlementBlastRadius");
+
+    for (const name of [
+      "checkPushAuthSecretKeyIds",
+      "checkTelegramChatKeyIds"
+    ]) {
+      const at = body.indexOf(name);
+
+      expect(at).toBeGreaterThan(0);
+      expect(at).toBeLessThan(close);
+    }
+  });
+
+  test("the check reports counts only and names the re-key command", async () => {
+    const source = await Bun.file("scripts/security-readiness.ts").text();
+
+    expect(source).toContain('rekeyCommand: "push:auth-secret:rekey"');
+    expect(source).toContain('rekeyCommand: "telegram:chat:rekey"');
+  });
+});
+
 describe("security:readiness wiring for push auth secrets", () => {
   test("the plaintext-rows check runs before the check that closes the shared pool", async () => {
     const source = await Bun.file("scripts/security-readiness.ts").text();

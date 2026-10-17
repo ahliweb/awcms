@@ -15,6 +15,7 @@
  * the column.
  */
 import { log } from "../../../lib/logging/logger";
+import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   FieldEncryptionError,
   type KeyRing
@@ -129,42 +130,168 @@ export async function registerPushSubscription(
         )
       : null;
 
-  const rows = (await tx`
-    INSERT INTO awcms_push_subscriptions
-      (tenant_id, tenant_user_id, transport, endpoint, endpoint_hash,
-       endpoint_masked, p256dh_key, auth_secret_ciphertext, user_agent_summary)
-    VALUES (
-      ${tenantId}, ${input.tenantUserId}, ${input.transport}, ${normalized},
-      ${endpointHash}, ${endpointMasked}, ${input.p256dhKey ?? null},
-      ${authSecretCiphertext}, ${input.userAgentSummary ?? null}
-    )
-    ON CONFLICT ON CONSTRAINT awcms_push_subscriptions_endpoint_unique
-    DO UPDATE SET
-      tenant_user_id = EXCLUDED.tenant_user_id,
-      transport = EXCLUDED.transport,
-      -- A no-op in every ordinary case: the conflict target is the HASH of this
-      -- very column, so EXCLUDED.endpoint is by construction the value already
-      -- stored. It is here for the ONE case where it is not —
-      -- revokeOwnPushSubscription overwrites the raw endpoint with a tombstone,
-      -- and without this line a device that re-subscribed would come back
-      -- active while still pointing at the tombstone: reachable in the console,
-      -- undeliverable in fact, failing with a provider error that names nothing.
-      endpoint = EXCLUDED.endpoint,
-      p256dh_key = EXCLUDED.p256dh_key,
-      -- Re-registering a legacy row migrates it: the fresh secret goes in as
-      -- ciphertext and the old plaintext is cleared in the same statement (the
-      -- CHECK requires exactly one of the two).
-      auth_secret = NULL,
-      auth_secret_ciphertext = EXCLUDED.auth_secret_ciphertext,
-      user_agent_summary = EXCLUDED.user_agent_summary,
-      status = 'active',
-      disabled_reason = null,
-      updated_at = now()
-    RETURNING id, tenant_user_id, transport, endpoint_masked, status,
-              disabled_reason, last_success_at, created_at
-  `) as SubscriptionRow[];
+  // Insert first; the conflicting case is handled below with the previous owner
+  // LOCKED, so "did the owner change" is decided on a row nobody can move under
+  // us (Issue #1098). A single `ON CONFLICT DO UPDATE` cannot report the value it
+  // overwrote, and a SELECT before the INSERT would race a concurrent transfer.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const inserted = (await tx`
+      INSERT INTO awcms_push_subscriptions
+        (tenant_id, tenant_user_id, transport, endpoint, endpoint_hash,
+         endpoint_masked, p256dh_key, auth_secret_ciphertext, user_agent_summary)
+      VALUES (
+        ${tenantId}, ${input.tenantUserId}, ${input.transport}, ${normalized},
+        ${endpointHash}, ${endpointMasked}, ${input.p256dhKey ?? null},
+        ${authSecretCiphertext}, ${input.userAgentSummary ?? null}
+      )
+      ON CONFLICT ON CONSTRAINT awcms_push_subscriptions_endpoint_unique
+      DO NOTHING
+      RETURNING id, tenant_user_id, transport, endpoint_masked, status,
+                disabled_reason, last_success_at, created_at
+    `) as SubscriptionRow[];
 
-  return toSummary(rows[0]!);
+    if (inserted.length > 0) return toSummary(inserted[0]!);
+
+    const existing = (await tx`
+      SELECT id, tenant_user_id, status
+      FROM awcms_push_subscriptions
+      WHERE tenant_id = ${tenantId} AND endpoint_hash = ${endpointHash}
+      FOR UPDATE
+    `) as { id: string; tenant_user_id: string; status: string }[];
+
+    // Purged between the conflict and the lock: insert again.
+    if (existing.length === 0) continue;
+
+    const previous = existing[0]!;
+    const rows = (await tx`
+      UPDATE awcms_push_subscriptions
+      SET tenant_user_id = ${input.tenantUserId},
+          transport = ${input.transport},
+          -- A no-op in every ordinary case: the lookup key is the HASH of this
+          -- very column, so the incoming endpoint is by construction the value
+          -- already stored. It is here for the ONE case where it is not:
+          -- revokeOwnPushSubscription overwrites the raw endpoint with a
+          -- tombstone, and without this line a device that re-subscribed would
+          -- come back active while still pointing at the tombstone: reachable
+          -- in the console, undeliverable in fact, failing with a provider
+          -- error that names nothing.
+          endpoint = ${normalized},
+          p256dh_key = ${input.p256dhKey ?? null},
+          -- Re-registering a legacy row migrates it: the fresh secret goes in
+          -- as ciphertext and the old plaintext is cleared in the same
+          -- statement (the CHECK requires exactly one of the two).
+          auth_secret = NULL,
+          auth_secret_ciphertext = ${authSecretCiphertext},
+          user_agent_summary = ${input.userAgentSummary ?? null},
+          status = 'active',
+          disabled_reason = null,
+          updated_at = now()
+      WHERE tenant_id = ${tenantId} AND id = ${previous.id}
+      RETURNING id, tenant_user_id, transport, endpoint_masked, status,
+                disabled_reason, last_success_at, created_at
+    `) as SubscriptionRow[];
+
+    // ANY owner change is a transfer, whatever the previous status: a revoked
+    // or disabled row is reactivated for the new user just the same, and that
+    // is exactly the path the first version of this check missed.
+    if (previous.tenant_user_id !== input.tenantUserId) {
+      await recordSubscriptionTransfer(
+        tx,
+        tenantId,
+        previous.id,
+        previous.tenant_user_id,
+        input.tenantUserId,
+        previous.status
+      );
+    }
+
+    return toSummary(rows[0]!);
+  }
+
+  throw new Error("Push subscription registration did not converge.");
+}
+
+/**
+ * Cancels what is still waiting for a device whose owner or liveness just
+ * changed (Issue #1098). A queued message is addressed to the user who owned the
+ * device when it was enqueued; once the device is revoked, disabled or moved,
+ * delivering it later would reach whoever registers next. `sending` rows are
+ * not touched here (they are in flight); the dispatcher's recipient check
+ * refuses those. Fixed `last_error` codes only: nothing user-controlled.
+ */
+async function cancelPendingMessages(
+  tx: Bun.TransactionSQL,
+  tenantId: string,
+  subscriptionId: string,
+  reasonCode: string
+): Promise<void> {
+  await tx`
+    UPDATE awcms_push_messages
+    SET status = 'cancelled', last_error = ${reasonCode}, updated_at = now()
+    WHERE tenant_id = ${tenantId} AND subscription_id = ${subscriptionId}
+      AND status IN ('queued', 'retry_wait')
+  `;
+}
+
+/**
+ * A device (endpoint) that is registered by a DIFFERENT tenant user than the one
+ * who holds it now moves to the new user (Issue #1098, decision: KEEP).
+ *
+ * The endpoint belongs to the browser profile, not to the person: on a shared
+ * browser the second user to sign in legitimately re-subscribes the same
+ * endpoint, and refusing would leave that user without notifications and
+ * without any way to learn why. The cost of keeping it is that someone who
+ * knows another user's raw endpoint (a capability URL, masked everywhere) can
+ * take the device over; the secret is not disclosed. So the move is made
+ * EXPLICIT instead of silent:
+ *
+ * - the prior user's still-queued notifications for the device are cancelled, so
+ *   nothing addressed to them is delivered to the new owner's screen;
+ * - an audit event records subscription id plus previous and new tenant user id
+ *   (ids only: never the endpoint, the keys or the secret), in the SAME
+ *   transaction. If the audit write fails the whole registration fails (fail
+ *   closed): an unrecorded takeover must not commit.
+ */
+async function recordSubscriptionTransfer(
+  tx: Bun.TransactionSQL,
+  tenantId: string,
+  subscriptionId: string,
+  previousTenantUserId: string,
+  newTenantUserId: string,
+  previousStatus: string
+): Promise<void> {
+  await cancelPendingMessages(
+    tx,
+    tenantId,
+    subscriptionId,
+    "subscription_transferred"
+  );
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId: newTenantUserId,
+    moduleKey: MODULE_KEY,
+    action: "subscription.transfer",
+    resourceType: "push_subscription",
+    resourceId: subscriptionId,
+    severity: "warning",
+    message:
+      "A push subscription moved to another tenant user because the same device endpoint was registered again.",
+    attributes: {
+      subscriptionId,
+      previousTenantUserId,
+      newTenantUserId,
+      previousStatus
+    }
+  });
+
+  log("info", "push.subscription.transferred", {
+    tenantId,
+    moduleKey: MODULE_KEY,
+    subscriptionId,
+    previousTenantUserId,
+    newTenantUserId
+  });
 }
 
 /** Diagnostics/list projection — never selects the raw endpoint. */
@@ -262,6 +389,8 @@ type TargetRow = {
   p256dh_key: string | null;
   auth_secret: string | null;
   auth_secret_ciphertext: string | null;
+  /** Whether the subscription is still owned by the message's recipient (Issue #1098). */
+  recipient_matches?: boolean;
 };
 
 /**
@@ -289,11 +418,19 @@ export type DeliveryTargetRow = TargetRow;
 export async function fetchDeliveryTargetRow(
   tx: Bun.TransactionSQL,
   tenantId: string,
-  subscriptionId: string
+  subscriptionId: string,
+  /** The tenant user the MESSAGE was addressed to. When given, delivery requires the subscription to still belong to them. */
+  recipientTenantUserId?: string | null
 ): Promise<DeliveryTargetRow | null> {
+  const checkRecipient = recipientTenantUserId !== undefined;
   const rows = (await tx`
     SELECT transport, endpoint, endpoint_hash, endpoint_masked, p256dh_key,
-           auth_secret, auth_secret_ciphertext
+           auth_secret, auth_secret_ciphertext,
+           coalesce(
+             ${checkRecipient} = false
+               OR tenant_user_id = ${recipientTenantUserId ?? null}::uuid,
+             false
+           ) AS recipient_matches
     FROM awcms_push_subscriptions
     WHERE tenant_id = ${tenantId}
       AND id = ${subscriptionId}
@@ -322,6 +459,16 @@ export function buildDeliveryTarget(
   tenantId: string,
   authSecretRing: KeyRing | null
 ): PushTarget {
+  // Issue #1098: the message was addressed to a user who no longer owns this
+  // device. Fixed message, no ids or content; non-retryable (a retry could
+  // never succeed and must not reach the new owner).
+  if (row.recipient_matches === false) {
+    throw new PushAuthSecretError(
+      "Push message recipient no longer owns the subscription; delivery refused.",
+      false
+    );
+  }
+
   if (hashPushEndpoint(row.endpoint) !== row.endpoint_hash) {
     throw new PushAuthSecretError(
       "Push subscription endpoint does not match its recorded identity; delivery refused.",
@@ -408,6 +555,13 @@ export async function disablePushSubscription(
     WHERE tenant_id = ${tenantId} AND id = ${subscriptionId}
   `;
 
+  await cancelPendingMessages(
+    tx,
+    tenantId,
+    subscriptionId,
+    "subscription_disabled"
+  );
+
   log("info", "push.subscription.disabled", {
     tenantId,
     moduleKey: MODULE_KEY,
@@ -480,6 +634,13 @@ export async function revokeOwnPushSubscription(
   `) as { id: string }[];
 
   if (rows.length === 0) return { revoked: false };
+
+  await cancelPendingMessages(
+    tx,
+    tenantId,
+    subscriptionId,
+    "subscription_revoked"
+  );
 
   log("info", "push.subscription.revoked", {
     tenantId,

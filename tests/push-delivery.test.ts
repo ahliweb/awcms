@@ -320,11 +320,12 @@ describe("the module reached a complete surface in three steps", () => {
     expect(pushDeliveryModule.status).toBe("active");
   });
 
-  test("both jobs are declared and both are safe on an offline/LAN deployment", () => {
+  test("every job is declared and is safe on an offline/LAN deployment", () => {
     const commands = (pushDeliveryModule.jobs ?? []).map((j) => j.command);
 
     expect(commands).toEqual([
       "bun run push:auth-secret:backfill",
+      "bun run push:auth-secret:rekey",
       "bun run push:dispatch",
       "bun run push:queue:purge"
     ]);

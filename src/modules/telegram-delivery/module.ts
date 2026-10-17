@@ -156,6 +156,21 @@ export const telegramDeliveryModule = defineModule({
   ],
   jobs: [
     {
+      command: "bun run telegram:chat:rekey",
+      schedule: {
+        mode: "manual",
+        because:
+          "A key-rotation action (Issue #1098): run by an operator after adding a new first key to TELEGRAM_CHAT_ENCRYPTION_KEYS, until `security:readiness` reports no binding under a non-active key id, and only then is the old key removed. A timer would re-scan an unchanged table forever."
+      },
+      purpose:
+        "Re-encrypt every live `awcms_telegram_bindings.chat_ciphertext` whose key id is not the ring's active (first) key onto it, in bounded keyset batches. Idempotent and resumable; refuses to run (exit 1) without the key ring; exits 3 when rows cannot be decrypted under the ring.",
+      recommendedSchedule:
+        "on demand, after each key rotation; verify with `bun run security:readiness`",
+      environmentNotes:
+        "Pure PostgreSQL operation, run as `awcms_app` (DATABASE_URL), NOT the worker: the binding guard trigger (sql/216) refuses the worker role any live ciphertext write. No network egress. The ring must still contain the old key. Safe in offline/LAN deployments.",
+      safeInOfflineLan: true
+    },
+    {
       command: "bun run telegram:dispatch",
       schedule: {
         mode: "cron",

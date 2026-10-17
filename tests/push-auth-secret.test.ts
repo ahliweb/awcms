@@ -141,9 +141,17 @@ describe("registerPushSubscription", () => {
     expect(
       values.some((v) => typeof v === "string" && v.startsWith("v2:k1:"))
     ).toBe(true);
-    // The statement clears the legacy plaintext on conflict.
-    expect(calls[0]!.text).toContain("auth_secret = NULL");
+    // The INSERT never names the plaintext column; the conflicting-row UPDATE
+    // (Issue #1098 split the upsert so the previous owner can be locked and
+    // compared) clears the legacy plaintext, proven end to end by the
+    // integration test "re-registering a legacy plaintext row migrates it".
     expect(calls[0]!.text).toContain("auth_secret_ciphertext");
+    expect(calls[0]!.text).not.toMatch(/\bauth_secret\b/);
+    const source = await Bun.file(
+      "src/modules/push-delivery/application/subscription-directory.ts"
+    ).text();
+
+    expect(source).toContain("auth_secret = NULL,");
   });
 
   test("fails closed without a key ring: nothing is written", async () => {

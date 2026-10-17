@@ -82,7 +82,7 @@ The VAPID token is cached per **origin**, so one batch of 500 Firefox subscriber
 
 ## The Web Push auth secret is encrypted at rest
 
-The RFC 8291 `auth_secret` is stored as `auth_secret_ciphertext` (AES-256-GCM, ADR-0137 helper, ring `PUSH_AUTH_SECRET_ENCRYPTION_KEYS`, AAD = tenant + `endpoint_hash`; Issue #1089, `sql/314`). Registration fails closed (`503 PUSH_MISCONFIGURED`) without the ring; the dispatcher decrypts and falls back to the legacy plaintext column only for a row with no ciphertext; `bun run push:auth-secret:backfill` converts the remainder. Full design, trade-offs and the rollout order: [`docs/awcms/push-notifications.md`](../../../docs/awcms/push-notifications.md).
+The RFC 8291 `auth_secret` is stored as `auth_secret_ciphertext` (AES-256-GCM, ADR-0137 helper, ring `PUSH_AUTH_SECRET_ENCRYPTION_KEYS`, AAD = tenant + `endpoint_hash`; Issue #1089, `sql/314`). Registration fails closed (`503 PUSH_MISCONFIGURED`) without the ring; the dispatcher decrypts and falls back to the legacy plaintext column only for a row with no ciphertext; `bun run push:auth-secret:backfill` converts the remainder; `bun run push:auth-secret:rekey` re-keys rows onto the active key after a rotation (Issue #1098). Re-registering an endpoint held by another user transfers it with an audit event (`subscription.transfer`, ids only) and cancels the previous user's queued notifications. Full design, trade-offs and the rollout order: [`docs/awcms/push-notifications.md`](../../../docs/awcms/push-notifications.md).
 
 ## HTTP surface
 
