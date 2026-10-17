@@ -1,5 +1,0 @@
----
-"awcms": patch
----
-
-chore(bun): the pinned Bun version moves 1.4.2 → 1.4.3 (#1097) across every place that pins it — `package.json`'s `packageManager` and `@types/bun` (`^1.4.3`), the current-pin `setup-bun` steps in `ci.yml` (`quality`, integration, E2E), `changesets.yml` and `release.yml`, `Dockerfile.production`'s base image, `deploy/cron/awcms.crontab`'s job runner image, `scripts/ci-local.ts` `CI_BUN_CURRENT` (+ `tests/ci-local-parity.test.ts`), and `awcms-family-compatibility.yaml` — plus the EN/ID docs that name the current pin (family-compatibility, ci-local, implementation blueprint, ADR-0032). `bun.lock` is regenerated under 1.4.3. The `engines.bun >=1.3.0` floor and the CI `minimum-supported` cell deliberately stay at 1.3.0 (a separate ADR-0032 support-contract decision). The `apt-get upgrade` perl-base CVE workaround in `Dockerfile.production` (#833) is kept: the 1.4.3 image could not be inspected in this environment, so its absence of the CVEs is unverified; the step is a no-op when the base is already patched and loosens nothing.
