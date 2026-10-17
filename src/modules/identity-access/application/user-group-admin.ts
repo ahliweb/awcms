@@ -239,12 +239,12 @@ export type UserGroupRecord = {
 };
 
 /**
- * Creates a LOCAL group. Lets the unique violation propagate to the caller,
- * which maps it — the transaction is already aborted at that point, so nothing
- * further may be written to `tx`.
+ * Creates a LOCAL group. The INSERT runs in a savepoint, so a unique violation
+ * is rolled back to it and surfaces as `DuplicateGroupCodeError` on a still-valid
+ * transaction that the caller may map to a 409 and commit (Issue #1099).
  */
 export async function createUserGroup(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   input: CreateUserGroupInput,
@@ -253,14 +253,16 @@ export async function createUserGroup(
   let rows: { id: string }[];
 
   try {
-    rows = (await tx`
+    rows = (await tx.savepoint(
+      (sp) => sp`
       INSERT INTO awcms_user_groups
         (tenant_id, group_code, group_name, description, source, created_by_tenant_user_id)
       VALUES
         (${tenantId}, ${input.groupCode}, ${input.groupName}, ${input.description},
          'local', ${actorTenantUserId})
       RETURNING id
-    `) as { id: string }[];
+    `
+    )) as { id: string }[];
   } catch (error) {
     // SQLSTATE lives on `errno` in Bun, never on `code` — `code` carries Bun's
     // own constant for every server error.

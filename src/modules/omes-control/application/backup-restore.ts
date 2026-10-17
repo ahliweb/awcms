@@ -135,6 +135,10 @@ export async function submitBackupRestore(
 
     return { outcome: "created", operationRequest: toSummary(linkedRows[0]!) };
   } catch (error) {
+    // tx-swallow-ok: Raised by the workflow engine on a healthy transaction
+    // (WorkflowDefinitionNotActiveError / InvalidWorkflowFactsError are
+    // thrown after read-only checks; the engine catches no database error
+    // beneath them).
     if (error instanceof WorkflowDefinitionNotActiveError) {
       return { outcome: "approval_workflow_not_configured" };
     }

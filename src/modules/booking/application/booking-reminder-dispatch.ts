@@ -343,6 +343,10 @@ async function dispatchOne(
 
     return settlement.stopPass ? "stop" : "continue";
   } catch (error) {
+    // tx-swallow-ok: The port work above runs in tx.savepoint, so a throw
+    // there rolled back to the savepoint; the settle writes in this catch run
+    // on a valid transaction (and would throw, not be swallowed, on an
+    // aborted one).
     // The class and code only, never the message text: a resolver's error may
     // carry a contact. Without this a permanently failing intent is invisible.
     const code = (error as { code?: unknown } | null)?.code;

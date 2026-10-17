@@ -660,34 +660,38 @@ async function consumeFactorCredential(
       return { matched: false, misconfigured: true };
     }
 
+    // Only the PURE half is guarded: decrypting and verifying the code can
+    // throw on a corrupt ciphertext or a malformed code, and that is "not a
+    // match". The compare-and-swap below is SQL and stays OUTSIDE the catch — a
+    // database failure must propagate, not be read as a wrong code, and it must
+    // never be swallowed while a failed statement has the transaction aborted
+    // (Issue #1099).
+    let matchedStep: number | null;
+
     try {
       const secret = decryptMfaSecret(factor.secret_ciphertext, key);
-      const matchedStep = verifyTotpCode(
-        secret,
-        credentials.code,
-        now.getTime(),
-        {
-          periodSec: resolveTotpPeriodSec(env),
-          digits: resolveTotpDigits(env),
-          windowSteps: resolveWindowSteps(env)
-        }
-      );
 
-      if (matchedStep !== null && matchedStep > factor.last_used_step) {
-        const advanced = await factorStore.advanceLastUsedStep(
-          tx,
-          factor.id,
-          matchedStep,
-          now
-        );
-
-        return { matched: advanced, misconfigured: false };
-      }
-
-      return { matched: false, misconfigured: false };
+      matchedStep = verifyTotpCode(secret, credentials.code, now.getTime(), {
+        periodSec: resolveTotpPeriodSec(env),
+        digits: resolveTotpDigits(env),
+        windowSteps: resolveWindowSteps(env)
+      });
     } catch {
       return { matched: false, misconfigured: false };
     }
+
+    if (matchedStep !== null && matchedStep > factor.last_used_step) {
+      const advanced = await factorStore.advanceLastUsedStep(
+        tx,
+        factor.id,
+        matchedStep,
+        now
+      );
+
+      return { matched: advanced, misconfigured: false };
+    }
+
+    return { matched: false, misconfigured: false };
   }
 
   if (credentials.recoveryCode) {

@@ -135,7 +135,9 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
     let updated;
 
     try {
-      updated = await updateBlogTerm(tx, tenantId, termId, input);
+      updated = await tx.savepoint((sp) =>
+        updateBlogTerm(sp, tenantId, termId, input)
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

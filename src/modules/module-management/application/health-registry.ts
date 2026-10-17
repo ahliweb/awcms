@@ -58,14 +58,19 @@ async function listMigrationFileNames(): Promise<string[]> {
 }
 
 async function migrationsAppliedSignal(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   correlationId?: string
 ): Promise<ReadinessSignal> {
   try {
     const fileNames = await listMigrationFileNames();
-    const appliedRows = (await tx`
-      SELECT migration_name FROM awcms_schema_migrations
-    `) as { migration_name: string }[];
+    // A savepoint: this SELECT is EXPECTED to be able to fail (the signal is how
+    // the failure is reported), and a failed statement must not leave the
+    // request's transaction aborted for the signals that follow it.
+    const appliedRows = (await tx.savepoint(
+      (sp) => sp`
+        SELECT migration_name FROM awcms_schema_migrations
+      `
+    )) as { migration_name: string }[];
     const appliedNames = new Set(appliedRows.map((row) => row.migration_name));
     const pending = fileNames.filter((name) => !appliedNames.has(name));
 
@@ -93,14 +98,16 @@ async function migrationsAppliedSignal(
 }
 
 async function dbRegistrySyncedSignal(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   descriptor: ModuleDescriptor,
   correlationId?: string
 ): Promise<ReadinessSignal> {
   try {
-    const rows = (await tx`
-      SELECT lifecycle_status FROM awcms_modules WHERE module_key = ${descriptor.key}
-    `) as { lifecycle_status: string }[];
+    const rows = (await tx.savepoint(
+      (sp) => sp`
+        SELECT lifecycle_status FROM awcms_modules WHERE module_key = ${descriptor.key}
+      `
+    )) as { lifecycle_status: string }[];
     const row = rows[0];
 
     if (!row) {
@@ -135,12 +142,14 @@ async function dbRegistrySyncedSignal(
 }
 
 async function permissionCatalogSyncedSignal(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   moduleKey: string,
   correlationId?: string
 ): Promise<ReadinessSignal> {
   try {
-    const report = await fetchModulePermissionSyncReport(tx, moduleKey);
+    const report = await tx.savepoint((sp) =>
+      fetchModulePermissionSyncReport(sp, moduleKey)
+    );
     const entries = report?.entries ?? [];
 
     /**
@@ -201,13 +210,15 @@ async function permissionCatalogSyncedSignal(
 }
 
 async function settingsValidSignal(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   moduleKey: string,
   correlationId?: string
 ): Promise<ReadinessSignal> {
   try {
-    await fetchModuleSettingsView(tx, tenantId, moduleKey);
+    await tx.savepoint((sp) =>
+      fetchModuleSettingsView(sp, tenantId, moduleKey)
+    );
     return { name: "settings_valid", status: "pass" };
   } catch (error) {
     log("error", "health-registry: settings_valid check failed", {
@@ -320,7 +331,7 @@ async function asyncApiDocumentedSignal(
 }
 
 async function computeGenericSignals(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   descriptor: ModuleDescriptor,
   correlationId?: string
@@ -339,7 +350,7 @@ async function computeGenericSignals(
 
 /** `null` means `moduleKey` isn't a registered descriptor — `404`. */
 export async function fetchModuleHealthReport(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   moduleKey: string,
   correlationId?: string
@@ -419,7 +430,7 @@ async function recordHealthCheckHistory(
  * effect of writing history, `GET` never does (stays a pure read).
  */
 export async function runModuleHealthCheck(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   moduleKey: string,
   correlationId?: string

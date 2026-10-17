@@ -172,7 +172,7 @@ suite("query budget — what the middleware spends before the page runs", () => 
     expect(queries).toBe(5);
   });
 
-  test("a request that DOES redirect costs 7", async () => {
+  test("a request that DOES redirect costs 6 counted statements", async () => {
     if (!appRoleActivated) {
       return;
     }
@@ -192,8 +192,14 @@ suite("query budget — what the middleware spends before the page runs", () => 
     expect(result).toMatchObject({ kind: "redirect", location: "/current-0" });
 
     // The five above, plus the chain's second lookup (which is what proves the
-    // target is terminal) and the best-effort hit projection.
-    expect(queries).toBe(7);
+    // target is terminal). The best-effort hit projection is NOT in this count
+    // any more: since Issue #1099 it runs in `tx.savepoint(...)` so a failure of
+    // that one statement cannot leave the request's transaction aborted, and the
+    // savepoint handle is not the Proxy this counter wraps. Honest cost on the
+    // wire: SAVEPOINT + the UPDATE + RELEASE SAVEPOINT = three more round trips,
+    // paid only on a request that actually redirects (a floor, see
+    // `countPoolQueries`).
+    expect(queries).toBe(6);
   });
 
   test("a path outside the redirect vocabulary costs NOTHING", async () => {

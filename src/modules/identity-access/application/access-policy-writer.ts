@@ -75,9 +75,10 @@ export type GrantGroupRolePolicyInput = {
  * narrow and are not.
  *
  * Lets a unique violation propagate rather than translating it. The caller knows
- * whether "already granted" is a `409` or an idempotent success, and — because
- * the violation has already aborted the transaction — it must not write anything
- * further before returning.
+ * whether "already granted" is a `409` or an idempotent success. A caller that
+ * catches the violation MUST run this in `tx.savepoint((sp) => grantRolePolicy(sp, …))`
+ * (as `assignRole` does): the violation aborts the transaction otherwise, and on
+ * Bun >= 1.4.3 the commit after a caught-and-continued failure throws (Issue #1099).
  */
 export async function grantRolePolicy(
   tx: Bun.SQL,

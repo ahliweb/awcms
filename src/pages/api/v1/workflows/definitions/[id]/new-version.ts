@@ -70,6 +70,10 @@ export const POST: APIRoute = async ({ params, request, cookies, locals }) => {
           { correlationId: locals.correlationId }
         );
       } catch (error) {
+        // tx-swallow-ok: The workflow module raises this domain error from
+        // application code on a healthy transaction (it never catches a
+        // database error beneath it), so returning here commits a valid
+        // transaction.
         if (error instanceof WorkflowDefinitionLifecycleError) {
           return fail(404, "RESOURCE_NOT_FOUND", error.message);
         }

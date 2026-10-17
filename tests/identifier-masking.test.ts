@@ -109,7 +109,7 @@ type AuditInsert = { text: string; values: unknown[] };
  * only) is the audit event.
  */
 function fakeTx(options: { profileFound: boolean; insertError?: unknown }): {
-  tx: Bun.SQL;
+  tx: Bun.TransactionSQL;
   statements: AuditInsert[];
 } {
   const statements: AuditInsert[] = [];
@@ -165,7 +165,13 @@ function fakeTx(options: { profileFound: boolean; insertError?: unknown }): {
     }
 
     return Promise.resolve([]);
-  }) as unknown as Bun.SQL;
+  }) as unknown as Bun.TransactionSQL;
+
+  // `tx.savepoint(fn)` runs `fn` against the same fake: a rejection inside it
+  // propagates exactly as a rolled-back savepoint would.
+  (
+    tx as unknown as { savepoint: (fn: (sp: unknown) => unknown) => unknown }
+  ).savepoint = (fn) => fn(tx);
 
   return { tx, statements };
 }

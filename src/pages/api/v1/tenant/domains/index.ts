@@ -138,11 +138,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     let domain;
 
     try {
-      domain = await createTenantDomain(
-        tx,
-        tenantId,
-        auth.context.tenantUserId,
-        input
+      domain = await tx.savepoint((sp) =>
+        createTenantDomain(sp, tenantId, auth.context.tenantUserId, input)
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

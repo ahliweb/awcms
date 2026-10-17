@@ -122,11 +122,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     let template;
 
     try {
-      template = await createEmailTemplate(
-        tx,
-        tenantId,
-        auth.context.tenantUserId,
-        input
+      template = await tx.savepoint((sp) =>
+        createEmailTemplate(sp, tenantId, auth.context.tenantUserId, input)
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -615,6 +615,9 @@ export async function dispatchTelegramQueue(
             owned.lease
           );
         } catch {
+          // tx-swallow-ok: The handle here is a pooled client, not a
+          // transaction (each statement autocommits), so a caught failure
+          // leaves nothing aborted.
           // The row stays `sending`; the re-claim bumps its retry count.
         }
       }

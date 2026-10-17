@@ -110,9 +110,10 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       // `offices/index.ts`): neither error is a `Bun.SQL.PostgresError` here,
       // so the circuit-breaker carve-out in `tenant-context.ts` would not
       // recognise them. `AssignmentTargetNotFoundError` is raised before any
-      // write (commit persists nothing); `DuplicateAssignmentError` follows the
-      // 23505 that already aborted the transaction (commit degrades to
-      // rollback). Neither path writes anything further to `tx`.
+      // write (commit persists nothing); `DuplicateAssignmentError` follows a
+      // 23505 that the grant writer ran in a SAVEPOINT, so it was rolled back to
+      // that savepoint and the transaction is still valid (Issue #1099).
+      // tx-swallow-ok: both errors are raised on a healthy transaction.
       if (error instanceof AssignmentTargetNotFoundError) {
         return fail(404, "RESOURCE_NOT_FOUND", error.message);
       }
@@ -199,6 +200,7 @@ export const DELETE: APIRoute = async ({ request, cookies, locals }) => {
     } catch (error) {
       // `SystemRoleAssignmentError` is raised before any write (the is_system
       // pre-check), so mapping it to 409 inside `withTenant` persists nothing.
+      // tx-swallow-ok: raised by a read-only pre-check on a valid transaction.
       if (error instanceof SystemRoleAssignmentError) {
         return fail(409, "ROLE_SYSTEM_PROTECTED", error.message);
       }

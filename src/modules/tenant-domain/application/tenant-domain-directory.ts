@@ -487,7 +487,7 @@ export type SetPrimaryTenantDomainResult =
  * letting the raw constraint-violation error surface.
  */
 export async function setPrimaryTenantDomain(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   id: string
@@ -508,24 +508,33 @@ export async function setPrimaryTenantDomain(
     return { outcome: "not_active", currentStatus: existing.status };
   }
 
-  await tx`
-    UPDATE awcms_tenant_domains
-    SET is_primary = false, updated_by = ${actorTenantUserId}, updated_at = now()
-    WHERE tenant_id = ${tenantId} AND is_primary = true AND deleted_at IS NULL AND id <> ${id}
-  `;
-
   let rows: TenantDomainRow[];
 
   try {
-    rows = (await tx`
-      UPDATE awcms_tenant_domains
-      SET is_primary = true, updated_by = ${actorTenantUserId}, updated_at = now()
-      WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
-      RETURNING id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
-        is_primary, redirect_to_primary, verification_method, verification_record_name,
-        verification_record_value, verified_at, last_checked_at, created_at, updated_at,
-        created_by, updated_by
-    `) as TenantDomainRow[];
+    // ONE savepoint around BOTH statements. Demoting the old primary and
+    // promoting this one are a pair: if the promotion loses the
+    // `primary_dedup` race, the demotion must be undone with it, or the tenant
+    // is left with no primary. The failed statement used to abort the whole
+    // transaction (so the demotion rolled back with everything else); the
+    // savepoint keeps that all-or-nothing scope explicit while leaving the
+    // transaction valid (Issue #1099).
+    rows = (await tx.savepoint(async (sp) => {
+      await sp`
+        UPDATE awcms_tenant_domains
+        SET is_primary = false, updated_by = ${actorTenantUserId}, updated_at = now()
+        WHERE tenant_id = ${tenantId} AND is_primary = true AND deleted_at IS NULL AND id <> ${id}
+      `;
+
+      return sp`
+        UPDATE awcms_tenant_domains
+        SET is_primary = true, updated_by = ${actorTenantUserId}, updated_at = now()
+        WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
+        RETURNING id, tenant_id, hostname, normalized_hostname, domain_type, route_mode, status,
+          is_primary, redirect_to_primary, verification_method, verification_record_name,
+          verification_record_value, verified_at, last_checked_at, created_at, updated_at,
+          created_by, updated_by
+      `;
+    })) as TenantDomainRow[];
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 

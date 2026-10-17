@@ -128,7 +128,9 @@ export const POST = defineTenantRoute({
     let institution;
 
     try {
-      institution = await createInstitution(tx, tenantId, prepared);
+      institution = await tx.savepoint((sp) =>
+        createInstitution(sp, tenantId, prepared)
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

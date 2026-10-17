@@ -121,23 +121,35 @@ export const POST = defineTenantRoute<ApprovePrepared>({
   handler: async ({ tx, tenantId, auth, prepared, now, locals }) => {
     let result;
     try {
-      result = await approveDelegatedAccess(tx, tenantId, now, {
-        partnerTenantId: prepared.partnerTenantId,
-        roleId: prepared.roleId,
-        approvedByTenantUserId: auth.context.tenantUserId,
-        purpose: prepared.purpose,
-        expiresAt: prepared.expiresAt
-      });
-    } catch {
+      result = await tx.savepoint((sp) =>
+        approveDelegatedAccess(sp, tenantId, now, {
+          partnerTenantId: prepared.partnerTenantId,
+          roleId: prepared.roleId,
+          approvedByTenantUserId: auth.context.tenantUserId,
+          purpose: prepared.purpose,
+          expiresAt: prepared.expiresAt
+        })
+      );
+    } catch (error) {
       // Two FKs do the validation this route deliberately does not duplicate:
       // the engagement must exist, and the role must belong to this tenant.
-      // Caught inside the transaction so the 4xx is not returned on an aborted
-      // one.
-      return fail(
-        404,
-        "NOT_FOUND",
-        "No such partner engagement, or no such role in this tenant."
-      );
+      // tx-swallow-ok: the call above runs in a savepoint, so a failed FK is
+      // rolled back to it and the 404 is returned on a healthy transaction (it
+      // used to ride out on an aborted one, whose commit Bun >= 1.4.3 throws on;
+      // Issue #1099). ONLY a foreign-key violation (23503) is that answer:
+      // anything else is a real fault and propagates (500), not a "not found".
+      if (
+        error instanceof Bun.SQL.PostgresError &&
+        String(error.errno) === "23503"
+      ) {
+        return fail(
+          404,
+          "NOT_FOUND",
+          "No such partner engagement, or no such role in this tenant."
+        );
+      }
+
+      throw error;
     }
 
     if (!result.ok) {

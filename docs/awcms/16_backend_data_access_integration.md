@@ -118,6 +118,58 @@ from `.astro` (never read by `tsc --noEmit`).
 6. A statement timeout to prevent hanging transactions.
 7. Deadlock retry is safe because of idempotency.
 
+### Catching a failed statement inside a transaction (Issue #1099)
+
+PostgreSQL aborts the **whole** transaction when one statement fails: every
+later statement answers `25P02` and the `COMMIT` becomes a `ROLLBACK`. Bun up to
+1.4.2 hid that: `sql.begin(cb)` returned `cb`'s value quietly when `cb` had
+caught the error and carried on. **Bun 1.4.3 throws
+`ERR_POSTGRES_COMMIT_ROLLED_BACK`** there, so every "catch the `23505`, return a
+409" became a 500. The convention that behaves the same on both:
+
+- **The statement that is _expected_ to fail runs in a savepoint**, and only
+  that statement: ``await tx.savepoint((sp) => sp`INSERT …`)`` inside the
+  `try`. The failure rolls back to the savepoint, the transaction stays valid,
+  the `catch` is then an ordinary business decision (`duplicate_key`, `404`,
+  "already exists"), and the transaction commits whatever else it did. A
+  helper that takes `tx` is called as `tx.savepoint((sp) => helper(sp, …))`;
+  its parameter type is `Bun.TransactionSQL`. House examples: `restoreRole`,
+  `createAuthProvider`, `readPreferences`, the booking `guarded` helpers.
+- **A savepoint rolls back everything inside it.** If the "expected failure" is
+  the second of two coupled writes (demote the old primary, promote the new
+  one), put **both** in the savepoint, or the first one commits alone.
+- **If the intent really was "abort everything", rethrow** and map the error
+  _outside_ the transaction. Never return a normal value after a failed
+  statement that was not inside a savepoint.
+- **Never swallow `ERR_POSTGRES_COMMIT_ROLLED_BACK`** (centrally in the tenant
+  wrapper or anywhere else). It hides the whole class, including every future
+  accidental swallow, and it decides commit-or-not on a guess.
+- **What changes for the data.** Writes made in the same transaction _before_
+  the failed statement now commit (before, the degraded `COMMIT` rolled them
+  back). In practice that is the ABAC decision-log row that
+  `authorizeInTransaction` writes for the allowed request — the same thing every
+  other 4xx already commits. The failed statement's own effects never commit.
+  Do not "restore" the old rollback by leaving the failure unrecovered.
+- **Gate:** `bun run db:transaction-swallow:check` (in `bun run check`) refuses
+  (1) a `catch` that can complete normally around SQL issued on a transaction
+  handle (any parameter typed `Bun.SQL`/`Bun.TransactionSQL`, a wrapper
+  callback's parameter, or `tx`/`sp`/…) outside `.savepoint(...)`; (2) a `catch`
+  that always ends in `throw` but **maps a database error** (`errno`,
+  `PostgresError`, a constraint name) to another error with `throw new …` — the
+  route then catches that mapped error on a transaction the unguarded statement
+  already aborted, so the savepoint belongs in the callee; (3) a promise-level
+  swallow (`.catch(…)`, `.then(ok, onRejected)`, `Promise.allSettled`) over such
+  a statement. A catch containing an executed `unsafe("ROLLBACK TO SAVEPOINT …")`
+  passes. A reviewed exception is a real `// tx-swallow-ok: <reason>` comment
+  that is the **first thing in that catch block** (not in the try, a string, a
+  nested construct, or after the first statement); the reason must be at least
+  20 characters and name the category (`healthy transaction`, `read-only`,
+  `before any write`, `savepoint`, `pooled client`) or the error class. Reviewers
+  should reject a marker that cannot say where the failed statement is guarded.
+  Only a foreign-key/unique violation you can name is caught: do not write a
+  bare catch-all (the partner-engagement and delegated-grant routes answer 404
+  only for `23503` and 409 only for `23505`, and let anything else surface).
+
 ### Posting a financial journal (end-to-end integration)
 
 ```mermaid

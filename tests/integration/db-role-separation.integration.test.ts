@@ -50,6 +50,7 @@ import {
   APP_ROLE_NAME,
   appRoleActivated,
   assertRejected,
+  assertRejectedInSavepoint,
   getAdminSql,
   getAppRoleSql,
   getOwnerSql,
@@ -310,8 +311,9 @@ suite(
           getOwnerSql(),
           TENANT_A,
           async (tx) =>
-            assertRejected(
-              tx`
+            assertRejectedInSavepoint(
+              tx,
+              (sp) => sp`
             INSERT INTO awcms_offices (tenant_id, office_code, office_name)
             VALUES (${TENANT_B}, 'smuggled', 'Smuggled')
           `,

@@ -76,11 +76,14 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
       return ok(office);
     } catch (error) {
-      // A `DuplicateOfficeCodeError` follows a unique violation that already
-      // aborted the transaction; returning 409 here is safe because the commit
-      // degrades to a rollback and nothing further is written to `tx`. Caught
-      // inside `withTenant` so the burst does not count toward the shared
-      // circuit breaker (same reasoning as the create route).
+      // tx-swallow-ok: The savepoint-guarded write (Issue #1099) rolled the
+      // failed statement back to its savepoint, so the transaction is valid
+      // and the commit succeeds.
+      // A `DuplicateOfficeCodeError` follows a unique violation that
+      // `restoreOffice` ran in a savepoint, so the transaction is still valid
+      // and the commit succeeds. Caught inside `withTenant` so the burst does
+      // not count toward the shared circuit breaker (same reasoning as the
+      // create route).
       if (error instanceof DuplicateOfficeCodeError) {
         return fail(409, "OFFICE_CODE_ALREADY_EXISTS", error.message);
       }

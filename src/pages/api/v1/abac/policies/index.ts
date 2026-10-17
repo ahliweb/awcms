@@ -124,13 +124,15 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       mutated = true;
       return created(policy);
     } catch (error) {
+      // tx-swallow-ok: The savepoint-guarded write (Issue #1099) rolled the
+      // failed statement back to its savepoint, so the transaction is valid
+      // and the commit succeeds.
       // Caught INSIDE `withTenant` on purpose: `DuplicatePolicyCodeError` is not
       // a `Bun.SQL.PostgresError` here, so `tenant-context.ts`'s client-input
       // carve-out would not recognise it and a burst of duplicate submits would
       // count toward the shared circuit breaker. Returning 409 from in here is
-      // safe because the unique violation already ABORTED the transaction, so
-      // the commit degrades to a rollback and nothing further is written to
-      // `tx` (a stray audit write would fail 25P02 and turn this into a 500).
+      // safe because `createPolicy` ran the failing INSERT in a savepoint: the
+      // transaction is still valid and commits normally.
       if (error instanceof DuplicatePolicyCodeError) {
         return fail(409, "POLICY_CODE_ALREADY_EXISTS", error.message);
       }

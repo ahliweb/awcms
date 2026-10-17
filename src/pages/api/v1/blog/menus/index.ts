@@ -173,7 +173,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     let menu;
 
     try {
-      menu = await createMenu(tx, tenantId, key, name);
+      menu = await tx.savepoint((sp) => createMenu(sp, tenantId, key, name));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 

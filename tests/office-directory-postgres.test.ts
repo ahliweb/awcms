@@ -76,11 +76,11 @@ describeOrSkip("office directory (real PostgreSQL)", () => {
   /** Mirrors `withTenant`: pins the tenant GUC, runs in one transaction. */
   async function inTenant<T>(
     tenantId: string,
-    fn: (tx: Bun.SQL) => Promise<T>
+    fn: (tx: Bun.TransactionSQL) => Promise<T>
   ): Promise<T> {
     return sql.begin(async (tx) => {
       await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
-      return fn(tx as unknown as Bun.SQL);
+      return fn(tx);
     }) as Promise<T>;
   }
 

@@ -86,6 +86,9 @@ export const GET = defineTenantRoute<Prepared>({
           });
       return ok({ scene });
     } catch (error) {
+      // tx-swallow-ok: The composition error is raised by pure validation
+      // after read-only queries, on a healthy transaction; no database error
+      // is caught beneath it.
       if (error instanceof MissionControlSceneInvalidError) {
         log("error", "omes.mission_control.scene_invalid", {
           correlationId: locals.correlationId,

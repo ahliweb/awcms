@@ -12,7 +12,7 @@ import {
   resolvePrincipalIdForIdentity
 } from "../../modules/identity-access/application/principal-preference-store";
 import { hashSessionToken } from "./session-token";
-import type { SQL } from "bun";
+import type { TransactionSQL } from "bun";
 
 /**
  * Reads the tenant's display defaults (ADR-0095 §"Keputusan 5" steps 3).
@@ -26,7 +26,7 @@ import type { SQL } from "bun";
  * Degrades to null on any fault: chrome, not a guard.
  */
 async function readTenantDisplayDefaults(
-  tx: SQL,
+  tx: TransactionSQL,
   tenantId: string
 ): Promise<{
   defaultLocale: string | null;
@@ -40,11 +40,13 @@ async function readTenantDisplayDefaults(
     // query already has open, one column wider. Adding a column to a
     // primary-key read costs nothing; the transaction it removes is a
     // connection acquisition and a round trip on every `/admin/*` render.
-    const rows = (await tx`
+    const rows = (await tx.savepoint(
+      (sp) => sp`
       SELECT default_locale, default_theme, tenant_name
       FROM awcms_tenants
       WHERE id = ${tenantId}
-    `) as Array<{
+    `
+    )) as Array<{
       default_locale: string | null;
       default_theme: string | null;
       tenant_name: string | null;

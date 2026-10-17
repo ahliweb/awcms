@@ -285,11 +285,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     let post;
 
     try {
-      post = await createBlogPost(
-        tx,
-        tenantId,
-        auth.context.tenantUserId,
-        input
+      post = await tx.savepoint((sp) =>
+        createBlogPost(sp, tenantId, auth.context.tenantUserId, input)
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

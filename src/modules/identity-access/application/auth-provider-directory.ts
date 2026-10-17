@@ -133,7 +133,7 @@ export type CreateAuthProviderResult =
   | { outcome: "misconfigured" };
 
 export async function createAuthProvider(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   input: CreateAuthProviderInput,
@@ -179,28 +179,30 @@ export async function createAuthProvider(
     clientSecretCiphertext = encryptSsoClientSecret(input.clientSecret, key);
   }
 
-  // The INSERT is the last write in this function, so a concurrent-duplicate
-  // 23505 (caught here, mapped to duplicate_key) leaves no half-applied state:
-  // the failed statement aborts the transaction, withTenant's COMMIT degrades
-  // to ROLLBACK, and the caller returns a clean 409 instead of an unhandled 500.
+  // The INSERT is the last write in this function and runs in a SAVEPOINT, so a
+  // concurrent-duplicate 23505 (caught here, mapped to duplicate_key) rolls back
+  // to the savepoint only: the transaction stays valid and commits (Bun >= 1.4.3
+  // throws on a COMMIT after an unrecovered failed statement; Issue #1099).
   let rows: AuthProviderRow[];
 
   try {
-    rows = (await tx`
-      INSERT INTO awcms_auth_providers
-        (tenant_id, provider_key, display_name, issuer_url, client_id,
-         client_secret_ciphertext, client_secret_env_var, scopes,
-         allowed_email_domains, enabled, created_by, updated_by)
-      VALUES (
-        ${tenantId}, ${input.providerKey}, ${input.displayName}, ${input.issuerUrl},
-        ${input.clientId}, ${clientSecretCiphertext}, ${input.clientSecretEnvVar},
-        ${input.scopes}, ${input.allowedEmailDomains}::jsonb,
-        ${input.enabled}, ${actorTenantUserId}, ${actorTenantUserId}
-      )
-      RETURNING id, provider_key, provider_type, display_name, issuer_url, client_id,
-                client_secret_ciphertext, client_secret_env_var, scopes,
-                allowed_email_domains, enabled, created_at, updated_at
-    `) as AuthProviderRow[];
+    rows = (await tx.savepoint(
+      (sp) => sp`
+        INSERT INTO awcms_auth_providers
+          (tenant_id, provider_key, display_name, issuer_url, client_id,
+           client_secret_ciphertext, client_secret_env_var, scopes,
+           allowed_email_domains, enabled, created_by, updated_by)
+        VALUES (
+          ${tenantId}, ${input.providerKey}, ${input.displayName}, ${input.issuerUrl},
+          ${input.clientId}, ${clientSecretCiphertext}, ${input.clientSecretEnvVar},
+          ${input.scopes}, ${input.allowedEmailDomains}::jsonb,
+          ${input.enabled}, ${actorTenantUserId}, ${actorTenantUserId}
+        )
+        RETURNING id, provider_key, provider_type, display_name, issuer_url, client_id,
+                  client_secret_ciphertext, client_secret_env_var, scopes,
+                  allowed_email_domains, enabled, created_at, updated_at
+      `
+    )) as AuthProviderRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&

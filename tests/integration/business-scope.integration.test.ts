@@ -29,7 +29,7 @@ import {
 
 import {
   appRoleActivated,
-  assertRejected,
+  assertRejectedInSavepoint,
   getAdminSql,
   getAppRoleSql,
   getRuntimeSql,
@@ -318,8 +318,9 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
 
   test("cross-tenant SUBJECT reference is denied by the composite (tenant_id, tenant_user_id) FK (raw INSERT bypassing the app)", async () => {
     const error = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
-      assertRejected(
-        tx`
+      assertRejectedInSavepoint(
+        tx,
+        (sp) => sp`
           INSERT INTO awcms_business_scope_assignments
             (tenant_id, tenant_user_id, scope_type, scope_id, granted_by_tenant_user_id, status)
           VALUES (${TENANT_A}, ${B_SUBJECT}, 'office', ${OFFICE_A}, ${A_ACTOR}, 'active')
@@ -334,8 +335,9 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
 
   test("cross-tenant ROLE reference is denied by the composite (tenant_id, role_id) FK (raw INSERT bypassing the app)", async () => {
     const error = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
-      assertRejected(
-        tx`
+      assertRejectedInSavepoint(
+        tx,
+        (sp) => sp`
           INSERT INTO awcms_business_scope_assignments
             (tenant_id, tenant_user_id, role_id, scope_type, scope_id, granted_by_tenant_user_id, status)
           VALUES (${TENANT_A}, ${A_SUBJECT}, ${B_ROLE}, 'office', ${OFFICE_A}, ${A_ACTOR}, 'active')

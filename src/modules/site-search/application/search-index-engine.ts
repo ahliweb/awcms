@@ -407,8 +407,10 @@ async function runReconcile(
   // number said `failures=0`.
   //
   // The `break` STAYS. `reconcileSource` failing is almost always a database
-  // error, which leaves this transaction aborted — continuing would produce a
-  // cascade of `25P02`s and `finalizeRun` itself would fail. What changes is
+  // error; each pass therefore runs in a SAVEPOINT (Issue #1099), so the failed
+  // pass is rolled back on its own and `finalizeRun` can still record the run as
+  // `failed` — without it the failure aborted this transaction, `finalizeRun`
+  // failed with `25P02`, and on Bun >= 1.4.3 the commit threw. What changes is
   // that the sources are now named: the one that failed, and the ones that were
   // consequently never attempted.
   const failedSources: string[] = [];
@@ -417,10 +419,20 @@ async function runReconcile(
   for (const [index, descriptor] of descriptors.entries()) {
     try {
       results.push(
-        await reconcileSource(tx, tenantId, descriptor, {
-          batchSize,
-          tenantCode
-        })
+        // A savepoint is a scope of its transaction and supports nested
+        // savepoints (the per-item isolation inside `reconcileSource`), hence
+        // the cast — the same idiom as the booking reminder dispatcher.
+        await tx.savepoint((sp) =>
+          reconcileSource(
+            sp as unknown as Bun.TransactionSQL,
+            tenantId,
+            descriptor,
+            {
+              batchSize,
+              tenantCode
+            }
+          )
+        )
       );
     } catch (error) {
       status = "failed";

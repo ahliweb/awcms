@@ -184,6 +184,10 @@ export const PUT: APIRoute = async ({ request, params, cookies, locals }) => {
           { correlationId: locals.correlationId }
         );
       } catch (error) {
+        // tx-swallow-ok: The workflow module raises this domain error from
+        // application code on a healthy transaction (it never catches a
+        // database error beneath it), so returning here commits a valid
+        // transaction.
         if (error instanceof InvalidWorkflowGraphError) {
           return fail(400, "VALIDATION_ERROR", error.message, {}, error.errors);
         }
@@ -329,6 +333,10 @@ export const DELETE: APIRoute = async ({
 
         return successResponse;
       } catch (error) {
+        // tx-swallow-ok: The workflow module raises this domain error from
+        // application code on a healthy transaction (it never catches a
+        // database error beneath it), so returning here commits a valid
+        // transaction.
         if (error instanceof WorkflowDefinitionLifecycleError) {
           if (error.message.includes("not found")) {
             return fail(404, "RESOURCE_NOT_FOUND", error.message);

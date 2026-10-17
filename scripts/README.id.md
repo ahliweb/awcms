@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:ae93056164bac2fb6bcc8ec4b260ec0f6f2318427bc03791f8a31000bee598a2 -->
+<!-- i18n-source-hash: sha256:f2f1baa4102053ce87f7529a0bc94d215b664eb2c9492d9197a4e0dd94d15701 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-146 target menjalankan berkas di `scripts/`; 63 di antaranya
+147 target menjalankan berkas di `scripts/`; 64 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -88,6 +88,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `db:migrate`                              | `db-migrate.ts`                                | —    |
 | `db:pool:health`                          | `db-pool-health.ts`                            | —    |
 | `db:tenant-context:check`                 | `tenant-context-usage-check.ts`                | ✅   |
+| `db:transaction-swallow:check`            | `transaction-swallow-check.ts`                 | ✅   |
 | `db:work-class:check`                     | `work-class-registry-check.ts`                 | ✅   |
 | `db:work-class:generate`                  | `work-class-registry-generate.ts`              | —    |
 | `deps:audit:check`                        | `dependency-audit-check.ts`                    | ✅   |

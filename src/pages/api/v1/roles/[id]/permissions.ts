@@ -105,9 +105,13 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       }
       return ok({ roleId, permissionId: validation.value.permissionId });
     } catch (error) {
+      // tx-swallow-ok: The savepoint-guarded write (Issue #1099) rolled the
+      // failed statement back to its savepoint, so the transaction is valid
+      // and the commit succeeds.
       // Caught INSIDE `withTenant`. `DuplicateRolePermissionError` follows the
-      // 23505 that already aborted the transaction, `PermissionNotFoundError`
-      // the 23503 — returning 4xx here commits nothing.
+      // 23505 and `PermissionNotFoundError` the 23503 of an INSERT that
+      // `grantPermissionToRole` ran in a savepoint — the transaction is still
+      // valid and the 4xx commits normally.
       if (error instanceof DuplicateRolePermissionError) {
         return fail(409, "ROLE_PERMISSION_ALREADY_GRANTED", error.message);
       }

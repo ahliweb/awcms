@@ -231,7 +231,7 @@ export type LifecycleDryRunOutcome =
  * module's README Limitations section.
  */
 export async function planLifecycleDryRunForAllDescriptors(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   descriptors: readonly HighVolumeTableDescriptor[],
   tenantId: string,
   activeHolds: readonly LegalHoldRecord[],
@@ -245,12 +245,12 @@ export async function planLifecycleDryRunForAllDescriptors(
     }
 
     try {
-      const result = await planLifecycleDryRun(
-        tx,
-        descriptor,
-        tenantId,
-        activeHolds,
-        now
+      // A savepoint per descriptor: a broken or unreachable table fails ITS
+      // statement only. Without it the failure aborts the transaction, every
+      // descriptor after it reports "current transaction is aborted", and the
+      // commit throws on Bun >= 1.4.3 (Issue #1099).
+      const result = await tx.savepoint((sp) =>
+        planLifecycleDryRun(sp, descriptor, tenantId, activeHolds, now)
       );
       outcomes.push({ descriptorKey: descriptor.key, ok: true, result });
     } catch (error) {

@@ -63,7 +63,7 @@ export class DuplicateIdentifierError extends Error {
 const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 export async function addIdentifierToProfile(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   profileId: string,
@@ -86,7 +86,8 @@ export async function addIdentifierToProfile(
   let rows: IdentifierRow[];
 
   try {
-    rows = (await tx`
+    rows = (await tx.savepoint(
+      (sp) => sp`
       INSERT INTO awcms_profile_identifiers
         (tenant_id, profile_id, identifier_type, normalized_value, value_hash, masked_value, is_primary)
       VALUES (
@@ -94,7 +95,8 @@ export async function addIdentifierToProfile(
         ${maskedValue}, ${input.isPrimary}
       )
       RETURNING id, profile_id, identifier_type, masked_value, is_primary, verification_status
-    `) as IdentifierRow[];
+    `
+    )) as IdentifierRow[];
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&

@@ -333,12 +333,11 @@ export type AssignmentRecord = {
  *   normal return, so any 4xx-mapped throw must precede the first write, and the
  *   composite FKs would otherwise surface as an opaque 500.
  * @throws {DuplicateAssignmentError} the role is already assigned (23505). This
- *   follows the unique violation that already aborted the transaction, so the
- *   caller must NOT write anything further (e.g. an audit row) before returning
- *   409 — that write would fail with 25P02 and turn the 409 into a 500.
+ *   follows a unique violation that ran in a savepoint (Issue #1099), so the
+ *   transaction is still valid and the caller maps it to 409 and commits.
  */
 export async function assignRole(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   tenantUserId: string,
@@ -378,8 +377,8 @@ export async function assignRole(
   // ADR-0078 — the duplicate check does not come for free from one unique
   // index any more: the active partial index covers one (role, scope) pair, not
   // "already holds this role". Asked BEFORE the write so "already assigned"
-  // stays a clean 409 rather than a unique violation that has already aborted
-  // the transaction.
+  // stays a clean 409 rather than a unique violation at all (the INSERT below is
+  // still in a savepoint for the race this check cannot close).
   if (await subjectHoldsRole(tx, tenantId, tenantUserId, roleId)) {
     throw new DuplicateAssignmentError();
   }
@@ -387,11 +386,13 @@ export async function assignRole(
   let rows: Array<{ id: string }>;
   try {
     rows = [
-      await grantRolePolicy(tx, tenantId, {
-        tenantUserId,
-        roleId,
-        grantedByTenantUserId: actorTenantUserId
-      })
+      await tx.savepoint((sp) =>
+        grantRolePolicy(sp, tenantId, {
+          tenantUserId,
+          roleId,
+          grantedByTenantUserId: actorTenantUserId
+        })
+      )
     ];
   } catch (error) {
     // Still translated: the check above closes the window it can, and a
@@ -435,7 +436,7 @@ export async function assignRole(
  * snapshot that stops being true the next time somebody joins.
  */
 export async function assignRoleToGroup(
-  tx: Bun.SQL,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   actorTenantUserId: string,
   userGroupId: string,
@@ -476,11 +477,13 @@ export async function assignRoleToGroup(
 
   let granted: { id: string };
   try {
-    granted = await grantGroupRolePolicy(tx, tenantId, {
-      userGroupId,
-      roleId,
-      grantedByTenantUserId: actorTenantUserId
-    });
+    granted = await tx.savepoint((sp) =>
+      grantGroupRolePolicy(sp, tenantId, {
+        userGroupId,
+        roleId,
+        grantedByTenantUserId: actorTenantUserId
+      })
+    );
   } catch (error) {
     if (
       error instanceof Bun.SQL.PostgresError &&

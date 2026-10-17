@@ -99,6 +99,9 @@ export async function runRepositoryProgressPoll(
     try {
       loaded = await loadTenantPollInput(sql, tenant.id);
     } catch (error) {
+      // tx-swallow-ok: The handle here is a pooled client, not a transaction
+      // (each statement autocommits), so a caught failure leaves nothing
+      // aborted.
       if (!(error instanceof DatabaseBusyError)) throw error;
       totals.tenantsSkipped += 1;
       totals.skippedTenantIds.push(tenant.id);

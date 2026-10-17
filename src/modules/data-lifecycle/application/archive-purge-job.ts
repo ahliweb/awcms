@@ -720,6 +720,9 @@ export async function runDataLifecycleArchivePurge(
           { workClass: "maintenance" }
         );
       } catch (error) {
+        // tx-swallow-ok: The handle here is a pooled client, not a
+        // transaction (each statement autocommits), so a caught failure
+        // leaves nothing aborted.
         descriptorFailures.push(`${tenant.id}:${descriptor.key}`);
         await recordDescriptorFailure(
           sql,

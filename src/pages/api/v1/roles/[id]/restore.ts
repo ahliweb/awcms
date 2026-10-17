@@ -70,9 +70,12 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       }
       return ok(role);
     } catch (error) {
+      // tx-swallow-ok: The savepoint-guarded write (Issue #1099) rolled the
+      // failed statement back to its savepoint, so the transaction is valid
+      // and the commit succeeds.
       // Caught INSIDE `withTenant`: the unique violation that produced this
-      // error already aborted the transaction, so returning 409 here commits
-      // nothing.
+      // error ran in a savepoint inside `restoreRole`, so the transaction is
+      // still valid and the 409 commits normally.
       if (error instanceof DuplicateRoleCodeError) {
         return fail(409, "ROLE_CODE_ALREADY_EXISTS", error.message);
       }

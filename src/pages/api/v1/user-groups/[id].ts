@@ -87,6 +87,9 @@ export const PATCH = defineTenantRoute({
 
       return ok(result.record);
     } catch (error) {
+      // tx-swallow-ok: Raised by application code on a healthy transaction
+      // (an existence or managed-by check before any write; no database error
+      // is caught beneath it).
       // Raised before any write (the `source` check), so mapping it here
       // persists nothing.
       if (error instanceof GroupExternallyManagedError) {

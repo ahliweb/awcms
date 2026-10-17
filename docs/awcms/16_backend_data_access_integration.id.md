@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](16_backend_data_access_integration.md)
 
-<!-- i18n-source-hash: sha256:297d8dcf24c34abf64639cc1f8cbd7cf6c73242d293816f14eb613400aa91e1b -->
+<!-- i18n-source-hash: sha256:5ab0a5cd65bd068c3affec67da56370141ee7cf844088f75995997435379be8b -->
 
 # Bagian 16 — Backend Data Access dan Integrasi Database
 
@@ -119,6 +119,64 @@ dan pemanggilan dari `.astro` (tak pernah dibaca `tsc --noEmit`).
 5. **Jangan** memanggil provider eksternal di dalam transaction (WA/email/R2/AI/payment gateway).
 6. Statement timeout untuk mencegah transaksi menggantung.
 7. Deadlock retry aman karena idempotency.
+
+### Menangkap statement yang gagal di dalam transaction (Issue #1099)
+
+PostgreSQL membatalkan **seluruh** transaction ketika satu statement gagal:
+semua statement sesudahnya dijawab `25P02` dan `COMMIT` berubah menjadi
+`ROLLBACK`. Bun sampai 1.4.2 menyembunyikannya: `sql.begin(cb)` diam-diam
+mengembalikan nilai `cb` ketika `cb` menangkap error lalu melanjutkan. **Bun
+1.4.3 melempar `ERR_POSTGRES_COMMIT_ROLLED_BACK`** di situ, sehingga setiap
+"tangkap `23505`, kembalikan 409" menjadi 500. Konvensi yang berperilaku sama di
+keduanya:
+
+- **Statement yang _diharapkan_ gagal dijalankan di dalam savepoint**, dan hanya
+  statement itu: ``await tx.savepoint((sp) => sp`INSERT …`)`` di dalam `try`.
+  Kegagalan di-rollback ke savepoint, transaction tetap valid, `catch` menjadi
+  keputusan bisnis biasa (`duplicate_key`, `404`, "sudah ada"), dan transaction
+  meng-commit apa pun yang sudah dikerjakannya. Helper yang menerima `tx`
+  dipanggil sebagai `tx.savepoint((sp) => helper(sp, …))`; tipe parameternya
+  `Bun.TransactionSQL`. Contoh di repo: `restoreRole`, `createAuthProvider`,
+  `readPreferences`, helper `guarded` modul booking.
+- **Savepoint me-rollback semua yang ada di dalamnya.** Bila "kegagalan yang
+  diharapkan" adalah penulisan kedua dari dua penulisan yang berpasangan
+  (turunkan primary lama, jadikan yang baru primary), masukkan **keduanya** ke
+  savepoint, atau yang pertama ter-commit sendirian.
+- **Bila niatnya memang "batalkan semuanya", lempar ulang** dan petakan error
+  _di luar_ transaction. Jangan pernah mengembalikan nilai normal sesudah
+  statement gagal yang tidak berada di dalam savepoint.
+- **Jangan menelan `ERR_POSTGRES_COMMIT_ROLLED_BACK`** (secara terpusat di
+  wrapper tenant maupun di tempat lain). Itu menyembunyikan seluruh kelas bug,
+  termasuk setiap penelanan tak sengaja di masa depan, dan memutuskan
+  commit-atau-tidak berdasarkan tebakan.
+- **Yang berubah pada data.** Penulisan dalam transaction yang sama _sebelum_
+  statement gagal kini ter-commit (dulu `COMMIT` yang terdegradasi
+  me-rollback-nya). Dalam praktik itu adalah baris decision-log ABAC yang
+  ditulis `authorizeInTransaction` untuk request yang diizinkan — hal yang sama
+  yang sudah di-commit setiap 4xx lain. Efek statement yang gagal itu sendiri
+  tidak pernah ter-commit. Jangan "memulihkan" rollback lama dengan membiarkan
+  kegagalan tak terpulihkan.
+- **Gerbang:** `bun run db:transaction-swallow:check` (ada di `bun run check`)
+  menolak (1) `catch` yang dapat selesai secara normal di sekitar SQL yang
+  dikirim lewat handle transaction (parameter bertipe `Bun.SQL`/
+  `Bun.TransactionSQL`, parameter callback wrapper, atau `tx`/`sp`/…) di luar
+  `.savepoint(...)`; (2) `catch` yang selalu berakhir `throw` tetapi **memetakan
+  error database** (`errno`, `PostgresError`, nama constraint) ke error lain
+  dengan `throw new …` — route lalu menangkap error hasil pemetaan itu pada
+  transaction yang sudah di-abort statement tanpa penjaga, jadi savepoint-nya
+  harus ada di callee; (3) penelanan tingkat promise (`.catch(…)`,
+  `.then(ok, onRejected)`, `Promise.allSettled`) atas statement semacam itu.
+  Catch yang berisi `unsafe("ROLLBACK TO SAVEPOINT …")` yang benar-benar
+  dieksekusi lolos. Pengecualian yang sudah ditinjau berupa komentar
+  `// tx-swallow-ok: <alasan>` yang asli dan menjadi **hal pertama di blok catch
+  itu** (bukan di try, string, konstruksi bersarang, atau setelah statement
+  pertama); alasannya minimal 20 karakter dan menyebut kategori (`healthy
+transaction`, `read-only`, `before any write`, `savepoint`, `pooled client`)
+  atau kelas errornya. Reviewer sebaiknya menolak marker yang tidak bisa
+  menyebut di mana statement gagal itu dijaga. Tangkap hanya pelanggaran
+  foreign-key/unique yang bisa Anda namai: jangan menulis catch-all kosong
+  (route partner-engagement dan delegated-grant menjawab 404 hanya untuk
+  `23503` dan 409 hanya untuk `23505`, dan membiarkan yang lain muncul).
 
 ### Posting jurnal keuangan (integrasi end-to-end)
 
