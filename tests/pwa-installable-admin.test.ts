@@ -429,7 +429,8 @@ describe("controls guarded by gates (mutation-proofed)", () => {
       source.indexOf("<head>"),
       source.indexOf("</head>")
     );
-    const scripts = head.match(/<script[\s\S]*?(?:\/>|<\/script>)/g) ?? [];
+    const scripts =
+      head.match(/<script\b[\s\S]*?(?:\/>|<\/script[^>]*>)/gi) ?? [];
 
     expect(scripts.length).toBe(1);
     expect(scripts[0]).toContain("THEME_INIT_SCRIPT_BODY");
