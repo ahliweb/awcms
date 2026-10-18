@@ -181,8 +181,8 @@ type BookingOutcome =
   | { ok: false; reason: BookingRefusal };
 ```
 
-Idempotency, as booking §5.2: the key is required on `hold`, `confirm`, `cancel`
-and `reschedule`; the acting user is part of the request hash; the same key
+Idempotency, as booking §5.2: the key is required on `hold`, `confirm`, `cancel`,
+`reschedule`, `checkIn`, `checkOut` and `markNoShow`; the acting user is part of the request hash; the same key
 against a different target is `IDEMPOTENCY_CONFLICT`; confirming a `confirmed`
 reservation returns it with `replayed: true`; and the exclusion constraint
 backstops both layers. The natural key `(tenant, externalRef.type, externalRef.id)`
@@ -212,6 +212,72 @@ OpenAPI document does not enumerate error codes. A stay is asked with
 `stay: { checkInDate, checkOutDate }` instead of `startsAt`. `hold` accepts a
 `poolId` instead of a `resourceId`, and `reschedule` returns the REPLACEMENT's
 `reservationId`.
+
+**Contract 1.1.0 (Issue #1108), additive.** The `booking` capability is versioned
+in `capability-contract-versions.ts` (`1.0.0` = the port above; `1.1.0` adds the
+following, no existing signature changed):
+
+```ts
+type Targeted = {
+  tenantId: string;
+  reservationId: string;
+  idempotencyKey: string;
+  correlationId: string;
+  actorTenantUserId: string;
+};
+
+interface BookingPort {
+  // ... quote, hold, confirm, cancel, reschedule as above ...
+  checkIn(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>; // confirmed -> checked_in
+  checkOut(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>; // checked_in -> completed
+  markNoShow(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>; // confirmed -> no_show, after start + grace
+  get(
+    tx: Bun.SQL,
+    input: { tenantId: string } & (
+      { reservationId: string } | { reservationNo: string }
+    )
+  ): Promise<
+    | { ok: true; reservation: BookingReservationRecord }
+    | { ok: false; reason: BookingRefusal }
+  >;
+  getOffering(
+    tx: Bun.SQL,
+    input: { tenantId: string; offeringId: string }
+  ): Promise<
+    | { ok: true; offering: BookingOfferingRecord }
+    | { ok: false; reason: BookingRefusal }
+  >;
+  listOfferings(
+    tx: Bun.SQL,
+    input: {
+      tenantId: string;
+      cursor?: string | null;
+      limit?: number;
+      status?: "active" | "inactive";
+    }
+  ): Promise<
+    | {
+        ok: true;
+        offerings: BookingOfferingRecord[];
+        nextCursor: string | null;
+      }
+    | { ok: false; reason: BookingRefusal }
+  >;
+  availability(
+    tx: Bun.SQL,
+    input: BookingAvailabilityInput
+  ): Promise<BookingAvailabilityResult>; // no actor
+}
+```
+
+`BookingRefusal` gains `CHECK_IN_TOO_EARLY` and `NO_SHOW_TOO_EARLY`. The
+transitions are idempotent exactly as `confirm` (actor-namespaced key, ADR-0145;
+a replay or the state already reached is `replayed: true`). The reads write
+nothing, return not-found as a value, and carry **no customer or contact data**:
+`BookingReservationRecord` is `{ reservationId, reservationNo, status, startsAt,
+endsAt, holdExpiresAt, lineageId, supersededById, stays[], externalRef }`, and
+`availability` returns slots or stay counts only. The full description, including
+how a public booking page uses the anonymous read, is booking.md §10.1.
 
 ## 4. Staff availability port
 

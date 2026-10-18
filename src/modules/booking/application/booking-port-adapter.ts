@@ -28,9 +28,25 @@
  *
  * The port authorizes nothing (the CONSUMER's route does) and runs inside the
  * caller's tenant transaction.
+ *
+ * ## Contract 1.1.0 (Issue #1108)
+ *
+ * `checkIn`, `checkOut` (the module's `complete`) and `markNoShow` are the same
+ * thin translation as `confirm` over the same `transition()`, each under its own
+ * idempotency scope, so the history row, the audit row and the
+ * `awcms.booking.reservation.*` event are exactly the route's. The four reads
+ * (`get`, `getOffering`, `listOfferings`, `availability`) write nothing, take no
+ * key and never return a customer reference (`booking-port-reads.ts`).
  */
 import type {
+  BookingAvailabilityInput,
+  BookingAvailabilityResult,
+  BookingGetInput,
+  BookingGetResult,
   BookingHoldInput,
+  BookingListOfferingsInput,
+  BookingOfferingPageResult,
+  BookingOfferingResult,
   BookingOutcome,
   BookingPort,
   BookingQuoteInput,
@@ -49,7 +65,17 @@ import {
   REASON_CODE_PATTERN,
   isPaymentFieldName
 } from "../domain/booking-reservation-validation";
-import { parseInstant } from "../domain/booking-validation";
+import { asUuid, parseInstant } from "../domain/booking-validation";
+import { AVAILABILITY_LIMITS } from "../domain/booking-availability";
+import { parseLocalDate } from "../domain/booking-time";
+import { decodeKeysetCursor } from "../../_shared/keyset-pagination";
+import {
+  listOfferingsForPort,
+  PORT_OFFERINGS_DEFAULT_LIMIT,
+  PORT_OFFERINGS_MAX_LIMIT,
+  readOfferingForPort,
+  readReservationForPort
+} from "./booking-port-reads";
 import { lockIdempotencyKey } from "./booking-route-support";
 import {
   NO_OP_STAFF_AVAILABILITY,
@@ -89,6 +115,8 @@ const REFUSALS = new Set<string>([
   "OFFERING_NOT_FOUND",
   "RESERVATION_NOT_FOUND",
   "RESOURCE_REQUIRED",
+  "CHECK_IN_TOO_EARLY",
+  "NO_SHOW_TOO_EARLY",
   "INVALID_STATE",
   "IDEMPOTENCY_CONFLICT",
   "PAYMENT_FIELD_NOT_ACCEPTED",
@@ -528,6 +556,282 @@ async function transition(
   );
 }
 
+function isReservationNo(value: unknown): value is string {
+  return typeof value === "string" && RESERVATION_NO_PATTERN.test(value);
+}
+
+/** The shape CHECK of `awcms_booking_reservations.reservation_no` (sql/180). */
+const RESERVATION_NO_PATTERN = /^[A-Z0-9][A-Z0-9-]{3,31}$/;
+
+async function get(tx: Sql, input: BookingGetInput): Promise<BookingGetResult> {
+  const byId = input.reservationId !== undefined;
+  const byNo = input.reservationNo !== undefined;
+
+  // A malformed tenant id is a value, not a Postgres 22P02 throw.
+  if (byId === byNo || asUuid(input.tenantId) === null) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  const key = byId
+    ? asUuid(input.reservationId)
+    : isReservationNo(input.reservationNo)
+      ? input.reservationNo
+      : null;
+
+  if (key === null) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  const reservation = await readReservationForPort(
+    tx,
+    input.tenantId,
+    byId ? { reservationId: key } : { reservationNo: key }
+  );
+
+  return reservation
+    ? { ok: true, reservation }
+    : refused("RESERVATION_NOT_FOUND");
+}
+
+async function getOffering(
+  tx: Sql,
+  input: { tenantId: string; offeringId: string }
+): Promise<BookingOfferingResult> {
+  const offeringId = asUuid(input.offeringId);
+
+  if (!offeringId || asUuid(input.tenantId) === null) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  const offering = await readOfferingForPort(tx, input.tenantId, offeringId);
+
+  return offering ? { ok: true, offering } : refused("OFFERING_NOT_FOUND");
+}
+
+async function listOfferings(
+  tx: Sql,
+  input: BookingListOfferingsInput
+): Promise<BookingOfferingPageResult> {
+  const limit = input.limit ?? PORT_OFFERINGS_DEFAULT_LIMIT;
+
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > PORT_OFFERINGS_MAX_LIMIT ||
+    asUuid(input.tenantId) === null ||
+    (input.status !== undefined &&
+      input.status !== "active" &&
+      input.status !== "inactive")
+  ) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  // A malformed cursor is a validation refusal, never "page 1" (that would hide a bug).
+  const cursor =
+    input.cursor === undefined || input.cursor === null
+      ? null
+      : decodeKeysetCursor(input.cursor);
+
+  if (input.cursor !== undefined && input.cursor !== null && !cursor) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  const page = await listOfferingsForPort(tx, input.tenantId, {
+    limit,
+    status: input.status ?? null,
+    cursor
+  });
+
+  return { ok: true, ...page };
+}
+
+/**
+ * The timezone an anonymous answer carries when it has no free capacity. A real
+ * zone there would tell the caller "this resource exists and has that many
+ * units" (a fully-booked window) against "it does not / is too small" (the
+ * neutral answer), so every empty anonymous answer carries the same fixed zone.
+ * An answer with free capacity carries the resource's own zone: a page needs it
+ * to render the times.
+ */
+const NEUTRAL_EMPTY_TIMEZONE = "UTC";
+
+/**
+ * The anonymous refusal for the outcomes that stay named. Only the offering and
+ * the booking mode: both are chosen by the caller from the tenant's own public
+ * page. An unknown resource and an over-capacity quantity are NOT here; they are
+ * the "no availability" answer (see `availability`).
+ */
+function availabilityRefusalOf(
+  answered: Exclude<
+    Awaited<ReturnType<typeof answerAvailability>>,
+    { outcome: "ok" }
+  >
+): BookingRefusal {
+  return answered.outcome === "not_found"
+    ? "OFFERING_NOT_FOUND"
+    : "BOOKING_MODE_MISMATCH";
+}
+
+/** True for the two outcomes the anonymous read folds into "no availability". */
+function isCapacityProbe(
+  answered: Awaited<ReturnType<typeof answerAvailability>>
+): boolean {
+  return (
+    answered.outcome === "too_many_units" ||
+    (answered.outcome === "not_found" && answered.what === "resource")
+  );
+}
+
+/**
+ * The anonymous-safe read. No actor, no key. It answers with slots (start, end,
+ * free units) or a stay's free-unit count, and never with a resource's name or
+ * unit labels, a reservation, a block's existence (a blocked night and a booked
+ * one are the same `SLOT_UNAVAILABLE`), the staff who serve a slot or the
+ * tenant's policy. Bounded like the authenticated route (31-day window, 500
+ * slots), because a public page is the caller that loops.
+ */
+async function availability(
+  tx: Sql,
+  input: BookingAvailabilityInput,
+  resolveStaff: StaffResolver
+): Promise<BookingAvailabilityResult> {
+  const offeringId = asUuid(input.offeringId);
+  const resourceId = asUuid(input.resourceId);
+  const quantity = input.quantity ?? 1;
+
+  if (
+    !offeringId ||
+    !resourceId ||
+    asUuid(input.tenantId) === null ||
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > 500 ||
+    (input.stay === undefined) === (input.from === undefined)
+  ) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  if (input.stay) {
+    const { checkInDate, checkOutDate } = input.stay;
+
+    if (!parseLocalDate(checkInDate) || !parseLocalDate(checkOutDate)) {
+      return refused("STAY_DATES_INVALID");
+    }
+
+    const answered = await answerAvailability(tx, input.tenantId, {
+      mode: "stay",
+      resourceId,
+      offeringId,
+      quantity,
+      checkInDate,
+      checkOutDate
+    });
+
+    // An unavailable stay is one answer whatever the cause (booked, blocked,
+    // a min/max stay, lead time, horizon, schedule, too many units, no such
+    // resource): the cause is the tenant's policy or occupancy and an anonymous
+    // caller must learn neither. Only a malformed date is the caller's own
+    // input and stays a named refusal.
+    const unavailable = (): BookingAvailabilityResult => ({
+      ok: true,
+      mode: "stay",
+      timezone: NEUTRAL_EMPTY_TIMEZONE,
+      checkInDate,
+      checkOutDate,
+      nights: null,
+      freeUnits: 0,
+      available: false,
+      reason: "SLOT_UNAVAILABLE"
+    });
+
+    if (isCapacityProbe(answered)) {
+      return unavailable();
+    }
+
+    if (answered.outcome !== "ok") {
+      return refused(availabilityRefusalOf(answered));
+    }
+
+    const stay = answered.answer;
+
+    if (stay.mode !== "stay") {
+      return refused("BOOKING_MODE_MISMATCH");
+    }
+
+    if (!stay.available) {
+      return stay.reasons[0]?.code === "STAY_DATES_INVALID"
+        ? refused("STAY_DATES_INVALID")
+        : unavailable();
+    }
+
+    return {
+      ok: true,
+      mode: "stay",
+      timezone: stay.timezone,
+      checkInDate: stay.checkInDate,
+      checkOutDate: stay.checkOutDate,
+      nights: stay.nights,
+      freeUnits: stay.freeUnits ?? 0,
+      available: true
+    };
+  }
+
+  const fromMs = parseInstant(input.from);
+  const toMs = parseInstant(input.to);
+  const limit = input.limit ?? 100;
+
+  if (
+    fromMs === null ||
+    toMs === null ||
+    toMs <= fromMs ||
+    toMs - fromMs > AVAILABILITY_LIMITS.maxSlotWindowDays * 86_400_000 ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > AVAILABILITY_LIMITS.maxSlots
+  ) {
+    return refused("VALIDATION_ERROR");
+  }
+
+  const answered = await answerAvailability(
+    tx,
+    input.tenantId,
+    { mode: "slot", resourceId, offeringId, quantity, fromMs, toMs, limit },
+    await resolveStaff(tx, input.tenantId)
+  );
+
+  if (isCapacityProbe(answered)) {
+    return {
+      ok: true,
+      mode: "slot",
+      timezone: NEUTRAL_EMPTY_TIMEZONE,
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+      slots: [],
+      truncated: false
+    };
+  }
+
+  if (answered.outcome !== "ok") {
+    return refused(availabilityRefusalOf(answered));
+  }
+
+  const slot = answered.answer;
+
+  if (slot.mode !== "slot") {
+    return refused("BOOKING_MODE_MISMATCH");
+  }
+
+  return {
+    ok: true,
+    mode: "slot",
+    timezone: slot.slots.length === 0 ? NEUTRAL_EMPTY_TIMEZONE : slot.timezone,
+    from: slot.from,
+    to: slot.to,
+    slots: slot.slots,
+    truncated: slot.truncated
+  };
+}
+
 /**
  * Builds the port. `resolveStaff` is the composition root's one decision about
  * the staff constraint (`booking/module.ts` `createComposedBookingPort`); pass
@@ -539,6 +843,17 @@ export function createBookingPort(resolveStaff: StaffResolver): BookingPort {
     hold: (tx, input) => hold(tx, input, resolveStaff),
     confirm: (tx, input) =>
       transition(tx, "booking_port_confirm", "confirm", input, null),
+    checkIn: (tx, input) =>
+      transition(tx, "booking_port_check_in", "check_in", input, null),
+    // The module's verb is `complete`; the scope keeps the port's name.
+    checkOut: (tx, input) =>
+      transition(tx, "booking_port_check_out", "complete", input, null),
+    markNoShow: (tx, input) =>
+      transition(tx, "booking_port_no_show", "no_show", input, null),
+    get: (tx, input) => get(tx, input),
+    getOffering: (tx, input) => getOffering(tx, input),
+    listOfferings: (tx, input) => listOfferings(tx, input),
+    availability: (tx, input) => availability(tx, input, resolveStaff),
     cancel: async (tx, input) =>
       // A short code, never free text (the same rule as the route's body).
       typeof input.reasonCode === "string" &&

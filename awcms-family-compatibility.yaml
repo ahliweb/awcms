@@ -176,6 +176,11 @@ contracts:
     # that a base module finally provides an adapter for it, so it belongs here
     # for the first time. `identity_access` consumes it, still `optional: true`.
     business_scope_hierarchy: "1.0.0"
+    # booking is owned (provided) by the base `booking` module (ADR-0131), port
+    # `_shared/ports/booking-port.ts`. 1.0.0 was the port of #941; 1.1.0 (#1108)
+    # adds checkIn, checkOut, markNoShow, get, getOffering, listOfferings and the
+    # anonymous availability read, additively. First entry in this registry.
+    booking: "1.1.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

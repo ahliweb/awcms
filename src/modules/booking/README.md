@@ -37,7 +37,10 @@ Reservations (Issue #941, `sql/208`, `sql/209`): the routes `POST/GET
 (`application/booking-reservation-service.ts`), `Idempotency-Key` through the
 shared component, the `BookingPort` (`application/booking-port-adapter.ts`), the
 nine reservation events on the live AsyncAPI document, and a safe default for the
-hold caps. The block routes (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
+hold caps. The port grew in Issue #1108 (contract `booking` 1.1.0, additive):
+`checkIn`, `checkOut` and `markNoShow`, and four reads that return no customer
+data, `get`, `getOffering`, `listOfferings` and an actor-less `availability` for
+a public booking page (booking.md section 10.1). The block routes (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
 `POST /blocks/{id}/release`) take `Idempotency-Key` with replay and publish no
 event. **Not present yet:** the reconciliation
 route.
@@ -261,7 +264,8 @@ DO NOTHING RETURNING id`: PostgreSQL waits for an in-doubt concurrent row and
 | `application/booking-reservation-policy.ts`          | Hours, lead time and horizon for a claim, from the same engine availability uses                |
 | `application/booking-reservation-directory.ts`       | Reservation list, detail and history (the note is never read)                                   |
 | `application/booking-event-emit.ts`                  | Outbox events from the one facts function, in the transition's transaction                      |
-| `application/booking-port-adapter.ts`                | The `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule   |
+| `application/booking-port-adapter.ts`                | The `BookingPort` (`_shared/ports/booking-port.ts`, contract 1.1.0): the verbs and the reads    |
+| `application/booking-port-reads.ts`                  | The port's `get` / offering reads: an explicit column allow-list, never a customer reference    |
 | `application/booking-transition-route.ts`            | The handler body shared by the five in-place transition routes                                  |
 | `application/booking-block-routes.ts`                | The handler bodies of block create / release: `runIdempotent`, then the block service           |
 | `application/booking-block-directory.ts`             | Block reads for the routes: detail and keyset list                                              |
