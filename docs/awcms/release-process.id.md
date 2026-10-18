@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](release-process.md)
 
-<!-- i18n-source-hash: sha256:f3211aafdb4042100129c7e11c0165ccc3ef1f745dc103753ba6bb93718b4881 -->
+<!-- i18n-source-hash: sha256:dbde85da5a7287577b0aa8210c0f156cfef4db3e61225ca02099d960f031861a -->
 
 # Release Process — Changesets, SBOM, Signing, Provenance
 
@@ -8,7 +8,7 @@
 >
 > **✅ Approval gate kini AKTIF (dikonfigurasi 2026-07-21).** Pada rilis `v6.0.0` job `sign-attest-publish` sempat berjalan **tanpa jeda "Waiting for review"** karena Environment `release` belum punya required reviewers. Gap itu **sudah ditutup**: required reviewer `ahliweb` (id `44542506`) dipasang via `gh api -X PUT .../environments/release` (`prevent_self_review: false`, `can_admins_bypass: true`). **Diverifikasi lewat rehearsal** (`workflow_dispatch`, run 29831369872): `validate`+`build` sukses lalu `sign-attest-publish` berhenti di `status: waiting` dengan pending deployment environment `release` — membuktikan gerbang benar-benar menahan (run rehearsal lalu dibatalkan tanpa publish). Sejak sekarang setiap rilis nyata **dan** rehearsal pause menunggu **Approve and deploy** dari maintainer sebelum sign/attest/publish.
 >
-> **Prosedur tag (koreksi):** tidak ada script `bun run changeset:tag` — tag rilis `vX.Y.Z` dibuat **manual** (`git tag -a vX.Y.Z -m "vX.Y.Z"` → `RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify` → `git push origin vX.Y.Z`). Image di-tag **tanpa** prefix `v` (`6.0.0`), sedangkan git tag & GitHub Release memakai `v6.0.0`.
+> **Prosedur tag (koreksi):** tidak ada script `bun run changeset:tag` — tag rilis `vX.Y.Z` dibuat **manual** (`git fetch origin main && git tag -a vX.Y.Z -m "vX.Y.Z" <commit-rilis>` → `git switch --detach vX.Y.Z` → `RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify && git push origin vX.Y.Z`). `release:verify` membaca `package.json`, `CHANGELOG.md` dan `.changeset/` dari **working tree**, jadi wajib dijalankan dari checkout commit yang di-tag — kini ia menolak checkout lain dengan pesan persis itu — dan push dirangkai dengan `&&` agar verify yang gagal tidak pernah memublikasikan tag (v10.9.0 diverifikasi dari `main` lokal yang tertinggal 11 commit, gagal dengan pesan selisih versi yang menyesatkan, dan tetap ter-push; tag-nya sendiri benar). Image di-tag **tanpa** prefix `v` (`6.0.0`), sedangkan git tag & GitHub Release memakai `v6.0.0`.
 
 Changesets sudah mengelola version bump dan `CHANGELOG.md` (lihat `.changeset/` dan `CHANGELOG.md` di repo ini serta `docs/awcms/09_roadmap_repository_commit.md` §Versioning dengan Changesets, menyusul) dan `bun run changesets:policy:check` sudah menegakkan kebijakan changeset di setiap PR (`.github/workflows/changesets.yml`). `release.yml` mem-produksi image, dua SBOM, signature, dan provenance yang bisa diverifikasi — desainnya didokumentasikan lengkap di bawah, implementasinya ada di `.github/workflows/release.yml`.
 

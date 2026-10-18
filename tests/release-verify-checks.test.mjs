@@ -8,6 +8,7 @@ import {
   checkTagMatchesPackageVersion,
   checkChangelogHasSection,
   checkNoPendingChangesets,
+  checkHeadAtTagCommit,
   selectReleaseTag
 } from "../scripts/lib/release-verify-checks.ts";
 
@@ -134,5 +135,27 @@ describe("selectReleaseTag", () => {
     // Ambigu SEBENARNYA — bukan sesuatu yang boleh ditebak diam-diam.
     const message = errorOf(selectReleaseTag(["v9.1.2", "v9.2.0"]));
     expect(message).toContain("RELEASE_VERIFY_TAG");
+  });
+});
+
+describe("checkHeadAtTagCommit", () => {
+  const TAG_SHA = "c6a04a93c847233e60877ff2abf00efdc5e67ab9";
+  const STALE_SHA = "8af77b8a0000000000000000000000000000beef";
+
+  test("null when HEAD is the tagged commit", () => {
+    expect(checkHeadAtTagCommit("v10.9.0", TAG_SHA, TAG_SHA)).toBeNull();
+  });
+
+  test("names the stale checkout instead of a version mismatch", () => {
+    const problem = checkHeadAtTagCommit("v10.9.0", TAG_SHA, STALE_SHA);
+    expect(problem?.message).toContain("bukan commit tag v10.9.0");
+    expect(problem?.message).toContain("8af77b8a");
+    expect(problem?.message).toContain("c6a04a93");
+    expect(problem?.message).toContain("git switch --detach v10.9.0");
+  });
+
+  test("reports a tag that does not exist locally", () => {
+    const problem = checkHeadAtTagCommit("v10.9.0", null, STALE_SHA);
+    expect(problem?.message).toContain("tidak ditemukan");
   });
 });

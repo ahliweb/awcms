@@ -32,10 +32,13 @@ flowchart LR
 5. Commit: `chore(release): vX.Y.Z` (include CHANGELOG + package.json + deletion of the changeset files), push to `main`.
 6. Create the release tag **manually** — this repo does NOT have a `changeset:tag` script, and `changeset tag` (the Changesets built-in) does not produce the `vX.Y.Z` tag this repo uses (for the `access: restricted` package named `awcms` it stays silent/formats as `awcms@X.Y.Z`, not `vX.Y.Z`). The npm scripts that DO exist are only `changeset`, `changeset:version`, `changeset:status` (see `package.json`). The correct procedure:
    ```bash
-   git tag -a vX.Y.Z -m "vX.Y.Z"                 # annotated tag on the release commit
-   RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify   # local gate: tag↔package.json↔CHANGELOG↔0 pending changesets
-   git push origin vX.Y.Z                        # push ONLY the release tag (avoid `--tags`, which pushes every local tag)
+   git fetch origin main
+   git tag -a vX.Y.Z -m "vX.Y.Z" <release-commit>     # annotated tag on the merged release commit
+   git switch --detach vX.Y.Z && bun install --frozen-lockfile
+   RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify && git push origin vX.Y.Z
+   git switch -                                       # back to your branch
    ```
+   `release:verify` reads `package.json`/`CHANGELOG.md`/`.changeset/` from the **working tree**, so it runs from the tag checkout (it refuses any other checkout), and `&&` keeps a failed verify from publishing the tag. Push ONLY the release tag (avoid `--tags`, which pushes every local tag).
    Pushing this tag **triggers** `.github/workflows/release.yml`: ancestor-of-`main` guard, `bun run release:verify` (version/CHANGELOG/remaining changesets must be consistent — `release.yml` takes the tag from `github.ref_name`, locally it comes from `RELEASE_VERIFY_TAG` or `git describe --exact-match`), the full quality gate, then — once approved through the `release` environment (see doc `release-process.md` §Environment approval) — image build, two CycloneDX SBOMs (source + image), checksums, keyless `cosign sign`, `actions/attest-build-provenance`/`actions/attest`, push to `ghcr.io/ahliweb/awcms`, and `gh release create` with the assets attached.
 7. **Do not** run `gh release create` manually any more — that is now part of `release.yml`; running it manually before the workflow finishes will collide with the assets it tries to attach automatically.
 

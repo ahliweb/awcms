@@ -129,6 +129,11 @@ export const TOOLING_ONLY: readonly { name: string; reason: string }[] = [
       "The tag `release:verify` validates. Meaningful only on a tagged release commit inside release.yml, never in a running environment."
   },
   {
+    name: "GITHUB_SHA",
+    reason:
+      "Set by GitHub Actions to the pushed commit. `release:verify` falls back to it as the tag's commit when the checkout lacks the tag ref; never deployment configuration."
+  },
+  {
     name: "FAMILY_CONFORMANCE_REPORT_PATH",
     reason:
       "Where `family:conformance:check` writes its machine-readable report. A CI artefact path, not deployment configuration."
