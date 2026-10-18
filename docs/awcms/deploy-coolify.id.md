@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:e09b72efe291d7ddd07fafc0dc640edcb2c3cd32061828d2b1bdc6f9da36101e -->
+<!-- i18n-source-hash: sha256:5a3a396365520a99a62a9f33280c34ce7afe0113354ea8796bc106ae918fedc6 -->
 
 # Deploy Coolify
 
@@ -306,6 +306,16 @@ docker run --rm --network container:<container-db> \
 Runner itulah yang dijadwalkan lewat **Scheduled Task** Coolify (bila plan/versi mendukung) atau cron di VPS host setiap 1-2 menit — pola yang sama persis dipakai worker purge cache tepi (`environments.md` §Cache tepi (ADR-0042)). Sama seperti backup, pada topologi multi-app setiap aplikasi punya checkout, `.env.jobs`, dan jadwal sendiri — tidak ada dispatcher bersama lintas aplikasi. Bila fitur terkait `false`, perintah ini no-op (exit 0) sehingga aman dijadwalkan meski belum diaktifkan.
 
 Job lain (audit purge, sync objects, dsb.) dijadwalkan dengan pola container one-shot yang sama persis, hanya beda nama command — lihat [`deployment-profiles.md`](deployment-profiles.md) §Job registry untuk daftar lengkap job dan mana yang on-demand (bukan cron berulang).
+
+### Rollout: job yang dijalankan lewat `ops/run-job.sh` kini memakai `WORKER_DATABASE_URL`
+
+`ops/awcms-jobs.env-allowlist` digenerasi dari apa yang dibaca kode, dan sampai Issue #1119 ia diam-diam melewatkan `WORKER_DATABASE_URL` (hanya dibaca sebagai `process.env[name]`), ketiga variabel `PUSH_VAPID_*`, dan beberapa lainnya. Host yang mengisi `WORKER_DATABASE_URL` karena itu menjalankan setiap job `run-job.sh` di koneksi `DATABASE_URL` (`awcms_app`). Setelah allowlist hasil regenerasi dideploy, job-job itu berjalan sebagai role least-privilege **`awcms_worker`**. Itu perilaku yang dimaksud dan terdokumentasi, tetapi di host produksi ini adalah pergantian role:
+
+1. **Verifikasi grant sebelum mendeploy ulang allowlist.** Untuk tabel tiap job jalankan `has_table_privilege('awcms_worker', '<tabel>', 'SELECT,INSERT,UPDATE,DELETE')` (dengan privilege yang dibutuhkan job itu), atau jalankan satu tick manual per job dengan DSN worker (`--dry-run` bila job punya).
+2. **Pantau tick pertama** di `$AWCMS_JOB_LOG`, terutama `push:dispatch`, `booking:holds:expire` dan `booking:reminders:dispatch`, `tenant-domain:dns:sync`, serta `idn-regions:*` bila dijadwalkan. Grant yang kurang tampak sebagai `permission denied for table …`, dan job masih bisa keluar dengan kode 0.
+3. **Jangan rollback dengan mengosongkan `WORKER_DATABASE_URL` atau mengarahkannya ke `DATABASE_URL`.** Itu menghilangkan isolasinya lagi; perbaiki grant-nya (migrasi untuk role di `sql/`).
+
+Host yang meneruskan seluruh berkas env (compose `env_file:`) tidak pernah terdampak.
 
 ## Webhook Telegram: jangan mencatat body respons
 

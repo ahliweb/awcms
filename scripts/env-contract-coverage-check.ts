@@ -38,9 +38,26 @@
  * `<thatName>.X`. An `env.X` on a variable that is not bound to `process.env`
  * stays invisible, which is the correct answer.
  *
+ * ## The second blind spot (Issue #1119)
+ *
+ * Binding detection required `= process.env` on the same declaration, so a
+ * function that RECEIVES the environment — `parseVapidConfig(env:
+ * NodeJS.ProcessEnv)`, no default — was invisible: its `env.PUSH_VAPID_*` reads
+ * never reached `.env.example` coverage or the generated jobs allow-list
+ * (`ops/awcms-jobs.env-allowlist`), so a host running `push:dispatch` through
+ * `ops/run-job.sh` started the dispatcher with push enabled and no VAPID
+ * material. A name is now ALSO an alias when it is DECLARED with the type
+ * `NodeJS.ProcessEnv` / `ProcessEnv` / `Readonly<ProcessEnv>` / `typeof
+ * process.env` (parameter, method parameter, arrow parameter, field, or local),
+ * with or without a default. That is still "provably the environment": the
+ * type says so, and an `env` of any other type stays invisible. The reads are
+ * recognised in the shapes `alias.X`, `alias?.X`, `alias["X"]`, `process.env["X"]`,
+ * `{ X: alias.X }` (which is just `alias.X`) and `const { X } = alias`.
+ *
  * Still not seen, and no longer worth hiding: computed reads
  * (`process.env[prefix + suffix]`), whose name does not exist as a literal
- * anywhere. Those need a human.
+ * anywhere; and an env object received UNTYPED or typed as a plain
+ * `Record<string, string | undefined>`. Those need a human.
  *
  * Pure text, no database, no network — runs in `quality` on every PR.
  */
@@ -55,20 +72,51 @@ const ENV_EXAMPLE = ".env.example";
 /** `process.env.NAME` — the direct read. */
 const ENV_READ = /process\.env\.([A-Z][A-Z0-9_]*)/g;
 
+/** `process.env["NAME"]` / `process.env['NAME']` — the string-literal index read. */
+const ENV_INDEX_READ =
+  /process\.env\[\s*[\x22\x27]([A-Z][A-Z0-9_]*)[\x22\x27]\s*\]/g;
+
 /**
  * A name bound to the whole `process.env` object — `const env = process.env`,
  * `env: NodeJS.ProcessEnv = process.env`, or a class field initialiser. The
  * negative lookahead is what keeps `process.env.FOO` from being read as a
- * binding of the object itself.
+ * binding of the object itself. The type annotation may carry generics with
+ * commas inside `<...>` (`env: Record<string, string | undefined> = process.env`)
+ * but a bare comma still ends it, so one parameter's default cannot bind its
+ * neighbour.
  */
 const ENV_ALIAS_BINDING =
-  /([A-Za-z_$][\w$]*)\s*(?::\s*[^=;,)]+?)?\s*=\s*process\.env(?![.[\w$])/g;
+  /([A-Za-z_$][\w$]*)\s*(?::\s*(?:[^=;,()<>{}]|<(?:[^<>]|<[^<>]*>)*>)+?)?\s*=\s*process\.env(?![.[\w$])/g;
+
+/**
+ * A name DECLARED as the environment by its type, with or without a default:
+ * `(env: NodeJS.ProcessEnv)`, `env?: ProcessEnv`, `env: Readonly<NodeJS.ProcessEnv>`,
+ * `env: typeof process.env`. The trailing `\b` / `(?![\w$])` keeps a longer type
+ * name (`ProcessEnvironment`) from matching. `Record<string, string | undefined>`
+ * is deliberately NOT here: the type does not say the object is the environment.
+ */
+const ENV_TYPED_BINDING =
+  /([A-Za-z_$][\w$]*)\s*\??\s*:\s*(?:Readonly\s*<\s*)?(?:(?:NodeJS\s*\.\s*)?ProcessEnv(?![\w$])|typeof\s+process\.env(?![.[\w$]))/g;
 
 /** `const { NAME, OTHER } = process.env` — a read of each destructured name. */
 const ENV_DESTRUCTURE = /\{([^}]*)\}\s*=\s*process\.env(?![.[\w$])/g;
 
 /** Names inside a destructuring pattern, ignoring any `: rename` and defaults. */
 const DESTRUCTURED_NAME = /([A-Z][A-Z0-9_]*)\s*(?::|=|,|$)/g;
+
+/** `process.env.X` and `process.env["X"]` — reads that need no alias. */
+export function directEnvReads(source: string): Set<string> {
+  const names = new Set<string>();
+
+  for (const match of source.matchAll(ENV_READ)) names.add(match[1]!);
+  for (const match of source.matchAll(ENV_INDEX_READ)) names.add(match[1]!);
+
+  return names;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 /**
  * Reads reached through an alias, resolved per FILE so a binding in one module
@@ -81,6 +129,10 @@ export function aliasedEnvReads(source: string): Set<string> {
     aliases.add(match[1]!);
   }
 
+  for (const match of source.matchAll(ENV_TYPED_BINDING)) {
+    aliases.add(match[1]!);
+  }
+
   const names = new Set<string>();
 
   for (const match of source.matchAll(ENV_DESTRUCTURE)) {
@@ -90,8 +142,36 @@ export function aliasedEnvReads(source: string): Set<string> {
   }
 
   for (const alias of aliases) {
-    const read = new RegExp(`\\b${alias}\\.([A-Z][A-Z0-9_]*)\\b`, "g");
+    const escaped = escapeRegExp(alias);
+
+    // `alias.X` and `alias?.X`. The leading boundary is `(?<![\w$])` rather than
+    // `\b` so an alias beginning with `$` is still anchored. A plain assignment
+    // (`alias.X = "true"`) is a WRITE — `ci-local` sets `CI`, `PATH` and the
+    // database URLs on the environment it hands a child process — and is not a
+    // read, so `(?!\s*=(?!=))` skips it; `===`, `==`, `??=` and `||=` still count.
+    const read = new RegExp(
+      `(?<![\\w$])${escaped}\\s*\\??\\.([A-Z][A-Z0-9_]*)(?![\\w$])(?!\\s*=(?!=))`,
+      "g"
+    );
     for (const match of source.matchAll(read)) names.add(match[1]!);
+
+    // `alias["X"]`
+    const index = new RegExp(
+      `(?<![\\w$])${escaped}\\s*\\??\\.?\\[\\s*["']([A-Z][A-Z0-9_]*)["']\\s*\\]`,
+      "g"
+    );
+    for (const match of source.matchAll(index)) names.add(match[1]!);
+
+    // `const { X, Y } = alias`
+    const destructure = new RegExp(
+      `\\{([^}]*)\\}\\s*=\\s*${escaped}(?![\\w$])`,
+      "g"
+    );
+    for (const match of source.matchAll(destructure)) {
+      for (const name of match[1]!.matchAll(DESTRUCTURED_NAME)) {
+        names.add(name[1]!);
+      }
+    }
   }
 
   return names;
@@ -149,10 +229,118 @@ export const TOOLING_ONLY: readonly { name: string; reason: string }[] = [
       "Set by the runtime/toolchain. This codebase's own environment switch is APP_ENV, which IS in .env.example."
   },
   {
+    name: "PATH",
+    reason:
+      "The operating system's own executable search path. `ci:local` reads the child environment's PATH only to PREPEND a toolchain directory to it; it is the host's variable, not configuration, and `ops/run-job.sh` deliberately leaves it behind."
+  },
+  {
+    name: "E2E_LOGIN_IDENTIFIER",
+    reason:
+      "Owner login the e2e harness seeds through POST /api/v1/setup/initialize on a throwaway database (`ci:local` builds the setup body from it; ci.yml sets a fixture value). A test fixture, never deployment configuration."
+  },
+  {
+    name: "E2E_OFFICE_CODE",
+    reason:
+      "Office code the e2e harness seeds through POST /api/v1/setup/initialize on a throwaway database (`ci:local` builds the setup body from it; ci.yml sets a fixture value). A test fixture, never deployment configuration."
+  },
+  {
+    name: "E2E_PASSWORD",
+    reason:
+      "Owner password the e2e harness seeds through POST /api/v1/setup/initialize on a throwaway database (`ci:local` builds the setup body from it; ci.yml sets a fixture value). A test fixture, never deployment configuration."
+  },
+  {
     name: "ASTRO_NODE_AUTOSTART",
     reason:
       "Read by @astrojs/node's own built entry, and set to `disabled` by src/lib/server/standalone-entry.ts immediately before importing it (Issue #464) so the adapter does not bind the port with its un-wrapped handler. An internal handshake between two files in this repo — an operator setting it in a deployment could only break the server, never configure it."
   }
+];
+
+/**
+ * Reads whose NAME is computed, so no scan can see it as a literal read
+ * (`process.env[name]`, `env[POOL_MAX_OVERRIDE_ENV_VAR[kind]]`). The scanner
+ * above recognises every literal spelling it can; what is left is declared
+ * here, by a human, with the file that makes the read.
+ *
+ * It is NOT optional bookkeeping. `WORKER_DATABASE_URL` is read only as
+ * `process.env[envVarName]` in `getNamedDatabaseClient`, so the generated jobs
+ * allow-list silently dropped it — the prefix pattern it replaced carried it —
+ * and every cron job fell back to `DATABASE_URL` (the `awcms_app` connection)
+ * instead of the least-privilege `awcms_worker` role (Issue #1119).
+ *
+ * `tests/env-contract-coverage.test.ts` requires each entry's `file` to still
+ * contain `name` as a string literal, so an entry cannot outlive the code that
+ * justified it.
+ */
+export const COMPUTED_ENV_READS: readonly {
+  name: string;
+  file: string;
+  /**
+   * The CODE shape of the read, matched against the file with comments
+   * stripped. A name that only survives in a doc comment (client.ts names every
+   * entry below in one) must not keep an entry alive after the real literal is
+   * renamed or removed.
+   */
+  needle: RegExp;
+  reason: string;
+}[] = [
+  {
+    name: "WORKER_DATABASE_URL",
+    file: "src/lib/database/client.ts",
+    needle: /\?\s*"WORKER_DATABASE_URL"/,
+    reason:
+      "getNamedDatabaseClient picks the variable per client kind and reads process.env[envVarName]; the worker kind is every scheduled job's connection."
+  },
+  {
+    name: "SETUP_DATABASE_URL",
+    file: "src/lib/database/client.ts",
+    needle: /:\s*"SETUP_DATABASE_URL"/,
+    reason:
+      "Same computed read, setup kind: the one-time bootstrap connection (awcms_setup)."
+  },
+  {
+    name: "DATABASE_POOL_MAX_WORKER",
+    file: "src/lib/database/client.ts",
+    needle: /worker:\s*"DATABASE_POOL_MAX_WORKER"/,
+    reason:
+      "POOL_MAX_OVERRIDE_ENV_VAR maps the worker kind to this name and resolvePoolMaxForKind reads env[overrideVar]."
+  },
+  {
+    name: "DATABASE_POOL_MAX_SETUP",
+    file: "src/lib/database/client.ts",
+    needle: /setup:\s*"DATABASE_POOL_MAX_SETUP"/,
+    reason:
+      "Same map, setup kind; read as env[overrideVar] by resolvePoolMaxForKind."
+  },
+  {
+    name: "PLATFORM_TENANT_ID",
+    file: "src/lib/tenant/platform-tenant.ts",
+    needle: /PLATFORM_TENANT_ENV_VAR\s*=\s*"PLATFORM_TENANT_ID"/,
+    reason:
+      "Read as env[PLATFORM_TENANT_ENV_VAR] by resolvePlatformTenant and resolvePlatformTenantIdIgnoringStatus: request-time platform-authority checks and the operator-run security:readiness CLI."
+  },
+  {
+    name: "AUTH_IP_HASH_SECRET",
+    file: "src/lib/security/client-fingerprint.ts",
+    needle: /IP_HASH_SECRET_ENV\s*=\s*"AUTH_IP_HASH_SECRET"/,
+    reason:
+      "Read as process.env[IP_HASH_SECRET_ENV] by resolveIpHashKey: the keyed hash of the client address on the public auth surface."
+  },
+  ...["app", "worker", "setup"].flatMap((processClass) =>
+    ["MIN", "EXPECTED", "MAX"].map((bound) => ({
+      name: `DATABASE_CAPACITY_${processClass.toUpperCase()}_INSTANCES_${bound}`,
+      file: "src/lib/database/capacity-config.ts",
+      needle: new RegExp(
+        "DATABASE_CAPACITY_\\$\\{processClass\\.toUpperCase\\(\\)\\}_INSTANCES_`" +
+          "[\\s\\S]*?env\\[`\\$\\{prefix\\}" +
+          bound +
+          "`\\]"
+      ),
+      reason:
+        "loadInstanceCounts builds the name from the process class and reads env[`${prefix}" +
+        bound +
+        "`]; it feeds the pool-health route and the capacity check."
+    }))
+  )
 ];
 
 export type EnvCoverageViolation = { name: string; files: string[] };
@@ -206,7 +394,7 @@ export async function collectEnvReads(): Promise<Map<string, string[]>> {
 
       const names = new Set<string>();
 
-      for (const match of source.matchAll(ENV_READ)) names.add(match[1]!);
+      for (const name of directEnvReads(source)) names.add(name);
       for (const name of aliasedEnvReads(source)) names.add(name);
 
       for (const name of names) {
@@ -215,6 +403,12 @@ export async function collectEnvReads(): Promise<Map<string, string[]>> {
         reads.set(name, files);
       }
     }
+  }
+
+  for (const entry of COMPUTED_ENV_READS) {
+    const files = reads.get(entry.name) ?? [];
+    if (!files.includes(entry.file)) files.push(entry.file);
+    reads.set(entry.name, files);
   }
 
   return reads;

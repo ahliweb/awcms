@@ -14,10 +14,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  COMPUTED_ENV_READS,
   TOOLING_ONLY,
   aliasedEnvReads,
   collectEnvReads,
   declaredInEnvExample,
+  directEnvReads,
   findCoverageViolations,
   stripComments
 } from "../scripts/env-contract-coverage-check";
@@ -163,6 +165,189 @@ describe("aliasedEnvReads", () => {
 
     expect([...aliasedEnvReads(source)]).toEqual([]);
   });
+});
+
+// Issue #1119. Binding detection used to require `= process.env` on the same
+// declaration, so a function that RECEIVES the environment was invisible:
+// `parseVapidConfig(env: NodeJS.ProcessEnv)` read PUSH_VAPID_* and none of the
+// three reached `.env.example` coverage or `ops/awcms-jobs.env-allowlist`.
+describe("aliasedEnvReads: names bound to the environment by TYPE", () => {
+  const names = (source: string) => [...aliasedEnvReads(source)].sort();
+
+  test("a parameter typed NodeJS.ProcessEnv with NO default", () => {
+    // The exact shape of src/modules/push-delivery/domain/vapid-config.ts.
+    const source = [
+      "export function parseVapidConfig(env: NodeJS.ProcessEnv): Result {",
+      "  const publicKey = env.PUSH_VAPID_PUBLIC_KEY?.trim() ?? '';",
+      "  const privateKey = env.PUSH_VAPID_PRIVATE_KEY?.trim() ?? '';",
+      "  return { subject: env.PUSH_VAPID_SUBJECT };",
+      "}"
+    ].join("\n");
+
+    expect(names(source)).toEqual([
+      "PUSH_VAPID_PRIVATE_KEY",
+      "PUSH_VAPID_PUBLIC_KEY",
+      "PUSH_VAPID_SUBJECT"
+    ]);
+  });
+
+  test("a bare ProcessEnv, an optional parameter, Readonly<> and typeof process.env", () => {
+    expect(names("function a(env: ProcessEnv) { return env.AA_ONE; }")).toEqual(
+      ["AA_ONE"]
+    );
+    expect(
+      names("function b(env?: NodeJS.ProcessEnv) { return env?.BB_TWO; }")
+    ).toEqual(["BB_TWO"]);
+    expect(
+      names(
+        "const c = (source: Readonly<NodeJS.ProcessEnv>) => source.CC_THREE;"
+      )
+    ).toEqual(["CC_THREE"]);
+    expect(
+      names("function d(vars: typeof process.env) { return vars.DD_FOUR; }")
+    ).toEqual(["DD_FOUR"]);
+  });
+
+  test("a class field and a method parameter", () => {
+    const source = [
+      "class Gateway {",
+      "  private readonly env: NodeJS.ProcessEnv;",
+      "  token() { return this.env.GATEWAY_TOKEN; }",
+      "  region(env: NodeJS.ProcessEnv) { return env.GATEWAY_REGION; }",
+      "}"
+    ].join("\n");
+
+    expect(names(source)).toEqual(["GATEWAY_REGION", "GATEWAY_TOKEN"]);
+  });
+
+  test("a parameter WITH a default, including a generic type annotation with commas", () => {
+    expect(
+      names(
+        "function a(env: NodeJS.ProcessEnv = process.env) { return env.WITH_DEFAULT; }"
+      )
+    ).toEqual(["WITH_DEFAULT"]);
+    // `Record<string, string | undefined>`: the comma used to end the type and
+    // the default was never recognised (DATABASE_POOL_MAX, TAX_TAXDATE_*).
+    expect(
+      names(
+        "function b(env: Readonly<Record<string, string | undefined>> = process.env) { return env.GENERIC_DEFAULT; }"
+      )
+    ).toEqual(["GENERIC_DEFAULT"]);
+  });
+
+  test("a const binding, process.env direct, and both index forms", () => {
+    const source = [
+      "const env = process.env;",
+      "const a = env.BOUND_NAME;",
+      'const b = env["INDEX_ON_ALIAS"];',
+      "const c = env?.OPTIONAL_CHAIN;",
+      "const { DESTRUCTURED_FROM_ALIAS } = env;"
+    ].join("\n");
+
+    expect(names(source)).toEqual([
+      "BOUND_NAME",
+      "DESTRUCTURED_FROM_ALIAS",
+      "INDEX_ON_ALIAS",
+      "OPTIONAL_CHAIN"
+    ]);
+  });
+
+  test("an object literal that reads through the alias: { X: env.X }", () => {
+    const source = [
+      "export function f(env: NodeJS.ProcessEnv) {",
+      "  return load('TELEGRAM_CHAT_HASH_KEYS', { TELEGRAM_CHAT_HASH_KEYS: env.TELEGRAM_CHAT_HASH_KEYS });",
+      "}"
+    ].join("\n");
+
+    expect(names(source)).toEqual(["TELEGRAM_CHAT_HASH_KEYS"]);
+  });
+
+  test("an env-shaped identifier of ANOTHER type stays invisible", () => {
+    const source = [
+      "function a(env: { MODE: string }) { return env.MODE; }",
+      "function b(env: Record<string, string>) { return env.SOME_KEY; }",
+      "function c(env: ProcessEnvironment) { return env.LOOKALIKE_TYPE; }",
+      "const ctx: Context = makeContext();",
+      "const d = ctx.OTHER_OBJECT;"
+    ].join("\n");
+
+    expect(names(source)).toEqual([]);
+  });
+
+  test("a plain assignment is a write, not a read; ??= and === still read", () => {
+    const source = [
+      "function a(env: NodeJS.ProcessEnv) {",
+      '  env.WRITTEN_ONLY = "true";',
+      "  env.DEFAULTED ??= 'x';",
+      "  return env.COMPARED === 'y';",
+      "}"
+    ].join("\n");
+
+    expect(names(source)).toEqual(["COMPARED", "DEFAULTED"]);
+  });
+
+  test("a default on one parameter does not bind its neighbour", () => {
+    const source = [
+      "function a(label: string, env: NodeJS.ProcessEnv = process.env) {",
+      "  return label.NOT_AN_ENV_READ + env.REAL_READ;",
+      "}"
+    ].join("\n");
+
+    expect(names(source)).toEqual(["REAL_READ"]);
+  });
+});
+
+describe("directEnvReads", () => {
+  test('process.env.X and process.env["X"] are reads; a computed index is not', () => {
+    const source = [
+      "const a = process.env.DOT_FORM;",
+      'const b = process.env["DOUBLE_QUOTED"];',
+      "const c = process.env['SINGLE_QUOTED'];",
+      "const d = process.env[name];",
+      "const e = process.env[`${prefix}SUFFIX`];"
+    ].join("\n");
+
+    expect([...directEnvReads(source)].sort()).toEqual([
+      "DOT_FORM",
+      "DOUBLE_QUOTED",
+      "SINGLE_QUOTED"
+    ]);
+  });
+});
+
+describe("COMPUTED_ENV_READS", () => {
+  test("every entry's code shape is still present in the file, comments excluded", async () => {
+    for (const entry of COMPUTED_ENV_READS) {
+      // Comments are stripped first: client.ts names every entry in a doc
+      // comment, so matching raw source kept a stale entry alive after the real
+      // literal was renamed.
+      const code = stripComments(await Bun.file(entry.file).text());
+
+      expect(code).toMatch(entry.needle);
+      expect(entry.reason.length).toBeGreaterThan(30);
+    }
+  });
+
+  test("the guard has teeth: a renamed literal, or a name left only in a comment, fails", () => {
+    const entry = COMPUTED_ENV_READS.find(
+      (candidate) => candidate.name === "WORKER_DATABASE_URL"
+    )!;
+    const real = '  kind === "worker"\n    ? "WORKER_DATABASE_URL"\n    : "x"';
+    const renamed = real.replace("WORKER_DATABASE_URL", "WORKER_DB_RENAMED");
+    const commentOnly = `/** \`WORKER_DATABASE_URL\` is configured */\n${renamed}`;
+
+    expect(stripComments(real)).toMatch(entry.needle);
+    expect(stripComments(renamed)).not.toMatch(entry.needle);
+    expect(stripComments(commentOnly)).not.toMatch(entry.needle);
+  });
+
+  test("is merged into collectEnvReads", async () => {
+    const reads = await collectEnvReads();
+
+    for (const entry of COMPUTED_ENV_READS) {
+      expect(reads.get(entry.name)).toContain(entry.file);
+    }
+  }, 60000);
 });
 
 describe("the real repository", () => {
