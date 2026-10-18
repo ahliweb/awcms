@@ -13,23 +13,38 @@
  * Exits non-zero when the key ring is missing: converting nothing and reporting
  * success would let an operator believe the rollout finished.
  *
+ * `--rekey` (Issue #1098) is the key-rotation mode: instead of encrypting
+ * plaintext it re-encrypts every ciphertext row whose key id is not the ACTIVE
+ * (first) key of the ring, so an old key can be retired. The ring must still
+ * contain the old key (all keys read, the first writes). Same guarantees:
+ * idempotent, resumable, batched, worker role, no key material or ciphertext in
+ * any output. Exits 2 when a tenant did not finish, 3 when rows could not be
+ * decrypted under the ring (reported as a count, left untouched).
+ *
  * Like `push:queue:purge` this does not go through `runJob`: no advisory lock.
  * Concurrent runs are still safe (rows are locked `FOR UPDATE` and the
  * predicate is re-checked in the UPDATE), but run it from one place.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
-import { backfillPushAuthSecretsForTenant } from "../src/modules/push-delivery/application/push-auth-secret-backfill";
+import {
+  backfillPushAuthSecretsForTenant,
+  rekeyPushAuthSecretsForTenant
+} from "../src/modules/push-delivery/application/push-auth-secret-backfill";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 
 type TenantRow = { id: string };
 
 async function main() {
+  const rekey = process.argv.slice(2).includes("--rekey");
+  const label = rekey
+    ? "push:auth-secret:backfill --rekey"
+    : "push:auth-secret:backfill";
   const ring = resolvePushAuthSecretRing(process.env);
 
   if (!ring.ok) {
     console.error(
-      `push:auth-secret:backfill REFUSED — ${ring.reason} Set PUSH_AUTH_SECRET_ENCRYPTION_KEYS first.`
+      `${label} REFUSED — ${ring.reason} Set PUSH_AUTH_SECRET_ENCRYPTION_KEYS first.`
     );
     process.exitCode = 1;
 
@@ -45,17 +60,23 @@ async function main() {
     `) as TenantRow[];
 
     let converted = 0;
+    let failed = 0;
     let incomplete = 0;
 
     for (const tenant of tenants) {
-      const result = await backfillPushAuthSecretsForTenant(
-        sql,
-        tenant.id,
-        ring,
-        { correlationId }
-      );
+      const result = rekey
+        ? await rekeyPushAuthSecretsForTenant(sql, tenant.id, ring, {
+            correlationId
+          })
+        : {
+            ...(await backfillPushAuthSecretsForTenant(sql, tenant.id, ring, {
+              correlationId
+            })),
+            failed: 0
+          };
 
       converted += result.converted;
+      failed += result.failed;
 
       if (!result.complete) {
         incomplete += 1;
@@ -63,15 +84,19 @@ async function main() {
     }
 
     console.log(
-      `push:auth-secret:backfill complete — correlationId=${correlationId} ` +
-        `tenants=${tenants.length} converted=${converted} incompleteTenants=${incomplete}`
+      `${label} complete — correlationId=${correlationId} ` +
+        `tenants=${tenants.length} converted=${converted}` +
+        (rekey ? ` undecryptable=${failed}` : "") +
+        ` incompleteTenants=${incomplete}`
     );
 
     if (incomplete > 0) {
       process.exitCode = 2;
+    } else if (failed > 0) {
+      process.exitCode = 3;
     }
   } catch (error) {
-    logScriptFailure("push:auth-secret:backfill FAILED", error);
+    logScriptFailure(`${label} FAILED`, error);
   } finally {
     await sql.close({ timeout: 1 });
   }

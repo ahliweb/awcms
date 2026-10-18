@@ -113,7 +113,7 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
   "scripts/push-auth-secret-backfill.ts": {
     workClass: "maintenance",
     rationale:
-      'One-time, re-runnable backfill (push:auth-secret:backfill, Issue #1089) that encrypts legacy plaintext push auth secrets; batched, tolerant of delay, and every withTenantOrThrow call inside push-auth-secret-backfill.ts passes workClass: "maintenance" explicitly.'
+      'One-time, re-runnable backfill (push:auth-secret:backfill, Issue #1089; its --rekey mode push:auth-secret:rekey, Issue #1098, re-encrypts rows onto the active key) that encrypts legacy plaintext push auth secrets; batched, tolerant of delay, and every withTenantOrThrow call inside push-auth-secret-backfill.ts passes workClass: "maintenance" explicitly.'
   },
   "scripts/push-dispatch.ts": {
     workClass: "background_sync",

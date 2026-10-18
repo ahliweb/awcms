@@ -48,6 +48,7 @@ Every way a binding stops being live goes through `endBindings`: the person (adm
 ## Storage (ADR-0140 section 6)
 
 - `chat_ciphertext`: the shared ADR-0137 helper (`src/lib/security/field-encryption.ts`; this module has no second copy), AAD `telegram_chat:v1 | tenant | binding`, ring `TELEGRAM_CHAT_ENCRYPTION_KEYS`. **Fail closed**: no usable ring means no binding is created and the dispatcher claims nothing; there is no plaintext fallback.
+- **Key rotation (Issue #1098).** Prepend a new key to `TELEGRAM_CHAT_ENCRYPTION_KEYS`, deploy, run `bun run telegram:chat:rekey` (idempotent, resumable, batched; runs as `awcms_app` because the binding guard trigger of `sql/216` refuses the worker any live ciphertext write), confirm `bun run security:readiness` check "Telegram chat ciphertexts are under the active key" (counts per key id), and only then remove the old key. Runbook: [`docs/awcms/push-notifications.md`](../../../docs/awcms/push-notifications.md) section Rotation.
 - `chat_hash` + `hash_key_id`: keyed HMAC-SHA256 over the tenant and the chat id under its own ring `TELEGRAM_CHAT_HASH_KEYS`. `chat_masked` (`***123`) is the only form a list, log, audit row or response carries.
 - **Queue rows carry the `binding_id`, never the chat id.** There is no reveal path.
 

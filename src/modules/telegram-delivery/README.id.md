@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:58962eb970f274e229b2731369e6ebf6e30a2df9ea45a5ce89c76d65b4e09ded -->
+<!-- i18n-source-hash: sha256:989a14f56265523acfc07ed25c7b47d0c0bd4ef8ecfe37f1aff6547f7d387952 -->
 
 # `telegram_delivery`
 
@@ -50,6 +50,7 @@ Setiap cara sebuah binding berhenti hidup melewati `endBindings`: orangnya (admi
 ## Penyimpanan (ADR-0140 bagian 6)
 
 - `chat_ciphertext`: helper bersama ADR-0137 (`src/lib/security/field-encryption.ts`; modul ini tidak punya salinan kedua), AAD `telegram_chat:v1 | tenant | binding`, cincin `TELEGRAM_CHAT_ENCRYPTION_KEYS`. **Gagal tertutup**: tanpa cincin yang dapat dipakai tidak ada binding yang dibuat dan dispatcher tidak mengklaim apa pun; tidak ada fallback plaintext.
+- **Rotasi kunci (Issue #1098).** Tambahkan kunci baru di depan `TELEGRAM_CHAT_ENCRYPTION_KEYS`, deploy, jalankan `bun run telegram:chat:rekey` (idempoten, dapat dilanjutkan, berbatch; berjalan sebagai `awcms_app` karena trigger penjaga binding `sql/216` menolak worker menulis ciphertext hidup), pastikan pemeriksaan `bun run security:readiness` "Telegram chat ciphertexts are under the active key" (hitungan per id kunci), baru buang kunci lama. Runbook: [`docs/awcms/push-notifications.id.md`](../../../docs/awcms/push-notifications.id.md) bagian Rotasi.
 - `chat_hash` + `hash_key_id`: HMAC-SHA256 berkunci atas tenant dan id chat di bawah cincinnya sendiri `TELEGRAM_CHAT_HASH_KEYS`. `chat_masked` (`***123`) adalah satu-satunya bentuk yang dibawa daftar, log, baris audit, atau respons.
 - **Baris antrean membawa `binding_id`, tidak pernah id chat.** Tidak ada jalur reveal.
 

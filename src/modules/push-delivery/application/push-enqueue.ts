@@ -60,17 +60,20 @@ async function insertMessages(
 ): Promise<string[]> {
   const inserted = (await tx`
     INSERT INTO awcms_push_messages
-      (tenant_id, correlation_id, category, subscription_id, priority,
-       title, body, target_path, data, created_by)
+      (tenant_id, correlation_id, category, subscription_id,
+       recipient_tenant_user_id, priority, title, body, target_path, data,
+       created_by)
     SELECT entry.tenant_id, entry.correlation_id, entry.category,
-           entry.subscription_id, entry.priority, entry.title, entry.body,
-           entry.target_path, entry.data, entry.created_by
+           entry.subscription_id, entry.recipient_tenant_user_id, entry.priority,
+           entry.title, entry.body, entry.target_path, entry.data,
+           entry.created_by
     FROM jsonb_to_recordset(${rows}::jsonb) AS entry (
       ordinal integer,
       tenant_id uuid,
       correlation_id text,
       category text,
       subscription_id uuid,
+      recipient_tenant_user_id uuid,
       priority text,
       title text,
       body text,
@@ -151,6 +154,7 @@ export async function enqueuePushToRecipients(
     correlation_id: string | null;
     category: string;
     subscription_id: string;
+    recipient_tenant_user_id: string;
     priority: string;
     title: string;
     body: string;
@@ -179,6 +183,9 @@ export async function enqueuePushToRecipients(
         correlation_id: input.correlationId ?? null,
         category: input.category,
         subscription_id: subscriptionId,
+        // Who the message is FOR (Issue #1098): the dispatcher refuses it if the
+        // device has since moved to another user.
+        recipient_tenant_user_id: tenantUserId,
         priority: input.priority ?? "normal",
         title: input.title,
         body: input.body,

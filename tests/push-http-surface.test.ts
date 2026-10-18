@@ -249,15 +249,20 @@ describe("ownership is enforced in the statement, not after a read", () => {
   });
 
   test("re-registration restores the endpoint a revocation destroyed", () => {
-    // Without `endpoint = EXCLUDED.endpoint` in the upsert, a device that
+    // Without `endpoint = ${normalized}` in the conflict-path UPDATE (Issue
+    // #1098 split the upsert into insert + locked update), a device that
     // re-subscribed would come back `active` still pointing at the tombstone:
     // visible in the console, undeliverable in fact.
+    const from = directory.indexOf(
+      "SET tenant_user_id = ${input.tenantUserId}"
+    );
     const upsert = directory.slice(
-      directory.indexOf("ON CONFLICT ON CONSTRAINT"),
-      directory.indexOf("RETURNING id, tenant_user_id")
+      from,
+      directory.indexOf("RETURNING id, tenant_user_id", from)
     );
 
-    expect(upsert).toContain("endpoint = EXCLUDED.endpoint");
+    expect(from).toBeGreaterThan(0);
+    expect(upsert).toContain("endpoint = ${normalized}");
     expect(upsert).toContain("status = 'active'");
   });
 });

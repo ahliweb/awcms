@@ -234,9 +234,11 @@ async function seedPush(count: number, subscriptionId: string): Promise<void> {
   for (let i = 0; i < count; i += 1) {
     await admin()`
       INSERT INTO awcms_push_messages
-        (tenant_id, category, subscription_id, title, body, status)
-      VALUES (${TENANT}, 'account.notice', ${subscriptionId}, 'Title', 'Body',
-              'queued')
+        (tenant_id, category, subscription_id, recipient_tenant_user_id, title,
+         body, status)
+      SELECT ${TENANT}, 'account.notice', id, tenant_user_id, 'Title', 'Body',
+             'queued'
+      FROM awcms_push_subscriptions WHERE id = ${subscriptionId}
     `;
   }
 }

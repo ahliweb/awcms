@@ -278,3 +278,15 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 #   set and the release is deployed. Re-running is harmless (idempotent) but
 #   pointless once `security:readiness` reports zero plaintext rows, so a timer
 #   would be dead weight.
+
+# push:auth-secret:rekey
+#   A key-rotation action (Issue #1098): run by an operator after adding a new
+#   first key to PUSH_AUTH_SECRET_ENCRYPTION_KEYS, until `security:readiness`
+#   reports no row under a non-active key id, and only then is the old key
+#   removed. A timer would re-scan an unchanged table forever.
+
+# telegram:chat:rekey
+#   A key-rotation action (Issue #1098): run by an operator after adding a new
+#   first key to TELEGRAM_CHAT_ENCRYPTION_KEYS, until `security:readiness`
+#   reports no binding under a non-active key id, and only then is the old key
+#   removed. A timer would re-scan an unchanged table forever.

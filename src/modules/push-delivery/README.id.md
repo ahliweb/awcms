@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:bbdad751fbdafb848406a106f6a7f6855dbdb237522910876c70b3a74306a6e8 -->
+<!-- i18n-source-hash: sha256:71cb4c3b71da2538bbee69d5d7d23c1b2a731cdd4738f870e614569eca33a18d -->
 
 # `push_delivery`
 
@@ -84,7 +84,7 @@ Token VAPID di-cache per **origin**, jadi satu batch 500 pelanggan Firefox berha
 
 ## Rahasia auth Web Push dienkripsi saat disimpan
 
-`auth_secret` RFC 8291 disimpan sebagai `auth_secret_ciphertext` (AES-256-GCM, helper ADR-0137, cincin `PUSH_AUTH_SECRET_ENCRYPTION_KEYS`, AAD = tenant + `endpoint_hash`; Issue #1089, `sql/314`). Pendaftaran gagal-tertutup (`503 PUSH_MISCONFIGURED`) tanpa cincin; dispatcher mendekripsi dan fallback ke kolom plaintext lama hanya untuk baris tanpa ciphertext; `bun run push:auth-secret:backfill` mengonversi sisanya. Desain lengkap, trade-off, dan urutan rollout: [`docs/awcms/push-notifications.id.md`](../../../docs/awcms/push-notifications.id.md).
+`auth_secret` RFC 8291 disimpan sebagai `auth_secret_ciphertext` (AES-256-GCM, helper ADR-0137, cincin `PUSH_AUTH_SECRET_ENCRYPTION_KEYS`, AAD = tenant + `endpoint_hash`; Issue #1089, `sql/314`). Pendaftaran gagal-tertutup (`503 PUSH_MISCONFIGURED`) tanpa cincin; dispatcher mendekripsi dan fallback ke kolom plaintext lama hanya untuk baris tanpa ciphertext; `bun run push:auth-secret:backfill` mengonversi sisanya; `bun run push:auth-secret:rekey` memindahkan baris ke kunci aktif setelah rotasi (Issue #1098). Mendaftar ulang endpoint yang dipegang pengguna lain memindahkannya dengan event audit (`subscription.transfer`, hanya id) dan membatalkan notifikasi antre pengguna sebelumnya. Desain lengkap, trade-off, dan urutan rollout: [`docs/awcms/push-notifications.id.md`](../../../docs/awcms/push-notifications.id.md).
 
 ## Permukaan HTTP
 
