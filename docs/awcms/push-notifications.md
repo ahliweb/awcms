@@ -6,6 +6,9 @@ Scope: the `push_delivery` module (ADR-0074), specifically how the RFC 8291
 per-subscription `auth_secret` is stored (Issue #1089, follow-up to #1082). The
 module itself is described in `src/modules/push-delivery/README.md`.
 
+Operator test matrix, real-device UAT status and go/no-go checklist:
+[`push-notifications-test-matrix.md`](push-notifications-test-matrix.md) (Issue #1107).
+
 ## What changed
 
 `awcms_push_subscriptions.auth_secret` was plaintext, readable by `awcms_app` and
