@@ -26,8 +26,35 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #. Admin shell — skip link, drawer, topbar
+msgid "A Safari tab cannot receive background push notifications on iOS or iPadOS, so no button is offered here. This works on iOS or iPadOS 16.4 or later:"
+msgstr "Tab Safari tidak dapat menerima notifikasi push latar belakang di iOS atau iPadOS, jadi tidak ada tombol yang ditawarkan di sini. Ini berfungsi di iOS atau iPadOS 16.4 ke atas:"
+
+msgid "Close the tab and open AWCMS from the new Home Screen icon, then sign in."
+msgstr "Tutup tab, lalu buka AWCMS dari ikon baru di Layar Utama, kemudian masuk."
+
+msgid "Come back to this page in the installed app and choose Enable on this device. iOS asks for permission only at that moment."
+msgstr "Kembali ke halaman ini di aplikasi yang terpasang dan pilih Aktifkan di perangkat ini. iOS baru meminta izin pada saat itu."
+
+msgid "Notifications are blocked for this site. This page cannot ask again — allow them in the browser or iOS Settings for this site or app, then reload. No notification will be sent until you do."
+msgstr "Notifikasi diblokir untuk situs ini. Halaman ini tidak dapat meminta lagi — izinkan di pengaturan peramban atau Pengaturan iOS untuk situs atau aplikasi ini, lalu muat ulang. Tidak ada notifikasi yang dikirim sampai Anda melakukannya."
+
+msgid "Notifications on iPhone and iPad need the installed app."
+msgstr "Notifikasi di iPhone dan iPad memerlukan aplikasi yang terpasang."
+
+msgid "Open this page in Safari and tap Share, then Add to Home Screen, then Add."
+msgstr "Buka halaman ini di Safari, ketuk Bagikan, lalu Tambah ke Layar Utama, lalu Tambah."
+
+msgid "Push needs the device to reach its push service over the internet. It is not available on an offline or LAN-only deployment, and a notification can be delayed or dropped by the operating system."
+msgstr "Push memerlukan perangkat dapat menjangkau layanan push-nya lewat internet. Fitur ini tidak tersedia pada deployment offline atau khusus LAN, dan sebuah notifikasi dapat tertunda atau dibuang oleh sistem operasi."
+
 msgid "Skip to main content"
 msgstr "Lewati ke konten utama"
+
+msgid "This browser does not support push notifications, so nothing can be enabled here. Use a current Chrome, Edge, Firefox or Safari over HTTPS."
+msgstr "Peramban ini tidak mendukung notifikasi push, jadi tidak ada yang dapat diaktifkan di sini. Gunakan Chrome, Edge, Firefox, atau Safari versi terbaru melalui HTTPS."
+
+msgid "This installed app cannot receive push notifications. Web Push on iPhone and iPad needs iOS or iPadOS 16.4 or later — update the device, then open the app again."
+msgstr "Aplikasi terpasang ini tidak dapat menerima notifikasi push. Web Push di iPhone dan iPad memerlukan iOS atau iPadOS 16.4 ke atas — perbarui perangkat, lalu buka aplikasi lagi."
 
 msgid "Toggle navigation menu"
 msgstr "Buka/tutup menu navigasi"

@@ -228,3 +228,85 @@ Set `PUSH_PAYLOAD_FORMAT=legacy` (or unset it) and restart the app and
 to re-subscribe, and messages already in flight in either shape are still read by
 the dual-reader worker. Do **not** roll the worker file back to a release that
 cannot read the declarative shape while the producer still emits it.
+
+## Installable admin on iPhone/iPad (Issue #1105)
+
+Web Push on iOS/iPadOS 16.4+ is delivered only to a web app **added to the Home
+Screen and opened from its icon**. A Safari tab has no `PushManager`, so it can
+never receive background push. This change makes the admin installable and
+guides the person there; it adds **no new sender, service worker or push
+origin** -- delivery is still the Bun/VAPID path of ADR-0074.
+
+### What ships
+
+- **One origin-level manifest**, `GET /manifest.webmanifest`
+  (`src/pages/manifest.webmanifest.ts`, contract in
+  `src/lib/pwa/web-app-manifest.ts`): `id`, `start_url` and `scope` are all
+  `/admin/`, `display: standalone`. Name, short name and colours come from
+  deployment config (`PWA_APP_NAME`, `PWA_APP_SHORT_NAME`, `PWA_THEME_COLOR`,
+  `PWA_BACKGROUND_COLOR`; defaults `AWCMS Admin`/`AWCMS`/`#2563eb`/`#ffffff`),
+  **never** from the request `Host` or a tenant row. Cache is
+  `public, max-age=3600, must-revalidate` -- the manifest may refresh; it is not
+  `immutable`.
+- **Self-hosted icons** in `public/icons/` (192, 512, maskable 512, and
+  `apple-touch-icon` 180), generated deterministically by
+  `bun run pwa:icons:generate`. They are a neutral placeholder mark; replace the
+  four PNGs (same names and sizes) for deployment artwork.
+- **Head links from the shared admin layout only**
+  (`src/layouts/AdminLayout.astro`): `rel=manifest`, `rel=apple-touch-icon`,
+  `theme-color`, `apple-mobile-web-app-*`. CSP is unchanged (`manifest-src` and
+  `img-src` fall back to `'self'`); `public/push-sw.js`, its path and its scope
+  are untouched.
+- **Guidance in `/admin/push-notifications`**: capability detection
+  (`serviceWorker` + `PushManager` + `Notification`) and standalone detection
+  (`display-mode: standalone` / `navigator.standalone`); the user agent is used
+  only to choose between "install it" and "this browser cannot". States: `ready`
+  (button offered; permission is requested **only on the click**), `denied`
+  (explanation, button withdrawn -- the browser will not prompt again, so there
+  is no retry loop), `ios-install` (Add to Home Screen, open from the icon,
+  then enable), `ios-update` (installed but OS older than 16.4), `unsupported`.
+  Strings are English + Indonesian; the panel is an `aria-live` region.
+
+### Identity and tenancy
+
+The installed identity is `<origin>/admin/`. Two deployments never collide
+(different origins). Within one deployment all tenants share one admin origin
+and therefore one installed app; the tenant is whatever the signed-in session
+selects. Per-tenant manifests are **out of scope** and a future extension via
+`tenant_domain` (resolve from the verified primary domain, keep `id` per origin).
+Changing the origin (new domain, protocol, or port) creates a **different**
+installed app and a different push subscription: the old Home Screen icon must be
+removed and the new one added, and notifications re-enabled.
+
+### Install, uninstall, permission reset (operator/user guide)
+
+- Install (iOS/iPadOS 16.4+): Safari -> Share -> Add to Home Screen -> Add; open
+  from the icon; sign in; `/admin/push-notifications` -> Enable on this device.
+- Uninstall: long-press the icon -> Remove App. Then use "Turn off on this
+  device" first if possible; a stale server row is disabled automatically when
+  the push service reports it gone.
+- Permission reset: iOS Settings -> Notifications -> the app (or Settings ->
+  Apps -> Safari -> Advanced -> Website Data for a browser tab). After a denial
+  the page cannot ask again.
+- Consent/privacy: permission is requested only after a deliberate tap; no
+  notification text carries sensitive personal data (ADR-0074 payload rules);
+  a subscription is personal data under UU PDP 27/2022 and is handled by the
+  existing subscription lifecycle. No compliance claim is made without evidence.
+- Online-first / offline-LAN: push requires internet reachability to the push
+  service. An offline/LAN deployment shows push as unavailable and promises
+  nothing; the OS may delay or drop notifications.
+
+### Known limitation to verify on a device
+
+`scope` is `/admin/` as decided, while the login page (`/login`) is outside it.
+Opening the installed app while signed out redirects to `/login`; iOS may present
+that navigation with an in-app browser bar. Confirm in UAT whether this is
+acceptable or whether the scope should be widened (a separate decision).
+
+### UAT status: PENDING (human)
+
+Installability on real iOS/iPadOS 16.4+, Chrome Android/desktop and macOS has
+**not** been exercised. Record device, OS version, screenshots and repro steps
+here before deploying, and keep **subscription acceptance** (server row created)
+separate from **device display** (notification actually shown). Do not deploy
+without that evidence.

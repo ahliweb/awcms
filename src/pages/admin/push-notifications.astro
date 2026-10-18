@@ -263,8 +263,89 @@ const messageColumns = canCancel ? 8 : 7;
           </p>
         )}
 
-        <p class="page-description" id="push-device-state">
-          {t("Checking this browser\u2026")}
+        <div id="push-live" aria-live="polite">
+          <p class="page-description" id="push-device-state">
+            {t("Checking this browser\u2026")}
+          </p>
+
+          {/* Issue #1105 -- per-environment guidance. Every variant is rendered
+              translated and `hidden`; the client script reveals the one that
+              applies (capability + standalone detection, see
+              `src/lib/ui/push-install-guidance.ts`). The state line and
+              this container share ONE live region (`#push-live`); nested live
+              regions double-announce. */}
+          <div id="push-guidance">
+            <div
+              class="state-notice"
+              id="push-guidance-ios-install"
+              data-guidance="ios-install"
+              hidden
+            >
+              <p>
+                <strong>
+                  {t(
+                    "Notifications on iPhone and iPad need the installed app."
+                  )}
+                </strong>{" "}
+                {t(
+                  "A Safari tab cannot receive background push notifications on iOS or iPadOS, so no button is offered here. This works on iOS or iPadOS 16.4 or later:"
+                )}
+              </p>
+              <ol>
+                <li>
+                  {t(
+                    "Open this page in Safari and tap Share, then Add to Home Screen, then Add."
+                  )}
+                </li>
+                <li>
+                  {t(
+                    "Close the tab and open AWCMS from the new Home Screen icon, then sign in."
+                  )}
+                </li>
+                <li>
+                  {t(
+                    "Come back to this page in the installed app and choose Enable on this device. iOS asks for permission only at that moment."
+                  )}
+                </li>
+              </ol>
+            </div>
+            <p
+              class="state-notice"
+              id="push-guidance-ios-update"
+              data-guidance="ios-update"
+              hidden
+            >
+              {t(
+                "This installed app cannot receive push notifications. Web Push on iPhone and iPad needs iOS or iPadOS 16.4 or later \u2014 update the device, then open the app again."
+              )}
+            </p>
+            <p
+              class="state-notice"
+              id="push-guidance-unsupported"
+              data-guidance="unsupported"
+              hidden
+            >
+              {t(
+                "This browser does not support push notifications, so nothing can be enabled here. Use a current Chrome, Edge, Firefox or Safari over HTTPS."
+              )}
+            </p>
+            <p
+              class="state-notice"
+              id="push-guidance-permission-blocked"
+              data-guidance="denied"
+              hidden
+            >
+              {t(
+                "Notifications are blocked for this site. This page cannot ask again \u2014 allow them in the browser or iOS Settings for this site or app, then reload. No notification will be sent until you do."
+              )}
+            </p>
+          </div>
+        </div>
+
+        <p class="page-description" id="push-offline-note">
+          {t(
+            "Push needs the device to reach its push service over the internet. It is not available on an offline or LAN-only deployment, and a notification can be delayed or dropped by the operating system."
+          )}
         </p>
 
         <div class="admin-actions">
@@ -577,9 +658,12 @@ const messageColumns = canCancel ? 8 : 7;
   import {
     disablePushOnThisDevice,
     enablePushOnThisDevice,
-    isPushSupported,
     PUSH_SERVICE_WORKER_PATH
   } from "../../lib/ui/push-subscription-client";
+  import {
+    classifyPushGuidance,
+    detectPushEnvironment
+  } from "../../lib/ui/push-install-guidance";
 
   const errorBox = messageBox("push-notifications-action-error");
   const devicePanel = document.getElementById("push-notifications-device");
@@ -609,17 +693,40 @@ const messageColumns = canCancel ? 8 : 7;
   async function refreshDeviceState(): Promise<void> {
     if (!devicePanel || !stateLine) return;
 
-    if (!isPushSupported()) {
-      setState(
-        "This browser does not support push notifications, so nothing can be enabled here."
-      );
-      return;
-    }
-
     if (devicePanel.dataset.webPushReady !== "true") {
       setState(
         "Push is not configured on this deployment, so this browser cannot subscribe."
       );
+      return;
+    }
+
+    // Issue #1105 -- decide the guidance from CAPABILITY first, then standalone
+    // mode; the translated text is already in the page, this only picks one.
+    const guidance = classifyPushGuidance(detectPushEnvironment());
+
+    for (const element of document.querySelectorAll<HTMLElement>(
+      "[data-guidance]"
+    )) {
+      element.hidden = element.dataset.guidance !== guidance;
+    }
+
+    if (guidance === "denied") {
+      // Not a loop: the browser will not prompt again, so the button that would
+      // call `requestPermission()` is withdrawn rather than left to do nothing.
+      setState("");
+      if (enableButton) enableButton.hidden = true;
+      if (disableButton) disableButton.hidden = true;
+      return;
+    }
+
+    if (
+      guidance === "ios-install" ||
+      guidance === "ios-update" ||
+      guidance === "unsupported"
+    ) {
+      setState("");
+      if (enableButton) enableButton.hidden = true;
+      if (disableButton) disableButton.hidden = true;
       return;
     }
 
@@ -682,7 +789,9 @@ const messageColumns = canCancel ? 8 : 7;
 
       if (!outcome.ok) {
         errorBox.show(outcome.reason);
-        setState("Notifications are off on this device.");
+        // Re-evaluates the state, so a refusal (`denied`) swaps the button for
+        // the explanation instead of leaving a control that cannot work.
+        await refreshDeviceState();
         return;
       }
 

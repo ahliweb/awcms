@@ -62,6 +62,14 @@ const PLATFORM_ROUTES: readonly { route: string; reason: string }[] = [
       "subsystem in src/lib, which is infrastructure and deliberately not a module."
   },
   {
+    route: "/manifest.webmanifest",
+    reason:
+      "Issue #1105 — the origin-level web app manifest for the installable " +
+      "admin shell. Deployment branding only (PWA_* env), no tenant or user " +
+      "data, so it belongs to no module and must not disappear when one is " +
+      "disabled; installability is a property of the shared admin layout."
+  },
+  {
     route: "/[...path]",
     reason:
       "Astro's lowest-ranked catch-all: it runs only when no real route matched, " +
