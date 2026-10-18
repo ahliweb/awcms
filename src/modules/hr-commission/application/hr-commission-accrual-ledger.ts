@@ -46,8 +46,11 @@ import {
 import type {
   CommissionAccrualOutcome,
   CommissionAccrualRecord,
-  CommissionAccrualRequest
+  CommissionAccrualRequest,
+  CommissionVoidOutcome,
+  CommissionVoidRequest
 } from "../../_shared/ports/commission-accrual-port";
+import { appendDomainEvent } from "../../domain-event-runtime/application/append-domain-event";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   ACCRUAL_ACTION_TARGET,
@@ -60,8 +63,14 @@ import {
 } from "../domain/hr-commission-accrual-state";
 import {
   accrualRequestDigest,
-  validateAccrualRequest
+  validateAccrualRequest,
+  validateVoidRequest
 } from "../domain/hr-commission-accrual-validation";
+import {
+  HR_COMMISSION_ACCRUAL_AGGREGATE_TYPE,
+  HR_COMMISSION_ACCRUAL_VOIDED_EVENT_TYPE,
+  HR_COMMISSION_EVENT_VERSION
+} from "../domain/hr-commission-events";
 import { type RoundingMode } from "../domain/hr-commission-decimal";
 import {
   CommissionEvaluationError,
@@ -752,7 +761,7 @@ export async function transitionAccrual(
 
   const locked = (await tx`
     SELECT status, employment_id, rule_key, rule_version::int AS rule_version,
-           created_by, approved_by, beneficiary_tenant_user_id
+           source_type, created_by, approved_by, beneficiary_tenant_user_id
     FROM awcms_hr_commission_accruals
     WHERE tenant_id = ${tenantId} AND id = ${id}
     FOR UPDATE
@@ -764,6 +773,7 @@ export async function transitionAccrual(
     beneficiary_tenant_user_id: string | null;
     rule_key: string;
     rule_version: number;
+    source_type: string;
   }[];
 
   const row = locked[0];
@@ -853,9 +863,124 @@ export async function transitionAccrual(
     correlationId: actor.correlationId
   });
 
+  if (action === "void") {
+    // Same transaction as the status edge: a rolled-back void publishes nothing,
+    // and a refused or replayed one never reaches here. Ids, the source TYPE and
+    // codes only (hr-payroll.md section 10): no amount, no source reference.
+    await appendDomainEvent(tx, tenantId, {
+      eventType: HR_COMMISSION_ACCRUAL_VOIDED_EVENT_TYPE,
+      eventVersion: HR_COMMISSION_EVENT_VERSION,
+      aggregateType: HR_COMMISSION_ACCRUAL_AGGREGATE_TYPE,
+      aggregateId: id,
+      correlationId: actor.correlationId ?? null,
+      producerModule: HR_COMMISSION_MODULE_KEY,
+      actorTenantUserId: userId,
+      payload: {
+        accrualId: id,
+        employmentId: row.employment_id,
+        sourceType: row.source_type,
+        ruleKey: row.rule_key,
+        ruleVersion: Number(row.rule_version),
+        fromStatus: row.status,
+        reasonCode: extras.reasonCode ?? null
+      }
+    });
+  }
+
   const fetched = await getAccrual(tx, tenantId, id);
 
   return { outcome: "ok", accrual: fetched!.accrual };
+}
+
+/**
+ * `CommissionAccrualPort.void` (Issue #1109): reverse the accrual posted for a
+ * source identity and employment, exactly once. The accrual is located by the
+ * ledger's own unique key and LOCKED `FOR UPDATE`, so two racing voids (or a void
+ * racing an approve / release) serialise on the row: the loser re-reads the
+ * winner's status and answers from it. A `pending` or `approved` accrual goes
+ * through `transitionAccrual` (the one write path of the HTTP void route: the
+ * audit row, the `voided` event, the lifecycle CHECK and the append-only
+ * transition log the database writes). `payable` and `paid` are refused as
+ * `period_closed` and nothing is written (see the port header for why).
+ */
+export async function voidCommissionBySource(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string | null,
+  rawRequest: CommissionVoidRequest
+): Promise<CommissionVoidOutcome> {
+  const validation = validateVoidRequest(rawRequest);
+
+  if (!validation.valid) {
+    return {
+      outcome: "input_invalid",
+      message: validation.errors
+        .map((error) => `${error.field}: ${error.message}`)
+        .join("; ")
+    };
+  }
+
+  if (actorTenantUserId === null) {
+    return { outcome: "actor_required" };
+  }
+
+  const request = validation.value;
+  const found = (await tx`
+    SELECT id, status
+    FROM awcms_hr_commission_accruals
+    WHERE tenant_id = ${tenantId}
+      AND source_type = ${request.source.type}
+      AND source_ref = ${request.source.ref}
+      AND source_line = ${request.source.line ?? ""}
+      AND employment_id = ${request.employmentId.toLowerCase()}::uuid
+      AND operation = 'accrue'
+    FOR UPDATE
+  `) as { id: string; status: AccrualStatus }[];
+  const row = found[0];
+
+  if (!row) {
+    return { outcome: "not_found" };
+  }
+
+  const record = async (): Promise<CommissionAccrualRecord> => {
+    const fetched = await getAccrual(tx, tenantId, row.id);
+
+    return toRecord(fetched!.accrual);
+  };
+
+  if (row.status === "voided") {
+    return { outcome: "already_voided", accrual: await record() };
+  }
+
+  if (row.status === "payable" || row.status === "paid") {
+    return {
+      outcome: "period_closed",
+      accrualId: row.id,
+      status: row.status
+    };
+  }
+
+  const result = await transitionAccrual(
+    tx,
+    tenantId,
+    row.id,
+    "void",
+    {
+      actorTenantUserId,
+      correlationId: request.correlationId
+    },
+    { reasonCode: request.reason }
+  );
+
+  if (result.outcome !== "ok") {
+    // The row is locked by this transaction, so no other writer can have moved
+    // it since the read above: anything but `ok` is a defect, not a refusal.
+    throw new Error(
+      `commission void of a locked ${row.status} accrual was refused (${result.outcome})`
+    );
+  }
+
+  return { outcome: "voided", accrual: toRecord(result.accrual) };
 }
 
 // --- Reconciliation -----------------------------------------------------------

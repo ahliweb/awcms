@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:f46bb7b5bd8ac0dbeb473a986132a32994ee3edc078f6f7a7549570a255d906e -->
+<!-- i18n-source-hash: sha256:741470b3af46e281d0c928e4b68ebe6b90243e2d70973e36b11f21256ac0e0e0 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -472,6 +472,19 @@ sumbernya sendiri; fakta moneter yang asli tidak disentuh dan statusnya diberi c
 berikutnya (baris negatif), tidak ditarik dari run yang sudah tertutup. Reversal
 sekali per akrual (unique index parsial) dan reversal tidak dapat di-reverse.
 
+**Void berdasarkan identitas sumber (Issue #1109).** `CommissionAccrualPort.void`
+membalik akrual sebuah `(sumber, employment)` bagi konsumen yang mem-void,
+mengembalikan, atau membatalkan penjualan, tanpa konsumen mengetahui id modul ini.
+Akrual `pending` atau `approved` menjadi `voided` (hasil `voided`; baris audit,
+event `awcms.hr.commission.voided`, dan baris log transisi ditulis dalam transaksi
+pemanggil); replay adalah `already_voided` dan tidak menulis apa pun; sumber yang
+tidak dikenal adalah `not_found`. Akrual `payable` atau `paid` **ditolak sebagai
+`period_closed`** dan tidak ada yang ditulis: sebelum baris reversal di atas ada,
+tidak ada cara membalik uang yang mungkin sudah dipegang payroll tanpa melanggar
+PS-19, sehingga kasus tertutup ditolak dan diserahkan ke manusia, tidak pernah
+di-void diam-diam. Kontrak port: `commission_accrual` 1.1.0. Rincian:
+`src/modules/hr-commission/README.id.md`.
+
 **Login penerima di-snapshot (Issue #1019, `sql/236`/`sql/237`).** Pemisahan tugas
 perlu tahu siapa penerimanya. Login employment (`tenant_user_id`) dapat dilepas dan
 ditautkan kembali oleh pemegang `hr_workforce.employments.assign`, maka akrual
@@ -789,14 +802,15 @@ pemetaan modul produsen persisnya dikonfirmasi ketika channel pertama ditambahka
 Semuanya lewat outbox event domain **dalam transaksi produsen**; panggilan yang
 ditolak atau di-replay tidak menerbitkan apa pun.
 
-| Event                          | Fase | Kapan                                                             | Payload (hanya id, jenis, hitungan)                                              |
-| ------------------------------ | ---- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `awcms.hr.attendance.recorded` | 1    | event kehadiran baru (bukan replay) disimpan                      | `eventId`, `employmentId`, `kind`, `occurredAt`, `source`, `officeId`            |
-| `awcms.hr.shift.assigned`      | 1    | penugasan menjadi `published` (dan saat batal, `cancelled: true`) | `assignmentId`, `employmentId`, `kind`, `startsAt`, `endsAt`, `cancelled`        |
-| `awcms.hr.commission.accrued`  | 2    | akrual baru diposting (bukan replay)                              | `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `operation` |
-| `awcms.hr.commission.approved` | 2    | akrual disetujui                                                  | `accrualId`, `employmentId`                                                      |
-| `awcms.hr.payroll.finalized`   | 3    | run difinalisasi                                                  | `runId`, `periodKey`, `kind`, `employeeCount`, `currencyCode`                    |
-| `awcms.hr.payroll.reversed`    | 3    | run di-reverse                                                    | `runId`, `reversalRunId`, `periodKey`, `employeeCount`                           |
+| Event                          | Fase | Kapan                                                             | Payload (hanya id, jenis, hitungan)                                                             |
+| ------------------------------ | ---- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `awcms.hr.attendance.recorded` | 1    | event kehadiran baru (bukan replay) disimpan                      | `eventId`, `employmentId`, `kind`, `occurredAt`, `source`, `officeId`                           |
+| `awcms.hr.shift.assigned`      | 1    | penugasan menjadi `published` (dan saat batal, `cancelled: true`) | `assignmentId`, `employmentId`, `kind`, `startsAt`, `endsAt`, `cancelled`                       |
+| `awcms.hr.commission.accrued`  | 2    | akrual baru diposting (bukan replay)                              | `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `operation`                |
+| `awcms.hr.commission.approved` | 2    | akrual disetujui                                                  | `accrualId`, `employmentId`                                                                     |
+| `awcms.hr.commission.voided`   | 2    | akrual di-void (HTTP atau port; **dipancarkan sejak #1109**)      | `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `fromStatus`, `reasonCode` |
+| `awcms.hr.payroll.finalized`   | 3    | run difinalisasi                                                  | `runId`, `periodKey`, `kind`, `employeeCount`, `currencyCode`                                   |
+| `awcms.hr.payroll.reversed`    | 3    | run di-reverse                                                    | `runId`, `reversalRunId`, `periodKey`, `employeeCount`                                          |
 
 **Tidak ada event yang membawa jumlah, nama, identifier, catatan, atau alasan.**
 Konsumen keuangan yang membutuhkan total membacanya lewat pembacaan terotorisasi di

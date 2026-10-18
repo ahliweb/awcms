@@ -448,6 +448,18 @@ stamped `reversed`. A reversal of an already-`paid` accrual is netted by the nex
 payroll (a negative line), not clawed from a closed run. Reversal is once per
 accrual (partial unique index) and a reversal is not reversible.
 
+**Voiding by source identity (Issue #1109).** `CommissionAccrualPort.void` reverses
+the accrual of a `(source, employment)` for a consumer that voids, refunds or
+cancels the sale, without the consumer knowing this module's ids. A `pending` or
+`approved` accrual goes to `voided` (outcome `voided`; the audit row, the
+`awcms.hr.commission.voided` event and the transition-log row are written in the
+caller's transaction); a replay is `already_voided` and writes nothing; an unknown
+source is `not_found`. A `payable` or `paid` accrual is **refused as `period_closed`**
+and nothing is written: until the reversal row above exists there is no way to
+reverse money payroll may already hold without breaking PS-19, so the closed case is
+refused and handed to a human, never silently voided. Port contract:
+`commission_accrual` 1.1.0. Details: `src/modules/hr-commission/README.md`.
+
 **The beneficiary's login is snapshotted (Issue #1019, `sql/236`/`sql/237`).**
 Separation of duties needs to know who the beneficiary is. The employment's login
 (`tenant_user_id`) can be unlinked and relinked by whoever holds
@@ -766,14 +778,15 @@ entries and producers land with the phase that owns them. The family namespace i
 confirmed when the first channel is added. All go through the domain-event outbox
 **in the producing transaction**; a refused or replayed call publishes nothing.
 
-| Event                          | Phase | When                                                                 | Payload (ids, kinds, counts only)                                                |
-| ------------------------------ | ----- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `awcms.hr.attendance.recorded` | 1     | a new (non-replayed) attendance event is stored                      | `eventId`, `employmentId`, `kind`, `occurredAt`, `source`, `officeId`            |
-| `awcms.hr.shift.assigned`      | 1     | an assignment becomes `published` (and on cancel, `cancelled: true`) | `assignmentId`, `employmentId`, `kind`, `startsAt`, `endsAt`, `cancelled`        |
-| `awcms.hr.commission.accrued`  | 2     | a new accrual is posted (not a replay)                               | `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `operation` |
-| `awcms.hr.commission.approved` | 2     | an accrual is approved                                               | `accrualId`, `employmentId`                                                      |
-| `awcms.hr.payroll.finalized`   | 3     | a run is finalized                                                   | `runId`, `periodKey`, `kind`, `employeeCount`, `currencyCode`                    |
-| `awcms.hr.payroll.reversed`    | 3     | a run is reversed                                                    | `runId`, `reversalRunId`, `periodKey`, `employeeCount`                           |
+| Event                          | Phase | When                                                                 | Payload (ids, kinds, counts only)                                                               |
+| ------------------------------ | ----- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `awcms.hr.attendance.recorded` | 1     | a new (non-replayed) attendance event is stored                      | `eventId`, `employmentId`, `kind`, `occurredAt`, `source`, `officeId`                           |
+| `awcms.hr.shift.assigned`      | 1     | an assignment becomes `published` (and on cancel, `cancelled: true`) | `assignmentId`, `employmentId`, `kind`, `startsAt`, `endsAt`, `cancelled`                       |
+| `awcms.hr.commission.accrued`  | 2     | a new accrual is posted (not a replay)                               | `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `operation`                |
+| `awcms.hr.commission.approved` | 2     | an accrual is approved                                               | `accrualId`, `employmentId`                                                                     |
+| `awcms.hr.commission.voided`   | 2     | an accrual is voided (HTTP or port; **emitted since #1109**)         | `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `fromStatus`, `reasonCode` |
+| `awcms.hr.payroll.finalized`   | 3     | a run is finalized                                                   | `runId`, `periodKey`, `kind`, `employeeCount`, `currencyCode`                                   |
+| `awcms.hr.payroll.reversed`    | 3     | a run is reversed                                                    | `runId`, `reversalRunId`, `periodKey`, `employeeCount`                                          |
 
 **No event carries an amount, a name, an identifier, a note or a reason.** A
 finance consumer that needs totals reads them through an authorized read in its own

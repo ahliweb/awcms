@@ -14,8 +14,9 @@ This is the **rule foundation** (#950: `awcms_hr_commission_rules`, the draft /
 publish / retire API, a **pure evaluation function**) and the **accrual ledger**
 (#951: `awcms_hr_commission_accruals`, `awcms_hr_commission_transitions`, the
 approve / release / void / pay lifecycle and the sale-attribution port).
-**Not here yet:** reversals (a compensating negative accrual for a payable or paid
-one), the `awcms.hr.commission.*` events, and the payroll claim of an accrual
+**Not here yet:** reversals of a payable or paid accrual (a compensating negative
+accrual; `CommissionAccrualPort.void` refuses those as `period_closed`, below), the
+other `awcms.hr.commission.*` events (only `voided` exists), and the payroll claim of an accrual
 (PS-19, below). It is **not affiliate commission** (hr-payroll.md 6.4: the
 beneficiary here is always an employment) and carries **no country's or
 jurisdiction's rules**: a tenant authors its own.
@@ -179,6 +180,46 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test remove
   booking. The adapter, not the ledger, verifies the sale is real, paid and the
   employee's, and decides what is commissionable. Authorization and audit stay with
   the caller's composition root (`POST /api/v1/hr-commission/accruals` is one).
+- **Reversing an accrual: `CommissionAccrualPort.void` (Issue #1109, port contract
+  `commission_accrual` 1.1.0).** `void(tx, tenantId, actorTenantUserId, { source,
+employmentId, reason, correlationId? })` is keyed by the SAME source identity
+  `accrue` took, so a consumer (the first is the commerce sale-attribution adapter
+  in a derived repository) never stores this module's ids. It locates the accrual by
+  the ledger's own unique key, locks it `FOR UPDATE` and answers:
+  - `voided` - a `pending` or `approved` accrual was voided. It goes through the one
+    transition core the HTTP void route uses, so the audit row
+    (`hr_commission.accrual.voided`, no amount, no source reference), the
+    `awcms.hr.commission.voided` domain event and the append-only transition-log
+    row are all written in the CALLER's transaction and roll back with it.
+  - `already_voided` - a replay; nothing is written, audited or published, whatever
+    `reason` the replay carries. Racing voids serialise on the row: one `voided`.
+  - `not_found` - nothing was accrued for that source and employment (also what
+    another tenant's accrual looks like: RLS).
+  - `period_closed` - the accrual is `payable` or `paid`; refused, nothing written.
+  - `actor_required` (a `null` actor: every edge stamps a person) and
+    `input_invalid` (a malformed source, an employment id that is not a UUID, a
+    `reason` that is not a code).
+
+  **Compensating entry.** The accrual is never edited or deleted: its monetary facts
+  are immutable by trigger and stay as posted. The reversal is the status edge to
+  `voided` plus the transition-log row the database appends (the ledger's "append"
+  for a reversal while no money has moved), so `reconcileAccruals` shows the amount
+  leave the live buckets and sit under `voided`, and a voided accrual can never be
+  paid. No migration was needed: a NEGATIVE row (`operation = reversal`) is only
+  required once money is committed, which is the next point.
+
+  **Closed-period policy (decided in #1109): refuse, `period_closed`.** This module
+  has no commission period of its own; the boundary is the accrual's status.
+  `payable` means released to payroll, whose run selects payable accruals
+  (`FOR UPDATE SKIP LOCKED`, PS-19), and `paid` means a payout is recorded. There is
+  no reversal-into-the-current-period mechanism yet (the negative row of
+  hr-payroll.md 6.3, below), and voiding money payroll may already hold would break
+  "an accrual is paid by exactly one run". So the port refuses and writes nothing;
+  the outcome carries `accrualId` and `status`, and the consumer routes it to a
+  human (a clawback / next-run netting), never to a blind retry. When the
+  reversal row lands, `period_closed` is the case it replaces with a posted
+  reversal; `voided`, `already_voided` and `not_found` keep their meaning.
+
 - **Known gap: a void permanently consumes its source key.** A voided accrual
   keeps its `(source, employment)` identity, so a redelivery of the same source
   returns the voided original (never a new accrual) and the commission cannot be
@@ -235,10 +276,12 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void is not segregated. A test remove
   re-opening its original. The unique key, the `operation` column and the
   transition log already have room for it; a `sql/NNN` that widens the
   `operation` and status CHECKs and the machine will add it.
-- **Events are provisional.** `awcms.hr.commission.accrued` and `.approved`
-  (hr-payroll.md section 10) are not emitted yet: the ledger writes no outbox row
-  and no AsyncAPI channel exists, so nothing is published until a consumer needs
-  one.
+- **Events: only `voided` exists.** `awcms.hr.commission.voided` (Issue #1109;
+  registry, AsyncAPI channel and `events.publishes`) is published in the transaction
+  of every void, HTTP or port, with ids, the source TYPE, the rule key and version,
+  `fromStatus` and the reason code (never an amount or a source reference).
+  `awcms.hr.commission.accrued` and `.approved` (hr-payroll.md section 10) are not
+  emitted yet: nothing is published until a consumer needs them.
 - **No own-accrual read and no office scope yet.** `accruals.read` is a plain
   permission: the "employee sees their own accruals" path (an ownership grant on
   the employment's login) and the `office` business scope are follow-ups with the

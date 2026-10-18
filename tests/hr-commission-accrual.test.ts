@@ -29,7 +29,8 @@ import {
   validateAccrualRequest,
   validateAccrueBody,
   validatePayBody,
-  validateVoidBody
+  validateVoidBody,
+  validateVoidRequest
 } from "../src/modules/hr-commission/domain/hr-commission-accrual-validation";
 import { validatePublishBody } from "../src/modules/hr-commission/domain/hr-commission-validation";
 
@@ -543,5 +544,44 @@ describe("refusal mapping", () => {
     expect(transitionRefusal("pay", { outcome: "not_found" })?.status).toBe(
       404
     );
+  });
+});
+
+describe("validateVoidRequest (CommissionAccrualPort.void, Issue #1109)", () => {
+  const base = {
+    employmentId: EMPLOYMENT,
+    source: { type: "sale_line", ref: "ORD-1", line: "1" },
+    reason: "sale_voided"
+  };
+
+  test("accepts the same source identity accrue takes, with or without a line", () => {
+    expect(validateVoidRequest(base).valid).toBe(true);
+    expect(
+      validateVoidRequest({ ...base, source: { type: "sale_line", ref: "A" } })
+        .valid
+    ).toBe(true);
+  });
+
+  test.each([
+    ["employmentId", { ...base, employmentId: "nope" }],
+    ["source.type", { ...base, source: { ...base.source, type: "Bad Type" } }],
+    ["source.ref", { ...base, source: { ...base.source, ref: "a b" } }],
+    ["source.ref", { ...base, source: { ...base.source, ref: "" } }],
+    [
+      "source.line",
+      { ...base, source: { ...base.source, line: "x".repeat(65) } }
+    ],
+    ["source", { ...base, source: undefined } as never],
+    ["reason", { ...base, reason: "Free text!" }],
+    ["reason", { ...base, reason: "x".repeat(41) }],
+    ["reason", { ...base, reason: undefined } as never],
+    ["reason", { ...base, reason: ["sale_voided"] } as never]
+  ])("rejects a bad %s", (field, request) => {
+    const result = validateVoidRequest(request);
+
+    expect(result.valid).toBe(false);
+    expect(
+      !result.valid && result.errors.map((error) => error.field)
+    ).toContain(field);
   });
 });
