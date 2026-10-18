@@ -101,5 +101,14 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // landed (#180); what changed is that a BASE module finally provides an
     // adapter for it, so it belongs in this registry for the first time. First
     // assigned number, not a stability milestone.
-    business_scope_hierarchy: "1.0.0"
+    business_scope_hierarchy: "1.0.0",
+    // booking is provided by the base `booking` module (ADR-0131); its port is
+    // `_shared/ports/booking-port.ts`. First entry in this registry, because the
+    // port is the first one a downstream adapter (the commerce adapter of a
+    // derived store) asks to GROW: `1.0.0` is the shape of Issue #941 (quote,
+    // hold, confirm, cancel, reschedule) and `1.1.0` (Issue #1108) ADDS `checkIn`,
+    // `checkOut`, `markNoShow`, `get`, `getOffering`, `listOfferings` and the
+    // anonymous `availability` read, plus the refusals `CHECK_IN_TOO_EARLY` and
+    // `NO_SHOW_TOO_EARLY`. No existing signature changed (a MINOR bump).
+    booking: "1.1.0"
   });

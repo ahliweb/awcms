@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:6f48b1d00e8657ae84026b151e2d52f19e858bceae2df4e4908dafda9339d3da -->
+<!-- i18n-source-hash: sha256:4281bb6c5e54a0874c2ad8d551f6254b3a8f7ba182866e3e9afb6a14f2dde430 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -40,6 +40,10 @@ Reservasi (Issue #941, `sql/208`, `sql/209`): route `POST/GET /reservations`,
 (`application/booking-reservation-service.ts`), `Idempotency-Key` lewat
 komponen bersama, `BookingPort` (`application/booking-port-adapter.ts`), sembilan
 event reservasi di dokumen AsyncAPI live, dan default aman untuk batas hold.
+Port bertambah di Issue #1108 (kontrak `booking` 1.1.0, aditif): `checkIn`,
+`checkOut` dan `markNoShow`, serta empat pembacaan tanpa data pelanggan, `get`,
+`getOffering`, `listOfferings` dan `availability` tanpa aktor untuk halaman booking
+publik (booking.md bagian 10.1).
 Route blok (Issue #1012: `POST/GET /blocks`, `GET /blocks/{id}`,
 `POST /blocks/{id}/release`) memakai `Idempotency-Key` dengan replay dan tidak
 menerbitkan event. **Belum ada:** route rekonsiliasi.
@@ -275,7 +279,8 @@ checkOutDate }` (`YYYY-MM-DD` lokal pada zona resource, setengah-terbuka)
 | `application/booking-reservation-policy.ts`          | Jam, lead time, dan horizon untuk klaim, dari mesin yang sama dengan ketersediaan               |
 | `application/booking-reservation-directory.ts`       | Daftar, detail, dan riwayat reservasi (catatan tak pernah dibaca)                               |
 | `application/booking-event-emit.ts`                  | Event outbox dari satu fungsi fakta, dalam transaksi transisi                                   |
-| `application/booking-port-adapter.ts`                | `BookingPort` (`_shared/ports/booking-port.ts`): quote, hold, confirm, cancel, reschedule       |
+| `application/booking-port-adapter.ts`                | `BookingPort` (`_shared/ports/booking-port.ts`, kontrak 1.1.0): verba dan pembacaan             |
+| `application/booking-port-reads.ts`                  | Bacaan `get` / offering port: daftar kolom eksplisit, tak pernah referensi pelanggan            |
 | `application/booking-transition-route.ts`            | Badan handler yang dipakai bersama lima route transisi di tempat                                |
 | `application/booking-block-routes.ts`                | Badan handler create / release blok: `runIdempotent`, lalu layanan blok                         |
 | `application/booking-block-directory.ts`             | Pembacaan blok untuk route: detail dan daftar keyset                                            |

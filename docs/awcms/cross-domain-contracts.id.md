@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:b78f6f6d9030e771c62d609ee55fc93cbe99d806c749ca066baf9dd9a24d5908 -->
+<!-- i18n-source-hash: sha256:2831a2faf61318b26a20f967db7506cd17e94612d75d5bb9aece84c922e23284 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -189,8 +189,8 @@ type BookingOutcome =
   | { ok: false; reason: BookingRefusal };
 ```
 
-Idempotensi, seperti booking §5.2: key wajib pada `hold`, `confirm`, `cancel`, dan
-`reschedule`; pengguna yang bertindak menjadi bagian dari hash request; key yang
+Idempotensi, seperti booking §5.2: key wajib pada `hold`, `confirm`, `cancel`,
+`reschedule`, `checkIn`, `checkOut` dan `markNoShow`; pengguna yang bertindak menjadi bagian dari hash request; key yang
 sama terhadap target berbeda adalah `IDEMPOTENCY_CONFLICT`; mengonfirmasi
 reservasi yang sudah `confirmed` mengembalikannya dengan `replayed: true`; dan
 exclusion constraint menjadi pengaman kedua lapis itu. Natural key
@@ -222,6 +222,73 @@ irisan staf). Dokumen OpenAPI tidak mengenumerasi kode error. Stay ditanyakan
 dengan `stay: { checkInDate, checkOutDate }` sebagai ganti `startsAt`. `hold`
 menerima `poolId` sebagai ganti `resourceId`, dan `reschedule` mengembalikan
 `reservationId` PENGGANTI.
+
+**Kontrak 1.1.0 (Issue #1108), aditif.** Kapabilitas `booking` diberi versi di
+`capability-contract-versions.ts` (`1.0.0` = port di atas; `1.1.0` menambahkan yang
+berikut, tidak ada signature yang berubah):
+
+```ts
+type Targeted = {
+  tenantId: string;
+  reservationId: string;
+  idempotencyKey: string;
+  correlationId: string;
+  actorTenantUserId: string;
+};
+
+interface BookingPort {
+  // ... quote, hold, confirm, cancel, reschedule seperti di atas ...
+  checkIn(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>; // confirmed -> checked_in
+  checkOut(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>; // checked_in -> completed
+  markNoShow(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>; // confirmed -> no_show, setelah mulai + grace
+  get(
+    tx: Bun.SQL,
+    input: { tenantId: string } & (
+      { reservationId: string } | { reservationNo: string }
+    )
+  ): Promise<
+    | { ok: true; reservation: BookingReservationRecord }
+    | { ok: false; reason: BookingRefusal }
+  >;
+  getOffering(
+    tx: Bun.SQL,
+    input: { tenantId: string; offeringId: string }
+  ): Promise<
+    | { ok: true; offering: BookingOfferingRecord }
+    | { ok: false; reason: BookingRefusal }
+  >;
+  listOfferings(
+    tx: Bun.SQL,
+    input: {
+      tenantId: string;
+      cursor?: string | null;
+      limit?: number;
+      status?: "active" | "inactive";
+    }
+  ): Promise<
+    | {
+        ok: true;
+        offerings: BookingOfferingRecord[];
+        nextCursor: string | null;
+      }
+    | { ok: false; reason: BookingRefusal }
+  >;
+  availability(
+    tx: Bun.SQL,
+    input: BookingAvailabilityInput
+  ): Promise<BookingAvailabilityResult>; // tanpa aktor
+}
+```
+
+`BookingRefusal` bertambah `CHECK_IN_TOO_EARLY` dan `NO_SHOW_TOO_EARLY`. Transisi
+idempoten persis seperti `confirm` (key ber-namespace aktor, ADR-0145; replay atau
+state yang sudah tercapai adalah `replayed: true`). Pembacaan tidak menulis apa
+pun, mengembalikan tidak-ditemukan sebagai nilai, dan **tidak membawa data
+pelanggan atau kontak**: `BookingReservationRecord` adalah `{ reservationId,
+reservationNo, status, startsAt, endsAt, holdExpiresAt, lineageId, supersededById,
+stays[], externalRef }`, dan `availability` hanya mengembalikan slot atau hitungan
+stay. Uraian lengkap, termasuk cara halaman booking publik memakai bacaan anonim,
+ada di booking.md §10.1.
 
 ## 4. Port ketersediaan staf
 
