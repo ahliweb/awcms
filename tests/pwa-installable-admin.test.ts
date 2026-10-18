@@ -447,3 +447,18 @@ describe("controls guarded by gates (mutation-proofed)", () => {
     );
   });
 });
+
+describe("install guidance does not read as an access refusal", () => {
+  // tests/e2e/admin-screens-render.e2e.ts treats any `[id$="-denied"]` as the
+  // screen refusing its viewer. The page's one legitimate refusal hook is the
+  // permission gate; guidance about the browser's notification permission
+  // must not borrow that suffix, or an owner looks refused.
+  test("only the screen's own gate carries a -denied id", async () => {
+    const source = await readFile(
+      "src/pages/admin/push-notifications.astro",
+      "utf8"
+    );
+    const ids = [...source.matchAll(/\bid="([^"]*-denied)"/g)].map((m) => m[1]);
+    expect(ids).toEqual(["push-notifications-denied"]);
+  });
+});
