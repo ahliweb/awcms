@@ -165,3 +165,66 @@ What the transfer does, in the **same transaction** as the registration:
 
 The plaintext secret and the ciphertext appear in no log line, audit row, event
 or API response; dispatcher failure messages are fixed strings.
+
+## Declarative Web Push payload and rollout (Issue #1106)
+
+`web_push` can now emit WebKit's **Declarative Web Push** shape instead of the
+legacy one. Only the encrypted plaintext changes; VAPID, `aes128gcm` (RFC 8291),
+subscriptions, recipient binding and the queue are untouched (the RFC 8291 test
+vectors are unchanged).
+
+| Format        | Plaintext JSON                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `legacy`      | `{ title, body, targetPath?, data? }` (default)                                            |
+| `declarative` | `{ web_push: 8030, notification: { title, body?, navigate, silent: false, tag?, data? } }` |
+
+- **Switch:** `PUSH_PAYLOAD_FORMAT=legacy|declarative`, default `legacy`; an
+  unknown value behaves as `legacy` and `config:validate` rejects it.
+  `declarative` additionally requires `APP_URL` to be an `https:` URL without
+  credentials (`config:validate` enforces it), because `navigate` is an
+  **absolute https URL on the configured public origin**.
+- **`navigate` is derived, never trusted:** the producer joins the queue's
+  already-validated same-origin `targetPath` onto `APP_URL`'s origin (never the
+  request Host header). Off-origin, protocol-relative (`//`, `/\`),
+  `javascript:`/`data:` and other schemes fail closed to `<origin>/admin`. The
+  service worker re-checks the origin when the notification arrives and again on
+  click.
+- **Size/content:** title must be non-empty (else the message is sent as
+  legacy), title is capped at 120 and body at 240 characters, the whole payload
+  at 2,048 bytes (else legacy). The legacy payload gets the same title/body caps and is always shrunk to fit one record (`data`, then `targetPath`, are dropped as a last resort); `tag` is capped at 64. Nothing beyond the existing `title`/`body` is
+  added; no icon or image is taken from the payload.
+- **No PII or secrets in `targetPath`:** it travels in the clear inside every
+  notification URL (including the query string), is capped at 512 characters,
+  and browsers that render declarative pushes natively bypass the service-worker
+  click check, so producer validation is the only wall for them.
+- **Service worker (dual reader):** `public/push-sw.js` reads both shapes
+  regardless of the switch and shows exactly **one** notification per `push`
+  event (`tag` from `tag` or `data.category` coalesces). Browsers that render the
+  declarative shape natively do not wake the worker, so there is no second
+  banner. Malformed, empty or non-JSON payloads show the generic fallback.
+  Scope, registration path and cache policy are unchanged.
+
+### Rollout (two stages)
+
+1. **Ship the release with `PUSH_PAYLOAD_FORMAT` unset.** Producers keep sending
+   legacy; the new worker is delivered through the normal service-worker update
+   (`/push-sw.js` is served `max-age=0`, so browsers revalidate it on their next
+   update check, at most about 24 hours later, or on the next navigation).
+2. **After at least one full service-worker update cycle (24 hours, the browser update-check ceiling) has passed since deploy**, set
+   `PUSH_PAYLOAD_FORMAT=declarative` on the app and `push:dispatch` (it is in
+   `ops/awcms-jobs.env-allowlist`) and restart them. Verify with
+   `bun run config:validate`, then send a test from `/admin/push-notifications`
+   to a Chromium device and an installed iOS/iPadOS 18.4+ PWA. Provider HTTP
+   acceptance is not device display: confirm the banner on the device.
+
+An older registered worker that predates the dual reader would read a
+declarative message as an untitled payload and show the generic fallback;
+that is why stage 2 waits for propagation and why legacy stays the default.
+
+### Rollback
+
+Set `PUSH_PAYLOAD_FORMAT=legacy` (or unset it) and restart the app and
+`push:dispatch`. No subscription, queue row or migration is involved, nobody has
+to re-subscribe, and messages already in flight in either shape are still read by
+the dual-reader worker. Do **not** roll the worker file back to a release that
+cannot read the declarative shape while the producer still emits it.

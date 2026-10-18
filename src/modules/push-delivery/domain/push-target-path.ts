@@ -30,6 +30,9 @@
 /** Deliberately conservative: the characters a real in-app destination needs, and nothing else. */
 const ALLOWED_PATH_PATTERN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@/%?#[\]]*$/;
 
+/** Longest accepted `targetPath`; it travels in every encrypted payload. */
+export const PUSH_TARGET_PATH_MAX_CHARS = 512;
+
 export type PushTargetPathValidation =
   { valid: true; path: string } | { valid: false; reason: string };
 
@@ -40,6 +43,13 @@ export function validatePushTargetPath(
 
   if (path.length === 0) {
     return { valid: false, reason: "targetPath must not be empty." };
+  }
+
+  if (path.length > PUSH_TARGET_PATH_MAX_CHARS) {
+    return {
+      valid: false,
+      reason: `targetPath must be at most ${PUSH_TARGET_PATH_MAX_CHARS} characters.`
+    };
   }
 
   if (!path.startsWith("/")) {
@@ -86,6 +96,18 @@ export function validatePushTargetPath(
     return {
       valid: false,
       reason: "targetPath resolves to a different origin."
+    };
+  }
+
+  // `/.//evil.test` and `/a/..//evil.test` pass every check above yet
+  // NORMALISE to `//evil.test`, which a later `new URL(path, origin)` reads as
+  // protocol-relative. Judge the normalised form too.
+  const normalised = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+
+  if (normalised.startsWith("//") || normalised.startsWith("/\\")) {
+    return {
+      valid: false,
+      reason: "targetPath normalises to a protocol-relative path."
     };
   }
 

@@ -171,7 +171,8 @@ describe("the service worker cannot be turned into an open redirect", () => {
     const source = await readFile(SERVICE_WORKER, "utf8");
 
     expect(source).toContain("FALLBACK_TITLE");
-    expect(source).toContain("var payload = readPayload(event) || {};");
+    // Issue #1106: the dual reader normalises a null payload to the fallback.
+    expect(source).toContain("normalizePayload(readPayload(event))");
   });
 
   test("both handlers wrap their async work in waitUntil", async () => {

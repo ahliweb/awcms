@@ -32,6 +32,11 @@ import type {
   PushProvider,
   PushTarget
 } from "../domain/push-provider-contract";
+import {
+  buildLegacyPayload,
+  buildPushPayload,
+  type PushPayloadFormat
+} from "../domain/push-payload-format";
 import { encryptWebPushPayload } from "../domain/web-push-encryption";
 import { mapWebPushResponse } from "../domain/web-push-error-mapping";
 import { defaultPushHttpClient, type PushHttpClient } from "./push-http-client";
@@ -56,6 +61,10 @@ export type WebPushProviderOptions = {
   timeoutMs: number;
   ttlSeconds?: number;
   http?: PushHttpClient;
+  /** `PUSH_PAYLOAD_FORMAT` (Issue #1106). Default `legacy`. */
+  payloadFormat?: PushPayloadFormat;
+  /** Configured https public origin (from `APP_URL`), for declarative `navigate`. Never a request Host. */
+  publicOrigin?: string | null;
   now?: () => Date;
 };
 
@@ -64,13 +73,16 @@ export type WebPushProviderOptions = {
  * travels encrypted through a third party, and every field is one an operator
  * would be comfortable seeing in a browser notification.
  */
-export function buildWebPushPayload(message: PushMessage): string {
-  return JSON.stringify({
-    title: message.title,
-    body: message.body,
-    ...(message.targetPath ? { targetPath: message.targetPath } : {}),
-    ...(message.data ? { data: message.data } : {})
-  });
+export function buildWebPushPayload(
+  message: PushMessage,
+  options?: { format?: PushPayloadFormat; publicOrigin?: string | null }
+): string {
+  return options?.format === "declarative"
+    ? buildPushPayload(message, {
+        format: "declarative",
+        publicOrigin: options.publicOrigin ?? null
+      })
+    : buildLegacyPayload(message);
 }
 
 export function createWebPushProvider(
@@ -107,7 +119,10 @@ export function createWebPushProvider(
 
       try {
         body = await encryptWebPushPayload(
-          buildWebPushPayload(message),
+          buildWebPushPayload(message, {
+            format: options.payloadFormat,
+            publicOrigin: options.publicOrigin
+          }),
           { p256dh: target.p256dhKey, authSecret: target.authSecret },
           {}
         );

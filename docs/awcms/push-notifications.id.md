@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](push-notifications.md)
 
-<!-- i18n-source-hash: sha256:c51221ddd2a11ba3ca35c1f656fd79673d3d697e097e85a5ab709e33f3a59f71 -->
+<!-- i18n-source-hash: sha256:8751f2e8324063cc44e081ad0aa54f5a85c100ff909a172aba8d652dd897084b -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -173,3 +173,67 @@ Yang dilakukan transfer, dalam **transaksi yang sama** dengan pendaftaran:
 
 Rahasia plaintext maupun ciphertext tidak muncul di baris log, baris audit, event,
 atau respons API; pesan kegagalan dispatcher adalah string tetap.
+
+## Payload Web Push deklaratif dan rollout (Issue #1106)
+
+`web_push` kini dapat memancarkan bentuk **Declarative Web Push** WebKit
+alih-alih bentuk legacy. Hanya plaintext terenkripsi yang berubah; VAPID,
+`aes128gcm` (RFC 8291), langganan, pengikatan penerima, dan antrean tidak
+berubah (vektor uji RFC 8291 tetap sama).
+
+| Format        | JSON plaintext                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `legacy`      | `{ title, body, targetPath?, data? }` (bawaan)                                             |
+| `declarative` | `{ web_push: 8030, notification: { title, body?, navigate, silent: false, tag?, data? } }` |
+
+- **Saklar:** `PUSH_PAYLOAD_FORMAT=legacy|declarative`, bawaan `legacy`; nilai
+  tak dikenal berperilaku seperti `legacy` dan `config:validate` menolaknya.
+  `declarative` juga mewajibkan `APP_URL` berskema `https:` tanpa kredensial
+  (ditegakkan `config:validate`), karena `navigate` adalah **URL https absolut
+  pada origin publik terkonfigurasi**.
+- **`navigate` diturunkan, tidak dipercaya:** produsen menggabungkan
+  `targetPath` same-origin yang sudah tervalidasi di antrean ke origin `APP_URL`
+  (bukan header Host permintaan). Off-origin, protocol-relative (`//`, `/\`),
+  `javascript:`/`data:` dan skema lain gagal-tertutup ke `<origin>/admin`.
+  Service worker memeriksa ulang origin saat notifikasi tiba dan saat klik.
+- **Ukuran/isi:** judul wajib tidak kosong (jika tidak, pesan dikirim sebagai
+  legacy), judul dibatasi 120 dan isi 240 karakter, seluruh payload 2.048 byte
+  (jika lebih, legacy). Payload legacy mendapat batas judul/isi yang sama dan selalu diperkecil agar muat satu record (`data`, lalu `targetPath`, dibuang sebagai langkah terakhir); `tag` dibatasi 64. Tidak ada tambahan selain `title`/`body`; ikon/gambar
+  tidak diambil dari payload.
+- **Jangan ada PII atau rahasia di `targetPath`:** ia ikut dalam URL
+  notifikasi (termasuk query string), dibatasi 512 karakter, dan browser yang
+  merender push deklaratif secara native melewati pemeriksaan klik service
+  worker, sehingga validasi di produsen adalah satu-satunya penjaga bagi mereka.
+- **Service worker (pembaca ganda):** `public/push-sw.js` membaca kedua bentuk
+  apa pun saklarnya dan menampilkan tepat **satu** notifikasi per event `push`
+  (`tag` dari `tag` atau `data.category` menggabungkan). Browser yang merender
+  bentuk deklaratif secara native tidak membangunkan worker, sehingga tidak ada
+  banner kedua. Payload rusak, kosong, atau bukan JSON menampilkan fallback
+  generik. Scope, path registrasi, dan kebijakan cache tidak berubah.
+
+### Rollout (dua tahap)
+
+1. **Rilis dengan `PUSH_PAYLOAD_FORMAT` tidak diset.** Produsen tetap mengirim
+   legacy; worker baru tersebar lewat pembaruan service worker biasa
+   (`/push-sw.js` disajikan `max-age=0`, sehingga browser memvalidasi ulang pada
+   pemeriksaan pembaruan berikutnya, paling lama sekitar 24 jam, atau pada
+   navigasi berikutnya).
+2. **Setelah minimal satu siklus pembaruan service worker penuh (24 jam, batas atas pemeriksaan pembaruan browser) sejak deploy**, set `PUSH_PAYLOAD_FORMAT=declarative`
+   pada aplikasi dan `push:dispatch` (ada di `ops/awcms-jobs.env-allowlist`) lalu
+   restart. Verifikasi dengan `bun run config:validate`, lalu kirim uji dari
+   `/admin/push-notifications` ke perangkat Chromium dan PWA iOS/iPadOS 18.4+
+   terpasang. Penerimaan HTTP oleh provider bukan tampilan di perangkat:
+   pastikan banner muncul di perangkat.
+
+Worker lama yang belum punya pembaca ganda akan membaca pesan deklaratif sebagai
+payload tanpa judul dan menampilkan fallback generik; karena itu tahap 2
+menunggu penyebaran dan legacy tetap bawaan.
+
+### Rollback
+
+Set `PUSH_PAYLOAD_FORMAT=legacy` (atau hapus) lalu restart aplikasi dan
+`push:dispatch`. Tidak ada langganan, baris antrean, atau migrasi yang
+terlibat, tidak perlu subscribe ulang, dan pesan yang sedang berjalan dalam
+bentuk apa pun tetap terbaca oleh worker pembaca ganda. **Jangan** menurunkan
+berkas worker ke rilis yang tidak bisa membaca bentuk deklaratif selama
+produsen masih memancarkannya.
