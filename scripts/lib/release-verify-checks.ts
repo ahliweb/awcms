@@ -63,6 +63,37 @@ export function selectReleaseTag(
 }
 
 /**
+ * The files `release:verify` reads (`package.json`, `CHANGELOG.md`,
+ * `.changeset/`) come from the WORKING TREE, not from the tag. Run from a
+ * checkout that is not the tagged commit — a local `main` a few commits
+ * behind, say — and every other check reports a confident, wrong mismatch
+ * (Issue: v10.9.0 was verified from a stale checkout, failed with "10.9.0 ≠
+ * 10.8.0", and the tag was pushed anyway). This check runs first and stops
+ * the rest, so the only message is the true one.
+ *
+ * @param tag the tag being verified, e.g. `v10.9.0`
+ * @param tagCommit the commit the tag resolves to, or null when it does not exist locally
+ * @param headCommit `git rev-parse HEAD`
+ */
+export function checkHeadAtTagCommit(
+  tag: string,
+  tagCommit: string | null,
+  headCommit: string
+): Problem | null {
+  if (tagCommit === null) {
+    return {
+      message: `Tag ${tag} tidak ditemukan di repo lokal — buat dulu (git tag -a ${tag} -m "${tag}" <commit-rilis>) lalu jalankan dari checkout tag itu.`
+    };
+  }
+  if (tagCommit !== headCommit) {
+    return {
+      message: `Checkout ini bukan commit tag ${tag} (HEAD ${headCommit.slice(0, 8)}, tag ${tagCommit.slice(0, 8)}) — release:verify membaca package.json/CHANGELOG.md/.changeset dari working tree, jadi jalankan dari checkout tag: git switch --detach ${tag} (atau git worktree add --detach <dir> ${tag}).`
+    };
+  }
+  return null;
+}
+
+/**
  * @param tagVersion versi hasil `parseVersionFromTag` (tanpa prefix `v`)
  * @param packageVersion `package.json`'s `version` field
  */

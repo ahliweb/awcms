@@ -5,7 +5,7 @@ description: Jalankan proses rilis AWCMS dengan Changesets. Gunakan saat diminta
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:93448a661254d3de5f9c5b88fbf8696984ca4a5b8740ea166e82f85b895ad441 -->
+<!-- i18n-source-hash: sha256:b01c6c8c71a480bf7f82734601ab7bf19a18d0bbf588bc871fc75c9d3358923e -->
 
 # AWCMS — Release (Changesets)
 
@@ -34,10 +34,13 @@ flowchart LR
 5. Commit: `chore(release): vX.Y.Z` (sertakan CHANGELOG + package.json + penghapusan file changeset), push ke `main`.
 6. Buat tag rilis **manual** — repo ini TIDAK punya script `changeset:tag`, dan `changeset tag` (bawaan Changesets) tidak menghasilkan tag `vX.Y.Z` yang dipakai repo ini (untuk paket `access: restricted` bernama `awcms` ia diam/format `awcms@X.Y.Z`, bukan `vX.Y.Z`). Script npm yang ADA hanya `changeset`, `changeset:version`, `changeset:status` (lihat `package.json`). Prosedur benar:
    ```bash
-   git tag -a vX.Y.Z -m "vX.Y.Z"                 # tag anotasi di commit rilis
-   RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify   # gate lokal: tag↔package.json↔CHANGELOG↔0 changeset pending
-   git push origin vX.Y.Z                        # push HANYA tag rilis (hindari `--tags` yang mendorong semua tag lokal)
+   git fetch origin main
+   git tag -a vX.Y.Z -m "vX.Y.Z" <commit-rilis>       # tag anotasi di commit rilis yang sudah di-merge
+   git switch --detach vX.Y.Z && bun install --frozen-lockfile
+   RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify && git push origin vX.Y.Z
+   git switch -                                       # kembali ke cabang semula
    ```
+   `release:verify` membaca `package.json`/`CHANGELOG.md`/`.changeset/` dari **working tree**, jadi dijalankan dari checkout tag (checkout lain ditolak), dan `&&` mencegah verify yang gagal memublikasikan tag. Push HANYA tag rilis (hindari `--tags` yang mendorong semua tag lokal).
    Push tag ini **memicu** `.github/workflows/release.yml`: guard ancestor-of-`main`, `bun run release:verify` (versi/CHANGELOG/changeset tersisa harus konsisten — `release.yml` mengambil tag dari `github.ref_name`, lokal dari `RELEASE_VERIFY_TAG` atau `git describe --exact-match`), full quality gate, lalu — setelah disetujui lewat `release` environment (lihat doc `release-process.md` §Environment approval) — build image, dua SBOM CycloneDX (source + image), checksums, `cosign sign` keyless, `actions/attest-build-provenance`/`actions/attest`, push `ghcr.io/ahliweb/awcms`, dan `gh release create` dengan asset terlampir.
 7. **Jangan** lagi menjalankan `gh release create` manual — itu sekarang bagian dari `release.yml`; menjalankannya manual sebelum workflow selesai akan bentrok dengan asset yang coba di-attach otomatis.
 

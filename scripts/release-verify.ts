@@ -20,10 +20,35 @@ import {
   checkTagMatchesPackageVersion,
   checkChangelogHasSection,
   checkNoPendingChangesets,
+  checkHeadAtTagCommit,
   selectReleaseTag
 } from "./lib/release-verify-checks";
 
 const ROOT = resolve(import.meta.dirname, "..");
+
+function git(args: string[]): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The commit the tag names. In release.yml the checkout of a tag push always
+ * carries the tag ref; `GITHUB_SHA` (the pushed commit) is the fallback for a
+ * checkout that does not.
+ */
+function resolveTagCommit(tag: string): string | null {
+  return (
+    git(["rev-parse", "--verify", "--quiet", `refs/tags/${tag}^{commit}`]) ??
+    (process.env.GITHUB_SHA?.trim() || null)
+  );
+}
 
 /**
  * Fallback lokal ketika `RELEASE_VERIFY_TAG` tidak diset.
@@ -79,6 +104,19 @@ if (import.meta.main) {
       `release:verify GAGAL — tag "${tag}" tidak cocok pola vX.Y.Z.`
     );
     process.exit(1);
+  }
+
+  const headCommit = git(["rev-parse", "HEAD"]);
+  if (headCommit) {
+    const headProblem = checkHeadAtTagCommit(
+      tag,
+      resolveTagCommit(tag),
+      headCommit
+    );
+    if (headProblem) {
+      console.error(`release:verify GAGAL — ${headProblem.message}`);
+      process.exit(1);
+    }
   }
 
   const packageJson = JSON.parse(
