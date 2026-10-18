@@ -304,6 +304,16 @@ That runner is what gets scheduled through a Coolify **Scheduled Task** (if your
 
 Other jobs (audit purge, sync objects, etc.) are scheduled with exactly the same one-shot container pattern, only the command name differs — see [`deployment-profiles.md`](deployment-profiles.md) §Job registry for the full job list and which ones are on-demand (not a repeating cron).
 
+### Rollout: jobs started through `ops/run-job.sh` now use `WORKER_DATABASE_URL`
+
+`ops/awcms-jobs.env-allowlist` is generated from what the code reads, and until Issue #1119 it silently missed `WORKER_DATABASE_URL` (read only as `process.env[name]`), the three `PUSH_VAPID_*` variables and a few others. A host that sets `WORKER_DATABASE_URL` therefore ran every `run-job.sh` job on the `DATABASE_URL` (`awcms_app`) connection. After the regenerated allowlist is deployed, those jobs run as the least-privilege **`awcms_worker`** role. That is the documented intent, but it is a role switch on a production host:
+
+1. **Verify grants before redeploying the allowlist.** For each job's tables run `has_table_privilege('awcms_worker', '<table>', 'SELECT,INSERT,UPDATE,DELETE')` (with the privilege that job needs), or run one manual tick per job with the worker DSN (`--dry-run` where the job has one).
+2. **Watch the first ticks** in `$AWCMS_JOB_LOG`, in particular `push:dispatch`, `booking:holds:expire` and `booking:reminders:dispatch`, `tenant-domain:dns:sync`, and `idn-regions:*` if you schedule them. A missing grant shows up as `permission denied for table …`, and the job may still exit 0.
+3. **Do not roll back by clearing `WORKER_DATABASE_URL` or pointing it at `DATABASE_URL`.** That removes the isolation again; fix the grant (a migration for the role in `sql/`) instead.
+
+Hosts that pass the whole env file (compose `env_file:`) were never affected.
+
 ## Telegram webhook: do not log response bodies
 
 If `TELEGRAM_ENABLED=true`, the verification PIN (Issue #1008) is returned **in the HTTP response body** of `POST /api/v1/telegram/webhook` (the Bot API's webhook-reply form). A reverse proxy, WAF, API gateway or APM agent in front of the app must therefore **not log or capture response bodies for `/api/v1/telegram/webhook`** (nor request bodies, which carry chat ids). The app itself never logs them. The PIN is short-lived (10 minutes), hashed at rest and limited to five wrong answers, but a body log would hand it to whoever reads the log.

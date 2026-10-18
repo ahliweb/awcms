@@ -40,6 +40,18 @@
  * `TOOLING_ONLY` names are excluded: they belong to build/CI tooling and no job
  * process reads them, which is the same reason the coverage gate exempts them.
  *
+ * ## What the generator can and cannot see (Issue #1119)
+ *
+ * `collectEnvReads()` resolves `process.env.X`, `process.env["X"]`, and every
+ * identifier bound to the environment — by initialiser (`const env =
+ * process.env`) or by TYPE (`env: NodeJS.ProcessEnv`, with or without a
+ * default) — read as `env.X`, `env?.X`, `env["X"]` or `const { X } = env`. It
+ * cannot see a computed name; those live in `COMPUTED_ENV_READS` beside the
+ * scanner. Before #1119 a function that merely RECEIVED the environment was
+ * invisible, which is how the three `PUSH_VAPID_*` variables never reached
+ * `push:dispatch`: the host started the dispatcher with push enabled and no
+ * VAPID material.
+ *
  * Usage:
  *   bun run jobs:env-allowlist:generate
  *   bun run jobs:env-allowlist:check
@@ -79,12 +91,22 @@ export function renderAllowlist(names: readonly string[]): string {
 }
 
 /**
- * Variables read ONLY by request handlers (and the operator's one-off webhook
- * registration), never by a scheduled job. The allow-list is one file for every
+ * Variables read ONLY by request handlers, the pool-health route and the
+ * operator's one-off CLIs (webhook registration, `database:capacity:check`),
+ * never by a scheduled job. The allow-list is one file for every
  * job container, so a secret listed here would be handed to `telegram:dispatch`
  * and every other cron job that has no use for it (ADR-0140 audit L8). The
  * dispatcher needs the bot token and the chat-ENCRYPTION ring; it never verifies
  * the webhook header and never builds a chat hash.
+ *
+ * `TELEGRAM_CHAT_HASH_KEYS` was on this list until Issue #1119. It stopped
+ * belonging here when Issue #1008 (L11) made `resolveTelegramEncryptionRing` —
+ * which `telegram:dispatch` and `telegram:chat:rekey` both call — read the hash
+ * ring to refuse an encryption ring that shares a key with it. A job that does
+ * not receive the hash ring sees it as "not configured", the distinctness check
+ * passes vacuously, and the guard is silently off exactly where the chat ids are
+ * decrypted. The scanner could not see that read (it goes through a parameter
+ * typed `NodeJS.ProcessEnv` with no default), so nothing flagged the stale entry.
  */
 export const WEB_ONLY: readonly { name: string; reason: string }[] = [
   {
@@ -93,9 +115,51 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
       "verified by the webhook route; the registration script is run by an operator, not scheduled"
   },
   {
-    name: "TELEGRAM_CHAT_HASH_KEYS",
-    reason: "keyed chat hashes are built by the webhook and the link route only"
+    name: "SETUP_DATABASE_URL",
+    reason:
+      "the awcms_setup bootstrap connection, used by POST /api/v1/setup/initialize only; handing it to cron jobs would defeat the role split"
   },
+  {
+    name: "SETUP_RATE_LIMIT_MAX",
+    reason:
+      "the rate limit of POST /api/v1/setup/initialize, read only by that route"
+  },
+  {
+    name: "SETUP_RATE_LIMIT_WINDOW_SEC",
+    reason:
+      "the rate-limit window of POST /api/v1/setup/initialize, read only by that route"
+  },
+  {
+    name: "DATABASE_POOL_MAX_SETUP",
+    reason: "sizes the setup-kind pool, which no scheduled job opens"
+  },
+  {
+    name: "AUTH_IP_HASH_SECRET",
+    reason:
+      "a secret: the keyed hash of the client address on the public auth surface; no cron job imports client-fingerprint, directly or transitively"
+  },
+  {
+    name: "PLATFORM_TENANT_ID",
+    reason:
+      "request-time platform-authority checks and the operator-run security:readiness CLI; no cron job resolves the platform tenant, directly or transitively"
+  },
+  ...[
+    "APPROVED_CONNECTIONS",
+    "RESERVED_ADMIN_CONNECTIONS",
+    "PGBOUNCER_MAX_CLIENT_CONN",
+    "PGBOUNCER_DEFAULT_POOL_SIZE"
+  ].map((name) => ({
+    name: `DATABASE_CAPACITY_${name}`,
+    reason:
+      "capacity budget read only by loadCapacityConfigFromEnv: the pool-health route and database:capacity:check, never a job's own work"
+  })),
+  ...["APP", "WORKER", "SETUP"].flatMap((processClass) =>
+    ["MIN", "EXPECTED", "MAX"].map((bound) => ({
+      name: `DATABASE_CAPACITY_${processClass}_INSTANCES_${bound}`,
+      reason:
+        "instance count read only by loadCapacityConfigFromEnv: the pool-health route and database:capacity:check, never a job's own work"
+    }))
+  ),
   {
     name: "TELEGRAM_WEBHOOK_RATE_PER_MINUTE",
     reason: "the webhook route's own rate limit"

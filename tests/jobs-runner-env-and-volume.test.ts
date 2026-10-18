@@ -210,3 +210,85 @@ describe("the allow-list itself", () => {
     expect(names.has("HOME")).toBe(false);
   });
 });
+
+// Issue #1119. `ops/run-job.sh` passes ONLY the names on the allow-list, and the
+// list is generated from what the scanner sees. A read the scanner could not see
+// meant a host running `push:dispatch` through run-job.sh started it with push
+// enabled and no VAPID material.
+describe("the allow-list carries what the scanner used to miss", () => {
+  const readNames = async () =>
+    new Set(
+      (await Bun.file(ALLOWLIST).text())
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith("#"))
+    );
+
+  test("the three PUSH_VAPID_* variables push:dispatch needs", async () => {
+    const names = await readNames();
+
+    for (const name of [
+      "PUSH_VAPID_PUBLIC_KEY",
+      "PUSH_VAPID_PRIVATE_KEY",
+      "PUSH_VAPID_SUBJECT"
+    ]) {
+      expect(names.has(name)).toBe(true);
+    }
+  });
+
+  test("the push auth-secret ring both push:dispatch and push:auth-secret:rekey read", async () => {
+    expect((await readNames()).has("PUSH_AUTH_SECRET_ENCRYPTION_KEYS")).toBe(
+      true
+    );
+  });
+
+  test("TELEGRAM_CHAT_HASH_KEYS: the encryption-ring resolver the dispatcher calls checks distinctness against it", async () => {
+    // Without it a job sees the hash ring as unconfigured and the distinctness
+    // guard (Issue #1008 L11) passes vacuously where chat ids are decrypted.
+    expect((await readNames()).has("TELEGRAM_CHAT_HASH_KEYS")).toBe(true);
+  });
+
+  test("WORKER_DATABASE_URL, read only as process.env[name], so every job does not silently fall back to awcms_app", async () => {
+    expect((await readNames()).has("WORKER_DATABASE_URL")).toBe(true);
+  });
+
+  test("the secrets that are genuinely web-only stay out of every job container", async () => {
+    const names = await readNames();
+
+    for (const name of [
+      "TELEGRAM_WEBHOOK_SECRET",
+      "SETUP_DATABASE_URL",
+      "DATABASE_POOL_MAX_SETUP",
+      "AUTH_IP_HASH_SECRET"
+    ]) {
+      expect(names.has(name)).toBe(false);
+    }
+  });
+
+  test("generic: nothing web-only, setup-scoped or webhook-secret-shaped is handed to a job", async () => {
+    const { WEB_ONLY } = await import("../scripts/jobs-env-allowlist");
+    const webOnly = new Set(WEB_ONLY.map((entry) => entry.name));
+    const offenders = [...(await readNames())].filter(
+      (name) =>
+        name.startsWith("SETUP_") ||
+        name.includes("WEBHOOK_SECRET") ||
+        webOnly.has(name)
+    );
+
+    expect(offenders).toEqual([]);
+    // A reason is the only thing that stops this list becoming a dumping ground.
+    for (const entry of WEB_ONLY) {
+      expect(entry.reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  test("every variable the code reads is on the list unless it is excused", async () => {
+    const { collectJobEnvNames } =
+      await import("../scripts/jobs-env-allowlist");
+    const names = await readNames();
+
+    expect(
+      [...(await collectJobEnvNames())].filter((n) => !names.has(n))
+    ).toEqual([]);
+  }, 60000);
+});
