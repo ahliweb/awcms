@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b133fb3db3f1242ff9948ffba7c84d0a4135030df2ebdb7e3ffe8c53b024781d -->
+<!-- i18n-source-hash: sha256:972260162efeaf2527774bdd3a965d9d4212a85c17dbd6ef5bbdc16800ea4a3b -->
 
 # `hr_commission`
 
@@ -16,8 +16,9 @@ Ini adalah **fondasi aturan** (#950: `awcms_hr_commission_rules`, API draft /
 publish / retire, **fungsi evaluasi yang murni**) dan **buku besar akrual** (#951:
 `awcms_hr_commission_accruals`, `awcms_hr_commission_transitions`, siklus approve /
 release / void / pay, dan port atribusi-penjualan). **Belum ada:** reversal
-(akrual negatif kompensasi untuk akrual yang payable atau paid), event
-`awcms.hr.commission.*`, dan klaim payroll atas sebuah akrual (PS-19, di bawah).
+akrual yang payable atau paid (akrual negatif kompensasi; `CommissionAccrualPort.void`
+menolaknya sebagai `period_closed`, di bawah), event `awcms.hr.commission.*` lainnya
+(hanya `voided` yang ada), dan klaim payroll atas sebuah akrual (PS-19, di bawah).
 Ini **bukan komisi afiliasi** (hr-payroll.md 6.4: penerimanya di sini selalu sebuah
 employment) dan **tidak membawa aturan negara atau yurisdiksi mana pun**: tenant
 menyusun aturannya sendiri.
@@ -191,6 +192,47 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes men
   milik karyawan itu, dan menentukan apa yang layak dikomisikan. Otorisasi dan audit
   tetap pada composition root pemanggil (`POST /api/v1/hr-commission/accruals`
   adalah salah satunya).
+- **Membalik akrual: `CommissionAccrualPort.void` (Issue #1109, kontrak port
+  `commission_accrual` 1.1.0).** `void(tx, tenantId, actorTenantUserId, { source,
+employmentId, reason, correlationId? })` berkunci identitas sumber YANG SAMA
+  dengan `accrue`, jadi konsumen (yang pertama adalah adapter atribusi-penjualan
+  commerce di repositori turunan) tidak pernah menyimpan id modul ini. Ia mencari
+  akrual lewat unique key buku besar, menguncinya `FOR UPDATE`, lalu menjawab:
+  - `voided` - akrual `pending` atau `approved` di-void. Lewat satu inti transisi
+    yang dipakai route HTTP void, sehingga baris audit
+    (`hr_commission.accrual.voided`, tanpa jumlah dan tanpa referensi sumber), event
+    domain `awcms.hr.commission.voided`, dan baris log transisi append-only semuanya
+    ditulis dalam transaksi PEMANGGIL dan ikut rollback bersamanya.
+  - `already_voided` - replay; tidak ada yang ditulis, diaudit, atau diterbitkan,
+    apa pun `reason` replay itu. Void yang berlomba diserialkan pada barisnya: satu
+    `voided`.
+  - `not_found` - tidak ada yang diakrualkan untuk sumber dan employment itu (juga
+    tampilan akrual tenant lain: RLS).
+  - `period_closed` - akrual `payable` atau `paid`; ditolak, tidak ada yang ditulis.
+  - `actor_required` (aktor `null`: setiap edge mencap seseorang) dan
+    `input_invalid` (sumber cacat, id employment bukan UUID, `reason` bukan kode).
+
+  **Entri kompensasi.** Akrual tidak pernah diubah atau dihapus: fakta monetarinya
+  tak dapat diubah oleh trigger dan tetap seperti saat diposting. Pembalikannya
+  adalah edge status ke `voided` ditambah baris log transisi yang ditambahkan
+  database (penambahan buku besar untuk reversal selama belum ada uang berpindah),
+  sehingga `reconcileAccruals` menunjukkan jumlahnya keluar dari bucket aktif dan
+  berada di `voided`, dan akrual yang di-void tak pernah dapat dibayar. Tidak
+  diperlukan migrasi: baris NEGATIF (`operation = reversal`) baru diperlukan setelah
+  uang dikomit, yaitu butir berikutnya.
+
+  **Kebijakan periode tertutup (diputuskan di #1109): tolak, `period_closed`.** Modul
+  ini tidak punya periode komisi sendiri; batasnya adalah status akrual. `payable`
+  berarti dirilis ke payroll, yang run-nya memilih akrual payable (`FOR UPDATE SKIP
+LOCKED`, PS-19), dan `paid` berarti pembayaran tercatat. Belum ada mekanisme
+  reversal-ke-periode-berjalan (baris negatif hr-payroll.md 6.3), dan mem-void uang
+  yang mungkin sudah dipegang payroll akan melanggar "akrual dibayar tepat oleh satu
+  run". Maka port menolak dan tidak menulis apa pun; hasilnya membawa `accrualId` dan
+  `status`, dan konsumen mengarahkannya ke manusia (penarikan kembali / netting run
+  berikutnya), bukan ke retry buta. Ketika baris reversal hadir, `period_closed`
+  adalah kasus yang digantikannya dengan reversal yang diposting; `voided`,
+  `already_voided`, dan `not_found` tetap bermakna sama.
+
 - **Celah yang diketahui: void mengonsumsi kunci sumber secara permanen.** Akrual
   yang di-void mempertahankan identitas `(sumber, employment)`-nya, sehingga
   pengiriman ulang sumber yang sama mengembalikan aslinya yang void (tak pernah
@@ -249,9 +291,12 @@ BENEFICIARY_LOGIN_UNRESOLVED`; `sql/237`). Void tidak dipisahkan. Sebuah tes men
   tak dapat di-reversal, tak pernah membuka kembali aslinya. Kunci unik, kolom
   `operation`, dan log transisi sudah punya ruangnya; sebuah `sql/NNN` yang
   melebarkan CHECK `operation` dan status serta mesinnya akan menambahkannya.
-- **Event masih provisional.** `awcms.hr.commission.accrued` dan `.approved`
-  (hr-payroll.md bagian 10) belum dipancarkan: buku besar tidak menulis baris outbox
-  dan tidak ada channel AsyncAPI, jadi tak ada yang diterbitkan sampai ada konsumen.
+- **Event: hanya `voided` yang ada.** `awcms.hr.commission.voided` (Issue #1109;
+  registry, channel AsyncAPI, dan `events.publishes`) diterbitkan dalam transaksi
+  setiap void, HTTP maupun port, dengan id, TIPE sumber, kunci dan versi aturan,
+  `fromStatus`, dan kode alasan (tidak pernah jumlah atau referensi sumber).
+  `awcms.hr.commission.accrued` dan `.approved` (hr-payroll.md bagian 10) belum
+  dipancarkan: tak ada yang diterbitkan sampai ada konsumen.
 - **Belum ada baca-akrual-sendiri dan scope office.** `accruals.read` adalah
   permission biasa: jalur "karyawan melihat akrualnya sendiri" (ownership grant pada
   login employment) dan business scope `office` adalah tindak lanjut bersama

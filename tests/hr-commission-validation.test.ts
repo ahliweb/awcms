@@ -301,11 +301,21 @@ describe("validateEmptyBody", () => {
 });
 
 describe("the hr_commission descriptor", () => {
-  test("is active (it declares its own-commission screen, Issue #952) and depends only on tenant_admin and hr_workforce", () => {
+  test("is active (it declares its own-commission screen, Issue #952) and depends only on tenant_admin, hr_workforce and the domain-event outbox (Issue #1109)", () => {
     expect(hrCommissionModule.status).toBe("active");
     expect([...hrCommissionModule.dependencies].sort()).toEqual([
+      "domain_event_runtime",
       "hr_workforce",
       "tenant_admin"
+    ]);
+  });
+
+  test("provides the commission_accrual port and publishes exactly the voided event (Issue #1109)", () => {
+    expect(hrCommissionModule.capabilities?.provides).toEqual([
+      "commission_accrual"
+    ]);
+    expect(hrCommissionModule.events?.publishes).toEqual([
+      "awcms.hr.commission.voided"
     ]);
   });
 
