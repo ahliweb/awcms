@@ -1027,6 +1027,76 @@ promise — only a `hold` or a `confirm` is.
 
 **Stays (provisional extension).** `quote` and `hold` accept, instead of `startsAt`, `stay: { checkInDate, checkOutDate }` (local `YYYY-MM-DD` dates in the resource's zone) and return `nights` and the derived `checkInAt` / `checkOutAt` instants; `reschedule` takes the same `stay`. Refusal reasons gain `MIN_STAY_VIOLATION`, `MAX_STAY_EXCEEDED`, `STAY_DATES_INVALID`, `BLOCK_CONFLICT` (a block call) and `TIMEZONE_IN_USE`. Blocks are created and released through the module's own admin API, not the port.
 
+**Port contract 1.1.0 (Issue #1108).** The capability `booking` is versioned in
+`src/modules/_shared/capability-contract-versions.ts` (first entry: `1.0.0` was
+the port above, `1.1.0` adds the following; no existing signature changed). A
+consumer that builds on the port (the commerce adapter's cancellation policy,
+reschedule, POS check-in/out and storefront pages) needs more than the five verbs:
+
+| Method                                                      | What it does                                                                                                                                                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `checkIn(tx, Targeted)`                                     | `confirmed -> checked_in`. A stay is refused before its check-in DATE (`CHECK_IN_TOO_EARLY`); no time-of-day check.                                                                        |
+| `checkOut(tx, Targeted)`                                    | `checked_in -> completed` (the module's `complete`).                                                                                                                                       |
+| `markNoShow(tx, Targeted)`                                  | `confirmed -> no_show` after the start plus the tenant grace (`NO_SHOW_TOO_EARLY` before). The route restricts it to staff; the port authorizes nothing, so that check is the CONSUMER's.  |
+| `get(tx, {tenantId, reservationId \| reservationNo})`       | `status`, `startsAt`, `endsAt`, `reservationNo`, `holdExpiresAt`, `lineageId`, `supersededById`, `stays[]`, `externalRef`. **No** customer reference, party size, note or actor.           |
+| `getOffering(tx, {tenantId, offeringId})`                   | One live offering: `granularity`, `confirmationMode`, `status`, party range, `durationSeconds` or night bounds.                                                                            |
+| `listOfferings(tx, {tenantId, cursor?, limit?})`            | Live offerings, newest first, keyset paged (limit 1..100, default 50, optional `status`); `nextCursor: null` is the end. Retires a consumer's direct read-only `SELECT` of booking tables. |
+| `availability(tx, {tenantId, offeringId, resourceId, ...})` | The anonymous-safe read for a public booking page: slots (`from`/`to`, at most 31 days, at most 500 slots) or a stay's `{nights, freeUnits, available}`. No actor, nothing written.        |
+
+The three transitions have exactly the contract of `confirm`: the actor, an
+`idempotencyKey` namespaced per actor (ADR-0145), a `Targeted` reservation, the
+**same** `transition()` as the HTTP route (so the same history row, audit row and
+`awcms.booking.reservation.*` event), and a refusal returned as `{ ok: false,
+reason }`. Each verb has its own idempotency scope (`booking_port_check_in`,
+`booking_port_check_out`, `booking_port_no_show`), so one key reused for two
+verbs on a reservation is not a replay. The refusal union gains
+`CHECK_IN_TOO_EARLY` and `NO_SHOW_TOO_EARLY` (the adapter used to fold both into
+`INVALID_STATE`; a POS needs to tell "wrong state" from "come back later").
+
+Reads write nothing and take no key. Not found is a VALUE (`RESERVATION_NOT_FOUND`,
+`OFFERING_NOT_FOUND`) and is the same answer for an unknown id and another
+tenant's; a malformed key or cursor is `VALIDATION_ERROR`. `get` selects an
+explicit column allow-list (`application/booking-port-reads.ts`) that never names
+`external_customer_ref`, so the opaque customer token is not readable through the
+port even by the consumer that placed the hold (it already has it). Instants in a
+`get` are rendered by the database with microseconds (`...00.000000Z`), as every
+other booking read; availability slots use millisecond `toISOString()` form. Both
+are RFC 3339 UTC.
+
+**The anonymous availability read.** The port runs inside the caller's tenant
+transaction, so the pattern is the one every public read in this repository uses:
+the public route resolves the tenant from the host, runs `withTenant(tenantId)`
+(RLS FORCE then scopes every row; each query also names `tenant_id`), and calls
+`availability` with no actor and no principal. A caller that names another tenant
+than its transaction's reads nothing (the neutral "no availability" answer). The answer holds
+slots (start, end, free units) or the stay counts, never a resource name or unit
+label, a reservation, the staff serving a slot, the tenant policy, or whether a
+night is blocked rather than booked (both are `SLOT_UNAVAILABLE`). An unavailable
+stay is ONE answer whatever the cause (booked, blocked, min or max stay, lead
+time, horizon, schedule): `available: false`, `freeUnits: 0`, `nights: null`,
+`reason: SLOT_UNAVAILABLE`, never `MIN_STAY_VIOLATION`, `MAX_STAY_EXCEEDED`,
+`LEAD_TIME_VIOLATION`, `HORIZON_EXCEEDED` or `OUTSIDE_SCHEDULE`. A quantity above
+the resource's units and an unknown `resourceId` are the same "no availability"
+answer as a fully-booked window (an empty `slots`, or the stay answer above), so
+the total unit count cannot be binary-searched. Every answer without free
+capacity carries the fixed `timezone: "UTC"`; an answer with free capacity
+carries the resource's own zone. Only the offering, the booking mode and a
+malformed date stay named refusals, and a malformed `tenantId` (on `get`,
+`getOffering`, `listOfferings` and `availability`) is `VALIDATION_ERROR`. It asks one
+`resourceId` because an offering does not fix a resource (there is no
+offering-to-resource link in the schema); the page already knows which one it
+sells. **This change adds no HTTP route:** the anonymous route, its rate limit
+(the authenticated `GET /availability` is 120 per minute per principal; a public
+one is keyed on the client address) and its CDN caching belong to the consumer,
+which owns the page. The port bounds the work itself (31-day window, 500 slots,
+`maxCandidates`). **A consumer route that exposes `availability` MUST rate-limit
+and cache-bound it:** the port takes no actor and does no ABAC check, by design
+(that is what makes it anonymous), so the route is the only throttle against
+occupancy scraping. And `get` by `reservationNo` is an unauthenticated lookup by
+a guessable-shaped number: a consumer must never expose it publicly by number
+(authorize the actor first, or look up by the unguessable `reservationId` the
+consumer already holds).
+
 ### 10.2 What the module never does (no `commerce` dependency)
 
 It does not import, call or declare a dependency on `commerce`. A tenant with no

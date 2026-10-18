@@ -34,7 +34,8 @@
  *
  * ## Idempotency
  *
- * `hold`, `confirm`, `cancel` and `reschedule` take an `idempotencyKey`. A replay
+ * `hold`, `confirm`, `cancel`, `reschedule`, `checkIn`, `checkOut` and
+ * `markNoShow` take an `idempotencyKey`. A replay
  * of the same key with the same request returns the original outcome with
  * `replayed: true` and writes nothing; the same key with a different request is
  * `IDEMPOTENCY_CONFLICT`. Asking for the state a reservation is already in
@@ -42,6 +43,19 @@
  * natural key `(tenant, externalRef.type, externalRef.id)` lets an adapter retry a
  * `hold` with a FRESH key without duplicating a live reservation
  * (`EXTERNAL_REF_IN_USE`). The exclusion constraint backstops both layers.
+ *
+ * ## Reads (contract 1.1.0)
+ *
+ * `get`, `getOffering`, `listOfferings` and `availability` are reads: they take
+ * no idempotency key and write nothing. A reservation read carries NO customer
+ * or contact data, not even the opaque `customerRef` (the consumer that placed
+ * the hold already knows whom it held for; a read must not be a way to learn it
+ * for a reservation the consumer did not place). Not found is a VALUE
+ * (`RESERVATION_NOT_FOUND` / `OFFERING_NOT_FOUND`), the same neutral answer for
+ * an unknown id and another tenant's. `availability` needs no actor and returns
+ * counts and slots only; the caller still supplies the `tenantId` its own
+ * transaction is scoped to (RLS FORCE applies, and every query also names the
+ * tenant).
  *
  * ## What the port deliberately does not carry
  *
@@ -83,6 +97,8 @@ export type BookingRefusal =
   | "OFFERING_NOT_FOUND"
   | "RESERVATION_NOT_FOUND"
   | "RESOURCE_REQUIRED"
+  | "CHECK_IN_TOO_EARLY"
+  | "NO_SHOW_TOO_EARLY"
   | "INVALID_STATE"
   | "IDEMPOTENCY_CONFLICT"
   | "PAYMENT_FIELD_NOT_ACCEPTED"
@@ -161,7 +177,136 @@ export type BookingOutcome =
     }
   | { ok: false; reason: BookingRefusal };
 
-type Targeted = {
+/** What `get` finds. Exactly one of `reservationId` and `reservationNo`. */
+export type BookingGetInput =
+  | { tenantId: string; reservationId: string; reservationNo?: undefined }
+  | { tenantId: string; reservationNo: string; reservationId?: undefined };
+
+export type BookingStayRecord = {
+  offeringId: string;
+  /** Local `YYYY-MM-DD` dates in `timezone`; check-out is exclusive. */
+  checkInDate: string;
+  checkOutDate: string;
+  nights: number;
+  timezone: string;
+};
+
+/**
+ * A reservation as the port reads it. Deliberately without `customerRef`, party
+ * size, notes, cancel reason or actor: a read of the schedule, not of a person.
+ */
+export type BookingReservationRecord = {
+  reservationId: string;
+  reservationNo: string;
+  status: string;
+  startsAt: BookingInstant;
+  endsAt: BookingInstant;
+  holdExpiresAt: BookingInstant | null;
+  lineageId: string;
+  /** The replacement a reschedule made; the reservation is then `rescheduled`. */
+  supersededById: string | null;
+  /** One entry per stay item; empty for a slot reservation. */
+  stays: BookingStayRecord[];
+  /** The adapter's own order reference, as it was given to `hold`. */
+  externalRef: { type: string; id: string } | null;
+};
+
+export type BookingGetResult =
+  | { ok: true; reservation: BookingReservationRecord }
+  | { ok: false; reason: BookingRefusal };
+
+export type BookingOfferingRecord = {
+  offeringId: string;
+  code: string;
+  name: string;
+  granularity: "time" | "stay";
+  confirmationMode: "immediate" | "hold_then_confirm";
+  status: "active" | "inactive";
+  minParty: number;
+  maxParty: number;
+  /** Time offerings only; `null` for a stay. */
+  durationSeconds: number | null;
+  /** Stay offerings only; `null` for a time offering. */
+  minNights: number | null;
+  maxNights: number | null;
+};
+
+export type BookingOfferingResult =
+  | { ok: true; offering: BookingOfferingRecord }
+  | { ok: false; reason: BookingRefusal };
+
+export type BookingListOfferingsInput = {
+  tenantId: string;
+  /** The previous page's `nextCursor`; absent or `null` is the first page. */
+  cursor?: string | null;
+  /** 1..100; default 50. */
+  limit?: number;
+  status?: "active" | "inactive";
+};
+
+export type BookingOfferingPageResult =
+  | { ok: true; offerings: BookingOfferingRecord[]; nextCursor: string | null }
+  | { ok: false; reason: BookingRefusal };
+
+/**
+ * An offering plus a window on one resource (the offering does not fix a
+ * resource; the caller's page already knows which one it sells). A slot
+ * resource is asked with `from`/`to` (at most 31 days); a stay resource with two
+ * local dates.
+ */
+export type BookingAvailabilityInput = {
+  tenantId: string;
+  offeringId: string;
+  resourceId: string;
+  /** Units wanted at once; default 1. */
+  quantity?: number;
+} & (
+  | {
+      from: BookingInstant;
+      to: BookingInstant;
+      /** 1..500; default 100. */
+      limit?: number;
+      stay?: undefined;
+    }
+  | {
+      from?: undefined;
+      to?: undefined;
+      limit?: undefined;
+      stay: { checkInDate: string; checkOutDate: string };
+    }
+);
+
+export type BookingAvailabilityResult =
+  | {
+      ok: true;
+      mode: "slot";
+      timezone: string;
+      from: BookingInstant;
+      to: BookingInstant;
+      slots: {
+        startsAt: BookingInstant;
+        endsAt: BookingInstant;
+        freeUnits: number;
+      }[];
+      /** More slots exist than `limit` (or the evaluation bound) returned. */
+      truncated: boolean;
+    }
+  | {
+      ok: true;
+      mode: "stay";
+      timezone: string;
+      checkInDate: string;
+      checkOutDate: string;
+      nights: number | null;
+      /** Units free on every night of the range (0 when not available). */
+      freeUnits: number;
+      available: boolean;
+      /** Set when `available` is false; the same union a `quote` refuses with. */
+      reason?: BookingRefusal;
+    }
+  | { ok: false; reason: BookingRefusal };
+
+export type Targeted = {
   tenantId: string;
   reservationId: string;
   idempotencyKey: string;
@@ -199,4 +344,69 @@ export interface BookingPort {
         poolId?: string;
       }
   ): Promise<BookingOutcome>;
+
+  /**
+   * confirmed -> checked_in. A stay cannot be checked in before its check-in
+   * DATE in the resource's zone (`CHECK_IN_TOO_EARLY`); there is no time-of-day
+   * check. Asking for a reservation that is already checked in is `replayed: true`.
+   */
+  checkIn(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>;
+
+  /** checked_in -> completed (the module's `complete` transition). */
+  checkOut(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>;
+
+  /**
+   * confirmed -> no_show, allowed only after the start plus the tenant's grace
+   * (`NO_SHOW_TOO_EARLY` before). The slot stays consumed. Whether the actor may
+   * mark a no-show (the HTTP route restricts it to staff) is the CALLER's check.
+   */
+  markNoShow(tx: Bun.SQL, input: Targeted): Promise<BookingOutcome>;
+
+  /**
+   * One reservation, by id or by its human number. No customer, contact or note
+   * data. A reservation that does not exist for the tenant is
+   * `RESERVATION_NOT_FOUND`.
+   *
+   * SECURITY: this is an UNAUTHENTICATED lookup (no actor, no ABAC check; the
+   * caller authorizes). `reservationNo` is a human-shaped number: a consumer must
+   * NEVER expose this read publicly by number, or it becomes an enumeration
+   * oracle for the tenant's bookings (schedule and state).
+   */
+  get(tx: Bun.SQL, input: BookingGetInput): Promise<BookingGetResult>;
+
+  /** One offering of the tenant (not a deleted one). */
+  getOffering(
+    tx: Bun.SQL,
+    input: { tenantId: string; offeringId: string }
+  ): Promise<BookingOfferingResult>;
+
+  /**
+   * The tenant's offerings (not deleted ones), newest first, keyset paged. Pass
+   * the previous page's `nextCursor` to continue; `null` means the end.
+   */
+  listOfferings(
+    tx: Bun.SQL,
+    input: BookingListOfferingsInput
+  ): Promise<BookingOfferingPageResult>;
+
+  /**
+   * Availability for one offering on one resource over a window, for a public
+   * booking page. Needs NO actor and returns slots or a stay's free-unit count
+   * only. Writes nothing; a result is not a promise (only `hold` is).
+   *
+   * Anonymous means it reveals nothing of the tenant's policy or size: an
+   * unavailable stay is always `available: false`, `nights: null`,
+   * `reason: SLOT_UNAVAILABLE` (never a min/max-stay, lead-time, horizon or
+   * schedule code), and an over-capacity `quantity` or an unknown `resourceId`
+   * is the same "no availability" answer as a fully-booked window (empty
+   * `slots`). Every answer without free capacity carries `timezone: "UTC"`.
+   *
+   * SECURITY: by design it takes NO actor and does NO ABAC check. Any consumer
+   * route exposing it MUST rate-limit and cache-bound it itself; the port bounds
+   * only one call (31-day window, 500 slots).
+   */
+  availability(
+    tx: Bun.SQL,
+    input: BookingAvailabilityInput
+  ): Promise<BookingAvailabilityResult>;
 }

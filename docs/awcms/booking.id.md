@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:c0f075ea468e2c8b3fc63ad110a0ff648465716403150acaf9712b4b7b2dc532 -->
+<!-- i18n-source-hash: sha256:30981d953f5582b4911a7e2b3d2d7df848fe91c469f598ccd57ca941a4edaeb0 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -1059,6 +1059,82 @@ setiap baris audit dan event sehingga kedua separuh satu aksi bergabung. `quote`
 bukan janji — hanya `hold` atau `confirm` yang janji.
 
 **Stay (ekstensi provisional).** `quote` dan `hold` menerima, sebagai ganti `startsAt`, `stay: { checkInDate, checkOutDate }` (tanggal lokal `YYYY-MM-DD` pada zona resource) dan mengembalikan `nights` serta instant turunan `checkInAt` / `checkOutAt`; `reschedule` menerima `stay` yang sama. Alasan penolakan bertambah `MIN_STAY_VIOLATION`, `MAX_STAY_EXCEEDED`, `STAY_DATES_INVALID`, `BLOCK_CONFLICT` (panggilan blok), dan `TIMEZONE_IN_USE`. Blok dibuat dan dilepas lewat API admin modul sendiri, bukan lewat port.
+
+**Kontrak port 1.1.0 (Issue #1108).** Kapabilitas `booking` diberi versi di
+`src/modules/_shared/capability-contract-versions.ts` (entri pertama: `1.0.0`
+adalah port di atas, `1.1.0` menambahkan yang berikut; tidak ada signature yang
+berubah). Consumer yang dibangun di atas port (kebijakan pembatalan, reschedule,
+check-in/out POS, dan halaman storefront milik adapter commerce) membutuhkan lebih
+dari lima verba:
+
+| Method                                                      | Fungsi                                                                                                                                                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `checkIn(tx, Targeted)`                                     | `confirmed -> checked_in`. Stay ditolak sebelum TANGGAL check-in-nya (`CHECK_IN_TOO_EARLY`); tidak ada pemeriksaan jam.                                                                                      |
+| `checkOut(tx, Targeted)`                                    | `checked_in -> completed` (`complete` milik modul).                                                                                                                                                          |
+| `markNoShow(tx, Targeted)`                                  | `confirmed -> no_show` setelah waktu mulai ditambah grace tenant (`NO_SHOW_TOO_EARLY` sebelumnya). Route membatasinya untuk staf; port tidak mengotorisasi apa pun, sehingga pemeriksaan itu milik CONSUMER. |
+| `get(tx, {tenantId, reservationId \| reservationNo})`       | `status`, `startsAt`, `endsAt`, `reservationNo`, `holdExpiresAt`, `lineageId`, `supersededById`, `stays[]`, `externalRef`. **Tanpa** referensi pelanggan, ukuran rombongan, catatan, atau aktor.             |
+| `getOffering(tx, {tenantId, offeringId})`                   | Satu offering aktif: `granularity`, `confirmationMode`, `status`, rentang rombongan, `durationSeconds` atau batas malam.                                                                                     |
+| `listOfferings(tx, {tenantId, cursor?, limit?})`            | Offering aktif, terbaru dulu, dipaging keyset (limit 1..100, default 50, `status` opsional); `nextCursor: null` berarti akhir. Menggantikan `SELECT` read-only langsung consumer ke tabel booking.           |
+| `availability(tx, {tenantId, offeringId, resourceId, ...})` | Pembacaan aman-anonim untuk halaman booking publik: slot (`from`/`to`, paling lama 31 hari, paling banyak 500 slot) atau `{nights, freeUnits, available}` untuk stay. Tanpa aktor, tanpa tulis.              |
+
+Ketiga transisi memiliki kontrak persis seperti `confirm`: aktor, `idempotencyKey`
+yang di-namespace per aktor (ADR-0145), reservasi `Targeted`, `transition()` yang
+**sama** dengan route HTTP (jadi baris riwayat, baris audit, dan event
+`awcms.booking.reservation.*` yang sama), dan penolakan dikembalikan sebagai
+`{ ok: false, reason }`. Tiap verba punya scope idempotensinya sendiri
+(`booking_port_check_in`, `booking_port_check_out`, `booking_port_no_show`),
+sehingga satu key yang dipakai untuk dua verba pada satu reservasi bukan replay.
+Union penolakan bertambah `CHECK_IN_TOO_EARLY` dan `NO_SHOW_TOO_EARLY` (adapter
+dulu melipat keduanya menjadi `INVALID_STATE`; POS perlu membedakan "state salah"
+dari "kembali nanti").
+
+Pembacaan tidak menulis apa pun dan tidak memakai key. Tidak ditemukan adalah NILAI
+(`RESERVATION_NOT_FOUND`, `OFFERING_NOT_FOUND`) dan jawabannya sama untuk id yang
+tak dikenal dan id milik tenant lain; key atau cursor yang cacat adalah
+`VALIDATION_ERROR`. `get` memilih daftar kolom eksplisit
+(`application/booking-port-reads.ts`) yang tidak pernah menyebut
+`external_customer_ref`, sehingga token pelanggan opak tidak terbaca lewat port,
+bahkan oleh consumer yang menaruh hold (ia sudah memilikinya). Instant pada `get`
+dirender database dengan mikrodetik (`...00.000000Z`), seperti semua bacaan booking
+lain; slot availability memakai bentuk milidetik `toISOString()`. Keduanya RFC 3339
+UTC.
+
+**Pembacaan availability anonim.** Port berjalan di dalam transaksi tenant
+pemanggil, sehingga polanya sama dengan setiap pembacaan publik di repositori ini:
+route publik menyelesaikan tenant dari host, menjalankan `withTenant(tenantId)`
+(RLS FORCE lalu membatasi setiap baris; tiap query juga menyebut `tenant_id`), dan
+memanggil `availability` tanpa aktor dan tanpa principal. Pemanggil yang menyebut
+tenant lain daripada transaksinya tidak membaca apa pun (jawaban netral "tidak ada ketersediaan").
+Jawabannya berisi slot (mulai, selesai, unit bebas) atau hitungan stay, tidak
+pernah nama resource atau label unit, reservasi, staf yang melayani slot,
+kebijakan tenant, atau apakah suatu malam diblokir dan bukan dipesan (keduanya
+`SLOT_UNAVAILABLE`). Stay yang tidak tersedia adalah SATU jawaban apa pun
+sebabnya (dipesan, diblokir, minimum atau maksimum menginap, lead time, horizon,
+jadwal): `available: false`, `freeUnits: 0`, `nights: null`,
+`reason: SLOT_UNAVAILABLE`, tidak pernah `MIN_STAY_VIOLATION`,
+`MAX_STAY_EXCEEDED`, `LEAD_TIME_VIOLATION`, `HORIZON_EXCEEDED` atau
+`OUTSIDE_SCHEDULE`. Kuantitas di atas jumlah unit resource dan `resourceId`
+yang tidak dikenal adalah jawaban "tidak ada ketersediaan" yang sama dengan
+jendela yang penuh dipesan (`slots` kosong, atau jawaban stay di atas), sehingga
+jumlah total unit tidak bisa ditebak dengan pencarian biner. Setiap jawaban tanpa
+kapasitas bebas membawa `timezone: "UTC"` tetap; jawaban dengan kapasitas bebas
+membawa zona resource itu sendiri. Hanya offering, mode booking, dan tanggal
+yang salah bentuk yang tetap menjadi penolakan bernama, dan `tenantId` yang salah
+bentuk (pada `get`, `getOffering`, `listOfferings` dan `availability`) adalah
+`VALIDATION_ERROR`. Ia menanyakan satu `resourceId` karena offering tidak
+menetapkan resource (skema tidak punya tautan offering-ke-resource); halaman sudah
+tahu mana yang dijualnya. **Perubahan ini tidak menambah route HTTP:** route
+anonim, rate limit-nya (`GET /availability` terautentikasi 120 per menit per
+principal; yang publik dikunci pada alamat klien) dan cache CDN-nya milik
+consumer, pemilik halamannya. Port membatasi sendiri pekerjaannya (jendela 31
+hari, 500 slot, `maxCandidates`). **Route consumer yang mengekspos
+`availability` WAJIB membatasi rate dan membatasi cache-nya:** port tidak
+menerima aktor dan tidak melakukan pemeriksaan ABAC, memang disengaja (itulah
+yang membuatnya anonim), sehingga route adalah satu-satunya penahan terhadap
+scraping okupansi. Dan `get` berdasarkan `reservationNo` adalah pencarian tanpa
+autentikasi dengan nomor yang bentuknya mudah ditebak: consumer tidak boleh
+mengeksposnya ke publik berdasarkan nomor (otorisasi aktor dulu, atau cari lewat
+`reservationId` yang tak tertebak yang sudah dipegang consumer).
 
 ### 10.2 Yang tak pernah dilakukan modul (tanpa dependensi `commerce`)
 

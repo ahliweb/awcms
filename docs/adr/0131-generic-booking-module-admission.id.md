@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0131-generic-booking-module-admission.md)
 
-<!-- i18n-source-hash: sha256:cb7b0d64ae6ae1ce37146c7804bae949bc0edc44295625552eacf9af56d83d85 -->
+<!-- i18n-source-hash: sha256:b99626acd52ce8d5180f30a9f7646a6e6563afbe84ea900678bb7e0826ba58c1 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -113,3 +113,9 @@ Dinilai atas keamanan, performa, maintainability, skalabilitas, kompatibilitas, 
 - **Menyalin nama dan kontak pelanggan ke reservasi:** sumber kebenaran kedua yang tak terjangkau penghapusan dan merge `profile_identity`.
 - **Kedaluwarsa hanya lewat job:** job yang macet akan membiarkan kamar terakhir tertahan selamanya. Lazy reclaim di penulis membuat kebenaran tak bergantung pada kesehatan job; job untuk event dan kerapian.
 - **Dependensi keras pada kapabilitas tenaga kerja:** memaksa `hr_payroll` pada setiap tenant yang memesan kamar. Port opsional; tanpanya, staf hanya dibatasi aturan modul sendiri.
+
+## Addendum (Issue #1108, 2026-10-18): `BookingPort` tumbuh ke kontrak 1.1.0
+
+Bagian 9 menyebut lima verba port. Adapter hilir pertama (adapter commerce dari toko turunan) membutuhkan transisi di tempat dan beberapa pembacaan, dan kapabilitas yang milik AWCMS dibangun di sini, bukan ditambal di consumer. Port bertambah, secara aditif, `checkIn`, `checkOut` (transisi `complete`) dan `markNoShow` dengan kontrak `confirm` (key idempotensi ber-namespace aktor menurut ADR-0145, reservasi `Targeted`, penolakan sebagai nilai, `transition()` yang sama sehingga event yang sama), dan empat pembacaan: `get`, `getOffering`, `listOfferings` dan `availability` tanpa aktor.
+
+Diputuskan di sini: (1) kapabilitas `booking` masuk `CAPABILITY_CONTRACT_VERSIONS` pada `1.1.0` (`1.0.0` adalah bentuk implisit #941), perubahan MINOR karena tidak ada signature yang berubah dan `BookingRefusal` hanya bertambah `CHECK_IN_TOO_EARLY` dan `NO_SHOW_TOO_EARLY`; (2) pembacaan tidak pernah mengembalikan `external_customer_ref` atau kontak, catatan, atau aktor apa pun, lewat daftar kolom eksplisit yang dikunci tes, sehingga port tidak memperluas siapa yang dapat mengetahui seseorang; (3) malam terblokir dan malam terpesan adalah penolakan yang sama pada pembacaan anonim; (4) tidak ada route HTTP yang ditambahkan: route anonim, rate limit dan cache-nya milik consumer pemilik halaman, dan port membatasi sendiri pekerjaannya. Pembayaran dan harga tetap di luar port.
