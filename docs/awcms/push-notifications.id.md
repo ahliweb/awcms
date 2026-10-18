@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](push-notifications.md)
 
-<!-- i18n-source-hash: sha256:8751f2e8324063cc44e081ad0aa54f5a85c100ff909a172aba8d652dd897084b -->
+<!-- i18n-source-hash: sha256:22d32af3f55fd420d51885421437cef898d5aa87c921c2451f2e9d9b1a75f95f -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -237,3 +237,89 @@ terlibat, tidak perlu subscribe ulang, dan pesan yang sedang berjalan dalam
 bentuk apa pun tetap terbaca oleh worker pembaca ganda. **Jangan** menurunkan
 berkas worker ke rilis yang tidak bisa membaca bentuk deklaratif selama
 produsen masih memancarkannya.
+
+## Admin yang dapat dipasang di iPhone/iPad (Issue #1105)
+
+Web Push di iOS/iPadOS 16.4+ hanya dikirim ke aplikasi web yang **ditambahkan ke
+Layar Utama dan dibuka dari ikonnya**. Tab Safari tidak memiliki `PushManager`,
+sehingga tidak pernah dapat menerima push latar belakang. Perubahan ini membuat
+admin dapat dipasang dan memandu pengguna ke sana; ia **tidak menambah pengirim,
+service worker, atau origin push baru** -- pengiriman tetap jalur Bun/VAPID
+ADR-0074.
+
+### Yang dikirim
+
+- **Satu manifest tingkat origin**, `GET /manifest.webmanifest`
+  (`src/pages/manifest.webmanifest.ts`, kontrak di
+  `src/lib/pwa/web-app-manifest.ts`): `id`, `start_url`, dan `scope` semuanya
+  `/admin/`, `display: standalone`. Nama, nama pendek, dan warna berasal dari
+  konfigurasi deployment (`PWA_APP_NAME`, `PWA_APP_SHORT_NAME`,
+  `PWA_THEME_COLOR`, `PWA_BACKGROUND_COLOR`; bawaan `AWCMS Admin`/`AWCMS`/
+  `#2563eb`/`#ffffff`), **tidak pernah** dari `Host` permintaan atau baris
+  tenant. Cache `public, max-age=3600, must-revalidate` -- manifest boleh
+  menyegarkan diri dan bukan `immutable`.
+- **Ikon self-hosted** di `public/icons/` (192, 512, maskable 512, dan
+  `apple-touch-icon` 180), dibangkitkan secara deterministik oleh
+  `bun run pwa:icons:generate`. Ikon ini penanda netral sementara; ganti keempat
+  PNG (nama dan ukuran sama) untuk karya seni deployment.
+- **Tautan head hanya dari layout admin bersama**
+  (`src/layouts/AdminLayout.astro`): `rel=manifest`, `rel=apple-touch-icon`,
+  `theme-color`, `apple-mobile-web-app-*`. CSP tidak berubah (`manifest-src` dan
+  `img-src` jatuh ke `'self'`); `public/push-sw.js`, path, dan scope-nya tidak
+  disentuh.
+- **Panduan di `/admin/push-notifications`**: deteksi kapabilitas
+  (`serviceWorker` + `PushManager` + `Notification`) dan deteksi mode mandiri
+  (`display-mode: standalone` / `navigator.standalone`); user agent hanya
+  dipakai memilih antara "pasang dulu" dan "peramban ini tidak bisa". Status:
+  `ready` (tombol ditawarkan; izin diminta **hanya saat diklik**), `denied`
+  (penjelasan, tombol ditarik -- peramban tidak akan meminta lagi sehingga tidak
+  ada loop ulang), `ios-install` (Tambah ke Layar Utama, buka dari ikon, lalu
+  aktifkan), `ios-update` (terpasang tetapi OS di bawah 16.4), `unsupported`.
+  Teks tersedia dalam bahasa Inggris dan Indonesia; panel adalah wilayah
+  `aria-live`.
+
+### Identitas dan tenancy
+
+Identitas terpasang adalah `<origin>/admin/`. Dua deployment tidak pernah
+bertabrakan (origin berbeda). Dalam satu deployment seluruh tenant berbagi satu
+origin admin dan karenanya satu aplikasi terpasang; tenant ditentukan sesi yang
+masuk. Manifest per tenant **di luar cakupan** dan menjadi ekstensi masa depan
+lewat `tenant_domain` (resolusi dari domain primer terverifikasi, `id` per
+origin). Mengganti origin (domain, protokol, atau port baru) membuat aplikasi
+terpasang dan langganan push **yang berbeda**: ikon Layar Utama lama harus
+dihapus, yang baru ditambahkan, dan notifikasi diaktifkan ulang.
+
+### Pasang, copot, reset izin (panduan operator/pengguna)
+
+- Pasang (iOS/iPadOS 16.4+): Safari -> Bagikan -> Tambah ke Layar Utama ->
+  Tambah; buka dari ikon; masuk; `/admin/push-notifications` -> Aktifkan di
+  perangkat ini.
+- Copot: tekan lama ikon -> Hapus App. Bila bisa, pakai "Matikan di perangkat
+  ini" lebih dulu; baris server yang basi dinonaktifkan otomatis saat layanan
+  push melaporkan langganan sudah hilang.
+- Reset izin: Pengaturan iOS -> Notifikasi -> aplikasi tersebut (atau Pengaturan
+  -> Apps -> Safari -> Lanjutan -> Data Situs Web untuk tab peramban). Setelah
+  ditolak, halaman tidak dapat meminta lagi.
+- Persetujuan/privasi: izin diminta hanya setelah ketukan yang disengaja; teks
+  notifikasi tidak memuat data pribadi sensitif (aturan payload ADR-0074);
+  langganan adalah data pribadi menurut UU PDP 27/2022 dan ditangani siklus hidup
+  langganan yang ada. Tidak ada klaim kepatuhan tanpa bukti.
+- Online-first / offline-LAN: push memerlukan keterjangkauan internet ke layanan
+  push. Deployment offline/LAN menampilkan push sebagai tidak tersedia dan tidak
+  menjanjikan apa pun; OS dapat menunda atau membuang notifikasi.
+
+### Keterbatasan yang harus diverifikasi di perangkat
+
+`scope` adalah `/admin/` sesuai keputusan, sementara halaman login (`/login`)
+berada di luarnya. Membuka aplikasi terpasang saat belum masuk mengalihkan ke
+`/login`; iOS dapat menampilkan navigasi itu dengan bilah peramban dalam-aplikasi.
+Konfirmasi saat UAT apakah ini dapat diterima atau scope perlu diperlebar
+(keputusan terpisah).
+
+### Status UAT: TERTUNDA (manusia)
+
+Kemampuan dipasang di iOS/iPadOS 16.4+ nyata, Chrome Android/desktop, dan macOS
+**belum** diuji. Catat perangkat, versi OS, tangkapan layar, dan langkah repro di
+sini sebelum deploy, dan pisahkan **penerimaan langganan** (baris server dibuat)
+dari **tampilan di perangkat** (notifikasi benar-benar muncul). Jangan deploy
+tanpa bukti itu.

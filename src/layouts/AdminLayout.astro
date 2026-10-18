@@ -92,7 +92,21 @@ import { fetchSidebarArrangement } from "../modules/module-management/applicatio
 import { listModules } from "../modules";
 import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
 import { resolveAdminIcon, ADMIN_ICON_PATHS } from "../lib/ui/admin-icons";
+import {
+  APPLE_TOUCH_ICON_PATH,
+  WEB_APP_MANIFEST_PATH,
+  resolvePwaIdentity
+} from "../lib/pwa/web-app-manifest";
 import packageJson from "../../package.json";
+
+/**
+ * Issue #1105 -- installable admin. Deployment branding for the Home Screen
+ * entry; never the request `Host` or a tenant row (see
+ * `src/lib/pwa/web-app-manifest.ts`). The `<link>`/`<meta>` below are the ONLY
+ * place the manifest is referenced: this is the shared admin shell, so every
+ * `/admin/*` page is installable without each page opting in.
+ */
+const pwa = resolvePwaIdentity(process.env);
 
 /** Shown in the sidebar footer; single source of truth is package.json. */
 const appVersion = packageJson.version;
@@ -386,6 +400,13 @@ const accountInitials =
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title} · AWCMS</title>
+    <link rel="manifest" href={WEB_APP_MANIFEST_PATH} />
+    <link rel="apple-touch-icon" href={APPLE_TOUCH_ICON_PATH} />
+    <meta name="theme-color" content={pwa.themeColor} />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content={pwa.shortName} />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     {/* The one inline script in this repo — must run before body paint or the
         shell flashes the wrong theme. CSP admits it by SHA-256; `set:html`
         guarantees the rendered bytes are exactly the hashed constant. */}

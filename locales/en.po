@@ -25,7 +25,34 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #. Admin shell — skip link, drawer, topbar
+msgid "A Safari tab cannot receive background push notifications on iOS or iPadOS, so no button is offered here. This works on iOS or iPadOS 16.4 or later:"
+msgstr ""
+
+msgid "Close the tab and open AWCMS from the new Home Screen icon, then sign in."
+msgstr ""
+
+msgid "Come back to this page in the installed app and choose Enable on this device. iOS asks for permission only at that moment."
+msgstr ""
+
+msgid "Notifications are blocked for this site. This page cannot ask again — allow them in the browser or iOS Settings for this site or app, then reload. No notification will be sent until you do."
+msgstr ""
+
+msgid "Notifications on iPhone and iPad need the installed app."
+msgstr ""
+
+msgid "Open this page in Safari and tap Share, then Add to Home Screen, then Add."
+msgstr ""
+
+msgid "Push needs the device to reach its push service over the internet. It is not available on an offline or LAN-only deployment, and a notification can be delayed or dropped by the operating system."
+msgstr ""
+
 msgid "Skip to main content"
+msgstr ""
+
+msgid "This browser does not support push notifications, so nothing can be enabled here. Use a current Chrome, Edge, Firefox or Safari over HTTPS."
+msgstr ""
+
+msgid "This installed app cannot receive push notifications. Web Push on iPhone and iPad needs iOS or iPadOS 16.4 or later — update the device, then open the app again."
 msgstr ""
 
 msgid "Toggle navigation menu"

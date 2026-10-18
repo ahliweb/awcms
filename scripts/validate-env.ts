@@ -294,6 +294,13 @@ const RULES: readonly Rule[] = [
   { name: "EMAIL_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
   { name: "EMAIL_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
 
+  // Installable admin (Issue #1105). Optional branding of the Home Screen app;
+  // the manifest falls back to defaults on an empty or invalid value.
+  { name: "PWA_APP_NAME", required: false, type: "string" },
+  { name: "PWA_APP_SHORT_NAME", required: false, type: "string" },
+  { name: "PWA_THEME_COLOR", required: false, type: "string" },
+  { name: "PWA_BACKGROUND_COLOR", required: false, type: "string" },
+
   // push_delivery (ADR-0074, epic #463). Off by default; off means the
   // dispatcher claims nothing at all. `PUSH_PROVIDER` is an enum listing only
   // the adapters that EXIST — `fcm`/`web_push` join it in Issue #466, and
