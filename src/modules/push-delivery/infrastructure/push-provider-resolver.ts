@@ -19,6 +19,10 @@ import {
   type PushProviderKind
 } from "../domain/push-config";
 import type { PushProvider } from "../domain/push-provider-contract";
+import {
+  resolvePushPayloadFormat,
+  resolvePushPublicOrigin
+} from "../domain/push-payload-format";
 import { parseVapidConfig } from "../domain/vapid-config";
 import { createFcmPushProvider } from "./fcm-provider";
 import { createLogPushProvider } from "./log-push-provider";
@@ -96,6 +100,8 @@ export function resolvePushProvider(
 
       return createWebPushProvider({
         vapid: vapid.config,
+        payloadFormat: resolvePushPayloadFormat(env),
+        publicOrigin: resolvePushPublicOrigin(env.APP_URL),
         timeoutMs: resolvePushSendTimeoutMs(env)
       });
     }

@@ -6,9 +6,7 @@
  * this app's `default-src 'self'` — no CSP change, which is half the reason
  * ADR-0074 chose Web Push over the FCM Web SDK.
  *
- * Vanilla and dependency-free, like `public/js/news-share.js`. It is not
- * bundled by Astro, for three reasons — the third only visible by fetching it
- * from the built server:
+ * Vanilla and dependency-free; not bundled by Astro, for three reasons:
  *
  *   1. a registration is keyed by script URL, so a content-hashed name would
  *      change on every build and orphan every subscription the previous build
@@ -20,60 +18,93 @@
  *      entitled to keep for a year without revalidating — a bug fix here would
  *      reach nobody, and the only symptom would be old behaviour.
  *
- * The cost is that it is never minified: `public/` is copied verbatim. 5,515 B,
- * most of it these comments. ADR-0074 records the number next to the 91,333 B
- * SDK it replaces.
+ * The cost is that it is never minified: `public/` is copied verbatim, so
+ * comments here count against the client asset budget.
  *
- * ## Payload shape
+ * ## Payload shapes (dual reader, Issue #1106)
  *
- * `{ title, body, targetPath?, data? }` — exactly what
- * `web-push-provider.ts` encrypts. It is decrypted by the browser before this
- * code sees it, so it arrives already authenticated as having come from a
- * server holding the VAPID private key.
+ *   legacy       { title, body, targetPath?, data? }
+ *   declarative  { web_push: 8030, notification: { title, body?, navigate,
+ *                  silent: false, tag?, data? } }
+ *
+ * Exactly one `showNotification` per event, so one banner (a browser that
+ * renders the declarative shape natively never wakes this worker). The producer
+ * emits declarative only while PUSH_PAYLOAD_FORMAT=declarative; this worker
+ * reads both always, so rollback is a producer flip. The click target is never
+ * trusted: it must resolve to http(s) on THIS origin. Runbook:
+ * docs/awcms/push-notifications.md.
  *
  * ## Why a payload-less push still shows something
  *
- * Some push services deliver a "tickle" with no body, and a decryption failure
- * leaves `event.data` unusable. Showing nothing in that case is not the safe
- * default it looks like: browsers require a user-visible notification for every
- * push and answer a silent one with their own "This site has been updated in
- * the background" — or, after repeated offences, by revoking the permission.
- * The fallback is therefore mandatory rather than polite.
+ * Browsers require a visible notification for every push and answer a silent
+ * one with their own "updated in the background" banner, then revoke the
+ * permission. The fallback is mandatory rather than polite.
  */
 "use strict";
 
-/** What a payload-less or undecryptable push shows. Deliberately vague — there is nothing honest to say about content that never arrived. */
 var FALLBACK_TITLE = "New notification";
 var FALLBACK_BODY = "Open the admin area to see what changed.";
+var ADMIN_ROOT = self.location.origin + "/admin";
 
 /**
- * Resolve the click destination against THIS origin, refusing anything that
- * lands elsewhere.
- *
- * The server already validates `targetPath` before the row is written
- * (`push-target-path.ts`), so this is a second wall, not the only one. It is
- * cheap and it is in the right place: this is the code that performs the
- * navigation, and a notification carrying this site's own name and icon is the
- * most convincing open-redirect vehicle there is.
- *
- * `new URL(path, origin)` is what makes it decidable: a protocol-relative
- * `//evil.example/x` resolves to a different origin and is caught by the
- * comparison, where a string test for a leading `/` would pass it.
+ * Resolve the click destination against THIS origin, refusing anything else.
+ * A second wall behind `push-target-path.ts`, and the one that navigates.
+ * `new URL()` makes `//evil.example/x` decidable: it resolves cross-origin.
  */
 function resolveSameOriginUrl(targetPath) {
-  if (typeof targetPath !== "string" || targetPath === "") {
-    return self.location.origin + "/admin";
-  }
+  if (typeof targetPath !== "string" || targetPath === "") return ADMIN_ROOT;
 
   try {
     var url = new URL(targetPath, self.location.origin);
 
-    return url.origin === self.location.origin
-      ? url.href
-      : self.location.origin + "/admin";
+    // Scheme checked explicitly; `javascript:`/`data:` must not rely on the
+    // opaque-origin comparison alone.
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return ADMIN_ROOT;
+    }
+
+    return url.origin === self.location.origin ? url.href : ADMIN_ROOT;
   } catch (error) {
-    return self.location.origin + "/admin";
+    return ADMIN_ROOT;
   }
+}
+
+function sameOrigin(href) {
+  try {
+    return new URL(href).origin === self.location.origin;
+  } catch (error) {
+    return false;
+  }
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function text(value, fallback) {
+  return typeof value === "string" && value !== "" ? value : fallback || "";
+}
+
+/** Either shape -> `{ title, body, url, tag }`. Never throws; `url` is same-origin. */
+function normalizePayload(raw) {
+  var source = {};
+  var target;
+
+  if (isRecord(raw) && raw.web_push === 8030 && isRecord(raw.notification)) {
+    source = raw.notification;
+    target = source.navigate;
+  } else if (isRecord(raw)) {
+    source = raw;
+    target = raw.targetPath;
+  }
+
+  return {
+    title: text(source.title, FALLBACK_TITLE),
+    body: text(source.body, FALLBACK_BODY),
+    url: resolveSameOriginUrl(target),
+    tag: text(source.tag, isRecord(source.data) ? source.data.category : null)
+      .slice(0, 64)
+  };
 }
 
 function readPayload(event) {
@@ -82,72 +113,50 @@ function readPayload(event) {
   try {
     return event.data.json();
   } catch (error) {
-    // Not JSON, or not decryptable. Either way there is no content to render,
-    // and the fallback is what keeps the permission alive.
+    // Not JSON or not decryptable: render the fallback, keep the permission.
     return null;
   }
 }
 
 self.addEventListener("push", function (event) {
-  var payload = readPayload(event) || {};
-  var title =
-    typeof payload.title === "string" && payload.title !== ""
-      ? payload.title
-      : FALLBACK_TITLE;
-  var body =
-    typeof payload.body === "string" && payload.body !== ""
-      ? payload.body
-      : FALLBACK_BODY;
+  var normalized = normalizePayload(readPayload(event));
+  var options = { body: normalized.body, data: { url: normalized.url } };
 
-  var options = {
-    body: body,
-    data: { url: resolveSameOriginUrl(payload.targetPath) }
-  };
+  // Coalesce per tag/category only when the payload names one: a constant
+  // fallback tag would collapse unrelated notifications into the last one.
+  if (normalized.tag) options.tag = normalized.tag;
 
-  // Coalesces per category so a burst of ten does not become ten banners. Set
-  // only when the payload names one: an absent tag means "do not coalesce",
-  // while a constant fallback tag would mean "coalesce with everything", and
-  // ten unrelated notifications would collapse into the last one.
-  if (payload.data && typeof payload.data.category === "string") {
-    options.tag = payload.data.category;
-  }
+  // No `icon` from the payload: it would leak the recipient's IP when fetched.
 
-  // No `icon`. There is no own-origin icon asset in this application to point
-  // at, and taking one from the payload is refused rather than deferred: the
-  // notification would fetch it at display time, handing whoever chose the URL
-  // the recipient's IP address and the fact that they are online.
-
-  // `waitUntil` is not optional: without it the browser may terminate this
-  // worker before `showNotification` resolves, which reads as "the push never
-  // arrived" and is untraceable from the server, where the send succeeded.
-  event.waitUntil(self.registration.showNotification(title, options));
+  // `waitUntil` is not optional (the worker may be killed before
+  // `showNotification` resolves), and one call per event is one banner.
+  event.waitUntil(
+    self.registration.showNotification(normalized.title, options)
+  );
 });
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 
-  var target =
-    (event.notification.data && event.notification.data.url) ||
-    self.location.origin + "/admin";
+  // Re-validated at click time: this is the code that navigates.
+  var target = resolveSameOriginUrl(
+    event.notification.data && event.notification.data.url
+  );
 
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then(function (windowClients) {
-        // Focus a tab that is already here rather than opening a second one.
-        // Matching on origin, not on the full URL: a user with the admin area
-        // open on a different page wants that window brought forward and
-        // navigated, not a duplicate of the whole application.
+        // Focus a tab already on this origin rather than opening a second one.
         for (var i = 0; i < windowClients.length; i += 1) {
           var client = windowClients[i];
 
-          if (
-            client.url.indexOf(self.location.origin) === 0 &&
-            "focus" in client
-          ) {
-            if ("navigate" in client) client.navigate(target);
+          if (sameOrigin(client.url) && "focus" in client) {
+            if ("navigate" in client) {
+              Promise.resolve(client.navigate(target)).catch(function () {});
+            }
 
-            return client.focus();
+            return Promise.resolve(client.focus()).catch(function () {});
           }
         }
 
