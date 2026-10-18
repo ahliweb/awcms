@@ -243,6 +243,21 @@ channels:
       #888), in one transaction. Producer:
       `procurement/application/procurement-posting.ts`'s `reverseDocument`.
       Same payload shape as `document.finalised`.
+  awcms.hr.commission.voided:
+    address: awcms.hr.commission.voided
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A commission accrual was voided (ADR-0132, Issue #1109), in the transaction
+      that voided it: a pending or approved accrual, by the HTTP void route or by
+      `CommissionAccrualPort.void` when the sale it came from was voided,
+      refunded or cancelled. Producer: `hr-commission/application/hr-commission-
+      accrual-ledger.ts`'s `transitionAccrual`. Payload: `accrualId`,
+      `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `fromStatus`
+      (`pending` or `approved`), `reasonCode` (a code or null). Never an amount,
+      a source reference, a payment reference or a name. A replayed void
+      publishes nothing.
   awcms.whatsapp.message.queued:
     address: awcms.whatsapp.message.queued
     messages:
@@ -852,6 +867,12 @@ operations:
       $ref: "#/channels/awcms.procurement.document.reversed"
     messages:
       - $ref: "#/channels/awcms.procurement.document.reversed/messages/DomainEvent"
+  publishHrCommissionAccrualVoided:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.hr.commission.voided"
+    messages:
+      - $ref: "#/channels/awcms.hr.commission.voided/messages/DomainEvent"
   publishWhatsappMessageQueued:
     action: send
     channel:

@@ -12,7 +12,7 @@
 | `awcms_*` tables                    | 222   |
 | Tables with `FORCE` RLS             | 204   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 731   |
+| Test files                          | 732   |
 | Route files                         | 577   |
 | ADR                                 | 292   |
 
@@ -51,7 +51,7 @@
 | `hr_workforce`         | 0.2.0   | active | domain | no   | `tenant_admin`, `profile_identity`, `domain_event_runtime`                                                         |
 | `whatsapp_delivery`    | 0.1.0   | active | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 | `booking`              | 0.3.0   | active | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
-| `hr_commission`        | 0.3.0   | active | domain | no   | `tenant_admin`, `hr_workforce`                                                                                     |
+| `hr_commission`        | 0.4.0   | active | domain | no   | `tenant_admin`, `hr_workforce`, `domain_event_runtime`                                                             |
 | `telegram_delivery`    | 0.1.0   | active | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
 ### Migrations
@@ -522,7 +522,7 @@
 | ------------- | ---------- |
 | `(root)`      | 555        |
 | `e2e`         | 26         |
-| `integration` | 149        |
+| `integration` | 150        |
 | `unit`        | 1          |
 
 ### Routes

@@ -124,6 +124,15 @@ export const WHATSAPP_DISPATCH_FAILED_EVENT_TYPE =
   "awcms.whatsapp.dispatch.failed";
 
 /**
+ * `hr_commission` (ADR-0132, Issue #1109). Declared here -- not imported from
+ * `hr-commission/domain/hr-commission-events.ts` -- for the same reason as
+ * `inventory` above. The literals are kept identical by the AsyncAPI parity gate.
+ */
+export const HR_COMMISSION_EVENT_VERSION = "1.0";
+export const HR_COMMISSION_ACCRUAL_VOIDED_EVENT_TYPE =
+  "awcms.hr.commission.voided";
+
+/**
  * `booking` (ADR-0131, Issue #941). Declared here -- not imported from
  * `booking/domain/booking-reservation-events.ts` -- for the same reason as
  * `inventory` above. The literals are kept identical by the AsyncAPI parity
@@ -151,6 +160,12 @@ export const BOOKING_RESERVATION_EXPIRED_EVENT_TYPE =
 
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
+    {
+      eventType: HR_COMMISSION_ACCRUAL_VOIDED_EVENT_TYPE,
+      eventVersion: HR_COMMISSION_EVENT_VERSION,
+      description:
+        "A commission accrual was voided (a pending or approved accrual, by the HTTP void route or by the CommissionAccrualPort when the sale it came from was voided, refunded or cancelled), in the transaction that voided it. Carries opaque ids, the source TYPE, the rule key and version, the status it left and a coded reason only: never an amount, a source reference, a payment reference or a name."
+    },
     {
       eventType: SAMPLE_RECORDED_EVENT_TYPE,
       eventVersion: SAMPLE_RECORDED_EVENT_VERSION,

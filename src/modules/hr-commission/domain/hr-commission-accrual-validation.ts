@@ -13,7 +13,8 @@ import { createHash } from "node:crypto";
 
 import type {
   CommissionAccrualRequest,
-  CommissionAccrualSource
+  CommissionAccrualSource,
+  CommissionVoidRequest
 } from "../../_shared/ports/commission-accrual-port";
 import {
   CommissionDecimalError,
@@ -76,6 +77,59 @@ function asBody(
 /** `true` only for a real string matching `pattern`: `RegExp.test` coerces an array or object to text and would pass `["x"]`. */
 function matches(value: unknown, pattern: RegExp): boolean {
   return typeof value === "string" && pattern.test(value);
+}
+
+/** Validates a void request already shaped like the port's (Issue #1109). */
+export function validateVoidRequest(
+  request: CommissionVoidRequest
+): Validated<CommissionVoidRequest> {
+  const errors: ValidationError[] = [];
+  const source = request?.source as CommissionAccrualSource | undefined;
+
+  if (!matches(request?.employmentId, UUID_PATTERN)) {
+    errors.push({
+      field: "employmentId",
+      message: "employmentId must be a UUID."
+    });
+  }
+
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    errors.push({ field: "source", message: "source is required." });
+  } else {
+    if (!matches(source.type, CODE_PATTERN)) {
+      errors.push({ field: "source.type", message: "source.type is invalid." });
+    }
+
+    if (!matches(source.ref, SOURCE_REF_PATTERN)) {
+      errors.push({
+        field: "source.ref",
+        message: "source.ref must be 1-200 characters of A-Z a-z 0-9 _ . : -."
+      });
+    }
+
+    if (
+      source.line !== undefined &&
+      !matches(source.line, SOURCE_LINE_PATTERN)
+    ) {
+      errors.push({
+        field: "source.line",
+        message:
+          "source.line must be at most 64 characters of A-Z a-z 0-9 _ . : -."
+      });
+    }
+  }
+
+  if (!matches(request?.reason, REASON_CODE_PATTERN)) {
+    errors.push({
+      field: "reason",
+      message:
+        "reason is a short code (lower-case letters, digits, '_', '.', '-'; at most 40 characters), never free text."
+    });
+  }
+
+  return errors.length > 0
+    ? { valid: false, errors }
+    : { valid: true, value: request };
 }
 
 /** Validates a request object already shaped like the port's (the in-process adapter's entry). */

@@ -13,8 +13,10 @@
  * port.ts` (this module imports nothing from commerce); a double delivery is one
  * accrual (a database unique key, race-safe); the amount comes from the
  * published rule in force on the event date, never from the caller. Affiliate
- * commission is NOT here. Reversal and the `awcms.hr.commission.*` events are
- * later phases. The rest of this header describes the rule foundation (#950).
+ * commission is NOT here. Issue #1109 adds `CommissionAccrualPort.void` (reverse
+ * an accrual by source identity; a `pending`/`approved` accrual only, `payable`
+ * and `paid` are refused as `period_closed`) and the first
+ * `awcms.hr.commission.*` event, `voided`; the other events are later phases. The rest of this header describes the rule foundation (#950).
  *
  * ## What the rule foundation (#950) is and is not
  *
@@ -38,12 +40,13 @@
  * chokepoint is reached through the shared route factory (`defineTenantRoute`).
  */
 import { defineModule } from "../_shared/module-contract";
+import { HR_COMMISSION_EVENT_TYPES } from "./domain/hr-commission-events";
 import { HR_COMMISSION_MODULE_KEY } from "./domain/hr-commission-permissions";
 
 export const hrCommissionModule = defineModule({
   key: HR_COMMISSION_MODULE_KEY,
   name: "HR Commission",
-  version: "0.3.0",
+  version: "0.4.0",
   // Commission accruals are monetary pay facts: payroll data by any reading
   // (ADR-0132). Declared so that no channel that must keep payroll off it (the
   // Telegram registry and its CI gate, ADR-0140) has to guess from a name.
@@ -54,7 +57,20 @@ export const hrCommissionModule = defineModule({
   status: "active",
   description:
     "Versioned commission rules (Issue #950, ADR-0132): jurisdiction-neutral, tenant-authored terms saying how a share of a source amount becomes a commission — a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling. A rule changes only by a new version; the database enforces that a draft may be edited, a published or retired version is immutable (a published one may only become retired), no two published versions of one rule overlap (race-safe, advisory-locked), and no row is ever deleted. The version in force for an event is the one whose half-open window contains the event's own date, never now(). Evaluation is a pure function over bigint decimal strings: no float, no expression or script, no tiers, bounded by construction. Publish and retire are high-risk, separately grantable, idempotency-keyed and audited without any rate or amount; publish is bound to the content digest the reviewer saw and refuses the draft's creator and last editor (maker / checker), and a row is born a draft. A rule references no person or employment and carries no personal data. Issue #951 adds the accrual LEDGER: a commission earned by an employment from a source event is one row whose monetary facts (rule version, inputs, rate snapshot, amount, currency, instants) are immutable by trigger and whose status advances pending -> approved -> payable -> paid, or to voided from pending or approved (a voided accrual can never be paid); the transition log is append-only and written only by the accrual's own triggers, so status and log cannot diverge and a reconciliation proves it. The same source for the same employment is accrued exactly once (a database unique key, race-safe), a downstream adapter reports a sale through a neutral port (this module imports nothing from commerce) and a redelivery returns the original; the amount is computed from the published rule in force on the event's own date and can never be asserted by the caller; the employment and rule are validated under FOR SHARE by trigger; the beneficiary cannot approve their own accrual. Approve, release, void and pay are high-risk, separately grantable, idempotency-keyed and audited without any amount. A back-dated publish of a rule now needs a stated reason. Employee commission only (not affiliate); reversal and events are later phases. Self-service (Issue #952): an employee reads their OWN accruals, read-only, at /admin/hr/my-commission through GET /api/v1/hr-commission/my-accruals, which joins the live employment linked to their login in the query itself (another person's accrual is a 404, never a 403, and there is no filter to widen it); the view carries no approver, payer or payment reference. No screen exports anyone's data.",
-  dependencies: ["tenant_admin", "hr_workforce"],
+  dependencies: ["tenant_admin", "hr_workforce", "domain_event_runtime"],
+  /**
+   * #1109: the accrual port (`_shared/ports/commission-accrual-port.ts`; adapter
+   * `application/hr-commission-accrual-port-adapter.ts`). A downstream adapter
+   * (the commerce sale-attribution adapter in a derived repository) binds to it
+   * at its composition root; nothing in this repository consumes it.
+   */
+  capabilities: {
+    provides: ["commission_accrual"]
+  },
+  events: {
+    asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",
+    publishes: [...HR_COMMISSION_EVENT_TYPES]
+  },
   type: "domain",
   api: {
     openApiPath: "openapi/modules/hr-commission.openapi.yaml",

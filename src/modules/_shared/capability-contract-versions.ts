@@ -96,6 +96,12 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // staff_availability is provided by `hr_workforce` (Issue #946, ADR-0132) and
     // consumed, optionally, by `booking` (Issue #949). First assigned number.
     staff_availability: "1.0.0",
+    // commission_accrual is provided by `hr_commission` (Issue #951, ADR-0132) and
+    // bound by a downstream sale-attribution adapter. The port shipped with
+    // `accrue` alone and was not listed here; Issue #1109 adds `void` (a new
+    // method on the port: MINOR) and declares the key for the first time, so
+    // `1.1.0` is the first assigned number: `1.0.0` is the accrue-only shape.
+    commission_accrual: "1.1.0",
     // tenant_admin provides (ADR-0060) — the office hierarchy resolver behind
     // `business_scope_hierarchy`. The port itself is unchanged from the day it
     // landed (#180); what changed is that a BASE module finally provides an

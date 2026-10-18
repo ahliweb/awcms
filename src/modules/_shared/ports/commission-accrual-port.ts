@@ -66,6 +66,40 @@
  *
  * Money is a decimal STRING in and out (never a JS number): a number has already
  * been through a float.
+ *
+ * ## Reversing an accrual: `void` (Issue #1109, contract 1.1.0)
+ *
+ * A sale that is voided, refunded or cancelled reverses its accrual with
+ * `void`, keyed by the SAME source identity `accrue` took (`source` and
+ * `employmentId`), so a consumer never stores `hr_commission`'s internal ids.
+ *
+ *   - It never edits or deletes the accrual: the monetary facts stay as posted.
+ *     The accrual's status moves to `voided` and the database appends the
+ *     transition to the append-only log; the ledger's balances move the amount
+ *     out of the live buckets into `voided`, and a voided accrual can never be
+ *     paid (the machine has no edge out of `voided`).
+ *   - `voided`: the accrual was `pending` or `approved` (no money had been
+ *     committed) and is now voided; the audit row and the
+ *     `awcms.hr.commission.voided` domain event are written in the caller's own
+ *     transaction.
+ *   - `already_voided`: a replay. Nothing is written, audited or published.
+ *   - `not_found`: nothing was accrued for that source and employment.
+ *   - `period_closed`: the accrual is `payable` (released to payroll, which
+ *     selects payable accruals into a run) or `paid`. It is REFUSED and nothing
+ *     is written: the family has no reversal-into-the-current-period mechanism
+ *     yet (a compensating negative row is the recorded follow-up of `sql/188`),
+ *     and silently voiding money payroll may already hold would break the
+ *     "paid by exactly one run" guarantee. The consumer routes this to a human
+ *     (a clawback), not to a retry.
+ *   - `actor_required`: every status edge stamps a person (`voided_by`); a
+ *     system actor (`null`) is refused. `input_invalid`: a malformed source, an
+ *     employment id that is not a UUID or a `reason` that is not a code.
+ *
+ * Like `accrue`, `void` performs no access check; the composition root must
+ * authorize its actor (the HTTP void route requires
+ * `hr_commission.accruals.cancel`). Unlike `accrue`, a NEW void writes its own
+ * audit row (the status edge is the same one the HTTP route takes, so the audit
+ * and the event cannot be skipped by a consumer).
  */
 
 export type CommissionAccrualSource = {
@@ -119,6 +153,31 @@ export type CommissionAccrualOutcome =
   | { outcome: "employment_not_eligible" }
   | { outcome: "input_invalid"; message: string };
 
+export type CommissionVoidRequest = {
+  /** The same source identity the accrual was posted with. */
+  source: CommissionAccrualSource;
+  /** The beneficiary the accrual was posted for. */
+  employmentId: string;
+  /**
+   * A short CODE, never free text: lower-case letters, digits, `_`, `.` or `-`,
+   * starting with a letter, at most 40 characters (e.g. `sale_voided`).
+   */
+  reason: string;
+  /** The request's correlation id; joins the audit row and the event. */
+  correlationId?: string;
+};
+
+export type CommissionVoidOutcome =
+  | { outcome: "voided" | "already_voided"; accrual: CommissionAccrualRecord }
+  | { outcome: "not_found" }
+  | {
+      outcome: "period_closed";
+      accrualId: string;
+      status: "payable" | "paid";
+    }
+  | { outcome: "actor_required" }
+  | { outcome: "input_invalid"; message: string };
+
 export type CommissionAccrualPort = {
   /** Accrue a commission for a sale fact, exactly once per source identity and employment. */
   accrue(
@@ -127,4 +186,14 @@ export type CommissionAccrualPort = {
     actorTenantUserId: string | null,
     request: CommissionAccrualRequest
   ): Promise<CommissionAccrualOutcome>;
+  /**
+   * Reverse the accrual posted for a source, exactly once (Issue #1109). The
+   * actor is the person who voided the sale: it is stamped on the accrual.
+   */
+  void(
+    tx: Bun.SQL,
+    tenantId: string,
+    actorTenantUserId: string | null,
+    request: CommissionVoidRequest
+  ): Promise<CommissionVoidOutcome>;
 };
