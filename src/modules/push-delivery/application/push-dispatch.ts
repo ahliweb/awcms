@@ -184,6 +184,11 @@ async function recordDeliveryAttempt(
   );
 }
 
+/**
+ * `status = 'sent'` / `sent_at` record PROVIDER ACCEPTANCE (the push service
+ * answered 2xx), not display on a device. `last_success_at` on the subscription
+ * has the same meaning. See `PushDeliveryResult` in the provider contract.
+ */
 async function finalizeSent(
   sql: Bun.SQL,
   tenantId: string,

@@ -61,6 +61,14 @@ export type PushMessage = {
  * collecting one permanent failure per message forever.
  */
 export type PushDeliveryResult =
+  /**
+   * `ok: true` means the PUSH SERVICE ACCEPTED the request (Web Push: HTTP
+   * 201/202; FCM: a message name). It does NOT mean a device showed anything:
+   * the service may hold it for an offline device, drop it at its TTL, or the
+   * device may suppress it (Focus/DND, revoked permission). "Device shown" and
+   * "clicked" are never observable from the server; they are recorded only by a
+   * human in the UAT matrix (`docs/awcms/push-notifications-test-matrix.md`).
+   */
   | { ok: true; providerMessageId?: string }
   | {
       ok: false;

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](push-notifications.md)
 
-<!-- i18n-source-hash: sha256:22d32af3f55fd420d51885421437cef898d5aa87c921c2451f2e9d9b1a75f95f -->
+<!-- i18n-source-hash: sha256:03a21db2148e3b3ec92f558dddf4c29b5d38881a9f4751d20e6853f2921428af -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -9,6 +9,9 @@
 Cakupan: modul `push_delivery` (ADR-0074), khususnya cara `auth_secret` RFC 8291
 per-langganan disimpan (Issue #1089, tindak lanjut #1082). Modulnya dijelaskan di
 `src/modules/push-delivery/README.id.md`.
+
+Matriks uji operator, status UAT perangkat nyata, dan daftar go/no-go:
+[`push-notifications-test-matrix.id.md`](push-notifications-test-matrix.id.md) (Issue #1107).
 
 ## Apa yang berubah
 
