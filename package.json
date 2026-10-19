@@ -209,7 +209,7 @@
     "@changesets/cli": "^3.0.3",
     "@playwright/test": "^1.64.0",
     "@types/bun": "^1.4.3",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.0",
     "typescript": "^7.0.2",
     "yaml": "^2.9.1"
