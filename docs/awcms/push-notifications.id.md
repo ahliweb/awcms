@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](push-notifications.md)
 
-<!-- i18n-source-hash: sha256:03a21db2148e3b3ec92f558dddf4c29b5d38881a9f4751d20e6853f2921428af -->
+<!-- i18n-source-hash: sha256:82b0d648fe31744af9302c81ffd5f9f3d73070cf2558d423a20ee3576e0a2222 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -51,7 +51,7 @@ menjatuhkan kolom sebelum langkah 5 menghilangkan rahasia.
 1. **Buat dan simpan cincin kunci** (secret store, bukan repo):
    `PUSH_AUTH_SECRET_ENCRYPTION_KEYS=k1:$(openssl rand -base64 32)`. Harus
    berbeda dari setiap cincin lain. Berikan ke **aplikasi**, `push:dispatch`, dan
-   `push:auth-secret:backfill` (sudah ada di `ops/awcms-jobs.env-allowlist`).
+   `push:auth-secret:backfill` (terbatas per job di `ops/awcms-jobs.env-scoped`, hanya untuk job tersebut).
    `bun run config:validate` memeriksanya saat `PUSH_PROVIDER=web_push`.
 2. **Deploy rilis** (menjalankan `sql/314`: menambah kolom, melonggarkan CHECK,
    mempersempit UPDATE worker). Sejak itu: perangkat baru/terdaftar ulang berupa
@@ -222,7 +222,7 @@ berubah (vektor uji RFC 8291 tetap sama).
    pemeriksaan pembaruan berikutnya, paling lama sekitar 24 jam, atau pada
    navigasi berikutnya).
 2. **Setelah minimal satu siklus pembaruan service worker penuh (24 jam, batas atas pemeriksaan pembaruan browser) sejak deploy**, set `PUSH_PAYLOAD_FORMAT=declarative`
-   pada aplikasi dan `push:dispatch` (ada di `ops/awcms-jobs.env-allowlist`) lalu
+   pada aplikasi dan `push:dispatch` (ada di `ops/awcms-jobs.env-global`) lalu
    restart. Verifikasi dengan `bun run config:validate`, lalu kirim uji dari
    `/admin/push-notifications` ke perangkat Chromium dan PWA iOS/iPadOS 18.4+
    terpasang. Penerimaan HTTP oleh provider bukan tampilan di perangkat:

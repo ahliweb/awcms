@@ -47,7 +47,7 @@ doing the column drop before step 5 loses secrets.
 1. **Generate and store the key ring** (secret store, not the repo):
    `PUSH_AUTH_SECRET_ENCRYPTION_KEYS=k1:$(openssl rand -base64 32)`. It must
    differ from every other ring. Provide it to the **app**, `push:dispatch` and
-   `push:auth-secret:backfill` (it is in `ops/awcms-jobs.env-allowlist`).
+   `push:auth-secret:backfill` (it is job-scoped in `ops/awcms-jobs.env-scoped`, granted to those jobs only).
    `bun run config:validate` checks it when `PUSH_PROVIDER=web_push`.
 2. **Deploy the release** (runs `sql/314`: adds the column, relaxes the CHECK,
    narrows worker UPDATE). From here: new/re-registered devices are ciphertext;
@@ -215,7 +215,7 @@ vectors are unchanged).
    update check, at most about 24 hours later, or on the next navigation).
 2. **After at least one full service-worker update cycle (24 hours, the browser update-check ceiling) has passed since deploy**, set
    `PUSH_PAYLOAD_FORMAT=declarative` on the app and `push:dispatch` (it is in
-   `ops/awcms-jobs.env-allowlist`) and restart them. Verify with
+   `ops/awcms-jobs.env-global`) and restart them. Verify with
    `bun run config:validate`, then send a test from `/admin/push-notifications`
    to a Chromium device and an installed iOS/iPadOS 18.4+ PWA. Provider HTTP
    acceptance is not device display: confirm the banner on the device.
