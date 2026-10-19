@@ -2861,6 +2861,9 @@ msgstr "Alasan pelepasan"
 msgid "Remove"
 msgstr "Hapus"
 
+msgid "Remove role {code}"
+msgstr "Hapus peran {code}"
+
 msgid "Removed"
 msgstr "Dihapus"
 
@@ -7945,7 +7948,7 @@ msgid "Edit resource {code}"
 msgstr "Ubah resource {code}"
 
 msgid "Edit {code}"
-msgstr "Ubah {code}"
+msgstr "Sunting {code}"
 
 msgid "Effective until (optional, exclusive)"
 msgstr "Berlaku sampai (opsional, tidak termasuk)"
