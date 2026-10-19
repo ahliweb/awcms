@@ -210,7 +210,7 @@
     "@playwright/test": "^1.64.0",
     "@types/bun": "^1.4.3",
     "prettier": "^3.9.9",
-    "prettier-plugin-astro": "^1.1.0",
+    "prettier-plugin-astro": "^1.1.1",
     "typescript": "^7.0.2",
     "yaml": "^2.9.1"
   },
