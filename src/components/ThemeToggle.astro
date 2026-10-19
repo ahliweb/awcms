@@ -34,14 +34,14 @@
 import { ADMIN_ICON_PATHS } from "../lib/ui/admin-icons";
 
 interface Props {
-  ariaLabel?: string;
+  actionLabel?: string;
   systemLabel?: string;
   lightLabel?: string;
   darkLabel?: string;
 }
 
 const {
-  ariaLabel = "Change colour theme",
+  actionLabel = "Change colour theme",
   systemLabel = "System",
   lightLabel = "Light",
   darkLabel = "Dark"
@@ -68,12 +68,22 @@ const MODE_ICONS = [
   data-label-system={systemLabel}
   data-label-light={lightLabel}
   data-label-dark={darkLabel}
-  aria-label={ariaLabel}
+  data-label-action={actionLabel}
 >
+  {/* The accessible name comes from CONTENT, not `aria-label`: "Change colour
+      theme: System". An `aria-label` of just the action replaced the visible
+      mode word, which fails WCAG 2.5.3 Label in Name (axe-core 4.14
+      `label-content-name-mismatch`, serious) — a voice-control user who says
+      "click System" reached nothing. This one span carries action + mode at
+      every width (the visible label below is `display: none` on phones), and
+      `theme-toggle-client.ts` rewrites it on every change. */}
+  <span class="sr-only theme-toggle-name">
+    {actionLabel}: {systemLabel}
+  </span>
   {/* ADR-0120 — all three glyphs render; `theme-toggle-client.ts` shows one by
       toggling `hidden`. Rendering them here rather than assigning markup in the
       client is what keeps `innerHTML` out of the admin shell entirely. They are
-      `aria-hidden` because the button already has a name and a description. */}
+      `aria-hidden` because the name comes from the `sr-only` span above. */}
   {MODE_ICONS.map((mode) => (
     <svg
       class="theme-toggle-icon"
@@ -93,7 +103,9 @@ const MODE_ICONS = [
       <path d={mode.path} />
     </svg>
   ))}
-  <span class="theme-toggle-label">{systemLabel}</span>
+  <span class="theme-toggle-label" aria-hidden="true">
+    {systemLabel}
+  </span>
 </button>
 
 <style>
@@ -110,7 +122,7 @@ const MODE_ICONS = [
   @media (max-width: 767.98px) {
     /* Icon alone on phones — the topbar is a fixed 58px row and the word is
        redundant next to the glyph. The mode still reaches assistive tech
-       through `aria-description`, which the client keeps in step. */
+       through the `sr-only` name span, which the client keeps in step. */
     .theme-toggle-label {
       display: none;
     }

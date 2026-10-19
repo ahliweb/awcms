@@ -98,13 +98,22 @@ function applyButtonState(button: HTMLElement, mode: ThemeMode): void {
   /*
    * The accessible name has to follow the state too.
    *
-   * The button's `aria-label` is a fixed "Change colour theme", which describes
-   * the ACTION but never says which mode is active — and the visible label is
-   * hidden at phone widths, so on a phone a screen-reader user had no way to
-   * know whether they were in system, light or dark. `aria-description` carries
-   * the current mode without replacing the action name.
+   * It lives in the `sr-only` `.theme-toggle-name` span — action plus mode,
+   * "Change colour theme: Dark" — so it says which mode is active even on a
+   * phone, where the visible label is hidden. This used to be a fixed
+   * `aria-label` plus an `aria-description` for the mode; the `aria-label`
+   * failed WCAG 2.5.3 Label in Name because it did not contain the visible
+   * mode word, and `aria-description` (ARIA 1.3) is not announced by every
+   * screen reader. `textContent`, not markup, so nothing here parses HTML.
    */
-  button.setAttribute("aria-description", labelFor(button, mode));
+  const name = button.querySelector(".theme-toggle-name");
+
+  if (name) {
+    const action = button.dataset.labelAction ?? "";
+    name.textContent = action
+      ? `${action}: ${labelFor(button, mode)}`
+      : labelFor(button, mode);
+  }
 }
 
 function init(): void {

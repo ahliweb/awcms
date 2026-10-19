@@ -444,9 +444,18 @@ const accountInitials =
               layout, and `.admin-brand-mark` is `aria-hidden`. Below 768px
               (`admin.css`'s `.admin-brand-text { display: none }`) the link
               had NO accessible name at all (axe: "Links must have
-              discernible text", serious). `aria-label` fixes the name
-              unconditionally, independent of which child is visible. */}
-          <a href="/admin" class="admin-brand" aria-label="AWCMS">
+              discernible text", serious).
+
+              The `aria-label` that fixed it then became a defect of its own
+              (WCAG 2.5.3 Label in Name; axe-core 4.14's
+              `label-content-name-mismatch`, serious): an `aria-label`
+              REPLACES the content, and the content's visible text — the tile
+              plus the wordmark, "A AWCMS" — is not contained in "AWCMS". The
+              name now comes from content instead: one `sr-only` span carries
+              it at every width, and both visible children stay `aria-hidden`
+              so nothing is announced twice. */}
+          <a href="/admin" class="admin-brand">
+            <span class="sr-only">AWCMS</span>
             {/* ADR-0120 — a letterform tile, not an image file: it costs no
                 request on a page that renders for every `/admin/*` hit, it
                 inherits the theme, and it cannot 404. */}
@@ -457,7 +466,7 @@ const accountInitials =
                 mark stays. A bare text node cannot be targeted by CSS, and the
                 topbar is a fixed-height row that must fit — see the phone-width
                 block in admin.css. Purely visual now: the link's accessible
-                name comes from `aria-label` above, so this span is also
+                name comes from the `sr-only` span above, so this span is also
                 `aria-hidden` to avoid announcing "AWCMS" twice. */}
             <span class="admin-brand-text" aria-hidden="true">
               AWCMS
@@ -507,7 +516,7 @@ const accountInitials =
             inactiveLabel={t("Sync inactive")}
           />
           <ThemeToggle
-            ariaLabel={t("Change colour theme")}
+            actionLabel={t("Change colour theme")}
             systemLabel={tx("theme", "System")}
             lightLabel={tx("theme", "Light")}
             darkLabel={tx("theme", "Dark")}
@@ -521,14 +530,21 @@ const accountInitials =
             {/* ADR-0096 — the avatar is a LINK. ADR-0120 turned it into an
                 initials disc: a stroked person-glyph at 26px reads as a smudge,
                 where two letters read as a person. Both the disc and the role
-                line are `aria-hidden`/decorative-adjacent — the accessible name
-                comes from the link's own label, so a screen reader announces
-                "My account", not "OW owner". */}
-            <a
-              href="/admin/account"
-              class="admin-account-link"
-              aria-label={t("My account")}
-            >
+                line are `aria-hidden` — the accessible name comes from the
+                `sr-only` span, so a screen reader announces "My account:
+                owner", not "OW owner".
+
+                That span replaced an `aria-label="My account"`, which failed
+                WCAG 2.5.3 Label in Name (axe-core 4.14
+                `label-content-name-mismatch`, serious): the role line is the
+                link's visible text, and a voice-control user who says "click
+                owner" must reach a link whose name contains "owner". The
+                initials are left out on purpose — they are an avatar, not a
+                label, exactly as an icon's glyph is not. */}
+            <a href="/admin/account" class="admin-account-link">
+              <span class="sr-only">
+                {t("My account")}: {roles}
+              </span>
               <span class="admin-avatar" aria-hidden="true">
                 {accountInitials}
               </span>
