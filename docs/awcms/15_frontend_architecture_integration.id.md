@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](15_frontend_architecture_integration.md)
 
-<!-- i18n-source-hash: sha256:b0a48ebe414fcafc5a6a057a911111c56da22e604a9ddf765772dc83c909f0f1 -->
+<!-- i18n-source-hash: sha256:ff4363accb7768628424296f61c82925a083d8ffa47c3e2c8f975a697de698c3 -->
 
 # Bagian 15 — Arsitektur Frontend dan Integrasi Frontend–Backend
 
@@ -25,6 +25,17 @@ Terkait: `14_ui_ux_design_system.md` (desain), `16_backend_data_access_integrati
 | State          | Lokal per-island + store ringan untuk sesi entri berjalan; hindari SPA global besar                                                      |
 
 Alasan: SSR menjaga waktu muat cepat di LAN, aman untuk cookie httpOnly, dan tetap ringan; islands membatasi JS hanya di area interaktif. Backend/SSR dijalankan dengan **Bun** sebagai platform runtime; Node.js bukan target platform server utama.
+
+## Teknologi apa yang dipakai sebuah permukaan (ADR-0146)
+
+Dokumen ini menjelaskan frontend Astro repo ini. Permukaan mana yang menjadi miliknya
+ditentukan oleh [ADR-0146](../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md) (Proposed): **setiap permukaan admin dan
+setiap permukaan web publik adalah Astro**; **aplikasi persona** (pelanggan, kurir,
+pengemudi, mitra, petugas gudang dan lapangan) memilih LynxJS + ReactLynx sebagai
+_kandidat_, di **repo konsumennya sendiri**, sebagai klien kontrak API publik, dan hanya
+setelah gerbang proof-of-concept Lynx. Tidak ada yang berubah di sini untuk aplikasi
+persona: ia tidak hidup di frontend ini, tidak mengimpor `src/modules/`, dan tidak pernah
+menjadi alasan menyusun ulang layar admin. Admin PWA yang dapat dipasang tetap admin Astro.
 
 ## Astro SSR di atas runtime Bun
 

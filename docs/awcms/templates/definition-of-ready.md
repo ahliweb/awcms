@@ -52,6 +52,38 @@ One question would have found both at step 9, and it is the first one below.
 | something landing **inert** | what makes it inert, and which PR turns it on                                                      |
 | a foundation layer          | **its ADR**, not the intention to write one                                                        |
 
+## New product surface (a screen or an app)
+
+Applies when the change adds a **new screen, app or client** rather than changing
+an existing one. Source: [ADR-0146](../../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md) §6; the classifier is
+`classifySurface` in [`scripts/lib/product-surface-policy.ts`](../../../scripts/lib/product-surface-policy.ts).
+
+This section **binds once ADR-0146 is Accepted**; while it is Proposed, use it
+as guidance. The structural no-Lynx check in `tests/product-surface-policy.test.ts`
+runs already, whatever the ADR status.
+
+1. **What does it manage, and for whom?** The system, or a person's own part of
+   a site, makes it an **admin** surface: stop, it is Astro (`system-admin` here,
+   `user-admin` in `awcms-astro` only when the site declares it, or `pwa-admin`).
+2. **Is it public and meant to be crawled?** Then `public-web`: Astro.
+3. **Is it a persona workflow** (transactional, interaction-intensive,
+   native-capability-bound)? Then `persona-app-native` or `persona-app-web`.
+   Record the kind the classifier returns; if it throws, the surface is
+   unclassified and **not ready**. "App" is not a `/app` URL, a phone-sized
+   layout or an installable manifest.
+4. **Which repo?** A persona app is a consumer repo with its own issues; this
+   repo gets no UI feature for it, and no `@lynx-js/*` dependency, import or
+   `lynx.config.*` (a test fails if one appears).
+5. **Which public contracts does it call**, with per-resource authorization for
+   this actor? A missing endpoint is an ordinary API issue here.
+6. **Auth and session** for this client type (PKCE, secure storage on native,
+   CSRF/CORS on Web); **offline, cache and sync policy** (conflict, replay,
+   idempotency, tenant context, remote revoke, data minimisation); **push**
+   adapter per platform.
+7. **PoC result linked** (Android, iOS, HarmonyOS, Web, and Bun tooling, run
+   outside this repo), or the PoC is the first task.
+8. **Threat model, MASVS/ASVS, and a DPIA** when sensitive data is processed.
+
 ## Two things that are NOT part of this list
 
 - **Estimates.** They are not in this flow and they are not added here.

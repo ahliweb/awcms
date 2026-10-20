@@ -180,6 +180,18 @@ Two constraints that are often only discovered late: **CSP single-owner** (a
 script must be imported and then bundled, not inlined) and every admin screen
 must go through `loadAdminScreen` (`access:chokepoint:check` counts it).
 
+**A new product surface is a step-8/9 decision, not an implementation detail**
+([ADR-0146](../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md)): before building a screen or an app, classify it
+with the surface table. Anything that manages the system or a person's own part
+of a site is an Astro admin (`/admin/*` here, or `awcms-astro` for USER admin); a
+public, crawlable page is Astro; only a **persona workflow** (customer, courier,
+driver, partner, warehouse or field staff) is a candidate for a separate
+**LynxJS** consumer repo, and only after the Lynx proof-of-concept gate. "App"
+means persona function, not a `/app` URL, a phone-sized layout or an
+Add-to-Home-Screen manifest. The questions are in
+[`templates/definition-of-ready.md`](templates/definition-of-ready.md) §New
+product surface.
+
 ## 9. Cross-Spec Review / Definition of Ready
 
 **Answers:** whether steps 1–8 agree with each other, before anyone writes code.

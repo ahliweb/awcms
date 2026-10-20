@@ -24,6 +24,22 @@ below). This repo has **33 registered modules**, migrations `sql/001-sql/224`, R
 (Issue #166, #171). This document describes what is **in the code today**. For per-module
 detail, see each `README.md` under `src/modules/<module>/`.
 
+## Product surfaces and persona apps (ADR-0146)
+
+[ADR-0146](adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md)
+(**Proposed** until maintainer review; it **refines** ADR-0055 and ADR-0070, it does not
+supersede them) fixes which technology each kind of surface uses. **Every admin surface
+(SYSTEM in this repo, USER in `awcms-astro`, and an installable PWA admin) and every public
+web surface stays Astro**; **persona apps** (customer, courier, driver, partner, warehouse
+and field staff) **prefer LynxJS + ReactLynx** as a _candidate_, in their **own consumer
+repos**, as clients of the official API contracts — never a second backend, never a Lynx
+workspace here. "App" is defined by persona function, not by URL, device or installability,
+and anything that manages the system is admin. Lynx for Web is admissible only after a
+proof of concept passes, and no persona app ships before the Android/iOS/HarmonyOS/Web and
+Bun PoC gate (ADR-0146 §5) is recorded. **State of the code today: no Lynx code, dependency
+or config exists in this repo**, and `tests/product-surface-policy.test.ts` fails if one
+appears (`scripts/lib/product-surface-policy.ts` holds the surface table and classifier).
+
 ## Stack
 
 - Runtime: Bun (Bun-only). Astro/Vite binaries are run through `bun --bun`.

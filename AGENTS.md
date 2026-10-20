@@ -124,6 +124,48 @@ Tiga hal yang mudah keliru:
   di-seed men-deny bahkan owner sementara kodenya terlihat benar — repo ini sudah
   pernah kena dua kali (lihat `tests/admin-security-page-contract.test.ts`).
 
+## Di mana sebuah APLIKASI persona dibangun, dan teknologi apa (ADR-0146)
+
+[ADR-0146](docs/adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md)
+(status **Proposed** sampai ditinjau maintainer) **menyempurnakan** — bukan
+men-supersede — ADR-0055 dan ADR-0070. Larangan struktural Lynx di repo ini
+sudah ditegakkan tes **sekarang**; gerbang Definition of Ready untuk permukaan
+baru baru **mengikat setelah ADR-0146 berstatus Accepted**. Aturannya, dibaca
+tanpa tafsir:
+
+| Permukaan                                                                          | Teknologi                                     | Rumah                                      |
+| ---------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------ |
+| Admin **SISTEM** (`/admin/*`, tenant/owner/platform)                               | **Astro** SSR (SSG hanya bila layak)          | `awcms` (repo ini)                         |
+| Admin **USER** situs                                                               | **Astro** SSR bila terautentikasi             | `awcms-astro`, hanya bila situs menyatakan |
+| Halaman **publik**: blog/berita, profil, katalog publik, landing, SEO              | **Astro** SSG/SSR per rute                    | `awcms` atau `awcms-astro`                 |
+| **Aplikasi persona** (pelanggan, kurir, pengemudi, mitra, petugas lapangan/gudang) | **LynxJS + ReactLynx**, _preferred candidate_ | **repo konsumen produk yang terpisah**     |
+| Web mobile berkarakter aplikasi (bukan publik/SEO/admin)                           | Lynx for Web, **hanya bila PoC lulus**        | repo konsumen produk yang terpisah         |
+| Admin yang dapat dipasang sebagai PWA                                              | **Astro** web app/PWA                         | repo admin yang dibungkusnya               |
+
+- **"Aplikasi" ditentukan oleh FUNGSI persona** (alur transaksi, interaksi
+  intensif, kemampuan native), **bukan** oleh URL `/app`, tampilan di ponsel,
+  atau kemampuan dipasang di Home Screen. **Apa pun yang mengelola sistem tetap
+  admin Astro**, di perangkat apa pun.
+- **Jangan menaruh Lynx di repo ini**: tidak ada dependensi `@lynx-js/*`, tidak
+  ada impor dari `@lynx-js/` di `src/`, tidak ada `lynx.config.*`; dan jangan
+  menjadikan `awcms-astro` repo Lynx. `tests/product-surface-policy.test.ts`
+  menegakkannya secara struktural (bukan pendeteksi kata — dokumen bebas
+  membahas Lynx). Mengubahnya memerlukan ADR yang men-supersede ADR-0146.
+- Aplikasi persona adalah **klien**: hanya memakai kontrak publik OpenAPI/event
+  yang sesuai aktornya, tidak pernah membaca database atau `src/modules/`, tidak
+  memakai endpoint admin secara implisit, dan tidak mem-bypass tenant isolation,
+  ABAC, atau idempotency lewat cache/offline. Backend AWCMS tetap **system of
+  record**.
+- **Sebelum produksi, PoC Lynx wajib lulus** (Android/iOS/HarmonyOS/Web + tooling
+  Bun) — dijalankan **di luar** repo ini. Gagal berarti pengecualian tercatat via
+  ADR. Tooling Lynx menyebut Node di quick-start-nya; itu **bukan** izin
+  menambah Node/npm/pnpm/yarn ke repo ini (Bun-only tetap berlaku).
+- Klasifikasi permukaan baru ada di `scripts/lib/product-surface-policy.ts`
+  (`classifySurface`); permukaan yang tak terklasifikasi **belum siap**
+  (Definition of Ready, ADR-0146 §6). Pekerjaan khusus konsumen (mis.
+  `ahliweb/awcms-one#445`) dibuat di repo konsumennya, bukan sebagai fitur UI di
+  sini.
+
 ## Alur kerja wajib setiap task
 
 > **Delapan langkah di bawah adalah langkah 10–12 dari alur penuh.** Alur

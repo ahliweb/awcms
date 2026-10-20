@@ -9,6 +9,15 @@ description: Implement an AWCMS UI screen/component per the design system. Use w
 
 Follow **`docs/awcms/14_ui_ux_design_system.md`** (tokens, components, layout, screens) and **`docs/awcms/15_frontend_architecture_integration.md`** (SSR/islands, API client, offline).
 
+## First: is this a screen for THIS repo? (ADR-0146)
+
+This skill builds **Astro** screens: SYSTEM admin under `/admin/*` here, and this repo's own public pages. Classify before you build ([`docs/adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md`](../../../docs/adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md), `classifySurface` in `scripts/lib/product-surface-policy.ts`):
+
+- It **manages the system** (modules, users, permissions, audit, tenants), or is an installable PWA admin: it is an Astro admin screen, built here. Installability, a phone-sized layout or a `/app` URL never makes it a "persona app".
+- It is a **public, crawlable page**: Astro (SSG/SSR per route).
+- It is a **persona workflow** (customer, courier, driver, partner, warehouse or field staff app): it does NOT belong in this repo. It is a consumer repo that prefers LynxJS + ReactLynx _after_ the PoC gate, calls only the public API contracts, and gets no UI feature, no `@lynx-js/*` dependency and no `lynx.config.*` here (`tests/product-surface-policy.test.ts` fails if one appears). Raise any missing endpoint as a normal API issue here.
+- It fits none of those: it is not ready; decide what it is first (Definition of Ready, `docs/awcms/templates/definition-of-ready.md`).
+
 ## Screen implementation checklist
 
 1. **Tokens first, and one hue has THREE roles** — use the doc 14 CSS variables (`--color-*`, `--sp-*`, `--fs-*`); never hardcode colours/sizes. Theme via `data-theme` with no flash. Picking the wrong one of the three families is the most-repeated UI defect in this repo (Issue #434, PR #720, twice more in ADR-0120):
