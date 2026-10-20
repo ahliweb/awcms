@@ -5,11 +5,20 @@ description: Implementasikan layar/komponen UI AWCMS sesuai design system. Gunak
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:3895e6792059db3159bb65086445fad747f69b00b8c6ffe164ca5e4eccb57d15 -->
+<!-- i18n-source-hash: sha256:72d7b3a4e0c79e22db36e453e3ce259c7cb5e19b816f69c7cee335a1fcc6f382 -->
 
 # AWCMS — UI Screen / Component
 
 Ikuti **`docs/awcms/14_ui_ux_design_system.md`** (token, komponen, layout, layar) dan **`docs/awcms/15_frontend_architecture_integration.md`** (SSR/islands, API client, offline).
+
+## Pertama: apakah ini layar untuk repo INI? (ADR-0146)
+
+Skill ini membangun layar **Astro**: admin SISTEM di bawah `/admin/*` di sini, dan halaman publik repo ini sendiri. Klasifikasikan sebelum membangun ([`docs/adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md`](../../../docs/adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md), `classifySurface` di `scripts/lib/product-surface-policy.ts`):
+
+- Ia **mengelola sistem** (modul, pengguna, izin, audit, tenant), atau admin PWA yang dapat dipasang: itu layar admin Astro, dibangun di sini. Kemampuan dipasang, tampilan seukuran ponsel, atau URL `/app` tidak pernah menjadikannya "aplikasi persona".
+- Ia **halaman publik yang dapat dirayapi**: Astro (SSG/SSR per rute).
+- Ia **alur kerja persona** (aplikasi pelanggan, kurir, pengemudi, mitra, petugas gudang atau lapangan): ia TIDAK termasuk repo ini. Ia repo konsumen yang memilih LynxJS + ReactLynx _setelah_ gerbang PoC, hanya memanggil kontrak API publik, dan tidak mendapat fitur UI, dependensi `@lynx-js/*`, maupun `lynx.config.*` di sini (`tests/product-surface-policy.test.ts` gagal bila ada yang muncul). Ajukan endpoint yang belum ada sebagai issue API biasa di sini.
+- Ia tidak cocok dengan satu pun: ia belum siap; putuskan dulu apa itu (Definition of Ready, `docs/awcms/templates/definition-of-ready.id.md`).
 
 ## Checklist implementasi layar
 

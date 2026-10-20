@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:bd81025712b394a748411ac089f518026b3abadf463403186c8d399d73e6ceee -->
+<!-- i18n-source-hash: sha256:cc2b8f2c7678b0636a5ffea192d2a04220ac405ac83b275124d30077227a5274 -->
 
 # Alur pengembangan AWCMS
 
@@ -179,6 +179,19 @@ tidak cocok dengan rutenya memerahkan CI, bukan menunggu ditemukan konsumen.
 Dua batasan yang sering baru ditemukan belakangan: **CSP single-owner** (script
 harus di-import lalu di-bundle, bukan inline) dan setiap layar admin wajib lewat
 `loadAdminScreen` (`access:chokepoint:check` menghitungnya).
+
+**Permukaan produk baru adalah keputusan langkah 8/9, bukan detail
+implementasi** ([ADR-0146](../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md)): sebelum membangun layar atau
+aplikasi, klasifikasikan dengan tabel permukaan. Apa pun yang mengelola sistem
+atau bagian milik seseorang di sebuah situs adalah admin Astro (`/admin/*` di
+sini, atau `awcms-astro` untuk admin USER); halaman publik yang dapat dirayapi
+adalah Astro; hanya **alur kerja persona** (pelanggan, kurir, pengemudi, mitra,
+petugas gudang atau lapangan) yang menjadi kandidat repo konsumen **LynxJS**
+yang terpisah, dan hanya setelah gerbang proof-of-concept Lynx. "Aplikasi"
+berarti fungsi persona, bukan URL `/app`, tampilan seukuran ponsel, atau
+manifest Add-to-Home-Screen. Pertanyaannya ada di
+[`templates/definition-of-ready.id.md`](templates/definition-of-ready.id.md)
+§Permukaan produk baru.
 
 ## 9. Cross-Spec Review / Definition of Ready
 

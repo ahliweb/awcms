@@ -107,6 +107,21 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
   differ on audit — the HTTP endpoint now writes its `awcms_audit_events` row to the platform
   tenant's log, while the job writes none, unchanged from ADR-0052's accepted cost.
 
+**Change of 20 October 2026 — which technology each product surface uses (ADR-0146, Proposed):**
+
+- [ADR-0146](adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md)
+  refines ADR-0055 and ADR-0070 (it supersedes neither). **Every admin surface and every
+  public web surface stays Astro**; **persona apps** (customer, courier, driver, partner,
+  warehouse and field staff) **prefer LynxJS + ReactLynx** as a _candidate_, in their **own
+  consumer repos**, as clients of the official API contracts. "App" is defined by persona
+  function, not URL, device or installability; Lynx for Web needs a passing proof of concept;
+  no Lynx app ships before the PoC gate (Android/iOS/HarmonyOS/Web + Bun) is recorded. Status
+  is **Proposed** until maintainer review. **Nothing Lynx-related exists in this repo and
+  `tests/product-surface-policy.test.ts` fails if it appears** (a `@lynx-js/*` dependency, an
+  import under `src/`, a `lynx.config.*`); the surface table and classifier are
+  `scripts/lib/product-surface-policy.ts`. Consumer-specific work lives in consumer repos
+  (e.g. `ahliweb/awcms-one#445`).
+
 ## 2. Inventory at a glance
 
 <!-- project-state-inventory:mulai -->
@@ -120,7 +135,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.10.1..HEAD`                                                   |
 | Base modules                      | **33** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **230** (`sql/001`–`315`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0145** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0146** (`0000` = template; highest ADR status: **Proposed**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **80** `.astro` files in `src/pages/admin/`; **0 of 33** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **98** (58.412 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **68** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |

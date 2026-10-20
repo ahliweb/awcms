@@ -24,6 +24,18 @@ Related: `14_ui_ux_design_system.md` (design), `16_backend_data_access_integrati
 
 Rationale: SSR keeps load times fast on a LAN, is safe for httpOnly cookies, and stays lightweight; islands limit JS to interactive areas only. Backend/SSR runs on **Bun** as the runtime platform; Node.js is not the primary server platform target.
 
+## Which technology a surface uses (ADR-0146)
+
+This document describes the Astro frontend of this repo. Which surfaces belong to
+it is decided by [ADR-0146](../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md) (Proposed): **every admin surface
+and every public web surface is Astro**; **persona apps** (customer, courier,
+driver, partner, warehouse and field staff) prefer LynxJS + ReactLynx as a
+_candidate_, in their **own consumer repos**, as clients of the public API
+contracts, and only after the Lynx proof-of-concept gate. Nothing here changes for
+a persona app: it does not live in this frontend, does not import `src/modules/`,
+and is never a reason to restructure an admin screen. An installable PWA admin is
+still an Astro admin.
+
 ## Astro SSR on the Bun runtime
 
 Astro **runs fully on Bun** for every phase: `bun install`, dev, build, and runtime. Call the Astro/Vite bins via `bun --bun astro …` (dev/build/preview) so that Bun executes them, not the `node` binary (the default bin shebang is `#!/usr/bin/env node`).
