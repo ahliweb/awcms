@@ -58,6 +58,10 @@ Applies when the change adds a **new screen, app or client** rather than changin
 an existing one. Source: [ADR-0146](../../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md) §6; the classifier is
 `classifySurface` in [`scripts/lib/product-surface-policy.ts`](../../../scripts/lib/product-surface-policy.ts).
 
+This section **binds once ADR-0146 is Accepted**; while it is Proposed, use it
+as guidance. The structural no-Lynx check in `tests/product-surface-policy.test.ts`
+runs already, whatever the ADR status.
+
 1. **What does it manage, and for whom?** The system, or a person's own part of
    a site, makes it an **admin** surface: stop, it is Astro (`system-admin` here,
    `user-admin` in `awcms-astro` only when the site declares it, or `pwa-admin`).

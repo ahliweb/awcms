@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](definition-of-ready.md)
 
-<!-- i18n-source-hash: sha256:464eb1e79779f9f20abcd1614b6bd20f465e7675080ade4ee5fd6cfaf874845c -->
+<!-- i18n-source-hash: sha256:c5ba4696d2ced890a6014c53ceeba63cd2df0088fbb211b52bee973a9f3e4edf -->
 
 # Definition of Ready (langkah 9 alur pengembangan)
 
@@ -62,6 +62,10 @@ Berlaku bila perubahan menambah **layar, aplikasi, atau klien baru**, bukan
 mengubah yang sudah ada. Sumber: [ADR-0146](../../adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md) §6;
 pengklasifikasinya adalah `classifySurface` di
 [`scripts/lib/product-surface-policy.ts`](../../../scripts/lib/product-surface-policy.ts).
+
+Bagian ini **mengikat setelah ADR-0146 berstatus Accepted**; selama masih
+Proposed, pakai sebagai panduan. Pemeriksaan struktural tanpa-Lynx di
+`tests/product-surface-policy.test.ts` sudah berjalan, apa pun status ADR-nya.
 
 1. **Apa yang dikelolanya, dan untuk siapa?** Sistem, atau bagian milik seseorang
    di sebuah situs, menjadikannya permukaan **admin**: berhenti, itu Astro

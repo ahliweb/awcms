@@ -128,7 +128,10 @@ Tiga hal yang mudah keliru:
 
 [ADR-0146](docs/adr/0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md)
 (status **Proposed** sampai ditinjau maintainer) **menyempurnakan** — bukan
-men-supersede — ADR-0055 dan ADR-0070. Aturannya, dibaca tanpa tafsir:
+men-supersede — ADR-0055 dan ADR-0070. Larangan struktural Lynx di repo ini
+sudah ditegakkan tes **sekarang**; gerbang Definition of Ready untuk permukaan
+baru baru **mengikat setelah ADR-0146 berstatus Accepted**. Aturannya, dibaca
+tanpa tafsir:
 
 | Permukaan                                                                          | Teknologi                                     | Rumah                                      |
 | ---------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------ |
