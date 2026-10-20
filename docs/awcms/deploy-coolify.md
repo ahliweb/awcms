@@ -306,13 +306,42 @@ Other jobs (audit purge, sync objects, etc.) are scheduled with exactly the same
 
 ### Rollout: jobs started through `ops/run-job.sh` now use `WORKER_DATABASE_URL`
 
-`ops/awcms-jobs.env-allowlist` is generated from what the code reads, and until Issue #1119 it silently missed `WORKER_DATABASE_URL` (read only as `process.env[name]`), the three `PUSH_VAPID_*` variables and a few others. A host that sets `WORKER_DATABASE_URL` therefore ran every `run-job.sh` job on the `DATABASE_URL` (`awcms_app`) connection. After the regenerated allowlist is deployed, those jobs run as the least-privilege **`awcms_worker`** role. That is the documented intent, but it is a role switch on a production host:
+`ops/awcms-jobs.env-global` (named `ops/awcms-jobs.env-allowlist` until Issue #1120) is generated from what the code reads, and until Issue #1119 it silently missed `WORKER_DATABASE_URL` (read only as `process.env[name]`), the three `PUSH_VAPID_*` variables and a few others. A host that sets `WORKER_DATABASE_URL` therefore ran every `run-job.sh` job on the `DATABASE_URL` (`awcms_app`) connection. After the regenerated allowlist is deployed, those jobs run as the least-privilege **`awcms_worker`** role. That is the documented intent, but it is a role switch on a production host:
 
 1. **Verify grants before redeploying the allowlist.** For each job's tables run `has_table_privilege('awcms_worker', '<table>', 'SELECT,INSERT,UPDATE,DELETE')` (with the privilege that job needs), or run one manual tick per job with the worker DSN (`--dry-run` where the job has one).
 2. **Watch the first ticks** in `$AWCMS_JOB_LOG`, in particular `push:dispatch`, `booking:holds:expire` and `booking:reminders:dispatch`, `tenant-domain:dns:sync`, and `idn-regions:*` if you schedule them. A missing grant shows up as `permission denied for table …`, and the job may still exit 0.
 3. **Do not roll back by clearing `WORKER_DATABASE_URL` or pointing it at `DATABASE_URL`.** That removes the isolation again; fix the grant (a migration for the role in `sql/`) instead.
 
 Hosts that pass the whole env file (compose `env_file:`) were never affected.
+
+### Deploy BOTH generated env files beside `run-job.sh` (Issue #1120)
+
+`ops/run-job.sh` selects a job's environment from **two** generated files, and refuses to run any job unless both are readable and consistent:
+
+| File                        | Contents                                                                                     | Reaches                                            |
+| --------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `ops/awcms-jobs.env-global` | every variable the code reads, minus tooling-only, web-only and job-scoped names             | **every** job container                            |
+| `ops/awcms-jobs.env-scoped` | `<job-target> <VAR>` lines: secrets only the named job reads (`JOB_SCOPED` in the generator) | the job whose `bun run` target matches **exactly** |
+
+Copy both next to `run-job.sh` on the host (or point `AWCMS_JOBS_ENV_GLOBAL` and `AWCMS_JOBS_ENV_SCOPED` at them).
+
+**What is scoped, what is web-only, and what stays global.** `JOB_SCOPED` holds the secrets a few jobs read: the push keys and FCM credentials (`push:dispatch`, `push:auth-secret:*`), the Telegram rings and bot token (`telegram:dispatch`, `telegram:chat:rekey`), the WhatsApp tokens and recipient hash ring (`whatsapp:dispatch`, `booking:reminders:dispatch`), the Cloudflare DNS token (`tenant-domain:dns:sync`), the Mailketing token (`email:*`), the Redis connection string (`redis:health`), the edge-cache purge token, the OMES GitHub token, the visitor-analytics salt, and the two R2 credential pairs (media and sync jobs). Secrets that no job reads (the MFA, SSO, URL-parameter and subscriber encryption keys, the comment timing secret, the sync HMAC secret and the Turnstile secret) are web-only and reach no job container. What stays in the global list is plain configuration plus three secrets every job needs: `DATABASE_URL`, `WORKER_DATABASE_URL` and `IDEMPOTENCY_HMAC_SECRET`. A few names that only look like secrets (public URLs, TTLs, public keys) also stay, each with a written reason in `GLOBAL_SECRETS`. `bun run jobs:env-allowlist:check` fails when any other name that matches the secret-looking pattern (`SECRET`, `TOKEN`, `_KEY(S)`, `PASSWORD`, `CREDENTIAL`, `PRIVATE`, `SALT`, `_URL`, `_DSN`, `ACCESS_KEY`, `PEPPER`, `HMAC`, `_AUTH`) is left in the global list without such a reason.
+
+**Deploy order: replace all three files together.** The new global file is deliberately NOT called `awcms-jobs.env-allowlist`, so the two runner generations cannot be confused:
+
+1. Copy `awcms-jobs.env-global` and `awcms-jobs.env-scoped` to the host, **next to** the existing `run-job.sh` and the old `awcms-jobs.env-allowlist`. Nothing changes yet.
+2. Replace `run-job.sh` with the new one. From the next tick the runner reads the two new files.
+3. Remove the old `awcms-jobs.env-allowlist` once the first ticks look right (see the log below). It is no longer read.
+
+Both generated files carry the same `# awcms-jobs-env-fingerprint:` line, a digest of the names and grants in the pair. The runner compares the two and refuses when they differ or when either is missing, so a pair taken from different releases cannot run. Failure modes, all closed rather than open:
+
+- **New runner, a new file missing:** the runner refuses with `global env file not readable` or `job-scoped env file not readable`.
+- **New runner, a stale global file that still lists a scoped secret** (the new scoped file beside an old complete list): the runner refuses with `<VAR> is in BOTH the global file and the scoped file`. Before this check that combination handed `email:dispatch` every secret.
+- **Old runner, new files:** the old runner only reads `awcms-jobs.env-allowlist`, so it keeps working with its old complete list and **ignores the new files**. That is safe but means the narrowing has not happened yet: the push and Telegram secrets still reach every job until `run-job.sh` itself is replaced (step 2).
+- **New runner, files from different releases** (for example the previous release's scoped file beside this release's global file): the runner refuses with `fingerprint mismatch`, naming both files and the digest each carries (`none` when a file predates fingerprints). Before this check that pair ran with exit 0 and left `whatsapp:dispatch`, `email:dispatch` and others without their provider secrets.
+- **A CRLF or truncated file:** a carriage return in either file, a line that is not exactly two fields, or a scoped file with no grants also refuses the run, and so does a global file that lists no variables at all.
+
+Regenerate with `bun run jobs:env-allowlist:generate`; `bun run jobs:env-allowlist:check` (part of `bun run check`) fails when either file is stale. `tests/jobs-env-scoped-reach.test.ts` traces each package script's imports and fails when a job that reaches a reader of a scoped secret is not granted it (the job would silently take the code default), when a granted job cannot reach one (a stale grant), or when a web-only secret is reachable from a job. Run an operator CLI that needs a scoped secret (for example `push:auth-secret:rekey`) through `run-job.sh` as usual; commands that need web-only variables (`config:validate`, `security:readiness`, `telegram:webhook:register`) run with the deployment's full environment instead.
 
 ## Telegram webhook: do not log response bodies
 

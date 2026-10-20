@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:5a3a396365520a99a62a9f33280c34ce7afe0113354ea8796bc106ae918fedc6 -->
+<!-- i18n-source-hash: sha256:351ac06906bb61cd2359536b5477a757bb036205cfeaa3e3f9e4dfdc9d23dd3c -->
 
 # Deploy Coolify
 
@@ -309,13 +309,42 @@ Job lain (audit purge, sync objects, dsb.) dijadwalkan dengan pola container one
 
 ### Rollout: job yang dijalankan lewat `ops/run-job.sh` kini memakai `WORKER_DATABASE_URL`
 
-`ops/awcms-jobs.env-allowlist` digenerasi dari apa yang dibaca kode, dan sampai Issue #1119 ia diam-diam melewatkan `WORKER_DATABASE_URL` (hanya dibaca sebagai `process.env[name]`), ketiga variabel `PUSH_VAPID_*`, dan beberapa lainnya. Host yang mengisi `WORKER_DATABASE_URL` karena itu menjalankan setiap job `run-job.sh` di koneksi `DATABASE_URL` (`awcms_app`). Setelah allowlist hasil regenerasi dideploy, job-job itu berjalan sebagai role least-privilege **`awcms_worker`**. Itu perilaku yang dimaksud dan terdokumentasi, tetapi di host produksi ini adalah pergantian role:
+`ops/awcms-jobs.env-global` (bernama `ops/awcms-jobs.env-allowlist` sampai Issue #1120) digenerasi dari apa yang dibaca kode, dan sampai Issue #1119 ia diam-diam melewatkan `WORKER_DATABASE_URL` (hanya dibaca sebagai `process.env[name]`), ketiga variabel `PUSH_VAPID_*`, dan beberapa lainnya. Host yang mengisi `WORKER_DATABASE_URL` karena itu menjalankan setiap job `run-job.sh` di koneksi `DATABASE_URL` (`awcms_app`). Setelah allowlist hasil regenerasi dideploy, job-job itu berjalan sebagai role least-privilege **`awcms_worker`**. Itu perilaku yang dimaksud dan terdokumentasi, tetapi di host produksi ini adalah pergantian role:
 
 1. **Verifikasi grant sebelum mendeploy ulang allowlist.** Untuk tabel tiap job jalankan `has_table_privilege('awcms_worker', '<tabel>', 'SELECT,INSERT,UPDATE,DELETE')` (dengan privilege yang dibutuhkan job itu), atau jalankan satu tick manual per job dengan DSN worker (`--dry-run` bila job punya).
 2. **Pantau tick pertama** di `$AWCMS_JOB_LOG`, terutama `push:dispatch`, `booking:holds:expire` dan `booking:reminders:dispatch`, `tenant-domain:dns:sync`, serta `idn-regions:*` bila dijadwalkan. Grant yang kurang tampak sebagai `permission denied for table …`, dan job masih bisa keluar dengan kode 0.
 3. **Jangan rollback dengan mengosongkan `WORKER_DATABASE_URL` atau mengarahkannya ke `DATABASE_URL`.** Itu menghilangkan isolasinya lagi; perbaiki grant-nya (migrasi untuk role di `sql/`).
 
 Host yang meneruskan seluruh berkas env (compose `env_file:`) tidak pernah terdampak.
+
+### Deploy KEDUA berkas env hasil generate di samping `run-job.sh` (Issue #1120)
+
+`ops/run-job.sh` memilih environment sebuah job dari **dua** berkas hasil generate, dan menolak menjalankan job apa pun kecuali keduanya dapat dibaca dan konsisten:
+
+| Berkas                      | Isi                                                                                           | Sampai ke                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `ops/awcms-jobs.env-global` | semua variabel yang dibaca kode, tanpa yang khusus tooling, khusus web, dan terbatas per job  | **setiap** container job                       |
+| `ops/awcms-jobs.env-scoped` | baris `<target-job> <VAR>`: secret yang hanya dibaca job tersebut (`JOB_SCOPED` di generator) | job yang target `bun run`-nya cocok **persis** |
+
+Salin keduanya di samping `run-job.sh` pada host (atau arahkan `AWCMS_JOBS_ENV_GLOBAL` dan `AWCMS_JOBS_ENV_SCOPED` ke berkas tersebut).
+
+**Apa yang dibatasi per job, apa yang khusus web, dan apa yang tetap global.** `JOB_SCOPED` memuat secret yang dibaca beberapa job saja: kunci push dan kredensial FCM (`push:dispatch`, `push:auth-secret:*`), ring Telegram dan token bot (`telegram:dispatch`, `telegram:chat:rekey`), token WhatsApp dan ring hash penerima (`whatsapp:dispatch`, `booking:reminders:dispatch`), token DNS Cloudflare (`tenant-domain:dns:sync`), token Mailketing (`email:*`), connection string Redis (`redis:health`), token purge edge-cache, token GitHub OMES, salt visitor-analytics, dan dua pasang kredensial R2 (job media dan sync). Secret yang tidak dibaca job mana pun (kunci enkripsi MFA, SSO, parameter URL dan pelanggan komentar, secret timing komentar, secret HMAC sync, dan secret Turnstile) bersifat khusus web dan tidak sampai ke container job mana pun. Yang tetap di daftar global adalah konfigurasi biasa ditambah tiga secret yang memang dibutuhkan setiap job: `DATABASE_URL`, `WORKER_DATABASE_URL`, dan `IDEMPOTENCY_HMAC_SECRET`. Beberapa nama yang hanya tampak seperti secret (URL publik, TTL, kunci publik) juga tetap, masing-masing dengan alasan tertulis di `GLOBAL_SECRETS`. `bun run jobs:env-allowlist:check` gagal bila nama lain yang cocok dengan pola mirip-secret (`SECRET`, `TOKEN`, `_KEY(S)`, `PASSWORD`, `CREDENTIAL`, `PRIVATE`, `SALT`, `_URL`, `_DSN`, `ACCESS_KEY`, `PEPPER`, `HMAC`, `_AUTH`) tertinggal di daftar global tanpa alasan seperti itu.
+
+**Urutan deploy: ganti ketiga berkas sekaligus.** Berkas global yang baru sengaja TIDAK bernama `awcms-jobs.env-allowlist`, agar kedua generasi runner tidak tertukar:
+
+1. Salin `awcms-jobs.env-global` dan `awcms-jobs.env-scoped` ke host, **di samping** `run-job.sh` yang ada dan `awcms-jobs.env-allowlist` lama. Belum ada yang berubah.
+2. Ganti `run-job.sh` dengan yang baru. Mulai tick berikutnya runner membaca kedua berkas baru.
+3. Hapus `awcms-jobs.env-allowlist` lama setelah tick-tick pertama terlihat benar (lihat log). Berkas itu tidak dibaca lagi.
+
+Kedua berkas hasil generate memuat baris `# awcms-jobs-env-fingerprint:` yang sama, yaitu digest nama dan grant dalam pasangan itu. Runner membandingkan keduanya dan menolak bila berbeda atau bila salah satunya tidak ada, sehingga pasangan dari rilis yang berbeda tidak dapat berjalan. Mode gagal, semuanya tertutup bukan terbuka:
+
+- **Runner baru, salah satu berkas baru hilang:** runner menolak dengan `global env file not readable` atau `job-scoped env file not readable`.
+- **Runner baru, berkas global basi yang masih memuat secret terbatas** (berkas scoped baru bersama daftar lengkap lama): runner menolak dengan `<VAR> is in BOTH the global file and the scoped file`. Sebelum pemeriksaan ini kombinasi tersebut menyerahkan semua secret ke `email:dispatch`.
+- **Runner lama, berkas baru:** runner lama hanya membaca `awcms-jobs.env-allowlist`, sehingga ia tetap berjalan dengan daftar lengkap lamanya dan **mengabaikan berkas baru**. Ini aman tetapi berarti penyempitan belum terjadi: secret push dan Telegram masih sampai ke setiap job sampai `run-job.sh` sendiri diganti (langkah 2).
+- **Runner baru, berkas dari rilis berbeda** (misalnya berkas scoped rilis sebelumnya bersama berkas global rilis ini): runner menolak dengan `fingerprint mismatch`, menyebut kedua berkas dan digest masing-masing (`none` bila berkas itu mendahului fingerprint). Sebelum pemeriksaan ini pasangan tersebut berjalan dengan exit 0 dan membuat `whatsapp:dispatch`, `email:dispatch`, dan lainnya berjalan tanpa secret provider.
+- **Berkas CRLF atau terpotong:** carriage return di salah satu berkas, baris yang bukan tepat dua kolom, atau berkas scoped tanpa satu pun grant juga menolak menjalankan job, begitu pula berkas global yang tidak memuat satu variabel pun.
+
+Generate ulang dengan `bun run jobs:env-allowlist:generate`; `bun run jobs:env-allowlist:check` (bagian dari `bun run check`) gagal bila salah satu berkas basi. `tests/jobs-env-scoped-reach.test.ts` menelusuri import tiap package script dan gagal bila job yang menjangkau pembaca sebuah secret terbatas tidak diberi secret itu (job akan diam-diam memakai default kode), bila job yang diberi tidak dapat menjangkau pembacanya (grant basi), atau bila secret khusus web dapat dijangkau dari sebuah job. Jalankan CLI operator yang butuh secret terbatas (misalnya `push:auth-secret:rekey`) lewat `run-job.sh` seperti biasa; perintah yang butuh variabel khusus web (`config:validate`, `security:readiness`, `telegram:webhook:register`) dijalankan dengan environment lengkap deployment.
 
 ## Webhook Telegram: jangan mencatat body respons
 

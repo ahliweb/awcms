@@ -44,7 +44,7 @@
  * function that RECEIVES the environment — `parseVapidConfig(env:
  * NodeJS.ProcessEnv)`, no default — was invisible: its `env.PUSH_VAPID_*` reads
  * never reached `.env.example` coverage or the generated jobs allow-list
- * (`ops/awcms-jobs.env-allowlist`), so a host running `push:dispatch` through
+ * (`ops/awcms-jobs.env-global`, formerly `env-allowlist`), so a host running `push:dispatch` through
  * `ops/run-job.sh` started the dispatcher with push enabled and no VAPID
  * material. A name is now ALSO an alias when it is DECLARED with the type
  * `NodeJS.ProcessEnv` / `ProcessEnv` / `Readonly<ProcessEnv>` / `typeof

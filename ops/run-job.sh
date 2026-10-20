@@ -55,11 +55,25 @@ NETWORK="${AWCMS_DOCKER_NETWORK:-coolify}"
 CONTAINER_WORKDIR="${AWCMS_JOBS_WORKDIR:-/home/bun/app}"
 DATA_DIR="${AWCMS_JOBS_DATA_DIR:-/var/lib/awcms-jobs}"
 
-# The generated companion to this script. Kept beside it deliberately: a runner
-# deployed without its allow-list must fail loudly rather than fall back to a
-# partial one, because a job missing a variable takes the code's default, does
+# The generated companions to this script. Kept beside it deliberately: a runner
+# deployed without them must fail loudly rather than fall back to a partial
+# environment, because a job missing a variable takes the code's default, does
 # the inert thing, and reports success.
-ALLOWLIST="${AWCMS_JOBS_ENV_ALLOWLIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/awcms-jobs.env-allowlist}"
+#
+# `awcms-jobs.env-global` is what EVERY job gets. It is NOT called
+# `awcms-jobs.env-allowlist` (Issue #1120): that older name held every variable,
+# the job-specific secrets included, and was read by the previous runner. An old
+# runner that finds only its old file keeps working with the old, complete list;
+# this runner finds only the new names and refuses without them. Reusing the old
+# name would have let a half-deployed host hand every job every secret.
+GLOBAL="${AWCMS_JOBS_ENV_GLOBAL:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/awcms-jobs.env-global}"
+
+# The job-scoped secrets (Issue #1120): `<job-target> <VAR>` lines. A secret in
+# here is NOT in the global file, so it reaches only the job named on its line.
+# Same fail-closed rule as the global file: without it a job that reads one of
+# these would see it as unset, take the inert default, and report success — so a
+# runner deployed without it refuses to run anything.
+SCOPED="${AWCMS_JOBS_ENV_SCOPED:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/awcms-jobs.env-scoped}"
 
 log() { echo "$(date -Is) run-job.sh: $*"; }
 
@@ -95,11 +109,20 @@ ENVFILE=$(mktemp /tmp/awcms-job-env.XXXXXX)
 chmod 600 "$ENVFILE"
 trap 'rm -f "$ENVFILE"' EXIT
 
-if [ ! -r "$ALLOWLIST" ]; then
-  log "env allow-list not readable at $ALLOWLIST — refusing to run $JOB" >&2
-  log "  Deploy ops/awcms-jobs.env-allowlist beside this script, or point" >&2
-  log "  AWCMS_JOBS_ENV_ALLOWLIST at it. Running with a partial environment" >&2
+if [ ! -r "$GLOBAL" ]; then
+  log "global env file not readable at $GLOBAL — refusing to run $JOB" >&2
+  log "  Deploy ops/awcms-jobs.env-global beside this script, or point" >&2
+  log "  AWCMS_JOBS_ENV_GLOBAL at it. Running with a partial environment" >&2
   log "  makes a job take code defaults and report success." >&2
+  exit 1
+fi
+
+if [ ! -r "$SCOPED" ]; then
+  log "job-scoped env file not readable at $SCOPED — refusing to run $JOB" >&2
+  log "  Deploy ops/awcms-jobs.env-scoped beside this script (BOTH generated" >&2
+  log "  files go next to run-job.sh), or point AWCMS_JOBS_ENV_SCOPED at it." >&2
+  log "  Without it a job that reads a scoped secret takes the code default" >&2
+  log "  and reports success." >&2
   exit 1
 fi
 
@@ -107,13 +130,79 @@ fi
 # takes effect on the next run. The container name changes on every deploy, so it
 # is resolved above and never hardcoded.
 #
-# Selected by exact NAME from the generated allow-list, not by prefix. The prefix
+# Selected by exact NAME from the generated global file, not by prefix. The prefix
 # pattern this replaced dropped 81 of the 171 variables the code reads —
 # including both artefact-root paths, every `TENANT_DOMAIN_CLOUDFLARE_*` (because
 # `^CLOUDFLARE_` is anchored and those do not start with it), and every
 # `VISITOR_ANALYTICS_*` retention window that `analytics:purge` exists to
 # enforce. `-F -x` on the name half is what makes a partial match impossible.
-NAMES=$(grep -vE '^\s*(#|$)' "$ALLOWLIST")
+NAMES=$(grep -vE '^\s*(#|$)' "$GLOBAL" || true)
+
+# A comments-only or blank global file makes grep exit 1, which `set -e` would
+# turn into a silent exit before any message. Say why instead: a runner with no
+# global names would start every job without DATABASE_URL.
+if [ -z "$NAMES" ]; then
+  log "global env file $GLOBAL lists no variables — refusing to run $JOB" >&2
+  log "  It is empty or only comments (truncated or mis-generated). Replace it" >&2
+  log "  with the awcms-jobs.env-global from the same release as run-job.sh." >&2
+  exit 1
+fi
+
+# Add the secrets scoped to THIS job, after checking BOTH files, in one pass.
+# Every check below refuses the run, because each one is a way for a job to end
+# up with the wrong environment and still report success:
+#
+# - a carriage return (a CRLF checkout): `PUSH_VAPID_PRIVATE_KEY\r` is a name
+#   that matches nothing, so the grant would silently not happen;
+# - a line that is not exactly two fields: a skipped grant is a job missing its
+#   secret;
+# - a scoped VAR that is ALSO in the global file: the global file reaches every
+#   job, so the scoping would be void. This is the signature of a version skew —
+#   the new scoped file beside an old, complete global list;
+# - no grant lines at all: an empty or truncated file would scope nothing;
+# - the two files carry different fingerprints, or one has none: the generator
+#   writes the SAME digest into both, so a pair that disagrees comes from
+#   different releases (an old scoped file beside a new global file runs, exits
+#   0, and leaves jobs without their provider secrets).
+#
+# The job is compared as a whole STRING (`($1 "") == (ENVIRON["JOB"] "")`, never a
+# regex or prefix, and never numerically even when a target looks like a number),
+# so `push:dispatch` does not match `push:dispatch:dry` or `xpush:dispatch`. It is
+# passed through the environment, not `awk -v`, so a backslash in a target is not
+# interpreted.
+SCOPED_NAMES=$(JOB="$JOB" awk '
+  /\r/ { printf "%s line %d has a carriage return (CRLF)\n", FILENAME, FNR > "/dev/stderr"; bad = 1; next }
+  /^# awcms-jobs-env-fingerprint: / {
+    if ((FILENAME in fp) || NF != 3 || length($3) != 64 || $3 !~ /^[0-9a-f]+$/) {
+      printf "%s has a duplicate or malformed fingerprint line\n", FILENAME > "/dev/stderr"; bad = 1
+    } else { fp[FILENAME] = $3 }
+    next
+  }
+  /^[[:space:]]*(#|$)/ { next }
+  FILENAME == ARGV[1] { gl[$0] = 1; next }
+  NF != 2 { printf "malformed line %d: %s\n", FNR, $0 > "/dev/stderr"; bad = 1; next }
+  { grants++ }
+  ($2 in gl) { printf "%s is in BOTH the global file and the scoped file (stale global file?)\n", $2 > "/dev/stderr"; bad = 1 }
+  ($1 "") == (ENVIRON["JOB"] "") { print $2 }
+  END {
+    if (grants == 0) { print "the scoped file has no grant lines" > "/dev/stderr"; bad = 1 }
+    g = (ARGV[1] in fp) ? fp[ARGV[1]] : "none"
+    c = (ARGV[2] in fp) ? fp[ARGV[2]] : "none"
+    if (g == "none" || c == "none" || g != c) {
+      printf "fingerprint mismatch: %s=%s, %s=%s (the files come from different releases, or one has no fingerprint)\n", ARGV[1], g, ARGV[2], c > "/dev/stderr"
+      bad = 1
+    }
+    exit bad
+  }
+' "$GLOBAL" "$SCOPED") || {
+  log "env files $GLOBAL / $SCOPED are inconsistent — refusing to run $JOB" >&2
+  log "  Replace awcms-jobs.env-global, awcms-jobs.env-scoped and run-job.sh" >&2
+  log "  together from the same release." >&2
+  exit 1
+}
+if [ -n "$SCOPED_NAMES" ]; then
+  NAMES=$(printf '%s\n%s\n' "$NAMES" "$SCOPED_NAMES")
+fi
 
 docker exec "$APP" printenv \
   | awk -F= 'NR==FNR { want[$0]=1; next } ($1 in want)' <(printf '%s\n' "$NAMES") - \
