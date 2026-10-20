@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:33d43c14acbfe71c33ec3d1045fdc24ccfd3d296fa6ec504a4b5731cbecff864 -->
+<!-- i18n-source-hash: sha256:00d63e2c6025920b121688a960c01f21dc2fcf81a3c1c4ecb87dcede7f984b0a -->
 
 # AWCMS — Project State & Continuation
 
