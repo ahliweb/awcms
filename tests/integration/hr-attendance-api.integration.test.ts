@@ -979,18 +979,12 @@ suite("hr_workforce attendance HTTP surface (Issue #947)", () => {
       expect(conflict.body.error!.code).toBe("CLIENT_EVENT_KEY_CONFLICT");
 
       const key = nextKey();
-      const one = await clock(
-        me.employmentId,
-        { clientEventKey: "queue-002" },
-        me.token,
-        key
-      );
-      const two = await clock(
-        me.employmentId,
-        { clientEventKey: "queue-002" },
-        me.token,
-        key
-      );
+      // One body for both posts: `clock()` defaults occurredAt to iso(0), which
+      // is second-precision, so two separate defaults straddle a second under
+      // load and the second post is (correctly) an IDEMPOTENCY_CONFLICT.
+      const queued = { clientEventKey: "queue-002", occurredAt: iso(0) };
+      const one = await clock(me.employmentId, queued, me.token, key);
+      const two = await clock(me.employmentId, queued, me.token, key);
 
       expect(two.status).toBe(one.status);
       expect(two.body).toEqual(one.body);
