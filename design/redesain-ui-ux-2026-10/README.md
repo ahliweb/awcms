@@ -26,16 +26,25 @@ loads React from unpkg, so viewing needs network access.
 
 ## Contents
 
-| File                                               | Screen                                                                                                                                                  | Interactive          |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| [`Main.dc.html`](Main.dc.html)                     | 00 · Analysis of awcms, awcms-one, omes and awcms-astro; shared status vocabulary, admin type scale, proposed shell and screen patterns                 | no                   |
-| [`AwcmsDashboard.dc.html`](AwcmsDashboard.dc.html) | Dashboard: brand + tenant switcher only in the sidebar head, Favourites, collapsed sections, "Perlu tindakan" queue above KPIs, sync health, audit feed | no                   |
-| [`AwcmsUsers.dc.html`](AwcmsUsers.dc.html)         | Users: standard list pattern — status tabs with counts, filters, bulk actions, detail drawer                                                            | tabs, selection, row |
+| File                                               | Screen                                                                                                                                                  | Interactive                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| [`Main.dc.html`](Main.dc.html)                     | 00 · Analysis of awcms, awcms-one, omes and awcms-astro; shared status vocabulary, admin type scale, proposed shell and screen patterns                 | no                         |
+| [`AwcmsDashboard.dc.html`](AwcmsDashboard.dc.html) | Dashboard: brand + tenant switcher only in the sidebar head, Favourites, collapsed sections, "Perlu tindakan" queue above KPIs, sync health, audit feed | no                         |
+| [`AwcmsUsers.dc.html`](AwcmsUsers.dc.html)         | Users: standard list pattern — search, status tabs with counts, filters, bulk actions, keyset paging footer, detail drawer                              | search, tabs, paging, row  |
+| [`PolaData.dc.html`](PolaData.dc.html)             | Data-page pattern shared by the family: which search and paging each page function gets (list, log, queue, grid, tree, public archive, search results)  | no                         |
+| [`AwcmsSpec.dc.html`](AwcmsSpec.dc.html)           | Per-screen spec of the 66 non-OMES admin screens: layout type, search fields, filters, default sort, paging, and what the code does today               | search, filter, paging     |
+| [`AwcmsAudit.dc.html`](AwcmsAudit.dc.html)         | Audit trail as a log: "search in" scope, exact ID match for correlation/resource IDs, time range, keyset 50 newer/older without a total, row detail     | search, range, paging, row |
+
+[`spec-awcms.json`](spec-awcms.json) is the data behind the spec screen. Its
+"current" column comes from a heuristic scan of `src/pages/admin/**/*.astro`
+(a `<table>`, the word "cursor", a `role="search"` form or a `q` parameter);
+every other column is the proposal.
 
 The other screens of the same canvas live in their own repositories under
 `design/redesain-ui-ux-2026-10/`: `ahliweb/awcms-one` (commerce dashboard,
-orders), `ahliweb/omes` (fleet overview, operation approval) and
-`ahliweb/awcms-astro` (public home and service page).
+orders, products, commerce spec), `ahliweb/omes` (fleet overview, operation
+approval, jobs, Control Center spec) and `ahliweb/awcms-astro` (public home,
+service page, channel archive, search, route spec).
 
 ## Assets used
 

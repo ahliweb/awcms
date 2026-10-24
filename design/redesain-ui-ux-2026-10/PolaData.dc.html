@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Pola halaman data</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+body{margin:0}
+a{color:#1d4ed8}a:hover{color:#1e40af}
+.btn2:hover{background:#f0f3f8}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f7fa; color: #141a21; font-family: 'Public Sans', system-ui, sans-serif; font-size: 14px">
+<div style="max-width: 1280px; margin: 0 auto; padding: 64px clamp(16px, 4vw, 40px) 80px; display: flex; flex-direction: column; gap: 48px">
+
+<header style="display: flex; flex-direction: column; gap: 14px; max-width: 920px">
+<div style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #1d4ed8">Pola bersama · berlaku di awcms, awcms-one, OMES, awcms-astro</div>
+<h1 style="margin: 0; font-size: 40px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 800; text-wrap: balance">Halaman data: pencarian dan paging dipilih menurut fungsi halaman</h1>
+<p style="margin: 0; font-size: 17px; line-height: 1.6; color: #5b6672">Dok. 14 awcms sudah menetapkan paging keyset (sebelumnya/berikutnya), bukan offset besar. Pemindaian kode menunjukkan aturan itu baru dipakai sebagian: banyak layar berisi tabel masih memuat seluruh baris tanpa paging dan tanpa kotak cari. Pola di bawah menetapkan satu jawaban per jenis halaman.</p>
+</header>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 16px">
+<sc-for list="{{scan}}" as="s" hint-placeholder-count="3">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'JetBrains Mono', monospace; font-weight: 600">{{s.repo}}</span><span style="font-size: 13px; color: #646f7a">{{s.total}} layar dipindai</span></div>
+<div style="display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #eef1f5">
+<div style="width: {{s.wBad}}; background: #dc2626"></div><div style="width: {{s.wMid}}; background: #b45309"></div><div style="width: {{s.wOk}}; background: #12873d"></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<span style="display: flex; gap: 8px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #dc2626; margin-top: 4px"></span><span><strong>{{s.bad}}</strong> tabel tanpa paging dan tanpa cari</span></span>
+<span style="display: flex; gap: 8px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #b45309; margin-top: 4px"></span><span><strong>{{s.mid}}</strong> sudah keyset, belum ada cari</span></span>
+<span style="display: flex; gap: 8px"><span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #12873d; margin-top: 4px"></span><span><strong>{{s.ok}}</strong> keyset dan cari</span></span>
+<span style="color: #646f7a">{{s.rest}}</span>
+</div>
+</div>
+</sc-for>
+</section>
+<p style="margin: -32px 0 0; font-size: 12px; color: #646f7a">Pemindaian otomatis atas <span style="font-family: 'JetBrains Mono', monospace">src/pages/admin/**/*.astro</span> (ada <span style="font-family: 'JetBrains Mono', monospace">&lt;table&gt;</span>, kata "cursor", form <span style="font-family: 'JetBrains Mono', monospace">role="search"</span>/parameter <span style="font-family: 'JetBrains Mono', monospace">q</span>). Heuristik — rincian per layar ada di artboard Spesifikasi tiap repo.</p>
+
+<section style="display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 700">Pilih pola menurut fungsi</h2>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; overflow-x: auto">
+<table style="width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #646f7a">Fungsi halaman</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #646f7a">Contoh</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #646f7a">Pencarian</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #646f7a">Paging</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; color: #646f7a">Total ditampilkan</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{matrix}}" as="m" hint-placeholder-count="7">
+<tr>
+<td style="padding: 14px 16px; border-top: 1px solid #e8edf3; vertical-align: top"><div style="display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 700">{{m.f}}</span><span style="align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 8px; border-radius: 6px; background: {{m.bg}}; color: {{m.fg}}">{{m.code}}</span></div></td>
+<td style="padding: 14px 16px; border-top: 1px solid #e8edf3; vertical-align: top; color: #3b4651">{{m.ex}}</td>
+<td style="padding: 14px 16px; border-top: 1px solid #e8edf3; vertical-align: top">{{m.q}}</td>
+<td style="padding: 14px 16px; border-top: 1px solid #e8edf3; vertical-align: top">{{m.p}}</td>
+<td style="padding: 14px 16px; border-top: 1px solid #e8edf3; vertical-align: top; color: #3b4651">{{m.t}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 700">Anatomi daftar admin (keyset)</h2>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e8edf3">
+<form role="search" style="display: flex; flex: 1 1 320px; height: 38px; border: 1px solid #858b92; border-radius: 8px; overflow: hidden">
+<label style="display: flex; align-items: center; gap: 6px; padding: 0 10px; background: #f7f9fc; border-right: 1px solid #dde3ea; font-size: 13px; color: #5b6672">Cari di<select style="border: 0; background: transparent; font: inherit; font-weight: 600; color: #141a21"><option>Semua kolom</option><option>Nama</option><option>Email</option></select></label>
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#646f7a" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="align-self: center; margin-left: 10px"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg>
+<input type="search" aria-label="Kata kunci" value="rina" style="flex: 1; min-width: 0; border: 0; outline: none; padding: 0 10px; font: inherit">
+<kbd style="align-self: center; margin-right: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 1px 6px; border: 1px solid #dde3ea; border-radius: 5px; color: #5b6672">/</kbd>
+</form>
+<button type="button" class="btn2" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; font: inherit; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4 2v-8z"></path></svg>Filter <span style="font-size: 11px; padding: 0 6px; border-radius: 999px; background: #e8effc; color: #1d4ed8">2</span></button>
+<button type="button" class="btn2" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; font: inherit; font-weight: 600; cursor: pointer">Urut: Login terakhir</button>
+<button type="button" class="btn2" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #dde3ea; background: #ffffff; font: inherit; color: #5b6672; cursor: pointer">Simpan tampilan</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #e8edf3; font-size: 13px">
+<span style="color: #646f7a">Filter aktif:</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: #e8effc; color: #1d4ed8; font-weight: 600">Peran: editor<button type="button" aria-label="Hapus filter peran" style="width: 20px; height: 20px; border-radius: 999px; border: 0; background: transparent; color: inherit; cursor: pointer">×</button></span>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: #e8effc; color: #1d4ed8; font-weight: 600">Tanpa MFA<button type="button" aria-label="Hapus filter tanpa MFA" style="width: 20px; height: 20px; border-radius: 999px; border: 0; background: transparent; color: inherit; cursor: pointer">×</button></span>
+<a href="#" style="margin-left: 4px; font-weight: 600">Reset semua</a>
+<span role="status" aria-live="polite" style="margin-left: auto; color: #5b6672"><strong style="color: #141a21">3 pengguna</strong> cocok dengan "rina"</span>
+</div>
+<div style="padding: 0 16px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+<div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid #e8edf3; font-size: 13px"><span><mark style="background: #fdf1de; color: inherit; padding: 0 1px; border-radius: 2px">{{r.hit}}</mark>{{r.rest}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">{{r.role}}</span><span style="color: #5b6672">{{r.last}}</span></div>
+</sc-for>
+</div>
+<nav aria-label="Paginasi" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f7f9fc; border-radius: 0 0 12px 12px; font-size: 13px; color: #5b6672">
+<span>Menampilkan <strong style="color: #141a21">1–3</strong> dari 3</span>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+<label style="display: flex; align-items: center; gap: 6px">Baris per halaman<select style="height: 32px; border: 1px solid #858b92; border-radius: 7px; font: inherit; font-weight: 600; padding: 0 6px; background: #ffffff"><option>25</option><option>50</option><option>100</option></select></label>
+<div style="display: flex; gap: 6px; align-items: center"><button type="button" disabled style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #dde3ea; background: #ffffff; color: #646f7a; font: inherit">‹ Sebelumnya</button><span style="padding: 0 6px">Halaman 1</span><button type="button" disabled style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #dde3ea; background: #ffffff; color: #646f7a; font: inherit">Berikutnya ›</button></div>
+</div>
+</nav>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px">
+<sc-for list="{{anatomy}}" as="a" hint-placeholder-count="5">
+<div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.5"><span style="flex: none; width: 22px; height: 22px; border-radius: 6px; background: #e8effc; color: #1d4ed8; display: grid; place-items: center; font-size: 12px; font-weight: 700">{{a.n}}</span><span><strong>{{a.t}}</strong> — <span style="color: #5b6672">{{a.d}}</span></span></div>
+</sc-for>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 20px">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 12px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Perilaku pencarian</h3>
+<sc-for list="{{search}}" as="x" hint-placeholder-count="6">
+<div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.5; border-bottom: 1px solid #e8edf3; padding-bottom: 10px"><span style="font-weight: 600; width: 120px; flex: none">{{x.k}}</span><span style="color: #3b4651">{{x.v}}</span></div>
+</sc-for>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 12px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Perilaku paging</h3>
+<sc-for list="{{paging}}" as="x" hint-placeholder-count="6">
+<div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.5; border-bottom: 1px solid #e8edf3; padding-bottom: 10px"><span style="font-weight: 600; width: 120px; flex: none">{{x.k}}</span><span style="color: #3b4651">{{x.v}}</span></div>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 700">Keadaan wajib setiap daftar</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 16px">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px" aria-label="Contoh keadaan memuat">
+<span style="font-weight: 700">Memuat</span>
+<div aria-hidden="true" style="display: flex; flex-direction: column; gap: 8px"><div style="height: 12px; border-radius: 6px; background: #eef1f5; width: 90%"></div><div style="height: 12px; border-radius: 6px; background: #eef1f5; width: 70%"></div><div style="height: 12px; border-radius: 6px; background: #eef1f5; width: 80%"></div><div style="height: 12px; border-radius: 6px; background: #eef1f5; width: 60%"></div></div>
+<span style="font-size: 12px; color: #646f7a">Kerangka 5 baris; toolbar tetap bisa dipakai.</span>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-weight: 700">Belum ada data</span>
+<span style="font-size: 13px; color: #5b6672">Belum ada pengguna selain Anda.</span>
+<button type="button" style="align-self: flex-start; height: 34px; padding: 0 12px; border-radius: 8px; border: 0; background: #2563eb; color: #ffffff; font: inherit; font-weight: 600">Undang pengguna</button>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-weight: 700">Tidak ada yang cocok</span>
+<span style="font-size: 13px; color: #5b6672">Tidak ada pengguna untuk "rinaa" dengan 2 filter.</span>
+<button type="button" style="align-self: flex-start; height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; font: inherit; font-weight: 600">Reset pencarian &amp; filter</button>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-weight: 700; color: #c81e1e">Galat memuat</span>
+<span style="font-size: 13px; color: #5b6672">Daftar tidak bisa dimuat. ID korelasi <span style="font-family: 'JetBrains Mono', monospace">req-7f3a…</span></span>
+<button type="button" style="align-self: flex-start; height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; font: inherit; font-weight: 600">Coba lagi</button>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 700">Varian publik (awcms-astro)</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 20px">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Arsip kanal/kategori/tag — paging bernomor</h3>
+<nav aria-label="Navigasi halaman arsip" style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+<a href="#" style="height: 40px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; display: flex; align-items: center; text-decoration: none; color: #0f172a">← Sebelumnya</a>
+<a href="#" style="width: 40px; height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; display: grid; place-items: center; text-decoration: none; color: #0f172a">1</a>
+<span aria-current="page" style="width: 40px; height: 40px; border-radius: 8px; display: grid; place-items: center; background: #0369a1; color: #ffffff; font-weight: 700">2</span>
+<a href="#" style="width: 40px; height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; display: grid; place-items: center; text-decoration: none; color: #0f172a">3</a>
+<span aria-hidden="true" style="padding: 0 4px; color: #64748b">…</span>
+<a href="#" style="width: 40px; height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; display: grid; place-items: center; text-decoration: none; color: #0f172a">9</a>
+<a href="#" style="height: 40px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; display: flex; align-items: center; text-decoration: none; color: #0f172a">Berikutnya →</a>
+</nav>
+<p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.55">Statis (SSG), 12 artikel per halaman (<span style="font-family: 'JetBrains Mono', monospace">SITE_POSTS_PER_PAGE</span>). Halaman 1 tetap di <span style="font-family: 'JetBrains Mono', monospace">/panduan/</span>, halaman 2+ di <span style="font-family: 'JetBrains Mono', monospace">/panduan/halaman/n/</span>, setiap halaman kanonik ke dirinya sendiri. Berfungsi tanpa JavaScript.</p>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Hasil cari — muat lebih banyak</h3>
+<div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start">
+<span role="status" style="font-size: 14px; color: #334155">20 hasil ditampilkan.</span>
+<button type="button" style="height: 44px; padding: 0 20px; border-radius: 10px; border: 1.5px solid #0369a1; background: #ffffff; color: #0369a1; font: inherit; font-weight: 700">Muat lebih banyak</button>
+</div>
+<p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.55">Dipanggil dari peramban pembaca ke awcms (GET sederhana, tanpa header khusus). Kursor dari respons berikutnya; jumlah hasil diumumkan lewat <span style="font-family: 'JetBrains Mono', monospace">aria-live</span>. Tanpa JS: pesan arahan ke kategori dan tag.</p>
+</div>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pct = (n, t) => Math.round(n / t * 1000) / 10 + '%';
+    const mk = (repo, total, bad, mid, ok, rest) => ({ repo, total, bad, mid, ok, rest, wBad: pct(bad, total), wMid: pct(mid, total), wOk: pct(ok, total) });
+    return {
+      scan: [
+        mk('awcms', 66, 37, 14, 8, '7 lainnya: formulir/dasbor tanpa tabel atau tabel bercari tanpa paging'),
+        mk('awcms-one (commerce)', 32, 21, 7, 2, '2 lainnya: tabel bercari tanpa paging'),
+        mk('OMES di awcms', 15, 2, 8, 0, '5 lainnya: monitor/dokumen tanpa tabel')
+      ],
+      matrix: [
+        { f: 'Daftar kerja', code: 'DAFTAR', bg: '#e8effc', fg: '#1d4ed8', ex: 'Pengguna, Produk, Pesanan, Server OMES', q: 'Kotak cari + "cari di" kolom; filter chip; tab status ber-angka', p: 'Keyset 25 (25/50/100), Sebelumnya/Berikutnya', t: 'Ya, bila COUNT terindeks murah; jika tidak "25+ hasil"' },
+        { f: 'Log / arsip besar', code: 'LOG', bg: '#eef1f5', fg: '#3b4651', ex: 'Jejak audit, Event domain, Job OMES, Outbox WhatsApp', q: 'Pencarian tepat ID (korelasi, sumber daya) + aktor; rentang waktu wajib', p: 'Keyset 50, "Lompat ke waktu", ekspor CSV untuk rentang', t: 'Tidak — tanpa COUNT atas tabel append-only' },
+        { f: 'Antrean kerja', code: 'ANTREAN', bg: '#fdf1de', fg: '#9a4507', ex: 'Moderasi, Persetujuan, Permintaan subjek data, Registrasi', q: 'Filter status + tenggat; cari isi/pengaju', p: 'Keyset 25, urut terlama/tenggat dulu, aksi massal', t: 'Ya — jumlah antrean adalah informasi kerja' },
+        { f: 'Galeri', code: 'GRID', bg: '#e0f2f6', fg: '#0b6076', ex: 'Pustaka media, Produk (mode grid), Tema', q: 'Nama/teks alt; filter tipe & status', p: 'Keyset 48 kartu', t: 'Ya bila murah' },
+        { f: 'Pohon / urutan manual', code: 'POHON', bg: '#e4f5ea', fg: '#0f7434', ex: 'Kantor, Kategori produk, Menu sidebar, Slider', q: 'Saring di tempat (client-side) — cabang yang cocok tetap terbuka', p: 'Tanpa paging; batas keras ≤ 200 simpul', t: 'Jumlah simpul' },
+        { f: 'Arsip publik', code: 'ARSIP', bg: '#e0f2fe', fg: '#075985', ex: 'Kanal, kategori, tag (awcms-astro)', q: 'Kotak cari diarahkan ke /cari dengan cakupan kanal', p: 'Bernomor 12/halaman, URL statis /halaman/n/', t: 'Ya ("Halaman 2 dari 9", "%s artikel")' },
+        { f: 'Hasil cari publik', code: 'CARI', bg: '#ecfdf5', fg: '#047857', ex: '/cari (awcms-astro)', q: 'Kata kunci + facet: jenis konten, kanal, topik, instansi, wilayah', p: 'Muat lebih banyak 20 (kursor)', t: '"N hasil ditampilkan"' }
+      ],
+      rows: [
+        { hit: 'Rina', rest: ' Setiawati · rina@contoh.id', role: 'owner', last: '24 Okt, 08.02' },
+        { hit: 'Rina', rest: 'ldi Saputra · rinaldi@contoh.id', role: 'editor', last: '22 Okt, 10.15' },
+        { hit: 'rina', rest: '.k@contoh.id (Karina)', role: 'editor', last: '—' }
+      ],
+      anatomy: [
+        { n: '1', t: 'Cari + cakupan', d: 'satu kotak, pilihan "cari di" untuk kolom; tombol "/" memfokuskan.' },
+        { n: '2', t: 'Filter & urut', d: 'panel filter; jumlah filter aktif di tombol; urutan bawaan sesuai fungsi.' },
+        { n: '3', t: 'Chip filter aktif', d: 'bisa dihapus satu per satu; "Reset semua".' },
+        { n: '4', t: 'Ringkasan hasil', d: 'jumlah cocok + kata kunci, diumumkan aria-live.' },
+        { n: '5', t: 'Footer paging', d: 'rentang, baris per halaman, Sebelumnya/Berikutnya keyset.' }
+      ],
+      search: [
+        { k: 'Eksekusi', v: 'Di server, debounce 300 ms setelah 2 karakter; Enter langsung. ID/kode (pola #…, corr-…, BJM-…) dicocokkan tepat, bukan LIKE.' },
+        { k: 'Data sensitif', v: 'Email, telepon, NIK, NPWP dicari lewat normalisasi + hash lookup (skill awcms-sensitive-data); hasil tetap ter-mask.' },
+        { k: 'Penanda', v: 'Teks cocok disorot dengan <mark>; kolom yang cocok disebut bila bukan kolom utama.' },
+        { k: 'URL', v: '?q=&status=&sort=&cursor=&limit= — bisa dibagikan, tombol Kembali bekerja; kursor direset saat kueri/filter berubah.' },
+        { k: 'Batas', v: 'q maks 100 karakter; pencarian teks pakai indeks trigram/tsvector per tenant (RLS tetap berlaku).' },
+        { k: 'Tanpa JS', v: 'Form GET biasa — halaman tetap bisa dicari dan dipaging tanpa skrip (sesuai CSP default-src self).' }
+      ],
+      paging: [
+        { k: 'Kursor', v: 'Kunci urut + id, buram (opaque) dan bertanda tangan; Sebelumnya memakai kursor terbalik. Tidak ada "lompat ke halaman 37".' },
+        { k: 'Ukuran', v: '25 bawaan untuk daftar, 50 untuk log, 48 untuk grid; pilihan 25/50/100 diingat per pengguna (localStorage).' },
+        { k: 'Total', v: 'Hanya bila COUNT terindeks murah; jika tidak tampil "1–50" tanpa "dari".' },
+        { k: 'Stabilitas', v: 'Urutan selalu diakhiri id agar baris tidak dobel/hilang saat data berubah di antara halaman.' },
+        { k: 'Kembali', v: 'Membuka detail lalu kembali mempertahankan kursor dan posisi gulir.' },
+        { k: 'Aksesibilitas', v: '<nav aria-label="Paginasi">, tombol nonaktif bila tidak ada halaman, target ≥ 32 px di tabel padat, 44 px di publik.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

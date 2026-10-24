@@ -117,11 +117,13 @@ details[open]>summary .caret{transform:rotate(180deg)}
 <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
 <section aria-label="Daftar pengguna" style="flex: 999 1 560px; min-width: 0; background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
 <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e8edf3">
-<label style="display: flex; align-items: center; gap: 8px; flex: 1 1 220px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; background: #ffffff; color: #646f7a"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg><span class="sr" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Cari pengguna</span><input type="search" placeholder="Nama, email, atau kantor" style="border: 0; outline: none; flex: 1; min-width: 0; font: inherit; font-size: 14px; background: transparent; color: #141a21"></label>
+<label style="display: flex; align-items: center; gap: 8px; flex: 1 1 220px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; background: #ffffff; color: #646f7a"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg><span class="sr" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Cari pengguna</span><input type="search" placeholder="Nama, email, atau kantor" value="{{q}}" onChange="{{onQ}}" style="border: 0; outline: none; flex: 1; min-width: 0; font: inherit; font-size: 14px; background: transparent; color: #141a21"><kbd style="font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 1px 6px; border: 1px solid #dde3ea; border-radius: 5px; color: #5b6672">/</kbd></label>
 <label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Peran<select style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><option>Semua</option><option>owner</option><option>admin</option><option>editor</option></select></label>
 <label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Kantor<select style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><option>Semua</option><option>Kantor pusat</option></select></label>
-<label style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; cursor: pointer"><input type="checkbox" style="margin: 0; width: 16px; height: 16px">Tanpa MFA</label>
+<label style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; cursor: pointer"><input type="checkbox" checked="{{noMfa}}" onChange="{{onNoMfa}}" style="margin: 0; width: 16px; height: 16px">Tanpa MFA</label>
+<button type="button" class="btn2" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Urut: Login terakhir</button>
 </div>
+<div role="status" aria-live="polite" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #e8edf3; font-size: 13px; color: #5b6672"><span>{{statusText}}</span><sc-if value="{{hasFilter}}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{resetFilter}}" style="border: 0; background: none; padding: 0; color: #1d4ed8; font: inherit; font-weight: 600; cursor: pointer">Reset pencarian</button></sc-if></div>
 <sc-if value="{{hasPicked}}" hint-placeholder-val="{{ false }}">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; background: #e8effc; color: #1d4ed8; border-bottom: 1px solid #c9d8f7; font-size: 13px">
 <strong>{{pickedCount}} dipilih</strong>
@@ -158,10 +160,14 @@ details[open]>summary .caret{transform:rotate(180deg)}
 </table>
 </div>
 <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid #e8edf3; background: #f7f9fc; border-radius: 0 0 12px 12px; font-size: 13px; color: #5b6672">
-<span>Menampilkan {{rowCount}} dari {{totalCount}}</span>
-<div style="display: flex; gap: 6px">
-<button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #646f7a; font: inherit; font-size: 13px" disabled>Sebelumnya</button>
-<button type="button" class="btn2" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Berikutnya</button>
+<span>Menampilkan <strong style="color: #141a21">{{rangeText}}</strong> dari {{totalCount}}</span>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+<label style="display: flex; align-items: center; gap: 6px">Baris per halaman<select style="height: 32px; border: 1px solid #858b92; border-radius: 7px; font: inherit; font-weight: 600; padding: 0 6px; background: #ffffff"><option>25</option><option>50</option><option>100</option></select></label>
+<div style="display: flex; gap: 6px; align-items: center">
+<button type="button" class="btn2" disabled="{{noPrev}}" onClick="{{prevPage}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; cursor: pointer">‹ Sebelumnya</button>
+<span style="padding: 0 4px">Halaman {{pageNo}}</span>
+<button type="button" class="btn2" disabled="{{noNext}}" onClick="{{nextPage}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Berikutnya ›</button>
+</div>
 </div>
 </div>
 </section>
@@ -214,7 +220,7 @@ details[open]>summary .caret{transform:rotate(180deg)}
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { tab: 'all', sel: 'u4', picked: {} };
+    this.state = { tab: 'all', sel: 'u4', picked: {}, q: '', noMfa: false, page: 0 };
   }
   renderVals() {
     const I = {
@@ -272,19 +278,39 @@ class Component extends DCLogic {
         alert: u.alert || ''
       });
     };
-    const rows = users.filter((u) => tab === 'all' || u.st === tab).map(decorate);
+    const q = this.state.q.trim().toLowerCase();
+    const searched = users.filter((u) => (!q || (u.name + ' ' + u.email + ' ' + u.office).toLowerCase().indexOf(q) >= 0) && (!this.state.noMfa || u.mfa === 'Belum diatur'));
+    const inTab = searched.filter((u) => tab === 'all' || u.st === tab);
+    const PER = 5;
+    const pages = Math.max(1, Math.ceil(inTab.length / PER));
+    const page = Math.min(this.state.page, pages - 1);
+    const rows = inTab.slice(page * PER, page * PER + PER).map(decorate);
+    const filtering = !!q || this.state.noMfa;
+    const tabTotal = filtering ? String(inTab.length) : String(counts[tab]);
     const selUser = users.find((u) => u.id === this.state.sel);
     const pickedCount = Object.keys(picked).filter((k) => picked[k]).length;
     return {
+      q: this.state.q,
+      onQ: (e) => this.setState({ q: e.target.value, page: 0 }),
+      noMfa: this.state.noMfa,
+      onNoMfa: () => this.setState({ noMfa: !this.state.noMfa, page: 0 }),
+      hasFilter: filtering,
+      resetFilter: () => this.setState({ q: '', noMfa: false, page: 0 }),
+      statusText: filtering ? inTab.length + ' pengguna cocok' + (q ? ' dengan "' + this.state.q.trim() + '"' : '') + (this.state.noMfa ? ' · tanpa MFA' : '') : 'Urut login terakhir · contoh memakai 5 baris per halaman agar paging terlihat (bawaan 25)',
+      rangeText: inTab.length ? (page * PER + 1) + '–' + Math.min(inTab.length, page * PER + PER) : '0',
+      pageNo: String(page + 1),
+      noPrev: page === 0,
+      noNext: page >= pages - 1,
+      prevPage: () => this.setState({ page: Math.max(0, page - 1) }),
+      nextPage: () => this.setState({ page: Math.min(pages - 1, page + 1) }),
       tabs: tabDefs.map(([k, l]) => ({
         label: l, count: String(counts[k]), sel: tab === k ? 'true' : 'false',
         st: tab === k ? 'color: #1d4ed8; font-weight: 600; box-shadow: inset 0 -2px 0 #2563eb' : 'color: #5b6672',
         cst: tab === k ? 'background: #e8effc; color: #1d4ed8' : 'background: #eef1f5; color: #5b6672',
-        pick: () => this.setState({ tab: k })
+        pick: () => this.setState({ tab: k, page: 0 })
       })),
       rows,
-      rowCount: rows.length,
-      totalCount: String(counts[tab]),
+      totalCount: tabTotal,
       hasPicked: pickedCount > 0,
       pickedCount,
       hasSel: !!selUser,
