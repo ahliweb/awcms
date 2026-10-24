@@ -77,6 +77,35 @@ SCOPED="${AWCMS_JOBS_ENV_SCOPED:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/a
 
 log() { echo "$(date -Is) run-job.sh: $*"; }
 
+# The target must be a package script NAME, nothing else (Issue #1131, L4).
+# `bun run <path>` runs a file, so `run-job.sh ./scripts/security-readiness.ts`
+# would walk straight past the by-name refusal below. Real targets are
+# lower-case words joined by `:` and `-`.
+case "$JOB" in
+  -* | *[!A-Za-z0-9:_-]*)
+    log "job target must be a package script name (letters, digits, ':', '-', '_'); refusing" >&2
+    exit 1
+    ;;
+esac
+
+# Operator-only commands never run in a job container (Issue #1131, L4).
+# GENERATED from OPERATOR_ONLY_TARGETS: run `bun run jobs:env-allowlist:generate`
+# after changing that list; `bun run jobs:env-allowlist:check` fails when this
+# block is stale. It is before every docker call on purpose.
+# BEGIN GENERATED: operator-only targets (bun run jobs:env-allowlist:generate)
+# Source: OPERATOR_ONLY_TARGETS in scripts/jobs-env-allowlist.ts, where each
+# entry carries its reason. Do not edit between the markers; regenerate.
+case "$JOB" in
+  bench:booking | config:validate | security:readiness | subject-data:coverage:check | telegram:webhook:register)
+    log "$JOB is an operator-only command and does not run in a job container; refusing" >&2
+    log "  It needs variables the runner never copies (or is a CI/developer gate), so" >&2
+    log "  it would run against a partial environment and print a misleading report." >&2
+    log "  Run it with the full deployment environment instead (docs/awcms/deploy-coolify.md)." >&2
+    exit 1
+    ;;
+esac
+# END GENERATED: operator-only targets
+
 if [ -z "$IMAGE" ]; then
   IMAGE="${REGISTRY_IMAGE}:${TAG}"
   if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then

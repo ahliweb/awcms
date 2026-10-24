@@ -97,8 +97,8 @@ const FROM_IMPORT =
   /\b(import|export)\b([^;'"`]*?)\bfrom\s*(["'])([^"'\n]+)\3/g;
 /** `import "x"` — a side-effect import. */
 const BARE_IMPORT = /(?:^|[\s;{}])import\s*(["'])([^"'\n]+)\1/g;
-/** `import(` — what follows is classified below. */
-const DYNAMIC_IMPORT = /\bimport\(\s*([^)]*?)\s*\)/g;
+/** `import(` — the argument that follows is read by `readCallArgument`. */
+const DYNAMIC_IMPORT_OPEN = /\bimport\(/g;
 const STRING_LITERAL = /^(["'])([^"'\n]*)\1$/;
 /** Code the import graph cannot see into. */
 const ESCAPES = /\b(require|Bun\.spawn|Bun\.spawnSync)\s*\(/g;
@@ -123,6 +123,61 @@ function resolveRelative(
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
   }
   return null;
+}
+
+/**
+ * The index of the bracket that closes the group `text` is inside at `start`
+ * (the first unmatched `)`, `]` or `}`), or -1 when there is none. Strings and
+ * template literals are skipped, and a template's `${ … }` is scanned as the
+ * expression it is, so a `)` inside a string or a nested call cannot end the
+ * argument early.
+ */
+function findClosingBracket(text: string, start: number): number {
+  let depth = 0;
+  let index = start;
+  while (index < text.length) {
+    const char = text[index] as string;
+    if (char === '"' || char === "'") {
+      index += 1;
+      while (index < text.length && text[index] !== char) {
+        index += text[index] === "\\" ? 2 : 1;
+      }
+    } else if (char === "`") {
+      index += 1;
+      while (index < text.length && text[index] !== "`") {
+        if (text[index] === "\\") {
+          index += 2;
+        } else if (text[index] === "$" && text[index + 1] === "{") {
+          const close = findClosingBracket(text, index + 2);
+          if (close === -1) return -1;
+          index = close + 1;
+        } else {
+          index += 1;
+        }
+      }
+    } else if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+    } else if (char === ")" || char === "]" || char === "}") {
+      if (depth === 0) return index;
+      depth -= 1;
+    }
+    index += 1;
+  }
+  return -1;
+}
+
+/**
+ * The argument of the `import(` whose opening bracket ends just before `start`,
+ * whitespace collapsed so a formatter cannot change what a site is keyed by.
+ * An argument that never closes is returned to the end of the text rather than
+ * dropped: it is reported like any other computed import.
+ */
+function readCallArgument(text: string, start: number): string {
+  const close = findClosingBracket(text, start);
+  return text
+    .slice(start, close === -1 ? text.length : close)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -157,8 +212,11 @@ export function readImports(source: string): {
     add(match[2] ?? "");
   }
 
-  for (const match of text.matchAll(DYNAMIC_IMPORT)) {
-    const argument = (match[1] ?? "").trim();
+  for (const match of text.matchAll(DYNAMIC_IMPORT_OPEN)) {
+    const argument = readCallArgument(
+      text,
+      (match.index as number) + match[0].length
+    );
     // `import()` with nothing inside is a syntax error, so it can only be prose
     // that the comment stripper left behind (a backticked `import()` in a doc).
     if (argument === "") continue;

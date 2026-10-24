@@ -92,6 +92,7 @@ import {
 const ROOT = process.cwd();
 const OUTPUT = "ops/awcms-jobs.env-global";
 const SCOPED_OUTPUT = "ops/awcms-jobs.env-scoped";
+const RUNNER = "ops/run-job.sh";
 const CHECK_ONLY = process.argv.includes("--check");
 
 const HEADER = [
@@ -177,6 +178,62 @@ export function renderScoped(
     pairs.map((pair) => `${pair.job} ${pair.name}`)
   );
   return `${SCOPED_HEADER}${FINGERPRINT_PREFIX}${fingerprint}\n#\n${lines.join("\n")}\n`;
+}
+
+/** The markers around the generated refusal in `ops/run-job.sh`. */
+export const RUNNER_BEGIN =
+  "# BEGIN GENERATED: operator-only targets (bun run jobs:env-allowlist:generate)";
+export const RUNNER_END = "# END GENERATED: operator-only targets";
+
+/**
+ * The shell `ops/run-job.sh` runs before it touches docker, so an operator-only
+ * target is refused by NAME (Issue #1131, L4). `OPERATOR_ONLY_TARGETS` is proved
+ * to reach a variable the runner never copies, or to be a CI/developer gate; run
+ * inside a job container either would start, find its input missing, and print a
+ * report that looks real (`security:readiness` resolves no platform tenant and
+ * says so in the output of a command that exits normally). The list lives in the
+ * script itself, not in a third file to deploy: a runner that has lost a
+ * companion file refuses everything anyway, but a runner whose refusal list is a
+ * file could be pointed at an empty one.
+ */
+export function renderRunnerRefusal(targets: readonly string[]): string {
+  const names = sortedCodePoints(targets);
+  // These go into a shell `case` pattern; anything outside this set could be
+  // a pattern metacharacter or a command.
+  const bad = names.filter(
+    (name) => !/^[A-Za-z0-9][A-Za-z0-9:_-]*$/.test(name)
+  );
+  if (bad.length > 0 || names.length === 0) {
+    throw new Error(
+      `OPERATOR_ONLY_TARGETS must be a non-empty list of plain package-script names; got ${JSON.stringify(bad.length > 0 ? bad : names)}`
+    );
+  }
+  return [
+    RUNNER_BEGIN,
+    "# Source: OPERATOR_ONLY_TARGETS in scripts/jobs-env-allowlist.ts, where each",
+    "# entry carries its reason. Do not edit between the markers; regenerate.",
+    'case "$JOB" in',
+    `  ${names.join(" | ")})`,
+    '    log "$JOB is an operator-only command and does not run in a job container; refusing" >&2',
+    '    log "  It needs variables the runner never copies (or is a CI/developer gate), so" >&2',
+    '    log "  it would run against a partial environment and print a misleading report." >&2',
+    '    log "  Run it with the full deployment environment instead (docs/awcms/deploy-coolify.md)." >&2',
+    "    exit 1",
+    "    ;;",
+    "esac",
+    RUNNER_END
+  ].join("\n");
+}
+
+/** `source` with the generated refusal replaced by `block`; null when the markers are missing or out of order. */
+export function spliceRunnerRefusal(
+  source: string,
+  block: string
+): string | null {
+  const start = source.indexOf(RUNNER_BEGIN);
+  const endMarker = source.indexOf(RUNNER_END, start);
+  if (start === -1 || endMarker === -1) return null;
+  return `${source.slice(0, start)}${block}${source.slice(endMarker + RUNNER_END.length)}`;
 }
 
 /**
@@ -436,9 +493,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
 
 /**
  * A job that imports a scoped secret's reader FILE but never calls the reader,
- * so it is NOT granted. `readerCalls` are the functions that perform the read;
- * the test proves no file the job reaches, other than the reader file itself,
- * mentions any of them.
+ * so it is NOT granted. `readerCalls` are the functions that perform the read.
+ * The test proves two things (Issue #1131, L4):
+ *
+ * - no file the job reaches, other than the reader file itself, mentions any of
+ *   them; and
+ * - inside the reader file, `readerCalls` is a CLOSED set: every read of the
+ *   variable, and every reference to a listed function, sits inside another
+ *   listed function. A new helper in the file that calls a reader internally
+ *   (or a constant initialised from one) fails the test, because a job that
+ *   imports that helper would read the secret through the file it was excused
+ *   for. `readerCalls` must therefore name every function that reads the
+ *   variable DIRECTLY OR THROUGH another function in the file.
  */
 export const REACHES_WITHOUT_READING: readonly {
   name: string;
@@ -451,7 +517,10 @@ export const REACHES_WITHOUT_READING: readonly {
     target: "telegram:queue:purge",
     readerCalls: [
       "resolveTelegramEncryptionRing",
-      "resolveTelegramEncryptionRingUnchecked"
+      "resolveTelegramEncryptionRingUnchecked",
+      // Reads the encryption ring to refuse a ring that shares a key with the
+      // hash ring (Issue #1008, L11), so it is a reader of this variable too.
+      "resolveTelegramHashRing"
     ],
     reason:
       "imports telegram-config.ts for the retention-day constants only; it deletes rows and decrypts nothing"
@@ -580,13 +649,23 @@ export const READER_FILE_EXCUSES: readonly {
 /**
  * `import(...)` sites the tracer cannot follow. The reach test fails on any
  * other, so a new computed import cannot quietly hide a reader from the graph.
+ *
+ * A site is the file AND the exact expression inside the brackets (whitespace
+ * collapsed), one entry per occurrence (Issue #1131, L4). Keyed by file alone,
+ * the entry for `scripts/table-write-ownership-check.ts` would have accepted a
+ * second, different computed import added to it. Changing a listed expression
+ * is a deliberate edit here, with the reason re-read; list a repeated
+ * expression once per occurrence.
  */
 export const UNTRACEABLE_IMPORT_SITES: readonly {
   file: string;
+  /** The text inside `import( … )`, as `readImports` reports it. */
+  expression: string;
   reason: string;
 }[] = [
   {
     file: "scripts/table-write-ownership-check.ts",
+    expression: "`${process.cwd()}/${file}`",
     reason:
       "CI gate that imports module files by computed path inside the repository checkout; it is not a job and no job imports it"
   }
@@ -1005,10 +1084,29 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const runnerSource = readIfPresent(path.join(ROOT, RUNNER));
+  const runnerRendered =
+    runnerSource === null
+      ? null
+      : spliceRunnerRefusal(
+          runnerSource,
+          renderRunnerRefusal(
+            OPERATOR_ONLY_TARGETS.map((entry) => entry.target)
+          )
+        );
+  if (runnerRendered === null) {
+    console.error(
+      `jobs:env-allowlist FAILED — ${RUNNER} is missing or lacks the generated block between\n  ${RUNNER_BEGIN}\n  ${RUNNER_END}\n` +
+        "  Without it the runner would run operator-only commands in a job container."
+    );
+    process.exit(1);
+  }
+
   const fingerprint = envFingerprint(names, pairs);
   const outputs = [
     { file: OUTPUT, rendered: renderGlobal(names, fingerprint) },
-    { file: SCOPED_OUTPUT, rendered: renderScoped(pairs, fingerprint) }
+    { file: SCOPED_OUTPUT, rendered: renderScoped(pairs, fingerprint) },
+    { file: RUNNER, rendered: runnerRendered }
   ];
 
   if (CHECK_ONLY) {
@@ -1034,14 +1132,14 @@ async function main(): Promise<void> {
 
     console.log(
       `jobs:env-allowlist:check OK — ${OUTPUT} names ${names.length} variable(s) and ${SCOPED_OUTPUT} ` +
-        `holds ${pairs.length} job-scoped grant(s), both matching a fresh regeneration.`
+        `holds ${pairs.length} job-scoped grant(s); ${RUNNER} refuses ${OPERATOR_ONLY_TARGETS.length} operator-only target(s); all match a fresh regeneration.`
     );
   } else {
     for (const output of outputs) {
       writeFileSync(path.join(ROOT, output.file), output.rendered);
     }
     console.log(
-      `jobs:env-allowlist — wrote ${OUTPUT} (${names.length} variable(s)) and ${SCOPED_OUTPUT} (${pairs.length} grant(s)).`
+      `jobs:env-allowlist — wrote ${OUTPUT} (${names.length} variable(s)), ${SCOPED_OUTPUT} (${pairs.length} grant(s)) and the operator-only refusal in ${RUNNER} (${OPERATOR_ONLY_TARGETS.length} target(s)).`
     );
   }
 }

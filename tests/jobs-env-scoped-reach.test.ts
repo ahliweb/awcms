@@ -18,12 +18,26 @@
  * container at all). An import the tracer cannot follow must be on
  * `UNTRACEABLE_IMPORT_SITES` or the test fails: a computed import is exactly how a
  * reader would hide from this guard.
+ *
+ * The exemption lists are themselves held to the code (Issue #1131, L4): an
+ * exempt site is the file AND the expression, so a second computed import in a
+ * listed file fails; a `REACHES_WITHOUT_READING` reader file may not gain a
+ * function that calls a reader; and `ops/run-job.sh` refuses the
+ * `OPERATOR_ONLY_TARGETS` by name (`tests/jobs-env-exemption-guards.test.ts`
+ * proves each of those checks fires on a synthetic violation).
  */
 import { beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 
 import { collectEnvReads } from "../scripts/env-contract-coverage-check";
+import {
+  diffImportSites,
+  enclosingDeclaration,
+  readerFileProblems,
+  referencesOf,
+  type ImportSite
+} from "../scripts/lib/exemption-guards";
 import {
   GLOBAL_SECRETS,
   JOB_SCOPED,
@@ -39,6 +53,7 @@ import {
   validateGlobalSecrets
 } from "../scripts/jobs-env-allowlist";
 import {
+  readImports,
   resolveTargetEntry,
   traceImports,
   type ImportTrace
@@ -108,38 +123,6 @@ function isReader(file: string, name: string): boolean {
   return rawIsReader(file, name);
 }
 
-/** Offsets of `name` in `source` that are not its own declaration. */
-function referencesOf(source: string, name: string): number[] {
-  const out: number[] = [];
-  const declaration = new RegExp(
-    `(?:function\\s*\\*?\\s+|const\\s+|let\\s+)${name}\\b`
-  );
-  for (const match of source.matchAll(new RegExp(`\\b${name}\\b`, "g"))) {
-    const index = match.index as number;
-    if (
-      declaration.test(
-        source.slice(Math.max(0, index - 20), index + name.length)
-      )
-    ) {
-      continue;
-    }
-    out.push(index);
-  }
-  return out;
-}
-
-/** The name of the top-level function declaration (or arrow const) containing `index`. */
-function enclosingFunction(source: string, index: number): string {
-  const starts =
-    /(?:^|\n)(?:export\s+)?(?:async\s+)?function\s*\*?\s*(\w+)|(?:^|\n)(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*(?::[^=]+)?=>/g;
-  let name = "(module level)";
-  for (const match of source.matchAll(starts)) {
-    if ((match.index as number) >= index) break;
-    name = match[1] ?? match[2] ?? name;
-  }
-  return name;
-}
-
 function reaches(target: string, name: string): boolean {
   const trace = traces.get(target);
   if (!trace) throw new Error(`${target} is not a bun scripts/ target`);
@@ -206,17 +189,36 @@ describe("the universe the guard walks", () => {
 
     expect(unresolved).toEqual([]);
 
-    const allowed = new Set(UNTRACEABLE_IMPORT_SITES.map((s) => s.file));
-    const unexplained = [...sites.keys()].filter((file) => !allowed.has(file));
+    // A site is the file AND the exact expression (Issue #1131, L4). Counted per
+    // occurrence in the file itself, not per job that reaches it, so a second
+    // computed import in a listed file is NOT covered by the first one's entry.
+    const reachedFiles = new Set(
+      [...traces.values()].flatMap((trace) => trace.files)
+    );
+    const found: ImportSite[] = [...reachedFiles]
+      .filter((file) => /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file))
+      .flatMap((file) =>
+        readImports(readFileSync(file, "utf8")).dynamic.map((expression) => ({
+          file,
+          expression
+        }))
+      );
+    // The traces and this recount must agree, or the recount is not the proof.
+    expect(found.length).toBeGreaterThanOrEqual(sites.size);
+
+    const { unexplained, stale } = diffImportSites(
+      found,
+      UNTRACEABLE_IMPORT_SITES
+    );
     expect(
       unexplained,
-      `computed import(...) in ${unexplained.join(", ")}: the tracer cannot follow it, so a reader could hide behind it. Replace it with a literal import or add the file to UNTRACEABLE_IMPORT_SITES with a reason.`
+      `computed import(...) the tracer cannot follow, so a reader could hide behind it: ${unexplained.map((site) => `${site.file}: import(${site.expression})`).join("; ")}. Replace it with a literal import or list the file AND expression in UNTRACEABLE_IMPORT_SITES with a reason.`
     ).toEqual([]);
 
     // A listed site that no longer exists is a stale excuse.
     expect(
-      [...allowed].filter((file) => !sites.has(file)),
-      "UNTRACEABLE_IMPORT_SITES lists a file with no computed import"
+      stale,
+      "UNTRACEABLE_IMPORT_SITES lists a file/expression with no matching computed import"
     ).toEqual([]);
 
     for (const entry of UNTRACEABLE_IMPORT_SITES) {
@@ -284,6 +286,34 @@ describe("the explicit exceptions are each still true", () => {
       ).toBe(true);
 
       const trace = traces.get(entry.target) as ImportTrace;
+
+      // The reader file itself is skipped by the loop below, so hold it here:
+      // readerCalls must be a closed set inside it (Issue #1131, L4).
+      const readerFiles = trace.files.filter((file) =>
+        rawIsReader(file, entry.name)
+      );
+      expect(readerFiles.length).toBeGreaterThan(0);
+      // A misspelt entry would make the closed-set check vacuous.
+      for (const call of entry.readerCalls) {
+        expect(
+          readerFiles.some((file) =>
+            new RegExp(`\\b${call}\\b`).test(strippedSource(file))
+          ),
+          `${call} is not mentioned in any reader file of ${entry.name}`
+        ).toBe(true);
+      }
+      for (const file of readerFiles) {
+        expect(
+          readerFileProblems(
+            file,
+            strippedSource(file),
+            entry.name,
+            entry.readerCalls
+          ),
+          `${file} is excused for ${entry.name} but has a reader the excuse does not name`
+        ).toEqual([]);
+      }
+
       for (const file of trace.files) {
         if (isReader(file, entry.name)) continue;
         const source = readFileSync(file, "utf8");
@@ -314,7 +344,7 @@ describe("the explicit exceptions are each still true", () => {
       const fileSource = strippedSource(excuse.file);
       for (const call of calls) {
         for (const reference of referencesOf(fileSource, call)) {
-          const inside = enclosingFunction(fileSource, reference);
+          const inside = enclosingDeclaration(fileSource, reference);
           expect(
             (excuse.callers ?? []).includes(inside),
             `${excuse.file}: ${inside} references ${call}, which reads ${excuse.name}, and is not listed in the excuse's callers. Either it is a reader (scope the secret) or list it and prove no job reaches it.`
