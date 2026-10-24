@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:71cb4c3b71da2538bbee69d5d7d23c1b2a731cdd4738f870e614569eca33a18d -->
+<!-- i18n-source-hash: sha256:d0faf854c0a2069c79ff88a179d9fdf3a5d7a5822c78ff0d38e4801cb413f27f -->
 
 # `push_delivery`
 
@@ -132,3 +132,7 @@ Ikon **tidak** diambil dari payload — ia akan di-fetch saat ditampilkan, menye
 ## Yang BELUM ada
 
 - **FCM Web (SDK browser).** Ditolak, dengan angkanya, di ADR-0074 §Yang DITOLAK.
+
+## Pengiriman push Bun vs WebSocket browser
+
+`bun run push:dispatch` yang ada menggunakan Bun dan API HTTP push/FCM, sementara Service Worker browser menampilkan notifikasi. SSE/WS Bun mendatang **tidak** menggantikan Web Push saat browser ditutup. Tidak ada microservice push Node.js. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).
