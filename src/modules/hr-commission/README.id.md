@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:972260162efeaf2527774bdd3a965d9d4212a85c17dbd6ef5bbdc16800ea4a3b -->
+<!-- i18n-source-hash: sha256:1873bf964c5793a5c80ada9054d740c3648388fda5643a5d94d3b50504760a9d -->
 
 # `hr_commission`
 
@@ -330,6 +330,22 @@ LOCKED`, PS-19), dan `paid` berarti pembayaran tercatat. Belum ada mekanisme
   (hr-payroll.md bagian 15).
 - **Descriptor subjek hanya stempel aktor** dan `exportable: false`: sebuah aturan
   tidak menamai subjek data.
+
+## Konsumen tanpa orang yang sedang masuk (ADR-0147, diputuskan; belum dibangun)
+
+Consumer domain-event (misalnya attributor `order.paid` commerce di awcms-one)
+berjalan di `domain-events:dispatch` sebagai `awcms_worker`, dan batas payroll
+melarang role itu memegang hak apa pun atas `awcms_hr_commission_accruals` dan
+`awcms_hr_commission_transitions`. Jadi ia tidak dapat memanggil
+`CommissionAccrualPort`.
+[ADR-0147](../../../docs/adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.id.md)
+memutuskan jalur yang disahkan (Issue #1138): konsumen menyerahkan permintaan ke
+antrean intake milik `hr_commission` hanya dengan `INSERT` (port
+`commission_intake`, default-deny per tenant), dan job yang berjalan sebagai
+`awcms_app` memostingnya lewat satu inti posting di atas. `PAYROLL_ALLOWED_GRANTEES`,
+allow-list worker yang kosong, dan `commission_accrual` 1.1.0 tidak berubah.
+**Belum ada kodenya**; ia issue tindak lanjut, dan sampai mendarat adapter berbasis
+event tetap dorman.
 
 ## Keterbatasan
 

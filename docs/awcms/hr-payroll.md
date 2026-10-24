@@ -482,6 +482,16 @@ a completed reservation — are **downstream adapters** in the consuming reposit
 this family imports neither commerce nor booking, and the adapter, not this module,
 decides which events are commissionable.
 
+**A consumer with no signed-in person (a domain-event consumer, ADR-0147).** A
+consumer that runs in `domain-events:dispatch` runs as `awcms_worker`, which the
+payroll boundary forbids any privilege on an accrual. It therefore does not call
+`CommissionAccrualPort`; it submits a request to an `hr_commission`-owned intake
+queue (port `commission_intake`, `INSERT` only for the worker, default-deny per
+tenant), and a job that runs as `awcms_app` posts it through the same posting core.
+The boundary, its worker allow-list and `commission_accrual` 1.1.0 do not change.
+Decided by [ADR-0147](../adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md)
+(Issue #1138); implementation is a follow-up issue.
+
 ## 7. Payroll design (phase 3)
 
 ### 7.1 Compensation and payout accounts
