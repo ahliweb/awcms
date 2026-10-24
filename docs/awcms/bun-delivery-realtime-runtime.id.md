@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](bun-delivery-realtime-runtime.md)
 
-<!-- i18n-source-hash: sha256:bda51954bbb3956658b4e9a8b8823a8a28b56bb75618ab7cc3b7f813ebe9f62b -->
+<!-- i18n-source-hash: sha256:586d0b763ae83e2f850b5d756fc0b1d492c925160d19b05470ee18530656f04a -->
 
 # Standar runtime pengiriman dan real-time AWCMS — Bun-only (usulan)
 > Standar implementasi rancangan, **bukan** bukti fitur WebSocket sudah berjalan. [Issue #1167](https://github.com/ahliweb/awcms/issues/1167) · keputusan desain [#1168](https://github.com/ahliweb/awcms/issues/1168) · 24 Oktober 2026.
@@ -37,3 +37,9 @@
 - Pelacakan upstream [#1139](https://github.com/ahliweb/awcms/issues/1139), [#1140](https://github.com/ahliweb/awcms/issues/1140), [#1141](https://github.com/ahliweb/awcms/issues/1141), [#1142](https://github.com/ahliweb/awcms/issues/1142), [#1143](https://github.com/ahliweb/awcms/issues/1143), [#1144](https://github.com/ahliweb/awcms/issues/1144), [#1155](https://github.com/ahliweb/awcms/issues/1155), [#1158](https://github.com/ahliweb/awcms/issues/1158), [#1164](https://github.com/ahliweb/awcms/issues/1164), [#1165](https://github.com/ahliweb/awcms/issues/1165). Konsumen [AWCMS-One #458](https://github.com/ahliweb/awcms-one/issues/458), [#459](https://github.com/ahliweb/awcms-one/issues/459), [#460](https://github.com/ahliweb/awcms-one/issues/460), [#461](https://github.com/ahliweb/awcms-one/issues/461), [#430–#432](https://github.com/ahliweb/awcms-one/issues/430).
 
 **Referensi Bun:** [WebSocket](https://bun.com/docs/runtime/http/websockets), [SSE](https://bun.com/guides/http/sse), [HTTP server](https://bun.com/docs/runtime/http/server). Saat implementasi, validasi kompatibilitas fitur dengan Bun 1.4.3 yang dipin.
+
+## Issue implementasi konkret (2026-10-24)
+
+- [#1170](https://github.com/ahliweb/awcms/issues/1170): audit dan tes manifest/job/kontainer memakai binary Bun yang dipin, tanpa salah menolak import `node:*` yang dijalankan Bun.
+- [#1171](https://github.com/ahliweb/awcms/issues/1171): implementasi SSE-first/WebSocket native Bun **setelah** ADR [#1168](https://github.com/ahliweb/awcms/issues/1168) disetujui; jangan mengklaim gateway sudah berjalan.
+- [AWCMS-One #469](https://github.com/ahliweb/awcms-one/issues/469): pengujian runtime template/deployment/commerce, tanpa fork `apps/cms` upstream.
