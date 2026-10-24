@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:4703465c6257d1473380d081e12b45bc1a90a9b9d6808e45cf89e4b5e7835dd4 -->
+<!-- i18n-source-hash: sha256:c89b0eb6e102da26a3b88f5375f688159bb7db9f36474d30652199eec80e4b77 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -130,6 +130,10 @@ Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, da
 ## Paket dokumen AWCMS
 
 [Standar worker kanal dan real-time Bun-only](bun-delivery-realtime-runtime.id.md) (issue #1167 dan ADR #1168) mencakup pengiriman email/WhatsApp/Web Push Bun yang sudah ada dan SSE/WebSocket Bun yang masih direncanakan.
+
+## Fondasi omnichannel (desain, Diterima)
+
+[**Paket kesiapan fondasi omnichannel v1**](omnichannel-foundation.id.md) menyertai [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (Issue [#1139](https://github.com/ahliweb/awcms/issues/1139)): pembagian lima kapabilitas, kamus data logis, matriks kapabilitas provider (fail-closed per akun), semantik multi-pengirim, model ancaman, pembacaan kepatuhan, garis besar kontrak, rollout, dan matriks tes. **Hanya desain**: belum ada modul, tabel, rute, atau konektor.
 
 ## Kontrak layar UI/UX Omnichannel
 
