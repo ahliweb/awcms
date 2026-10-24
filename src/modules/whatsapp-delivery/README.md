@@ -77,7 +77,7 @@ The purge first expires stale non-terminal rows (clearing an OTP), then deletes 
 
 ## Not in this phase
 
-Inbound webhooks (delivery receipts, "stop" replies — ADR-0133 section 10, Q2), a per-tenant sender selection (Q3), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
+Sender selection per tenant, brand and number is **decided but not built**: [ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §4 adds an immutable, nullable `sender_account_id` to the one queue (Issue #1141); `null` stays today's deployment sender. Inbound webhooks (delivery receipts, "stop" replies — ADR-0133 section 10, Q2), a per-tenant sender selection (Q3), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
 
 ## WhatsApp Bun runtime / planned UI status
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:21fb5237e9effe54519bbd0eaa22c149859f039352147e9078d07eae8a80bf56 -->
+<!-- i18n-source-hash: sha256:34ff58c8ddcaf43e31fc949b3606e9bcd811c1fe9f13cfd3f73e829b6d7cd5f6 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -81,7 +81,7 @@ Purge lebih dulu mengedaluwarsakan baris non-terminal yang basi (mengosongkan OT
 
 ## Bukan bagian fase ini
 
-Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q2), pemilihan pengirim per tenant (Q3), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
+Pemilihan pengirim per tenant, brand, dan nomor **sudah diputuskan tetapi belum dibangun**: [ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §4 menambahkan `sender_account_id` yang tak dapat diubah dan nullable pada satu antrean (Issue #1141); `null` tetap pengirim deployment hari ini. Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q2), pemilihan pengirim per tenant (Q3), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
 
 ## Runtime Bun WhatsApp / status UI terencana
 
