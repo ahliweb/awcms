@@ -35,3 +35,9 @@
 - Related upstream issues [#1139](https://github.com/ahliweb/awcms/issues/1139), [#1140](https://github.com/ahliweb/awcms/issues/1140), [#1141](https://github.com/ahliweb/awcms/issues/1141), [#1142](https://github.com/ahliweb/awcms/issues/1142), [#1143](https://github.com/ahliweb/awcms/issues/1143), [#1144](https://github.com/ahliweb/awcms/issues/1144), [#1155](https://github.com/ahliweb/awcms/issues/1155), [#1158](https://github.com/ahliweb/awcms/issues/1158), [#1164](https://github.com/ahliweb/awcms/issues/1164), [#1165](https://github.com/ahliweb/awcms/issues/1165). Downstream [AWCMS-One #458](https://github.com/ahliweb/awcms-one/issues/458), [#459](https://github.com/ahliweb/awcms-one/issues/459), [#460](https://github.com/ahliweb/awcms-one/issues/460), [#461](https://github.com/ahliweb/awcms-one/issues/461), [#430–#432](https://github.com/ahliweb/awcms-one/issues/430).
 
 **Official Bun docs:** [WebSocket and pub/sub](https://bun.com/docs/runtime/http/websockets), [SSE](https://bun.com/guides/http/sse), [Bun HTTP server](https://bun.com/docs/runtime/http/server). Versions/features must be validated against pinned Bun 1.4.3 at implementation time.
+
+## Concrete implementation follow-ups (2026-10-24)
+
+- [#1170](https://github.com/ahliweb/awcms/issues/1170): audit and test that delivery/job/container launch commands execute the pinned Bun binary, without false positives for Bun-hosted Node built-ins.
+- [#1171](https://github.com/ahliweb/awcms/issues/1171): implement an authenticated SSE-first / optional native Bun WebSocket gateway **only after** [#1168](https://github.com/ahliweb/awcms/issues/1168) accepts its architecture; do not claim a gateway already ships.
+- [AWCMS-One #469](https://github.com/ahliweb/awcms-one/issues/469): root template/deploy/commerce runtime guard, leaving upstream `apps/cms` intact.
