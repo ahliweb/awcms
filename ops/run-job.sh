@@ -110,7 +110,7 @@ esac
 # Source: OPERATOR_ONLY_TARGETS in scripts/jobs-env-allowlist.ts, where each
 # entry carries its reason. Do not edit between the markers; regenerate.
 case "$JOB" in
-  bench:booking | config:validate | security:readiness | subject-data:coverage:check | telegram:webhook:register)
+  bench:booking | config:validate | jobs:env-allowlist:check | jobs:env-allowlist:generate | security:readiness | subject-data:coverage:check | telegram:webhook:register)
     log "$JOB is an operator-only command and does not run in a job container; refusing" >&2
     log "  It needs variables the runner never copies (or is a CI/developer gate), so" >&2
     log "  it would run against a partial environment and print a misleading report." >&2
@@ -303,9 +303,52 @@ if [ -n "$SCOPED_NAMES" ]; then
   NAMES=$(printf '%s\n%s\n' "$NAMES" "$SCOPED_NAMES")
 fi
 
+# DATABASE_URL is the `awcms_app` credential. A job on the worker client prefers
+# WORKER_DATABASE_URL and uses DATABASE_URL only when the first is blank, so once
+# the host has configured the worker role the broader login is withheld from every
+# job whose code cannot reach the app client (Issue #1132). A job that can reach it
+# (the one-off backfills, `telegram:chat:rekey`, a script that opens its own
+# connection) keeps it. Which is which is derived from the import closure.
+# BEGIN GENERATED: targets that need DATABASE_URL (bun run jobs:env-allowlist:generate)
+# Source: appConnectionTargets() in scripts/jobs-env-allowlist.ts, derived from each
+# target's import closure. Do not edit between the markers; regenerate.
+case "$JOB" in
+  blog:legacy:article-paths | blog:legacy:cutover:verify | blog:legacy:import | blog:legacy:redirects:import | changesets:policy:check | check:astro-frontmatter:check | check:astro-scripts:check | check:docs | check:docs:translation | ci:local | data-lifecycle:registry:check | db:migrate | deps:audit:check | deps:freshness | docs:i18n:stamp | docs:i18n:stamp:check | email:templates:seed-defaults | entitlements:backfill | family:conformance:check | graph:artifacts:check | identity-access:permissions:backfill | identity:mfa-collisions:preflight | identity:principals:preflight | modules:table-writes:check | payroll:catalog-boundary:check | payroll:sql-boundary:check | release:verify | telegram:chat:rekey | version:check)
+    WITHHOLD_DATABASE_URL=0
+    ;;
+  *)
+    WITHHOLD_DATABASE_URL=1
+    ;;
+esac
+# END GENERATED: targets that need DATABASE_URL
+
+# `WORKER_DATABASE_URL` counts as configured only when it is not blank after
+# trimming, exactly as `readConfiguredUrl` in `src/lib/database/client.ts` reads
+# it: a blank value falls back to DATABASE_URL, so the credential stays.
 docker exec "$APP" printenv \
-  | awk -F= 'NR==FNR { want[$0]=1; next } ($1 in want)' <(printf '%s\n' "$NAMES") - \
+  | WITHHOLD="$WITHHOLD_DATABASE_URL" awk -F= '
+      NR==FNR { want[$0]=1; next }
+      ($1 in want) {
+        kept[++n] = $0
+        if ($1 == "DATABASE_URL") db = n
+        if ($1 == "WORKER_DATABASE_URL") {
+          value = substr($0, length($1) + 2)
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+          worker = (value != "")
+        }
+      }
+      END {
+        for (i = 1; i <= n; i++) {
+          if (i == db && ENVIRON["WITHHOLD"] == "1" && worker) continue
+          print kept[i]
+        }
+      }
+    ' <(printf '%s\n' "$NAMES") - \
   > "$ENVFILE"
+
+if [ "$WITHHOLD_DATABASE_URL" = "1" ] && ! grep -q '^DATABASE_URL=' "$ENVFILE"; then
+  log "DATABASE_URL withheld from $JOB (WORKER_DATABASE_URL is configured; this job never opens the app connection)"
+fi
 
 COPIED=$(wc -l < "$ENVFILE" | tr -d ' ')
 if [ "$COPIED" -eq 0 ]; then
