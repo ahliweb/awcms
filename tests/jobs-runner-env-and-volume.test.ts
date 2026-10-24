@@ -744,3 +744,93 @@ describe("job-scoped secrets reach only the jobs that read them", () => {
     expect(source).toContain("awcms-jobs.env-scoped");
   });
 });
+
+describe("DATABASE_URL is withheld from jobs that never open the app connection (Issue #1132)", () => {
+  const WORKER = "WORKER_DATABASE_URL=postgres://worker:w@db/awcms";
+  const APP = "DATABASE_URL=postgres://app:a@db/awcms";
+  const names = (lines: string[]): string[] =>
+    lines.map((line) => line.split("=")[0] as string).sort();
+
+  test("a worker-client job on a host with WORKER_DATABASE_URL does not receive the app login", async () => {
+    const selected = await selectEnv(
+      [APP, WORKER, "APP_ENV=production"].join("\n")
+    );
+
+    expect(names(selected)).toEqual(["APP_ENV", "WORKER_DATABASE_URL"]);
+  });
+
+  test("without a configured worker URL the fallback keeps working: absent, blank or whitespace", async () => {
+    for (const worker of [
+      "",
+      "WORKER_DATABASE_URL=",
+      "WORKER_DATABASE_URL=   "
+    ]) {
+      const fixture = [APP, worker, "APP_ENV=production"]
+        .filter(Boolean)
+        .join("\n");
+      const selected = await selectEnv(fixture);
+
+      expect(selected).toContain(APP);
+    }
+  });
+
+  test("a target that opens the app connection keeps DATABASE_URL even when the worker URL is set", async () => {
+    // telegram:chat:rekey runs as awcms_app on purpose (the binding guard trigger
+    // refuses the worker role a live ciphertext write); blog:legacy:import and the
+    // one-off backfills use the app client too.
+    for (const job of [
+      "telegram:chat:rekey",
+      "blog:legacy:import",
+      "entitlements:backfill",
+      "identity-access:permissions:backfill"
+    ]) {
+      const { lines, exitCode } = await runSelection(
+        [APP, WORKER].join("\n"),
+        job
+      );
+
+      expect(exitCode).toBe(0);
+      expect(names(lines)).toContain("DATABASE_URL");
+      expect(names(lines)).toContain("WORKER_DATABASE_URL");
+    }
+  });
+
+  test("every scheduled job is on the withholding side", async () => {
+    const crontab = await Bun.file("ops/awcms-jobs.crontab").text();
+    const scheduled = [
+      ...new Set(
+        [...crontab.matchAll(/\$AWCMS_RUN_JOB\s+(\S+)/g)].map(
+          (m) => m[1] as string
+        )
+      )
+    ];
+    expect(scheduled.length).toBeGreaterThan(20);
+
+    for (const job of scheduled) {
+      const { lines, exitCode } = await runSelection(
+        [APP, WORKER].join("\n"),
+        job
+      );
+
+      expect(exitCode).toBe(0);
+      expect(names(lines), job).not.toContain("DATABASE_URL");
+      expect(names(lines), job).toContain("WORKER_DATABASE_URL");
+    }
+  });
+
+  test("only the exact name is withheld: a lookalike and the worker URL itself are untouched", async () => {
+    const selected = await selectEnv(
+      [APP, WORKER, "DATABASE_URL_LOOKALIKE=x", "SETUP_DATABASE_URL=y"].join(
+        "\n"
+      )
+    );
+
+    expect(names(selected)).toEqual(["WORKER_DATABASE_URL"]);
+  });
+
+  test("the runner says so in the job log, so the withholding is visible", async () => {
+    const source = await runnerSource();
+
+    expect(source).toContain("DATABASE_URL withheld from");
+  });
+});
