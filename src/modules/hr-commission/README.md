@@ -316,6 +316,20 @@ employmentId, reason, correlationId? })` is keyed by the SAME source identity
 - **The subject descriptor is actor-stamps only** and `exportable: false`: a rule
   names no data subject.
 
+## A consumer with no signed-in person (ADR-0147, decided; not built)
+
+A domain-event consumer (for example the commerce `order.paid` attributor in
+awcms-one) runs in `domain-events:dispatch` as `awcms_worker`, and the payroll
+boundary forbids that role any privilege on `awcms_hr_commission_accruals` and
+`awcms_hr_commission_transitions`. So it cannot call `CommissionAccrualPort`.
+[ADR-0147](../../../docs/adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md)
+decides the sanctioned path (Issue #1138): the consumer submits a request to an
+`hr_commission`-owned intake queue with `INSERT` only (port `commission_intake`,
+default-deny per tenant), and a job that runs as `awcms_app` posts it through the
+one posting core above. `PAYROLL_ALLOWED_GRANTEES`, the empty worker allow-list and
+`commission_accrual` 1.1.0 do not change. **Nothing of this exists in the code yet**;
+it is a follow-up issue, and until it lands an event-driven adapter stays dormant.
+
 ## Limitations
 
 - Only the employee's own-commission screen exists (Issue #952); the rule screens and the accrual screens (list, approve / release / void / pay) are the follow-up.

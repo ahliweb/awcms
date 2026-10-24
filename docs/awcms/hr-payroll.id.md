@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:741470b3af46e281d0c928e4b68ebe6b90243e2d70973e36b11f21256ac0e0e0 -->
+<!-- i18n-source-hash: sha256:f59b3b6c550776d3ab095e8592295de82f829d0a4a6e6074954af8a7159f1129 -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -505,6 +505,17 @@ adalah pola yang boleh mereka salin. **Konsumen event sumber** — baris pesanan
 dibayar, reservasi yang selesai — adalah **adapter hilir** di repositori konsumen;
 keluarga ini tidak mengimpor commerce maupun booking, dan adapter, bukan modul ini,
 yang memutuskan event mana yang dapat dikomisikan.
+
+**Konsumen tanpa orang yang sedang masuk (consumer domain-event, ADR-0147).**
+Konsumen yang berjalan di `domain-events:dispatch` berjalan sebagai `awcms_worker`,
+yang oleh batas payroll dilarang memegang hak apa pun atas akrual. Karena itu ia
+tidak memanggil `CommissionAccrualPort`; ia menyerahkan permintaan ke antrean intake
+milik `hr_commission` (port `commission_intake`, hanya `INSERT` bagi worker,
+default-deny per tenant), dan job yang berjalan sebagai `awcms_app` memostingnya
+lewat inti posting yang sama. Batas, allow-list worker-nya, dan `commission_accrual`
+1.1.0 tidak berubah. Diputuskan oleh
+[ADR-0147](../adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.id.md)
+(Issue #1138); implementasi adalah issue tindak lanjut.
 
 ## 7. Desain Payroll (fase 3)
 

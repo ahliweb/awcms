@@ -1,0 +1,111 @@
+🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md)
+
+<!-- i18n-source-hash: sha256:6fcdeb56a6e05ebe897e3d43553acbd6be97ad200b9d0a02b0f80bc61fec236e -->
+
+# ADR-0147 — Akrual komisi berbasis event masuk lewat antrean intake milik `hr_commission` yang diposting job berperan `awcms_app`; role worker hanya mendapat `INSERT` pada antrean itu dan tidak ada hak apa pun atas payroll
+
+- **Status:** Diterima
+- **Tanggal:** 2026-10-24
+- **Pengambil keputusan:** ahliweb (pemilik: "kerjakan opsi yang direkomendasikan")
+- **Menyelesaikan:** Issue #1138 (hilir `ahliweb/awcms-one#391`, yang attributor ADR-0046-nya dikirim dalam keadaan dorman sampai ini ada)
+- **Mengamendemen:** [ADR-0132](0132-hr-payroll-module-family-admission.id.md) §7 (menambahkan cara KONSUMEN SISTEM, yang tidak punya orang yang sedang masuk, memposting komisi). Tidak membalik apa pun di dalamnya dan tidak menyentuh §8 (payroll).
+- **Memperluas:** [ADR-0006](0006-offline-first-sync-outbox.id.md) (tidak ada kerja berprivilege atau panggilan provider di dalam transaksi konsumen), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.id.md) (konsumen bergantung pada port netral), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.id.md) §3 (satu antrean per kepentingan, klaim berlease), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md) (konsumen dideklarasikan di descriptor modul dan berjalan di `domain-events:dispatch` sebagai `awcms_worker`), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md)
+- **Terkait:** Issue #1015 (batas katalog payroll), #1077 (pengerasannya), #1095 (celah sisa), #951 dan #1109 (`CommissionAccrualPort.accrue` dan `void`), [`docs/awcms/hr-payroll.id.md`](../awcms/hr-payroll.id.md) §6 dan §13.3, `src/modules/_shared/payroll-data-boundary.ts`, `scripts/lib/payroll-catalog-boundary.ts`
+
+**Hanya dokumen dan tata kelola.** ADR ini tidak menambah tabel, migrasi, rute, job, berkas port, atau dependensi. Implementasinya adalah issue baru (ditautkan dari #1138) yang lingkup dan kriteria penerimaannya diturunkan dari §7.
+
+## Konteks
+
+`CommissionAccrualPort` (ADR-0132 §7, kontrak `commission_accrual` 1.1.0) diposting dari **composition root** konsumen: handler rute atau sebuah job. Inti posting (`accrueCommission`, `voidAccrual`) dan trigger penjaga akrual berjalan di **transaksi pemanggil dengan privilege pemanggil**.
+
+Adapter hilir yang mengakrual atas sebuah domain event, seperti attributor `order.paid` commerce di awcms-one, berjalan di `domain-events:dispatch` sebagai `awcms_worker`. Untuk memposting lewat port ia membutuhkan `SELECT` dan `INSERT` pada `awcms_hr_commission_accruals` dan `awcms_hr_commission_transitions`, `UPDATE` kolom untuk `void`, serta `FOR SHARE` pada rule dan employment (yang di Postgres diperlakukan sebagai `UPDATE (id)`).
+
+Batas payroll dengan benar melarang setiap hak itu. `PAYROLL_ALLOWED_GRANTEES = ["awcms_app"]`; `PAYROLL_WORKER_EXECUTE_ALLOWLIST` kosong dan bagaimanapun terbatas pada fungsi penghitung skalar. Alasannya tertulis di bagian atas `payroll-data-boundary.ts`: `awcms_worker` menjalankan job tanpa pengawasan sehingga tidak boleh membaca baris gaji seseorang satu per satu, dan sebuah akrual **adalah** penghasilan satu karyawan (nama tabelnya ada di `FORBIDDEN_PAYROLL_TABLE_PATTERNS` karena itu). Akibatnya **tidak ada jalur yang disahkan bagi konsumen berbasis event untuk mengakrual atau membatalkan**, dan hilir mengirim adapter dalam keadaan dorman (migrasi 1053-nya mencabut hak payroll worker dan mengaktifkan adapter ditolak).
+
+Tiga fakta membentuk pilihan:
+
+- Inti posting besar dan kritis keamanan: tepat-sekali berdasarkan identitas sumber, rule dipilih dari tanggal event itu sendiri, kunci induk `FOR SHARE`, database menghitung ulang jumlah, baris audit dan domain event ditulis di transaksi pemanggil, serta snapshot penerima manfaat. Ia ada satu, dalam TypeScript, dengan kembaran SQL hanya untuk aritmetika jumlah.
+- `accrue` sudah menerima **aktor null** (kolom `created_by` dan aktor transisi nullable untuk "dibuat sistem", `sql/188`); `void` tidak, karena setiap tepi status mencap seseorang (`actor_required`).
+- Ada preseden "job atas tabel berprivilege berjalan sebagai `awcms_app`, bukan worker": `telegram:chat:rekey` adalah operasi murni database yang dijalankan sebagai `awcms_app` karena penjaga binding menolak role worker. Sejak Issue #1132 (baris 5 dan 6) `ops/run-job.sh` menurunkan dari import closure tiap job, job mana yang mempertahankan `DATABASE_URL` yang dibutuhkan role itu, sehingga job serupa yang baru tidak membutuhkan daftar tulisan tangan.
+
+## Keputusan
+
+**Konsumen berbasis event tidak memposting. Ia menyerahkan catatan intake, dan sebuah job yang berjalan sebagai `awcms_app` yang memposting.** Secara konkret:
+
+### 1. Antrean intake dimiliki `hr_commission` dan bukan tabel keluarga payroll
+
+Sebuah tabel baru (nama kerja `awcms_hr_commission_intents`; namanya **tidak** cocok dengan `FORBIDDEN_PAYROLL_TABLE_PATTERNS`, ini disengaja dan diperiksa di tes implementasi) menyimpan satu baris per permintaan yang diserahkan:
+
+- `tenant_id`, `kind` (`accrue` | `void`), identitas sumber `(source_type, source_ref, source_line)`, `employment_id` (foreign key komposit dengan `tenant_id`), dan kolom permintaan yang sudah diterima port: `rule_key`, `base_amount` atau `units`, `currency_code`, `occurred_at`, `occurred_on`, `correlation_id`; untuk `void` juga `reason` dan orang yang membatalkan penjualan (`actor_tenant_user_id`).
+- `request_digest` (digest kanonik yang sama dengan yang dipakai ledger), `status` (`pending` | `posting` | `posted` | `refused` | `failed`), `outcome_code`, `attempts`, `next_attempt_at` (sekaligus lease), dan cap waktu.
+- Kunci unik pada `(tenant_id, kind, source_type, source_ref, source_line, employment_id, request_digest)`: pengiriman ulang permintaan yang **sama** adalah `duplicate`; **identitas yang sama dengan permintaan berbeda** disimpan sebagai baris kedua dan muncul saat posting sebagai `source_conflict` milik ledger sendiri, alih-alih ditelan kunci unik.
+- RLS `FORCE` pada `tenant_id`, `USING` dan `WITH CHECK`; descriptor `subjectData` (ADR-0094) dan descriptor `data_lifecycle` di migrasi yang sama; baris terminal dipurge dengan bentuk `delegated` dengan `updated_at` sebagai kursor, tidak pernah hanya berdasarkan usia.
+
+**Hak akses.** `awcms_worker` menerima `INSERT` pada tabel ini dan **tidak ada yang lain**: tanpa `SELECT`, `UPDATE`, atau `DELETE`, dan tanpa hak apa pun pada objek keluarga payroll. Karena itu worker tidak dapat membaca kembali apa yang ia serahkan atau bagaimana itu diselesaikan, dan tidak dapat menyentuh akrual yang telah diposting. `awcms_app` menerima apa yang dibutuhkan job poster. `scripts/security-readiness.ts` (`WORKER_ROLE_GRANTS`) mencantumkan tepat satu kata kerja ini.
+
+### 2. Port netral baru, `commission_intake` 1.0.0, di `_shared/ports/`
+
+`submitAccrual(tx, tenantId, actorTenantUserId | null, request)` dan `submitVoid(tx, tenantId, actorTenantUserId, request)` menerima **bentuk permintaan yang sama** dengan `CommissionAccrualPort` dan menjalankan **validator murni yang sama**. Keduanya melakukan satu `INSERT ... ON CONFLICT DO NOTHING` di transaksi pemanggil dan mengembalikan `queued`, `duplicate`, `input_invalid`, `actor_required` (`void` tanpa orang) atau `disabled`. Keduanya tidak pernah mengembalikan akrual, jumlah, atau rule. `CommissionAccrualPort` tetap persis seperti sekarang (`commission_accrual` 1.1.0): ia tetap menjadi sambungan sinkron bagi rute yang punya orang yang sedang masuk dan transaksi hidup.
+
+### 3. Job poster berjalan sebagai `awcms_app` dan memakai ulang satu inti posting
+
+Sebuah job modul (nama kerja `hr-commission:intents:post`, interval pendek, dideklarasikan di descriptor modul sehingga crontab dan gerbang registry mencakupnya) membuka client **app**, mengklaim baris intake per tenant dengan `FOR UPDATE SKIP LOCKED` dalam transaksi pendek, dan untuk tiap baris memanggil `accrueCommission` / `voidAccrual` yang sudah ada di dalam transaksi tenant dengan aktor yang tersimpan. Hasil ledger (`accrued`, `replayed`, `source_conflict`, `no_effective_rule`, `period_closed`, `not_found`, ...) dipetakan menjadi `posted` (sukses, replay, `already_voided`), `refused` (penolakan bisnis: terminal, tidak pernah diulang) atau percobaan ulang terbatas untuk kesalahan sementara yang berakhir `failed`. Hanya ada **satu** implementasi posting, sehingga baris audit, domain event, baris log transisi, snapshot SoD, dan trigger identik byte demi byte dengan jalur sinkron. Karena job menjangkau `getDatabaseClient()`, `ops/run-job.sh` mempertahankan `DATABASE_URL` untuknya secara otomatis (Issue #1132), dan ia satu-satunya job terjadwal yang demikian.
+
+### 4. Otorisasi berdasarkan registrasi dan opt-in per tenant, bukan sesi
+
+Tidak ada orang yang masuk di consumer domain-event, dan dokumentasi port eksplisit bahwa composition root yang mengotorisasi. Untuk jalur ini otorisasi adalah dua fakta, keduanya **default-deny**:
+
+1. konsumen dideklarasikan di descriptor modul (ADR-0134) yang mencantumkan `commission_intake` di `capabilities.consumes`, yaitu kode yang sudah ditinjau, bukan pemanggil saat runtime; dan
+2. tenant telah menyalakan intake: `hr_commission` aktif lewat Module Management **dan** pengaturan tenant `commission_intake_enabled` (default `false`) yang hanya diubah oleh izin berisiko tinggi yang dapat diberikan terpisah (nama kerja `hr_commission.intake.configure`), diaudit pada tingkat `warning`.
+
+Dengan pengaturan mati, `submit*` menjawab `disabled` dan tidak menulis apa pun, dan poster tidak mengklaim apa pun.
+
+### 5. Hasil terlihat tanpa memberi worker jalur baca
+
+Intake yang ditolak atau gagal adalah **pengecualian yang dipantau**, bukan pembuangan senyap: job poster melaporkan hitungan lewat diagnostik job, daftar admin baca-saja untuk pengecualian intake (dibatasi izin, hanya kode hasil dan id yang dimasker, tanpa jumlah) menunjukkan apa yang harus dilihat manusia, dan event `awcms.hr.commission.*` yang ada membawa keberhasilan. Konsumen tidak pernah butuh jawabannya secara sinkron.
+
+### 6. Yang tidak berubah
+
+`PAYROLL_ALLOWED_GRANTEES` tetap `["awcms_app"]`. `PAYROLL_WORKER_EXECUTE_ALLOWLIST` tetap kosong. Tidak ada fungsi posting `SECURITY DEFINER` yang ditambahkan, dan pemeriksaan batas katalog payroll (`payroll:catalog-boundary:check`) tidak membutuhkan pengecualian. `commission_accrual` tetap 1.1.0 dan `POST /api/v1/hr-commission/accruals` tidak berubah.
+
+### 7. Gerbang untuk issue implementasi
+
+Migrasi dengan RLS `FORCE` dan hak di atas; tes batas bahwa worker tidak memegang hak apa pun atas relasi keluarga payroll dan tepat `INSERT` pada tabel intake; pemeriksaan katalog payroll hijau tanpa pengecualian baru; gerbang `subjectData`, `data_lifecycle`, dan seed izin; pengkabelan port dan descriptor; OpenAPI untuk daftar pengecualian dan AsyncAPI hanya bila event baru ditambahkan; serta tes untuk: dua tenant (submit di satu tenant tidak pernah memposting di tenant lain), tepat-sekali di bawah sepuluh submit paralel dan di bawah poster yang diulang setelah crash, keterlihatan `source_conflict`, `void` tanpa aktor, `period_closed` diarahkan ke manusia, pengaturan mati, dan sesi worker yang mencoba `SELECT` tabel atau akrual apa pun.
+
+## Opsi yang dipertimbangkan
+
+| Kriteria                 | **B. Antrean intake + poster `awcms_app` (dipilih)**                                                                                                      | A. Fungsi `SECURITY DEFINER` `accrue`/`void` dengan kelas allow-list worker                                                                                                                                                                | C. Konsumen memanggil rute akrual HTTP dengan aktor mesin                                                                           | D. Tetap dorman (status quo)                  | E. Memperlebar hak worker atas akrual                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Keamanan                 | Worker hanya dapat menambahkan intent. Tidak dapat membaca, memposting, membatalkan, atau menjangkau baris payroll. Batas dan dua daftarnya tidak berubah | Worker dapat **menulis** akrual untuk tenant dan employment mana pun yang ia sebut, lewat fungsi yang harus menetapkan konteks tenant dari argumen (primitif lintas tenant), dan melebarkan `PAYROLL_WORKER_EXECUTE_ALLOWLIST` yang kosong | Butuh kredensial mesin yang dapat memanggil rute berisiko tinggi dan cara agar worker memegangnya; memperluas permukaan rahasia job | Tidak ada tambahan; fitur tidak dapat dipakai | Langsung melanggar batas yang dibangun audit (#1015, #1077); membaca gaji per baris |
+| Kinerja                  | Satu INSERT per event; posting dibatch di luar jalur permintaan                                                                                           | Satu panggilan fungsi per event, inline                                                                                                                                                                                                    | Satu lompatan jaringan dan pipeline permintaan penuh per event                                                                      | n/a                                           | Inline                                                                              |
+| Keterpeliharaan          | **Satu** implementasi posting (TypeScript) dan satu tabel intake                                                                                          | Implementasi posting kedua di PL/pgSQL (evaluasi rule, kunci induk, baris audit, event, snapshot penerima manfaat) yang harus dijaga sama dengan yang pertama; kembaran SQL hari ini hanya mencakup jumlah                                 | Satu implementasi, tetapi mengikat worker pada ketersediaan dan autentikasi tier web                                                | Tidak ada                                     | Satu implementasi                                                                   |
+| Skalabilitas             | Antrean meredam lonjakan; poster berbasis lease dan terbatas                                                                                              | Biaya inline dalam transaksi dispatcher                                                                                                                                                                                                    | Dibatasi tier web                                                                                                                   | n/a                                           | Inline                                                                              |
+| Kompatibilitas           | Aditif: port dan tabel baru, port yang ada tidak disentuh                                                                                                 | Aditif di SQL, tetapi mengubah arti allow-list worker                                                                                                                                                                                      | Tidak ada perubahan di hr_commission, tetapi dependensi HTTP internal baru di setiap konsumen                                       | Tidak ada                                     | Merusak temuan `payroll-grant`                                                      |
+| Kompleksitas operasi     | Satu job dan satu tabel lagi untuk dipantau; latensi adalah interval polling                                                                              | Tanpa job baru, tetapi permukaan fungsi berprivilege yang harus ditinjau di setiap perubahan                                                                                                                                               | Rotasi kredensial dan logika retry di setiap konsumen                                                                               | Tidak ada                                     | Tidak ada, dan temuan audit permanen                                                |
+| Implikasi jangka panjang | Bentuk yang sama melayani konsumen sistem berikutnya (komisi berbasis booking, impor) tanpa keputusan privilege lain                                      | Setiap konsumen baru mewarisi worker yang dapat menulis penghasilan                                                                                                                                                                        | Menciptakan ulang outbox dengan tangan di setiap konsumen                                                                           | Kemampuan hilir tidak pernah rilis            | Mengikis batas satu pengecualian demi satu                                          |
+
+**Mengapa B.** Hanya opsi ini yang menjaga invarian batas ("worker tidak pernah menyentuh gaji seseorang") benar secara konstruksi sambil memakai ulang satu inti posting yang telah diaudit. Harganya adalah latensi (interval polling) dan satu antrean lagi; keduanya dapat diterima untuk komisi, yang disetujui manusia sebelum pernah bisa dibayar.
+
+### Pembacaan kepatuhan
+
+- **UU PDP No. 27/2022.** Penghasilan adalah data pribadi keuangan. Rancangan ini menjaga pemrosesan di role yang sudah memegang kendali payroll, meminimalkan apa yang dapat dilihat role tanpa pengawasan hingga nol, dan membatasi retensi tabel intake (purge baris terminal, default 30 hari, lantai 7, batas atas 90, untuk dikonfirmasi pemilik pada implementasi). Pengamanan oleh pengendali (Pasal 35) diperkuat, bukan dilonggarkan. Apakah operator pengendali atau prosesor (keputusan pemilik O5) tidak terpengaruh.
+- **PP 71/2019 (sistem elektronik).** Penyelenggara harus menjaga sistemnya aman dan andal; mencabut jalur tulis tetap dari role tanpa pengawasan sejalan dengan itu dan menambahkan antrean yang dapat diaudit.
+- **ISO/IEC 27001:2022 / 27002:2022.** Hak akses minimum dan pembatasan akses (5.15, 5.18, 8.2, 8.3), pencatatan (8.15), penghapusan informasi (8.10), pengodean aman (8.28: satu implementasi, bukan dua), perlindungan PII (5.34).
+- **ISO/IEC 27005.** Risiko "job tanpa pengawasan dapat membuat atau mengubah penghasilan" **dihilangkan**, bukan dimitigasi. Risiko sisa baru dicatat di Konsekuensi.
+- **ISO/IEC 27701 dan 27034.** Inti posting adalah kendali normatif aplikasi untuk tepat-sekali dan pemisahan tugas; mengalirkan setiap jalur lewatnya menjaga kendali itu tetap satu. Tabel intake mewarisi kewajiban subjek data dan retensi modul (ADR-0094).
+
+## Konsekuensi
+
+- **Positif:** hilir `awcms-one#391` dapat mengaktifkan attributor-nya setelah implementasi mendarat dan subtree disinkronkan; batas payroll, pemeriksaan katalognya, dan dua daftarnya tidak disentuh; satu implementasi posting.
+- **Negatif / pertukaran:** akrual **konsisten pada akhirnya** (muncul setelah tik poster berikutnya); penolakan bisnis diketahui lewat daftar pengecualian, bukan oleh konsumen; satu tabel dan satu job lagi untuk dioperasikan.
+- **Risiko sisa (ISO/IEC 27005):** (1) worker yang diretas dapat **menambahkan** intent palsu untuk tenant mana pun yang intake-nya menyala, yang menjadi akrual `pending` yang tetap harus disetujui manusia dan, terpisah, dibayar (kendali maker/checker dan SoD penerima manfaat yang ada membatasi ini; saklar per tenant dan daftar pengecualian membuatnya terlihat). (2) Tabel intake menyimpan jumlah dasar penjualan dan id employment selama jendela retensi: ia data penghasilan turunan dan diperlakukan sensitif di log dan audit (hanya id dan kode). (3) Poster yang mati membuat intent menumpuk: dipantau berdasarkan usia, dengan ambang peringatan yang dipilih pada implementasi.
+- **Rollback** bersifat maju-saja seperti setiap migrasi di sini: matikan `commission_intake_enabled` (port menjawab `disabled`), hentikan job, biarkan tabel tidak aktif.
+- **ADR ini tidak membangun apa pun.** Hilir tetap dorman sampai issue implementasi digabung.
+
+## Alternatif yang ditolak
+
+- **Fungsi posting `SECURITY DEFINER` (A).** Menggandakan inti posting di SQL, memberi worker primitif tulis yang membutuhkan tenant sebagai argumen, dan mengubah allow-list worker yang kosong menjadi kelas pengecualian permanen. Issue #1138 menawarkannya sebagai satu contoh; analisis di atas memilih contoh lain yang ditawarkannya.
+- **Aktor mesin lewat HTTP (C).** Outbox yang diciptakan ulang per konsumen, dengan kredensial di dalam job.
+- **Memberi worker hak atas akrual (E).** Batas itu ada justru untuk melarang ini.
+- **Tetap dorman (D).** Membiarkan kemampuan hilir terblokir permanen, tanpa keputusan tercatat.
+- **Memindahkan dispatcher (atau satu consumer) ke role app.** Mengubah privilege setiap consumer demi melayani satu.
