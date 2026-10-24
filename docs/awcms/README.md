@@ -125,3 +125,7 @@ block fence and the diagram type — never the contents — so a broken diagram 
 a green `bun run check` could coexist.
 
 See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every task, and [`docs/adr/`](../adr/README.md) for architectural decisions.
+
+## Omnichannel UI/UX screen contracts
+
+[**Upstream Omnichannel UI/UX v1.0**](omnichannel-ui-ux-screen-contracts.md) maps **UP-01–UP-16** existing email/WhatsApp/Push/staff Telegram and proposed multi-account/social/Mailketing **v2.0.2**/leads/inbox/SSE-WS screens, with states, access and release tests. Tracked [#1174](https://github.com/ahliweb/awcms/issues/1174). This is target documentation, not working multi-account API.
