@@ -26,71 +26,37 @@
  * separate `NEWS_MEDIA_R2_CUSTOM_DOMAIN` var (§11 clarifies
  * `NEWS_MEDIA_R2_PUBLIC_BASE_URL` already IS the custom-domain URL) — this
  * file follows the doc, not a broader reading of the issue body.
+ *
+ * ## Split by what a job may read (Issue #1132)
+ *
+ * This file resolves the credentials, so a job that imports it can reach
+ * `NEWS_MEDIA_R2_ACCESS_KEY_ID` / `NEWS_MEDIA_R2_SECRET_ACCESS_KEY`.
+ * The settings that carry no secret (public base URL, bucket, limits) live in
+ * `media-r2-public-config.ts`, which this file composes and re-exports; a caller
+ * that only needs those imports it instead. The check that compares the pair
+ * against `sync-storage`'s own `R2_*` pair lives in `media-r2-separation.ts`,
+ * because it is the only code here that reads those.
  */
+import {
+  NEWS_MEDIA_R2_DISALLOWED_MIME_TYPE_DEFAULT,
+  NEWS_MEDIA_R2_KNOWN_MIME_TYPES,
+  NEWS_MEDIA_R2_MAX_PRESIGNED_UPLOAD_TTL_SECONDS,
+  NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS,
+  resolveNewsMediaR2PublicConfig,
+  type NewsMediaR2PublicConfig
+} from "./media-r2-public-config";
 
-export const NEWS_MEDIA_R2_DEFAULT_ALLOWED_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif"
-] as const;
-
-/** SVG is deliberately excluded by default — see architecture doc §9 (XSS via embedded `<script>`). */
-export const NEWS_MEDIA_R2_DISALLOWED_MIME_TYPE_DEFAULT = "image/svg+xml";
-
-/**
- * Every MIME type this codebase actually knows how to reason about for
- * `NEWS_MEDIA_R2_ALLOWED_MIME_TYPES` (Issue #635): the four raster types
- * `news-media-mime-sniffer.ts` can sniff from magic bytes, PLUS
- * `image/svg+xml` (excluded by default above, but a real, deliberate
- * override path exists for it — `checkNewsMediaR2SvgNotAllowed`,
- * `scripts/security-readiness.ts` — so it belongs in the "known" set, not
- * the "unknown/unsafe" one). An operator listing anything OUTSIDE this set
- * (`text/html`, `application/octet-stream`, a typo, ...) has misconfigured
- * the allow-list: the sniffer can never accept such an upload (every real
- * upload would fail-safe reject at `finalize`), so config:validate treats
- * it as a hard error rather than a silent no-op, per Issue #635's
- * acceptance criteria ("Allowed MIME types include unsafe/non-image
- * types").
- */
-export const NEWS_MEDIA_R2_KNOWN_MIME_TYPES = [
-  ...NEWS_MEDIA_R2_DEFAULT_ALLOWED_MIME_TYPES,
-  NEWS_MEDIA_R2_DISALLOWED_MIME_TYPE_DEFAULT
-] as const;
-
-/**
- * Upper bound for `NEWS_MEDIA_R2_PRESIGNED_UPLOAD_TTL_SECONDS` (Issue #635).
- * Architecture doc §8 describes the default (300s/5min) as "short-lived —
- * enough for one interactive upload, too short to be useful to a leaked
- * URL long after being generated." A presigned PUT URL is not single-use
- * (§8's own residual-risk note), so the whole TTL-based mitigation
- * degrades the longer the window is — 1 hour is a generous ceiling that
- * still keeps that property meaningful (an operator who needs longer has a
- * different problem, e.g. a slow client upload path, not a config this
- * check should silently accommodate).
- */
-export const NEWS_MEDIA_R2_MAX_PRESIGNED_UPLOAD_TTL_SECONDS = 3600;
-
-/**
- * Floor for `NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS` (Issue #690,
- * `r2-backup-lifecycle.md` §3: "Masa tenggang minimum 30 hari sebelum hapus
- * fisik, dapat dikonfigurasi operator"). Unlike
- * `NEWS_MEDIA_R2_MAX_PRESIGNED_UPLOAD_TTL_SECONDS` (a ceiling), this is a
- * FLOOR — the doc's own "minimum 30 hari" language, not a suggested default
- * an operator is free to shrink arbitrarily. `isOrphanGraceTooShort` reports
- * a value below this as unsafe (`security:readiness`, warning severity —
- * same non-blocking-but-flagged pattern as `isPresignedUploadTtlTooLong`).
- */
-export const NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS = 30;
-
-export const NEWS_MEDIA_R2_DEFAULTS = {
-  enabled: false,
-  presignedUploadTtlSeconds: 300,
-  maxUploadBytes: 10_485_760,
-  allowedMimeTypes: [...NEWS_MEDIA_R2_DEFAULT_ALLOWED_MIME_TYPES] as string[],
-  pendingTtlMinutes: 60,
-  orphanGraceDays: NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS
-} as const;
+// Kept importable from here: every existing caller (and test) reaches these
+// through this file, and none of them is a credential.
+export {
+  NEWS_MEDIA_R2_DEFAULTS,
+  NEWS_MEDIA_R2_DEFAULT_ALLOWED_MIME_TYPES,
+  NEWS_MEDIA_R2_DISALLOWED_MIME_TYPE_DEFAULT,
+  NEWS_MEDIA_R2_KNOWN_MIME_TYPES,
+  NEWS_MEDIA_R2_MAX_PRESIGNED_UPLOAD_TTL_SECONDS,
+  NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS,
+  parsePositiveInt
+} from "./media-r2-public-config";
 
 /**
  * Required only when `NEWS_MEDIA_R2_ENABLED=true` — mirrors
@@ -108,86 +74,31 @@ export const NEWS_MEDIA_R2_REQUIRED_WHEN_ENABLED = [
   "NEWS_MEDIA_R2_PUBLIC_BASE_URL"
 ] as const;
 
-export type NewsMediaR2Config = {
-  enabled: boolean;
-  accountId: string;
+export type NewsMediaR2Config = NewsMediaR2PublicConfig & {
   accessKeyId: string;
   secretAccessKey: string;
-  bucket: string;
-  publicBaseUrl: string;
-  presignedUploadTtlSeconds: number;
-  maxUploadBytes: number;
-  allowedMimeTypes: string[];
-  pendingTtlMinutes: number;
-  /** Grace period (days) between a media object becoming `orphaned` and `scripts/news-media-r2-reconcile.ts` (Issue #690) physically deleting its R2 object + soft-deleting its metadata row (`r2-backup-lifecycle.md` §3). Also reused as the age threshold (against the R2-reported `lastModified`) before that same job will physically delete an "orphan-in-R2" object (a bucket object with no matching metadata row at all — see that script's own header for why one config knob covers both cases). */
-  orphanGraceDays: number;
 };
 
 function isSet(value: string | undefined): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function parseBoolean(value: string | undefined, fallback: boolean): boolean {
-  if (!isSet(value)) return fallback;
-  return value === "true";
-}
-
-/** `undefined` when unset/blank/non-positive-integer — never throws, never NaN. */
-export function parsePositiveInt(
-  value: string | undefined
-): number | undefined {
-  if (!isSet(value)) return undefined;
-
-  const trimmed = (value as string).trim();
-
-  if (!/^\d+$/.test(trimmed)) return undefined;
-
-  const parsed = Number.parseInt(trimmed, 10);
-
-  return parsed > 0 ? parsed : undefined;
-}
-
-function parseMimeList(value: string | undefined): string[] {
-  if (!isSet(value)) return [...NEWS_MEDIA_R2_DEFAULTS.allowedMimeTypes];
-
-  return (value as string)
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter((entry) => entry.length > 0);
-}
-
 /**
- * Resolves the full config from `env`, falling back to
- * `NEWS_MEDIA_R2_DEFAULTS` for anything unset/malformed. Never throws —
+ * Resolves the full config from `env`: the non-credential settings from
+ * `resolveNewsMediaR2PublicConfig` plus the access key pair. Never throws —
  * malformed values are reported by `checkNewsMediaR2Config`
  * (`scripts/validate-env.ts`), not here.
+ *
+ * A caller that does not use `accessKeyId` / `secretAccessKey` should call
+ * `resolveNewsMediaR2PublicConfig` instead (Issue #1132).
  */
 export function resolveNewsMediaR2Config(
   env: NodeJS.ProcessEnv = process.env
 ): NewsMediaR2Config {
   return {
-    enabled: parseBoolean(
-      env.NEWS_MEDIA_R2_ENABLED,
-      NEWS_MEDIA_R2_DEFAULTS.enabled
-    ),
-    accountId: env.NEWS_MEDIA_R2_ACCOUNT_ID ?? "",
+    ...resolveNewsMediaR2PublicConfig(env),
     accessKeyId: env.NEWS_MEDIA_R2_ACCESS_KEY_ID ?? "",
-    secretAccessKey: env.NEWS_MEDIA_R2_SECRET_ACCESS_KEY ?? "",
-    bucket: env.NEWS_MEDIA_R2_BUCKET ?? "",
-    publicBaseUrl: env.NEWS_MEDIA_R2_PUBLIC_BASE_URL ?? "",
-    presignedUploadTtlSeconds:
-      parsePositiveInt(env.NEWS_MEDIA_R2_PRESIGNED_UPLOAD_TTL_SECONDS) ??
-      NEWS_MEDIA_R2_DEFAULTS.presignedUploadTtlSeconds,
-    maxUploadBytes:
-      parsePositiveInt(env.NEWS_MEDIA_R2_MAX_UPLOAD_BYTES) ??
-      NEWS_MEDIA_R2_DEFAULTS.maxUploadBytes,
-    allowedMimeTypes: parseMimeList(env.NEWS_MEDIA_R2_ALLOWED_MIME_TYPES),
-    pendingTtlMinutes:
-      parsePositiveInt(env.NEWS_MEDIA_R2_PENDING_TTL_MINUTES) ??
-      NEWS_MEDIA_R2_DEFAULTS.pendingTtlMinutes,
-    orphanGraceDays:
-      parsePositiveInt(env.NEWS_MEDIA_R2_ORPHAN_GRACE_DAYS) ??
-      NEWS_MEDIA_R2_DEFAULTS.orphanGraceDays
+    secretAccessKey: env.NEWS_MEDIA_R2_SECRET_ACCESS_KEY ?? ""
   };
 }
 
@@ -209,53 +120,6 @@ export function findMissingNewsMediaR2Vars(
   return NEWS_MEDIA_R2_REQUIRED_WHEN_ENABLED.filter(
     (name) => !isSet(env[name])
   );
-}
-
-/**
- * Keputusan kunci #1 (`.claude/skills/awcms-news-portal/SKILL.md`,
- * architecture doc §2): news-media R2 bucket/credentials MUST be separate
- * from `sync-storage`'s own `R2_*` vars (Issue #436). Compares whichever
- * of the two pairs is actually set — an unset `sync-storage` R2 var never
- * produces a false "collision" (both sides empty-string would otherwise
- * look "equal").
- */
-export type NewsMediaR2SeparationViolation =
-  | "bucket_shared_with_sync_r2"
-  | "access_key_id_shared_with_sync_r2"
-  | "secret_access_key_shared_with_sync_r2";
-
-export function findNewsMediaR2SeparationViolations(
-  env: NodeJS.ProcessEnv = process.env
-): NewsMediaR2SeparationViolation[] {
-  const violations: NewsMediaR2SeparationViolation[] = [];
-
-  const newsBucket = env.NEWS_MEDIA_R2_BUCKET;
-  const syncBucket = env.R2_BUCKET;
-  if (isSet(newsBucket) && isSet(syncBucket) && newsBucket === syncBucket) {
-    violations.push("bucket_shared_with_sync_r2");
-  }
-
-  const newsAccessKeyId = env.NEWS_MEDIA_R2_ACCESS_KEY_ID;
-  const syncAccessKeyId = env.R2_ACCESS_KEY_ID;
-  if (
-    isSet(newsAccessKeyId) &&
-    isSet(syncAccessKeyId) &&
-    newsAccessKeyId === syncAccessKeyId
-  ) {
-    violations.push("access_key_id_shared_with_sync_r2");
-  }
-
-  const newsSecretAccessKey = env.NEWS_MEDIA_R2_SECRET_ACCESS_KEY;
-  const syncSecretAccessKey = env.R2_SECRET_ACCESS_KEY;
-  if (
-    isSet(newsSecretAccessKey) &&
-    isSet(syncSecretAccessKey) &&
-    newsSecretAccessKey === syncSecretAccessKey
-  ) {
-    violations.push("secret_access_key_shared_with_sync_r2");
-  }
-
-  return violations;
 }
 
 /** `true` when the configured allow-list contains the disallowed-by-default SVG MIME type. */

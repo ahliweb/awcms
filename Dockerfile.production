@@ -11,19 +11,19 @@
 # against a privileged connection before this container's first start
 # (docs/awcms/deployment-profiles.md §Model dua-peran basis data).
 
-FROM oven/bun:1.4.3 AS base
+FROM oven/bun:1.4.4 AS base
 
-# The perl-base CVE workaround (#833) below is KEPT and was NOT re-verified
-# against the 1.4.3 image (2026-10-16, #1097): oven/bun:1.4.3 (index digest
-# sha256:ec06c3b6cea0..., amd64 sha256:c017a211c49a...) was published
-# 2026-10-10, AFTER the Debian fix (5.40.1-6+deb13u1) existed, so its base MAY
-# already carry it — but no container daemon was available to inspect the
-# image's dpkg status and the registry blob pull was rate-limited, so the
-# absence of the CVEs could not be proven. The step is `apt-get upgrade`: a
-# no-op when the base is already patched, and it closes any fixable Debian
-# CVE when it is not — keeping it costs one layer and loosens nothing. Remove
-# it only after `docker run --rm oven/bun:1.4.3 dpkg -s perl-base` shows
-# >= 5.40.1-6+deb13u1 (or a scanner shows the three CVEs gone).
+# The perl-base CVE workaround (#833) below is KEPT. Re-checked against the
+# 1.4.4 image (2026-10-24, #1172): `docker run --rm --entrypoint dpkg
+# oven/bun:1.4.4 -s perl-base` reports 5.40.1-6+deb13u1 — i.e. the base image
+# ALREADY carries the Debian fix, so the three CVEs below are not present in
+# it (oven/bun:1.4.4 index digest sha256:1d22548f177f..., published
+# 2026-10-22; `bun --version` in the image prints 1.4.4). The step is
+# `apt-get upgrade`: a no-op when the base is already patched, and it closes
+# any future fixable Debian CVE on the next rebuild without waiting for
+# oven/bun to republish the tag — so it is kept on purpose (one layer,
+# loosens nothing), no longer because the CVEs are suspected to be present.
+# The image is pinned by tag, not by digest (floating `latest` is never used).
 #
 # Original finding (#833, 2026-09-27) for oven/bun:1.4.2: its Debian (trixie)
 # base shipped perl-base 5.40.1-6 with three CRITICAL, fixed-upstream CVEs
@@ -98,6 +98,17 @@ COPY --chown=bun:bun src ./src
 COPY --chown=bun:bun sql ./sql
 COPY --chown=bun:bun locales ./locales
 COPY --chown=bun:bun openapi ./openapi
+
+# The host-side runner and its two generated env files (Issue #1131, L5).
+# `ops/run-job.sh` is copied to the host by hand, and so are the env files; the
+# image is pulled on its own schedule. A newer image can read a scoped secret
+# that an older host file does not grant, and the job then runs without it and
+# reports success. Shipping the three files here lets the runner compare its
+# host copies with these and refuse on any difference. They hold variable
+# NAMES and job targets only (`tests/jobs-image-ops-files.test.ts` asserts no
+# line has a value), so nothing secret is baked in. Only these three: the rest
+# of `ops/` (backup, restore drill, log shipping) is host tooling, not job code.
+COPY --chown=bun:bun ops/run-job.sh ops/awcms-jobs.env-global ops/awcms-jobs.env-scoped ./ops/
 
 USER bun
 

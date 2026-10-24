@@ -35,14 +35,14 @@ not committed yet is invisible to it — the runner warns when the tree is dirty
 Jobs run **sequentially**, cheapest first (the order below), because they share
 `dist/` and the machine.
 
-| Local job           | Mirrors (`workflow` > job)        | What it runs                                                                                                                                     | Needs                          |
-| ------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `hygiene`           | `ci.yml` > `hygiene`              | The Bun-only grep over `package.json` scripts; no tracked `.env` files. The workflow's shell, verbatim.                                          | bash, git                      |
-| `changesets`        | `changesets.yml` > `policy-check` | Fetch the base, `bun install --frozen-lockfile`, `bun run changesets:policy:check` with `CHANGESET_POLICY_BASE_REF=<--base>`.                    | git history with a merge-base  |
-| `quality`           | `ci.yml` > `quality`              | Fetch tags (the `version:check` gate needs them), frozen install, the **full** `bun run check` with `DATABASE_URL` blank.                        | —                              |
-| `integration`       | `ci.yml` > `integration-tests`    | Throwaway database, frozen install, `bun run db:migrate`, `bun test tests/integration/ --timeout 60000`, then the legacy ad-hoc suite file list. | PostgreSQL superuser           |
-| `minimum-supported` | `ci.yml` > `minimum-supported`    | On **Bun 1.3.0**: frozen install, `typecheck`, `build`, `family:conformance:check`.                                                              | Bun 1.3.0 (see below)          |
-| `e2e`               | `ci.yml` > `e2e-smoke`            | Throwaway database, migrate, build, start the server, seed through `POST /api/v1/setup/initialize`, `bun run test:e2e`.                          | PostgreSQL superuser, Chromium |
+| Local job           | Mirrors (`workflow` > job)        | What it runs                                                                                                                                                                                                                | Needs                          |
+| ------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `hygiene`           | `ci.yml` > `hygiene`              | The Bun-only grep over `package.json` scripts; no tracked `.env` files. (The wider launch-manifest scan, `tests/bun-only-launch-manifests.test.ts`, is a `bun test` and runs in `quality`.) The workflow's shell, verbatim. | bash, git                      |
+| `changesets`        | `changesets.yml` > `policy-check` | Fetch the base, `bun install --frozen-lockfile`, `bun run changesets:policy:check` with `CHANGESET_POLICY_BASE_REF=<--base>`.                                                                                               | git history with a merge-base  |
+| `quality`           | `ci.yml` > `quality`              | Fetch tags (the `version:check` gate needs them), frozen install, the **full** `bun run check` with `DATABASE_URL` blank.                                                                                                   | —                              |
+| `integration`       | `ci.yml` > `integration-tests`    | Throwaway database, frozen install, `bun run db:migrate`, `bun test tests/integration/ --timeout 60000`, then the legacy ad-hoc suite file list.                                                                            | PostgreSQL superuser           |
+| `minimum-supported` | `ci.yml` > `minimum-supported`    | On **Bun 1.3.0**: frozen install, `typecheck`, `build`, `family:conformance:check`.                                                                                                                                         | Bun 1.3.0 (see below)          |
+| `e2e`               | `ci.yml` > `e2e-smoke`            | Throwaway database, migrate, build, start the server, seed through `POST /api/v1/setup/initialize`, `bun run test:e2e`.                                                                                                     | PostgreSQL superuser, Chromium |
 
 The workflow job ids (`policy-check`, `integration-tests`, `e2e-smoke`) are
 accepted as `--job` aliases.
@@ -101,7 +101,7 @@ So `bun run ci:local && git push` refuses to push after a skip, on purpose.
   once cached it also works offline). It is placed first on `PATH` for that job
   only, so every nested `bun run` uses it. If neither works the job is
   **skipped**, never run on the wrong Bun. The other jobs use the `bun` on `PATH`;
-  the runner prints it next to the version CI pins (1.4.3), because a different
+  the runner prints it next to the version CI pins (1.4.4), because a different
   Bun is a source of "green locally, red on GitHub".
 - **Playwright Chromium** for `e2e`. The workflow runs
   `bun run test:e2e:install` (`playwright install --with-deps`), which needs
@@ -154,7 +154,7 @@ parses `ci.yml` and `changesets.yml` and fails when:
 - a workflow **step** is neither mirrored nor listed under `omitted` with a
   reason, or a mirrored step's `run:` text differs from the workflow's (shell
   steps carry the workflow text **verbatim**);
-- the pinned facts diverge: the Bun versions (1.4.3 current, 1.3.0 floor), the
+- the pinned facts diverge: the Bun versions (1.4.4 current, 1.3.0 floor), the
   PostgreSQL major, the e2e environment and seed body, the default base ref.
 
 It matches shell steps by what they execute rather than by label, so renaming a

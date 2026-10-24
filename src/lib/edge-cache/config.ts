@@ -23,9 +23,9 @@
  * never widen **what** is cacheable — that is decided independently, and
  * fail-closed, by `cacheability.ts`.
  */
+import { loadEdgeCacheMode, type EdgeCacheMode } from "./mode";
 
-/** How aggressively the origin asks the edge to cache. */
-export type EdgeCacheMode = "off" | "auto" | "on";
+export type { EdgeCacheMode } from "./mode";
 
 export type EdgeCacheEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -71,8 +71,6 @@ const DEFAULTS = {
   autoWindowSeconds: 60
 } as const;
 
-const MODES: readonly EdgeCacheMode[] = ["off", "auto", "on"];
-
 /**
  * Parse a bounded positive integer. Anything unparseable, negative, or above
  * `max` falls back to the default rather than throwing — a malformed tuning
@@ -107,13 +105,8 @@ function readNonEmpty(raw: string | undefined): string | null {
 export function loadEdgeCacheConfig(
   env: EdgeCacheEnvironment = process.env
 ): EdgeCacheConfig {
-  const rawMode = env.EDGE_CACHE_MODE?.trim().toLowerCase();
-  const mode: EdgeCacheMode = MODES.includes(rawMode as EdgeCacheMode)
-    ? (rawMode as EdgeCacheMode)
-    : "off";
-
   return {
-    mode,
+    mode: loadEdgeCacheMode(env),
     maxTtlSeconds: readBoundedInt(
       env.EDGE_CACHE_MAX_TTL_SECONDS,
       DEFAULTS.maxTtlSeconds,

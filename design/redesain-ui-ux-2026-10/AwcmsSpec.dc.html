@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>awcms · Spesifikasi layar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+body{margin:0}
+a{color:#1d4ed8}a:hover{color:#1e40af}
+.pg:hover{background:#f0f3f8}
+.row:hover{background:#f7f9fc}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f7fa; color: #141a21; font-family: 'Public Sans', system-ui, sans-serif; font-size: 14px">
+<div style="max-width: 1360px; margin: 0 auto; padding: 48px clamp(16px, 3vw, 40px) 64px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end">
+<div style="display: flex; flex-direction: column; gap: 8px; flex: 1 1 560px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #1d4ed8">{{repo}} · {{source}}</span>
+<h1 style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.015em">{{heading}}</h1>
+<p style="margin: 0; color: #5b6672; font-size: 15px; line-height: 1.55; max-width: 820px">{{lead}}</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; flex: 1 1 420px">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px 14px"><div style="font-size: 24px; font-weight: 700">{{stat.total}}</div><div style="font-size: 12px; color: #646f7a">layar</div></div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px 14px"><div style="font-size: 24px; font-weight: 700">{{stat.data}}</div><div style="font-size: 12px; color: #646f7a">berisi data → cari + paging</div></div>
+<div style="background: #fdeaea; border: 1px solid #f6caca; border-radius: 10px; padding: 12px 14px"><div style="font-size: 24px; font-weight: 700; color: #c81e1e">{{stat.gap}}</div><div style="font-size: 12px; color: #9b1c1c">belum punya keduanya</div></div>
+</div>
+</header>
+
+<section aria-label="Daftar spesifikasi layar" style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e8edf3">
+<label style="display: flex; align-items: center; gap: 8px; flex: 1 1 280px; height: 38px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; color: #646f7a"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg><input type="search" aria-label="Cari layar, rute, atau kolom cari" placeholder="Cari layar, rute, kolom cari…" value="{{q}}" onChange="{{onQ}}" style="border: 0; outline: none; flex: 1; min-width: 0; font: inherit; color: #141a21; background: transparent"></label>
+<div role="group" aria-label="Jenis halaman" style="display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #eef1f5; border-radius: 9px">
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+<button type="button" aria-pressed="{{g.sel}}" onClick="{{g.pick}}" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 0; font: inherit; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; {{g.st}}">{{g.label}}<span style="font-size: 11px; color: #646f7a">{{g.count}}</span></button>
+</sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Seksi<select onChange="{{onSec}}" style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><sc-for list="{{sections}}" as="s" hint-placeholder-count="6"><option value="{{s.v}}" selected="{{s.sel}}">{{s.label}}</option></sc-for></select></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; cursor: pointer"><input type="checkbox" checked="{{gapOnly}}" onChange="{{onGap}}" style="margin: 0; width: 16px; height: 16px">Hanya yang belum sesuai</label>
+</div>
+<div role="status" aria-live="polite" style="padding: 10px 16px; font-size: 13px; color: #5b6672; border-bottom: 1px solid #e8edf3">{{summary}}</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 1180px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 10px 16px; font-size: 12px; font-weight: 600; color: #646f7a; width: 19%">Halaman</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Seksi</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Tipe layout</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a; width: 16%">Pencarian</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a; width: 17%">Filter</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Urut bawaan</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Paging</th>
+<th style="padding: 10px 16px 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Kondisi kode kini</th>
+</tr></thead>
+<tbody>
+<sc-if value="{{loading}}" hint-placeholder-val="{{ false }}"><tr><td colspan="8" style="padding: 40px 16px; text-align: center; color: #5b6672">Memuat spesifikasi…</td></tr></sc-if>
+<sc-if value="{{empty}}" hint-placeholder-val="{{ false }}"><tr><td colspan="8" style="padding: 40px 16px; text-align: center; color: #5b6672">Tidak ada layar yang cocok. <button type="button" onClick="{{reset}}" style="border: 0; background: none; color: #1d4ed8; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline">Reset pencarian &amp; filter</button></td></tr></sc-if>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="12">
+<tr class="row">
+<td style="padding: 11px 16px; border-top: 1px solid #e8edf3; vertical-align: top"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">{{r.n}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #646f7a; word-break: break-all">{{r.r}}</span></div></td>
+<td style="padding: 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top; color: #3b4651">{{r.s}}</td>
+<td style="padding: 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top"><span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: {{r.tbg}}; color: {{r.tfg}}">{{r.t}}</span></td>
+<td style="padding: 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top; line-height: 1.45">{{r.q}}</td>
+<td style="padding: 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top; line-height: 1.45; color: #3b4651">{{r.f}}</td>
+<td style="padding: 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top; color: #3b4651">{{r.o}}</td>
+<td style="padding: 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{r.p}}</td>
+<td style="padding: 11px 16px 11px 12px; border-top: 1px solid #e8edf3; vertical-align: top"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: {{r.nbg}}; color: {{r.nfg}}">{{r.now}}</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<nav aria-label="Paginasi" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid #e8edf3; background: #f7f9fc; border-radius: 0 0 12px 12px; font-size: 13px; color: #5b6672">
+<span>Menampilkan <strong style="color: #141a21">{{range}}</strong> dari {{count}} layar</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+<button type="button" class="pg" disabled="{{noPrev}}" onClick="{{prev}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; font: inherit; cursor: pointer">‹ Sebelumnya</button>
+<sc-for list="{{pages}}" as="p" hint-placeholder-count="5">
+<button type="button" class="pg" aria-current="{{p.cur}}" onClick="{{p.go}}" style="min-width: 32px; height: 32px; padding: 0 8px; border-radius: 7px; font: inherit; cursor: pointer; {{p.st}}">{{p.n}}</button>
+</sc-for>
+<button type="button" class="pg" disabled="{{noNext}}" onClick="{{next}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; font: inherit; cursor: pointer">Berikutnya ›</button>
+</div>
+</nav>
+</section>
+<p style="margin: 0; font-size: 12px; color: #646f7a; line-height: 1.5">Daftar ini memakai pola paging bernomor karena seluruh datanya kecil dan ada di klien — layar admin yang sebenarnya memakai keyset (lihat "Pola halaman data"). "Kondisi kode kini" berasal dari pemindaian otomatis berkas layar; tipe, pencarian, filter, urutan, dan paging adalah usulan.</p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { data: null, q: '', grp: 'all', sec: '', gapOnly: false, page: 0 };
+  }
+  componentDidMount() {
+    fetch('spec-awcms.json').then((r) => r.json()).then((data) => this.setState({ data })).catch(() => this.setState({ data: [] }));
+  }
+  renderVals() {
+    const PER = 12;
+    const data = this.state.data || [];
+    const grpOf = (t) => /Log/.test(t) ? 'log' : (/Daftar|Galeri|Kotak|Kalender|Arsip|Hasil|Indeks/.test(t) ? 'list' : (/Dasbor|Monitor|Matriks|Laporan/.test(t) ? 'dash' : 'form'));
+    const isData = (x) => x.p !== '—' && x.p.indexOf('— ') !== 0;
+    const gap = (x) => isData(x) && x.now !== 'keyset · ada cari' && x.now !== 'SSG';
+    const G = { list: ['Daftar', '#e8effc', '#1d4ed8'], log: ['Log', '#eef1f5', '#3b4651'], dash: ['Dasbor/monitor', '#e0f2f6', '#0b6076'], form: ['Formulir/detail', '#e4f5ea', '#0f7434'] };
+    const NOW = { 'keyset · ada cari': ['#e4f5ea', '#0f7434'], 'keyset · tanpa cari': ['#fdf1de', '#9a4507'], 'tabel tanpa paging · tanpa cari': ['#fdeaea', '#c81e1e'], 'tabel tanpa paging · ada cari': ['#fdf1de', '#9a4507'] };
+    const q = this.state.q.trim().toLowerCase();
+    const base = data.filter((x) => (!this.state.sec || x.s === this.state.sec) && (!this.state.gapOnly || gap(x)) && (!q || (x.n + ' ' + x.r + ' ' + x.q + ' ' + x.f + ' ' + x.t).toLowerCase().indexOf(q) >= 0));
+    const filtered = base.filter((x) => this.state.grp === 'all' || grpOf(x.t) === this.state.grp);
+    const pages = Math.max(1, Math.ceil(filtered.length / PER));
+    const page = Math.min(this.state.page, pages - 1);
+    const slice = filtered.slice(page * PER, page * PER + PER).map((x) => {
+      const g = G[grpOf(x.t)];
+      const nw = NOW[x.now] || ['#eef1f5', '#5b6672'];
+      return Object.assign({}, x, { tbg: g[1], tfg: g[2], nbg: nw[0], nfg: nw[1] });
+    });
+    const set = (patch) => this.setState(Object.assign({ page: 0 }, patch));
+    const secs = Array.from(new Set(data.map((x) => x.s)));
+    const cnt = (k) => base.filter((x) => k === 'all' || grpOf(x.t) === k).length;
+    const pageList = [];
+    for (let i = 0; i < pages; i++) pageList.push({ n: String(i + 1), cur: i === page ? 'page' : 'false', go: () => this.setState({ page: i }), st: i === page ? 'background: #2563eb; color: #ffffff; border: 1px solid #2563eb; font-weight: 700' : 'background: #ffffff; color: #141a21; border: 1px solid #858b92' });
+    return {
+      repo: 'ahliweb/awcms',
+      source: 'src/pages/admin/**/*.astro (tanpa /admin/omes/*)',
+      heading: 'Spesifikasi UI/UX per layar admin',
+      lead: 'Setiap layar admin awcms dengan tipe layout, kolom pencarian, filter, urutan bawaan, dan paging yang diusulkan sesuai fungsinya. Layar OMES dirinci terpisah di baris OMES.',
+      loading: this.state.data === null,
+      empty: this.state.data !== null && filtered.length === 0,
+      stat: { total: String(data.length), data: String(data.filter(isData).length), gap: String(data.filter(gap).length) },
+      q: this.state.q,
+      onQ: (e) => set({ q: e.target.value }),
+      onSec: (e) => set({ sec: e.target.value }),
+      onGap: () => set({ gapOnly: !this.state.gapOnly }),
+      gapOnly: this.state.gapOnly,
+      reset: () => this.setState({ q: '', grp: 'all', sec: '', gapOnly: false, page: 0 }),
+      groups: [['all', 'Semua'], ['list', 'Daftar'], ['log', 'Log'], ['dash', 'Dasbor/monitor'], ['form', 'Formulir/detail']].map(([k, l]) => ({ label: l, count: String(cnt(k)), sel: this.state.grp === k ? 'true' : 'false', pick: () => set({ grp: k }), st: this.state.grp === k ? 'background: #ffffff; color: #141a21; font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,.12)' : 'background: transparent; color: #5b6672' })),
+      sections: [{ v: '', label: 'Semua', sel: !this.state.sec }].concat(secs.map((s) => ({ v: s, label: s, sel: this.state.sec === s }))),
+      summary: filtered.length + ' layar cocok' + (q ? ' dengan "' + this.state.q.trim() + '"' : '') + (this.state.gapOnly ? ' · hanya yang belum punya paging + cari' : ''),
+      rows: slice,
+      range: filtered.length ? (page * PER + 1) + '–' + Math.min(filtered.length, page * PER + PER) : '0',
+      count: String(filtered.length),
+      pages: pageList,
+      noPrev: page === 0,
+      noNext: page >= pages - 1,
+      prev: () => this.setState({ page: Math.max(0, page - 1) }),
+      next: () => this.setState({ page: Math.min(pages - 1, page + 1) })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -4,7 +4,6 @@ import {
   allowsSvgMimeType,
   findMissingNewsMediaR2Vars,
   findNewsMediaR2PublicBaseUrlProductionUnsafeReason,
-  findNewsMediaR2SeparationViolations,
   findUnknownNewsMediaR2MimeTypes,
   isNewsMediaR2Enabled,
   isOrphanGraceTooShort,
@@ -15,6 +14,8 @@ import {
   NEWS_MEDIA_R2_REQUIRED_WHEN_ENABLED,
   resolveNewsMediaR2Config
 } from "../src/modules/media-library/domain/media-r2-config";
+import { resolveNewsMediaR2PublicConfig } from "../src/modules/media-library/domain/media-r2-public-config";
+import { findNewsMediaR2SeparationViolations } from "../src/modules/media-library/domain/media-r2-separation";
 
 describe("resolveNewsMediaR2Config", () => {
   test("defaults to disabled with empty credential fields when env is empty", () => {
@@ -131,6 +132,52 @@ describe("findMissingNewsMediaR2Vars", () => {
         NEWS_MEDIA_R2_PUBLIC_BASE_URL: "https://media.example.test"
       } as NodeJS.ProcessEnv)
     ).toEqual([]);
+  });
+});
+
+describe("resolveNewsMediaR2PublicConfig - the half a job may have without the credentials (Issue #1132)", () => {
+  const fullEnv = {
+    NEWS_MEDIA_R2_ENABLED: "true",
+    NEWS_MEDIA_R2_ACCOUNT_ID: "acct-news",
+    NEWS_MEDIA_R2_ACCESS_KEY_ID: "news-key",
+    NEWS_MEDIA_R2_SECRET_ACCESS_KEY: "news-secret",
+    NEWS_MEDIA_R2_BUCKET: "news-media-bucket",
+    NEWS_MEDIA_R2_PUBLIC_BASE_URL: "https://media.example.test",
+    NEWS_MEDIA_R2_PRESIGNED_UPLOAD_TTL_SECONDS: "120",
+    NEWS_MEDIA_R2_ALLOWED_MIME_TYPES: "image/png,image/webp"
+  } as NodeJS.ProcessEnv;
+
+  test("returns the settings and carries no credential field, even when the credentials are set", () => {
+    const config = resolveNewsMediaR2PublicConfig(fullEnv);
+
+    expect(config.publicBaseUrl).toBe("https://media.example.test");
+    expect(config.bucket).toBe("news-media-bucket");
+    expect(config.presignedUploadTtlSeconds).toBe(120);
+    expect(Object.keys(config)).not.toContain("accessKeyId");
+    expect(Object.keys(config)).not.toContain("secretAccessKey");
+    expect(JSON.stringify(config)).not.toContain("news-secret");
+    expect(JSON.stringify(config)).not.toContain("news-key");
+  });
+
+  test("resolves identically with the credentials absent", () => {
+    const withoutCredentials = { ...fullEnv };
+    delete withoutCredentials.NEWS_MEDIA_R2_ACCESS_KEY_ID;
+    delete withoutCredentials.NEWS_MEDIA_R2_SECRET_ACCESS_KEY;
+
+    expect(resolveNewsMediaR2PublicConfig(withoutCredentials)).toEqual(
+      resolveNewsMediaR2PublicConfig(fullEnv)
+    );
+  });
+
+  test("the full resolver is exactly the public one plus the credential pair", () => {
+    for (const env of [{}, fullEnv] as NodeJS.ProcessEnv[]) {
+      const { accessKeyId, secretAccessKey, ...rest } =
+        resolveNewsMediaR2Config(env);
+
+      expect(rest).toEqual(resolveNewsMediaR2PublicConfig(env));
+      expect(accessKeyId).toBe(env.NEWS_MEDIA_R2_ACCESS_KEY_ID ?? "");
+      expect(secretAccessKey).toBe(env.NEWS_MEDIA_R2_SECRET_ACCESS_KEY ?? "");
+    }
   });
 });
 

@@ -32,9 +32,9 @@
  */
 import {
   findMissingNewsMediaR2Vars,
-  findNewsMediaR2SeparationViolations,
   isNewsMediaR2Enabled
 } from "./media-r2-config";
+import { findNewsMediaR2SeparationViolations } from "./media-r2-separation";
 
 export type ManagedMediaReadinessReason =
   | "news_media_r2_disabled"

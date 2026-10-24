@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-ui-ux-screen-contracts.md)
 
-<!-- i18n-source-hash: sha256:32dbcada1a3012623982a34731aba0cf38f57648cb71563273c419b2a2713692 -->
+<!-- i18n-source-hash: sha256:cef0f1951df84621646a8ae386290716c9bc0e68803e335314c5cab2ebad2e0c -->
 
 # AWCMS — Kontrak UI/UX upstream Omnichannel v1.0
 
@@ -10,7 +10,7 @@
 
 AWCMS saat ini memiliki admin Astro, email/Mailketing **v1**, newsletter dan suppression, WhatsApp Meta/Fonnte/log, Web Push, Telegram notifikasi staf dan Control Center OMES. Port social publishing yang noop tidak berarti provider sosial terhubung. Customer master dan segmen/kampanye commerce tetap milik AWCMS-One; upstream tidak membuat customer master atau antrean kedua. Gunakan komponen admin.css dan token existing, bukan sistem UI lain.
 
-Bun main saat ini **1.4.3**, versi stabil terverifikasi **1.4.4** (22 Okt) → issue [#1172](https://github.com/ahliweb/awcms/issues/1172). Mailketing API target **v2.0.2** (23 Okt), adapter kode masih v1 → [#1159](https://github.com/ahliweb/awcms/issues/1159). Pembaruan dependency harus terpantau/teruji [#1173](https://github.com/ahliweb/awcms/issues/1173); tidak otomatis menganggap semua terbaru.
+Bun stabil terverifikasi **1.4.4** (22 Okt), kini dipin di repositori ([#1172](https://github.com/ahliweb/awcms/issues/1172)). Mailketing API target **v2.0.2** (23 Okt), adapter kode masih v1 → [#1159](https://github.com/ahliweb/awcms/issues/1159). Pembaruan dependency harus terpantau/teruji [#1173](https://github.com/ahliweb/awcms/issues/1173); tidak otomatis menganggap semua terbaru.
 
 ## 2. Inventaris layar AWCMS
 
@@ -59,4 +59,4 @@ Setiap rute memakai header tenant/izin, freshness, tabel berpaginasi, filter/res
 
 ## 5. Syarat uji dan rilis
 
-Dua tenant dengan email/nomor sama tidak boleh memilih sender atau thread lain. Mailketing v2 diuji dengan message_id buatan server, kredit, sender dan error semantik; StarSender/Meta berbeda kemampuan; provider accepted bukan delivered. Periksa role dicabut, consent, webhook palsu, crash queue, tampilan 360px dan keyboard, terjemahan dan redaksi data. Worker memakai Bun versi repo; peningkatan 1.4.4 issue #1172 dan audit berkala #1173, SSE/WS #1168. Jalankan bun test, bun run check, uji DB/FORCE RLS, OpenAPI/AsyncAPI dan dokumentasi EN/ID. PR dokumen ini **tidak** mengimplementasikan route/API baru.
+Dua tenant dengan email/nomor sama tidak boleh memilih sender atau thread lain. Mailketing v2 diuji dengan message_id buatan server, kredit, sender dan error semantik; StarSender/Meta berbeda kemampuan; provider accepted bukan delivered. Periksa role dicabut, consent, webhook palsu, crash queue, tampilan 360px dan keyboard, terjemahan dan redaksi data. Worker memakai Bun versi repo; pin Bun 1.4.4 sudah masuk via #1172, audit berkala #1173, SSE/WS #1168. Jalankan bun test, bun run check, uji DB/FORCE RLS, OpenAPI/AsyncAPI dan dokumentasi EN/ID. PR dokumen ini **tidak** mengimplementasikan route/API baru.

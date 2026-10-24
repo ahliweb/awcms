@@ -61,7 +61,7 @@
  * a feature the operator never enabled.
  */
 import { listModules } from "../../modules";
-import { loadEdgeCacheConfig } from "./config";
+import { loadEdgeCacheMode } from "./mode";
 import { enqueueEdgeCachePurge, type SqlExecutor } from "./purge-queue";
 import { PUBLIC_CACHE_SURFACES } from "./surface-registry";
 import type { SurrogateKeyScope } from "./surrogate-keys";
@@ -120,9 +120,10 @@ export async function enqueueModuleContentPurge(
   moduleKey: string,
   reason: string
 ): Promise<number> {
-  const config = loadEdgeCacheConfig();
-
-  if (config.mode === "off") {
+  // The mode alone, not the whole config: this runs inside every publish, and
+  // the full config would pull the purge token into the job that publishes
+  // (Issue #1132). The worker that drains the queue is the one that needs it.
+  if (loadEdgeCacheMode() === "off") {
     return 0;
   }
 

@@ -130,3 +130,7 @@ The icon is **not** taken from the payload — it would be fetched when displaye
 ## What is NOT there yet
 
 - **FCM Web (browser SDK).** Rejected, with the numbers, in ADR-0074 §What was REJECTED.
+
+## Bun push delivery vs browser WebSocket
+
+Existing `bun run push:dispatch` delivers push/FCM via HTTP under Bun, while a browser Service Worker displays notifications. A future Bun WebSocket/SSE stream is **not** a replacement for durable Web Push while the browser is closed. No Node.js push microservice. [Runtime standard](../../../docs/awcms/bun-delivery-realtime-runtime.md).

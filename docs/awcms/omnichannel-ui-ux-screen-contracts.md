@@ -8,7 +8,7 @@
 
 The upstream AWCMS backend and SYSTEM admin own tenant/RBAC/ABAC/FORCE RLS, existing email (Mailketing **v1**), templates, suppression, newsletter, WhatsApp (log/Fonnte/Meta), push, staff Telegram, and the OMES Control Center Astro /admin/omes/* routes. The upstream social publishing port currently routes to a no-op adapter for some flows. The full commerce customer/segment/campaign authority remains **AWCMS-One commerce**; never introduce a second generic customer master or provider queue. UI uses existing admin.css, design tokens, status pills, segmented filters, tables, two-pane and timelines, without a new admin framework.
 
-**Latest verified external baseline:** Bun available stable 1.4.4 (22 Oct 2026), repository still pinned 1.4.3 → upgrade [#1172](https://github.com/ahliweb/awcms/issues/1172). Mailketing documentation v2.0.2 (23 Oct 2026), existing adapter POST /api/v1/send remains → migration [#1159](https://github.com/ahliweb/awcms/issues/1159). All dependency update status is time-bound [#1173](https://github.com/ahliweb/awcms/issues/1173); production pins must be upgraded through tests/staging, not wildcard latest.
+**Latest verified external baseline:** Bun stable 1.4.4 (22 Oct 2026), now pinned in the repository ([#1172](https://github.com/ahliweb/awcms/issues/1172)). Mailketing documentation v2.0.2 (23 Oct 2026), existing adapter POST /api/v1/send remains → migration [#1159](https://github.com/ahliweb/awcms/issues/1159). All dependency update status is time-bound [#1173](https://github.com/ahliweb/awcms/issues/1173); production pins must be upgraded through tests/staging, not wildcard latest.
 
 ## 2. Upstream Admin navigation and screen inventory
 
@@ -79,5 +79,5 @@ Each route: permission-aware heading, tenant scope, last freshness, text+icon st
 - Mailketing v2.0.2 fake-vendor tests for server-assigned ID, credits/sender, semantic success:false, 401/402/403/422/429/5xx, no token leak, accepted ≠ delivered.
 - Meta and StarSender template/permitted message distinction, switching default new sends only, disconnection/blocked risk.
 - Keyboard-only and mobile 360px, i18n EN/ID, empty/loading/stale/permission denial, CSV formula injection; no raw PII in metrics.
-- AWCMS jobs executed by repo-pinned Bun; current Bun 1.4.3 upgrade to verified 1.4.4 separately #1172; weekly package/report #1173. Upstream Bun native SSE/WS behind ADR #1168, not an introduced Node runtime.
+- AWCMS jobs executed by repo-pinned Bun; Bun 1.4.4 pin landed via #1172; weekly package/report #1173. Upstream Bun native SSE/WS behind ADR #1168, not an introduced Node runtime.
 - Run bun test, bun run check, relevant integration/PostgreSQL FORCE RLS, OpenAPI/AsyncAPI and translation/doc gates. No code in this docs PR.

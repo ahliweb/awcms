@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](family-compatibility.md)
 
-<!-- i18n-source-hash: sha256:0ba7f0cc94a63b8fe1da3b29f0425603ecf9038603013b266046c2b0a9cf2a29 -->
+<!-- i18n-source-hash: sha256:6cac94a536a7888ea754d546749eca0077b8a7b971ebbdd344f8058833003750 -->
 
 # Manifes kontrak keluarga AWCMS
 
@@ -50,8 +50,8 @@ Nilai `declared` di manifest WAJIB sama dengan nilai nyata di sumber yang ditunj
 
 | Komponen         | Current   | Minimum-supported | Sumber                                                         |
 | ---------------- | --------- | ----------------- | -------------------------------------------------------------- |
-| Bun (pin)        | `1.4.3`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
-| Bun (CI current) | `1.4.3`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
+| Bun (pin)        | `1.4.4`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
+| Bun (CI current) | `1.4.4`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
 | Bun (CI minimum) | —         | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
 | Astro            | `^7.4.0`  | `^7.4.0`          | `package.json` `dependencies.astro`                            |
 | `@astrojs/node`  | `^11.1.7` | `^11.1.7`         | `package.json` `dependencies`                                  |

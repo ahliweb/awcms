@@ -78,3 +78,7 @@ The purge first expires stale non-terminal rows (clearing an OTP), then deletes 
 ## Not in this phase
 
 Inbound webhooks (delivery receipts, "stop" replies — ADR-0133 section 10, Q2), a per-tenant sender selection (Q3), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
+
+## WhatsApp Bun runtime / planned UI status
+
+Existing `bun run whatsapp:dispatch` performs provider HTTP via one Bun queue. Future StarSender and Meta multi-sender work [#1141–#1143](https://github.com/ahliweb/awcms/issues/1141) must reuse it, not a Node.js/Socket.IO worker. Future Bun SSE/WS projects status only; provider accepted is not verified delivered. [Runtime standard](../../../docs/awcms/bun-delivery-realtime-runtime.md).

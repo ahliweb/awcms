@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>AWCMS · Pengguna</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Public Sans";font-style:italic;font-weight:400;font-display:swap;src:url("../../public/fonts/public-sans-italic-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+body{margin:0}
+a{color:#1d4ed8}a:hover{color:#1e40af}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open]>summary .caret{transform:rotate(180deg)}
+.nv:hover{background:#1a222e;color:#f0f4f9}
+.btn2:hover{background:#f0f3f8}
+.row:hover{background:#f7f9fc}
+.nm{background:none;border:0;padding:0;font:inherit;color:#141a21;font-weight:600;cursor:pointer;text-align:left}
+.nm:hover{color:#1d4ed8;text-decoration:underline}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f5f7fa; color: #141a21; font-family: 'Public Sans', system-ui, sans-serif; font-size: 14px">
+
+<aside style="flex: 1 1 248px; background: #101722; color: #9aa7b2; display: flex; flex-direction: column; border-right: 1px solid #1f2733">
+<div style="padding: 16px 14px 12px; display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid #1f2733">
+<a href="#" style="display: flex; align-items: center; gap: 10px; text-decoration: none">
+<img src="../../public/icons/icon-192.png" alt="" width="32" height="32" style="width: 32px; height: 32px; border-radius: 8px; flex: none">
+<span style="display: flex; flex-direction: column; gap: 1px"><span style="color: #f0f4f9; font-weight: 700; font-size: 15px">AWCMS</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">Admin · v10.10.2</span></span>
+</a>
+<button type="button" aria-label="Ganti tenant, saat ini PT Contoh Nusantara" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; background: #1a222e; border: 1px solid #2a323c; border-radius: 10px; color: #f0f4f9; text-align: left; cursor: pointer; font: inherit">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: #3fbf6b; flex: none"></span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1"><span style="font-size: 13px; font-weight: 600">PT Contoh Nusantara</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">tnt_8f21c · produksi</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg>
+</button>
+</div>
+<nav aria-label="Admin" style="padding: 12px 10px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<a href="#" class="nv" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; text-decoration: none; color: #9aa7b2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"></path></svg>Dasbor</a>
+<a href="#" class="nv" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; text-decoration: none; color: #9aa7b2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"></path></svg>Akun saya</a>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #1f2733; padding-top: 12px">
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="8">
+<details open="{{s.open}}">
+<summary style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: #f0f4f9; font-weight: 600; font-size: 13px">
+<span style="flex: 1">{{s.label}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">{{s.count}}</span>
+<svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#838d99" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+</summary>
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 2px 0 10px">
+<sc-for list="{{s.groups}}" as="g" hint-placeholder-count="2">
+<span style="font-size: 12px; color: #838d99; padding: 8px 10px 4px 12px">{{g.label}}</span>
+<sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+<a href="#" class="nv" aria-current="{{it.cur}}" style="display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; text-decoration: none; {{it.st}}">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{it.icon}}"></path></svg>
+<span style="flex: 1">{{it.label}}</span>
+<sc-if value="{{it.badge}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 700; color: #101722; background: #e0a13a; border-radius: 999px; padding: 1px 7px">{{it.badge}}</span></sc-if>
+</a>
+</sc-for>
+</sc-for>
+</div>
+</details>
+</sc-for>
+</div>
+</nav>
+<div style="padding: 12px 20px 16px; border-top: 1px solid #1f2733; display: flex; justify-content: space-between; font-size: 12px; color: #838d99">
+<a href="#" style="color: #9aa7b2">Bantuan & dokumentasi</a>
+<span style="font-family: 'JetBrains Mono', monospace">id · WIB</span>
+</div>
+</aside>
+
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+<header style="min-height: 58px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 24px; background: #ffffff; border-bottom: 1px solid #dde3ea; box-sizing: border-box">
+<nav aria-label="Remah roti" style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #5b6672"><a href="#" style="color: #5b6672; text-decoration: none">PT Contoh Nusantara</a><span aria-hidden="true">/</span><span>Identitas</span><span aria-hidden="true">/</span><span aria-current="page" style="color: #141a21; font-weight: 600">Pengguna</span></nav>
+<button type="button" style="display: flex; align-items: center; gap: 9px; flex: 1 1 220px; max-width: 420px; height: 36px; padding: 0 11px; border: 1px solid #dde3ea; border-radius: 9px; background: #f7f9fc; color: #646f7a; font: inherit; font-size: 14px; cursor: pointer; margin-left: 12px">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg>
+<span style="flex: 1; text-align: left">Cari layar, data, atau perintah…</span>
+<kbd style="font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6px; border: 1px solid #dde3ea; border-radius: 5px; background: #ffffff; color: #5b6672">Ctrl K</kbd>
+</button>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: center; gap: 6px">
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #e4f5ea; color: #0f7434; font-size: 12px; font-weight: 600">Sinkron aktif</span>
+<button type="button" class="btn2" aria-label="Notifikasi, 4 belum dibaca" style="width: 36px; height: 36px; border-radius: 8px; border: 0; background: transparent; color: #5b6672; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg></button>
+<span aria-hidden="true" style="width: 1px; height: 24px; background: #dde3ea; margin: 0 6px"></span>
+<a href="#" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #141a21">
+<span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 999px; background: #e8effc; color: #1d4ed8; display: grid; place-items: center; font-weight: 700; font-size: 12px">RS</span>
+<span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600; font-size: 13px">Rina Setiawati</span><span style="font-size: 12px; color: #5b6672">owner, admin</span></span>
+</a>
+</div>
+</header>
+<div role="note" style="padding: 8px 24px; background: #e0f2f6; color: #0b6076; font-size: 13px; border-bottom: 1px solid #c7e6ee"><strong>Data contoh.</strong> Nama dan alamat email fiktif untuk desain.</div>
+
+<main style="padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 1360px; width: 100%; box-sizing: border-box">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px; max-width: 720px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em">Pengguna</h1>
+<p style="margin: 0; color: #5b6672; font-size: 14px; line-height: 1.5">Akun yang punya akses ke tenant ini. Peran menentukan layar yang terlihat; kebijakan ABAC menentukan data yang boleh disentuh.</p>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" class="btn2" style="height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"></path></svg>Ekspor CSV</button>
+<button type="button" style="height: 40px; padding: 0 16px; border-radius: 8px; border: 0; background: #2563eb; color: #ffffff; font: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Undang pengguna</button>
+</div>
+</div>
+
+<div role="tablist" aria-label="Filter status" style="display: flex; gap: 4px; border-bottom: 1px solid #dde3ea; overflow-x: auto">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="5">
+<button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="background: none; border: 0; font: inherit; cursor: pointer; padding: 10px 12px; display: flex; align-items: center; gap: 8px; white-space: nowrap; {{t.st}}">{{t.label}}<span style="font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; {{t.cst}}">{{t.count}}</span></button>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<section aria-label="Daftar pengguna" style="flex: 999 1 560px; min-width: 0; background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e8edf3">
+<label style="display: flex; align-items: center; gap: 8px; flex: 1 1 220px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; background: #ffffff; color: #646f7a"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg><span class="sr" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Cari pengguna</span><input type="search" placeholder="Nama, email, atau kantor" value="{{q}}" onChange="{{onQ}}" style="border: 0; outline: none; flex: 1; min-width: 0; font: inherit; font-size: 14px; background: transparent; color: #141a21"><kbd style="font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 1px 6px; border: 1px solid #dde3ea; border-radius: 5px; color: #5b6672">/</kbd></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Peran<select style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><option>Semua</option><option>owner</option><option>admin</option><option>editor</option></select></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Kantor<select style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><option>Semua</option><option>Kantor pusat</option></select></label>
+<label style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; cursor: pointer"><input type="checkbox" checked="{{noMfa}}" onChange="{{onNoMfa}}" style="margin: 0; width: 16px; height: 16px">Tanpa MFA</label>
+<button type="button" class="btn2" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Urut: Login terakhir</button>
+</div>
+<div role="status" aria-live="polite" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #e8edf3; font-size: 13px; color: #5b6672"><span>{{statusText}}</span><sc-if value="{{hasFilter}}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{resetFilter}}" style="border: 0; background: none; padding: 0; color: #1d4ed8; font: inherit; font-weight: 600; cursor: pointer">Reset pencarian</button></sc-if></div>
+<sc-if value="{{hasPicked}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; background: #e8effc; color: #1d4ed8; border-bottom: 1px solid #c9d8f7; font-size: 13px">
+<strong>{{pickedCount}} dipilih</strong>
+<span style="flex: 1"></span>
+<button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Ubah peran</button>
+<button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Kirim ulang undangan</button>
+<button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #dc2626; background: #ffffff; color: #c81e1e; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Tangguhkan</button>
+</div>
+</sc-if>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 10px 8px 10px 16px; width: 20px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Pilih</span></th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Nama</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Peran</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Kantor</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Status</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">MFA</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Login terakhir</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{rows}}" as="u" hint-placeholder-count="8">
+<tr class="row" style="{{u.rowSt}}">
+<td style="padding: 12px 8px 12px 16px; border-top: 1px solid #e8edf3"><input type="checkbox" aria-label="Pilih {{u.name}}" checked="{{u.checked}}" onChange="{{u.toggle}}" style="margin: 0; width: 16px; height: 16px"></td>
+<td style="padding: 12px; border-top: 1px solid #e8edf3"><div style="display: flex; align-items: center; gap: 10px"><span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 999px; background: {{u.av}}; color: #141a21; display: grid; place-items: center; font-weight: 700; font-size: 11px; flex: none">{{u.ini}}</span><div style="display: flex; flex-direction: column; gap: 1px; min-width: 0"><button type="button" class="nm" onClick="{{u.open}}">{{u.name}}</button><span style="font-size: 12px; color: #646f7a">{{u.email}}</span></div></div></td>
+<td style="padding: 12px; border-top: 1px solid #e8edf3"><span style="padding: 2px 8px; border-radius: 6px; background: #eef1f5; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{u.role}}</span></td>
+<td style="padding: 12px; border-top: 1px solid #e8edf3">{{u.office}}</td>
+<td style="padding: 12px; border-top: 1px solid #e8edf3"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{u.bg}}; color: {{u.fg}}; white-space: nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{u.icon}}"></path></svg>{{u.status}}</span></td>
+<td style="padding: 12px; border-top: 1px solid #e8edf3; color: {{u.mfaColor}}; font-weight: 500">{{u.mfa}}</td>
+<td style="padding: 12px; border-top: 1px solid #e8edf3; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5b6672; white-space: nowrap">{{u.last}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid #e8edf3; background: #f7f9fc; border-radius: 0 0 12px 12px; font-size: 13px; color: #5b6672">
+<span>Menampilkan <strong style="color: #141a21">{{rangeText}}</strong> dari {{totalCount}}</span>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+<label style="display: flex; align-items: center; gap: 6px">Baris per halaman<select style="height: 32px; border: 1px solid #858b92; border-radius: 7px; font: inherit; font-weight: 600; padding: 0 6px; background: #ffffff"><option>25</option><option>50</option><option>100</option></select></label>
+<div style="display: flex; gap: 6px; align-items: center">
+<button type="button" class="btn2" disabled="{{noPrev}}" onClick="{{prevPage}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; cursor: pointer">‹ Sebelumnya</button>
+<span style="padding: 0 4px">Halaman {{pageNo}}</span>
+<button type="button" class="btn2" disabled="{{noNext}}" onClick="{{nextPage}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Berikutnya ›</button>
+</div>
+</div>
+</div>
+</section>
+
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+<aside aria-label="Detail pengguna" style="flex: 1 1 340px; min-width: 0; background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 4px 14px rgba(15,23,42,.09); display: flex; flex-direction: column">
+<div style="padding: 18px 20px; display: flex; gap: 12px; align-items: flex-start; border-bottom: 1px solid #e8edf3">
+<span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 999px; background: {{sel.av}}; display: grid; place-items: center; font-weight: 700; flex: none">{{sel.ini}}</span>
+<div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0">
+<h2 style="margin: 0; font-size: 20px; font-weight: 700">{{sel.name}}</h2>
+<span style="font-size: 13px; color: #5b6672">{{sel.email}}</span>
+<span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{sel.bg}}; color: {{sel.fg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{sel.icon}}"></path></svg>{{sel.status}}</span>
+</div>
+<button type="button" class="btn2" aria-label="Tutup detail" onClick="{{close}}" style="width: 36px; height: 36px; border-radius: 8px; border: 0; background: transparent; color: #5b6672; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<sc-if value="{{sel.alert}}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="margin: 16px 20px 0; padding: 12px 14px; border-radius: 8px; background: #fdeaea; color: #c81e1e; font-size: 13px; line-height: 1.5; display: flex; gap: 10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l10 18H2zM12 10v4M12 17h.01"></path></svg><span>{{sel.alert}}</span></div>
+</sc-if>
+<dl style="margin: 0; padding: 16px 20px; display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; font-size: 13px; border-bottom: 1px solid #e8edf3">
+<dt style="color: #646f7a">Peran</dt><dd style="margin: 0"><span style="padding: 2px 8px; border-radius: 6px; background: #eef1f5; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{sel.role}}</span></dd>
+<dt style="color: #646f7a">Kantor</dt><dd style="margin: 0">{{sel.office}}</dd>
+<dt style="color: #646f7a">MFA</dt><dd style="margin: 0; color: {{sel.mfaColor}}; font-weight: 600">{{sel.mfa}}</dd>
+<dt style="color: #646f7a">Login terakhir</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{sel.last}}</dd>
+<dt style="color: #646f7a">Bergabung</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{sel.joined}}</dd>
+</dl>
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid #e8edf3">
+<h3 style="margin: 0; font-size: 14px; font-weight: 600">Aktivitas terbaru</h3>
+<sc-for list="{{sel.acts}}" as="a" hint-placeholder-count="3">
+<div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.45"><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #646f7a; flex: none; width: 44px">{{a.t}}</span><span>{{a.d}}</span></div>
+</sc-for>
+<a href="#" style="font-size: 13px; font-weight: 600">Lihat di jejak audit</a>
+</div>
+<div style="padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 14px; font-weight: 600">Tindakan</h3>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" class="btn2" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">{{sel.primary}}</button>
+<button type="button" class="btn2" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Ubah peran</button>
+<button type="button" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #dc2626; background: #ffffff; color: #c81e1e; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">{{sel.danger}}</button>
+</div>
+<p style="margin: 0; font-size: 12px; color: #646f7a; line-height: 1.5">Tindakan yang mengubah akses meminta alasan dan tercatat di jejak audit.</p>
+</div>
+</aside>
+</sc-if>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'all', sel: 'u4', picked: {}, q: '', noMfa: false, page: 0 };
+  }
+  renderVals() {
+    const I = {
+      users: 'M16 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 20v-1a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+      user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
+      mail: 'M4 5h16v14H4zM4 7l8 6 8-6',
+      inbox: 'M4 13l3-8h10l3 8v6H4zM4 13h5l1 2h4l1-2h5',
+      key: 'M8 15a4 4 0 1 1 0-8 4 4 0 0 1 0 8M11 11h10M18 11v3M15 11v2',
+      group: 'M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6M5 20a7 7 0 0 1 14 0M5 9a2 2 0 1 0 0-4M19 9a2 2 0 1 0 0-4',
+      shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+      sliders: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M14 4v4M8 10v4M16 16v4',
+      handshake: 'M3 12l4-4 4 2 4-3 6 5M7 16l3 3 4-4 3 3',
+      cpu: 'M6 6h12v12H6zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4',
+      lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
+      map: 'M9 4L3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14',
+      ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M8 12l3 3 5-6',
+      crit: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M15 9l-6 6M9 9l6 6',
+      wait: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
+      unk: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M8 12h8'
+    };
+    const active = 'background: #1e2836; color: #f0f4f9; font-weight: 600';
+    const idle = 'color: #9aa7b2';
+    const it = (label, icon, extra) => Object.assign({ label, icon, st: idle, cur: 'false', badge: '' }, extra || {});
+    const ST = {
+      active: { status: 'Aktif', icon: I.ok, bg: '#e4f5ea', fg: '#0f7434' },
+      suspended: { status: 'Ditangguhkan', icon: I.crit, bg: '#fdeaea', fg: '#c81e1e' },
+      invited: { status: 'Diundang', icon: I.wait, bg: '#e8effc', fg: '#1d4ed8' },
+      inactive: { status: 'Nonaktif', icon: I.unk, bg: '#eef1f5', fg: '#5b6672' }
+    };
+    const users = [
+      { id: 'u1', name: 'Rina Setiawati', email: 'rina@contoh.id', ini: 'RS', av: '#dbe6fb', role: 'owner', office: 'Kantor pusat', st: 'active', mfa: 'TOTP', last: '24 Okt, 08.02', joined: '12 Jan 2026', acts: [{ t: '14.42', d: 'Memberi izin blog.publish ke peran editor' }, { t: '09.03', d: 'Mengaktifkan modul Booking' }] },
+      { id: 'u2', name: 'Andi Wijaya', email: 'andi.w@contoh.id', ini: 'AW', av: '#d9f0e1', role: 'admin', office: 'Kantor pusat', st: 'active', mfa: 'TOTP', last: '24 Okt, 13.40', joined: '03 Feb 2026', acts: [{ t: '13.55', d: 'Memverifikasi domain shop.contoh.id' }] },
+      { id: 'u3', name: 'Maya Lestari', email: 'maya@contoh.id', ini: 'ML', av: '#fbe7cc', role: 'privacy_officer', office: 'Kantor pusat', st: 'active', mfa: 'Kunci keamanan', last: '24 Okt, 11.15', joined: '20 Mar 2026', acts: [{ t: '11.20', d: 'Membuat ekspor data subjek DSR-0042' }] },
+      { id: 'u4', name: 'Dimas Pratama', email: 'd.pratama@contoh.id', ini: 'DP', av: '#f8d9d9', role: 'editor', office: 'Cabang Palangka Raya', st: 'suspended', mfa: 'Belum diatur', last: '24 Okt, 14.10', joined: '07 Mei 2026', alert: 'Dikunci otomatis setelah 5 login gagal pada 14.10 WIB. Akun ini juga belum mengatur MFA.', acts: [{ t: '14.10', d: 'Login gagal ke-5 — akun dikunci 15 menit' }, { t: '14.06', d: 'Login gagal dari IP 103.x.x.24' }, { t: '23 Okt', d: 'Mengirim artikel untuk ditinjau' }] },
+      { id: 'u5', name: 'Siti Rahmawati', email: 'siti.r@contoh.id', ini: 'SR', av: '#e3dcfb', role: 'author', office: 'Cabang Sampit', st: 'active', mfa: 'Belum diatur', last: '22 Okt, 16.21', joined: '14 Jun 2026', acts: [{ t: '22 Okt', d: 'Membuat draf artikel "Jadwal layanan"' }] },
+      { id: 'u6', name: 'Yusuf Hidayat', email: 'yusuf@contoh.id', ini: 'YH', av: '#d6eef3', role: 'warehouse_staff', office: 'Gudang utama', st: 'active', mfa: 'TOTP', last: '23 Okt, 07.55', joined: '01 Jul 2026', acts: [{ t: '23 Okt', d: 'Mencatat penerimaan barang GR-0193' }] },
+      { id: 'u7', name: 'Lina Marlina', email: 'lina.m@contoh.id', ini: 'LM', av: '#eef1f5', role: 'reviewer', office: 'Cabang Sampit', st: 'invited', mfa: '—', last: 'Belum pernah', joined: 'Diundang 20 Okt', acts: [{ t: '20 Okt', d: 'Undangan dikirim oleh Andi Wijaya · kedaluwarsa 27 Okt' }] },
+      { id: 'u8', name: 'Budi Santoso', email: 'budi.s@contoh.id', ini: 'BS', av: '#eef1f5', role: 'reviewer', office: 'Cabang Pangkalan Bun', st: 'inactive', mfa: 'TOTP', last: '02 Sep, 10.11', joined: '15 Feb 2026', acts: [{ t: '02 Sep', d: 'Dinonaktifkan oleh Rina Setiawati — alasan: pindah tugas' }] }
+    ];
+    const counts = { all: 142, active: 128, invited: 6, suspended: 5, inactive: 3 };
+    const tabDefs = [['all', 'Semua'], ['active', 'Aktif'], ['invited', 'Diundang'], ['suspended', 'Ditangguhkan'], ['inactive', 'Nonaktif']];
+    const tab = this.state.tab;
+    const picked = this.state.picked;
+    const decorate = (u) => {
+      const s = ST[u.st];
+      const isSel = this.state.sel === u.id;
+      return Object.assign({}, u, s, {
+        mfaColor: u.mfa === 'Belum diatur' ? '#9a4507' : '#141a21',
+        checked: !!picked[u.id],
+        rowSt: isSel ? 'background: #e8effc' : '',
+        open: () => this.setState({ sel: u.id }),
+        toggle: () => { const p = Object.assign({}, this.state.picked); p[u.id] = !p[u.id]; this.setState({ picked: p }); },
+        primary: u.st === 'suspended' ? 'Buka kunci akun' : (u.st === 'invited' ? 'Kirim ulang undangan' : 'Atur ulang MFA'),
+        danger: u.st === 'suspended' || u.st === 'inactive' ? 'Hapus akses' : 'Tangguhkan akun',
+        alert: u.alert || ''
+      });
+    };
+    const q = this.state.q.trim().toLowerCase();
+    const searched = users.filter((u) => (!q || (u.name + ' ' + u.email + ' ' + u.office).toLowerCase().indexOf(q) >= 0) && (!this.state.noMfa || u.mfa === 'Belum diatur'));
+    const inTab = searched.filter((u) => tab === 'all' || u.st === tab);
+    const PER = 5;
+    const pages = Math.max(1, Math.ceil(inTab.length / PER));
+    const page = Math.min(this.state.page, pages - 1);
+    const rows = inTab.slice(page * PER, page * PER + PER).map(decorate);
+    const filtering = !!q || this.state.noMfa;
+    const tabTotal = filtering ? String(inTab.length) : String(counts[tab]);
+    const selUser = users.find((u) => u.id === this.state.sel);
+    const pickedCount = Object.keys(picked).filter((k) => picked[k]).length;
+    return {
+      q: this.state.q,
+      onQ: (e) => this.setState({ q: e.target.value, page: 0 }),
+      noMfa: this.state.noMfa,
+      onNoMfa: () => this.setState({ noMfa: !this.state.noMfa, page: 0 }),
+      hasFilter: filtering,
+      resetFilter: () => this.setState({ q: '', noMfa: false, page: 0 }),
+      statusText: filtering ? inTab.length + ' pengguna cocok' + (q ? ' dengan "' + this.state.q.trim() + '"' : '') + (this.state.noMfa ? ' · tanpa MFA' : '') : 'Urut login terakhir · contoh memakai 5 baris per halaman agar paging terlihat (bawaan 25)',
+      rangeText: inTab.length ? (page * PER + 1) + '–' + Math.min(inTab.length, page * PER + PER) : '0',
+      pageNo: String(page + 1),
+      noPrev: page === 0,
+      noNext: page >= pages - 1,
+      prevPage: () => this.setState({ page: Math.max(0, page - 1) }),
+      nextPage: () => this.setState({ page: Math.min(pages - 1, page + 1) }),
+      tabs: tabDefs.map(([k, l]) => ({
+        label: l, count: String(counts[k]), sel: tab === k ? 'true' : 'false',
+        st: tab === k ? 'color: #1d4ed8; font-weight: 600; box-shadow: inset 0 -2px 0 #2563eb' : 'color: #5b6672',
+        cst: tab === k ? 'background: #e8effc; color: #1d4ed8' : 'background: #eef1f5; color: #5b6672',
+        pick: () => this.setState({ tab: k, page: 0 })
+      })),
+      rows,
+      totalCount: tabTotal,
+      hasPicked: pickedCount > 0,
+      pickedCount,
+      hasSel: !!selUser,
+      sel: selUser ? decorate(selUser) : {},
+      close: () => this.setState({ sel: null }),
+      sections: [
+        { label: 'Sistem', count: '12', open: false, groups: [] },
+        { label: 'Konten', count: '11', open: false, groups: [] },
+        { label: 'Commerce', count: '2', open: false, groups: [] },
+        { label: 'Keterlibatan', count: '3', open: false, groups: [] },
+        { label: 'Operasional', count: '14', open: false, groups: [] },
+        { label: 'Identitas', count: '13', open: true, groups: [
+          { label: 'Akun', items: [it('Pengguna', I.users, { st: active, cur: 'page' }), it('Profil', I.user), it('Undangan', I.mail), it('Permintaan registrasi', I.inbox, { badge: '3' })] },
+          { label: 'Akses', items: [it('Peran', I.key), it('Grup pengguna', I.group), it('Kebijakan ABAC', I.sliders), it('Kebijakan akses', I.shield)] },
+          { label: 'Mitra & mesin', items: [it('Akses mitra', I.handshake), it('Registri mitra', I.list || I.handshake), it('Kredensial mesin', I.cpu)] },
+          { label: 'Keamanan', items: [it('Autentikasi & keamanan', I.lock), it('Cakupan bisnis', I.map)] }
+        ] },
+        { label: 'OMES', count: '15', open: false, groups: [] },
+        { label: 'Umum', count: '9', open: false, groups: [] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
