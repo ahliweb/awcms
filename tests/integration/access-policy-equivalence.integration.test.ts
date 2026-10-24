@@ -108,7 +108,16 @@ async function applyBackfillMigration(): Promise<void> {
     "utf8"
   );
 
-  await getAdminSql().unsafe(sql);
+  // The file carries its own `BEGIN;` / `COMMIT;`. Bun >= 1.4.4 refuses a raw
+  // transaction-control statement on a POOLED client (ERR_POSTGRES_UNSAFE_
+  // TRANSACTION: "Only use sql.begin, sql.reserved or max: 1"), so it runs on
+  // a reserved connection — one session, which is what a BEGIN needs anyway.
+  const reserved = await getAdminSql().reserve();
+  try {
+    await reserved.unsafe(sql);
+  } finally {
+    reserved.release();
+  }
 }
 
 async function seedFixtures(): Promise<void> {

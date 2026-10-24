@@ -26,7 +26,7 @@
  * `scripts/visitor-analytics-purge.ts`).
  *
  * Four independent cutoffs, each from the module's config
- * (`VisitorAnalyticsConfig`):
+ * (`VisitorAnalyticsSettings`):
  *   1. `awcms_visit_events` older than `eventRetentionDays` — hard deleted.
  *   2. `awcms_visitor_sessions.ip_address`/`login_identifier_snapshot` (the
  *      two genuinely "raw detail" columns) older than `rawDetailRetentionDays`
@@ -42,7 +42,7 @@
  *   4. `awcms_visitor_daily_rollups` older than `rollupRetentionDays` — hard
  *      deleted.
  */
-import type { VisitorAnalyticsConfig } from "../domain/visitor-analytics-config";
+import type { VisitorAnalyticsSettings } from "../domain/visitor-analytics-settings";
 import { VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY } from "../module";
 import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
 
@@ -87,7 +87,10 @@ function daysAgo(now: Date, days: number): Date {
 export async function purgeVisitorAnalyticsData(
   tx: Bun.SQL,
   tenantId: string,
-  config: VisitorAnalyticsConfig,
+  config: Pick<
+    VisitorAnalyticsSettings,
+    "eventRetentionDays" | "rawDetailRetentionDays" | "rollupRetentionDays"
+  >,
   now: Date,
   legalHoldGuard: LegalHoldGuardPort,
   options: PurgeVisitorAnalyticsOptions = {}

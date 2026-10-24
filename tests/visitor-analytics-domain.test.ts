@@ -21,6 +21,7 @@ import {
 } from "../src/modules/visitor-analytics/domain/analytics-range";
 import { resolveGeoEnrichment } from "../src/modules/visitor-analytics/domain/geo-enrichment";
 import { resolveAnalyticsClientIp } from "../src/modules/visitor-analytics/domain/client-ip";
+import { resolveVisitorAnalyticsSettings } from "../src/modules/visitor-analytics/domain/visitor-analytics-settings";
 import { setLogSink, type LogEntry } from "../src/lib/logging/logger";
 import {
   planVisitorKeyCookie,
@@ -59,6 +60,30 @@ describe("config resolver (privacy-first defaults)", () => {
     expect(config.enabled).toBe(true);
     expect(config.hashSalt).toBe("real-salt");
     expect(config.eventRetentionDays).toBe(45);
+  });
+
+  test("the settings half carries no salt, and the full config is exactly settings + salt (Issue #1132)", () => {
+    const env = {
+      VISITOR_ANALYTICS_ENABLED: "true",
+      VISITOR_ANALYTICS_HASH_SALT: "real-salt",
+      VISITOR_ANALYTICS_EVENT_RETENTION_DAYS: "45"
+    };
+    const settings = resolveVisitorAnalyticsSettings(env);
+
+    expect(Object.keys(settings)).not.toContain("hashSalt");
+    expect(JSON.stringify(settings)).not.toContain("real-salt");
+    expect(settings.eventRetentionDays).toBe(45);
+    expect(resolveVisitorAnalyticsConfig(env)).toEqual({
+      ...settings,
+      hashSalt: "real-salt"
+    });
+    // Identical with the salt absent: a job that never receives it resolves the same windows.
+    expect(
+      resolveVisitorAnalyticsSettings({
+        VISITOR_ANALYTICS_ENABLED: "true",
+        VISITOR_ANALYTICS_EVENT_RETENTION_DAYS: "45"
+      })
+    ).toEqual(settings);
   });
 
   test("parsePositiveInt rejects non-positive / malformed values", () => {

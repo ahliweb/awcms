@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](bun-delivery-realtime-runtime.md)
 
-<!-- i18n-source-hash: sha256:16eefc7a5abf7f549ed48349d3d3375583b2c819f3cef0a0d61d39b2baee4b75 -->
+<!-- i18n-source-hash: sha256:dca82705a2f681c3ccd6daf859b087a0fae91567668584b27d6b4ababeaf5d11 -->
 
 # Standar runtime pengiriman dan real-time AWCMS — Bun-only (usulan)
 
@@ -8,7 +8,7 @@
 
 ## Otoritas, runtime dan transport
 
-[ADR-0002](../adr/0002-bun-only-runtime.id.md) **sudah Accepted**. `package.json` menetapkan `bun@1.4.3`. Seluruh HTTP service, dispatcher pengiriman, job terjadwal/outbox serta gateway event real-time yang **dimiliki AWCMS** **WAJIB memakai Bun versi repo**. Jangan menjalankan proses Node.js, server npm/pnpm/yarn, layanan `ws`/Socket.IO yang mensyaratkan Node, dispatcher bahasa lain atau sidecar broadcast baru tanpa ADR yang disetujui. Import `node:*` kompatibel Bun dan adapter `@astrojs/node` **yang dijalankan di Bun** tetap diperbolehkan.
+[ADR-0002](../adr/0002-bun-only-runtime.id.md) **sudah Accepted**. `package.json` menetapkan `bun@1.4.4`. Seluruh HTTP service, dispatcher pengiriman, job terjadwal/outbox serta gateway event real-time yang **dimiliki AWCMS** **WAJIB memakai Bun versi repo**. Jangan menjalankan proses Node.js, server npm/pnpm/yarn, layanan `ws`/Socket.IO yang mensyaratkan Node, dispatcher bahasa lain atau sidecar broadcast baru tanpa ADR yang disetujui. Import `node:*` kompatibel Bun dan adapter `@astrojs/node` **yang dijalankan di Bun** tetap diperbolehkan.
 
 **Bedakan transport:** email = antrean `email` → worker Bun `email:dispatch` → adapter Mailketing/transport yang diizinkan; WhatsApp = antrean `whatsapp_delivery` → worker Bun `whatsapp:dispatch` → API HTTPS Meta/Fonnte dan StarSender yang masih direncanakan; Web Push = antrean `push_delivery` → worker Bun `push:dispatch` → layanan push/FCM. Telegram saat ini untuk notifikasi staf; dukungan pelanggan/publikasi masih direncanakan. **WebSocket bukan cara mengirim email/WhatsApp ke provider.** Webhook provider yang diautentikasi masuk melalui HTTPS dan disimpan secara tahan lama sebelum diproyeksikan ke dashboard.
 
@@ -40,7 +40,7 @@
 - Update OpenAPI/AsyncAPI dan dokumen EN/ID saat fitur nyata masuk. Jalankan `bun test`, `bun run check`, tes DB/integrasi, dan audit runtime sesuai repo; jangan tulis ulang migrasi atau edit manual `bun.lock`.
 - Pelacakan upstream [#1139](https://github.com/ahliweb/awcms/issues/1139), [#1140](https://github.com/ahliweb/awcms/issues/1140), [#1141](https://github.com/ahliweb/awcms/issues/1141), [#1142](https://github.com/ahliweb/awcms/issues/1142), [#1143](https://github.com/ahliweb/awcms/issues/1143), [#1144](https://github.com/ahliweb/awcms/issues/1144), [#1155](https://github.com/ahliweb/awcms/issues/1155), [#1158](https://github.com/ahliweb/awcms/issues/1158), [#1164](https://github.com/ahliweb/awcms/issues/1164), [#1165](https://github.com/ahliweb/awcms/issues/1165). Konsumen [AWCMS-One #458](https://github.com/ahliweb/awcms-one/issues/458), [#459](https://github.com/ahliweb/awcms-one/issues/459), [#460](https://github.com/ahliweb/awcms-one/issues/460), [#461](https://github.com/ahliweb/awcms-one/issues/461), [#430–#432](https://github.com/ahliweb/awcms-one/issues/430).
 
-**Referensi Bun:** [WebSocket](https://bun.com/docs/runtime/http/websockets), [SSE](https://bun.com/guides/http/sse), [HTTP server](https://bun.com/docs/runtime/http/server). Saat implementasi, validasi kompatibilitas fitur dengan Bun 1.4.3 yang dipin.
+**Referensi Bun:** [WebSocket](https://bun.com/docs/runtime/http/websockets), [SSE](https://bun.com/guides/http/sse), [HTTP server](https://bun.com/docs/runtime/http/server). Saat implementasi, validasi kompatibilitas fitur dengan Bun 1.4.4 yang dipin.
 
 ## Issue implementasi konkret (2026-10-24)
 

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:79095b4ae63cc382d55f17f24e73e4ccea22e13f224e6a69f79ff3faa7080fe8 -->
+<!-- i18n-source-hash: sha256:c5bf36dbbce53b62a14c225ac020b00c4d7bb7dd1017d660e1ffcaf45fd95436 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-150 target menjalankan berkas di `scripts/`; 64 di antaranya
+151 target menjalankan berkas di `scripts/`; 64 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -92,6 +92,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `db:work-class:check`                     | `work-class-registry-check.ts`                 | ✅   |
 | `db:work-class:generate`                  | `work-class-registry-generate.ts`              | —    |
 | `deps:audit:check`                        | `dependency-audit-check.ts`                    | ✅   |
+| `deps:freshness`                          | `dependency-freshness.ts`                      | —    |
 | `design:token-contrast:check`             | `design-token-contrast-check.ts`               | ✅   |
 | `docs:i18n:stamp`                         | `docs-i18n-stamp.mjs`                          | —    |
 | `docs:i18n:stamp:check`                   | `docs-i18n-stamp.mjs`                          | ✅   |

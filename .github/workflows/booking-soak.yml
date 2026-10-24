@@ -1,0 +1,127 @@
+# Booking GiST soak (Issue #1087) -- MANUAL ONLY.
+#
+# One CI run once saw two live, overlapping `time` allocations on one unit in
+# the "mixed soak" test of tests/integration/booking-concurrency.integration.test.ts,
+# despite `awcms_booking_resource_allocations_time_excl` (sql/180). It never
+# reproduced locally (PostgreSQL 16, then 18.4: see the evidence on #1087), and
+# the assertion is provably equivalent to the constraint, so the only way to
+# learn more is to run the SAME test many times on the SAME image CI uses and
+# keep whatever it prints when it fails.
+#
+# This workflow does exactly that and nothing else: it loops the soak test
+# `iterations` times against `postgres:18.4` and uploads, as an artifact, the
+# log of every failing iteration (the test already dumps the offending pairs
+# with ids, ranges, xmin/xmax, txid snapshot and server version) plus a summary.
+# It is deliberately NOT triggered by push / pull_request / schedule: it is a
+# diagnostic, not a gate, and a flaky gate that cannot be reproduced on demand
+# would only hide the signal. It is read-only (contents: read) and uses no secret.
+name: Booking soak (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "How many times to run the mixed soak test (1-500)"
+        required: false
+        default: "100"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: Loop the booking mixed soak on PostgreSQL 18.4
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    permissions:
+      contents: read
+    env:
+      POSTGRES_USER: awcms
+      POSTGRES_PASSWORD: awcms_ci_password
+      POSTGRES_DB: awcms
+      # Passed through the environment, never interpolated into the script:
+      # a workflow_dispatch input is user-controlled text.
+      SOAK_ITERATIONS: ${{ inputs.iterations }}
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: awcms
+          POSTGRES_PASSWORD: awcms_ci_password
+          POSTGRES_DB: awcms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U awcms -d awcms"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Assemble DATABASE_URL for this job's Postgres
+        run: echo "DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply migrations against this job's Postgres
+        run: bun run db:migrate
+
+      - name: Loop the mixed soak
+        run: |
+          set -u
+          case "${SOAK_ITERATIONS}" in
+            ''|*[!0-9]*) echo "iterations must be a whole number, got '${SOAK_ITERATIONS}'" >&2; exit 2 ;;
+          esac
+          iterations=$((10#${SOAK_ITERATIONS}))
+          if [ "$iterations" -lt 1 ] || [ "$iterations" -gt 500 ]; then
+            echo "iterations must be between 1 and 500, got ${iterations}" >&2
+            exit 2
+          fi
+
+          mkdir -p soak-artifacts
+          failures=0
+          for i in $(seq 1 "$iterations"); do
+            log="soak-artifacts/iteration-${i}.log"
+            if bun test tests/integration/booking-concurrency.integration.test.ts \
+                 --timeout 60000 -t "a mixed soak" > "$log" 2>&1; then
+              rm -f "$log"
+            else
+              failures=$((failures + 1))
+              echo "::error::soak iteration ${i}/${iterations} FAILED (log kept as an artifact)"
+            fi
+          done
+
+          {
+            echo "iterations=${iterations}"
+            echo "failures=${failures}"
+            echo "postgres=$(psql "$DATABASE_URL" -Atc 'select version()' 2>/dev/null || echo unknown)"
+            echo "commit=${GITHUB_SHA}"
+          } > soak-artifacts/summary.txt
+          cat soak-artifacts/summary.txt
+          echo "### Booking soak: ${failures} failure(s) in ${iterations} iteration(s)" >> "$GITHUB_STEP_SUMMARY"
+          [ "$failures" -eq 0 ]
+
+      - name: Upload the overlap dump
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: booking-soak-${{ github.run_id }}
+          path: soak-artifacts/
+          retention-days: 30
+          if-no-files-found: ignore

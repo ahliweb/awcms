@@ -92,6 +92,7 @@ import {
 const ROOT = process.cwd();
 const OUTPUT = "ops/awcms-jobs.env-global";
 const SCOPED_OUTPUT = "ops/awcms-jobs.env-scoped";
+const RUNNER = "ops/run-job.sh";
 const CHECK_ONLY = process.argv.includes("--check");
 
 const HEADER = [
@@ -177,6 +178,62 @@ export function renderScoped(
     pairs.map((pair) => `${pair.job} ${pair.name}`)
   );
   return `${SCOPED_HEADER}${FINGERPRINT_PREFIX}${fingerprint}\n#\n${lines.join("\n")}\n`;
+}
+
+/** The markers around the generated refusal in `ops/run-job.sh`. */
+export const RUNNER_BEGIN =
+  "# BEGIN GENERATED: operator-only targets (bun run jobs:env-allowlist:generate)";
+export const RUNNER_END = "# END GENERATED: operator-only targets";
+
+/**
+ * The shell `ops/run-job.sh` runs before it touches docker, so an operator-only
+ * target is refused by NAME (Issue #1131, L4). `OPERATOR_ONLY_TARGETS` is proved
+ * to reach a variable the runner never copies, or to be a CI/developer gate; run
+ * inside a job container either would start, find its input missing, and print a
+ * report that looks real (`security:readiness` resolves no platform tenant and
+ * says so in the output of a command that exits normally). The list lives in the
+ * script itself, not in a third file to deploy: a runner that has lost a
+ * companion file refuses everything anyway, but a runner whose refusal list is a
+ * file could be pointed at an empty one.
+ */
+export function renderRunnerRefusal(targets: readonly string[]): string {
+  const names = sortedCodePoints(targets);
+  // These go into a shell `case` pattern; anything outside this set could be
+  // a pattern metacharacter or a command.
+  const bad = names.filter(
+    (name) => !/^[A-Za-z0-9][A-Za-z0-9:_-]*$/.test(name)
+  );
+  if (bad.length > 0 || names.length === 0) {
+    throw new Error(
+      `OPERATOR_ONLY_TARGETS must be a non-empty list of plain package-script names; got ${JSON.stringify(bad.length > 0 ? bad : names)}`
+    );
+  }
+  return [
+    RUNNER_BEGIN,
+    "# Source: OPERATOR_ONLY_TARGETS in scripts/jobs-env-allowlist.ts, where each",
+    "# entry carries its reason. Do not edit between the markers; regenerate.",
+    'case "$JOB" in',
+    `  ${names.join(" | ")})`,
+    '    log "$JOB is an operator-only command and does not run in a job container; refusing" >&2',
+    '    log "  It needs variables the runner never copies (or is a CI/developer gate), so" >&2',
+    '    log "  it would run against a partial environment and print a misleading report." >&2',
+    '    log "  Run it with the full deployment environment instead (docs/awcms/deploy-coolify.md)." >&2',
+    "    exit 1",
+    "    ;;",
+    "esac",
+    RUNNER_END
+  ].join("\n");
+}
+
+/** `source` with the generated refusal replaced by `block`; null when the markers are missing or out of order. */
+export function spliceRunnerRefusal(
+  source: string,
+  block: string
+): string | null {
+  const start = source.indexOf(RUNNER_BEGIN);
+  const endMarker = source.indexOf(RUNNER_END, start);
+  if (start === -1 || endMarker === -1) return null;
+  return `${source.slice(0, start)}${block}${source.slice(endMarker + RUNNER_END.length)}`;
 }
 
 /**
@@ -366,11 +423,8 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
     jobs: [
       {
         target: "edge-cache:purge",
-        reason: "the purge worker"
-      },
-      {
-        target: "blog:publish:scheduled",
-        reason: "emits cache purges for the posts it publishes"
+        reason:
+          "the purge worker: the only job that sends a BAN, which is what the token authenticates (blog:publish:scheduled only enqueues rows and asks loadEdgeCacheMode whether the cache is off, so it is not granted it, Issue #1132)"
       }
     ]
   },
@@ -385,60 +439,53 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
       }
     ]
   },
-  {
-    name: "VISITOR_ANALYTICS_HASH_SALT",
-    reason:
-      "the salt behind visitor keys; whoever holds it can link hashed visitors across days",
-    jobs: [
-      {
-        target: "analytics:purge",
-        reason:
-          "calls resolveVisitorAnalyticsConfig for the retention windows, which resolves the whole config including the salt"
-      }
-    ]
-  },
   ...["NEWS_MEDIA_R2", "R2"].flatMap((prefix) =>
     ["ACCESS_KEY_ID", "SECRET_ACCESS_KEY"].map((suffix) => ({
       name: `${prefix}_${suffix}`,
       reason:
         "object-storage (Cloudflare R2) credentials; they can read and overwrite every stored media object",
-      jobs: [
-        ...(prefix === "R2"
+      jobs:
+        prefix === "R2"
           ? [
               {
                 target: "sync:objects:dispatch",
                 reason: "uploads queued sync objects to R2"
+              },
+              {
+                target: "blog:publish:scheduled",
+                reason:
+                  "evaluateManagedMediaReadiness compares the news-media pair against this pair (Keputusan kunci #1, media-r2-separation.ts); without it the check passes vacuously, so the job would enforce managed media where the web app, which sees both pairs, says the deployment is not ready (Issue #1132: kept, not narrowed)"
               }
             ]
-          : []),
-        {
-          target: "blog:publish:scheduled",
-          reason: "reaches the media storage client while publishing"
-        },
-        {
-          target: "blog:ads:ingest",
-          reason:
-            "only needs resolveNewsMediaR2Config().publicBaseUrl, but that resolver also reads the credential pair, so the file-level trace reaches it (narrowing needs a resolver split)"
-        },
-        {
-          target: "blog:legacy:import",
-          reason:
-            "operator run: reaches managed-media-readiness.ts through mediaLibraryPortAdapter, which resolves the R2 config; it uploads nothing itself (narrowing needs a resolver split)"
-        },
-        {
-          target: "news-media:reconcile",
-          reason: "lists and verifies stored objects against the registry"
-        }
-      ]
+          : [
+              {
+                target: "blog:publish:scheduled",
+                reason:
+                  "evaluateManagedMediaReadiness (through mediaLibraryPortAdapter) requires the pair to be present before it reports managed-media enforcement active, and compares it with the sync-storage pair; it never uploads (Issue #1132: kept, not narrowed)"
+              },
+              {
+                target: "news-media:reconcile",
+                reason: "lists and verifies stored objects against the registry"
+              }
+            ]
     }))
   )
 ];
 
 /**
  * A job that imports a scoped secret's reader FILE but never calls the reader,
- * so it is NOT granted. `readerCalls` are the functions that perform the read;
- * the test proves no file the job reaches, other than the reader file itself,
- * mentions any of them.
+ * so it is NOT granted. `readerCalls` are the functions that perform the read.
+ * The test proves two things (Issue #1131, L4):
+ *
+ * - no file the job reaches, other than the reader file itself, mentions any of
+ *   them; and
+ * - inside the reader file, `readerCalls` is a CLOSED set: every read of the
+ *   variable, and every reference to a listed function, sits inside another
+ *   listed function. A new helper in the file that calls a reader internally
+ *   (or a constant initialised from one) fails the test, because a job that
+ *   imports that helper would read the secret through the file it was excused
+ *   for. `readerCalls` must therefore name every function that reads the
+ *   variable DIRECTLY OR THROUGH another function in the file.
  */
 export const REACHES_WITHOUT_READING: readonly {
   name: string;
@@ -451,7 +498,10 @@ export const REACHES_WITHOUT_READING: readonly {
     target: "telegram:queue:purge",
     readerCalls: [
       "resolveTelegramEncryptionRing",
-      "resolveTelegramEncryptionRingUnchecked"
+      "resolveTelegramEncryptionRingUnchecked",
+      // Reads the encryption ring to refuse a ring that shares a key with the
+      // hash ring (Issue #1008, L11), so it is a reader of this variable too.
+      "resolveTelegramHashRing"
     ],
     reason:
       "imports telegram-config.ts for the retention-day constants only; it deletes rows and decrypts nothing"
@@ -580,13 +630,23 @@ export const READER_FILE_EXCUSES: readonly {
 /**
  * `import(...)` sites the tracer cannot follow. The reach test fails on any
  * other, so a new computed import cannot quietly hide a reader from the graph.
+ *
+ * A site is the file AND the exact expression inside the brackets (whitespace
+ * collapsed), one entry per occurrence (Issue #1131, L4). Keyed by file alone,
+ * the entry for `scripts/table-write-ownership-check.ts` would have accepted a
+ * second, different computed import added to it. Changing a listed expression
+ * is a deliberate edit here, with the reason re-read; list a repeated
+ * expression once per occurrence.
  */
 export const UNTRACEABLE_IMPORT_SITES: readonly {
   file: string;
+  /** The text inside `import( … )`, as `readImports` reports it. */
+  expression: string;
   reason: string;
 }[] = [
   {
     file: "scripts/table-write-ownership-check.ts",
+    expression: "`${process.cwd()}/${file}`",
     reason:
       "CI gate that imports module files by computed path inside the repository checkout; it is not a job and no job imports it"
   }
@@ -605,6 +665,7 @@ export const UNTRACEABLE_EXECUTION_SITES: readonly {
   ...[
     "scripts/graph-artifacts-check.ts",
     "scripts/dependency-audit-check.ts",
+    "scripts/dependency-freshness.ts",
     "scripts/astro-script-typecheck.ts",
     "scripts/astro-frontmatter-typecheck.ts",
     "scripts/changeset-policy-check.ts",
@@ -760,6 +821,15 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
     name: "TURNSTILE_SECRET_KEY",
     reason:
       "verifies Turnstile challenges on public forms; read by the request path only"
+  },
+  // Issue #1132: it was granted to analytics:purge only because that job called
+  // the full config resolver for its retention windows. It now resolves the
+  // settings (visitor-analytics-settings.ts), which never reads the salt, and the
+  // collector - the only code that hashes - runs in the request path.
+  {
+    name: "VISITOR_ANALYTICS_HASH_SALT",
+    reason:
+      "the salt behind visitor keys; whoever holds it can link hashed visitors across days. Read only by the collector (the analytics ingest route) and the analytics pages, never by a job"
   }
 ];
 
@@ -1005,10 +1075,29 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const runnerSource = readIfPresent(path.join(ROOT, RUNNER));
+  const runnerRendered =
+    runnerSource === null
+      ? null
+      : spliceRunnerRefusal(
+          runnerSource,
+          renderRunnerRefusal(
+            OPERATOR_ONLY_TARGETS.map((entry) => entry.target)
+          )
+        );
+  if (runnerRendered === null) {
+    console.error(
+      `jobs:env-allowlist FAILED — ${RUNNER} is missing or lacks the generated block between\n  ${RUNNER_BEGIN}\n  ${RUNNER_END}\n` +
+        "  Without it the runner would run operator-only commands in a job container."
+    );
+    process.exit(1);
+  }
+
   const fingerprint = envFingerprint(names, pairs);
   const outputs = [
     { file: OUTPUT, rendered: renderGlobal(names, fingerprint) },
-    { file: SCOPED_OUTPUT, rendered: renderScoped(pairs, fingerprint) }
+    { file: SCOPED_OUTPUT, rendered: renderScoped(pairs, fingerprint) },
+    { file: RUNNER, rendered: runnerRendered }
   ];
 
   if (CHECK_ONLY) {
@@ -1034,14 +1123,14 @@ async function main(): Promise<void> {
 
     console.log(
       `jobs:env-allowlist:check OK — ${OUTPUT} names ${names.length} variable(s) and ${SCOPED_OUTPUT} ` +
-        `holds ${pairs.length} job-scoped grant(s), both matching a fresh regeneration.`
+        `holds ${pairs.length} job-scoped grant(s); ${RUNNER} refuses ${OPERATOR_ONLY_TARGETS.length} operator-only target(s); all match a fresh regeneration.`
     );
   } else {
     for (const output of outputs) {
       writeFileSync(path.join(ROOT, output.file), output.rendered);
     }
     console.log(
-      `jobs:env-allowlist — wrote ${OUTPUT} (${names.length} variable(s)) and ${SCOPED_OUTPUT} (${pairs.length} grant(s)).`
+      `jobs:env-allowlist — wrote ${OUTPUT} (${names.length} variable(s)), ${SCOPED_OUTPUT} (${pairs.length} grant(s)) and the operator-only refusal in ${RUNNER} (${OPERATOR_ONLY_TARGETS.length} target(s)).`
     );
   }
 }

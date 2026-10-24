@@ -14,6 +14,7 @@ import {
   IDENTITY_COOKIE_PREFIX
 } from "../src/lib/edge-cache/cacheability";
 import { loadEdgeCacheConfig } from "../src/lib/edge-cache/config";
+import { loadEdgeCacheMode } from "../src/lib/edge-cache/mode";
 import { createPressureTracker } from "../src/lib/edge-cache/pressure";
 import { applyEdgeCacheHeaders } from "../src/lib/edge-cache/response-headers";
 import {
@@ -672,6 +673,30 @@ describe("response headers", () => {
     );
 
     expect(response.headers.get("vary")).toBe("Accept, Accept-Encoding");
+  });
+});
+
+describe("loadEdgeCacheMode (Issue #1132)", () => {
+  test("is off for anything unset or unrecognised, and parses the three modes case-insensitively", () => {
+    expect(loadEdgeCacheMode({})).toBe("off");
+    expect(loadEdgeCacheMode({ EDGE_CACHE_MODE: "" })).toBe("off");
+    expect(loadEdgeCacheMode({ EDGE_CACHE_MODE: "enabled" })).toBe("off");
+    expect(loadEdgeCacheMode({ EDGE_CACHE_MODE: " AUTO " })).toBe("auto");
+    expect(loadEdgeCacheMode({ EDGE_CACHE_MODE: "on" })).toBe("on");
+  });
+
+  test("agrees with loadEdgeCacheConfig for every value, and does not need the purge token", () => {
+    for (const mode of ["", "off", "auto", "ON", "bogus", undefined]) {
+      const env = { EDGE_CACHE_MODE: mode };
+
+      expect(loadEdgeCacheMode(env)).toBe(loadEdgeCacheConfig(env).mode);
+    }
+    expect(
+      loadEdgeCacheMode({
+        EDGE_CACHE_MODE: "on",
+        EDGE_CACHE_PURGE_TOKEN: "secret-token"
+      })
+    ).toBe("on");
   });
 });
 

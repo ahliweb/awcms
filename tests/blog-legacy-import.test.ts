@@ -484,10 +484,15 @@ describe("the import script refuses rather than repairs", () => {
     const source = stripComments(await readFile(IMPORT_SCRIPT, "utf8"));
 
     // One map, one sweep, one chokepoint. `mediaObjectIdsIn` collects every
-    // value in the map — body and featured alike — and `isMediaReferenceSafe`
-    // is called exactly once per distinct id, before any conversion.
+    // value in the map — body and featured alike — and the registry check
+    // (`isMediaReferenceSafeForTenant`, the same query `isMediaReferenceSafe`
+    // runs; the job imports it rather than the whole port adapter so that it is
+    // not handed the R2 credentials, Issue #1132) is called exactly once per
+    // distinct id, before any conversion.
     expect(source).toContain("mediaObjectIdsIn(parsedMap.value)");
-    expect([...source.matchAll(/isMediaReferenceSafe/g)]).toHaveLength(1);
+    expect([
+      ...source.matchAll(/isMediaReferenceSafeForTenant\(/g)
+    ]).toHaveLength(1);
     // …and the resolution reads that same verified map, never a second source.
     expect(source).toContain("mediaMap.get(record.value.featuredImageSrc)");
   });

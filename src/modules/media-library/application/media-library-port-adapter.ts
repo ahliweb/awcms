@@ -44,10 +44,10 @@
  * `media-library-tenant-state.ts`'s `markManagedMediaEnforced`.
  */
 import {
-  fetchNewsMediaObjectById,
   fetchNewsMediaObjectsByIds,
   isNewsMediaObjectSafeForPublicReference
 } from "./media-object-directory";
+import { isMediaReferenceSafeForTenant } from "./media-reference-safety";
 import { isManagedMediaEnforcedForTenant } from "./media-library-tenant-state";
 import { evaluateManagedMediaReadiness } from "../domain/managed-media-readiness";
 import { resolvePublicMediaRightsFields } from "../domain/media-rights-policy";
@@ -78,10 +78,7 @@ export const mediaLibraryPortAdapter: MediaLibraryPort = {
     tenantId: string,
     mediaObjectId: string
   ): Promise<boolean> {
-    const media = await fetchNewsMediaObjectById(tx, tenantId, mediaObjectId);
-    return (
-      media !== null && isNewsMediaObjectSafeForPublicReference(media.status)
-    );
+    return isMediaReferenceSafeForTenant(tx, tenantId, mediaObjectId);
   },
 
   async resolveMediaReferences(

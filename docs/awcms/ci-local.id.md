@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ci-local.md)
 
-<!-- i18n-source-hash: sha256:b2b9cf40622a209722f65d7d0c7b6e39d46dea8d02a3c9c78abb3ae1b0743d48 -->
+<!-- i18n-source-hash: sha256:cd32404d89dce16477d0c171eb0f6f93d1bfacfe9fbba4cf7a36814b20f25579 -->
 
 # Menjalankan setiap job CI secara lokal (`bun run ci:local`)
 
@@ -38,14 +38,14 @@ memperingatkan bila working tree kotor.
 Job berjalan **berurutan**, yang paling murah lebih dulu (urutan di bawah),
 karena semuanya berbagi `dist/` dan mesin yang sama.
 
-| Job lokal           | Mencerminkan (`workflow` > job)   | Yang dijalankan                                                                                                                                  | Butuh                          |
-| ------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `hygiene`           | `ci.yml` > `hygiene`              | grep Bun-only atas script `package.json`; tidak ada berkas `.env` ter-track. Shell workflow, apa adanya.                                         | bash, git                      |
-| `changesets`        | `changesets.yml` > `policy-check` | Fetch base, `bun install --frozen-lockfile`, `bun run changesets:policy:check` dengan `CHANGESET_POLICY_BASE_REF=<--base>`.                      | riwayat git dengan merge-base  |
-| `quality`           | `ci.yml` > `quality`              | Fetch tag (gerbang `version:check` membutuhkannya), install frozen, `bun run check` **penuh** dengan `DATABASE_URL` kosong.                      | —                              |
-| `integration`       | `ci.yml` > `integration-tests`    | Database sementara, install frozen, `bun run db:migrate`, `bun test tests/integration/ --timeout 60000`, lalu daftar berkas suite legacy ad-hoc. | superuser PostgreSQL           |
-| `minimum-supported` | `ci.yml` > `minimum-supported`    | Di atas **Bun 1.3.0**: install frozen, `typecheck`, `build`, `family:conformance:check`.                                                         | Bun 1.3.0 (lihat di bawah)     |
-| `e2e`               | `ci.yml` > `e2e-smoke`            | Database sementara, migrate, build, menyalakan server, seed lewat `POST /api/v1/setup/initialize`, `bun run test:e2e`.                           | superuser PostgreSQL, Chromium |
+| Job lokal           | Mencerminkan (`workflow` > job)   | Yang dijalankan                                                                                                                                                                                                                                   | Butuh                          |
+| ------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `hygiene`           | `ci.yml` > `hygiene`              | grep Bun-only atas script `package.json`; tidak ada berkas `.env` ter-track. (Pemindaian manifes peluncuran yang lebih luas, `tests/bun-only-launch-manifests.test.ts`, adalah `bun test` dan berjalan di `quality`.) Shell workflow, apa adanya. | bash, git                      |
+| `changesets`        | `changesets.yml` > `policy-check` | Fetch base, `bun install --frozen-lockfile`, `bun run changesets:policy:check` dengan `CHANGESET_POLICY_BASE_REF=<--base>`.                                                                                                                       | riwayat git dengan merge-base  |
+| `quality`           | `ci.yml` > `quality`              | Fetch tag (gerbang `version:check` membutuhkannya), install frozen, `bun run check` **penuh** dengan `DATABASE_URL` kosong.                                                                                                                       | —                              |
+| `integration`       | `ci.yml` > `integration-tests`    | Database sementara, install frozen, `bun run db:migrate`, `bun test tests/integration/ --timeout 60000`, lalu daftar berkas suite legacy ad-hoc.                                                                                                  | superuser PostgreSQL           |
+| `minimum-supported` | `ci.yml` > `minimum-supported`    | Di atas **Bun 1.3.0**: install frozen, `typecheck`, `build`, `family:conformance:check`.                                                                                                                                                          | Bun 1.3.0 (lihat di bawah)     |
+| `e2e`               | `ci.yml` > `e2e-smoke`            | Database sementara, migrate, build, menyalakan server, seed lewat `POST /api/v1/setup/initialize`, `bun run test:e2e`.                                                                                                                            | superuser PostgreSQL, Chromium |
 
 Id job workflow (`policy-check`, `integration-tests`, `e2e-smoke`) diterima
 sebagai alias `--job`.
@@ -104,7 +104,7 @@ Jadi `bun run ci:local && git push` menolak push setelah sebuah skip, dengan sen
   juga jalan offline). Ia ditaruh paling depan di `PATH` hanya untuk job itu,
   sehingga setiap `bun run` bersarang memakainya. Bila keduanya gagal job
   **di-skip**, tidak pernah dijalankan di Bun yang salah. Job lain memakai `bun`
-  di `PATH`; runner mencetaknya di samping versi yang dipin CI (1.4.3), karena Bun
+  di `PATH`; runner mencetaknya di samping versi yang dipin CI (1.4.4), karena Bun
   yang berbeda adalah sumber "hijau di lokal, merah di GitHub".
 - **Chromium Playwright** untuk `e2e`. Workflow menjalankan
   `bun run test:e2e:install` (`playwright install --with-deps`), yang butuh
@@ -162,7 +162,7 @@ mem-parse `ci.yml` dan `changesets.yml` dan gagal ketika:
 - sebuah **step** workflow tidak dicerminkan dan tidak tercantum di `omitted`
   beserta alasannya, atau teks `run:` step yang dicerminkan berbeda dari workflow
   (step shell membawa teks workflow **apa adanya**);
-- fakta yang dipin bergeser: versi Bun (1.4.3 saat ini, 1.3.0 lantai), major
+- fakta yang dipin bergeser: versi Bun (1.4.4 saat ini, 1.3.0 lantai), major
   PostgreSQL, environment dan body seed e2e, ref base default.
 
 Ia mencocokkan step shell lewat apa yang dieksekusinya, bukan labelnya, sehingga
