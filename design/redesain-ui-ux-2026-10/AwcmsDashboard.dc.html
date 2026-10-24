@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>AWCMS · Dasbor admin</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Public Sans";font-style:italic;font-weight:400;font-display:swap;src:url("../../public/fonts/public-sans-italic-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+body{margin:0}
+a{color:#1d4ed8}a:hover{color:#1e40af}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open]>summary .caret{transform:rotate(180deg)}
+.nv:hover{background:#1a222e;color:#f0f4f9}
+.btn2:hover{background:#f0f3f8}
+.row:hover{background:#f7f9fc}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f5f7fa; color: #141a21; font-family: 'Public Sans', system-ui, sans-serif; font-size: 14px">
+
+<aside style="flex: 1 1 248px; background: #101722; color: #9aa7b2; display: flex; flex-direction: column; border-right: 1px solid #1f2733">
+<div style="padding: 16px 14px 12px; display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid #1f2733">
+<a href="#" style="display: flex; align-items: center; gap: 10px; text-decoration: none">
+<img src="../../public/icons/icon-192.png" alt="" width="32" height="32" style="width: 32px; height: 32px; border-radius: 8px; flex: none">
+<span style="display: flex; flex-direction: column; gap: 1px"><span style="color: #f0f4f9; font-weight: 700; font-size: 15px">AWCMS</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">Admin · v10.10.2</span></span>
+</a>
+<button type="button" aria-label="Ganti tenant, saat ini PT Contoh Nusantara" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; background: #1a222e; border: 1px solid #2a323c; border-radius: 10px; color: #f0f4f9; text-align: left; cursor: pointer; font: inherit">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: #3fbf6b; flex: none"></span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1"><span style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">PT Contoh Nusantara</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">tnt_8f21c · produksi</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg>
+</button>
+</div>
+<nav aria-label="Admin" style="padding: 12px 10px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{top}}" as="it" hint-placeholder-count="2">
+<a href="#" class="nv" aria-current="{{it.cur}}" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; text-decoration: none; {{it.st}}">
+<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{it.icon}}"></path></svg>
+<span style="flex: 1">{{it.label}}</span>
+</a>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 0 10px 4px"><span style="font-size: 12px; font-weight: 600; color: #838d99">Favorit</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#838d99" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"></path></svg></div>
+<sc-for list="{{fav}}" as="it" hint-placeholder-count="3">
+<a href="#" class="nv" style="display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; text-decoration: none; color: #9aa7b2">
+<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{it.icon}}"></path></svg>
+<span style="flex: 1">{{it.label}}</span>
+</a>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #1f2733; padding-top: 12px">
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="7">
+<details open="{{s.open}}">
+<summary style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: #f0f4f9; font-weight: 600; font-size: 13px">
+<span style="flex: 1">{{s.label}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">{{s.count}}</span>
+<svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#838d99" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+</summary>
+</details>
+</sc-for>
+</div>
+</nav>
+<div style="padding: 12px 20px 16px; border-top: 1px solid #1f2733; display: flex; justify-content: space-between; font-size: 12px; color: #838d99">
+<a href="#" style="color: #9aa7b2">Bantuan & dokumentasi</a>
+<span style="font-family: 'JetBrains Mono', monospace">id · WIB</span>
+</div>
+</aside>
+
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+<header style="min-height: 58px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 24px; background: #ffffff; border-bottom: 1px solid #dde3ea; box-sizing: border-box">
+<nav aria-label="Remah roti" style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #5b6672"><a href="#" style="color: #5b6672; text-decoration: none">PT Contoh Nusantara</a><span aria-hidden="true">/</span><span aria-current="page" style="color: #141a21; font-weight: 600">Dasbor</span></nav>
+<button type="button" style="display: flex; align-items: center; gap: 9px; flex: 1 1 220px; max-width: 420px; height: 36px; padding: 0 11px; border: 1px solid #dde3ea; border-radius: 9px; background: #f7f9fc; color: #646f7a; font: inherit; font-size: 14px; cursor: pointer; margin-left: 12px">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-4.3-4.3"></path></svg>
+<span style="flex: 1; text-align: left">Cari layar, data, atau perintah…</span>
+<kbd style="font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 6px; border: 1px solid #dde3ea; border-radius: 5px; background: #ffffff; color: #5b6672">Ctrl K</kbd>
+</button>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: center; gap: 6px">
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #e4f5ea; color: #0f7434; font-size: 12px; font-weight: 600"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"></path></svg>Sinkron aktif</span>
+<button type="button" class="btn2" aria-label="Notifikasi, 4 belum dibaca" style="position: relative; width: 36px; height: 36px; border-radius: 8px; border: 0; background: transparent; color: #5b6672; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span aria-hidden="true" style="position: absolute; top: 4px; right: 3px; min-width: 16px; height: 16px; border-radius: 999px; background: #dc2626; color: #ffffff; font-size: 10px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; box-sizing: border-box">4</span></button>
+<button type="button" class="btn2" aria-label="Ganti tema warna" style="width: 36px; height: 36px; border-radius: 8px; border: 0; background: transparent; color: #5b6672; display: grid; place-items: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"></path></svg></button>
+<button type="button" class="btn2" aria-label="Bahasa: Indonesia" style="height: 36px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; color: #5b6672; display: flex; align-items: center; gap: 6px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg>ID</button>
+<span aria-hidden="true" style="width: 1px; height: 24px; background: #dde3ea; margin: 0 6px"></span>
+<a href="#" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #141a21">
+<span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 999px; background: #e8effc; color: #1d4ed8; display: grid; place-items: center; font-weight: 700; font-size: 12px">RS</span>
+<span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600; font-size: 13px">Rina Setiawati</span><span style="font-size: 12px; color: #5b6672">owner, admin</span></span>
+</a>
+</div>
+</header>
+<div role="note" style="display: flex; align-items: center; gap: 8px; padding: 8px 24px; background: #e0f2f6; color: #0b6076; font-size: 13px; border-bottom: 1px solid #c7e6ee">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v5M12 8h.01"></path></svg>
+<span><strong>Data contoh.</strong> Angka, nama, dan waktu di layar ini ilustrasi untuk desain — bukan data tenant.</span>
+</div>
+
+<main style="padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 24px; max-width: 1360px; width: 100%; box-sizing: border-box">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em">Dasbor</h1>
+<p style="margin: 0; color: #5b6672; font-size: 14px">Ringkasan tenant PT Contoh Nusantara · data per <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">24 Okt 2026, 14.50 WIB</span></p>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" class="btn2" style="height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"></path></svg>Unduh laporan</button>
+<button type="button" style="height: 40px; padding: 0 16px; border-radius: 8px; border: 0; background: #2563eb; color: #ffffff; font: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Undang pengguna</button>
+</div>
+</div>
+
+<section aria-labelledby="pt" style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #e8edf3">
+<h2 id="pt" style="margin: 0; font-size: 16px; font-weight: 600">Perlu tindakan</h2>
+<span style="font-size: 13px; color: #646f7a">5 item · diurut menurut keparahan, lalu umur</span>
+<a href="#" style="margin-left: auto; font-size: 13px; font-weight: 600">Lihat semua</a>
+</div>
+<sc-for list="{{queue}}" as="q" hint-placeholder-count="5">
+<div class="row" style="display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid #e8edf3">
+<span style="justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{q.bg}}; color: {{q.fg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{q.icon}}"></path></svg>{{q.status}}</span>
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+<span style="font-weight: 600; font-size: 14px">{{q.title}}</span>
+<span style="font-size: 13px; color: #5b6672">{{q.sub}}</span>
+</div>
+<a href="#" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid {{q.btnBorder}}; background: {{q.btnBg}}; color: {{q.btnFg}}; font-weight: 600; font-size: 13px; display: flex; align-items: center; text-decoration: none; white-space: nowrap">{{q.action}}</a>
+</div>
+</sc-for>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 16px">
+<sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; color: #5b6672; font-weight: 500">{{k.label}}</span><span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: {{k.tint}}; color: {{k.ink}}; display: grid; place-items: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="{{k.icon}}"></path></svg></span></div>
+<div style="font-size: 28px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums">{{k.value}}</div>
+<div style="font-size: 12px; color: #646f7a">{{k.caption}}</div>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+<section style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px">
+<div style="display: flex; align-items: baseline; gap: 10px; padding: 16px 20px; flex-wrap: wrap"><h2 style="margin: 0; font-size: 16px; font-weight: 600">Kesehatan sinkronisasi</h2><span style="font-size: 13px; color: #646f7a">6 node offline/LAN terdaftar</span><a href="#" style="margin-left: auto; font-size: 13px; font-weight: 600">Sync &amp; storage</a></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 0; border-top: 1px solid #e8edf3; border-bottom: 1px solid #e8edf3">
+<sc-for list="{{syncStats}}" as="s" hint-placeholder-count="4">
+<div style="padding: 14px 20px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #e8edf3"><span style="font-size: 12px; color: #646f7a; font-weight: 600">{{s.label}}</span><span style="font-size: 22px; font-weight: 700; color: {{s.color}}; font-variant-numeric: tabular-nums">{{s.value}}</span></div>
+</sc-for>
+</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a">Node</th>
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a">Kantor</th>
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a">Sinkron terakhir</th>
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a">Status</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="4">
+<tr class="row">
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3; font-family: 'JetBrains Mono', monospace">{{n.id}}</td>
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3">{{n.office}}</td>
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3; font-family: 'JetBrains Mono', monospace; color: #5b6672">{{n.last}}</td>
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{n.bg}}; color: {{n.fg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.icon}}"></path></svg>{{n.status}}</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<section style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px">
+<div style="display: flex; align-items: baseline; gap: 10px; padding: 16px 20px; flex-wrap: wrap"><h2 style="margin: 0; font-size: 16px; font-weight: 600">Penggunaan modul</h2><span style="font-size: 13px; color: #646f7a">5 modul paling aktif, 30 hari</span><a href="#" style="margin-left: auto; font-size: 13px; font-weight: 600">Kelola modul</a></div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a">Modul</th>
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a">Metrik</th>
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a; text-align: right">Jumlah</th>
+<th style="padding: 10px 20px; font-size: 12px; font-weight: 600; color: #646f7a; width: 30%">Porsi</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{modules}}" as="m" hint-placeholder-count="5">
+<tr class="row">
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3; font-weight: 600">{{m.name}}</td>
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3; color: #5b6672">{{m.metric}}</td>
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600">{{m.value}}</td>
+<td style="padding: 11px 20px; border-top: 1px solid #e8edf3"><div style="height: 6px; border-radius: 999px; background: #eef1f5"><div style="height: 6px; border-radius: 999px; background: #2563eb; width: {{m.pct}}"></div></div></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+
+<div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<section style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: baseline"><h2 style="margin: 0; font-size: 16px; font-weight: 600">Aktivitas terbaru</h2><a href="#" style="margin-left: auto; font-size: 13px; font-weight: 600">Jejak audit</a></div>
+<sc-for list="{{feed}}" as="f" hint-placeholder-count="5">
+<div style="display: flex; gap: 12px">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: {{f.dot}}; margin-top: 6px; flex: none"></span>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 14px; line-height: 1.45">{{f.text}}</span><span style="font-size: 12px; color: #646f7a"><span style="font-family: 'JetBrains Mono', monospace">{{f.time}}</span> · {{f.actor}}</span></div>
+</div>
+</sc-for>
+</section>
+<section style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 600">Sesi Anda</h2>
+<dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; font-size: 13px">
+<dt style="color: #646f7a">Tenant</dt><dd style="margin: 0; font-weight: 600">PT Contoh Nusantara</dd>
+<dt style="color: #646f7a">Peran</dt><dd style="margin: 0; display: flex; gap: 6px; flex-wrap: wrap"><span style="padding: 2px 8px; border-radius: 6px; background: #eef1f5; font-family: 'JetBrains Mono', monospace; font-size: 12px">owner</span><span style="padding: 2px 8px; border-radius: 6px; background: #eef1f5; font-family: 'JetBrains Mono', monospace; font-size: 12px">admin</span></dd>
+<dt style="color: #646f7a">Izin</dt><dd style="margin: 0">214 izin dari semua peran</dd>
+<dt style="color: #646f7a">MFA</dt><dd style="margin: 0"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; background: #e4f5ea; color: #0f7434; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Aktif · TOTP</span></dd>
+<dt style="color: #646f7a">Login</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px">24 Okt 2026, 08.02 WIB</dd>
+</dl>
+</section>
+<section style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 600">Pintasan</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{quick}}" as="l" hint-placeholder-count="4">
+<a href="#" class="btn2" style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 44px; box-sizing: border-box; border: 1px solid #dde3ea; border-radius: 8px; color: #141a21; text-decoration: none; font-weight: 500; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{l.icon}}"></path></svg>{{l.label}}</a>
+</sc-for>
+</div>
+</section>
+</div>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const I = {
+      grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+      user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
+      users: 'M16 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 20v-1a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+      list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+      image: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M20 15l-5-5L5 20',
+      building: 'M4 21V5l8-2v18M12 8l8 2v11M8 9h.01M8 13h.01M8 17h.01M16 13h.01M16 17h.01M2 21h20',
+      sync: 'M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4',
+      shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+      file: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5',
+      mail: 'M4 5h16v14H4zM4 7l8 6 8-6',
+      ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M8 12l3 3 5-6',
+      warn: 'M12 3l10 18H2zM12 10v4M12 17h.01',
+      crit: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 8v5M12 16h.01',
+      wait: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
+      unk: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01'
+    };
+    const S = {
+      crit: { status: 'Kritis', icon: I.crit, bg: '#fdeaea', fg: '#c81e1e' },
+      warn: { status: 'Perhatian', icon: I.warn, bg: '#fdf1de', fg: '#9a4507' },
+      wait: { status: 'Menunggu', icon: I.wait, bg: '#e8effc', fg: '#1d4ed8' },
+      ok: { status: 'Sehat', icon: I.ok, bg: '#e4f5ea', fg: '#0f7434' },
+      unk: { status: 'Tak diketahui', icon: I.unk, bg: '#eef1f5', fg: '#5b6672' }
+    };
+    const primary = { btnBg: '#2563eb', btnFg: '#ffffff', btnBorder: '#2563eb' };
+    const secondary = { btnBg: '#ffffff', btnFg: '#141a21', btnBorder: '#858b92' };
+    const active = 'background: #1e2836; color: #f0f4f9; font-weight: 600';
+    const idle = 'color: #9aa7b2';
+    return {
+      top: [
+        { label: 'Dasbor', icon: I.grid, st: active, cur: 'page' },
+        { label: 'Akun saya', icon: I.user, st: idle, cur: 'false' }
+      ],
+      fav: [
+        { label: 'Pengguna', icon: I.users },
+        { label: 'Jejak audit', icon: I.list },
+        { label: 'Pustaka media', icon: I.image }
+      ],
+      sections: [
+        { label: 'Sistem', count: '12', open: false },
+        { label: 'Konten', count: '11', open: false },
+        { label: 'Commerce', count: '2', open: false },
+        { label: 'Keterlibatan', count: '3', open: false },
+        { label: 'Operasional', count: '14', open: false },
+        { label: 'Identitas', count: '13', open: false },
+        { label: 'OMES', count: '15', open: false },
+        { label: 'Umum', count: '9', open: false }
+      ],
+      queue: [
+        Object.assign({}, S.crit, primary, { title: '2 konflik sinkronisasi belum diselesaikan', sub: 'Node kantor-cabang-02 · konflik tertua 3 hari', action: 'Selesaikan konflik' }),
+        Object.assign({}, S.warn, secondary, { title: 'Permintaan subjek data jatuh tempo besok', sub: 'Permintaan akses data pribadi (UU PDP) · diajukan 21 Okt 2026', action: 'Proses permintaan' }),
+        Object.assign({}, S.wait, secondary, { title: '3 permintaan registrasi menunggu persetujuan', sub: 'Tertua 2 hari · butuh peran owner atau admin', action: 'Tinjau' }),
+        Object.assign({}, S.wait, secondary, { title: '4 persetujuan alur kerja', sub: 'Pengadaan (3) · konten blog (1)', action: 'Buka persetujuan' }),
+        Object.assign({}, S.warn, secondary, { title: '12 komentar di antrean moderasi', sub: 'Blog · 3 ditandai spam secara otomatis', action: 'Moderasi' })
+      ],
+      kpis: [
+        { label: 'Pengguna aktif', value: '128', caption: 'dari 142 akun · 6 undangan terbuka', icon: I.users, tint: '#e8effc', ink: '#1d4ed8' },
+        { label: 'Kantor aktif', value: '7', caption: 'pusat + 6 cabang', icon: I.building, tint: '#e0f2f6', ink: '#0b6076' },
+        { label: 'Node sinkron aktif', value: '5 / 6', caption: '1 node tak melapor sejak 26 jam', icon: I.sync, tint: '#fdf1de', ink: '#9a4507' },
+        { label: 'Kejadian audit, 7 hari', value: '2.418', caption: '31 keputusan akses ditolak', icon: I.shield, tint: '#e4f5ea', ink: '#0f7434' }
+      ],
+      syncStats: [
+        { label: 'Node aktif', value: '5', color: '#141a21' },
+        { label: 'Konflik terbuka', value: '2', color: '#c81e1e' },
+        { label: 'Objek tertunda', value: '38', color: '#9a4507' },
+        { label: 'Objek gagal', value: '0', color: '#141a21' }
+      ],
+      nodes: [
+        Object.assign({ id: 'node-pusat-01', office: 'Kantor pusat', last: '14.49 WIB' }, S.ok),
+        Object.assign({ id: 'node-cabang-02', office: 'Cabang Palangka Raya', last: '14.31 WIB' }, S.crit),
+        Object.assign({ id: 'node-cabang-04', office: 'Cabang Sampit', last: '14.47 WIB' }, S.warn),
+        Object.assign({ id: 'node-gudang-01', office: 'Gudang utama', last: '23 Okt, 12.40' }, S.unk)
+      ],
+      modules: [
+        { name: 'Blog', metric: 'Artikel terbit', value: '214', pct: '62%' },
+        { name: 'Pustaka media', metric: 'Berkas diunggah', value: '1.932', pct: '100%' },
+        { name: 'Inventaris', metric: 'SKU aktif', value: '486', pct: '48%' },
+        { name: 'Booking', metric: 'Reservasi', value: '57', pct: '18%' },
+        { name: 'Newsletter', metric: 'Pelanggan baru', value: '340', pct: '34%' }
+      ],
+      feed: [
+        { text: 'Peran "editor" diberi izin blog.publish', time: '14.42', actor: 'Rina Setiawati', dot: '#2563eb' },
+        { text: 'Login gagal 5× untuk akun d.pratama — dikunci 15 menit', time: '14.10', actor: 'sistem', dot: '#dc2626' },
+        { text: 'Domain tenant shop.contoh.id terverifikasi', time: '13.55', actor: 'Andi Wijaya', dot: '#12873d' },
+        { text: 'Ekspor data subjek DSR-0042 dibuat', time: '11.20', actor: 'Maya Lestari', dot: '#b45309' },
+        { text: 'Modul Booking diaktifkan untuk tenant', time: '09.03', actor: 'Rina Setiawati', dot: '#2563eb' }
+      ],
+      quick: [
+        { label: 'Tulis artikel', icon: I.file },
+        { label: 'Unggah media', icon: I.image },
+        { label: 'Templat email', icon: I.mail },
+        { label: 'Kebijakan akses', icon: I.shield }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
