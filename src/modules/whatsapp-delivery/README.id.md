@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:da5a42f5f84979aff84087d70f84e0e58f162dfae4856e88ca73b7e8afb0785a -->
+<!-- i18n-source-hash: sha256:21fb5237e9effe54519bbd0eaa22c149859f039352147e9078d07eae8a80bf56 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -82,3 +82,7 @@ Purge lebih dulu mengedaluwarsakan baris non-terminal yang basi (mengosongkan OT
 ## Bukan bagian fase ini
 
 Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q2), pemilihan pengirim per tenant (Q3), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
+
+## Runtime Bun WhatsApp / status UI terencana
+
+`bun run whatsapp:dispatch` sudah mengirim melalui API provider dari antrean Bun tunggal. StarSender dan Meta multi-nomor mendatang [#1141–#1143](https://github.com/ahliweb/awcms/issues/1141) wajib memakainya tanpa worker Node.js/Socket.IO. SSE/WS Bun nanti hanya menampilkan status; diterima provider bukan delivered. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).
