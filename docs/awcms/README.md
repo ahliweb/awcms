@@ -130,3 +130,7 @@ See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every tas
 ## AWCMS documentation package
 
 [Bun-only channel worker and realtime standard](bun-delivery-realtime-runtime.md) (issue #1167, realtime ADR #1168) governs current Bun email/WhatsApp/Web Push dispatch and planned Bun SSE/WebSocket. It does not claim a gateway already exists.
+
+## Omnichannel UI/UX screen contracts
+
+[**Upstream Omnichannel UI/UX v1.0**](omnichannel-ui-ux-screen-contracts.md) maps **UP-01–UP-16** existing email/WhatsApp/Push/staff Telegram and proposed multi-account/social/Mailketing **v2.0.2**/leads/inbox/SSE-WS screens, with states, access and release tests. Tracked [#1174](https://github.com/ahliweb/awcms/issues/1174). This is target documentation, not working multi-account API.

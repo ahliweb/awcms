@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:df2ae5a2b73551853c7f50f5715e55b377eace5b22fe0da90a2b0b8052cec119 -->
+<!-- i18n-source-hash: sha256:4703465c6257d1473380d081e12b45bc1a90a9b9d6808e45cf89e4b5e7835dd4 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -130,3 +130,7 @@ Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, da
 ## Paket dokumen AWCMS
 
 [Standar worker kanal dan real-time Bun-only](bun-delivery-realtime-runtime.id.md) (issue #1167 dan ADR #1168) mencakup pengiriman email/WhatsApp/Web Push Bun yang sudah ada dan SSE/WebSocket Bun yang masih direncanakan.
+
+## Kontrak layar UI/UX Omnichannel
+
+[**UI/UX Omnichannel upstream v1.0**](omnichannel-ui-ux-screen-contracts.id.md) memetakan **UP-01–UP-16** dari modul email/WhatsApp/Push/Telegram staf saat ini hingga rencana multi-akun/sosial/Mailketing **v2.0.2**/leads/inbox/SSE-WS, lengkap status, hak akses dan pengujian. Issue [#1174](https://github.com/ahliweb/awcms/issues/1174). Dokumen rencana bukan bukti koneksi API sudah aktif.
