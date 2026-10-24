@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:351ac06906bb61cd2359536b5477a757bb036205cfeaa3e3f9e4dfdc9d23dd3c -->
+<!-- i18n-source-hash: sha256:365cb78d21a2209ddada8efd4c5ffd391351eab27a4a8bfbb0a867503401d6ee -->
 
 # Deploy Coolify
 
@@ -345,6 +345,8 @@ Kedua berkas hasil generate memuat baris `# awcms-jobs-env-fingerprint:` yang sa
 - **Berkas CRLF atau terpotong:** carriage return di salah satu berkas, baris yang bukan tepat dua kolom, atau berkas scoped tanpa satu pun grant juga menolak menjalankan job, begitu pula berkas global yang tidak memuat satu variabel pun.
 
 Generate ulang dengan `bun run jobs:env-allowlist:generate`; `bun run jobs:env-allowlist:check` (bagian dari `bun run check`) gagal bila salah satu berkas basi. `tests/jobs-env-scoped-reach.test.ts` menelusuri import tiap package script dan gagal bila job yang menjangkau pembaca sebuah secret terbatas tidak diberi secret itu (job akan diam-diam memakai default kode), bila job yang diberi tidak dapat menjangkau pembacanya (grant basi), atau bila secret khusus web dapat dijangkau dari sebuah job. Jalankan CLI operator yang butuh secret terbatas (misalnya `push:auth-secret:rekey`) lewat `run-job.sh` seperti biasa; perintah yang butuh variabel khusus web (`config:validate`, `security:readiness`, `telegram:webhook:register`) dijalankan dengan environment lengkap deployment.
+
+**Perintah khusus operator ditolak oleh `run-job.sh` (Issue #1131).** `bench:booking`, `config:validate`, `security:readiness`, `subject-data:coverage:check`, dan `telegram:webhook:register` (`OPERATOR_ONLY_TARGETS` di generator) membutuhkan variabel yang tidak pernah disalin runner, atau merupakan gerbang CI. Di dalam container job, `security:readiness` tidak dapat me-resolve platform tenant dan mencetak laporan yang tampak sungguhan, sehingga `ops/run-job.sh <target>` kini keluar dengan kode 1 untuk perintah-perintah itu sebelum memanggil docker, dengan menyebut alasannya. Daftarnya adalah blok hasil generate di dalam `run-job.sh` di antara penanda `# BEGIN GENERATED` dan `# END GENERATED` (generate ulang dengan `bun run jobs:env-allowlist:generate`; `bun run jobs:env-allowlist:check` gagal bila blok itu basi), jadi ganti `run-job.sh` dari rilis yang sama dengan berkas env. Runner juga menolak target yang bukan nama package script biasa (path seperti `./scripts/security-readiness.ts`, opsi, atau apa pun yang berisi spasi atau `;`), karena `bun run <path>` akan menjalankan berkas dan melewati penolakan berdasarkan nama. Jalankan perintah-perintah ini dengan environment lengkap deployment, seperti sebelumnya.
 
 ## Webhook Telegram: jangan mencatat body respons
 
