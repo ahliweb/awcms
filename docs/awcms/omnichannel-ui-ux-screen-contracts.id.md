@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-ui-ux-screen-contracts.md)
 
-<!-- i18n-source-hash: sha256:aabd783c5b02d0f1725489374282a9797ebb5060376e335505dcccee7cd3b096 -->
+<!-- i18n-source-hash: sha256:32dbcada1a3012623982a34731aba0cf38f57648cb71563273c419b2a2713692 -->
 
 # AWCMS — Kontrak UI/UX upstream Omnichannel v1.0
 
@@ -14,24 +14,24 @@ Bun main saat ini **1.4.3**, versi stabil terverifikasi **1.4.4** (22 Okt) → i
 
 ## 2. Inventaris layar AWCMS
 
-| ID | Layar | Status | Rujukan |
-| --- | --- | --- | --- |
-| UP-01 | Email templates, antrean dan announcement | SUDAH ADA | modul email |
-| UP-02 | Suppression email | SUDAH ADA | /admin/email-suppression |
-| UP-03 | Newsletter dan opt-in | SUDAH ADA | modul newsletter |
-| UP-04 | WhatsApp generik | SUDAH ADA | /admin/whatsapp |
-| UP-05 | Web Push | Backend SUDAH ADA | push_delivery |
-| UP-06 | Telegram staf | Backend SUDAH ADA | telegram_delivery |
-| UP-07 | OMES Control Center | SUDAH ADA, berizin | /admin/omes/* |
-| UP-08 | Channel Hub multi-akun/izin | RENCANA | #1139/#1140/#1154 |
-| UP-09 | StarSender banyak device, Meta banyak nomor | RENCANA | #1141–#1143 |
-| UP-10 | Mailketing API v2 multi-akun/sender/kredit/list | RENCANA | #1158–#1162 |
-| UP-11 | Telegram pelanggan/bot/channel | RENCANA | #1155–#1157 |
-| UP-12 | Facebook/IG/TikTok/YouTube/LinkedIn/Threads | RENCANA/RISET | #1145–#1152 |
-| UP-13 | Lead/prospect/pipeline | RENCANA | #1163/#1166 |
-| UP-14 | Unified inbox/assignment/SLA | RENCANA | #1144/#1164 |
-| UP-15 | Follow-up rules/task/calendar | RENCANA | #1165 |
-| UP-16 | SSE/WS progress gateway | BELUM ADA, ADR lebih dulu | #1168/#1171 |
+| ID    | Layar                                           | Status                    | Rujukan                  |
+| ----- | ----------------------------------------------- | ------------------------- | ------------------------ |
+| UP-01 | Email templates, antrean dan announcement       | SUDAH ADA                 | modul email              |
+| UP-02 | Suppression email                               | SUDAH ADA                 | /admin/email-suppression |
+| UP-03 | Newsletter dan opt-in                           | SUDAH ADA                 | modul newsletter         |
+| UP-04 | WhatsApp generik                                | SUDAH ADA                 | /admin/whatsapp          |
+| UP-05 | Web Push                                        | Backend SUDAH ADA         | push_delivery            |
+| UP-06 | Telegram staf                                   | Backend SUDAH ADA         | telegram_delivery        |
+| UP-07 | OMES Control Center                             | SUDAH ADA, berizin        | /admin/omes/*            |
+| UP-08 | Channel Hub multi-akun/izin                     | RENCANA                   | #1139/#1140/#1154        |
+| UP-09 | StarSender banyak device, Meta banyak nomor     | RENCANA                   | #1141–#1143              |
+| UP-10 | Mailketing API v2 multi-akun/sender/kredit/list | RENCANA                   | #1158–#1162              |
+| UP-11 | Telegram pelanggan/bot/channel                  | RENCANA                   | #1155–#1157              |
+| UP-12 | Facebook/IG/TikTok/YouTube/LinkedIn/Threads     | RENCANA/RISET             | #1145–#1152              |
+| UP-13 | Lead/prospect/pipeline                          | RENCANA                   | #1163/#1166              |
+| UP-14 | Unified inbox/assignment/SLA                    | RENCANA                   | #1144/#1164              |
+| UP-15 | Follow-up rules/task/calendar                   | RENCANA                   | #1165                    |
+| UP-16 | SSE/WS progress gateway                         | BELUM ADA, ADR lebih dulu | #1168/#1171              |
 
 ## 3. Kontrak alur per layar
 
