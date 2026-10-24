@@ -665,6 +665,7 @@ export const UNTRACEABLE_EXECUTION_SITES: readonly {
   ...[
     "scripts/graph-artifacts-check.ts",
     "scripts/dependency-audit-check.ts",
+    "scripts/dependency-freshness.ts",
     "scripts/astro-script-typecheck.ts",
     "scripts/astro-frontmatter-typecheck.ts",
     "scripts/changeset-policy-check.ts",

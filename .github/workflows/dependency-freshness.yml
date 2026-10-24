@@ -1,0 +1,74 @@
+# Dependency freshness report (Issue #1173) — weekly, READ-ONLY.
+#
+# Runs `bun run deps:freshness`: `bun outdated` + `bun audit` + the Bun pin vs
+# npm + the pinned base images vs Docker Hub + the held-back register. It writes
+# the report to the job summary and uploads the JSON manifest as an artifact.
+#
+# What it deliberately does NOT do: open PRs, push commits, edit `bun.lock` or
+# `package.json`, or create issues. Upgrades are atomic, human-reviewed PRs
+# (docs/awcms/dependency-governance.md); a scheduled job that changed the lock
+# would be the silent mass update the issue forbids. The only alarm is the run
+# going red: `--strict` fails when a check could not run (UNKNOWN is never a
+# pass), on an unhandled high/critical advisory, on an expired or stale
+# held-back entry, or on a recorded image digest that no longer matches its tag.
+# Plain drift never fails the run.
+#
+# Separate from `ci.yml` on purpose: this needs the live registries, which would
+# make a PR's required checks depend on npm/Docker Hub availability.
+name: Dependency freshness
+
+on:
+  schedule:
+    # Monday 02:00 UTC = 09:00 Asia/Jakarta, the same slot as Dependabot.
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: dependency-freshness
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    name: Freshness report (bun outdated + bun audit + images)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Freshness report
+        # `--strict` is what turns an UNKNOWN section into a red run.
+        run: bun run deps:freshness --strict --out-json dependency-freshness.json --out-md dependency-freshness.md
+
+      - name: Publish report to the job summary
+        if: always()
+        run: |
+          if [ -f dependency-freshness.md ]; then
+            cat dependency-freshness.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "deps:freshness produced no report (see the step log)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload manifest
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-freshness
+          path: |
+            dependency-freshness.json
+            dependency-freshness.md
+          if-no-files-found: ignore
+          retention-days: 90
