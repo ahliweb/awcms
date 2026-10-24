@@ -109,6 +109,7 @@
     "i18n:screens:check": "bun scripts/i18n-screen-coverage-check.ts",
     "design:token-contrast:check": "bun scripts/design-token-contrast-check.ts",
     "deps:audit:check": "bun scripts/dependency-audit-check.ts",
+    "deps:freshness": "bun scripts/dependency-freshness.ts",
     "access:chokepoint:check": "bun scripts/access-chokepoint-check.ts",
     "access:decision-log:coverage:check": "bun scripts/access-decision-log-coverage-check.ts",
     "access:grant-readers:check": "bun scripts/access-grant-readers-check.ts",
