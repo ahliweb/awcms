@@ -182,7 +182,9 @@ import type {
   LegacyArticleImageRefs,
   LegacyImageUsage
 } from "../src/modules/blog-content/domain/legacy-media-map";
-import { mediaLibraryPortAdapter } from "../src/modules/media-library/application/media-library-port-adapter";
+// Not `mediaLibraryPortAdapter`: that file also evaluates deployment readiness,
+// which reads the R2 credentials, and this job only asks whether a row is safe.
+import { isMediaReferenceSafeForTenant } from "../src/modules/media-library/application/media-reference-safety";
 import {
   findTakenSlugs,
   importLegacyBlogPost
@@ -725,11 +727,7 @@ async function main(): Promise<void> {
       const unsafe = await withTenantOrThrow(db(), tenantId, async (tx) => {
         const found: string[] = [];
         for (const id of ids) {
-          const safe = await mediaLibraryPortAdapter.isMediaReferenceSafe(
-            tx,
-            tenantId,
-            id
-          );
+          const safe = await isMediaReferenceSafeForTenant(tx, tenantId, id);
           if (!safe) found.push(id);
         }
         return found;

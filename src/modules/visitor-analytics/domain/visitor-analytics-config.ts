@@ -25,63 +25,35 @@
  * the flag explicitly is unaffected; explicit values always win over the
  * default here.
  */
-export const VISITOR_ANALYTICS_MODES = ["basic", "detailed"] as const;
+import {
+  VISITOR_ANALYTICS_SETTINGS_DEFAULTS,
+  resolveVisitorAnalyticsSettings,
+  type VisitorAnalyticsSettings
+} from "./visitor-analytics-settings";
 
-export type VisitorAnalyticsMode = (typeof VISITOR_ANALYTICS_MODES)[number];
+// Kept importable from here: every existing caller reaches these through this
+// file, and none of them is the salt.
+export {
+  VISITOR_ANALYTICS_MODES,
+  isKnownVisitorAnalyticsMode,
+  parsePositiveInt,
+  type VisitorAnalyticsMode
+} from "./visitor-analytics-settings";
 
-export function isKnownVisitorAnalyticsMode(
-  value: string | undefined
-): value is VisitorAnalyticsMode {
-  return (VISITOR_ANALYTICS_MODES as readonly string[]).includes(value ?? "");
-}
-
-export type VisitorAnalyticsConfig = {
-  enabled: boolean;
-  mode: VisitorAnalyticsMode;
-  collectAdmin: boolean;
-  collectPublic: boolean;
-  collectApi: boolean;
-  detailedEnabled: boolean;
-  rawIpEnabled: boolean;
-  rawUserAgentEnabled: boolean;
-  geoEnabled: boolean;
-  trustProxy: boolean;
-  trustCloudflare: boolean;
-  onlineWindowSeconds: number;
-  eventRetentionDays: number;
-  rawDetailRetentionDays: number;
-  rollupRetentionDays: number;
+/**
+ * `VisitorAnalyticsSettings` (everything a job that does not hash may read) plus
+ * the hash salt. Callers that never hash should take the settings from
+ * `resolveVisitorAnalyticsSettings` in `visitor-analytics-settings.ts` instead
+ * (Issue #1132): this file reads `VISITOR_ANALYTICS_HASH_SALT`.
+ */
+export type VisitorAnalyticsConfig = VisitorAnalyticsSettings & {
   hashSalt: string;
-  /**
-   * Lifetime (days) of the anonymous `awcms_visitor_key` cookie.
-   * Deliberately short — the cookie is a persistent anonymous identifier,
-   * so its lifetime is bounded to the same order of magnitude as the
-   * module's *shortest* sensitive-data retention window
-   * (`rawDetailRetentionDays`, 30 days default) rather than a multi-year
-   * constant.
-   */
-  visitorKeyCookieTtlDays: number;
 };
 
 /** Safe defaults matching the module's `.env.example` block exactly. */
 export const VISITOR_ANALYTICS_DEFAULTS: VisitorAnalyticsConfig = {
-  enabled: false,
-  mode: "basic",
-  collectAdmin: true,
-  collectPublic: true,
-  collectApi: false,
-  detailedEnabled: false,
-  rawIpEnabled: false,
-  rawUserAgentEnabled: false,
-  geoEnabled: false,
-  trustProxy: false,
-  trustCloudflare: false,
-  onlineWindowSeconds: 300,
-  eventRetentionDays: 90,
-  rawDetailRetentionDays: 30,
-  rollupRetentionDays: 730,
-  hashSalt: "",
-  visitorKeyCookieTtlDays: 30
+  ...VISITOR_ANALYTICS_SETTINGS_DEFAULTS,
+  hashSalt: ""
 };
 
 /**
@@ -97,102 +69,19 @@ export const VISITOR_ANALYTICS_POSITIVE_INT_VARS = [
   "VISITOR_ANALYTICS_VISITOR_KEY_COOKIE_TTL_DAYS"
 ] as const;
 
-function isSet(value: string | undefined): boolean {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function parseBoolean(value: string | undefined, fallback: boolean): boolean {
-  if (!isSet(value)) return fallback;
-  return value === "true";
-}
-
-/** `undefined` when unset/blank/non-positive-integer — never throws, never NaN. */
-export function parsePositiveInt(
-  value: string | undefined
-): number | undefined {
-  if (!isSet(value)) return undefined;
-
-  const trimmed = (value as string).trim();
-
-  if (!/^\d+$/.test(trimmed)) return undefined;
-
-  const parsed = Number.parseInt(trimmed, 10);
-
-  return parsed > 0 ? parsed : undefined;
-}
-
 /**
- * Resolves the full config from `env`, falling back to
- * `VISITOR_ANALYTICS_DEFAULTS` for anything unset or malformed. Never
- * throws — malformed numeric values are reported by `scripts/validate-env.ts`,
- * not here; this resolver always returns a usable config.
+ * Resolves the full config from `env`: the settings from
+ * `resolveVisitorAnalyticsSettings` plus the hash salt. Never throws — malformed
+ * numeric values are reported by `scripts/validate-env.ts`, not here; this
+ * resolver always returns a usable config.
  */
 export function resolveVisitorAnalyticsConfig(
   env: NodeJS.ProcessEnv = process.env
 ): VisitorAnalyticsConfig {
-  const modeRaw = env.VISITOR_ANALYTICS_MODE;
-
   return {
-    enabled: parseBoolean(
-      env.VISITOR_ANALYTICS_ENABLED,
-      VISITOR_ANALYTICS_DEFAULTS.enabled
-    ),
-    mode: isKnownVisitorAnalyticsMode(modeRaw)
-      ? modeRaw
-      : VISITOR_ANALYTICS_DEFAULTS.mode,
-    collectAdmin: parseBoolean(
-      env.VISITOR_ANALYTICS_COLLECT_ADMIN,
-      VISITOR_ANALYTICS_DEFAULTS.collectAdmin
-    ),
-    collectPublic: parseBoolean(
-      env.VISITOR_ANALYTICS_COLLECT_PUBLIC,
-      VISITOR_ANALYTICS_DEFAULTS.collectPublic
-    ),
-    collectApi: parseBoolean(
-      env.VISITOR_ANALYTICS_COLLECT_API,
-      VISITOR_ANALYTICS_DEFAULTS.collectApi
-    ),
-    detailedEnabled: parseBoolean(
-      env.VISITOR_ANALYTICS_DETAILED_ENABLED,
-      VISITOR_ANALYTICS_DEFAULTS.detailedEnabled
-    ),
-    rawIpEnabled: parseBoolean(
-      env.VISITOR_ANALYTICS_RAW_IP_ENABLED,
-      VISITOR_ANALYTICS_DEFAULTS.rawIpEnabled
-    ),
-    rawUserAgentEnabled: parseBoolean(
-      env.VISITOR_ANALYTICS_RAW_USER_AGENT_ENABLED,
-      VISITOR_ANALYTICS_DEFAULTS.rawUserAgentEnabled
-    ),
-    geoEnabled: parseBoolean(
-      env.VISITOR_ANALYTICS_GEO_ENABLED,
-      VISITOR_ANALYTICS_DEFAULTS.geoEnabled
-    ),
-    trustProxy: parseBoolean(
-      env.VISITOR_ANALYTICS_TRUST_PROXY,
-      VISITOR_ANALYTICS_DEFAULTS.trustProxy
-    ),
-    trustCloudflare: parseBoolean(
-      env.VISITOR_ANALYTICS_TRUST_CLOUDFLARE,
-      VISITOR_ANALYTICS_DEFAULTS.trustCloudflare
-    ),
-    onlineWindowSeconds:
-      parsePositiveInt(env.VISITOR_ANALYTICS_ONLINE_WINDOW_SECONDS) ??
-      VISITOR_ANALYTICS_DEFAULTS.onlineWindowSeconds,
-    eventRetentionDays:
-      parsePositiveInt(env.VISITOR_ANALYTICS_EVENT_RETENTION_DAYS) ??
-      VISITOR_ANALYTICS_DEFAULTS.eventRetentionDays,
-    rawDetailRetentionDays:
-      parsePositiveInt(env.VISITOR_ANALYTICS_RAW_DETAIL_RETENTION_DAYS) ??
-      VISITOR_ANALYTICS_DEFAULTS.rawDetailRetentionDays,
-    rollupRetentionDays:
-      parsePositiveInt(env.VISITOR_ANALYTICS_ROLLUP_RETENTION_DAYS) ??
-      VISITOR_ANALYTICS_DEFAULTS.rollupRetentionDays,
+    ...resolveVisitorAnalyticsSettings(env),
     hashSalt:
-      env.VISITOR_ANALYTICS_HASH_SALT ?? VISITOR_ANALYTICS_DEFAULTS.hashSalt,
-    visitorKeyCookieTtlDays:
-      parsePositiveInt(env.VISITOR_ANALYTICS_VISITOR_KEY_COOKIE_TTL_DAYS) ??
-      VISITOR_ANALYTICS_DEFAULTS.visitorKeyCookieTtlDays
+      env.VISITOR_ANALYTICS_HASH_SALT ?? VISITOR_ANALYTICS_DEFAULTS.hashSalt
   };
 }
 

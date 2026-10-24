@@ -44,10 +44,13 @@ import {
   runBoundedBatches
 } from "../src/lib/jobs/batching";
 import { purgeVisitorAnalyticsData } from "../src/modules/visitor-analytics/application/retention-purge";
+// The SETTINGS, not the full config (Issue #1132): the retention windows are all
+// this job reads, and the full resolver also reads the visitor hash salt, which
+// `ops/run-job.sh` would then hand to this job.
 import {
-  resolveVisitorAnalyticsConfig,
-  type VisitorAnalyticsConfig
-} from "../src/modules/visitor-analytics/domain/visitor-analytics-config";
+  resolveVisitorAnalyticsSettings,
+  type VisitorAnalyticsSettings
+} from "../src/modules/visitor-analytics/domain/visitor-analytics-settings";
 import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/application/legal-hold-guard-port-adapter";
 
 export type VisitorAnalyticsPurgeResult = {
@@ -66,7 +69,7 @@ export type VisitorAnalyticsPurgeResult = {
 export async function runVisitorAnalyticsPurge(
   sql: Bun.SQL,
   ctx: Pick<JobContext, "dryRun"> & Partial<Pick<JobContext, "signal">>,
-  config: VisitorAnalyticsConfig,
+  config: VisitorAnalyticsSettings,
   now: Date = new Date()
 ): Promise<VisitorAnalyticsPurgeResult> {
   const tenants = await fetchActiveTenants(sql);
@@ -162,7 +165,7 @@ export async function runVisitorAnalyticsPurge(
 async function main() {
   const sql = getWorkerDatabaseClient();
   const cliOptions = parseJobCliArgs(process.argv.slice(2));
-  const config = resolveVisitorAnalyticsConfig();
+  const config = resolveVisitorAnalyticsSettings();
 
   try {
     const result = await runJob(

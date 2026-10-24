@@ -81,7 +81,7 @@ import {
   fetchNewsMediaObjectByObjectKey,
   isNewsMediaObjectSafeForPublicReference
 } from "../src/modules/media-library/application/media-object-directory";
-import { resolveNewsMediaR2Config } from "../src/modules/media-library/domain/media-r2-config";
+import { resolveNewsMediaR2PublicConfig } from "../src/modules/media-library/domain/media-r2-public-config";
 
 type TenantRow = { id: string };
 
@@ -106,8 +106,11 @@ async function main() {
   const placementKey = resolvePlacementKey();
   // Through `media_library`'s own resolver, never a raw `process.env` read:
   // the base URL is that module's config, and reading it directly here would
-  // create a second place that has to be kept in step with it.
-  const publicBaseUrl = resolveNewsMediaR2Config().publicBaseUrl;
+  // create a second place that has to be kept in step with it. The PUBLIC
+  // resolver, on purpose (Issue #1132): this job needs the URL and nothing else,
+  // and the full resolver also reads the R2 access key pair, which would make
+  // `ops/run-job.sh` hand those credentials to this job.
+  const publicBaseUrl = resolveNewsMediaR2PublicConfig().publicBaseUrl;
 
   if (apply && !placementKey) {
     console.error(
