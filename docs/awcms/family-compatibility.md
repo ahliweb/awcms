@@ -48,8 +48,8 @@ A manifest `declared` value MUST equal the real value at the `source` it points 
 
 | Component        | Current   | Minimum-supported | Source                                                         |
 | ---------------- | --------- | ----------------- | -------------------------------------------------------------- |
-| Bun (pin)        | `1.4.3`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
-| Bun (CI current) | `1.4.3`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
+| Bun (pin)        | `1.4.4`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
+| Bun (CI current) | `1.4.4`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
 | Bun (CI minimum) | —         | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
 | Astro            | `^7.4.0`  | `^7.4.0`          | `package.json` `dependencies.astro`                            |
 | `@astrojs/node`  | `^11.1.7` | `^11.1.7`         | `package.json` `dependencies`                                  |
