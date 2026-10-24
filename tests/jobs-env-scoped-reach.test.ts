@@ -41,6 +41,11 @@ import {
 import {
   GLOBAL_SECRETS,
   JOB_SCOPED,
+  RUNNER_DB_BEGIN,
+  RUNNER_DB_END,
+  appConnectionTargets,
+  renderRunnerDatabaseUrl,
+  spliceBetween,
   NAME_REGISTRY_FILES,
   OPERATOR_ONLY_TARGETS,
   READER_FILE_EXCUSES,
@@ -179,6 +184,11 @@ describe("the universe the guard walks", () => {
     const sites = new Map<string, Set<string>>();
     const unresolved: string[] = [];
     for (const [target, trace] of traces) {
+      // An operator-only target is refused by `ops/run-job.sh` before any
+      // container starts (the generator targets since Issue #1132, which trace
+      // every other target and so reach the tracer), so a reader hiding in its
+      // closure can never run inside a job.
+      if (operatorOnly(target)) continue;
       for (const site of trace.dynamic) {
         sites.set(site.from, (sites.get(site.from) ?? new Set()).add(target));
       }
@@ -193,7 +203,9 @@ describe("the universe the guard walks", () => {
     // occurrence in the file itself, not per job that reaches it, so a second
     // computed import in a listed file is NOT covered by the first one's entry.
     const reachedFiles = new Set(
-      [...traces.values()].flatMap((trace) => trace.files)
+      [...traces.entries()]
+        .filter(([target]) => !operatorOnly(target))
+        .flatMap(([, trace]) => trace.files)
     );
     const found: ImportSite[] = [...reachedFiles]
       .filter((file) => /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file))
@@ -545,7 +557,9 @@ describe("what the tracer cannot see is accounted for", () => {
     for (const [target, trace] of traces) {
       for (const site of trace.escapes) {
         seen.add(site.from);
-        if (!allowed.has(site.from)) {
+        // Operator-only targets never run in a job container (see the dynamic
+        // import test above), so an unlisted site in their closure is harmless.
+        if (!allowed.has(site.from) && !operatorOnly(target)) {
           unexplained.add(
             `${site.from} (${site.specifier}) reached by ${target}`
           );
@@ -567,5 +581,143 @@ describe("what the tracer cannot see is accounted for", () => {
     for (const entry of UNTRACEABLE_EXECUTION_SITES) {
       expect(entry.reason.length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe("DATABASE_URL is withheld from jobs that cannot reach the app connection (Issue #1132)", () => {
+  const crontabTargets = (): string[] => [
+    ...new Set(
+      [
+        ...readFileSync("ops/awcms-jobs.crontab", "utf8").matchAll(
+          /\$AWCMS_RUN_JOB\s+(\S+)/g
+        )
+      ].map((match) => match[1] as string)
+    )
+  ];
+  // Tracing every package target takes seconds; do it once for the block.
+  let appTargets: string[] = [];
+  beforeAll(() => {
+    appTargets = appConnectionTargets(packageScripts);
+  }, 60000);
+
+  test("no scheduled job keeps DATABASE_URL: none of them reaches an app-client call", () => {
+    // Module-registry jobs that are run by hand (`entitlements:backfill`,
+    // `email:templates:seed-defaults`, `telegram:chat:rekey`) DO open the app
+    // connection and keep it; only the crontab is held to "never".
+    const keepers = new Set(appTargets);
+
+    expect(keepers.size).toBeGreaterThan(5);
+    expect(
+      crontabTargets()
+        .filter((target) => keepers.has(target))
+        .sort()
+    ).toEqual([]);
+  });
+
+  test("an independent count agrees: no file in a scheduled job's reach calls the app client", () => {
+    // Deliberately not the generator's own predicate: a plain call to either
+    // client constructor, or the name spelled as a literal, outside the resolver.
+    for (const target of crontabTargets()) {
+      const offenders = (traces.get(target) as ImportTrace).files.filter(
+        (file) =>
+          file !== "src/lib/database/client.ts" &&
+          /\bget(Setup)?DatabaseClient\s*\(|["'`]DATABASE_URL["'`]/.test(
+            strippedSource(file)
+          )
+      );
+
+      expect(offenders, `${target} reaches the app connection`).toEqual([]);
+    }
+  });
+
+  test("the scripts that run as awcms_app on purpose keep it", () => {
+    const keepers = new Set(appTargets);
+
+    for (const target of [
+      "telegram:chat:rekey",
+      "blog:legacy:import",
+      "blog:legacy:article-paths",
+      "blog:legacy:cutover:verify",
+      "blog:legacy:redirects:import",
+      "email:templates:seed-defaults",
+      "entitlements:backfill",
+      "identity-access:permissions:backfill",
+      "identity:mfa-collisions:preflight",
+      "identity:principals:preflight",
+      "db:migrate"
+    ]) {
+      expect(keepers.has(target), target).toBe(true);
+    }
+  });
+
+  test("a target the tracer cannot fully see keeps it: unknown is not safe to withhold from", () => {
+    // `ci:local` shells out (Bun.spawn): whatever it starts is invisible.
+    expect(appTargets).toContain("ci:local");
+  });
+
+  test("the runner's generated block is exactly what the generator renders", () => {
+    const runner = readFileSync("ops/run-job.sh", "utf8");
+    const rendered = renderRunnerDatabaseUrl(appTargets);
+
+    expect(
+      spliceBetween(runner, RUNNER_DB_BEGIN, RUNNER_DB_END, rendered)
+    ).toBe(runner);
+  });
+});
+
+describe("IDEMPOTENCY_HMAC_SECRET stays global by a recorded decision (Issue #1132)", () => {
+  const HASHERS =
+    /\b(computeRequestHash|keyedRequestHash|resolveIdempotencyHmacKey)\s*\(/;
+  const scheduled = (): string[] => [
+    ...new Set(
+      [
+        ...readFileSync("ops/awcms-jobs.crontab", "utf8").matchAll(
+          /\$AWCMS_RUN_JOB\s+(\S+)/g
+        )
+      ].map((match) => match[1] as string)
+    )
+  ];
+
+  test("the only request-hashing code a scheduled job can reach is booking's, and no job's own script hashes", () => {
+    // The decision rests on this fact. If a new caller becomes reachable from a
+    // job, or a job script starts hashing, narrowing the key needs another look
+    // (scope it to the jobs that really call it) rather than a silent pass.
+    const reachable = new Set<string>();
+    for (const target of scheduled()) {
+      for (const file of (traces.get(target) as ImportTrace).files) {
+        if (
+          file !== "src/lib/security/idempotency-hmac.ts" &&
+          file !== "src/modules/_shared/idempotency.ts" &&
+          HASHERS.test(strippedSource(file))
+        ) {
+          reachable.add(file);
+        }
+      }
+      expect(
+        HASHERS.test(
+          strippedSource(
+            `scripts/${(traces.get(target) as ImportTrace).entry.replace(/^scripts\//, "")}`
+          )
+        ),
+        `${target}'s own script hashes a request`
+      ).toBe(false);
+    }
+
+    expect([...reachable].sort()).toEqual([
+      "src/modules/booking/application/booking-port-adapter.ts",
+      "src/modules/booking/application/booking-route-support.ts"
+    ]);
+  });
+
+  test("the key is a global secret with a written reason, and it is not scoped to any job", () => {
+    const entry = GLOBAL_SECRETS.find(
+      (secret) => secret.name === "IDEMPOTENCY_HMAC_SECRET"
+    );
+
+    expect(entry?.kind).toBe("secret");
+    expect(entry?.reason).toContain("Issue #1132");
+    expect(
+      JOB_SCOPED.some((secret) => secret.name === "IDEMPOTENCY_HMAC_SECRET")
+    ).toBe(false);
   });
 });
