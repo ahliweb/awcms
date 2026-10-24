@@ -423,11 +423,8 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
     jobs: [
       {
         target: "edge-cache:purge",
-        reason: "the purge worker"
-      },
-      {
-        target: "blog:publish:scheduled",
-        reason: "emits cache purges for the posts it publishes"
+        reason:
+          "the purge worker: the only job that sends a BAN, which is what the token authenticates (blog:publish:scheduled only enqueues rows and asks loadEdgeCacheMode whether the cache is off, so it is not granted it, Issue #1132)"
       }
     ]
   },
@@ -442,51 +439,35 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
       }
     ]
   },
-  {
-    name: "VISITOR_ANALYTICS_HASH_SALT",
-    reason:
-      "the salt behind visitor keys; whoever holds it can link hashed visitors across days",
-    jobs: [
-      {
-        target: "analytics:purge",
-        reason:
-          "calls resolveVisitorAnalyticsConfig for the retention windows, which resolves the whole config including the salt"
-      }
-    ]
-  },
   ...["NEWS_MEDIA_R2", "R2"].flatMap((prefix) =>
     ["ACCESS_KEY_ID", "SECRET_ACCESS_KEY"].map((suffix) => ({
       name: `${prefix}_${suffix}`,
       reason:
         "object-storage (Cloudflare R2) credentials; they can read and overwrite every stored media object",
-      jobs: [
-        ...(prefix === "R2"
+      jobs:
+        prefix === "R2"
           ? [
               {
                 target: "sync:objects:dispatch",
                 reason: "uploads queued sync objects to R2"
+              },
+              {
+                target: "blog:publish:scheduled",
+                reason:
+                  "evaluateManagedMediaReadiness compares the news-media pair against this pair (Keputusan kunci #1, media-r2-separation.ts); without it the check passes vacuously, so the job would enforce managed media where the web app, which sees both pairs, says the deployment is not ready (Issue #1132: kept, not narrowed)"
               }
             ]
-          : []),
-        {
-          target: "blog:publish:scheduled",
-          reason: "reaches the media storage client while publishing"
-        },
-        {
-          target: "blog:ads:ingest",
-          reason:
-            "only needs resolveNewsMediaR2Config().publicBaseUrl, but that resolver also reads the credential pair, so the file-level trace reaches it (narrowing needs a resolver split)"
-        },
-        {
-          target: "blog:legacy:import",
-          reason:
-            "operator run: reaches managed-media-readiness.ts through mediaLibraryPortAdapter, which resolves the R2 config; it uploads nothing itself (narrowing needs a resolver split)"
-        },
-        {
-          target: "news-media:reconcile",
-          reason: "lists and verifies stored objects against the registry"
-        }
-      ]
+          : [
+              {
+                target: "blog:publish:scheduled",
+                reason:
+                  "evaluateManagedMediaReadiness (through mediaLibraryPortAdapter) requires the pair to be present before it reports managed-media enforcement active, and compares it with the sync-storage pair; it never uploads (Issue #1132: kept, not narrowed)"
+              },
+              {
+                target: "news-media:reconcile",
+                reason: "lists and verifies stored objects against the registry"
+              }
+            ]
     }))
   )
 ];
@@ -839,6 +820,15 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
     name: "TURNSTILE_SECRET_KEY",
     reason:
       "verifies Turnstile challenges on public forms; read by the request path only"
+  },
+  // Issue #1132: it was granted to analytics:purge only because that job called
+  // the full config resolver for its retention windows. It now resolves the
+  // settings (visitor-analytics-settings.ts), which never reads the salt, and the
+  // collector - the only code that hashes - runs in the request path.
+  {
+    name: "VISITOR_ANALYTICS_HASH_SALT",
+    reason:
+      "the salt behind visitor keys; whoever holds it can link hashed visitors across days. Read only by the collector (the analytics ingest route) and the analytics pages, never by a job"
   }
 ];
 
