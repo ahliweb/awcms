@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:0a932b3f1e1f107ca76b14886382b76b3b1f861a61d6342332836598fce8e2db -->
+<!-- i18n-source-hash: sha256:14bd77a2c77a389a66aaeefec5b19638721c4c4178e25b0f4c7b93f11ebb2488 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -125,3 +125,7 @@ pagar blok dan tipe diagram — tak pernah isinya — sehingga diagram rusak dan
 `bun run check` hijau bisa hidup berdampingan.
 
 Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, dan [`docs/adr/`](../adr/README.md) untuk keputusan arsitektural.
+
+## Kontrak layar UI/UX Omnichannel
+
+[**UI/UX Omnichannel upstream v1.0**](omnichannel-ui-ux-screen-contracts.id.md) memetakan **UP-01–UP-16** dari modul email/WhatsApp/Push/Telegram staf saat ini hingga rencana multi-akun/sosial/Mailketing **v2.0.2**/leads/inbox/SSE-WS, lengkap status, hak akses dan pengujian. Issue [#1174](https://github.com/ahliweb/awcms/issues/1174). Dokumen rencana bukan bukti koneksi API sudah aktif.
