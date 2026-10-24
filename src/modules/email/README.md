@@ -195,3 +195,7 @@ once the module is enabled.
 `awcms-integration` (outbox/retry/circuit-breaker), `awcms-sensitive-data`
 (normalize/hash/mask), `awcms-idempotency`, `awcms-abac-guard`,
 `awcms-audit-log`.
+
+## Email Bun runtime / planned UI status
+
+Existing `bun run email:dispatch` is a Bun queue worker calling HTTP provider outside DB transaction. Future campaigns, multi-account Mailketing and realtime progress must keep Bun; WebSocket/SSE would only display authorized status, not send email. [Runtime standard](../../../docs/awcms/bun-delivery-realtime-runtime.md).
