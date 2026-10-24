@@ -99,6 +99,17 @@ COPY --chown=bun:bun sql ./sql
 COPY --chown=bun:bun locales ./locales
 COPY --chown=bun:bun openapi ./openapi
 
+# The host-side runner and its two generated env files (Issue #1131, L5).
+# `ops/run-job.sh` is copied to the host by hand, and so are the env files; the
+# image is pulled on its own schedule. A newer image can read a scoped secret
+# that an older host file does not grant, and the job then runs without it and
+# reports success. Shipping the three files here lets the runner compare its
+# host copies with these and refuse on any difference. They hold variable
+# NAMES and job targets only (`tests/jobs-image-ops-files.test.ts` asserts no
+# line has a value), so nothing secret is baked in. Only these three: the rest
+# of `ops/` (backup, restore drill, log shipping) is host tooling, not job code.
+COPY --chown=bun:bun ops/run-job.sh ops/awcms-jobs.env-global ops/awcms-jobs.env-scoped ./ops/
+
 USER bun
 
 # ---- runtime: minimal, non-root, read-only-filesystem compatible ----

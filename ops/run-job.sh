@@ -32,6 +32,20 @@
 #      Observed 2026-08-14: the first run after a redeploy failed with
 #      `pull access denied for awcms-jobs`.
 #
+# IMAGE vs HOST DRIFT (Issue #1131, L5)
+#
+# This script and its two generated env files are copied to the host by hand,
+# while the jobs image is pulled (`:latest` by default) on its own schedule. A
+# newer image can add a reader of a scoped secret to a job that an older host
+# `awcms-jobs.env-scoped` does not grant: the job then runs without the secret
+# and the push / telegram resolvers answer a non-retryable "misconfigured".
+# So `Dockerfile.production` (stage `jobs`) ships `run-job.sh` and both env
+# files under `$CONTAINER_WORKDIR/ops/`, and before any job starts this runner
+# compares the SHA-256 of its three host files with the image's and REFUSES on
+# any difference, a missing image copy included. The files list variable NAMES
+# only, never values, so shipping them in the image bakes in no secret.
+# There is no bypass switch: the fix is to install the image's copy.
+#
 # Usage:
 #   run-job.sh <bun-run-target> [extra args...]
 #   run-job.sh logs:audit:purge --dry-run
@@ -106,6 +120,57 @@ case "$JOB" in
 esac
 # END GENERATED: operator-only targets
 
+# Compare the host copies of this script and the two env files with the ones
+# baked into $IMAGE (Issue #1131, L5). One `docker run` prints the image's
+# SHA-256 for all three; nothing from the image is executed or copied, and the
+# container has no network. Any difference, an unreadable host file or an image
+# that does not carry the files (built before L5, or the legacy local build)
+# refuses the run: a skewed pair is how a job ends up without its secret and
+# still reports success.
+verify_image_ops() {
+  local image_ops="$CONTAINER_WORKDIR/ops" self sums pair name host image_sum host_sum
+  local drift=0
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+  if ! sums=$(docker run --rm --network none --entrypoint sha256sum "$IMAGE" \
+    "$image_ops/run-job.sh" "$image_ops/awcms-jobs.env-global" "$image_ops/awcms-jobs.env-scoped" 2>/dev/null); then
+    log "cannot read run-job.sh and the env files from $IMAGE (expected under $image_ops) — refusing to run $JOB" >&2
+    log "  The image predates Issue #1131 L5 or is a legacy local build. Use an image" >&2
+    log "  built from the same release as this runner (AWCMS_JOBS_IMAGE / AWCMS_JOBS_TAG)." >&2
+    exit 1
+  fi
+
+  for pair in "run-job.sh|$self" "awcms-jobs.env-global|$GLOBAL" "awcms-jobs.env-scoped|$SCOPED"; do
+    name="${pair%%|*}"
+    host="${pair#*|}"
+    image_sum=$(printf '%s\n' "$sums" | awk -v p="$image_ops/$name" '$2 == p { print $1 }')
+    host_sum=$(sha256sum "$host" 2>/dev/null | awk '{ print $1 }') || host_sum=""
+    case "$image_sum" in
+      *[!0-9a-f]* | "") image_sum="" ;;
+    esac
+    if [ -z "$image_sum" ] || [ "${#image_sum}" -ne 64 ]; then
+      log "image $IMAGE reported no usable checksum for $name — refusing to run $JOB" >&2
+      drift=1
+    elif [ -z "$host_sum" ]; then
+      log "host file $host is not readable — refusing to run $JOB" >&2
+      drift=1
+    elif [ "$host_sum" != "$image_sum" ]; then
+      log "host $name differs from the copy in $IMAGE — refusing to run $JOB" >&2
+      log "  host $host_sum  $host" >&2
+      log "  image $image_sum  $image_ops/$name" >&2
+      drift=1
+    fi
+  done
+
+  if [ "$drift" -ne 0 ]; then
+    log "  Host files and image come from different releases. Install the image's" >&2
+    log "  copies next to run-job.sh (write each to a temp file, then mv it into place):" >&2
+    log "    docker run --rm --entrypoint cat $IMAGE $image_ops/<file> > <tmp>" >&2
+    log "  or pin AWCMS_JOBS_IMAGE to the image that matches the host files (rollback)." >&2
+    exit 1
+  fi
+}
+
 if [ -z "$IMAGE" ]; then
   IMAGE="${REGISTRY_IMAGE}:${TAG}"
   if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
@@ -133,6 +198,11 @@ if [ -z "$APP" ]; then
   log "app container not running — skipping $JOB" >&2
   exit 1
 fi
+
+# Refuse before anything is copied or started if the host files and the image
+# disagree (Issue #1131, L5). After the app-container check so a host with no
+# app running does not pay a docker run for nothing.
+verify_image_ops
 
 ENVFILE=$(mktemp /tmp/awcms-job-env.XXXXXX)
 chmod 600 "$ENVFILE"
