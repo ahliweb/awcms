@@ -91,3 +91,7 @@ The two narrow cross-tenant lookups the unauthenticated webhook needs (code to t
 - **No domain events are published.** The queue row, the binding row and the audit log are the ledgers.
 - **Claim shape.** The dispatcher's claim and the purge's expiry use `WITH due AS MATERIALIZED (... LIMIT n FOR UPDATE SKIP LOCKED) UPDATE ... FROM due`, the Issue #1007 fix the email, push and WhatsApp dispatchers also carry; `queue-claim-limit.integration.test.ts` covers this queue too.
 - **Consumers are not wired yet.** `booking.staff_reminder` and `workflow_approval.approval_pending` (ADR-0140 section 1) are registered by their owning modules in their own issues; this module ships only `system.ops_alert`.
+
+## Bun runtime for staff Telegram
+
+Existing `telegram_delivery` is staff-only; its jobs use Bun and Telegram Bot API HTTPS, not a Node.js bot or WebSocket message transport. Future customer Telegram/multi-bot [#1155–#1157](https://github.com/ahliweb/awcms/issues/1155) is a separate admitted Bun-owned capability, not expansion of the staff queue. [Runtime standard](../../../docs/awcms/bun-delivery-realtime-runtime.md).

@@ -126,3 +126,7 @@ block fence and the diagram type — never the contents — so a broken diagram 
 a green `bun run check` could coexist.
 
 See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every task, and [`docs/adr/`](../adr/README.md) for architectural decisions.
+
+## AWCMS documentation package
+
+[Bun-only channel worker and realtime standard](bun-delivery-realtime-runtime.md) (issue #1167, realtime ADR #1168) governs current Bun email/WhatsApp/Web Push dispatch and planned Bun SSE/WebSocket. It does not claim a gateway already exists.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:94c0ff8c08b4f7091a71dd556b5ddfae265e0d5662dbcc001079fd42df7f830a -->
+<!-- i18n-source-hash: sha256:df2ae5a2b73551853c7f50f5715e55b377eace5b22fe0da90a2b0b8052cec119 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -126,3 +126,7 @@ pagar blok dan tipe diagram — tak pernah isinya — sehingga diagram rusak dan
 `bun run check` hijau bisa hidup berdampingan.
 
 Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, dan [`docs/adr/`](../adr/README.md) untuk keputusan arsitektural.
+
+## Paket dokumen AWCMS
+
+[Standar worker kanal dan real-time Bun-only](bun-delivery-realtime-runtime.id.md) (issue #1167 dan ADR #1168) mencakup pengiriman email/WhatsApp/Web Push Bun yang sudah ada dan SSE/WebSocket Bun yang masih direncanakan.

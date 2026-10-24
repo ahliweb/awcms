@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:989a14f56265523acfc07ed25c7b47d0c0bd4ef8ecfe37f1aff6547f7d387952 -->
+<!-- i18n-source-hash: sha256:2807c0c00523c5fc05d4a7f3f0d6bbfffd2bc7c6e60206e511882c1561d6ae05 -->
 
 # `telegram_delivery`
 
@@ -93,3 +93,7 @@ Dua pencarian lintas-tenant sempit yang dibutuhkan webhook tanpa sesi (kode ke t
 - **Tidak ada event domain yang diterbitkan.** Baris antrean, baris binding, dan log audit adalah buku besarnya.
 - **Bentuk klaim.** Klaim dispatcher dan kedaluwarsa di purge memakai `WITH due AS MATERIALIZED (... LIMIT n FOR UPDATE SKIP LOCKED) UPDATE ... FROM due`, perbaikan Issue #1007 yang juga dibawa dispatcher email, push, dan WhatsApp; `queue-claim-limit.integration.test.ts` mencakup antrean ini juga.
 - **Konsumen belum tersambung.** `booking.staff_reminder` dan `workflow_approval.approval_pending` (ADR-0140 bagian 1) didaftarkan modul pemiliknya di issue masing-masing; modul ini hanya mengirim `system.ops_alert`.
+
+## Runtime Bun untuk Telegram staf
+
+`telegram_delivery` saat ini hanya untuk staf; job wajib memakai Bun dan Bot API HTTPS, bukan bot Node.js atau WebSocket pengiriman. Telegram pelanggan/multi-bot [#1155–#1157](https://github.com/ahliweb/awcms/issues/1155) direncanakan sebagai kapabilitas Bun terpisah, bukan memperluas antrean staf. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).

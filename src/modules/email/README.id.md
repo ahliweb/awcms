@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:28ae429f3321045e970153d641aa8a3e18ac9d93c6b962881fa7c928a0da5e63 -->
+<!-- i18n-source-hash: sha256:0ad26a9b18214db6d275091a5ebc1d765ba4c4f2fad2326f097574cf3a698a0b -->
 
 # Email
 
@@ -206,3 +206,7 @@ jalannya berikutnya begitu modulnya diaktifkan.
 `awcms-integration` (outbox/coba ulang/circuit breaker), `awcms-sensitive-data`
 (normalisasi/hash/masking), `awcms-idempotency`, `awcms-abac-guard`,
 `awcms-audit-log`.
+
+## Runtime Bun email / status UI terencana
+
+`bun run email:dispatch` sudah berupa worker antrean Bun melalui API provider di luar transaksi DB. Kampanye/Mailketing multi-akun dan status real-time mendatang wajib memakai Bun; WebSocket/SSE hanya untuk tampilan progres, bukan mengirim email. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).
