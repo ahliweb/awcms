@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>AWCMS · Jejak audit</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+body{margin:0}
+a{color:#1d4ed8}a:hover{color:#1e40af}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open]>summary .caret{transform:rotate(180deg)}
+.nv:hover{background:#1a222e;color:#f0f4f9}
+.btn2:hover{background:#f0f3f8}
+.row:hover{background:#f7f9fc}
+.lnk{background:none;border:0;padding:0;font:inherit;color:#1d4ed8;cursor:pointer;text-align:left}
+.lnk:hover{text-decoration:underline}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f5f7fa; color: #141a21; font-family: 'Public Sans', system-ui, sans-serif; font-size: 14px">
+
+<aside style="flex: 1 1 248px; background: #101722; color: #9aa7b2; display: flex; flex-direction: column; border-right: 1px solid #1f2733">
+<div style="padding: 16px 14px 12px; display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid #1f2733">
+<a href="#" style="display: flex; align-items: center; gap: 10px; text-decoration: none">
+<img src="../../public/icons/icon-192.png" alt="" width="32" height="32" style="width: 32px; height: 32px; border-radius: 8px; flex: none">
+<span style="display: flex; flex-direction: column; gap: 1px"><span style="color: #f0f4f9; font-weight: 700; font-size: 15px">AWCMS</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">Admin · v10.10.2</span></span>
+</a>
+<button type="button" aria-label="Ganti tenant, saat ini PT Contoh Nusantara" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; background: #1a222e; border: 1px solid #2a323c; border-radius: 10px; color: #f0f4f9; text-align: left; cursor: pointer; font: inherit">
+<span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 999px; background: #3fbf6b; flex: none"></span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1"><span style="font-size: 13px; font-weight: 600">PT Contoh Nusantara</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">tnt_8f21c · produksi</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg>
+</button>
+</div>
+<nav aria-label="Admin" style="padding: 12px 10px; display: flex; flex-direction: column; gap: 12px; flex: 1">
+<a href="#" class="nv" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; text-decoration: none; color: #9aa7b2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"></path></svg>Dasbor</a>
+<div style="display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #1f2733; padding-top: 12px">
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="8">
+<details open="{{s.open}}">
+<summary style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: #f0f4f9; font-weight: 600; font-size: 13px"><span style="flex: 1">{{s.label}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #838d99">{{s.count}}</span><svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#838d99" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></summary>
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 2px 0 10px">
+<sc-for list="{{s.groups}}" as="g" hint-placeholder-count="2">
+<span style="font-size: 12px; color: #838d99; padding: 8px 10px 4px 12px">{{g.label}}</span>
+<sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+<a href="#" class="nv" aria-current="{{it.cur}}" style="display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; text-decoration: none; {{it.st}}"><span style="flex: 1">{{it.label}}</span></a>
+</sc-for>
+</sc-for>
+</div>
+</details>
+</sc-for>
+</div>
+</nav>
+</aside>
+
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+<header style="min-height: 58px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 24px; background: #ffffff; border-bottom: 1px solid #dde3ea; box-sizing: border-box">
+<nav aria-label="Remah roti" style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #5b6672"><a href="#" style="color: #5b6672; text-decoration: none">PT Contoh Nusantara</a><span aria-hidden="true">/</span><span>Operasional</span><span aria-hidden="true">/</span><span aria-current="page" style="color: #141a21; font-weight: 600">Jejak audit</span></nav>
+<div style="flex: 1"></div>
+<a href="#" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #141a21"><span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 999px; background: #e8effc; color: #1d4ed8; display: grid; place-items: center; font-weight: 700; font-size: 12px">ML</span><span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600; font-size: 13px">Maya Lestari</span><span style="font-size: 12px; color: #5b6672">privacy_officer</span></span></a>
+</header>
+<div role="note" style="padding: 8px 24px; background: #e0f2f6; color: #0b6076; font-size: 13px; border-bottom: 1px solid #c7e6ee"><strong>Data contoh.</strong> 120 entri sintetis untuk memperlihatkan paging keyset.</div>
+
+<main style="padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 18px; max-width: 1360px; width: 100%; box-sizing: border-box">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px; max-width: 760px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em">Jejak audit</h1>
+<p style="margin: 0; color: #5b6672; line-height: 1.5">Catatan permanen aksi berisiko tinggi — login, pemberian akses, perubahan harga, resolusi konflik sinkron. Nilai sensitif teredaksi sebelum disimpan.</p>
+</div>
+<button type="button" class="btn2" style="height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid #858b92; background: #ffffff; color: #141a21; font: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"></path></svg>Ekspor rentang ini (CSV)</button>
+</div>
+
+<section aria-label="Entri audit" style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05)">
+<form role="search" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e8edf3">
+<div style="display: flex; flex: 1 1 420px; height: 38px; border: 1px solid #858b92; border-radius: 8px; overflow: hidden">
+<label style="display: flex; align-items: center; gap: 6px; padding: 0 10px; background: #f7f9fc; border-right: 1px solid #dde3ea; font-size: 13px; color: #5b6672">Cari di<select onChange="{{onMode}}" style="border: 0; background: transparent; font: inherit; font-weight: 600; color: #141a21"><sc-for list="{{modes}}" as="m" hint-placeholder-count="5"><option value="{{m.v}}" selected="{{m.sel}}">{{m.label}}</option></sc-for></select></label>
+<input type="search" aria-label="Kata kunci jejak audit" placeholder="{{placeholder}}" value="{{q}}" onChange="{{onQ}}" style="flex: 1; min-width: 0; border: 0; outline: none; padding: 0 10px; font: inherit; font-family: {{qFont}}">
+</div>
+<div role="group" aria-label="Rentang waktu" style="display: flex; padding: 3px; gap: 2px; background: #eef1f5; border-radius: 9px">
+<sc-for list="{{ranges}}" as="r" hint-placeholder-count="5">
+<button type="button" aria-pressed="{{r.sel}}" onClick="{{r.pick}}" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 0; font: inherit; font-size: 13px; cursor: pointer; {{r.st}}">{{r.label}}</button>
+</sc-for>
+</div>
+<label style="display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Hasil<select onChange="{{onRes}}" style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><option value="">Semua</option><option value="ok">Berhasil</option><option value="deny">Ditolak</option><option value="err">Galat</option></select></label>
+<label style="display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 10px; border: 1px solid #858b92; border-radius: 8px; font-size: 13px; color: #5b6672">Sumber daya<select style="border: 0; font: inherit; font-weight: 600; color: #141a21; background: transparent"><option>Semua</option><option>user</option><option>role</option><option>blog_post</option><option>sync_conflict</option></select></label>
+</form>
+<div role="status" aria-live="polite" style="display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; border-bottom: 1px solid #e8edf3; font-size: 13px; color: #5b6672"><span>{{summary}}</span><span style="margin-left: auto">Urut terbaru · log append-only, tanpa total</span></div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 900px; border-collapse: collapse; font-size: 13px">
+<thead><tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 10px 16px; font-size: 12px; font-weight: 600; color: #646f7a">Waktu (WIB)</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Aktor</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Aksi</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Sumber daya</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">Hasil</th>
+<th style="padding: 10px 12px; font-size: 12px; font-weight: 600; color: #646f7a">ID korelasi</th>
+<th style="padding: 10px 16px 10px 12px; width: 40px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Rincian</span></th>
+</tr></thead>
+<tbody>
+<sc-if value="{{empty}}" hint-placeholder-val="{{ false }}"><tr><td colspan="7" style="padding: 40px 16px; text-align: center; color: #5b6672">Tidak ada entri untuk pencarian ini dalam rentang waktu terpilih. <button type="button" class="lnk" onClick="{{reset}}" style="font-weight: 600">Reset pencarian</button></td></tr></sc-if>
+<sc-for list="{{rows}}" as="e" hint-placeholder-count="10">
+<tr class="row">
+<td style="padding: 10px 16px; border-top: 1px solid #e8edf3; font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: nowrap; color: #3b4651">{{e.time}}</td>
+<td style="padding: 10px 12px; border-top: 1px solid #e8edf3"><div style="display: flex; flex-direction: column"><span style="font-weight: 600">{{e.actor}}</span><span style="font-size: 12px; color: #646f7a">{{e.role}}</span></div></td>
+<td style="padding: 10px 12px; border-top: 1px solid #e8edf3; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{e.action}}</td>
+<td style="padding: 10px 12px; border-top: 1px solid #e8edf3"><span style="font-size: 12px; color: #646f7a">{{e.rtype}}</span> <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">{{e.rid}}</span></td>
+<td style="padding: 10px 12px; border-top: 1px solid #e8edf3"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{e.bg}}; color: {{e.fg}}">{{e.res}}</span></td>
+<td style="padding: 10px 12px; border-top: 1px solid #e8edf3"><button type="button" class="lnk" onClick="{{e.byCorr}}" title="Saring menurut ID korelasi ini" style="font-family: 'JetBrains Mono', monospace; font-size: 12px">{{e.corr}}</button></td>
+<td style="padding: 10px 16px 10px 12px; border-top: 1px solid #e8edf3"><button type="button" class="btn2" aria-expanded="{{e.open}}" aria-label="Lihat rincian entri" onClick="{{e.toggle}}" style="width: 32px; height: 32px; border-radius: 7px; border: 1px solid #dde3ea; background: #ffffff; cursor: pointer; display: grid; place-items: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b6672" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" style="{{e.rot}}"><path d="M6 9l6 6 6-6"></path></svg></button></td>
+</tr>
+<sc-if value="{{e.isOpen}}" hint-placeholder-val="{{ false }}">
+<tr><td colspan="7" style="padding: 0 16px 14px; background: #f7f9fc"><pre style="margin: 0; padding: 12px 14px; border-radius: 8px; background: #ffffff; border: 1px solid #e8edf3; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; color: #3b4651">{{e.detail}}</pre></td></tr>
+</sc-if>
+</sc-for>
+</tbody>
+</table>
+</div>
+<nav aria-label="Paginasi" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid #e8edf3; background: #f7f9fc; border-radius: 0 0 12px 12px; font-size: 13px; color: #5b6672">
+<span>Entri <strong style="color: #141a21">{{range}}</strong>{{more}}</span>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center">
+<label style="display: flex; align-items: center; gap: 6px">Lompat ke waktu<input type="datetime-local" value="2026-10-24T14:50" style="height: 32px; border: 1px solid #858b92; border-radius: 7px; font: inherit; padding: 0 6px"></label>
+<label style="display: flex; align-items: center; gap: 6px">Baris<select onChange="{{onPer}}" style="height: 32px; border: 1px solid #858b92; border-radius: 7px; font: inherit; font-weight: 600; padding: 0 6px; background: #ffffff"><option value="50" selected="{{per50}}">50</option><option value="100" selected="{{per100}}">100</option></select></label>
+<div style="display: flex; gap: 6px"><button type="button" class="btn2" disabled="{{noPrev}}" onClick="{{prev}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; font: inherit; cursor: pointer">‹ Lebih baru</button><button type="button" class="btn2" disabled="{{noNext}}" onClick="{{next}}" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #858b92; background: #ffffff; font: inherit; cursor: pointer">Lebih lama ›</button></div>
+</div>
+</nav>
+</section>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1250}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'all', q: '', range: '24h', res: '', per: 50, page: 0, open: null };
+  }
+  renderVals() {
+    const T = [
+      { actor: 'Rina Setiawati', role: 'owner', action: 'access.role.grant', rtype: 'role', rid: 'editor', res: 'ok', d: 'izin: + blog.publish\nalasan: "editor menerbitkan sendiri mulai Nov"' },
+      { actor: 'sistem', role: 'auth', action: 'auth.login.locked', rtype: 'user', rid: 'usr_4d81', res: 'deny', d: 'percobaan: 5\nip: 103.x.x.24 [disamarkan]\nkunci: 15 menit' },
+      { actor: 'Andi Wijaya', role: 'admin', action: 'tenant.domain.verify', rtype: 'tenant_domain', rid: 'shop.contoh.id', res: 'ok', d: 'metode: TXT\nhasil: terverifikasi' },
+      { actor: 'Maya Lestari', role: 'privacy_officer', action: 'subject.export.create', rtype: 'subject_request', rid: 'DSR-0042', res: 'ok', d: 'subjek: [REDACTED]\nisi: profil, pesanan, log masuk' },
+      { actor: 'Hendra Nugraha', role: 'store_manager', action: 'commerce.price.change', rtype: 'product', rid: 'BRS-PW-5', res: 'ok', d: 'harga: 84.000 → 86.500\nberlaku: segera' },
+      { actor: 'node-cabang-02', role: 'sync', action: 'sync.conflict.resolve', rtype: 'sync_conflict', rid: 'cf_19a2', res: 'err', d: 'strategi: server-menang\ngalat: versi objek kedaluwarsa' },
+      { actor: 'Siti Rahmawati', role: 'author', action: 'blog.post.submit', rtype: 'blog_post', rid: 'post_8812', res: 'ok', d: 'status: draf → ditinjau' },
+      { actor: 'Dimas Pratama', role: 'editor', action: 'access.decision', rtype: 'blog_post', rid: 'post_8790', res: 'deny', d: 'kebijakan: abac.office_scope\nalasan: kantor berbeda' }
+    ];
+    const RES = { ok: ['Berhasil', '#e4f5ea', '#0f7434'], deny: ['Ditolak', '#fdf1de', '#9a4507'], err: ['Galat', '#fdeaea', '#c81e1e'] };
+    const all = [];
+    let minutes = 14 * 60 + 49;
+    for (let i = 0; i < 120; i++) {
+      const t = T[(i * 5 + Math.floor(i / 3)) % T.length];
+      const day = minutes < 0 ? 23 : 24;
+      const m = ((minutes % 1440) + 1440) % 1440;
+      const hh = String(Math.floor(m / 60)).padStart(2, '0');
+      const mm = String(m % 60).padStart(2, '0');
+      const corr = 'req-' + (7000 + Math.floor(i / 2) * 7).toString(16) + 'a' + (i % 3);
+      all.push(Object.assign({}, t, { id: 'e' + i, time: day + ' Okt ' + hh + '.' + mm + '.' + String((i * 17) % 60).padStart(2, '0'), corr }));
+      minutes -= 4 + (i % 7);
+    }
+    const s = this.state;
+    const q = s.q.trim().toLowerCase();
+    const field = (e) => s.mode === 'actor' ? e.actor + ' ' + e.role : s.mode === 'action' ? e.action : s.mode === 'resource' ? e.rtype + ' ' + e.rid : s.mode === 'corr' ? e.corr : [e.actor, e.role, e.action, e.rtype, e.rid, e.corr].join(' ');
+    const exact = s.mode === 'corr' || s.mode === 'resource';
+    const inRange = (e, i) => s.range === '1h' ? i < 12 : s.range === '24h' ? i < 120 : true;
+    const filtered = all.filter((e, i) => inRange(e, i) && (!s.res || e.res === s.res) && (!q || (exact ? field(e).toLowerCase().split(' ').indexOf(q) >= 0 || field(e).toLowerCase() === q : field(e).toLowerCase().indexOf(q) >= 0)));
+    const per = s.per;
+    const pages = Math.max(1, Math.ceil(filtered.length / per));
+    const page = Math.min(s.page, pages - 1);
+    const rows = filtered.slice(page * per, page * per + per).map((e) => {
+      const r = RES[e.res];
+      const isOpen = s.open === e.id;
+      return Object.assign({}, e, { res: r[0], bg: r[1], fg: r[2], isOpen, open: isOpen ? 'true' : 'false', rot: isOpen ? 'transform: rotate(180deg)' : '', detail: 'aksi: ' + e.action + '\naktor: ' + e.actor + ' (' + e.role + ')\n' + e.d + '\nid_korelasi: ' + e.corr, toggle: () => this.setState({ open: isOpen ? null : e.id }), byCorr: () => this.setState({ mode: 'corr', q: e.corr, page: 0 }) });
+    });
+    const set = (p) => this.setState(Object.assign({ page: 0, open: null }, p));
+    const active = 'background: #1e2836; color: #f0f4f9; font-weight: 600';
+    const idle = 'color: #9aa7b2';
+    const it = (label, a) => ({ label, st: a ? active : idle, cur: a ? 'page' : 'false' });
+    const modeLabel = { all: 'Semua kolom', actor: 'Aktor', action: 'Aksi', resource: 'ID sumber daya', corr: 'ID korelasi' };
+    const rangeLabel = { '1h': '1 jam terakhir', '24h': '24 jam terakhir', '7d': '7 hari terakhir', '30d': '30 hari terakhir' };
+    return {
+      modes: Object.keys(modeLabel).map((k) => ({ v: k, label: modeLabel[k], sel: s.mode === k })),
+      onMode: (e) => set({ mode: e.target.value }),
+      placeholder: s.mode === 'corr' ? 'mis. req-1b58a0 (cocok tepat)' : s.mode === 'resource' ? 'mis. DSR-0042 (cocok tepat)' : 'Nama aktor, kode aksi, ID…',
+      qFont: (s.mode === 'corr' || s.mode === 'resource' || s.mode === 'action') ? "'JetBrains Mono', monospace" : 'inherit',
+      q: s.q,
+      onQ: (e) => set({ q: e.target.value }),
+      ranges: [['1h', '1 jam'], ['24h', '24 jam'], ['7d', '7 hari'], ['30d', '30 hari'], ['custom', 'Kustom…']].map(([k, l]) => ({ label: l, sel: s.range === k ? 'true' : 'false', pick: () => set({ range: k }), st: s.range === k ? 'background: #ffffff; color: #141a21; font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,.12)' : 'background: transparent; color: #5b6672' })),
+      onRes: (e) => set({ res: e.target.value }),
+      summary: (q ? filtered.length + ' entri cocok dengan "' + s.q.trim() + '" di ' + modeLabel[s.mode].toLowerCase() : 'Semua entri') + ' · ' + (rangeLabel[s.range] || 'rentang kustom'),
+      empty: filtered.length === 0,
+      reset: () => set({ q: '', mode: 'all', res: '' }),
+      rows,
+      range: filtered.length ? (page * per + 1) + '–' + Math.min(filtered.length, page * per + per) : '0',
+      more: page < pages - 1 ? ' · ada entri lebih lama' : ' · akhir rentang',
+      onPer: (e) => set({ per: Number(e.target.value) }),
+      per50: per === 50, per100: per === 100,
+      noPrev: page === 0, noNext: page >= pages - 1,
+      prev: () => this.setState({ page: Math.max(0, page - 1), open: null }),
+      next: () => this.setState({ page: Math.min(pages - 1, page + 1), open: null }),
+      sections: [
+        { label: 'Sistem', count: '12', open: false, groups: [] },
+        { label: 'Konten', count: '11', open: false, groups: [] },
+        { label: 'Operasional', count: '14', open: true, groups: [
+          { label: 'Pemantauan', items: [it('Jejak audit', true), it('Event domain'), it('Analitik pengunjung'), it('Operasi pelaporan')] },
+          { label: 'Data', items: [it('Siklus hidup data'), it('Permintaan subjek data'), it('Sync & storage'), it('Dataset wilayah')] },
+          { label: 'Pengiriman', items: [it('WhatsApp'), it('Telegram'), it('Notifikasi push')] },
+          { label: 'Alur kerja', items: [it('Persetujuan')] }
+        ] },
+        { label: 'Identitas', count: '13', open: false, groups: [] },
+        { label: 'OMES', count: '15', open: false, groups: [] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

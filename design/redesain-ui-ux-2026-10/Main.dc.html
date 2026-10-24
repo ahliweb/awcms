@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Analisis keluarga AWCMS</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Public Sans";font-style:normal;font-weight:300 800;font-display:swap;src:url("../../public/fonts/public-sans-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Public Sans";font-style:italic;font-weight:400;font-display:swap;src:url("../../public/fonts/public-sans-italic-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin.woff2") format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 600;font-display:swap;src:url("../../public/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+body{margin:0}
+a{color:#1d4ed8}a:hover{color:#1e40af}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f5f7fa; color: #141a21; font-family: 'Public Sans', system-ui, sans-serif">
+<div style="max-width: 1280px; margin: 0 auto; padding: 64px clamp(16px, 4vw, 40px) 80px; display: flex; flex-direction: column; gap: 56px">
+
+<header style="display: flex; flex-direction: column; gap: 16px; max-width: 900px">
+<div style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #1d4ed8">Analisis UI/UX · 24 Okt 2026 · ahliweb/awcms · awcms-one · omes · awcms-astro</div>
+<h1 style="margin: 0; font-size: 44px; line-height: 1.12; letter-spacing: -0.02em; font-weight: 800; text-wrap: balance">Empat repo, satu bahasa visual: tenang saat normal, tegas saat ada masalah</h1>
+<p style="margin: 0; font-size: 18px; line-height: 1.6; color: #5b6672; text-wrap: pretty">Tiga panel admin (awcms, awcms-one, OMES) sebenarnya berbagi satu shell dan satu berkas token di <span style="font-family: 'JetBrains Mono', monospace; font-size: 15px">src/styles/tokens.css</span>. Redesain ini mempertahankan nama token dan nilai yang sudah diukur kontrasnya, lalu memperbaiki arsitektur informasi, hierarki layar, dan konsistensi status. awcms-astro mendapat bahasa editorial sendiri untuk pembaca publik.</p>
+</header>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 700">Peta repo dan temuan</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr)); gap: 20px">
+<sc-for list="{{repos}}" as="r" hint-placeholder-count="4">
+<article style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; box-shadow: 0 1px 1px rgba(15,23,42,.05); display: flex; flex-direction: column">
+<div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid #e8edf3">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 600">{{r.name}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #646f7a; background: #eef1f5; padding: 2px 8px; border-radius: 999px">{{r.ver}}</span>
+<span style="font-size: 12px; font-weight: 600; color: {{r.tagFg}}; background: {{r.tagBg}}; padding: 3px 10px; border-radius: 999px">{{r.tag}}</span>
+</div>
+<p style="margin: 0; font-size: 15px; line-height: 1.55; color: #141a21">{{r.role}}</p>
+<div style="font-size: 13px; color: #5b6672; line-height: 1.5">{{r.stack}}</div>
+<div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+<sc-for list="{{r.sw}}" as="s" hint-placeholder-count="5">
+<span style="display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #5b6672; padding: 3px 8px 3px 3px; border: 1px solid #e8edf3; border-radius: 999px"><span style="width: 16px; height: 16px; border-radius: 999px; background: {{s}}; border: 1px solid rgba(0,0,0,.12)"></span>{{s}}</span>
+</sc-for>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 0">
+<div style="padding: 18px 24px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid #e8edf3">
+<div style="font-size: 13px; font-weight: 700; color: #0f7434">Yang dipertahankan</div>
+<sc-for list="{{r.keep}}" as="x" hint-placeholder-count="3">
+<div style="display: flex; gap: 8px; font-size: 14px; line-height: 1.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12873d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 3px"><path d="M20 6L9 17l-5-5"></path></svg><span>{{x}}</span></div>
+</sc-for>
+</div>
+<div style="padding: 18px 24px; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; font-weight: 700; color: #c81e1e">Masalah yang ditemukan</div>
+<sc-for list="{{r.issues}}" as="x" hint-placeholder-count="3">
+<div style="display: flex; gap: 8px; font-size: 14px; line-height: 1.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c81e1e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 3px"><path d="M12 3l10 18H2zM12 10v4M12 17h.01"></path></svg><span>{{x}}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="padding: 18px 24px 22px; background: #f7f9fc; border-top: 1px solid #e8edf3; border-radius: 0 0 12px 12px; display: flex; flex-direction: column; gap: 8px; margin-top: auto">
+<div style="font-size: 13px; font-weight: 700; color: #1d4ed8">Arah redesain</div>
+<sc-for list="{{r.dir}}" as="x" hint-placeholder-count="3">
+<div style="display: flex; gap: 8px; font-size: 14px; line-height: 1.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 3px"><path d="M5 12h14M13 6l6 6-6 6"></path></svg><span>{{x}}</span></div>
+</sc-for>
+</div>
+</article>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 24px; font-weight: 700">Kosakata status bersama — satu arti, satu bentuk, satu warna</h2>
+<p style="margin: 0; font-size: 15px; color: #5b6672; line-height: 1.55; max-width: 860px">Saat ini awcms memakai pill berwarna, sedangkan OMES v3 menambahkan bentuk ikon. Redesain menyeragamkan keduanya: status tidak pernah dibedakan oleh warna saja (WCAG 1.4.1). Kolom terang memakai pasangan <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">--color-*-on-soft</span> di atas <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">--color-*-soft</span> yang sudah lolos 4,5:1 di tokens.css.</p>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; overflow-x: auto">
+<table style="width: 100%; min-width: 880px; border-collapse: collapse; font-size: 14px">
+<thead>
+<tr style="background: #f7f9fc; text-align: left">
+<th style="padding: 12px 20px; font-size: 12px; font-weight: 600; color: #646f7a; border-bottom: 1px solid #e8edf3">Status</th>
+<th style="padding: 12px 20px; font-size: 12px; font-weight: 600; color: #646f7a; border-bottom: 1px solid #e8edf3">Admin terang (awcms, awcms-one)</th>
+<th style="padding: 12px 20px; font-size: 12px; font-weight: 600; color: #646f7a; border-bottom: 1px solid #e8edf3">Konsol gelap (OMES)</th>
+<th style="padding: 12px 20px; font-size: 12px; font-weight: 600; color: #646f7a; border-bottom: 1px solid #e8edf3">Dipakai untuk</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{statuses}}" as="s" hint-placeholder-count="6">
+<tr>
+<td style="padding: 12px 20px; border-bottom: 1px solid #e8edf3; font-weight: 600">{{s.name}}</td>
+<td style="padding: 12px 20px; border-bottom: 1px solid #e8edf3"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{s.lbg}}; color: {{s.lfg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{s.icon}}"></path></svg>{{s.label}}</span><span style="margin-left: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #646f7a">{{s.lfg}} / {{s.lbg}}</span></td>
+<td style="padding: 12px 20px; border-bottom: 1px solid #e8edf3"><span style="display: inline-flex; align-items: center; gap: 8px; background: #141a20; padding: 6px 10px; border-radius: 8px"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: {{s.dbg}}; color: {{s.dfg}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{s.icon}}"></path></svg>{{s.label}}</span></span><span style="margin-left: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #646f7a">{{s.dfg}}</span></td>
+<td style="padding: 12px 20px; border-bottom: 1px solid #e8edf3; color: #5b6672">{{s.use}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 20px">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Tipografi admin — 6 langkah</h3>
+<sc-for list="{{type}}" as="t" hint-placeholder-count="6">
+<div style="display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid #e8edf3; padding-bottom: 10px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #646f7a; width: 72px; flex: none">{{t.spec}}</span>
+<span style="font-size: {{t.size}}; font-weight: {{t.w}}; line-height: 1.25">{{t.use}}</span>
+</div>
+</sc-for>
+<p style="margin: 0; font-size: 13px; color: #5b6672; line-height: 1.5">Public Sans untuk UI, JetBrains Mono untuk ID, kode, hash, waktu. Label kolom tabel beralih dari KAPITAL 11px ke kalimat biasa 12px/600 — sama dengan OMES v3.</p>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Shell admin yang diusulkan</h3>
+<sc-for list="{{shell}}" as="x" hint-placeholder-count="6">
+<div style="display: flex; gap: 12px; font-size: 14px; line-height: 1.5">
+<span style="flex: none; width: 24px; height: 24px; border-radius: 6px; background: #e8effc; color: #1d4ed8; display: grid; place-items: center; font-size: 12px; font-weight: 700">{{x.n}}</span>
+<span><strong style="font-weight: 600">{{x.t}}</strong> — <span style="color: #5b6672">{{x.d}}</span></span>
+</div>
+</sc-for>
+</div>
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 700">Pola layar standar</h3>
+<sc-for list="{{patterns}}" as="x" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid #e8edf3; padding-bottom: 10px">
+<span style="font-size: 14px; font-weight: 600">{{x.t}}</span>
+<span style="font-size: 13px; color: #5b6672; line-height: 1.5">{{x.d}}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 20px; font-weight: 700">Isi kanvas ini</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px">
+<sc-for list="{{boards}}" as="b" hint-placeholder-count="8">
+<div style="background: #ffffff; border: 1px solid #dde3ea; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #1d4ed8">{{b.repo}}</span>
+<span style="font-size: 14px; font-weight: 600">{{b.screen}}</span>
+<span style="font-size: 13px; color: #5b6672; line-height: 1.45">{{b.note}}</span>
+</div>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 13px; color: #646f7a">Semua angka di layar admin adalah data contoh (ditandai di setiap layar). Data OMES diambil dari fixture <span style="font-family: 'JetBrains Mono', monospace">contracts/control-center/v1</span> + <span style="font-family: 'JetBrains Mono', monospace">sample-fleet.json</span>.</p>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const I = {
+      ok: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M8 12l3 3 5-6',
+      warn: 'M12 3l10 18H2zM12 10v4M12 17h.01',
+      crit: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 8v5M12 16h.01',
+      wait: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
+      unk: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01',
+      info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v5M12 8h.01'
+    };
+    return {
+      repos: [
+        {
+          name: 'awcms', ver: 'v10.10.2', tag: 'Admin · desain ulang', tagFg: '#1d4ed8', tagBg: '#e8effc',
+          role: 'Template ERP/back-office "superset" keluarga AWCMS: multi-tenant, online-first, RLS, 21+ modul; memegang semua layar admin SISTEM.',
+          stack: 'Bun · Astro 7 SSR · PostgreSQL/RLS · 80 layar /admin · CSP default-src self · i18n id/en',
+          sw: ['#101722', '#f5f7fa', '#ffffff', '#2563eb', '#141a21'],
+          keep: ['Token semantik ADR-0120 dengan kontras terukur (-strong, -on-soft, border-strong 3:1).', 'Shell bebas skrip: drawer CSS, seksi <details>, font self-host — aman untuk CSP.', 'Palet perintah Ctrl K yang dibangun dari menu yang boleh diakses.'],
+          issues: ['Sidebar ±80 entri dalam 7 seksi yang semuanya terbuka — layar terdalam butuh banyak gulir.', 'Merek dan tenant tampil dua kali (topbar dan kepala sidebar).', 'Dasbor mencampur KPI tenant dengan info sesi; tidak ada antrean "perlu tindakan".', 'Label kolom KAPITAL 11px berbeda dengan konsol OMES.'],
+          dir: ['Satu lokasi merek + pemilih tenant di kepala sidebar; topbar untuk remah roti, pencarian, notifikasi, akun.', 'Hanya seksi aktif yang terbuka, ditambah Favorit yang disematkan.', 'Dasbor: "Perlu tindakan" di atas KPI; daftar dengan tab status, filter, aksi massal, laci detail.']
+        },
+        {
+          name: 'awcms-one', ver: 'v0.17.0', tag: 'Admin · desain ulang', tagFg: '#1d4ed8', tagBg: '#e8effc',
+          role: 'Platform commerce + berita (re-platform BjekMart) dan template GitHub; apps/cms adalah subtree awcms + modul commerce, apps/storefront situs toko.',
+          stack: 'Monorepo Bun · apps/cms (awcms) · apps/storefront (Astro) · packages/kontrak · 112 layar admin, 32 di antaranya commerce',
+          sw: ['#0284c7', '#0369a1', '#0b1120', '#2563eb', '#dc2626'],
+          keep: ['Shell dan token identik dengan awcms — redesain cukup sekali.', 'Label status pesanan dan pembayaran sudah lengkap (7 + 5 status).', 'SITE_PROFILE toko/berita/landing dan template:init untuk warna merek.'],
+          issues: ['32 layar commerce rata di satu seksi "Commerce".', 'Aksen toko (#0284c7) tidak terbawa ke admin (#2563eb) — admin tidak terasa milik tenant.', 'Dasbor commerce tanpa filter kanal (Storefront/POS) dan periode.'],
+          dir: ['Subgrup: Penjualan, Katalog, Pemasaran, Pelanggan, Keuangan, Booking, Kanal.', 'Warna merek dari template:init menjadi --color-primary admin setelah lolos cek kontras.', 'Layar pesanan: tab status ber-angka, timeline status, sesi gateway pembayaran.']
+        },
+        {
+          name: 'omes', ver: 'v0.6.0', tag: 'Admin · desain ulang', tagFg: '#1d4ed8', tagBg: '#e8effc',
+          role: 'Toolkit host Ubuntu/Mint + Hermes Agent. Control Center-nya diimplementasikan di awcms /admin/omes/* (15 layar) dengan skin gelap .omes-cc; proposal v3 ada di design/control-center-v3.',
+          stack: 'Bash + bats · kontrak control-center/v1 · UI: awcms omes-control-center.css · prototipe ui/control-center',
+          sw: ['#0d1115', '#10151a', '#141a20', '#5fc8d6', '#e8eef3'],
+          keep: ['Status dengan bentuk + warna + teks; data basi tidak pernah tampil "Sehat".', 'Alur rencana → tinjau → setujui → jalankan via worker → verifikasi.', 'Konfirmasi ketik nama host untuk perubahan kritis.'],
+          issues: ['15 entri berawalan "OMES …" bercampur di sidebar AWCMS.', 'Palet .omes-cc menyimpang dari v3 (bahaya #e9a9a0 vs #F49A8B, latar #0b0f13 vs #0D1115).', 'Topbar AWCMS terang menempel di atas konsol gelap.'],
+          dir: ['Ruang kerja OMES: pengalih ruang kerja, IA v3 Pantau · Ubah & pulihkan · Agen · Tata kelola.', 'Satu sumber token v3, berlaku untuk seluruh shell saat di /admin/omes.', 'Strip siklus hidup dan kesegaran data per otoritas (omes-host, hermes, external-provider).']
+        },
+        {
+          name: 'awcms-astro', ver: 'v0.6.1', tag: 'Web publik · desain baru', tagFg: '#0f7434', tagBg: '#e4f5ea',
+          role: 'Template situs publik statis (SSG) yang membaca konten awcms; tanpa backend, tanpa pelacak, bisa dibaca tanpa JavaScript; standar dari situs layanan enam bahasa.',
+          stack: 'Astro SSG · bilingual id/en · kanal Panduan/Layanan/Informasi · komponen Syarat, Langkah, Biaya (PNBP/Pajak), FAQ, Buletin',
+          sw: ['#0284c7', '#059669', '#0f172a', '#f8fafc', '#090d16'],
+          keep: ['Prinsip "akurasi di atas kelengkapan", sumber selalu disebut.', 'Komponen layanan yang sudah tepat: syarat, langkah, rincian biaya + dasar hukum.', 'Mode gelap, bilingual, aksesibel tanpa JS.'],
+          issues: ['Font sistem — identitas lemah dan berbeda tiap perangkat.', 'Pencarian tersembunyi di /cari; beranda dibuka dengan chip, bukan tugas pembaca.', 'Halaman layanan tanpa ringkasan sekilas (waktu, biaya, lokasi) dan tanpa daftar isi.'],
+          dir: ['Tipografi editorial: Source Serif 4 untuk judul + Public Sans untuk teks (self-host).', 'Hero berbasis tugas: kotak cari + topik populer + kanal.', 'Halaman layanan: kartu ringkasan, daftar isi, checklist syarat, langkah bernomor, tabel biaya ber-sumber.']
+        }
+      ],
+      statuses: [
+        { name: 'Sehat / Berhasil', label: 'Sehat', icon: I.ok, lfg: '#0f7434', lbg: '#e4f5ea', dfg: '#7DD89A', dbg: 'rgba(125,216,154,.12)', use: 'Hanya bila data segar dan semua cek lulus. Lulus sebagian bukan hijau.' },
+        { name: 'Perhatian', label: 'Perhatian', icon: I.warn, lfg: '#9a4507', lbg: '#fdf1de', dfg: '#E8B44A', dbg: 'rgba(232,180,74,.14)', use: 'Drift non-kritis, stok rendah, ambang 75–89%, rollback.' },
+        { name: 'Kritis / Gagal', label: 'Kritis', icon: I.crit, lfg: '#c81e1e', lbg: '#fdeaea', dfg: '#F49A8B', dbg: 'rgba(244,154,139,.14)', use: 'Gagal, terekspos, pembayaran ditolak, ambang ≥90%. Selalu disertai tindakan.' },
+        { name: 'Menunggu', label: 'Menunggu', icon: I.wait, lfg: '#1d4ed8', lbg: '#e8effc', dfg: '#B4BFFA', dbg: 'rgba(180,191,250,.14)', use: 'Gerbang alur kerja: persetujuan, menunggu pembayaran, antrean.' },
+        { name: 'Tak diketahui / Netral', label: 'Tak diketahui', icon: I.unk, lfg: '#5b6672', lbg: '#eef1f5', dfg: '#C3CDD6', dbg: 'rgba(195,205,214,.14)', use: 'Data basi atau hilang (tampil "—", bukan 0), draf, nonaktif, kedaluwarsa.' },
+        { name: 'Info', label: 'Info', icon: I.info, lfg: '#0b6076', lbg: '#e0f2f6', dfg: '#5FC8D6', dbg: 'rgba(95,200,214,.12)', use: 'Keterangan netral: diproses, dikirim, sinkron berjalan.' }
+      ],
+      type: [
+        { spec: '28 / 700', size: '28px', w: 700, use: 'Judul halaman, angka KPI' },
+        { spec: '20 / 700', size: '20px', w: 700, use: 'Judul detail objek' },
+        { spec: '16 / 600', size: '16px', w: 600, use: 'Judul panel' },
+        { spec: '14 / 400', size: '14px', w: 400, use: 'Teks isi, navigasi, tombol' },
+        { spec: '13 / 400', size: '13px', w: 400, use: 'Sel tabel, keterangan' },
+        { spec: '12 / 600', size: '12px', w: 600, use: 'Label kolom, lencana, waktu' }
+      ],
+      shell: [
+        { n: '1', t: 'Kepala sidebar', d: 'merek + pemilih tenant/ruang kerja; satu-satunya tempat merek.' },
+        { n: '2', t: 'Favorit', d: 'hingga 5 layar yang disematkan pengguna, di atas seksi.' },
+        { n: '3', t: 'Seksi bertingkat', d: 'seksi → grup modul → layar; hanya seksi aktif terbuka, lencana jumlah antrean.' },
+        { n: '4', t: 'Topbar konten', d: 'remah roti, pencarian Ctrl K, status sinkron, notifikasi, tema, bahasa, akun.' },
+        { n: '5', t: 'Kepala halaman', d: 'judul + deskripsi + waktu data + 1 aksi utama di kanan.' },
+        { n: '6', t: 'Banner lingkungan', d: 'produksi/staging/data contoh selalu terlihat di bawah topbar.' }
+      ],
+      patterns: [
+        { t: 'Antrean "Perlu tindakan"', d: 'Diurut menurut keparahan lalu umur; setiap baris punya tepat satu tombol tindakan.' },
+        { t: 'Daftar + laci detail', d: 'Tab status ber-angka, filter, aksi massal; klik baris membuka laci tanpa kehilangan posisi.' },
+        { t: 'Kartu KPI jujur', d: 'Angka + keterangan sumber dan waktu; nilai tak diketahui tampil "—".' },
+        { t: 'Konfirmasi berlapis', d: 'Alasan wajib (ReasonPanel ADR-0125); ketik nama objek untuk aksi kritis.' },
+        { t: 'Status kosong & galat', d: 'Setiap tabel punya keadaan kosong, memuat, tanpa izin, dan galat (dok. 14 §Mandatory state).' }
+      ],
+      boards: [
+        { repo: 'semua repo', screen: 'Pola halaman data', note: 'Pencarian + paging menurut fungsi: daftar, log, antrean, galeri, pohon, arsip publik, hasil cari.' },
+        { repo: 'awcms', screen: 'Spesifikasi 66 layar', note: 'Tipe, cari, filter, urutan, paging per layar + kondisi kode kini (interaktif).' },
+        { repo: 'awcms', screen: 'Jejak audit', note: 'Log keyset 50 tanpa total, cari tepat ID korelasi, rentang waktu (interaktif).' },
+        { repo: 'awcms-one', screen: 'Spesifikasi 32 layar commerce', note: 'Per subgrup sidebar (interaktif).' },
+        { repo: 'awcms-one', screen: 'Produk', note: 'Cari nama/SKU/barcode, tabel atau grid, keyset 25/24 (interaktif).' },
+        { repo: 'omes', screen: 'Spesifikasi 15 layar', note: 'Dipetakan ke navigasi ruang kerja v3 (interaktif).' },
+        { repo: 'omes', screen: 'Job', note: 'Log keyset 50, cari ID job/korelasi, chip status (interaktif).' },
+        { repo: 'awcms-astro', screen: 'Spesifikasi rute + arsip + pencarian', note: 'Arsip bernomor 12/halaman; pencarian facet + muat lebih banyak (interaktif).' },
+        { repo: 'awcms', screen: 'Dasbor admin', note: 'Shell baru, antrean perlu tindakan, KPI, kesehatan sinkron, audit.' },
+        { repo: 'awcms', screen: 'Pengguna', note: 'Pola daftar standar; klik baris untuk laci detail (interaktif).' },
+        { repo: 'awcms-one', screen: 'Dasbor commerce', note: 'Sidebar commerce bersubgrup, filter kanal, grafik pendapatan 14 hari.' },
+        { repo: 'awcms-one', screen: 'Pesanan', note: 'Tab status ber-angka + detail pesanan dengan timeline (interaktif).' },
+        { repo: 'omes', screen: 'Ringkasan armada', note: 'Ruang kerja OMES gelap dalam shell awcms; filter armada (interaktif).' },
+        { repo: 'omes', screen: 'Persetujuan operasi', note: 'Rencana, cek pra-syarat, empat mata, konfirmasi ketik (interaktif).' },
+        { repo: 'awcms-astro', screen: 'Beranda publik', note: 'Hero berbasis tugas, kanal, sorotan, prinsip, buletin.' },
+        { repo: 'awcms-astro', screen: 'Halaman layanan', note: 'Ringkasan sekilas, daftar isi, syarat, langkah, biaya, FAQ.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
