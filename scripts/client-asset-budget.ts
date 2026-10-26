@@ -1104,8 +1104,18 @@ export const READER_BUDGET_BYTES = 24_000;
  * fetched by the OS on install, not on every page load); the remaining 670 B is
  * the capability/standalone detection added to the push console's one script.
  * No stylesheet grew.
+ *
+ * **Raised for Issue #1196** (the admin data-page primitives, ADR-0149): +2,802 B,
+ * measured (343,542 -> 346,344 on its own base). All of it is the one shared
+ * stylesheet block (`.data-toolbar`, `.data-chip`, `.data-sort`, `.data-pager`
+ * in `admin.css`, which every admin screen already loads) plus the Users
+ * screen's own markup; the primitives are server-rendered `.astro` components
+ * and ship NO script, so no JS grew. This is the opposite of the #552 shape:
+ * the four controls were being hand-built per screen (the audit trail, the
+ * procurement and inventory filters), and the point of the primitives is that
+ * the next screen to adopt them adds markup, not another copy of these rules.
  */
-export const APP_BUDGET_BYTES = 343_542;
+export const APP_BUDGET_BYTES = 346_344;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

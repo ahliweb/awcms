@@ -1,0 +1,127 @@
+---
+/**
+ * KeysetPager — the footer of a data page: range, page size, Previous / Next
+ * (Issue #1196, ADR-0149; item 6 of the pattern).
+ *
+ * ## Why Previous/Next and no page numbers
+ *
+ * The cursors are opaque positions (`cursor=`), not offsets. There is no "jump
+ * to page 37", and that is the point: an `OFFSET` has to walk and discard every
+ * skipped row on every request (and under FORCE RLS it does so through the
+ * policy), and it shows a row twice or skips one when data changes between
+ * pages. A keyset position does neither. The cost — no random access — is
+ * accepted in ADR-0149 §Consequences.
+ *
+ * ## Rendering
+ *
+ * `<nav aria-label>` holding: the range ("Showing 1–25 of 80", or without the
+ * total when it is not cheap to know), a "Rows per page" group of links
+ * (10 / 25 / 50, `aria-current` on the active one), and Previous / Next.
+ *
+ * An unavailable direction is NOT omitted (the layout would jump) and is not
+ * a dead tab stop: it renders `aria-disabled="true"` with no `href`, so it is
+ * announced as unavailable and skipped by Tab. The available one is a real
+ * `<a rel="prev|next">`.
+ *
+ * `total` is OPTIONAL by contract. Pass it only when it is exact and cheap
+ * (a list already in memory, or an indexed count). `totalIsApproximate`
+ * switches the wording to "about N". With no `total`, the range stands alone;
+ * a COUNT(*) is never run just to decorate a footer.
+ *
+ * Page-size links drop the cursor (a different size is a different set of
+ * pages); the hrefs arrive prebuilt from `buildDataPageHref`.
+ */
+import { getTranslatorFor } from "../../lib/i18n";
+import type { DataPageSize } from "../../lib/ui/admin-data-page";
+
+interface Props {
+  /** `null` when there is no previous page. */
+  prevHref: string | null;
+  /** `null` when there is no next page. */
+  nextHref: string | null;
+  /** 1-based position of the first/last row shown; `from` is 0 for no rows. */
+  from: number;
+  to: number;
+  total?: number;
+  totalIsApproximate?: boolean;
+  limit: DataPageSize;
+  sizes: { value: DataPageSize; href: string }[];
+  /** Accessible name of the `<nav>`; defaults to "Pagination". */
+  label?: string;
+}
+
+const {
+  prevHref,
+  nextHref,
+  from,
+  to,
+  total,
+  totalIsApproximate = false,
+  limit,
+  sizes,
+  label
+} = Astro.props;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const range =
+  to === 0
+    ? t("No rows to show")
+    : total === undefined
+      ? t("Showing {from}–{to}", { from, to })
+      : totalIsApproximate
+        ? t("Showing {from}–{to} of about {total}", { from, to, total })
+        : t("Showing {from}–{to} of {total}", { from, to, total });
+---
+
+<nav class="data-pager" aria-label={label ?? t("Pagination")}>
+  <p class="data-pager-range" role="status" aria-live="polite">
+    {range}
+  </p>
+
+  <div class="data-pager-controls">
+    <div class="data-pager-sizes" role="group" aria-label={t("Rows per page")}>
+      <span class="data-pager-sizes-label" aria-hidden="true">
+        {t("Rows per page")}
+      </span>
+      {sizes.map((size) => (
+        <a
+          class="data-pager-size"
+          href={size.href}
+          aria-current={size.value === limit ? "true" : undefined}
+          aria-label={t("Show {size} rows per page", { size: size.value })}
+        >
+          {size.value}
+        </a>
+      ))}
+    </div>
+
+    <div class="data-pager-steps">
+      {prevHref !== null ? (
+        <a class="btn btn-secondary data-pager-step" href={prevHref} rel="prev">
+          <span aria-hidden="true">‹</span> {t("Previous")}
+        </a>
+      ) : (
+        <span
+          class="btn btn-secondary data-pager-step"
+          role="link"
+          aria-disabled="true"
+        >
+          <span aria-hidden="true">‹</span> {t("Previous")}
+        </span>
+      )}
+      {nextHref !== null ? (
+        <a class="btn btn-secondary data-pager-step" href={nextHref} rel="next">
+          {t("Next")} <span aria-hidden="true">›</span>
+        </a>
+      ) : (
+        <span
+          class="btn btn-secondary data-pager-step"
+          role="link"
+          aria-disabled="true"
+        >
+          {t("Next")} <span aria-hidden="true">›</span>
+        </span>
+      )}
+    </div>
+  </div>
+</nav>

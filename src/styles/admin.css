@@ -3761,3 +3761,247 @@
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+
+/* ---- Data-page pattern (Issue #1196, ADR-0149) ---------------------- */
+/*
+ * Styling for the four primitives in `src/components/admin/`:
+ * DataListToolbar, DataEmptyState (its look is `.empty-state` in
+ * `admin-screens.css`), SortableHeader and KeysetPager.
+ *
+ * Tokens only, and only pairings the contrast registry already measures:
+ * `--color-primary-on-soft` on `--color-primary-soft` (chips),
+ * `--color-text` / `--color-text-muted` on `--color-surface` and
+ * `--color-text-faint` on `--color-surface-3` (headings). Adding a NEW pairing
+ * here means adding a line to `PAIRS` in `scripts/design-token-contrast-check.ts`.
+ *
+ * Target size. ADR-0120 deliberately keeps pointer-first admin controls at
+ * 36-38px (WCAG 2.2 AA 2.5.8 asks 24px, and 44px inputs beside 36px buttons
+ * looked mis-set). These controls are links and tiny buttons the reader hits
+ * repeatedly, so they reach 44px under a COARSE pointer, where the larger
+ * target actually matters, and keep the compact metrics for a mouse.
+ */
+.data-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.data-toolbar-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+
+.data-toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.data-toolbar-field--search {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+.data-toolbar-field .field-input {
+  width: 100%;
+}
+
+.data-toolbar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.data-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.data-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 28px;
+  padding: 0 var(--sp-1) 0 var(--sp-3);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.data-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: var(--radius-full);
+  color: inherit;
+  font-size: var(--fs-md);
+  line-height: 1;
+  text-decoration: none;
+}
+
+.data-chip-remove:hover {
+  background: var(--color-surface);
+  text-decoration: none;
+}
+
+.data-toolbar-clear {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.data-toolbar-summary {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Sortable column heading. The link inherits the heading's colour: a
+   `--color-primary` link on `--color-surface-3` is not a measured pairing. */
+.data-sort-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 24px;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+
+.data-sort-link:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.data-sort[aria-sort] .data-sort-link {
+  color: var(--color-text);
+}
+
+.data-sort-arrow {
+  font-size: var(--fs-xs);
+}
+
+/* Footer: range, rows-per-page, Previous / Next. */
+.data-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.data-pager-range {
+  margin: 0;
+}
+
+.data-pager-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.data-pager-sizes,
+.data-pager-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.data-pager-size {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+
+.data-pager-size:hover {
+  background: var(--color-surface-2);
+  text-decoration: none;
+}
+
+.data-pager-size[aria-current="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-on-soft);
+}
+
+/* An unavailable direction keeps its place in the layout, is not focusable,
+   and is announced as disabled (`aria-disabled`). Contrast is exempt for an
+   inactive component, but it stays readable: muted text, no hover. */
+.data-pager-step[aria-disabled="true"] {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.data-pager-step[aria-disabled="true"]:hover {
+  background: var(--color-surface-2);
+}
+
+/* A `.data-table--stack` table hides its `<thead>` below `--bp-md`, visually
+   only. Left alone, its sort links stay in the tab order while clipped to 1px,
+   which is a focus the reader cannot see. `visibility: hidden` removes them
+   from tab order and the accessibility tree; the toolbar's Sort select is the
+   control at that width. */
+@media (max-width: 767.98px) {
+  .data-table--stack .data-sort-link {
+    visibility: hidden;
+  }
+}
+
+@media (pointer: coarse) {
+  .data-chip {
+    min-height: 44px;
+  }
+
+  .data-chip-remove {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .data-toolbar-clear,
+  .data-sort-link {
+    min-height: 44px;
+  }
+
+  .data-pager-size {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .data-pager-step {
+    min-height: 44px;
+  }
+
+  .data-toolbar-submit {
+    min-height: 44px;
+  }
+}

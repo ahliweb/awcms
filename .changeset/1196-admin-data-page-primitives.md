@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+Add the admin data-page pattern (Issue #1196, ADR-0149, proposed) and move `/admin/users` onto it. Four server-rendered primitives in `src/components/admin/` (`DataListToolbar`, `DataEmptyState`, `SortableHeader`, `KeysetPager`) give a list a labelled `role="search"` GET form with removable filter chips and "Clear filters", an empty state that names the query, sortable headings with `aria-sort`, and a keyset footer (Previous/Next on an opaque cursor, page size 10/25/50, an "of N" total only when exact). State is the URL (`q`, `status`, `role`, `sort`, `dir`, `cursor`, `limit`), so it works without JavaScript and ships no script; the pure URL, chip and cursor rules are in `src/lib/ui/admin-data-page.ts`. The Users list gains search over the masked identifier and role codes, status and role filters, sort and paging. No API, OpenAPI, migration, permission or token change: the users loader is unchanged (`LIMIT 100`), so the new controls apply to that loaded list. The app client-asset budget rises by the measured 2,802 B of shared stylesheet.

@@ -1,0 +1,252 @@
+---
+/**
+ * DataListToolbar — the search + filter + active-chip strip above an admin
+ * list (Issue #1196, ADR-0149; the data-page pattern's items 1 and 3).
+ *
+ * ## What it renders
+ *
+ *   1. A `<form method="get" role="search">` with an accessible NAME (the
+ *      landmark) holding a visibly labelled search box, one labelled `<select>`
+ *      per declared filter, and a submit button. It is a plain GET form, so
+ *      searching works with JavaScript disabled and ships no bundle.
+ *   2. The current sort, direction and page size ride along as hidden inputs,
+ *      so searching does not silently reset them. The CURSOR deliberately does
+ *      not: a new query is a new result set, and a cursor is a position inside
+ *      the old one.
+ *   3. When anything is applied: one removable chip per active filter (each a
+ *      real link to "this page without that filter") and a "Clear filters" link.
+ *   4. A polite live-region summary ("3 users match “rina”").
+ *
+ * ## Why there is a Sort select as well as sortable headers
+ *
+ * `<SortableHeader>` is the primary control, but a `.data-table--stack` table
+ * hides its `<thead>` below `--bp-md` (rows become cards), taking the header
+ * links with it. The optional `sort` prop renders the same choice as two
+ * labelled selects so a phone — and anyone who prefers a form — can still sort.
+ * When `sort` is given, `sort`/`dir` are fields of the form and must NOT also be
+ * passed in `preserve`.
+ *
+ * ## What it does NOT do
+ *
+ * It runs no query and decides nothing about which filters exist. The page
+ * parses the URL (`parseDataPageQuery`), applies it, and hands this component
+ * the result. Authorization, tenant scoping and what a search may match stay
+ * where they always were — in the page's loader.
+ *
+ * ## Props (every visible string is passed in already translated)
+ *
+ * | Prop            | Notes                                                                 |
+ * | --------------- | --------------------------------------------------------------------- |
+ * | `action`        | Path the form submits to (the page's own path).                       |
+ * | `landmarkLabel` | Accessible name of the `role="search"` form ("Search users").         |
+ * | `searchLabel`   | Visible label of the text box ("Search").                             |
+ * | `q`             | Current search text.                                                  |
+ * | `filters`       | `{ name, label, value, allLabel, options[] }` per `<select>`.         |
+ * | `sort`          | Optional "Sort by" + direction selects (see below).                   |
+ * | `preserve`      | Hidden inputs to carry (`limit`, plus `sort`/`dir` when no `sort`).   |
+ * | `chips`         | From `buildActiveFilterChips`.                                        |
+ * | `clearHref`     | From `buildClearFiltersHref`.                                         |
+ * | `summary`       | Live-region text; omit for none.                                      |
+ * | `submitLabel`, `clearLabel`, `chipsLabel`, `removeLabel(label)`                         |
+ * | `idPrefix`      | Makes the `for`/`id` pairs unique if a page ever has two toolbars.    |
+ *
+ * ## Accessibility
+ *
+ * Every control has a programmatic label. A chip's remove link names WHAT it
+ * removes ("Remove filter: Status: Active"), because a bare "×" is a tab stop
+ * that says nothing. The chip list is a real `<ul>`, so a screen reader hears
+ * "list, 2 items". Focus rings come from the global `:focus-visible`; target
+ * size is 24px minimum and 44px on a coarse pointer (see `admin.css`).
+ */
+import type { ActiveFilterChip } from "../../lib/ui/admin-data-page";
+
+interface FilterOption {
+  value: string;
+  label: string;
+}
+
+interface FilterField {
+  name: string;
+  label: string;
+  /** Currently selected value; `""` means "all". */
+  value: string;
+  /** Text of the empty option ("All statuses"). */
+  allLabel: string;
+  options: FilterOption[];
+}
+
+interface SortField {
+  /** Label of the "sort by" select ("Sort by"). */
+  label: string;
+  value: string;
+  options: FilterOption[];
+  /** Label of the direction select ("Order"). */
+  dirLabel: string;
+  dir: "asc" | "desc";
+  ascLabel: string;
+  descLabel: string;
+}
+
+interface Props {
+  action: string;
+  landmarkLabel: string;
+  searchLabel: string;
+  q: string;
+  searchPlaceholder?: string;
+  filters?: FilterField[];
+  sort?: SortField;
+  preserve?: Record<string, string>;
+  chips?: ActiveFilterChip[];
+  clearHref?: string;
+  summary?: string;
+  submitLabel: string;
+  clearLabel: string;
+  chipsLabel: string;
+  /** Builds the accessible name of a chip's remove link from the chip text. */
+  removeLabel: (chipLabel: string) => string;
+  idPrefix?: string;
+}
+
+const {
+  action,
+  landmarkLabel,
+  searchLabel,
+  q,
+  searchPlaceholder,
+  filters = [],
+  sort,
+  preserve = {},
+  chips = [],
+  clearHref,
+  summary,
+  submitLabel,
+  clearLabel,
+  chipsLabel,
+  removeLabel,
+  idPrefix = "data"
+} = Astro.props;
+
+const searchId = `${idPrefix}-search`;
+---
+
+<div class="data-toolbar">
+  <form
+    class="data-toolbar-form"
+    method="get"
+    action={action}
+    role="search"
+    aria-label={landmarkLabel}
+  >
+    <div class="data-toolbar-field data-toolbar-field--search">
+      <label class="field-label" for={searchId}>
+        {searchLabel}
+      </label>
+      <input
+        class="field-input"
+        type="search"
+        id={searchId}
+        name="q"
+        value={q}
+        maxlength="100"
+        autocomplete="off"
+        placeholder={searchPlaceholder}
+      />
+    </div>
+
+    {filters.map((filter) => (
+      <div class="data-toolbar-field">
+        <label class="field-label" for={`${idPrefix}-filter-${filter.name}`}>
+          {filter.label}
+        </label>
+        <select
+          class="field-input"
+          id={`${idPrefix}-filter-${filter.name}`}
+          name={filter.name}
+        >
+          <option value="" selected={filter.value === ""}>
+            {filter.allLabel}
+          </option>
+          {filter.options.map((option) => (
+            <option
+              value={option.value}
+              selected={filter.value === option.value}
+            >
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    ))}
+
+    {sort !== undefined && (
+      <>
+        <div class="data-toolbar-field">
+          <label class="field-label" for={`${idPrefix}-sort`}>
+            {sort.label}
+          </label>
+          <select class="field-input" id={`${idPrefix}-sort`} name="sort">
+            {sort.options.map((option) => (
+              <option
+                value={option.value}
+                selected={sort.value === option.value}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="data-toolbar-field">
+          <label class="field-label" for={`${idPrefix}-dir`}>
+            {sort.dirLabel}
+          </label>
+          <select class="field-input" id={`${idPrefix}-dir`} name="dir">
+            <option value="asc" selected={sort.dir === "asc"}>
+              {sort.ascLabel}
+            </option>
+            <option value="desc" selected={sort.dir === "desc"}>
+              {sort.descLabel}
+            </option>
+          </select>
+        </div>
+      </>
+    )}
+
+    {Object.entries(preserve).map(([name, value]) => (
+      <input type="hidden" name={name} value={value} />
+    ))}
+
+    <button type="submit" class="btn btn-primary data-toolbar-submit">
+      {submitLabel}
+    </button>
+  </form>
+
+  {chips.length > 0 && (
+    <div class="data-toolbar-chips">
+      <ul class="data-chip-list" aria-label={chipsLabel}>
+        {chips.map((chip) => (
+          <li class="data-chip" data-chip={chip.id}>
+            <span class="data-chip-text">{chip.label}</span>
+            <a
+              class="data-chip-remove"
+              href={chip.removeHref}
+              aria-label={removeLabel(chip.label)}
+            >
+              <span aria-hidden="true">×</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      {clearHref !== undefined && (
+        <a class="data-toolbar-clear" href={clearHref}>
+          {clearLabel}
+        </a>
+      )}
+    </div>
+  )}
+
+  {summary !== undefined && (
+    <p class="data-toolbar-summary" role="status" aria-live="polite">
+      {summary}
+    </p>
+  )}
+</div>

@@ -1,0 +1,91 @@
+---
+/**
+ * DataEmptyState — the "nothing to show" block of a data page (Issue #1196,
+ * ADR-0149; item 4 of the pattern).
+ *
+ * Two different situations get two different messages, because they have
+ * different next steps:
+ *
+ *   - `filtered` — the list HAS rows but the search/filters match none. The
+ *     message NAMES the query ("No results for “rina”") so the reader can see
+ *     what was searched for (a typo is the usual cause), says what to try, and
+ *     offers a one-click "Clear filters". A bare "No data" here reads as "the
+ *     system is empty", which is the wrong conclusion and a support ticket.
+ *   - not filtered — the list is genuinely empty. The page supplies the title
+ *     and text for ITS domain ("No users yet" / "Users provisioned for this
+ *     tenant will appear here."), and an optional call to action through the
+ *     default slot.
+ *
+ * `colspan` renders the block as a full-width table row (`<tr><td>`), the shape
+ * `.data-table` needs; omit it for an empty state outside a table.
+ *
+ * The query is printed through normal Astro interpolation, so it is HTML-
+ * escaped; `parseDataPageQuery` has already bounded it to 100 characters.
+ *
+ * All text arrives translated EXCEPT the three strings that are the same on
+ * every data page, which this component owns.
+ */
+import "../../styles/admin-screens.css";
+import { getTranslatorFor } from "../../lib/i18n";
+
+interface Props {
+  /** `true` when a search or filter is applied. */
+  filtered: boolean;
+  /** The search text, when there is one. */
+  query?: string;
+  /** Target of the "Clear filters" link (filtered case). */
+  clearHref?: string;
+  /** Title for the unfiltered-empty case (translated). */
+  title: string;
+  /** Explanatory text for the unfiltered-empty case (translated). */
+  text?: string;
+  /** Render as `<tr><td colspan>` for use inside a table body. */
+  colspan?: number;
+}
+
+const { filtered, query = "", clearHref, title, text, colspan } = Astro.props;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const heading = !filtered
+  ? title
+  : query !== ""
+    ? t("No results for “{query}”", { query })
+    : t("No results match the active filters");
+const body = filtered
+  ? t("Check the spelling, try fewer words, or clear the filters.")
+  : text;
+---
+
+{colspan !== undefined ? (
+  <tr>
+    <td class="data-table-empty" colspan={colspan}>
+      <div class="empty-state" data-empty={filtered ? "filtered" : "empty"}>
+        <span class="empty-state-icon" aria-hidden="true">
+          ◑
+        </span>
+        <span class="empty-state-title">{heading}</span>
+        {body !== undefined && <span class="empty-state-text">{body}</span>}
+        {filtered && clearHref !== undefined && (
+          <a class="btn btn-secondary" href={clearHref}>
+            {t("Clear filters")}
+          </a>
+        )}
+        {!filtered && <slot />}
+      </div>
+    </td>
+  </tr>
+) : (
+  <div class="empty-state" data-empty={filtered ? "filtered" : "empty"}>
+    <span class="empty-state-icon" aria-hidden="true">
+      ◑
+    </span>
+    <span class="empty-state-title">{heading}</span>
+    {body !== undefined && <span class="empty-state-text">{body}</span>}
+    {filtered && clearHref !== undefined && (
+      <a class="btn btn-secondary" href={clearHref}>
+        {t("Clear filters")}
+      </a>
+    )}
+    {!filtered && <slot />}
+  </div>
+)}
