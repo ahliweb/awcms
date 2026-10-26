@@ -229,7 +229,7 @@
     "undici": "^8.10.2"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.7",
+    "@astrojs/node": "^11.1.9",
     "astro": "^7.4.0"
   }
 }
