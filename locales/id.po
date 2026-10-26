@@ -8829,3 +8829,82 @@ msgstr[0] "{count} kejadian dalam 7 hari terakhir (UTC)"
 
 msgid "Some sections are not available to you."
 msgstr "Beberapa bagian tidak tersedia untuk Anda."
+
+msgid "No results for “{query}”"
+msgstr "Tidak ada hasil untuk “{query}”"
+
+msgid "No results match the active filters"
+msgstr "Tidak ada hasil yang cocok dengan filter aktif"
+
+msgid "Check the spelling, try fewer words, or clear the filters."
+msgstr "Periksa ejaan, coba kata yang lebih sedikit, atau hapus filter."
+
+msgid "Clear filters"
+msgstr "Hapus filter"
+
+msgid "sort ascending"
+msgstr "urutkan naik"
+
+msgid "sort descending"
+msgstr "urutkan turun"
+
+msgid "No rows to show"
+msgstr "Tidak ada baris untuk ditampilkan"
+
+msgid "Showing {from}–{to}"
+msgstr "Menampilkan {from}–{to}"
+
+msgid "Showing {from}–{to} of about {total}"
+msgstr "Menampilkan {from}–{to} dari sekitar {total}"
+
+msgid "Showing {from}–{to} of {total}"
+msgstr "Menampilkan {from}–{to} dari {total}"
+
+msgid "Pagination"
+msgstr "Paginasi"
+
+msgid "Rows per page"
+msgstr "Baris per halaman"
+
+msgid "Show {size} rows per page"
+msgstr "Tampilkan {size} baris per halaman"
+
+msgid "Previous"
+msgstr "Sebelumnya"
+
+msgid "Next"
+msgstr "Berikutnya"
+
+msgid "Search: {value}"
+msgstr "Cari: {value}"
+
+msgid "Status: {value}"
+msgstr "Status: {value}"
+
+msgid "Role: {value}"
+msgstr "Peran: {value}"
+
+msgid "Search users"
+msgstr "Cari pengguna"
+
+msgid "All roles"
+msgstr "Semua peran"
+
+msgid "Sort by"
+msgstr "Urutkan menurut"
+
+msgid "Ascending"
+msgstr "Naik"
+
+msgid "Descending"
+msgstr "Turun"
+
+msgid "Active filters"
+msgstr "Filter aktif"
+
+msgid "Remove filter: {label}"
+msgstr "Hapus filter: {label}"
+
+msgid "{count} user matches your search and filters"
+msgid_plural "{count} users match your search and filters"
+msgstr[0] "{count} pengguna cocok dengan pencarian dan filter Anda"

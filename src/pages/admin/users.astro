@@ -15,12 +15,49 @@
  *
  * `listTenantUsers` returns each user's assigned role CODES; the unassign
  * endpoint needs the role ID, so we resolve code → id here from `listRoles`.
+ *
+ * ## Data-page pattern (Issue #1196, ADR-0149)
+ *
+ * The list is the first adopter of the shared primitives in
+ * `src/components/admin/`: a labelled `role="search"` toolbar with removable
+ * filter chips, a naming empty state, sortable headers with `aria-sort`, and a
+ * keyset pager. All of it is GET query state (`q`, `status`, `role`, `sort`,
+ * `dir`, `cursor`, `limit`) rendered on the server, so it works with JavaScript
+ * disabled and the page's existing script is untouched.
+ *
+ * What the data layer supports TODAY, honestly: `listTenantUsers` (and
+ * `GET /api/v1/users`) take no query, sort or cursor — they return the tenant's
+ * users, `LIMIT 100`, ordered by login identifier. This issue forbids changing
+ * the API, so search, filter, sort and paging are applied here, on that already
+ * loaded and already authorized list, through the same URL contract and cursor
+ * shape a SQL-backed list will use (`sliceKeyset`). Two consequences are worth
+ * stating: the search matches what the page SHOWS — the MASKED login identifier
+ * and the role codes — never the raw identifier (PII that is not loaded), and
+ * the totals are exact for the loaded rows, not for a tenant with more than 100
+ * users. Moving the query into SQL is a follow-up that changes the data source
+ * and nothing the reader or a bookmark can see.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import DataEmptyState from "../../components/admin/DataEmptyState.astro";
+import DataListToolbar from "../../components/admin/DataListToolbar.astro";
+import KeysetPager from "../../components/admin/KeysetPager.astro";
+import SortableHeader from "../../components/admin/SortableHeader.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { getTranslatorFor } from "../../lib/i18n";
+import {
+  DATA_PAGE_SIZES,
+  DEFAULT_DATA_PAGE_SIZE,
+  buildActiveFilterChips,
+  buildClearFiltersHref,
+  buildDataPageHref,
+  buildSortHeaderState,
+  hasActiveFilters,
+  parseDataPageQuery,
+  sliceKeyset,
+  type DataPageSpec
+} from "../../lib/ui/admin-data-page";
 import {
   listRoles,
   listTenantUsers,
@@ -110,6 +147,65 @@ const canRevokeSessions =
 const roleIdByCode = new Map(roles.map((role) => [role.roleCode, role.id]));
 const showActions =
   canConfigure || canAssign || canReadSessions || canRevokeSessions;
+
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const USERS_PATH = "/admin/users";
+const USERS_SPEC: DataPageSpec = {
+  filterKeys: ["status", "role"],
+  sortKeys: ["identifier", "status"],
+  defaultSort: "identifier",
+  defaultDir: "asc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, USERS_SPEC);
+const filtered = hasActiveFilters(query);
+
+// The search matches what the page shows: the masked identifier and the role
+// codes. The raw login identifier is PII and is not loaded here at all.
+const needle = query.q.toLowerCase();
+const matchingUsers = users.filter(
+  (user) =>
+    (needle === "" ||
+      user.loginIdentifierMasked.toLowerCase().includes(needle) ||
+      user.roles.some((code) => code.toLowerCase().includes(needle))) &&
+    (query.filters.status === undefined ||
+      user.status === query.filters.status) &&
+    (query.filters.role === undefined ||
+      user.roles.includes(query.filters.role))
+);
+const page = sliceKeyset(matchingUsers, {
+  sortValue: (user) =>
+    query.sort === "status" ? user.status : user.loginIdentifierMasked,
+  id: (user) => user.id,
+  dir: query.dir,
+  limit: query.limit,
+  cursor: query.cursor
+});
+const pageUsers = page.items;
+
+const href = (change: Parameters<typeof buildDataPageHref>[3]) =>
+  buildDataPageHref(USERS_PATH, USERS_SPEC, query, change);
+const sortState = (key: string) =>
+  buildSortHeaderState(USERS_PATH, USERS_SPEC, query, key);
+
+const chips = buildActiveFilterChips(
+  USERS_PATH,
+  USERS_SPEC,
+  query,
+  (key, value) =>
+    key === "q"
+      ? t("Search: {value}", { value })
+      : key === "status"
+        ? t("Status: {value}", { value: userStatusLabel(value) })
+        : t("Role: {value}", { value })
+);
+const summary = filtered
+  ? tn(
+      "{count} user matches your search and filters",
+      "{count} users match your search and filters",
+      page.total,
+      { count: page.total }
+    )
+  : undefined;
 ---
 
 <AdminLayout
@@ -138,6 +234,59 @@ const showActions =
         role="alert"
         hidden
       />
+      <DataListToolbar
+        action={USERS_PATH}
+        idPrefix="users"
+        landmarkLabel={t("Search users")}
+        searchLabel={t("Search")}
+        q={query.q}
+        filters={[
+          {
+            name: "status",
+            label: t("Status"),
+            value: query.filters.status ?? "",
+            allLabel: t("All statuses"),
+            options: [
+              { value: "active", label: userStatusLabel("active") },
+              { value: "inactive", label: userStatusLabel("inactive") }
+            ]
+          },
+          {
+            name: "role",
+            label: t("Role"),
+            value: query.filters.role ?? "",
+            allLabel: t("All roles"),
+            options: roles.map((role) => ({
+              value: role.roleCode,
+              label: role.roleCode
+            }))
+          }
+        ]}
+        sort={{
+          label: t("Sort by"),
+          value: query.sort,
+          options: [
+            { value: "identifier", label: t("Login identifier") },
+            { value: "status", label: t("Status") }
+          ],
+          dirLabel: t("Sort order"),
+          dir: query.dir,
+          ascLabel: t("Ascending"),
+          descLabel: t("Descending")
+        }}
+        preserve={
+          query.limit === DEFAULT_DATA_PAGE_SIZE
+            ? {}
+            : { limit: String(query.limit) }
+        }
+        chips={chips}
+        clearHref={buildClearFiltersHref(USERS_PATH, USERS_SPEC, query)}
+        summary={summary}
+        submitLabel={t("Search")}
+        clearLabel={t("Clear filters")}
+        chipsLabel={t("Active filters")}
+        removeLabel={(label) => t("Remove filter: {label}", { label })}
+      />
       <div
         class="data-table-scroll fade-in-up"
         role="region"
@@ -146,35 +295,33 @@ const showActions =
       >
         <table class="data-table data-table--stack" id="users-table">
           <caption id="users-table-caption">
-            {tn("{count} user", "{count} users", users.length, {
-              count: users.length
+            {tn("{count} user", "{count} users", page.total, {
+              count: page.total
             })}
           </caption>
           <thead>
             <tr>
-              <th scope="col">{t("Login identifier")}</th>
-              <th scope="col">{t("Status")}</th>
+              <SortableHeader
+                label={t("Login identifier")}
+                {...sortState("identifier")}
+              />
+              <SortableHeader label={t("Status")} {...sortState("status")} />
               <th scope="col">{t("Roles")}</th>
               {showActions && <th scope="col">{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
-            {users.length === 0 ? (
-              <tr>
-                <td class="data-table-empty" colspan={showActions ? 4 : 3}>
-                  <div class="empty-state">
-                    <span class="empty-state-icon" aria-hidden="true">
-                      ◑
-                    </span>
-                    <span class="empty-state-title">{t("No users yet")}</span>
-                    <span class="empty-state-text">
-                      {t("Users provisioned for this tenant will appear here.")}
-                    </span>
-                  </div>
-                </td>
-              </tr>
+            {pageUsers.length === 0 ? (
+              <DataEmptyState
+                colspan={showActions ? 4 : 3}
+                filtered={filtered}
+                query={query.q}
+                clearHref={buildClearFiltersHref(USERS_PATH, USERS_SPEC, query)}
+                title={t("No users yet")}
+                text={t("Users provisioned for this tenant will appear here.")}
+              />
             ) : (
-              users.map((user) => (
+              pageUsers.map((user) => (
                 <>
                   <tr>
                     <td data-label={t("Login identifier")}>
@@ -314,6 +461,22 @@ const showActions =
           </tbody>
         </table>
       </div>
+      <KeysetPager
+        prevHref={
+          page.prevCursor === null ? null : href({ cursor: page.prevCursor })
+        }
+        nextHref={
+          page.nextCursor === null ? null : href({ cursor: page.nextCursor })
+        }
+        from={page.from}
+        to={page.to}
+        total={page.total}
+        limit={query.limit}
+        sizes={DATA_PAGE_SIZES.map((value) => ({
+          value,
+          href: href({ limit: value })
+        }))}
+      />
     </>
   )}
 </AdminLayout>

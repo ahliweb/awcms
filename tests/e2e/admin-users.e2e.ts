@@ -90,4 +90,64 @@ test.describe("admin users write controls (authenticated)", () => {
 
     await expect(page.locator("#users-action-error")).toBeVisible();
   });
+
+  /**
+   * Issue #1196 / ADR-0149 — the data-page pattern on its first adopter. Pure
+   * GET navigation: no mutation, and it must work WITHOUT the page's script, so
+   * nothing here waits for `data-admin-delegation-ready`.
+   */
+  test("the list is a data page: search, chips, sort, empty state, pager", async ({
+    page
+  }) => {
+    await page.goto("/admin/users");
+
+    // The search landmark is named, and the box inside it is labelled.
+    const search = page.getByRole("search", {
+      name: /search users|cari pengguna/i
+    });
+    await expect(search).toBeVisible();
+    await expect(search.getByRole("searchbox")).toBeVisible();
+
+    // The default sort is the login identifier, ascending, on that header only.
+    const sorted = page.locator("th[aria-sort]");
+    await expect(sorted).toHaveCount(1);
+    await expect(sorted).toHaveAttribute("aria-sort", "ascending");
+
+    // The pager is a named nav; with a single seeded user both directions are
+    // unavailable, announced as such and not focusable.
+    const pager = page.getByRole("navigation", {
+      name: /pagination|paginasi/i
+    });
+    await expect(pager).toBeVisible();
+    for (const step of await pager.locator('[aria-disabled="true"]').all()) {
+      await expect(step).not.toHaveAttribute("href", /.*/);
+    }
+    await expect(pager.locator('a[aria-current="true"]')).toHaveText("25");
+
+    // Activating the sorted header flips the direction in the URL and aria-sort.
+    await page.locator("th[aria-sort] a").click();
+    await expect(page).toHaveURL(/[?&]sort=identifier&dir=desc/);
+    await expect(page.locator("th[aria-sort]")).toHaveAttribute(
+      "aria-sort",
+      "descending"
+    );
+
+    // A filter becomes a removable chip; removing it is a plain link.
+    await page.goto("/admin/users?status=active");
+    const chip = page.locator('[data-chip="status"]');
+    await expect(chip).toHaveCount(1);
+    await chip.getByRole("link").click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.locator("[data-chip]")).toHaveCount(0);
+
+    // A query nothing matches names itself and offers the way back.
+    await page.goto("/admin/users?q=zz-no-such-user-zz");
+    const empty = page.locator('[data-empty="filtered"]');
+    await expect(empty).toContainText("zz-no-such-user-zz");
+    await empty
+      .getByRole("link", { name: /clear filters|hapus filter/i })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.locator("#users-table")).toBeVisible();
+  });
 });

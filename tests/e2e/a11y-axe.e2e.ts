@@ -81,6 +81,17 @@ const ROUTES = [
   { path: "/admin", label: "dashboard" },
   { path: "/admin/comments", label: "comments moderation queue" },
   { path: "/admin/users", label: "users (.admin-status-pill list)" },
+  // Issue #1196 — the data-page pattern's three states on its first adopter:
+  // chips + a sorted header (`aria-sort`) + a non-default page size, and the
+  // empty state that names a query nothing matches.
+  {
+    path: "/admin/users?status=active&sort=status&dir=desc&limit=10",
+    label: "users (filter chips, aria-sort, page size 10)"
+  },
+  {
+    path: "/admin/users?q=zz-no-such-user-zz",
+    label: "users (empty state naming the query)"
+  },
   { path: "/admin/approvals", label: "approvals (.admin-timeline)" },
   { path: "/admin/media", label: "media" },
   { path: "/admin/omes", label: "OMES control centre index" },

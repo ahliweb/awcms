@@ -1,0 +1,60 @@
+---
+/**
+ * SortableHeader — a `<th scope="col">` whose heading is a sort link (Issue
+ * #1196, ADR-0149; item 5 of the pattern).
+ *
+ * Sorting is URL state, so the control is a plain `<a href>`: it works with no
+ * JavaScript, survives a reload, and can be shared. `href` is the NEXT state of
+ * the cycle (`buildSortHeaderState`): ascending first, then it flips.
+ *
+ * `aria-sort` is set ONLY on the column that is currently sorted
+ * (`ascending` | `descending`) and omitted elsewhere — the ARIA Authoring
+ * Practices ask for it on one header at a time. The arrow glyph is decoration
+ * (`aria-hidden`); the state is carried by `aria-sort` and, for sighted users
+ * who cannot rely on the glyph alone, by the arrow's SHAPE (▲ / ▼), never by
+ * colour.
+ *
+ * Why a link and not a `<button>`: a button needs a script to do anything, and
+ * this page deliberately ships none. Activating it navigates, which is exactly
+ * what a link announces.
+ *
+ * Because a sorted header re-sorts the whole list, the screen-reader-only
+ * suffix tells the user what activating will DO ("sort descending"), which
+ * `aria-sort` alone (it states the CURRENT order) does not.
+ */
+import { getTranslatorFor } from "../../lib/i18n";
+import type { SortDirection } from "../../lib/ui/admin-data-page";
+
+interface Props {
+  /** Column heading (translated). */
+  label: string;
+  /** Where activation goes — from `buildSortHeaderState().href`. */
+  href: string;
+  /** `null` when this column is not the sorted one. */
+  direction: SortDirection | null;
+  /** Extra class names for the `<th>`. */
+  class?: string;
+}
+
+const { label, href, direction, class: className } = Astro.props;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const ariaSort =
+  direction === "asc"
+    ? "ascending"
+    : direction === "desc"
+      ? "descending"
+      : undefined;
+// What activating the link does next.
+const action = direction === "asc" ? t("sort descending") : t("sort ascending");
+---
+
+<th scope="col" class:list={["data-sort", className]} aria-sort={ariaSort}>
+  <a class="data-sort-link" href={href}>
+    <span>{label}</span>
+    <span class="data-sort-arrow" aria-hidden="true">
+      {direction === "asc" ? "▲" : direction === "desc" ? "▼" : "↕"}
+    </span>
+    <span class="visually-hidden">({action})</span>
+  </a>
+</th>
