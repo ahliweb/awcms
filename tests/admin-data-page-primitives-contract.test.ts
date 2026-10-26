@@ -32,8 +32,14 @@ async function read(path: string): Promise<string> {
 
 /** Markup only: drop the frontmatter and HTML/JS comments. */
 function markupOf(source: string): string {
-  const afterFrontmatter = source.replace(/^---[\s\S]*?\n---\n/, "");
-  return afterFrontmatter.replace(/<!--[\s\S]*?-->/g, "");
+  let markup = source.replace(/^---[\s\S]*?\n---\n/, "");
+  // Repeat to a fixpoint: one pass can leave a comment opener formed from the pieces of a removed one.
+  let previous: string;
+  do {
+    previous = markup;
+    markup = markup.replace(/<!--[\s\S]*?-->/g, "");
+  } while (markup !== previous);
+  return markup;
 }
 
 describe("data-page primitives: shared properties", () => {
