@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:a9a741db5d76ca500f151e5d6eec5825b2cfd6161d5bb1499ed96f01a0c0c920 -->
+<!-- i18n-source-hash: sha256:89a0706d2518c7a849fcd268d1ee0af313e15283425ad34eca7ba8fd9af4d09b -->
 
 # `omes_control`
 
@@ -365,3 +365,23 @@ Pemeriksaan identitas/replay/versi yang gagal pada poll/heartbeat menjawab denga
 **Kesenjangan lintas-repositori yang ditandai secara eksplisit**, bukan disiasati diam-diam: pull worker referensi sisi-OMES sebagaimana di-merge untuk `ahliweb/omes#192` (`lib/omes/py/jobs/worker.py`) belum membangkitkan keypair Ed25519 sungguhan atau mengirim header signature/nonce/timestamp apa pun — "public key"-nya adalah string placeholder turunan hash SHA-256. Modul ini tidak melonggarkan verifikasi agar cocok dengan stub itu; membawa worker sisi-OMES ke bentuk wire ini adalah pekerjaan lanjutan yang diperlukan, dicatat di PR yang mendaratkan issue ini, bukan ditebak di sini.
 
 `domain/contracts/` milik `ahliweb/omes#197` (`validateOmesContract`/`validateOmesContractText`, `scanForRawSecrets`, `getOmesStateMachine`, `OMES_CONTRACT_PIN`) adalah yang divalidasi keempat rute terhadap setiap amplop masuk sebelum melakukan apa pun — titik pemasangan yang sudah diantisipasi headernya sendiri.
+
+## Kompatibilitas kontrak worker dan preflight deploy (`ahliweb/awcms#1185`)
+
+`omes_control` memakai kontrak wire worker OMES hanya lewat snapshot ter-vendor yang di-pin di `contracts/v1/` - tidak pernah dari `omes/main` saat request. Tiga lapis menjaga rilis agar tidak berjalan di atas kontrak yang belum ditinjau:
+
+1. **`bun run contracts:omes:sync:check`** - setiap berkas ter-vendor masih ber-hash sesuai `PIN.json` (drift / berkas liar).
+2. **`domain/contracts/compatibility.ts`** - deklarasi rilis yang ditulis tangan: commit sumber, satu **digest SHA-256 agregat** atas peta berkas PIN, **rentang worker** yang didukung, dan kapabilitas yang ditindaklanjuti consumer. `contracts:omes:sync` menulis ulang `PIN.json` beserta hash-nya sekaligus, sehingga lapis 1 tetap hijau setelah bump tanpa tinjauan; berkas ini tidak. Menaikkan kontrak berarti menyunting berkas ini dengan sengaja plus satu baris di matriks di bawah.
+3. **`bun run omes:contract:preflight`** - offline, read-only, Bun-only (tanpa jaringan, SSH, atau shell-out). Menjalankan lapis 1, mencocokkan PIN dengan lapis 2, memeriksa `openapi/awcms-public-api.openapi.yaml` masih mendeklarasikan `/api/v1/omes/worker/{enroll,poll,result,heartbeat}`, dan dengan `-- --worker <descriptor.json> [--require-digest]` mengevaluasi `contract_version` / `omes_version` / `contract_digest` / `capabilities` sebuah worker. Ia bagian dari `bun run check`; jalankan dari checkout repo sebelum deploy yang mengubah `contracts/v1/` atau menaikkan worker host (image runtime tidak membawa `scripts/`).
+
+Aturan fail-closed (`evaluateWorkerCompatibility`): `contract_version` yang hilang, bukan string, tak dikenal, atau major masa depan; digest yang tidak persis sama dengan yang dideklarasikan; `omes_version` pre-release, bertag build, tak terurai, atau di luar rentang; dan descriptor non-objek semuanya `incompatible`. Kapabilitas di luar allowlist operasi aman adalah `unsupported_capability`, bukan sukses tebakan. Rentang hanyalah syarat perlu - kompatibilitas SemVer biner tidak pernah diasumsikan.
+
+| Butir              | Nilai (rilis ini)                                               |
+| ------------------ | --------------------------------------------------------------- |
+| Kontrak            | `ahliweb/omes` `control-center/v1`                              |
+| Commit sumber      | `a4026e6338ce917dbd6771c7e1bf02c14e31c38f`                      |
+| Digest agregat     | lihat `DECLARED_CONTRACT.aggregateDigest` di `compatibility.ts` |
+| Rentang worker     | `>=0.6.0 <0.7.0` (**dideklarasikan, belum diverifikasi**)       |
+| Bukti rilis bertag | belum ada (`DECLARED_WORKER_RANGE.evidence` bernilai `null`)    |
+
+Dicakup `tests/omes-control-contract-consumer-compat.test.ts` (murni, tanpa DB): pin/digest, fixture rentang dan versi tak dikenal, worker Ed25519 sintetis untuk keempat rute (tanda tangan terikat path/body/nonce/tenant/worker/server, timestamp basi dan masa depan), serta preflight terhadap salinan yang diutak-atik atau di-sync ulang. **Belum tercakup, masih terbuka:** rilis stabil worker OMES v0.6.0 dan matriks yang diverifikasi terhadap tag itu (sisi produsen, `ahliweb/omes#352`; rencana integrasi `ahliweb/omes#350`; gerbang consumer `ahliweb/omes-web#20`), produsen yang menerbitkan `contract_digest`, bukti canary/rollback, sinkronisasi subtree OMES-Web lewat **merge commit**, dan asersi FORCE RLS / ABAC berbasis DB untuk tabel worker (tes worker yang ada mencakup persistensi nonce dan urutan guard; suite DB khusus kompatibilitas bukan bagian perubahan ini).
