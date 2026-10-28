@@ -14,7 +14,12 @@
  */
 import { readFile } from "node:fs/promises";
 
+import {
+  resolveKeyRing,
+  STRICT_KEY_RING_OPTIONS
+} from "../src/lib/security/field-encryption";
 import { describeIdempotencySecretProblem } from "../src/lib/security/idempotency-hmac";
+import { resolveChannelSecretsRing } from "../src/modules/channel-accounts/domain/channel-accounts-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -376,6 +381,17 @@ const RULES: readonly Rule[] = [
   { name: "WHATSAPP_META_ACCESS_TOKEN", required: false, type: "string" },
   { name: "WHATSAPP_META_PHONE_NUMBER_ID", required: false, type: "string" },
   { name: "WHATSAPP_META_API_VERSION", required: false, type: "string" },
+
+  // channel_accounts (ADR-0148, Issue #1140). Off by default; off means every
+  // route answers 503 after authorization. The ring encrypts every tenant's
+  // provider credentials and is a secret, never echoed.
+  { name: "CHANNEL_ACCOUNTS_ENABLED", required: false, type: "bool" },
+  {
+    name: "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
 
   // telegram_delivery (ADR-0140, Issue #965). Off by default; off means enqueue
   // answers `refused: DISABLED`, the webhook answers 404 and the dispatcher claims
@@ -916,6 +932,44 @@ export function validateEnv(env: EnvBag): string[] {
       problems.push(
         "WHATSAPP_META_ACCESS_TOKEN dan WHATSAPP_META_PHONE_NUMBER_ID wajib diisi saat WHATSAPP_PROVIDER=meta."
       );
+    }
+  }
+
+  // channel_accounts (ADR-0148 section 5): enabling the module REQUIRES a valid
+  // secrets key ring, parsed by the same helper the runtime uses. There is no
+  // plaintext fallback, so without it no credential could ever be stored. The
+  // ring must not share a key with another module's encryption ring: one
+  // compromised ring would then open two datasets. No value is ever echoed.
+  if (env.CHANNEL_ACCOUNTS_ENABLED === "true") {
+    const channelRing = resolveChannelSecretsRing(env as NodeJS.ProcessEnv);
+
+    if (!channelRing.ok) {
+      problems.push(
+        `${channelRing.reason} Wajib valid saat CHANNEL_ACCOUNTS_ENABLED=true (tanpa kunci, kredensial akun kanal tidak dapat disimpan; tidak ada fallback plaintext).`
+      );
+    } else {
+      for (const other of [
+        "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_HASH_KEYS",
+        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS"
+      ]) {
+        const otherRing = resolveKeyRing(
+          other,
+          { [other]: env[other] } as NodeJS.ProcessEnv,
+          STRICT_KEY_RING_OPTIONS
+        );
+
+        if (
+          otherRing.ok &&
+          channelRing.keys.some((key) =>
+            otherRing.keys.some((otherKey) => otherKey.key.equals(key.key))
+          )
+        ) {
+          problems.push(
+            `CHANNEL_SECRETS_ENCRYPTION_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
+          );
+        }
+      }
     }
   }
 

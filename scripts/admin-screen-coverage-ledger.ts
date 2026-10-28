@@ -232,5 +232,16 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // (switch, DPIA reference, notice, geofences) and the evidence reader are the
   // recorded follow-up; until then both are reachable only through the API.
   "hr_workforce.attendance_evidence.read",
-  "hr_workforce.geolocation_evidence.configure"
+  "hr_workforce.geolocation_evidence.configure",
+  // channel_accounts (6) — ADR-0148 / Issue #1140. API-first and `experimental`:
+  // the connection manager (accounts, connections, capabilities with their
+  // evidence, health, assignments) is tracked separately as Issue #1154, which
+  // flips the module to `active` and adds its navigation entry in the same change
+  // (a nav entry without a page is a permanent 404).
+  "channel_accounts.accounts.create",
+  "channel_accounts.accounts.read",
+  "channel_accounts.accounts.revoke",
+  "channel_accounts.assignments.assign",
+  "channel_accounts.capabilities.configure",
+  "channel_accounts.credentials.manage"
 ];

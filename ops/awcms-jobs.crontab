@@ -243,6 +243,12 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 #   with --commit after sql/134 is applied, repeating until the report stops
 #   saying partial.
 
+# channel-accounts:secrets:rekey
+#   A key-rotation action (Issue #1140): run by an operator after adding a new
+#   first key to CHANNEL_SECRETS_ENCRYPTION_KEYS, until no secret remains under
+#   a non-active key id, and only then is the old key removed. A timer would
+#   re-scan an unchanged table forever.
+
 # config:validate
 #   A deploy gate, not a background task: it runs as the first stage of a
 #   deployment and its whole value is failing BEFORE the app starts.

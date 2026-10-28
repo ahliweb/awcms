@@ -94,6 +94,46 @@ export const BOUNDED_BY_DESIGN: readonly {
   reason: string;
 }[] = [
   {
+    table: "awcms_channel_accounts",
+    reason:
+      "ADR-0148 / Issue #1140. Every row is AUTHORED by an administrator registering an external account the tenant really operates (a page, a number, a bot), never accumulated by traffic: the ceiling is the number of accounts a business connects, and an account is soft-deleted (terminal) when it is retired. Nothing in a request path or a job inserts one."
+  },
+  {
+    table: "awcms_channel_provider_connections",
+    reason:
+      "ADR-0148 / Issue #1140. One row per authorisation an administrator granted a provider, written only through the authenticated OAuth callback or the connector that completes it. Abandoned `pending` hand-offs are failed and their authorisation-code ciphertext erased by the bounded sweep on the next authorisation start (`sweepExpiredOAuthStates`); a revoked row keeps no credential reference, so it is an inert few-hundred-byte record of the fact."
+  },
+  {
+    table: "awcms_channel_secrets",
+    reason:
+      "ADR-0148 / Issue #1140. One row per credential an administrator wrote or a grant produced, referenced by exactly one account or connection; a revoke, a disconnect and an account deletion HARD-DELETE the ciphertext, and the PKCE/authorisation-code rows of an abandoned flow are deleted by the same bounded sweep. The ceiling is the live credential count, deliberately never retained after the credential is gone."
+  },
+  {
+    table: "awcms_channel_account_capabilities",
+    reason:
+      "ADR-0148 / Issue #1140. A unique key per (account, capability) and a closed list of nine capabilities, so at most nine rows per account, upserted by an administrator and never appended."
+  },
+  {
+    table: "awcms_channel_webhook_subscriptions",
+    reason:
+      "ADR-0148 / Issue #1140. Written only by an authorised administrator or a connector for an account the tenant registered; a revoked subscription is a status change on the same row. The ceiling is the number of accounts times the few callback modes a provider offers."
+  },
+  {
+    table: "awcms_channel_account_health",
+    reason:
+      "ADR-0148 / Issue #1140. One row per account by primary key (tenant, account), upserted by the latest health report: the ceiling IS the account table, and a report overwrites rather than appends. The bounded history the pack mentions is deliberately not stored."
+  },
+  {
+    table: "awcms_channel_account_assignments",
+    reason:
+      "ADR-0148 / Issue #1140. A unique key per (account, person): at most one row per person per account, written only by a holder of `assignments.assign`. Bounded by accounts times the tenant's staff, and removed when unassigned."
+  },
+  {
+    table: "awcms_channel_oauth_states",
+    reason:
+      "ADR-0148 / Issue #1140. A single-use authorisation nonce created only by an authenticated person starting a flow, capped at ten unconsumed per person, and swept (with its PKCE verifier ciphertext) on the next start (`sweepExpiredOAuthStates`). A state a connection still references is kept until that connection is done with it. Delegated lifecycle was considered and rejected: it would need an `awcms_worker` read grant on a control-plane table that nothing else lets the worker role touch."
+  },
+  {
     table: "awcms_site_profile",
     reason:
       "ADR-0102. At most ONE row per tenant, by primary key — the row is upserted, never appended, so the table's ceiling IS `awcms_tenants` and no request path or job can add a second. Nothing here is traffic-generated: every value is typed by an administrator on `/admin/site-profile`. An age-based purge would be actively WRONG rather than merely unnecessary, for the same reason it is wrong for `awcms_principal_preferences`: `executionMode: 'generic'` deletes by age with no status predicate, so a newsroom that set its editorial address two years ago and has not touched it since — the healthy case — would have its masthead, footer and contact block silently emptied for being OLD. The row has no natural expiry and its age says nothing about whether it is still wanted; deleting it would blank the published contact details of a live site. Erasure is not a question here either: this is the PUBLISHER's own published identity, deliberately public, not a data subject's personal data — which is exactly why the audit row for a change records which fields are set and never their values."
