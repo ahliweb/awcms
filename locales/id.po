@@ -7775,6 +7775,9 @@ msgstr "Modul mendaftarkan templatenya di kode. Setiap template adalah notifikas
 msgid "Telegram Delivery"
 msgstr "Pengiriman Telegram"
 
+msgid "Channel Accounts"
+msgstr "Akun Kanal"
+
 msgid "Tenant suspended"
 msgstr "Tenant ditangguhkan"
 

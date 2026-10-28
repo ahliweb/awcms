@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:08d98dac62afdbb381b3eb45657090235cb543d981e0ed92d56f3e4bdb5583ea -->
+<!-- i18n-source-hash: sha256:db9e18c991fdd7b19eaf0ab88a6050239989edd94b7c2244c2dd467914ae1f79 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-152 target menjalankan berkas di `scripts/`; 65 di antaranya
+153 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -67,6 +67,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `build:preview-overlay`                   | `build-preview-overlay.ts`                     | —    |
 | `build:preview-overlay:check`             | `build-preview-overlay.ts`                     | ✅   |
 | `changesets:policy:check`                 | `changeset-policy-check.ts`                    | —    |
+| `channel-accounts:secrets:rekey`          | `channel-accounts-secrets-rekey.ts`            | —    |
 | `check:astro-frontmatter:check`           | `astro-frontmatter-typecheck.ts`               | ✅   |
 | `check:astro-scripts:check`               | `astro-script-typecheck.ts`                    | ✅   |
 | `check:docs`                              | `check-docs.mjs`                               | ✅   |

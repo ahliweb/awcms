@@ -1,5 +1,5 @@
 {
-  "moduleCount": 33,
+  "moduleCount": 34,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -63,6 +63,22 @@
       "permissionCount": 32,
       "navigationCount": 6,
       "jobCount": 2,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "channel_accounts",
+      "name": "Channel Accounts",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "system",
+      "dependencies": ["tenant_admin", "identity_access", "logging"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 6,
+      "navigationCount": 0,
+      "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

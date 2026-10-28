@@ -32,6 +32,7 @@ import { whatsappDeliveryModule } from "./whatsapp-delivery/module";
 import { bookingModule } from "./booking/module";
 import { hrCommissionModule } from "./hr-commission/module";
 import { telegramDeliveryModule } from "./telegram-delivery/module";
+import { channelAccountsModule } from "./channel-accounts/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -232,7 +233,16 @@ const baseModules: ModuleDescriptor[] = [
   // (consumers reach it through the capability port) and it is never a fallback
   // for another channel (ADR-0139). Ships INERT: TELEGRAM_ENABLED is off by
   // default. See src/modules/telegram-delivery/module.ts's `description`.
-  telegramDeliveryModule
+  telegramDeliveryModule,
+  // Admitted by ADR-0148 (Issue #1140): the omnichannel account and credential
+  // CONTROL PLANE — tenant-scoped multi-account registry, provider connections,
+  // fail-closed per-account capability and envelope-encrypted secret references.
+  // It sends nothing and calls no provider. Depends on tenant_admin/
+  // identity_access/logging (all above), so the DAG stays acyclic; nothing
+  // depends on it yet (the WhatsApp sender key, #1141, is its first consumer).
+  // Ships INERT: CHANNEL_ACCOUNTS_ENABLED is off by default. See
+  // src/modules/channel-accounts/module.ts's `description`.
+  channelAccountsModule
 ];
 
 /**

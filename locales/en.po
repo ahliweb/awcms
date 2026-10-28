@@ -7787,6 +7787,9 @@ msgstr ""
 msgid "Telegram Delivery"
 msgstr ""
 
+msgid "Channel Accounts"
+msgstr ""
+
 msgid "Tenant suspended"
 msgstr ""
 
