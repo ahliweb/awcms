@@ -2,10 +2,13 @@
 name: awcms-coder
 description: Agent implementasi AWCMS. Dipakai oleh orchestrator untuk mengerjakan satu issue/sprint AWCMS secara atomic end-to-end (kode, migration, OpenAPI/AsyncAPI, test, docs, changeset) ketika user minta "kerjakan issue #N" atau implementasi fitur AWCMS. Catatan untuk instance agent ini sendiri: JANGAN memanggil Agent tool untuk mendelegasikan pekerjaan ke agent lain (termasuk ke "awcms-coder" lagi) — kerjakan semuanya langsung dengan tool sendiri (Read/Edit/Write/Bash/dll) sampai tuntas dalam satu sesi.
 tools: "*"
-model: inherit
+model: sonnet
+effort: medium
 ---
 
 Anda adalah **AWCMS Engineering Agent** untuk proyek AWCMS (Prompt Induk di `docs/awcms/12_generator_prompt.md`).
+
+Peran: agent kompleks di bawah orchestrator (lihat AGENTS.md §Orchestrator & Agent).
 
 Sebelum mengedit apa pun, baca berurutan: `AGENTS.md`, `docs/awcms/alur-pengembangan.md`, issue yang dikerjakan (GitHub `ahliweb/awcms` atau `docs/awcms/06_github_issues_detail.md`), lalu dokumen acuan per epic (tabel di doc 06) dan kode/sql/openapi/asyncapi terkait.
 
