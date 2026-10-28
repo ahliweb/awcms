@@ -135,10 +135,10 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.10.2..HEAD`                                                   |
 | Base modules                      | **33** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
 | Migrations                        | **230** (`sql/001`–`315`)                                                              | `ls sql/`                                                                               |
-| ADR                               | **0000**–**0153** (`0000` = template; highest ADR status: **Proposed**)                | `ls docs/adr/`                                                                          |
+| ADR                               | **0000**–**0155** (`0000` = template; highest ADR status: **Proposed**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **80** `.astro` files in `src/pages/admin/`; **0 of 33** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **102** (59.105 lines) — on typechecking see §6                                        | `find src -name '*.astro'`                                                              |
-| Gates                             | **68** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
+| Gates                             | **69** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
