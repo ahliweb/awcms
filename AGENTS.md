@@ -262,12 +262,37 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — proses kontribusi & Definition of Done.
 - [`SECURITY.md`](SECURITY.md) — kebijakan keamanan & pelaporan kerentanan.
 
+## Orchestrator & Agent (model AI)
+
+> Standar lintas-portofolio dari [`ahliweb/personal-coding`](https://github.com/ahliweb/personal-coding/blob/main/docs/tingkatan-model-ai-claude-openai.md) (`docs/tingkatan-model-ai-claude-openai.md`, snapshot 2026-10-28). Harga, effort, dan lini model dipelihara di sana — jangan disalin ke repo ini.
+
+Pekerjaan yang perlu dipecah ke beberapa agent memakai pola **orchestrator → agent**. Orchestrator memecah pekerjaan, membagi tugas, mengatur ketergantungan, lalu memeriksa dan menyatukan hasil; agent mengerjakan satu bagian yang sudah dibatasi.
+
+| Peran                                                                 | Claude Code                                       | Codex / OpenAI                   |
+| --------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------- |
+| Orchestrator                                                          | Opus 5.5, effort `high`                           | GPT-6.1 Sol, `high`              |
+| Agent kompleks — lintas komponen, keamanan, integrasi, risiko regresi | Sonnet 5.5, `medium` (subagent `awcms-coder`)     | GPT-6.1 Sol atau Terra, `medium` |
+| Agent sederhana — mekanis, terdefinisi jelas, risiko rendah           | Haiku 5.5, `low` (subagent `pelaksana-sederhana`) | GPT-6 Luna atau Terra, `low`     |
+
+Review: `awcms-reviewer` (Sonnet 5.5, `high`); audit keamanan: `awcms-security-auditor` (Opus 5.5, `high`).
+
+Pekerjaan kritis (arsitektur, keamanan, migrasi besar): orchestrator Fable 5.1 `high`–`xhigh`, agent kompleks Opus 5.5 `high`.
+
+Aturan:
+
+1. **Jangan memecah tugas kecil.** Coba satu model kuat (Opus 5.5 / GPT-6.1 Sol) dengan effort rendah lebih dulu.
+2. **Naikkan, jangan menebak.** Agent sederhana yang menemukan ambiguitas, risiko, atau sentuhan arsitektur berhenti dan mengembalikan tugas ke orchestrator, yang memindahkannya ke agent kompleks.
+3. **Agent paralel terisolasi.** Tidak boleh menyentuh file atau modul yang sama; tugas yang saling bergantung dijalankan berurutan.
+4. **Verifikasi tetap di orchestrator.** Diff, uji, dan angka dicek sendiri sebelum dipakai; laporan agent bukan bukti.
+5. **Agent tetap di scope-nya.** Tidak mengubah arsitektur, tidak mendelegasikan lagi, tidak menyentuh area di luar tugas.
+6. **Aturan repo ini tetap berlaku** untuk setiap agent — alur kerja, gerbang, guardrail keamanan, konvensi commit.
+
 ## Skill & subagent (Claude Code)
 
 Repo ini dilengkapi playbook pengembangan berbasis agent, diadaptasi dari [awcms-mini](https://github.com/ahliweb/awcms-mini):
 
 - [`.claude/skills/`](.claude/skills/README.md) — 55 skill tingkat-proyek yang meng-encode standar `docs/awcms/` (scaffold modul, migration, endpoint, ABAC guard, audit log, testing, security review, deploy, dst.). Dipanggil otomatis oleh model atau manual via `/<nama-skill>`.
-- [`.claude/agents/`](.claude/skills/README.md#subagents-claudeagents) — subagent `awcms-coder` (implementasi issue end-to-end), `awcms-reviewer` (review PR read-only), `awcms-security-auditor` (audit keamanan read-only).
+- [`.claude/agents/`](.claude/skills/README.md#subagents-claudeagents) — subagent `awcms-coder` (implementasi issue end-to-end; Sonnet 5.5, `medium`), `awcms-reviewer` (review PR read-only; Sonnet 5.5, `high`), `awcms-security-auditor` (audit keamanan read-only; Opus 5.5, `high`), `pelaksana-sederhana` (sub-tugas mekanis berisiko rendah; Haiku 5.5, `low`). Lihat §Orchestrator & Agent di atas.
 
 Konsistensi skill kini **digerbangi CI**: `bun run skills:check` ada di rantai `bun run check` ([ADR-0062](docs/adr/0062-skills-are-gated-against-the-code-they-describe.md)), dan gerbangnya dipersempit [ADR-0068](docs/adr/0068-family-standards-posture-editions-and-recorded-divergences.md) sehingga klaim aspirational wajib berada di blok bertanda — path repo arsip ditulis eksplisit (`awcms-mini:src/…`), bukan seolah path repo ini. `awcms-mini`/`awcms-micro` adalah **arsip** ([ADR-0055](docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md)) — bukan lagi "repo acuan"; skill yang badannya masih spesifikasi mini/micro membawa banner statusnya sendiri. Untuk skill yang menargetkan modul ERP/integrasi bisnis vertikal, terapkan langsung di `src/modules/` template ini saat membangun modul itu ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0022); nomor issue `#NNN` di badan skill warisan merujuk epik repo arsip sebagai contoh, bukan tracker repo ini.
 
