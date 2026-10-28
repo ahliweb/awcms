@@ -199,6 +199,8 @@ The following values must be injected through Coolify environment variables (not
 
 > **`bun run production:preflight` DOES NOT EXIST in this repo.** The orchestrator doc 07 refers to has not been implemented and is listed as a deferred target in [`scripts/README.md`](../../scripts/README.md) §Deferred — scheduling it will fail, not block a deploy. What is real today: `bun run config:validate` (env contract, no DB) and `bun run security:readiness` (a series of checks against a live DB, exiting non-zero when a `critical` one fails — the check count grows, do not memorise the number; `runSecurityReadinessChecks()` in `scripts/security-readiness.ts` is the list that applies).
 
+When the release changes `src/modules/omes-control/contracts/v1/` or the OMES host worker is upgraded, also run `bun run omes:contract:preflight` from a repo checkout (add `-- --worker <descriptor.json> --require-digest` to evaluate a worker). It is offline and read-only, and refuses a vendored contract that is not the one `domain/contracts/compatibility.ts` declares, or a worker outside the declared range; an unknown capability is reported as `unsupported_capability`. See the `omes_control` README, section "Worker contract compatibility and deploy preflight".
+
 ## One-shot migration
 
 Exactly as described in [`deployment-profiles.md`](deployment-profiles.md) §Two-role database model: `Dockerfile.production` does **not** run migrations — the image's runtime role (`awcms_app`) has no DDL/GRANT rights.

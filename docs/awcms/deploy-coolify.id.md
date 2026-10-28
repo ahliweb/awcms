@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:2c9572c104586e060534db315edece993414a59b88668524ad51c7b07771adb4 -->
+<!-- i18n-source-hash: sha256:f735d378b0c61ca39b66d2575117b66d0b877cc360de526c9f61b6515e10432f -->
 
 # Deploy Coolify
 
@@ -201,6 +201,8 @@ Nilai berikut wajib disuntikkan lewat Coolify environment variable (bukan dibaka
 `bun run config:validate` menolak dengan pesan jelas bila variabel wajib hilang atau kondisional tidak konsisten — jalankan sendiri sebelum mengandalkan deploy Coolify pertama kali, **dari checkout repo**, bukan dari dalam container app (image runtime tidak mengirim `scripts/` — lihat §Dispatcher terjadwal). Ia juga bisa memeriksa berkas env langsung: `bun scripts/validate-env.ts --file <path>`.
 
 > **`bun run production:preflight` TIDAK ADA di repo ini.** Orkestrator yang dirujuk doc 07 belum diimplementasikan dan terdaftar sebagai target ditunda di [`scripts/README.md`](../../scripts/README.md) §Ditunda — menjadwalkannya akan gagal, bukan memblokir deploy. Yang nyata hari ini: `bun run config:validate` (kontrak env, tanpa DB) dan `bun run security:readiness` (rangkaian check terhadap DB hidup, exit non-zero bila ada `critical` gagal — jumlah checknya tumbuh, jangan hafalkan angkanya; `runSecurityReadinessChecks()` di `scripts/security-readiness.ts` adalah daftar yang berlaku).
+
+Bila rilis mengubah `src/modules/omes-control/contracts/v1/` atau worker host OMES dinaikkan, jalankan juga `bun run omes:contract:preflight` dari checkout repo (tambahkan `-- --worker <descriptor.json> --require-digest` untuk mengevaluasi worker). Ia offline dan read-only, dan menolak kontrak ter-vendor yang bukan yang dideklarasikan `domain/contracts/compatibility.ts`, atau worker di luar rentang yang dideklarasikan; kapabilitas tak dikenal dilaporkan sebagai `unsupported_capability`. Lihat README `omes_control`, bagian "Kompatibilitas kontrak worker dan preflight deploy".
 
 ## Migration one-shot
 
