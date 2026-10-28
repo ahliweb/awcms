@@ -170,6 +170,12 @@ contracts:
     # identity) was ADDED to the port (MINOR). The key is declared here for the
     # first time; 1.0.0 was the accrue-only shape.
     commission_accrual: "1.1.0"
+    # commission_intake is owned (provided) by the base `hr_commission` module
+    # (#1189, ADR-0147): the port an event-driven consumer running as
+    # `awcms_worker` submits a commission request through, because the worker may
+    # not touch the accrual ledger. A job running as `awcms_app` posts the queue
+    # through the one posting core. `commission_accrual` is unchanged.
+    commission_intake: "1.0.0"
     # business_scope_hierarchy is owned (provided) by the base `tenant_admin`
     # module since ADR-0060, which resolves the `office` scope type against
     # `awcms_offices`. The port itself is unchanged since #180; what changed is

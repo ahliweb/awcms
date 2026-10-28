@@ -245,6 +245,8 @@ export const NOT_SENSITIVE_READS: Readonly<Record<string, string>> = {
     "tenant clock-skew and evidence settings; no person, no time. (Issue #1083)",
   "hr_commission.my_accruals.read":
     "an employee reading their OWN accruals (Issue #952): the query joins the live employment linked to the caller's login, so no other person's row can be asked for, the view omits the approver, payer and payment reference, and there is no export. The owner-reads-own precedent of payslips.read: an employee looking at their own earnings is not an event to explain; anyone else's accruals go through accruals.read, which is audited",
+  "hr_commission.intake.read":
+    "the commission intake exceptions list and the poster's counts (ADR-0147, Issue #1189): an outcome CODE, a masked source reference, a masked employment id and queue counts. No amount, no rule, no actor and no accrual is returned, so it reveals no earnings; the earnings stay behind accruals.read, which is audited",
   "hr_commission.rules.read":
     "published commission rules (rates, tiers, windows); the same for every employee, no person and no amount earned",
   "hr_payroll.payout_accounts.reveal":
@@ -428,7 +430,8 @@ export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[]
         "src/pages/api/v1/hr-commission/accruals/[id]/release.ts",
         "src/pages/api/v1/hr-commission/accruals/[id]/pay.ts",
         "src/pages/api/v1/hr-commission/accruals/[id]/void.ts",
-        "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts"
+        "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts",
+        "src/modules/hr-commission/application/hr-commission-intake-poster.ts"
       ],
       // The existing mutation callers are audited as mutations by their own
       // high-risk events. Whether they should ALSO record a read, or return a
@@ -447,7 +450,9 @@ export const PAYROLL_READ_FUNCTION_IMPORTS: readonly PayrollReadFunctionImport[]
         "src/pages/api/v1/hr-commission/accruals/[id]/void.ts":
           "a mutation audited by its own event; returns the transitioned accrual to the actor who holds the void power",
         "src/modules/hr-commission/application/hr-commission-accrual-port-adapter.ts":
-          "the in-process CommissionAccrualPort for other modules; it maps the ledger result to the port shape and exposes no HTTP surface"
+          "the in-process CommissionAccrualPort for other modules; it maps the ledger result to the port shape and exposes no HTTP surface",
+        "src/modules/hr-commission/application/hr-commission-intake-poster.ts":
+          "the awcms_app job hr-commission:intents:post (ADR-0147, Issue #1189): it posts a queued request through the one posting core and DISCARDS the returned accrual, keeping only the outcome code on the intake row. It exposes no HTTP surface and reads no accrual for anyone; the NEW accrual is audited by auditAccrued and a void by the ledger's own transition audit, exactly as on the synchronous path"
       }
     },
     {

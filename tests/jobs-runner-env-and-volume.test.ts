@@ -806,6 +806,12 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
     ];
     expect(scheduled.length).toBeGreaterThan(20);
 
+    // The ONE scheduled job that runs as awcms_app on purpose: it posts the
+    // commission intake queue into the accrual ledger, and the payroll boundary
+    // lets only the request role touch an accrual (ADR-0147, Issue #1189). Every
+    // other scheduled job is withheld DATABASE_URL.
+    const APP_ROLE_SCHEDULED_JOBS = new Set(["hr-commission:intents:post"]);
+
     for (const job of scheduled) {
       const { lines, exitCode } = await runSelection(
         [APP, WORKER].join("\n"),
@@ -813,8 +819,18 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
       );
 
       expect(exitCode).toBe(0);
-      expect(names(lines), job).not.toContain("DATABASE_URL");
+
+      if (APP_ROLE_SCHEDULED_JOBS.has(job)) {
+        expect(names(lines), job).toContain("DATABASE_URL");
+      } else {
+        expect(names(lines), job).not.toContain("DATABASE_URL");
+      }
+
       expect(names(lines), job).toContain("WORKER_DATABASE_URL");
+    }
+
+    for (const job of APP_ROLE_SCHEDULED_JOBS) {
+      expect(scheduled, `${job} is scheduled`).toContain(job);
     }
   });
 

@@ -246,6 +246,12 @@ employmentId, reason, correlationId? })` is keyed by the SAME source identity
 | `application/hr-commission-accrual-ledger.ts`       | Accrue, list, get, transitions, reconciliation (outcomes, audit)             |
 | `application/hr-commission-accrual-port-adapter.ts` | The concrete `CommissionAccrualPort`                                         |
 | `src/pages/api/v1/hr-commission/accruals/**`        | 6 thin route files (`/accruals`, `/{id}`, `.../approve\|release\|void\|pay`) |
+| `domain/hr-commission-intake.ts`                    | Intake queue, pure: status machine, retry schedule, digests, settlement      |
+| `application/hr-commission-intake-store.ts`         | The consumer's INSERT (`submit*Intent`), the switch, the exceptions list     |
+| `application/hr-commission-intake-poster.ts`        | The `awcms_app` poster: claim, post, settle, retry, poison, purge            |
+| `application/hr-commission-intake-port-adapter.ts`  | The concrete `CommissionIntakePort`                                          |
+| `application/hr-commission-intake-job.ts`           | The job body (every active tenant); `scripts/hr-commission-intents-post.ts`  |
+| `src/pages/api/v1/hr-commission/intake/**`          | 2 thin route files (`/intake/settings`, `/intake/exceptions`)                |
 | `domain/hr-commission-decimal.ts`                   | Exact `bigint` decimal parsing, rounding, formatting                         |
 | `domain/hr-commission-evaluation.ts`                | PURE `evaluateCommission` and `selectEffectiveRule`                          |
 | `domain/hr-commission-validation.ts`                | Strict request validators (money as strings)                                 |
@@ -307,7 +313,7 @@ employmentId, reason, correlationId? })` is keyed by the SAME source identity
   "is not exposed by any API" stays true only because of that redaction, and the
   applied migration cannot be edited to say so.
 - **Retention: retained for the life of the tenant, no period asserted.** There is
-  deliberately NO `dataLifecycle` descriptor for any of the three tables (a
+  deliberately NO `dataLifecycle` descriptor for the rules, accruals or transitions (a
   descriptor must assert a period and a purge mode, and nothing purges): the ledger
   tables are answered by `BOUNDED_BY_DESIGN` entries in
   `scripts/data-lifecycle-table-coverage-check.ts`. The period belongs to the
@@ -316,19 +322,127 @@ employmentId, reason, correlationId? })` is keyed by the SAME source identity
 - **The subject descriptor is actor-stamps only** and `exportable: false`: a rule
   names no data subject.
 
-## A consumer with no signed-in person (ADR-0147, decided; not built)
+## A consumer with no signed-in person: the intake queue (ADR-0147, Issue #1189)
 
 A domain-event consumer (for example the commerce `order.paid` attributor in
 awcms-one) runs in `domain-events:dispatch` as `awcms_worker`, and the payroll
 boundary forbids that role any privilege on `awcms_hr_commission_accruals` and
 `awcms_hr_commission_transitions`. So it cannot call `CommissionAccrualPort`.
 [ADR-0147](../../../docs/adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md)
-decides the sanctioned path (Issue #1138): the consumer submits a request to an
-`hr_commission`-owned intake queue with `INSERT` only (port `commission_intake`,
-default-deny per tenant), and a job that runs as `awcms_app` posts it through the
-one posting core above. `PAYROLL_ALLOWED_GRANTEES`, the empty worker allow-list and
-`commission_accrual` 1.1.0 do not change. **Nothing of this exists in the code yet**;
-it is a follow-up issue, and until it lands an event-driven adapter stays dormant.
+decides the sanctioned path and Issue #1189 builds it: **the consumer does not
+post, it submits; a job that runs as `awcms_app` posts.**
+
+```text
+consumer (awcms_worker)                       hr-commission:intents:post (awcms_app)
+  port.submitAccrual / submitVoid               claim  (FOR UPDATE SKIP LOCKED + lease)
+  one INSERT ... ON CONFLICT DO NOTHING    ->   post   (accrueCommission / voidCommissionBySource,
+  into awcms_hr_commission_intents                      the stored actor, one tenant tx per row)
+  queued | duplicate | input_invalid |          settle (posted | refused | retry -> failed)
+  actor_required | disabled                      purge  (settled rows past 30 days)
+```
+
+- **The table** `awcms_hr_commission_intents` (`sql/316`) holds one row per
+  submitted request, tenant-scoped with RLS `FORCE`. It is deliberately **not** a
+  payroll-family name (it is in `PAYROLL_OWNED_NON_PAYROLL_TABLES`, which is not a
+  catalog exemption: `PAYROLL_CATALOG_EXEMPTIONS`, `PAYROLL_ALLOWED_GRANTEES` and
+  the empty `PAYROLL_WORKER_EXECUTE_ALLOWLIST` are unchanged).
+- **What the worker can do:** `INSERT` on that table and nothing else on it (no
+  `SELECT`, `UPDATE` or `DELETE`, so it cannot read back what it submitted), and
+  nothing on any payroll-family object. It also reads the one-boolean switch
+  `awcms_hr_commission_intake_settings`. The insert is a bare `ON CONFLICT DO NOTHING`
+  with no arbiter and no `RETURNING`, which is why `INSERT` alone is enough.
+  `WORKER_ROLE_GRANTS` in `scripts/security-readiness.ts` lists exactly that.
+- **Exactly once.** The unique key is `(tenant_id, kind, source_type, source_ref,
+source_line, employment_id, request_digest)`, the digest being the ledger's own for
+  an accrual: a redelivery of the **same** request is `duplicate`; the same identity
+  with a **different** request is a second row and surfaces at posting as the
+  ledger's `source_conflict` in the exceptions list. Past that, the ledger's own
+  unique key makes a retry after a crash a `replayed`, which is `posted`. The ledger
+  write and the settlement of the intake row commit in **one** transaction.
+- **Authorization is registration plus a switch, not a session.** The consumer is
+  reviewed code declared in a module descriptor (`capabilities.consumes:
+["commission_intake"]`), and the tenant must have switched intake on:
+  `PUT /api/v1/hr-commission/intake/settings` with `hr_commission.intake.configure`
+  (high-risk, separately grantable, idempotency-keyed, audited at `warning`). Default
+  **off**: the port answers `disabled`, a database trigger refuses a raw insert, and
+  the poster claims nothing. A `void` needs a person (`actor_required`); an
+  `accrue` may have none.
+- **The poster** (`application/hr-commission-intake-poster.ts`, job
+  `hr-commission:intents:post`, every minute) is the **only scheduled job that
+  holds `DATABASE_URL`** (`ops/run-job.sh` derives that from its import closure,
+  Issue #1132). Business refusals (`no_effective_rule`, `source_conflict`,
+  `period_closed`, ...) are terminal and never retried; a transient error is retried
+  with a back-off (30 s doubling to an hour) and ends `failed` after 8 attempts; a
+  row whose every claim died mid-flight is failed too. A void that arrives before
+  the accrual it reverses waits for it. `period_closed` is routed to a human, never
+  silently voided.
+- **Audit, event and logs.** A new accrual is audited by the same `auditAccrued`
+  the HTTP route calls and a void rides the ledger's transition core, so the audit
+  row, the `awcms.hr.commission.voided` event and the transition log are the
+  synchronous path's own. A refusal writes `hr_commission.intake.refused` and a
+  failure `hr_commission.intake.failed`, both at `warning`, with ids and codes only.
+  No amount, source reference or driver message reaches an audit row or a log (an
+  error is logged as its class and SQLSTATE).
+- **Visibility without a worker read path.** `GET /api/v1/hr-commission/intake/
+exceptions` (`hr_commission.intake.read`, which opens no accrual) lists the
+  refused and failed requests with an outcome code and **masked** ids, plus the
+  poster's diagnostics (counts per status, age of the oldest live row). There is no
+  admin screen yet (the permissions are on `NOT_YET_SCREENED`).
+- **Retention.** Settled rows are purged by the poster after 30 days by default
+  (floor 7, ceiling 90, the `delegated` data-lifecycle form with `updated_at` as the
+  cursor; to be confirmed by the owner). `pending` and `posting` rows are work and
+  the database refuses to delete them. The lifecycle engine's dry-run snapshot reads
+  the queue through `awcms_hr_commission_lifecycle_eligible_count` (a count-only
+  `SECURITY DEFINER` function, the `sql/303` pattern), because the worker may not
+  read the table.
+- **The worker's claim about who acted is not trusted** (security audit of
+  Issue #1189). The worker submits a `claimed_by_tenant_user_id`, but the poster
+  stamps the ledger (`created_by`, `voided_by`) and every audit row with the
+  tenant's **intake system actor** (`intake_actor_tenant_user_id` in the settings
+  row, an active tenant user named when the switch is turned on, required while it
+  is on and enforced by a CHECK). The claim survives only as `claimedBy` in the
+  audit attributes. A **void is posted only for an accrual this intake created**
+  (an intake `accrue` row that settled `accrued`; one that merely `replayed` a
+  manual accrual is not an origin), so a compromised worker cannot void a manually
+  created accrual by naming its source: without the origin the void waits and is
+  then refused as `no_intake_origin`. An intake accrual that is `pending` or
+  `approved` is voidable exactly as the port and ADR-0147 section 3 map it; a
+  `payable` or `paid` one is `period_closed`. Once the originating `accrued` row
+  has been purged by retention, a late void is refused (`no_intake_origin`).
+- **How long a void can arrive (explicit limit).** The origin of a void is the
+  intake `accrue` row that settled `accrued`, so that row is kept for the 90-day
+  ceiling (like `refused` and `failed` rows); other posted rows (voids, replays)
+  are kept 30 days. A void arriving **later than 90 days** after the accrual was
+  posted is refused as `no_intake_origin`, appears in the exceptions list and
+  needs a human. While the matching accrue is itself still live in the queue
+  (`pending` or `posting`, for instance stuck behind a poster outage) the void
+  keeps waiting past the 24-hour grace, so a stuck accrue cannot later post a
+  commission for a voided sale. A ledger-side "created via intake" marker on the
+  accrual is the follow-up if longer windows are needed.
+- **The system actor is re-validated every tick.** If the tenant's intake system
+  actor stops being an active user, the poster claims nothing for that tenant
+  (a warning is logged), `GET /intake/settings` reports `intakeActorStatus:
+actor_inactive`, and the queue drains again once the actor is active or replaced.
+- **Out-of-order delivery.** A void whose accrual has not been posted yet is
+  deferred every 15 minutes for 24 hours without spending its retry budget (the
+  guard trigger lets a deferral give its claim back), then refused.
+- **Audit and retention.** Every posted or refused request writes an
+  `hr_commission.intake.posted` / `.refused` row with the kind, outcome code,
+  `claimedBy` and a 12-hex **fingerprint** of the source reference (never the
+  reference). `posted` rows are purged after 30 days, `refused` and `failed` rows
+  after 90, and both windows are clamped to the declared floor 7 and ceiling 90 at
+  run time. The worker reads the settings table by **column** only
+  (`tenant_id`, `commission_intake_enabled`).
+- **Deferred (follow-up issue):** a per-tenant cap on live rows, fair claiming and
+  skipping idle tenants (an intake flood by a compromised worker is bounded only
+  by the switch, the human approval of every accrual, and the exceptions list).
+- **Eventually consistent.** Accrual appears after the next poster tick; a business
+  refusal is discovered in the exceptions list, not by the consumer.
+- **Rollback** is forward-only: switch `commission_intake_enabled` off (the port
+  answers `disabled`), stop the job, keep the table inert.
+
+The downstream adapter (`ahliweb/awcms-one#391`) is not part of this repository: it
+calls `commission_intake` once this merges and the subtree is synced.
 
 ## Limitations
 

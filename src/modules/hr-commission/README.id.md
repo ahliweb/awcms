@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:1873bf964c5793a5c80ada9054d740c3648388fda5643a5d94d3b50504760a9d -->
+<!-- i18n-source-hash: sha256:546a77fdcdacbc2cae061ab50e327ad29ec215203c3b5cc422a5c51346c47a20 -->
 
 # `hr_commission`
 
@@ -260,6 +260,12 @@ LOCKED`, PS-19), dan `paid` berarti pembayaran tercatat. Belum ada mekanisme
 | `application/hr-commission-accrual-ledger.ts`       | Accrue, list, get, transisi, rekonsiliasi (outcome, audit)                     |
 | `application/hr-commission-accrual-port-adapter.ts` | `CommissionAccrualPort` yang konkret                                           |
 | `src/pages/api/v1/hr-commission/accruals/**`        | 6 berkas route tipis (`/accruals`, `/{id}`, `.../approve\|release\|void\|pay`) |
+| `domain/hr-commission-intake.ts`                    | Antrean intake, murni: mesin status, jadwal ulang, digest, penyelesaian        |
+| `application/hr-commission-intake-store.ts`         | INSERT konsumen (`submit*Intent`), sakelar, daftar pengecualian                |
+| `application/hr-commission-intake-poster.ts`        | Poster `awcms_app`: klaim, posting, selesaikan, ulang, racun, purge            |
+| `application/hr-commission-intake-port-adapter.ts`  | `CommissionIntakePort` yang konkret                                            |
+| `application/hr-commission-intake-job.ts`           | Isi job (tiap tenant aktif); `scripts/hr-commission-intents-post.ts`           |
+| `src/pages/api/v1/hr-commission/intake/**`          | 2 berkas route tipis (`/intake/settings`, `/intake/exceptions`)                |
 | `domain/hr-commission-decimal.ts`                   | Parsing, pembulatan, dan format desimal `bigint` yang eksak                    |
 | `domain/hr-commission-evaluation.ts`                | `evaluateCommission` dan `selectEffectiveRule` yang MURNI                      |
 | `domain/hr-commission-validation.ts`                | Validator request yang ketat (uang sebagai string)                             |
@@ -322,7 +328,7 @@ LOCKED`, PS-19), dan `paid` berarti pembayaran tercatat. Belum ada mekanisme
   "tidak diekspos API apa pun" benar hanya karena penyamaran itu, dan migrasi yang
   sudah diterapkan tidak dapat disunting untuk menyatakannya.
 - **Retensi: disimpan selama hidup tenant, tanpa periode yang diklaim.** Sengaja
-  TIDAK ada descriptor `dataLifecycle` untuk ketiga tabel (descriptor harus
+  TIDAK ada descriptor `dataLifecycle` untuk aturan, akrual, dan transisi (descriptor harus
   mengklaim periode dan mode purge, dan tak ada yang mem-purge): tabel buku besar
   dijawab oleh entri `BOUNDED_BY_DESIGN` di
   `scripts/data-lifecycle-table-coverage-check.ts`. Periodenya milik penasihat
@@ -331,7 +337,7 @@ LOCKED`, PS-19), dan `paid` berarti pembayaran tercatat. Belum ada mekanisme
 - **Descriptor subjek hanya stempel aktor** dan `exportable: false`: sebuah aturan
   tidak menamai subjek data.
 
-## Konsumen tanpa orang yang sedang masuk (ADR-0147, diputuskan; belum dibangun)
+## Konsumen tanpa orang yang sedang masuk: antrean intake (ADR-0147, Issue #1189)
 
 Consumer domain-event (misalnya attributor `order.paid` commerce di awcms-one)
 berjalan di `domain-events:dispatch` sebagai `awcms_worker`, dan batas payroll
@@ -339,13 +345,125 @@ melarang role itu memegang hak apa pun atas `awcms_hr_commission_accruals` dan
 `awcms_hr_commission_transitions`. Jadi ia tidak dapat memanggil
 `CommissionAccrualPort`.
 [ADR-0147](../../../docs/adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.id.md)
-memutuskan jalur yang disahkan (Issue #1138): konsumen menyerahkan permintaan ke
-antrean intake milik `hr_commission` hanya dengan `INSERT` (port
-`commission_intake`, default-deny per tenant), dan job yang berjalan sebagai
-`awcms_app` memostingnya lewat satu inti posting di atas. `PAYROLL_ALLOWED_GRANTEES`,
-allow-list worker yang kosong, dan `commission_accrual` 1.1.0 tidak berubah.
-**Belum ada kodenya**; ia issue tindak lanjut, dan sampai mendarat adapter berbasis
-event tetap dorman.
+memutuskan jalur yang disahkan dan Issue #1189 membangunnya: **konsumen tidak
+memposting, ia menyerahkan; job yang berjalan sebagai `awcms_app` yang memposting.**
+
+```text
+konsumen (awcms_worker)                       hr-commission:intents:post (awcms_app)
+  port.submitAccrual / submitVoid               klaim  (FOR UPDATE SKIP LOCKED + lease)
+  satu INSERT ... ON CONFLICT DO NOTHING   ->   posting (accrueCommission / voidCommissionBySource,
+  ke awcms_hr_commission_intents                         aktor tersimpan, satu tx tenant per baris)
+  queued | duplicate | input_invalid |          selesaikan (posted | refused | coba lagi -> failed)
+  actor_required | disabled                      purge  (baris selesai lewat 30 hari)
+```
+
+- **Tabelnya** `awcms_hr_commission_intents` (`sql/316`) menyimpan satu baris per
+  permintaan yang diserahkan, tercakup tenant dengan RLS `FORCE`. Sengaja **bukan**
+  nama keluarga payroll (ia ada di `PAYROLL_OWNED_NON_PAYROLL_TABLES`, yang bukan
+  pengecualian katalog: `PAYROLL_CATALOG_EXEMPTIONS`, `PAYROLL_ALLOWED_GRANTEES`, dan
+  `PAYROLL_WORKER_EXECUTE_ALLOWLIST` yang kosong tidak berubah).
+- **Yang dapat dilakukan worker:** `INSERT` pada tabel itu dan tidak ada yang lain
+  (tanpa `SELECT`, `UPDATE`, atau `DELETE`, sehingga ia tidak dapat membaca balik
+  apa yang diserahkannya), dan tidak ada hak atas objek keluarga payroll mana pun.
+  Ia juga membaca sakelar satu-boolean `awcms_hr_commission_intake_settings`. Insert
+  adalah `ON CONFLICT DO NOTHING` polos tanpa arbiter dan tanpa `RETURNING`, sebab
+  itu `INSERT` saja cukup. `WORKER_ROLE_GRANTS` di `scripts/security-readiness.ts`
+  mendaftarkan persis itu.
+- **Tepat sekali.** Kunci uniknya `(tenant_id, kind, source_type, source_ref,
+source_line, employment_id, request_digest)`, digest-nya adalah digest buku besar
+  sendiri untuk akrual: pengiriman ulang permintaan yang **sama** adalah
+  `duplicate`; identitas yang sama dengan permintaan **berbeda** adalah baris kedua
+  dan muncul saat posting sebagai `source_conflict` milik buku besar di daftar
+  pengecualian. Selebihnya, kunci unik buku besar membuat percobaan ulang setelah
+  crash menjadi `replayed`, yaitu `posted`. Tulisan buku besar dan penyelesaian baris
+  intake di-commit dalam **satu** transaksi.
+- **Otorisasi adalah registrasi ditambah sakelar, bukan sesi.** Konsumen adalah
+  kode yang ditinjau dan dideklarasikan di descriptor modul (`capabilities.consumes:
+["commission_intake"]`), dan tenant harus menyalakan intake:
+  `PUT /api/v1/hr-commission/intake/settings` dengan `hr_commission.intake.configure`
+  (berisiko tinggi, dapat diberikan terpisah, ber-Idempotency-Key, diaudit pada
+  `warning`). Bawaannya **mati**: port menjawab `disabled`, trigger basis data menolak
+  insert mentah, dan poster tidak mengklaim apa pun. `void` memerlukan orang
+  (`actor_required`); `accrue` boleh tanpa.
+- **Poster** (`application/hr-commission-intake-poster.ts`, job
+  `hr-commission:intents:post`, tiap menit) adalah **satu-satunya job terjadwal yang
+  memegang `DATABASE_URL`** (`ops/run-job.sh` menurunkannya dari closure impornya,
+  Issue #1132). Penolakan bisnis (`no_effective_rule`, `source_conflict`,
+  `period_closed`, ...) bersifat final dan tidak diulang; error sementara diulang
+  dengan back-off (30 dtk berlipat hingga sejam) dan berakhir `failed` setelah 8
+  percobaan; baris yang setiap klaimnya mati di tengah jalan juga di-fail-kan. Void
+  yang tiba sebelum akrual yang dibalikkannya menunggu akrual itu. `period_closed`
+  diarahkan ke manusia, tidak pernah di-void diam-diam.
+- **Audit, event, dan log.** Akrual baru diaudit oleh `auditAccrued` yang sama
+  dengan yang dipanggil route HTTP dan void menumpang inti transisi buku besar,
+  sehingga baris audit, event `awcms.hr.commission.voided`, dan log transisi adalah
+  milik jalur sinkron. Penolakan menulis `hr_commission.intake.refused` dan kegagalan
+  `hr_commission.intake.failed`, keduanya pada `warning`, hanya berisi id dan kode.
+  Tidak ada nominal, referensi sumber, atau pesan driver yang masuk baris audit atau
+  log (error dicatat sebagai kelas dan SQLSTATE-nya).
+- **Keterlihatan tanpa jalur baca untuk worker.** `GET /api/v1/hr-commission/intake/
+exceptions` (`hr_commission.intake.read`, yang tidak membuka akrual apa pun)
+  mendaftar permintaan yang ditolak dan gagal dengan kode hasil dan id yang
+  **disamarkan**, ditambah diagnostik poster (hitungan per status, umur baris hidup
+  tertua). Belum ada layar admin (permission-nya ada di `NOT_YET_SCREENED`).
+- **Retensi.** Baris selesai di-purge poster setelah 30 hari secara bawaan (batas
+  bawah 7, atas 90, bentuk `delegated` data-lifecycle dengan `updated_at` sebagai
+  kursor; menunggu konfirmasi pemilik). Baris `pending` dan `posting` adalah
+  pekerjaan dan basis data menolak menghapusnya. Snapshot dry-run mesin lifecycle
+  membaca antrean lewat `awcms_hr_commission_lifecycle_eligible_count` (fungsi
+  `SECURITY DEFINER` hanya-hitung, pola `sql/303`), karena worker tidak boleh
+  membaca tabelnya.
+- **Klaim worker tentang siapa yang bertindak tidak dipercaya** (audit keamanan
+  Issue #1189). Worker menyerahkan `claimed_by_tenant_user_id`, tetapi poster
+  mencap buku besar (`created_by`, `voided_by`) dan setiap baris audit dengan
+  **aktor sistem intake** tenant (`intake_actor_tenant_user_id` di baris
+  settings, pengguna tenant aktif yang dinamai saat sakelar dinyalakan, wajib
+  selama menyala dan ditegakkan CHECK). Klaim itu hanya bertahan sebagai
+  `claimedBy` di atribut audit. **Void hanya diposting untuk akrual yang dibuat
+  intake ini** (baris `accrue` intake yang selesai `accrued`; yang hanya
+  `replayed` atas akrual manual bukan asal), sehingga worker yang dikompromikan
+  tidak dapat mem-void akrual buatan manual dengan menyebut sumbernya: tanpa asal,
+  void menunggu lalu ditolak sebagai `no_intake_origin`. Akrual intake berstatus
+  `pending` atau `approved` dapat di-void persis seperti dipetakan port dan
+  ADR-0147 bagian 3; yang `payable` atau `paid` adalah `period_closed`. Setelah
+  baris `accrued` asalnya di-purge retensi, void yang terlambat ditolak
+  (`no_intake_origin`).
+- **Berapa lama void dapat tiba (batas eksplisit).** Asal sebuah void adalah baris
+  `accrue` intake yang selesai `accrued`, sehingga baris itu disimpan hingga batas
+  atas 90 hari (seperti baris `refused` dan `failed`); baris posted lain (void,
+  replay) disimpan 30 hari. Void yang tiba **lebih dari 90 hari** setelah akrual
+  diposting ditolak sebagai `no_intake_origin`, muncul di daftar pengecualian, dan
+  perlu manusia. Selama accrue yang cocok masih hidup di antrean (`pending` atau
+  `posting`, misalnya macet karena poster mati), void terus menunggu melewati
+  toleransi 24 jam, sehingga accrue yang macet tidak dapat kemudian memposting
+  komisi untuk penjualan yang sudah di-void. Penanda "dibuat lewat intake" di sisi
+  buku besar pada akrual adalah tindak lanjut bila jendela lebih panjang
+  diperlukan.
+- **Aktor sistem divalidasi ulang tiap tick.** Bila aktor sistem intake tenant
+  berhenti menjadi pengguna aktif, poster tidak mengklaim apa pun untuk tenant itu
+  (peringatan dicatat), `GET /intake/settings` melaporkan `intakeActorStatus:
+actor_inactive`, dan antrean mengalir lagi setelah aktor aktif atau diganti.
+- **Pengiriman tak berurutan.** Void yang akrualnya belum diposting ditunda tiap 15
+  menit selama 24 jam tanpa menghabiskan jatah percobaannya (trigger penjaga
+  membolehkan penundaan mengembalikan klaimnya), lalu ditolak.
+- **Audit dan retensi.** Setiap permintaan yang diposting atau ditolak menulis
+  baris `hr_commission.intake.posted` / `.refused` berisi jenis, kode hasil,
+  `claimedBy`, dan **sidik jari** 12-heks dari referensi sumber (bukan
+  referensinya). Baris `posted` di-purge setelah 30 hari, baris `refused` dan
+  `failed` setelah 90, dan kedua jendela dijepit ke batas bawah 7 dan atas 90 yang
+  dideklarasikan saat berjalan. Worker membaca tabel settings hanya per **kolom**
+  (`tenant_id`, `commission_intake_enabled`).
+- **Ditunda (issue tindak lanjut):** batas baris hidup per tenant, klaim yang adil,
+  dan melewati tenant yang menganggur (banjir intake oleh worker yang
+  dikompromikan hanya dibatasi sakelar, persetujuan manusia atas setiap akrual,
+  dan daftar pengecualian).
+- **Konsistensi akhirnya.** Akrual muncul setelah tick poster berikutnya; penolakan
+  bisnis ditemukan di daftar pengecualian, bukan oleh konsumen.
+- **Rollback** hanya maju: matikan `commission_intake_enabled` (port menjawab
+  `disabled`), hentikan job, biarkan tabel tidak aktif.
+
+Adapter hilir (`ahliweb/awcms-one#391`) bukan bagian repositori ini: ia memanggil
+`commission_intake` setelah ini di-merge dan subtree disinkronkan.
 
 ## Keterbatasan
 
