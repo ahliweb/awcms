@@ -57,6 +57,25 @@ The sentence "the per-instance database rule cannot be configured away" becomes:
 
 The required tests (strict, relaxed, mode switching, permission, idempotency, step-up, isolation, machine credentials) are the 22 rows SOD1–SOD22 in the pack section 7.5, with acceptance scenarios S9 and S9a in section 12. They are a requirement on the implementing issue.
 
+### 7. Amendment A1 (Proposed, 28 October 2026): reversal duties and the paid-run recovery rule (finding PS-02, Issue #956)
+
+**Status of this amendment: Proposed.** ADR-0136 stays Accepted for §1 to §6. This section is a recommendation that takes effect only when the maintainer accepts it **and** counsel answers L-C3 of the pack's legal checklist (`hr-payroll.md` §17.3). Issue #957 must not fix the reversal columns before both. Nothing here is implemented.
+
+**Context.** The security review (pack §17.2, PS-02, blocking) found two gaps. (a) `reverse` (R) was constrained only against P: the person who calculated, approved or finalized the original could reverse it, and nothing required a second person to approve the reversal run. (b) The pack reversed a finalized or **paid** run and then let a fresh regular run recalculate; money recorded as paid is not recovered by a reversal, so the replacement run paid the employee again, and issue #962 compounded it by re-opening commission accruals.
+
+**Decision (recommended).**
+
+1. **A reversal is a run with its own chain.** A `reversal` run is calculated, approved, finalized and paid like any run. `reversed_by` (the requester) and the reversal run's approver differ from the original run's `paid_by`. R is added to the per-instance database rules: **R × C** (the requester of a reversal is not its calculator) and **R × A** (nor its approver), in **both** modes, as unconditional CHECKs like A ≠ C and A ≠ P. They are not role-level rules, because one person may hold R and C for different runs and the descriptors cannot read per-instance state (ADR-0031). R × P stays the existing role-level rule.
+2. **Reversing a paid run recovers; it does not re-pay.** The reversal run negates the original lines and adds, per affected employment, a **recovery** line (`element_kind = recovery`, negative). The recovery is **netted in the next open period** only after a distinct approval of the netting. The replacement regular run pays only the **delta** between the corrected and the originally paid amount. Commission accruals consumed by the original run stay `paid`; the recovery, not a re-opened accrual, carries the difference. Reversal of a finalized-but-unpaid run needs no recovery.
+3. **What the engine does not decide.** Whether netting a recovery against later pay is lawful, and any limit on deducting recoveries from pay, are counsel's question (L-C3). Where netting is not allowed the recovery is handled outside the engine and recorded as an adjustment; the engine never forces the deduction.
+4. **Payee as actor (finding PS-01, same review).** No actor may calculate, approve, finalize, pay or reverse a run that contains a line for the employment linked to their own `tenant_user_id`, nor propose or approve compensation for their own employment, in either mode, enforced by trigger and handler. This closes a hole the SoD matrix left open and does not change §1 to §5.
+
+**Options considered.** (A, recommended) recovery line netted in the next open period, replacement pays the delta. (B) Refuse reversal of a paid run and require adjustment lines only: simplest and never nets, but leaves no way to correct a paid run's lines while preserving the audit link to the original, and pushes every correction into manual adjustment. (C) Let the replacement run pay in full and recover out of band: the double payment the finding names. (D) Re-open the accruals and the run: breaks immutability and the exactly-once accrual rule (pack §6.2). A is chosen for security (no double payment, every step has a distinct approver), auditability (the recovery references the reversed line) and operability; B is the fallback if counsel says netting is not acceptable.
+
+**Consequences.** Three columns or CHECKs and one `element_kind` value are added to the Issue #957 design (pack §9); the SoD matrix gains R × C and R × A (pack §7.5); the test matrix gains SOD23 to SOD29. If counsel rejects netting, A becomes B and §7.4 of the pack changes with it; the R × C, R × A and payee rules stand either way.
+
+**Test matrix.** SOD23 to SOD29 in the pack §7.5, scenarios S10a to S10c in §12.
+
 ## Consequences
 
 - **Not built.** This ADR creates no migration, OpenAPI path, AsyncAPI channel, permission seed or code. The setting, the `sod_mode` column, the CHECKs, the permission and the SoD rule are implemented in Issue #957; until then `hr_payroll` remains admitted and gated, and the tests SOD1–SOD22 do not yet exist.
