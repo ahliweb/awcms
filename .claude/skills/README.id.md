@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:7681e339dc263297d7211b61aa11624400c4f184afb4ad82894f6f3677022700 -->
+<!-- i18n-source-hash: sha256:aa11973230678c6063f692ce78ab98141dfd879227c71fba69e943f1234cfcb0 -->
 
 # AWCMS Project Skills
 
@@ -250,11 +250,12 @@ flowchart TD
 
 Selain skill, tersedia **subagent** untuk delegasi kerja penuh:
 
-| Agent                    | Peran                                               | Tools     |
-| ------------------------ | --------------------------------------------------- | --------- |
-| `awcms-coder`            | Implementasi issue end-to-end (Prompt Induk doc 12) | Semua     |
-| `awcms-reviewer`         | Review PR/diff terhadap DoD (read-only)             | Read-only |
-| `awcms-security-auditor` | Audit keamanan modul, verdict go-live (read-only)   | Read-only |
+| Agent                    | Peran                                               | Tools     | Model / effort    |
+| ------------------------ | --------------------------------------------------- | --------- | ----------------- |
+| `awcms-coder`            | Implementasi issue end-to-end (Prompt Induk doc 12) | Semua     | Sonnet / `medium` |
+| `awcms-reviewer`         | Review PR/diff terhadap DoD (read-only)             | Read-only | Sonnet / `high`   |
+| `awcms-security-auditor` | Audit keamanan modul, verdict go-live (read-only)   | Read-only | Opus / `high`     |
+| `pelaksana-sederhana`    | Sub-tugas sederhana, mekanis, risiko rendah         | Semua     | Haiku / `low`     |
 
 Pola pakai: `awcms-coder` mengerjakan issue → `awcms-reviewer` mereview → modul sensitif diaudit `awcms-security-auditor`.
 

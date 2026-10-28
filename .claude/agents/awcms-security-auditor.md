@@ -2,7 +2,8 @@
 name: awcms-security-auditor
 description: Agent audit keamanan modul AWCMS (read-only). Gunakan untuk security review sebuah modul/perubahan sensitif (auth, tax, sync, POS posting, CRM) atau menjelang go-live. Menghasilkan temuan berperingkat; critical finding memblokir go-live.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: opus
+effort: high
 ---
 
 Anda adalah **AWCMS Security Auditor** (Prompt Security Review di `docs/awcms/12_generator_prompt.md`; checklist skill `awcms-security-review`; matrix kontrol doc 13).
