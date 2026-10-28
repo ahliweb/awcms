@@ -134,7 +134,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v10.10.2..HEAD`                                                   |
 | Base modules                      | **33** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **230** (`sql/001`–`315`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **232** (`sql/001`–`317`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0155** (`0000` = template; highest ADR status: **Proposed**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **80** `.astro` files in `src/pages/admin/`; **0 of 33** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **102** (59.105 lines) — on typechecking see §6                                        | `find src -name '*.astro'`                                                              |
@@ -405,6 +405,26 @@ pioneered directly here after the ADR-0047 freeze.)
   §Baseline/§Obsidian workflow/§Security and privacy.
 
 ## 4. Backlog / next steps
+
+- **COMMISSION INTAKE QUEUE — 28 October 2026: built (#1189, ADR-0147; migrations
+  `sql/316` + `sql/317`).** An event-driven consumer (`awcms_worker`) can now report
+  a sale to `hr_commission` without any privilege on the accrual ledger: it submits
+  through the new port `commission_intake` 1.0.0 (one `INSERT ... ON CONFLICT DO
+NOTHING` into `awcms_hr_commission_intents`, `INSERT` as the worker's only verb on
+  it) and the job `hr-commission:intents:post` (`awcms_app`, every minute; the only
+  scheduled job that keeps `DATABASE_URL`) claims, posts through the one posting
+  core, retries, fails poison and purges settled rows after 30 days. Default-deny
+  per tenant (`commission_intake_enabled`, `hr_commission.intake.configure`);
+  refused and failed requests are listed at `GET /api/v1/hr-commission/intake/
+exceptions` (`intake.read`). The payroll boundary did not move:
+  `PAYROLL_ALLOWED_GRANTEES`, the empty worker allow-list and
+  `PAYROLL_CATALOG_EXEMPTIONS` are unchanged (the two new tables are in
+  `PAYROLL_OWNED_NON_PAYROLL_TABLES`, which is not an exemption). **Open:** an admin
+  screen for the exceptions list and the switch (both permissions are on
+  `NOT_YET_SCREENED`); the owner's confirmation of the 30-day retention default;
+  the downstream adapter `ahliweb/awcms-one#391`, which stays dormant until this is
+  merged and the subtree is synced as a merge commit. Map: the `hr_commission`
+  README.
 
 - **IDENTITY_ACCESS BUG HUNT — 16 October 2026: 13 of 15 fix groups landed
   (#1057–#1069, docs #1070, tracking #1055 closed); one follow-up open, #1056.**

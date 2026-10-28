@@ -192,6 +192,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "hr_commission.rules.read",
   "hr_commission.rules.retire",
   "hr_commission.rules.update",
+  // hr_commission intake (2) — ADR-0147 / Issue #1189. The intake queue ships
+  // API-first like the rest of the module: the switch (`PUT /api/v1/hr-commission/
+  // intake/settings`) and the read-only exceptions list with the poster's counts
+  // (`GET .../intake/exceptions`) are the whole surface, and a page over them is
+  // the recorded follow-up (an operator can drive both from the API meanwhile).
+  "hr_commission.intake.configure",
+  "hr_commission.intake.read",
   // hr_workforce shifts (8) — ADR-0132 / Issue #946. Same posture as above:
   // API-first and `experimental`; the shift roster and template screens are the
   // recorded follow-up that flips the module to `active`.

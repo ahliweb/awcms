@@ -12211,6 +12211,114 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/hr-commission/intake/exceptions:
+    get:
+      operationId: hrCommissionIntakeExceptionsList
+      tags:
+        - HR Commission
+      summary: List the commission intake requests that need a human
+      description: "Gated by `hr_commission.intake.read` (Issue #1189, ADR-0147 section 5), which opens no accrual. The intake requests the ledger REFUSED (`source_conflict`, `no_effective_rule`, `period_closed`, `not_found`, ...) or that FAILED after the poster's bounded retries, newest settlement first, keyset paginated (`cursor`). Each row carries an outcome CODE and MASKED ids only: no amount, no rule, no actor, no unmasked source reference. `summary` is the poster's diagnostics: whether intake is on, the queue's counts per status and how many seconds the oldest still-live request has waited (a poster outage shows as a growing age). Read-only. Never cached. Tenant-scoped (withTenant + RLS FORCE)."
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of exceptions with the queue summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrCommissionIntakeExceptionPage"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/hr-commission/intake/settings:
+    get:
+      operationId: hrCommissionIntakeSettingGet
+      tags:
+        - HR Commission
+      summary: Read the commission intake switch
+      description: "Gated by `hr_commission.intake.read` (Issue #1189, ADR-0147 section 4). The tenant's `commissionIntakeEnabled` switch; `false` when it was never set (default-deny). With it off the `commission_intake` port answers `disabled`, nothing is written and the poster job claims nothing. Read-only; holds no pay data."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The switch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrCommissionIntakeSetting"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: hrCommissionIntakeSettingPut
+      tags:
+        - HR Commission
+      summary: Switch commission intake on or off
+      description: "Gated by `hr_commission.intake.configure` (high-risk, separately grantable; never implied by `accruals.accrue` or `rules.publish`). Turning it ON lets a registered system consumer (one running as the worker role, with no signed-in person) queue commission requests that the `hr-commission:intents:post` job then posts through the one posting core; turning it OFF stops new intake and the poster claiming (rows already queued wait). Switching ON needs the intake system actor (`intakeActorTenantUserId`, an active tenant user; 400 `INTAKE_ACTOR_REQUIRED` / `INTAKE_ACTOR_INVALID`): the poster stamps THAT identity on every posted accrual and audit row, never the consumer's own claim. The body is strict: `commissionIntakeEnabled` (boolean) and the optional `intakeActorTenantUserId`, nothing else. Requires an Idempotency-Key; replaying it returns the stored response and does not switch again. Audited at `warning` with the before and after switch (never an amount). The `hr_commission` module must be enabled for the tenant (Module Management gate)."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HrCommissionIntakeSettingInput"
+      responses:
+        "200":
+          description: The switch after the change.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/HrCommissionIntakeSetting"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/hr-commission/my-accruals:
     get:
       operationId: hrCommissionMyAccrualsList
@@ -34578,6 +34686,109 @@ components:
         reasonCode:
           type: string
           pattern: ^[a-z][a-z0-9_.-]{0,39}$
+    HrCommissionIntakeException:
+      type: object
+      description: A refused or failed intake request. Codes and masked ids only; never an amount.
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - accrue
+            - void
+        status:
+          type: string
+          enum:
+            - refused
+            - failed
+        outcomeCode:
+          type: string
+          description: "How it ended: a ledger outcome (`source_conflict`, `no_effective_rule`, `rule_ambiguous`, `source_type_mismatch`, `currency_mismatch`, `employment_not_found`, `employment_not_eligible`, `input_invalid`, `period_closed`, `not_found`, `actor_required`, `no_intake_origin` for a void whose accrual this intake never created) or, for `failed`, `error` / `attempts_exhausted`."
+        sourceType:
+          type: string
+        sourceRefMasked:
+          type: string
+        employmentIdMasked:
+          type: string
+        attempts:
+          type: integer
+        submittedAt:
+          type: string
+          format: date-time
+        settledAt:
+          type: string
+          format: date-time
+    HrCommissionIntakeExceptionPage:
+      type: object
+      properties:
+        exceptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/HrCommissionIntakeException"
+        nextCursor:
+          type: string
+          nullable: true
+        summary:
+          $ref: "#/components/schemas/HrCommissionIntakeSummary"
+    HrCommissionIntakeSetting:
+      type: object
+      properties:
+        commissionIntakeEnabled:
+          type: boolean
+        intakeActorTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The system actor the poster stamps on every accrual and audit row it posts. The worker's own claim about who acted is never trusted.
+        intakeActorStatus:
+          type: string
+          enum:
+            - unset
+            - active
+            - actor_inactive
+          description: "`actor_inactive` means intake is configured but the actor is no longer an active tenant user: the poster claims nothing until it is fixed."
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    HrCommissionIntakeSettingInput:
+      type: object
+      additionalProperties: false
+      required:
+        - commissionIntakeEnabled
+      properties:
+        commissionIntakeEnabled:
+          type: boolean
+        intakeActorTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: An ACTIVE user of this tenant. Required to switch intake ON (here or already stored); omitted keeps the stored value; null clears it (only while switching OFF).
+    HrCommissionIntakeSummary:
+      type: object
+      properties:
+        commissionIntakeEnabled:
+          type: boolean
+        counts:
+          type: object
+          description: Rows per status. Counts only.
+          properties:
+            pending:
+              type: integer
+            posting:
+              type: integer
+            posted:
+              type: integer
+            refused:
+              type: integer
+            failed:
+              type: integer
+        oldestLiveAgeSeconds:
+          type: integer
+          nullable: true
+          description: Seconds the oldest pending or posting request has waited; null when none.
     HrCommissionOwnAccrual:
       type: object
       description: "What an employee sees of their OWN accrual: the earning and how it was computed. No approver, payer, payment reference, rule row id or employment id. Money is a decimal string."

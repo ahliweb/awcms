@@ -46,7 +46,7 @@ import { HR_COMMISSION_MODULE_KEY } from "./domain/hr-commission-permissions";
 export const hrCommissionModule = defineModule({
   key: HR_COMMISSION_MODULE_KEY,
   name: "HR Commission",
-  version: "0.4.0",
+  version: "0.5.0",
   // Commission accruals are monetary pay facts: payroll data by any reading
   // (ADR-0132). Declared so that no channel that must keep payroll off it (the
   // Telegram registry and its CI gate, ADR-0140) has to guess from a name.
@@ -56,16 +56,23 @@ export const hrCommissionModule = defineModule({
   // it now declares the employee's own-commission screen.
   status: "active",
   description:
-    "Versioned commission rules (Issue #950, ADR-0132): jurisdiction-neutral, tenant-authored terms saying how a share of a source amount becomes a commission — a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling. A rule changes only by a new version; the database enforces that a draft may be edited, a published or retired version is immutable (a published one may only become retired), no two published versions of one rule overlap (race-safe, advisory-locked), and no row is ever deleted. The version in force for an event is the one whose half-open window contains the event's own date, never now(). Evaluation is a pure function over bigint decimal strings: no float, no expression or script, no tiers, bounded by construction. Publish and retire are high-risk, separately grantable, idempotency-keyed and audited without any rate or amount; publish is bound to the content digest the reviewer saw and refuses the draft's creator and last editor (maker / checker), and a row is born a draft. A rule references no person or employment and carries no personal data. Issue #951 adds the accrual LEDGER: a commission earned by an employment from a source event is one row whose monetary facts (rule version, inputs, rate snapshot, amount, currency, instants) are immutable by trigger and whose status advances pending -> approved -> payable -> paid, or to voided from pending or approved (a voided accrual can never be paid); the transition log is append-only and written only by the accrual's own triggers, so status and log cannot diverge and a reconciliation proves it. The same source for the same employment is accrued exactly once (a database unique key, race-safe), a downstream adapter reports a sale through a neutral port (this module imports nothing from commerce) and a redelivery returns the original; the amount is computed from the published rule in force on the event's own date and can never be asserted by the caller; the employment and rule are validated under FOR SHARE by trigger; the beneficiary cannot approve their own accrual. Approve, release, void and pay are high-risk, separately grantable, idempotency-keyed and audited without any amount. A back-dated publish of a rule now needs a stated reason. Employee commission only (not affiliate); reversal and events are later phases. Self-service (Issue #952): an employee reads their OWN accruals, read-only, at /admin/hr/my-commission through GET /api/v1/hr-commission/my-accruals, which joins the live employment linked to their login in the query itself (another person's accrual is a 404, never a 403, and there is no filter to widen it); the view carries no approver, payer or payment reference. No screen exports anyone's data.",
+    "Versioned commission rules (Issue #950, ADR-0132): jurisdiction-neutral, tenant-authored terms saying how a share of a source amount becomes a commission — a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling. A rule changes only by a new version; the database enforces that a draft may be edited, a published or retired version is immutable (a published one may only become retired), no two published versions of one rule overlap (race-safe, advisory-locked), and no row is ever deleted. The version in force for an event is the one whose half-open window contains the event's own date, never now(). Evaluation is a pure function over bigint decimal strings: no float, no expression or script, no tiers, bounded by construction. Publish and retire are high-risk, separately grantable, idempotency-keyed and audited without any rate or amount; publish is bound to the content digest the reviewer saw and refuses the draft's creator and last editor (maker / checker), and a row is born a draft. A rule references no person or employment and carries no personal data. Issue #951 adds the accrual LEDGER: a commission earned by an employment from a source event is one row whose monetary facts (rule version, inputs, rate snapshot, amount, currency, instants) are immutable by trigger and whose status advances pending -> approved -> payable -> paid, or to voided from pending or approved (a voided accrual can never be paid); the transition log is append-only and written only by the accrual's own triggers, so status and log cannot diverge and a reconciliation proves it. The same source for the same employment is accrued exactly once (a database unique key, race-safe), a downstream adapter reports a sale through a neutral port (this module imports nothing from commerce) and a redelivery returns the original; the amount is computed from the published rule in force on the event's own date and can never be asserted by the caller; the employment and rule are validated under FOR SHARE by trigger; the beneficiary cannot approve their own accrual. Approve, release, void and pay are high-risk, separately grantable, idempotency-keyed and audited without any amount. A back-dated publish of a rule now needs a stated reason. Employee commission only (not affiliate); reversal and events are later phases. Self-service (Issue #952): an employee reads their OWN accruals, read-only, at /admin/hr/my-commission through GET /api/v1/hr-commission/my-accruals, which joins the live employment linked to their login in the query itself (another person's accrual is a 404, never a 403, and there is no filter to widen it); the view carries no approver, payer or payment reference. No screen exports anyone's data. Intake (Issue #1189, ADR-0147): an event-driven consumer that runs as the worker role, and so may touch no accrual, submits a commission or a void through the `commission_intake` port (one INSERT into awcms_hr_commission_intents, default-deny per tenant behind `hr_commission.intake.configure`), and the job `hr-commission:intents:post`, which runs as awcms_app, posts it through the one posting core; refused and failed requests are listed for a human (an outcome code and masked ids, never an amount).",
   dependencies: ["tenant_admin", "hr_workforce", "domain_event_runtime"],
   /**
    * #1109: the accrual port (`_shared/ports/commission-accrual-port.ts`; adapter
    * `application/hr-commission-accrual-port-adapter.ts`). A downstream adapter
    * (the commerce sale-attribution adapter in a derived repository) binds to it
    * at its composition root; nothing in this repository consumes it.
+   *
+   * #1189 (ADR-0147): `commission_intake` (`_shared/ports/commission-intake-port.ts`;
+   * adapter `application/hr-commission-intake-port-adapter.ts`) is the port an
+   * EVENT-DRIVEN consumer, one running as `awcms_worker`, submits through: the
+   * worker may not touch the accrual ledger, so it INSERTs an intake record and
+   * the job `hr-commission:intents:post` (as `awcms_app`) posts it through the one
+   * posting core. `commission_accrual` is unchanged.
    */
   capabilities: {
-    provides: ["commission_accrual"]
+    provides: ["commission_accrual", "commission_intake"]
   },
   events: {
     asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",
@@ -155,16 +162,170 @@ export const hrCommissionModule = defineModule({
       action: "pay",
       description:
         "Record that a payable commission accrual has been paid — audited, high-risk"
+    },
+    {
+      activityCode: "intake",
+      action: "read",
+      description:
+        "Read the commission intake exceptions (refused and failed requests: an outcome code and masked ids, never an amount) and the poster job counts"
+    },
+    {
+      activityCode: "intake",
+      action: "configure",
+      description:
+        "Switch the tenant's commission intake on or off (lets a registered system consumer queue commission requests that a job posts) — audited at warning, high-risk"
     }
   ],
-  // No `dataLifecycle` descriptor for ANY of the three tables, deliberately: a
-  // descriptor must assert a retention period and an execution mode, and nothing
-  // here purges (no job, no function) and nobody in this repository owns the
-  // period for records of earnings. The honest answer is the `BOUNDED_BY_DESIGN`
-  // entries in scripts/data-lifecycle-table-coverage-check.ts: retained for the
-  // life of the tenant, no period asserted. Asserting 2555-3650 days with a purge
-  // mode would be a claim about behaviour that does not exist.
+  jobs: [
+    {
+      command: "bun run hr-commission:intents:post",
+      schedule: {
+        mode: "cron",
+        expression: "* * * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Drains the commission intake queue (Issue #1189, ADR-0147) into the accrual ledger: claims due intake rows per tenant (FOR UPDATE SKIP LOCKED, with a lease), posts each through the one existing posting core (accrueCommission / voidCommissionBySource) in its own tenant transaction with the stored actor, and settles the row as posted, refused (a business refusal: terminal, never retried) or, after a bounded number of transient errors, failed. A void that arrives before the accrual it reverses waits for it. Also purges settled rows past retention (posted 30 days, refused and failed 90). Audit rows, domain events and the transition log are the synchronous path's own; no amount reaches a log or an audit row.",
+      recommendedSchedule: "Every minute via cron/systemd timer.",
+      environmentNotes:
+        "Database-only operation, no external network dependency. Runs as `awcms_app` (DATABASE_URL), NOT the worker: it posts accruals, and the payroll boundary lets only the request role touch them. The event consumer that feeds the queue is `awcms_worker` and holds INSERT on the intake table and nothing else. A tenant whose hr_commission module or `commission_intake_enabled` switch is off is not touched (its rows wait); retention housekeeping still runs. Bounded per-tenant passes in the maintenance work class; safe alongside request traffic and alongside a second instance (SKIP LOCKED plus a lease). `--dry-run` counts the due rows and the terminal rows past retention.",
+      safeInOfflineLan: true
+    }
+  ],
+  // No `dataLifecycle` descriptor for the rules, the accruals or the transitions,
+  // deliberately: a descriptor must assert a retention period and an execution
+  // mode, and nothing here purges them (no job, no function) and nobody in this
+  // repository owns the period for records of earnings. The honest answer is the
+  // `BOUNDED_BY_DESIGN` entries in scripts/data-lifecycle-table-coverage-check.ts:
+  // retained for the life of the tenant, no period asserted. Asserting 2555-3650
+  // days with a purge mode would be a claim about behaviour that does not exist.
+  //
+  // The INTAKE queue (#1189, ADR-0147) is different: it is transient, it has a
+  // purge (the poster job), and its period is the ADR's (default 30 days, floor 7,
+  // ceiling 90, to be confirmed by the owner).
+  dataLifecycle: [
+    {
+      key: "hr_commission.intents",
+      tableName: "awcms_hr_commission_intents",
+      ownerModuleKey: HR_COMMISSION_MODULE_KEY,
+      scope: "tenant",
+      // `updated_at`, not `created_at`: the moment the row stopped moving.
+      cursorColumn: "updated_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 90,
+      defaultRetentionDays: 30,
+      partition: {
+        eligible: false,
+        rationale:
+          "A transient queue drained every minute, one row per submitted sale line, with terminal rows deleted after a short window: the live set stays small and no long history is kept to range-scan."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "The row is a derived copy of a sale's base amount and an employment id, awaiting posting. The BUSINESS record is the accrual in the ledger, retained for the life of the tenant; archiving the queue would copy earnings data into a second, longer-lived artifact for no purpose."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Only settled rows (`posted`, `refused`, `failed`) are deleted, by the poster job's own statement that names those statuses; a `pending` or `posting` row is work and the database refuses to delete it. The generic engine, which deletes purely by age, would drop unposted work, which is why this descriptor is delegated."
+      },
+      legalHold: { applicable: false, precedence: "not_applicable" },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "updated_at"],
+          purpose:
+            "awcms_hr_commission_intents_retention_idx (sql/316) — partial over the settled statuses, the purge's own path and the backlog count's."
+        }
+      ],
+      batchLimit: 1000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists. Restoring an old backup revives rows that were `pending` or `posting` at backup time: they are claimed again, and the ledger's unique key answers a request already posted as `replayed`, so nothing is accrued twice.",
+      executionMode: "delegated",
+      existingAdopter: {
+        jobCommand: "bun run hr-commission:intents:post",
+        purgeFunctionRef:
+          "src/modules/hr-commission/application/hr-commission-intake-poster.ts#purgeTerminalIntents",
+        description:
+          "Deletes settled intake rows older than the retention window in bounded batches, after each posting pass. The worker cannot read the table, so the lifecycle engine's dry-run backlog snapshot goes through awcms_hr_commission_lifecycle_eligible_count (sql/316)."
+      }
+    },
+    {
+      key: "hr_commission.intake_settings",
+      tableName: "awcms_hr_commission_intake_settings",
+      ownerModuleKey: HR_COMMISSION_MODULE_KEY,
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "system_event",
+      retentionMinDays: 365,
+      retentionMaxDays: 3650,
+      defaultRetentionDays: 1095,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per tenant, by primary key, upserted by an administrator and never appended by traffic: its ceiling is the number of tenants."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "No archive step exists or is warranted: the table is live configuration, one boolean."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Not performed by any job: a live configuration row, not a record. An age-based purge would silently switch off a tenant that enabled intake long ago, which is the healthy case, so no purge is declared."
+      },
+      legalHold: { applicable: false, precedence: "not_applicable" },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id"],
+          purpose:
+            "Primary key (tenant_id), sql/316; nothing scans this table by age."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore. A restored row restores the switch as it was at backup time.",
+      executionMode: "delegated",
+      existingAdopter: {
+        purgeFunctionRef:
+          "none -- retained for the life of the tenant; see ADR-0147",
+        description:
+          "There is deliberately no purge mechanism; this descriptor exists so the table answers the retention question on the record rather than by silence. The worker holds only a column-level SELECT on it, so the dry-run snapshot goes through awcms_hr_commission_lifecycle_eligible_count (sql/316)."
+      }
+    }
+  ],
   subjectData: [
+    {
+      key: "hr_commission.intents",
+      tableName: "awcms_hr_commission_intents",
+      ownerModuleKey: HR_COMMISSION_MODULE_KEY,
+      // ADR-0142: the beneficiary is reached through the employment, never
+      // through the actor stamp (the person who voided a sale).
+      subjectColumns: [],
+      subjectVia: {
+        column: "employment_id",
+        parentKey: "hr_workforce.employments",
+        parentColumns: ["profile_id"]
+      },
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "A TRANSIENT queue (#1189, ADR-0147): a sale's base amount and an employment id waiting to be posted, purged shortly after it settles (30 days by default). It reaches the beneficiary through `employment_id` -> `awcms_hr_employments` (`profile_id` only). It is NOT exported: it is a derived, short-lived copy of earnings data, and the person's earnings are answered by the settled accrual (`hr_commission.accruals`, exported behind the payroll boundary's own gate); handing a second copy out through a table that is outside the payroll family would bypass that gate. Not erased on request: a pending request is a payable claim the employer still owes, and an anonymised profile leaves the row resolving to no recognisable person. The `claimed_by_tenant_user_id` stamp (who the worker CLAIMED voided the sale; an attribute, never authoritative) resolves to nobody once the identity is anonymised. No name, identifier, contact or free text is stored (`reason` is a code)."
+    },
+    {
+      key: "hr_commission.intake_settings",
+      tableName: "awcms_hr_commission_intake_settings",
+      ownerModuleKey: HR_COMMISSION_MODULE_KEY,
+      subjectColumns: [
+        { column: "updated_by", references: "tenant_user" },
+        { column: "intake_actor_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "One row per tenant holding a boolean switch (`commission_intake_enabled`). It says nothing about a person; the only links are the stamp of whoever last changed it and the tenant user designated as the intake system actor, both of which resolve to nobody once the identity is anonymised."
+    },
     {
       key: "hr_commission.rules",
       tableName: "awcms_hr_commission_rules",
