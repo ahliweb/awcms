@@ -96,6 +96,7 @@ describe("fetchModuleJobs", () => {
         "bun run blog:publish:scheduled",
         "bun run booking:holds:expire",
         "bun run booking:reminders:dispatch",
+        "bun run channel-accounts:secrets:rekey",
         "bun run comments:retention",
         "bun run config:validate",
         "bun run data-lifecycle:archive-purge",

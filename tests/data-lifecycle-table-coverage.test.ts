@@ -542,7 +542,21 @@ describe("the real repository", () => {
       // window overwrites in place, not by authorship. A generic age purge would
       // delete the counter of an actor reading right now and re-open the audit
       // flood the table exists to prevent.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(19);
+      //
+      // **27 since `channel_accounts` (Issue #1140, ADR-0148).** The eight raised
+      // are the control-plane tables of one module, and the argument is stated per
+      // entry: every one is bounded by AUTHORSHIP (an administrator registers an
+      // account, grants a capability, assigns a person), by a UNIQUE key (one
+      // capability per account and name, one assignment per person, one health row
+      // per account) or by the bounded sweep on the OAuth write path, and none
+      // accumulates with traffic. A `dataLifecycle` descriptor was weighed and
+      // rejected for each: the generic engine would AGE-DELETE accounts and
+      // capability evidence that are still in use, and a delegated descriptor for
+      // the one growth-capable table (`awcms_channel_oauth_states`) would need an
+      // `awcms_worker` read grant on a control-plane table nothing else lets the
+      // worker touch. The recorded follow-up, when a connector adds a worker, is
+      // a delegated descriptor for that table with its count function.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(27);
     });
 
     test("every entry names a table that really exists in sql/", () => {

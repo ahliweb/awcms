@@ -363,6 +363,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Changing the served version affects every tenant, so it can only be done from the platform tenant — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it.": ["Mengubah versi yang disajikan berdampak pada setiap tenant, jadi ia hanya bisa dilakukan dari tenant platform — bukan dari tenant ini. Peran Anda membawa izinnya; tindakan ini ditolak karena DI MANA ia dilakukan, bukan siapa yang melakukannya."],
   "Changing this changes the public landing-page URL. Record a redirect for the old one.": ["Mengubah ini mengubah URL halaman landing publik. Catat redirect untuk URL lama."],
   "Changing this records who decided and when, and writes an audit entry. Setting it back to unverified clears both.": ["Mengubahnya mencatat siapa yang memutuskan dan kapan, serta menulis entri audit. Mengembalikannya ke unverified menghapus keduanya."],
+  "Channel Accounts": ["Akun Kanal"],
   "Chat": ["Chat"],
   "Check": ["Periksa"],
   "Check in": ["Check-in"],

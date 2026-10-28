@@ -65,9 +65,6 @@ export function isChannelAccountsEnabled(
   return env.CHANNEL_ACCOUNTS_ENABLED === "true";
 }
 
-/** The environment variable that holds the secret key ring (ADR-0148 section 5). */
-export const CHANNEL_SECRETS_KEY_RING_ENV = "CHANNEL_SECRETS_ENCRYPTION_KEYS";
-
 /** Prefix of the field-encryption `purpose`; the secret's own purpose is appended, so a ciphertext cannot be re-labelled. */
 export const CHANNEL_SECRET_AAD_PURPOSE_PREFIX = "channel_secret:v1:";
 
