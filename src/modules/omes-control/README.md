@@ -356,3 +356,23 @@ A failed identity/replay/version check on poll/heartbeat answers the pinned cont
 **A flagged cross-repository gap**, not silently worked around: the OMES-side reference pull worker as merged for `ahliweb/omes#192` (`lib/omes/py/jobs/worker.py`) does not yet generate a real Ed25519 keypair or send any signature/nonce/timestamp headers — its "public key" is a placeholder string derived from a SHA-256 hash. This module does not relax verification to match that stub; bringing the OMES-side worker up to this wire shape is necessary follow-up work, tracked in the PR that lands this issue rather than guessed at here.
 
 `ahliweb/omes#197`'s `domain/contracts/` (`validateOmesContract`/`validateOmesContractText`, `scanForRawSecrets`, `getOmesStateMachine`, `OMES_CONTRACT_PIN`) is what all four routes validate every inbound envelope against before doing anything else — the wiring point its own header anticipated.
+
+## Worker contract compatibility and deploy preflight (`ahliweb/awcms#1185`)
+
+`omes_control` consumes the OMES worker wire contract only through the vendored, pinned snapshot in `contracts/v1/` - never from `omes/main` at request time. Three layers keep a release from running against a contract it was not reviewed against:
+
+1. **`bun run contracts:omes:sync:check`** - every vendored file still hashes to what `PIN.json` lists (drift / stray file).
+2. **`domain/contracts/compatibility.ts`** - the release's own, hand-written declaration: source commit, one **aggregate SHA-256 digest** over the PIN file map, the supported **worker range**, and the capabilities this consumer acts on. `contracts:omes:sync` rewrites `PIN.json` and its hashes together, so layer 1 stays green after an unreviewed bump; this file does not. Bumping the contract is therefore a deliberate edit here plus a row in the matrix below.
+3. **`bun run omes:contract:preflight`** - offline, read-only, Bun-only (no network, SSH or shell-out). Runs layer 1, checks PIN against layer 2, checks that `openapi/awcms-public-api.openapi.yaml` still declares `/api/v1/omes/worker/{enroll,poll,result,heartbeat}`, and with `-- --worker <descriptor.json> [--require-digest]` evaluates a worker's `contract_version` / `omes_version` / `contract_digest` / `capabilities`. It is part of `bun run check`; run it from a repo checkout before a deploy that changes `contracts/v1/` or upgrades the host worker (the runtime image does not ship `scripts/`).
+
+Fail-closed rules (`evaluateWorkerCompatibility`): a missing, non-string, unknown or future `contract_version`; a digest that is not exactly the declared one; a pre-release, build-tagged, unparseable or out-of-range `omes_version`; and a non-object descriptor are all `incompatible`. A capability outside the safe-operation allowlist is `unsupported_capability`, never a guessed success. A range is a necessary condition only - SemVer compatibility of the binary is never assumed.
+
+| Item                    | Value (this release)                                          |
+| ----------------------- | ------------------------------------------------------------- |
+| Contract                | `ahliweb/omes` `control-center/v1`                            |
+| Source commit           | `a4026e6338ce917dbd6771c7e1bf02c14e31c38f`                    |
+| Aggregate digest        | see `DECLARED_CONTRACT.aggregateDigest` in `compatibility.ts` |
+| Declared worker range   | `>=0.6.0 <0.7.0` (**declared, not verified**)                 |
+| Tagged-release evidence | none recorded (`DECLARED_WORKER_RANGE.evidence` is `null`)    |
+
+Covered by `tests/omes-control-contract-consumer-compat.test.ts` (pure, no DB): pin/digest, range and unknown-version fixtures, a synthetic Ed25519 worker for all four routes (signature bound to path/body/nonce/tenant/worker/server, stale and future timestamp), and the preflight against tampered or re-synced copies. **Not covered here, still open:** the OMES worker v0.6.0 stable release and a matrix verified against that tag (producer side, `ahliweb/omes#352`; integration plan `ahliweb/omes#350`; consumer gate `ahliweb/omes-web#20`), the producer publishing `contract_digest`, canary/rollback evidence, the OMES-Web subtree **merge-commit** sync, and DB-backed FORCE RLS / ABAC assertions for the worker tables (existing worker tests cover nonce persistence and the guard order; a dedicated compatibility-level DB suite is not part of this change).
