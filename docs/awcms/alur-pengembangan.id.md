@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:0eb17fa4f08080b76036f8a944c1d5293f6f27e1a51dd3b3b50cb1b522d16a95 -->
+<!-- i18n-source-hash: sha256:b7f13524bc7db23171a78dc29e72d5562e5c644ff84da4c5b6e6dbdbe8c4dfe1 -->
 
 # Alur pengembangan AWCMS
 
@@ -62,7 +62,7 @@ selera, melainkan KELAS perubahannya:
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Dokumen saja, chore, dependency bump                    | 10 → 12, lalu 16–18 saat rilis                                                                              |
 | Perbaikan bug tanpa perubahan kontrak/skema             | 10 → 12                                                                                                     |
-| Perubahan perilaku pada modul yang sudah ada            | 3, 6 (bila menyentuh akses), 8 (bila menyentuh API), 10 → 12                                                |
+| Perubahan perilaku pada modul yang sudah ada            | 3, 4 (bila menyentuh layar atau alur pengguna), 6 (bila menyentuh akses), 8 (bila menyentuh API), 10 → 12   |
 | Skema baru / kolom baru                                 | 5, 6, 10 → 12                                                                                               |
 | **Modul baru**                                          | 1 → 12 penuh, plus admission ADR ([`21_module_admission_governance.md`](21_module_admission_governance.md)) |
 | Perubahan lapisan fondasi (auth, access, sync, tenancy) | 1 → 12 penuh, **ADR wajib**                                                                                 |

@@ -60,7 +60,7 @@ the CLASS of the change:
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | Docs only, chore, dependency bump                     | 10 → 12, then 16–18 at release time                                                                           |
 | Bug fix without a contract/schema change              | 10 → 12                                                                                                       |
-| Behaviour change in an existing module                | 3, 6 (if it touches access), 8 (if it touches the API), 10 → 12                                               |
+| Behaviour change in an existing module                | 3, 4 (if it touches a screen or user flow), 6 (if it touches access), 8 (if it touches the API), 10 → 12      |
 | New schema / new column                               | 5, 6, 10 → 12                                                                                                 |
 | **New module**                                        | full 1 → 12, plus an admission ADR ([`21_module_admission_governance.md`](21_module_admission_governance.md)) |
 | Foundation-layer change (auth, access, sync, tenancy) | full 1 → 12, **ADR mandatory**                                                                                |
