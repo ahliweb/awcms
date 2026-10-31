@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0136-configurable-payroll-segregation-of-duties-mode.md)
 
-<!-- i18n-source-hash: sha256:a5277be352e790179b69eda29acf0ba931fd92123839762c715f7738eaf07869 -->
+<!-- i18n-source-hash: sha256:2fd381ca867a6a882beea558e0aaf5ef82769e6a8bb27e41e6c38b087294093a -->
 
 # ADR-0136 — Pemisahan tugas payroll dapat dikonfigurasi per tenant (ketat secara default, dapat dilonggarkan ke siapkan ≠ setujui)
 
@@ -58,6 +58,25 @@ Kalimat "aturan per-instance database tidak bisa dikonfigurasi hilang" menjadi: 
 ### 6. Matriks uji
 
 Tes yang diwajibkan (ketat, longgar, peralihan mode, izin, idempotency, step-up, isolasi, kredensial mesin) adalah 22 baris SOD1–SOD22 pada bagian 7.5 paket, dengan skenario penerimaan S9 dan S9a di bagian 12. Itu adalah persyaratan bagi issue implementasi.
+
+### 7. Amendemen A1 (Diusulkan, 28 Oktober 2026): tugas pembalikan dan aturan pemulihan run berbayar (temuan PS-02, Issue #956)
+
+**Status amendemen ini: Diusulkan.** ADR-0136 tetap Diterima untuk §1 sampai §6. Bagian ini adalah rekomendasi yang berlaku hanya ketika maintainer menerimanya **dan** penasihat hukum menjawab L-C3 pada daftar periksa hukum paket (`hr-payroll.md` §17.3). Issue #957 tidak boleh menetapkan kolom pembalikan sebelum keduanya. Tidak ada yang diimplementasikan.
+
+**Konteks.** Tinjauan keamanan (paket §17.2, PS-02, memblokir) menemukan dua celah. (a) `reverse` (R) hanya dibatasi terhadap P: orang yang menghitung, menyetujui, atau memfinalisasi run asli dapat membaliknya, dan tidak ada yang mensyaratkan orang kedua menyetujui run pembalikan. (b) Paket membalik run finalized atau **berbayar** lalu membiarkan run reguler baru menghitung ulang; uang yang tercatat dibayar tidak dipulihkan oleh pembalikan, sehingga run pengganti membayar karyawan lagi, dan issue #962 memperburuknya dengan membuka kembali akrual komisi.
+
+**Keputusan (direkomendasikan).**
+
+1. **Pembalikan adalah run dengan rantainya sendiri.** Run `reversal` dihitung, disetujui, difinalisasi, dan dibayar seperti run lain. `reversed_by` (peminta) dan penyetuju run pembalikan berbeda dari `paid_by` run asli. R ditambahkan ke aturan database per-instance: **R × C** (peminta pembalikan bukan penghitungnya) dan **R × A** (juga bukan penyetujunya), di **kedua** mode, sebagai CHECK tanpa syarat seperti A ≠ C dan A ≠ P. Keduanya bukan aturan tingkat-peran, karena satu orang dapat memegang R dan C untuk run berbeda dan deskriptor tidak dapat membaca state per-instance (ADR-0031). R × P tetap aturan tingkat-peran yang ada.
+2. **Membalik run berbayar memulihkan; tidak membayar ulang.** Run pembalikan menegasikan baris asli dan menambahkan, per employment terdampak, baris **pemulihan** (`element_kind = recovery`, negatif). Pemulihan **dinetto di periode terbuka berikutnya** hanya setelah persetujuan tersendiri atas netting. Run reguler pengganti hanya membayar **selisih** antara jumlah yang benar dan yang semula dibayar. Akrual komisi yang dikonsumsi run asli tetap `paid`; pemulihan, bukan akrual yang dibuka kembali, yang membawa selisihnya. Pembalikan run finalized-tetapi-belum-dibayar tidak butuh pemulihan.
+3. **Yang tidak diputuskan mesin.** Apakah menetto pemulihan terhadap gaji berikutnya sah, dan batas memotong pemulihan dari gaji, adalah pertanyaan penasihat hukum (L-C3). Bila netting tidak diizinkan, pemulihan ditangani di luar mesin dan dicatat sebagai penyesuaian; mesin tidak pernah memaksa pemotongan.
+4. **Penerima bayar sebagai aktor (temuan PS-01, tinjauan yang sama).** Tidak ada aktor yang boleh menghitung, menyetujui, memfinalisasi, membayar, atau membalik run yang memuat baris untuk employment yang terhubung ke `tenant_user_id`-nya sendiri, atau mengusulkan atau menyetujui kompensasi untuk employment-nya sendiri, di kedua mode, ditegakkan oleh trigger dan handler. Ini menutup lubang yang ditinggalkan matriks SoD dan tidak mengubah §1 sampai §5.
+
+**Opsi yang dipertimbangkan.** (A, direkomendasikan) baris pemulihan dinetto di periode terbuka berikutnya, pengganti membayar selisih. (B) Menolak pembalikan run berbayar dan hanya mengizinkan baris penyesuaian: paling sederhana dan tidak pernah menetto, tetapi tidak menyisakan cara mengoreksi baris run berbayar sambil menjaga tautan audit ke aslinya, dan mendorong setiap koreksi ke penyesuaian manual. (C) Membiarkan run pengganti membayar penuh dan memulihkan di luar sistem: pembayaran ganda yang disebut temuan. (D) Membuka kembali akrual dan run: merusak imutabilitas dan aturan akrual tepat-sekali (paket §6.2). A dipilih karena keamanan (tanpa pembayaran ganda, tiap langkah punya penyetuju berbeda), auditabilitas (pemulihan merujuk baris yang dibalik), dan operabilitas; B adalah cadangan bila penasihat hukum menyatakan netting tidak dapat diterima.
+
+**Konsekuensi.** Tiga kolom atau CHECK dan satu nilai `element_kind` ditambahkan ke desain Issue #957 (paket §9); matriks SoD bertambah R × C dan R × A (paket §7.5); matriks uji bertambah SOD23 sampai SOD29. Bila penasihat hukum menolak netting, A menjadi B dan §7.4 paket berubah mengikutinya; aturan R × C, R × A, dan penerima bayar tetap berlaku.
+
+**Matriks uji.** SOD23 sampai SOD29 di paket §7.5, skenario S10a sampai S10c di §12.
 
 ## Konsekuensi
 
