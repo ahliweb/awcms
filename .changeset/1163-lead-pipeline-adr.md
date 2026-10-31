@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+Record ADR-0153 (Issue #1163, status Proposed): a reusable lead/prospect pipeline is admitted as a pre-customer `crm_leads` context that never owns the customer, the canonical identity or consent. `commerce` stays the only customer authority (an opaque `external_customer_ref` written only by a conversion confirmation) and `profile_identity` stays the only identity authority (no profile is created on intake). Stages are a tenant-defined, versioned catalog with a closed category list, declarative guards and typed extensions; the LPP vocabulary (program, cohort, re-registration) is never a column, seed or default. Identity matching is per tenant by keyed hash and yields candidates only, merges are human-verified and undoable, and events and the port carry opaque ids, never PII. It gives #1164, #1165, #1166 and the downstream customer-mapping and report-projection issues binding invariants (L1 to L12), a data dictionary with ERD, a test matrix and thirteen open questions for the maintainer. Documentation only (ADR with Indonesian mirror and the ADR indexes); no module, migration, route or port is added.
