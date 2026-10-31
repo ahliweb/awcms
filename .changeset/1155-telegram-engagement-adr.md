@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+Record ADR-0152 (Issue #1155, status Proposed): customer Telegram engagement is a separate, off-by-default `telegram_engagement` context, and `telegram_delivery` stays staff-only and unchanged (no import, table, token, webhook or queue shared with it). Many bots, channels and groups per tenant are `channel_accounts` with vault-referenced tokens; each bot has its own opaque callback route, a `secret_token` verified in constant time and `(account, update_id)` deduplication; `/start` grants support eligibility only while marketing needs a separate explicit opt-in; contacts are account-scoped with no cross-platform merge; channel publishing runs in `social_publishing`; group activity and Telegram Business connections are not admitted in v1. It gives #1156 and #1157 binding invariants (TG1 to TG15) and a test matrix, and lists ten open questions for the maintainer, including a second Telegram queue that would amend ADR-0133 section 3. Documentation only (ADR with Indonesian mirror and the ADR indexes); no module, migration, route or port is added.

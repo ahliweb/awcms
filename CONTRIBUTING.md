@@ -14,12 +14,17 @@ Terima kasih sudah tertarik berkontribusi. Dokumen ini menjelaskan cara berkontr
 ## Alur kontribusi
 
 > **Dokumen ini menjelaskan langkah 10–12** dari alur pengembangan penuh (issue
-> → implementasi → PR). Langkah 1–9 (blueprint, PRD, threat model, ERD, matriks
-> RBAC/ABAC/RLS, spesifikasi domain, kontrak API, UX, review lintas-spesifikasi)
-> dan 13–18 (staging, UAT, go/no-go, produksi, validasi, monitoring) ada di
+> → implementasi → PR). Langkah 1–9 (blueprint, riset pengguna + PRD, threat model,
+> UX/UI + prototipe tervalidasi, ERD, matriks RBAC/ABAC/RLS, spesifikasi domain,
+> kontrak API + mock, review lintas-spesifikasi) dan 13–18 (staging, UAT, go/no-go, produksi, validasi, monitoring) ada di
 > **[`docs/awcms/alur-pengembangan.md`](docs/awcms/alur-pengembangan.md)**, yang
 > juga memuat tabel **kelas perubahan**: tidak setiap perubahan menempuh 18
 > langkah, dan yang menentukan bukan selera.
+>
+> Sejak alur v2 ([ADR-0156](docs/adr/0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.id.md)),
+> langkah 11 terdiri dari **11.1 frontend → 11.2 backend → 11.3 integrasi**,
+> berurutan per slice; mekanik di bawah berlaku untuk setiap PR dari ketiganya.
+> Rujukan "langkah 4–8" yang ditulis sebelum 30 Oktober 2026 memakai penomoran v1.
 
 ```mermaid
 flowchart LR
