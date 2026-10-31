@@ -178,6 +178,12 @@ tanpa tafsir:
 > menempuh 18 langkah, dan yang menentukan bukan selera melainkan kelas
 > perubahannya. Modul baru dan perubahan lapisan fondasi menempuh 1→12 penuh
 > plus ADR; perbaikan bug tanpa perubahan kontrak menempuh 10→12 saja.
+>
+> Sejak alur v2 ([ADR-0156](docs/adr/0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.md)):
+> UX/UI divalidasi di **langkah 4** (sebelum ERD), dan langkah 11 terdiri dari
+> **11.1 frontend → 11.2 backend → 11.3 integrasi** per slice. Otorisasi tetap
+> ditegakkan di backend dan database. Rujukan "langkah 4–8" yang ditulis sebelum
+> 30 Oktober 2026 memakai penomoran v1 (tabel peta di dokumen alur).
 
 1. Mulai dari issue/ADR yang jelas scope-nya. Bila mengubah standar dasar, buat ADR dulu (lihat [`GOVERNANCE.md`](GOVERNANCE.md)).
 2. **Buat branch baru dari `main` SEBELUM menyentuh kode.** Setiap implementasi issue GitHub wajib dikerjakan di branch tersendiri — **jangan pernah commit langsung ke `main`** (branch protection menolak push langsung; lihat [`docs/awcms/branch-protection.md`](docs/awcms/branch-protection.md)). Penamaan: `feature/<issue>-<slug>`, `fix/<issue>-<slug>`, `docs/<topik>`, atau `security/<issue>-<slug>` — mis. `git switch -c feature/178-module-composition`. Satu branch = satu issue/PR; jangan menumpuk beberapa issue tak-berkaitan di satu branch. Detail alur di [`CONTRIBUTING.md`](CONTRIBUTING.md) §Alur kontribusi.
