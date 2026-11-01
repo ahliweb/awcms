@@ -201,9 +201,11 @@ paths:
             The combination is not admitted: `PROVIDER_UNKNOWN`,
             `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`,
             `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`
-            (also for a connection of another provider, so the code is not an
-            oracle for which ids name a connection), `CONNECTION_MISMATCH` (only
-            for a connection id on an account that does not use one),
+            (also, for an `oauth2` account, for a connection of another
+            provider; a connection id sent with a non-`oauth2` shape is still
+            answered by shape first, so this is not a complete existence
+            oracle yet: Issue #1215 L2), `CONNECTION_MISMATCH` (only for a
+            connection id on an account that does not use one),
             `CONNECTION_NOT_ACTIVE` (the connection's
             grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or
             `SCOPE_UNRESOLVED` (the named business scope does not exist in this
