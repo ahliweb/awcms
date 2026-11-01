@@ -482,15 +482,30 @@ a completed reservation — are **downstream adapters** in the consuming reposit
 this family imports neither commerce nor booking, and the adapter, not this module,
 decides which events are commissionable.
 
-**A consumer with no signed-in person (a domain-event consumer, ADR-0147).** A
-consumer that runs in `domain-events:dispatch` runs as `awcms_worker`, which the
-payroll boundary forbids any privilege on an accrual. It therefore does not call
-`CommissionAccrualPort`; it submits a request to an `hr_commission`-owned intake
-queue (port `commission_intake`, `INSERT` only for the worker, default-deny per
-tenant), and a job that runs as `awcms_app` posts it through the same posting core.
-The boundary, its worker allow-list and `commission_accrual` 1.1.0 do not change.
-Decided by [ADR-0147](../adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md)
-(Issue #1138); implementation is a follow-up issue.
+**A consumer with no signed-in person (a domain-event consumer, ADR-0147,
+Issue #1189).** A consumer that runs in `domain-events:dispatch` runs as
+`awcms_worker`, which the payroll boundary forbids any privilege on an accrual. It
+therefore does not call `CommissionAccrualPort`; it submits a request to the
+`hr_commission`-owned intake queue `awcms_hr_commission_intents` through the port
+`commission_intake` (one `INSERT ... ON CONFLICT DO NOTHING`; `INSERT` is the
+worker's only privilege on the table, and it reads only the one-boolean switch
+`commission_intake_enabled`, default off per tenant, changed by the high-risk
+`hr_commission.intake.configure`). The job `hr-commission:intents:post`, which runs
+as `awcms_app` every minute, claims the rows (`FOR UPDATE SKIP LOCKED` with a
+lease) and posts each through the same posting core (`accrueCommission` /
+`voidCommissionBySource`) in a tenant transaction with the stored actor, so the
+audit row, the `awcms.hr.commission.voided` event and the transition log are the
+synchronous path's own. A request is `posted`, `refused` (a business refusal such
+as `source_conflict`, `no_effective_rule` or `period_closed`: terminal, listed for a
+human at `GET /api/v1/hr-commission/intake/exceptions`, outcome code and masked ids
+only) or, after eight transient failures, `failed`. A redelivery of the same
+request is a `duplicate`; a replay after a crash is the ledger's own `replayed`.
+Settled rows are purged after 30 days, `refused` and `failed` rows after 90 (floor 7, ceiling 90, clamped at run time). The worker's own claim about who acted is never trusted: the poster stamps the tenant's configured **intake system actor** (named when the switch is turned on) on the ledger and the audit, and posts a void only for an accrual this intake itself created. The boundary, its
+worker allow-list, `PAYROLL_CATALOG_EXEMPTIONS` and `commission_accrual` 1.1.0 do not
+change. Decided by [ADR-0147](../adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.md)
+(Issue #1138); built by Issue #1189 (migrations `sql/316` and `sql/317`); the
+module README has the map. The downstream adapter (`ahliweb/awcms-one#391`) is not
+in this repository.
 
 ## 7. Payroll design (phase 3)
 
@@ -808,11 +823,13 @@ awcms_hr_pay_rule_sets 1--n awcms_hr_pay_rule_versions   (runs snapshot the vers
 
 ### Phase 2 (`hr_commission`)
 
-| Table                             | Holds                                      | `awcms_app` privileges               | Classification                      |
-| --------------------------------- | ------------------------------------------ | ------------------------------------ | ----------------------------------- |
-| `awcms_hr_commission_rules`       | versioned rules                            | SELECT, INSERT, UPDATE (draft only)  | confidential                        |
-| `awcms_hr_commission_accruals`    | ledger; immutable facts + advancing status | SELECT, INSERT, UPDATE (status only) | confidential (earnings of a person) |
-| `awcms_hr_commission_transitions` | append-only transition log                 | SELECT, INSERT                       | confidential                        |
+| Table                                 | Holds                                                                                                            | `awcms_app` privileges                                                                                                                    | Classification                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `awcms_hr_commission_rules`           | versioned rules                                                                                                  | SELECT, INSERT, UPDATE (draft only)                                                                                                       | confidential                                                        |
+| `awcms_hr_commission_accruals`        | ledger; immutable facts + advancing status                                                                       | SELECT, INSERT, UPDATE (status only)                                                                                                      | confidential (earnings of a person)                                 |
+| `awcms_hr_commission_transitions`     | append-only transition log                                                                                       | SELECT, INSERT                                                                                                                            | confidential                                                        |
+| `awcms_hr_commission_intents`         | intake queue (ADR-0147, #1189): one row per submitted accrue/void request, status, outcome code, attempts, lease | SELECT, INSERT, UPDATE, DELETE (a trigger limits UPDATE to the state machine and DELETE to settled rows); `awcms_worker`: **INSERT only** | confidential (a sale's base amount and an employment id; transient) |
+| `awcms_hr_commission_intake_settings` | the per-tenant switch `commission_intake_enabled` (default off)                                                  | SELECT, INSERT, UPDATE; `awcms_worker`: column SELECT (two columns)                                                                       | internal                                                            |
 
 ### Phase 3 (`hr_payroll`)
 
@@ -1392,6 +1409,8 @@ TRIGGER ... RENAME` on a payroll table and a direct write to `pg_class` /
   written through `csvCellForWrite`.
 
 ## 14. Rollout, rollback and operations
+
+**Operating the commission intake queue (ADR-0147, #1189).** Switch a tenant's intake on with `PUT /api/v1/hr-commission/intake/settings` (`hr_commission.intake.configure`); schedule `hr-commission:intents:post` (generated into `ops/awcms-jobs.crontab`, every minute; it runs as `awcms_app`, so the host's `DATABASE_URL` must reach it, which `ops/run-job.sh` arranges from the job's import closure); watch `GET /api/v1/hr-commission/intake/exceptions` (`summary.oldestLiveAgeSeconds` growing means the poster is not running, and the job logs `hr_commission.intake.stalled` past 15 minutes). Rollback is forward-only: switch intake off and stop the job; the table is inert. After a restore, queued rows are claimed again and the ledger's unique key answers any request already posted as `replayed`.
 
 Each phase ships as ordinary issues: migration (forward-only), OpenAPI, AsyncAPI,
 tests (RLS as `awcms_app`, every high-risk guard both ways, the state-machine

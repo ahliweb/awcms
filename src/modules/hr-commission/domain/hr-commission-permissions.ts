@@ -73,6 +73,18 @@ export const HR_COMMISSION_GUARDS = {
       action: "pay" as const
     }
   },
+  intake: {
+    read: {
+      moduleKey: "hr_commission",
+      activityCode: "intake",
+      action: "read" as const
+    },
+    configure: {
+      moduleKey: "hr_commission",
+      activityCode: "intake",
+      action: "configure" as const
+    }
+  },
   myAccruals: {
     read: {
       moduleKey: "hr_commission",

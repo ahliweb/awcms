@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](hr-payroll.md)
 
-<!-- i18n-source-hash: sha256:554a98e7a4a644dc8e15dd20dde4787eb068a56e2525f5e31c8b3587000ada09 -->
+<!-- i18n-source-hash: sha256:91e64aeadb3eb7e689a23a8c2771823b7f701facfeb425b746610fcc24c5399d -->
 
 # HR dan payroll — workforce, komisi, payroll (paket desain)
 
@@ -506,16 +506,35 @@ dibayar, reservasi yang selesai — adalah **adapter hilir** di repositori konsu
 keluarga ini tidak mengimpor commerce maupun booking, dan adapter, bukan modul ini,
 yang memutuskan event mana yang dapat dikomisikan.
 
-**Konsumen tanpa orang yang sedang masuk (consumer domain-event, ADR-0147).**
-Konsumen yang berjalan di `domain-events:dispatch` berjalan sebagai `awcms_worker`,
-yang oleh batas payroll dilarang memegang hak apa pun atas akrual. Karena itu ia
-tidak memanggil `CommissionAccrualPort`; ia menyerahkan permintaan ke antrean intake
-milik `hr_commission` (port `commission_intake`, hanya `INSERT` bagi worker,
-default-deny per tenant), dan job yang berjalan sebagai `awcms_app` memostingnya
-lewat inti posting yang sama. Batas, allow-list worker-nya, dan `commission_accrual`
-1.1.0 tidak berubah. Diputuskan oleh
+**Konsumen tanpa orang yang sedang masuk (consumer domain-event, ADR-0147,
+Issue #1189).** Konsumen yang berjalan di `domain-events:dispatch` berjalan sebagai
+`awcms_worker`, yang oleh batas payroll dilarang memegang hak apa pun atas akrual.
+Karena itu ia tidak memanggil `CommissionAccrualPort`; ia menyerahkan permintaan ke
+antrean intake `awcms_hr_commission_intents` milik `hr_commission` lewat port
+`commission_intake` (satu `INSERT ... ON CONFLICT DO NOTHING`; `INSERT` adalah satu-
+satunya hak worker atas tabel itu, dan ia hanya membaca sakelar satu-boolean
+`commission_intake_enabled`, bawaannya mati per tenant, diubah oleh
+`hr_commission.intake.configure` yang berisiko tinggi). Job
+`hr-commission:intents:post`, yang berjalan sebagai `awcms_app` tiap menit,
+mengklaim baris (`FOR UPDATE SKIP LOCKED` dengan lease) dan memostingnya satu per
+satu lewat inti posting yang sama (`accrueCommission` / `voidCommissionBySource`)
+dalam transaksi tenant dengan aktor tersimpan, sehingga baris audit, event
+`awcms.hr.commission.voided`, dan log transisi adalah milik jalur sinkron.
+Permintaan menjadi `posted`, `refused` (penolakan bisnis seperti `source_conflict`,
+`no_effective_rule`, atau `period_closed`: final, didaftar untuk manusia di
+`GET /api/v1/hr-commission/intake/exceptions`, hanya kode hasil dan id yang
+disamarkan), atau, setelah delapan kegagalan sementara, `failed`. Pengiriman ulang
+permintaan yang sama adalah `duplicate`; pemutaran ulang setelah crash adalah
+`replayed` milik buku besar sendiri. Baris selesai di-purge setelah 30 hari, baris `refused` dan `failed` setelah 90
+(batas bawah 7, atas 90, dijepit saat berjalan). Klaim worker tentang siapa yang
+bertindak tidak pernah dipercaya: poster mencap **aktor sistem intake** tenant
+(dinamai saat sakelar dinyalakan) pada buku besar dan audit, dan hanya memposting
+void untuk akrual yang dibuat intake ini sendiri. Batas, allow-list worker-nya, `PAYROLL_CATALOG_EXEMPTIONS`, dan
+`commission_accrual` 1.1.0 tidak berubah. Diputuskan oleh
 [ADR-0147](../adr/0147-event-driven-commission-accrual-enters-through-an-intake-queue-posted-by-an-app-role-job.id.md)
-(Issue #1138); implementasi adalah issue tindak lanjut.
+(Issue #1138); dibangun oleh Issue #1189 (migrasi `sql/316` dan `sql/317`); README
+modul memuat petanya. Adapter hilir (`ahliweb/awcms-one#391`) tidak ada di
+repositori ini.
 
 ## 7. Desain Payroll (fase 3)
 
@@ -835,11 +854,13 @@ awcms_hr_pay_rule_sets 1--n awcms_hr_pay_rule_versions   (run mem-snapshot id ve
 
 ### Fase 2 (`hr_commission`)
 
-| Tabel                             | Memuat                                     | Hak `awcms_app`                       | Klasifikasi                     |
-| --------------------------------- | ------------------------------------------ | ------------------------------------- | ------------------------------- |
-| `awcms_hr_commission_rules`       | aturan berversi                            | SELECT, INSERT, UPDATE (hanya draft)  | rahasia                         |
-| `awcms_hr_commission_accruals`    | ledger; fakta immutable + status yang maju | SELECT, INSERT, UPDATE (hanya status) | rahasia (penghasilan seseorang) |
-| `awcms_hr_commission_transitions` | log transisi append-only                   | SELECT, INSERT                        | rahasia                         |
+| Tabel                                 | Memuat                                                                                                                        | Hak `awcms_app`                                                                                                                             | Klasifikasi                                                    |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `awcms_hr_commission_rules`           | aturan berversi                                                                                                               | SELECT, INSERT, UPDATE (hanya draft)                                                                                                        | rahasia                                                        |
+| `awcms_hr_commission_accruals`        | ledger; fakta immutable + status yang maju                                                                                    | SELECT, INSERT, UPDATE (hanya status)                                                                                                       | rahasia (penghasilan seseorang)                                |
+| `awcms_hr_commission_transitions`     | log transisi append-only                                                                                                      | SELECT, INSERT                                                                                                                              | rahasia                                                        |
+| `awcms_hr_commission_intents`         | antrean intake (ADR-0147, #1189): satu baris per permintaan accrue/void yang diserahkan, status, kode hasil, percobaan, lease | SELECT, INSERT, UPDATE, DELETE (trigger membatasi UPDATE pada mesin status dan DELETE pada baris selesai); `awcms_worker`: **hanya INSERT** | rahasia (nominal dasar penjualan dan id employment; sementara) |
+| `awcms_hr_commission_intake_settings` | sakelar per tenant `commission_intake_enabled` (bawaan mati)                                                                  | SELECT, INSERT, UPDATE; `awcms_worker`: SELECT per kolom (dua kolom)                                                                        | internal                                                       |
 
 ### Fase 3 (`hr_payroll`)
 
@@ -1439,6 +1460,8 @@ TABLE` terakhir pada tabel keluarga harus membawa penanda `payroll-boundary`,
   persis; CSV apa pun ditulis lewat `csvCellForWrite`.
 
 ## 14. Rollout, rollback, dan operasi
+
+**Mengoperasikan antrean intake komisi (ADR-0147, #1189).** Nyalakan intake tenant dengan `PUT /api/v1/hr-commission/intake/settings` (`hr_commission.intake.configure`); jadwalkan `hr-commission:intents:post` (dihasilkan ke `ops/awcms-jobs.crontab`, tiap menit; ia berjalan sebagai `awcms_app`, jadi `DATABASE_URL` host harus sampai kepadanya, yang diatur `ops/run-job.sh` dari closure impor job); pantau `GET /api/v1/hr-commission/intake/exceptions` (`summary.oldestLiveAgeSeconds` yang terus naik berarti poster tidak berjalan, dan job mencatat `hr_commission.intake.stalled` setelah 15 menit). Rollback hanya maju: matikan intake dan hentikan job; tabelnya tidak aktif. Setelah restore, baris antrean diklaim lagi dan kunci unik buku besar menjawab permintaan yang sudah diposting sebagai `replayed`.
 
 Setiap fase terbit sebagai isu biasa: migrasi (hanya maju), OpenAPI, AsyncAPI, tes
 (RLS sebagai `awcms_app`, setiap guard berisiko tinggi dua arah, trigger state

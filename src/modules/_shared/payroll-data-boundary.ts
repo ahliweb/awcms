@@ -182,7 +182,11 @@ export const PAYROLL_OWNED_NON_PAYROLL_TABLES: Readonly<
   Record<string, string>
 > = {
   awcms_hr_commission_rules:
-    "the tenant's commercial terms (a rule version, a rate); it names no employee and no amount earned by one. Accruals cite it but it carries no per-person pay (subject-data rationale in hr-commission/module.ts)"
+    "the tenant's commercial terms (a rule version, a rate); it names no employee and no amount earned by one. Accruals cite it but it carries no per-person pay (subject-data rationale in hr-commission/module.ts)",
+  awcms_hr_commission_intents:
+    "ADR-0147 / Issue #1189: the TRANSIENT intake queue an event-driven consumer (awcms_worker) INSERTs into and the awcms_app poster drains into the ledger. Deliberately outside the family: the worker's only privilege is INSERT on it, which is the whole point of the design, and listing it here is not a catalog exemption (PAYROLL_CATALOG_EXEMPTIONS stays empty). It is derived data (a base amount and an employment id) for a short retention window and carries no settled pay; the accrual it becomes is the payroll-family record.",
+  awcms_hr_commission_intake_settings:
+    "ADR-0147 / Issue #1189: one boolean per tenant (commission_intake_enabled), readable by awcms_worker so the port can answer disabled. It names no person and no amount."
 };
 
 /**

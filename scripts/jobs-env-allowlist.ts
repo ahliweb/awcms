@@ -988,13 +988,13 @@ export const GLOBAL_SECRETS: readonly {
     name: "DATABASE_URL",
     kind: "secret",
     reason:
-      "the awcms_app connection string. It stays in the global list because it is the FALLBACK of the worker client (a blank WORKER_DATABASE_URL uses it) and the only login of the app-client scripts, but ops/run-job.sh withholds it at run time from every job that cannot reach the app client whenever the app container has a non-blank WORKER_DATABASE_URL (Issue #1132; appConnectionTargets() derives which jobs keep it). No scheduled job keeps it"
+      "the awcms_app connection string. It stays in the global list because it is the FALLBACK of the worker client (a blank WORKER_DATABASE_URL uses it) and the only login of the app-client scripts, but ops/run-job.sh withholds it at run time from every job that cannot reach the app client whenever the app container has a non-blank WORKER_DATABASE_URL (Issue #1132; appConnectionTargets() derives which jobs keep it). Exactly one scheduled job keeps it: hr-commission:intents:post (ADR-0147, Issue #1189), which posts commission accruals and so must run as the only role the payroll boundary allows"
   },
   {
     name: "WORKER_DATABASE_URL",
     kind: "secret",
     reason:
-      "the least-privilege awcms_worker connection string (Issue #1119); preferred over DATABASE_URL by every job's database client, so every job that opens the database needs it"
+      "the least-privilege awcms_worker connection string (Issue #1119); preferred over DATABASE_URL by every job's database client, so every job that opens the database needs it. hr-commission:intents:post carries it too although it opens only the app client: the runner has no per-job exclusion for a GLOBAL name, and its import closure reaches the resolver in src/lib/database/client.ts that reads it. It is documented, not scoped out; the variable is the least-privilege worker login, so carrying it adds no authority to that job (Issue #1189 L5)"
   },
   {
     name: "IDEMPOTENCY_HMAC_SECRET",

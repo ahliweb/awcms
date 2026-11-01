@@ -14265,6 +14265,76 @@ Gated by `hr_commission.accruals.cancel` (high-risk). `pending` or `approved` ->
 | 404    | RESOURCE_NOT_FOUND.                            | [`ApiError`](#standard-error-envelope) |
 | 409    | IDEMPOTENCY_CONFLICT or ACCRUAL_INVALID_STATE. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/hr-commission/intake/exceptions` — List the commission intake requests that need a human
+
+- **operationId**: `hrCommissionIntakeExceptionsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.intake.read` (Issue #1189, ADR-0147 section 5), which opens no accrual. The intake requests the ledger REFUSED (`source_conflict`, `no_effective_rule`, `period_closed`, `not_found`, ...) or that FAILED after the poster's bounded retries, newest settlement first, keyset paginated (`cursor`). Each row carries an outcome CODE and MASKED ids only: no amount, no rule, no actor, no unmasked source reference. `summary` is the poster's diagnostics: whether intake is on, the queue's counts per status and how many seconds the oldest still-live request has waited (a poster outage shows as a growing age). Read-only. Never cached. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `cursor`           | query  | no       | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                  | Schema                                 |
+| ------ | -------------------------------------------- | -------------------------------------- |
+| 200    | A page of exceptions with the queue summary. | object                                 |
+| 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/hr-commission/intake/settings` — Read the commission intake switch
+
+- **operationId**: `hrCommissionIntakeSettingGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.intake.read` (Issue #1189, ADR-0147 section 4). The tenant's `commissionIntakeEnabled` switch; `false` when it was never set (default-deny). With it off the `commission_intake` port answers `disabled`, nothing is written and the poster job claims nothing. Read-only; holds no pay data.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The switch.                 | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/hr-commission/intake/settings` — Switch commission intake on or off
+
+- **operationId**: `hrCommissionIntakeSettingPut`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `hr_commission.intake.configure` (high-risk, separately grantable; never implied by `accruals.accrue` or `rules.publish`). Turning it ON lets a registered system consumer (one running as the worker role, with no signed-in person) queue commission requests that the `hr-commission:intents:post` job then posts through the one posting core; turning it OFF stops new intake and the poster claiming (rows already queued wait). Switching ON needs the intake system actor (`intakeActorTenantUserId`, an active tenant user; 400 `INTAKE_ACTOR_REQUIRED` / `INTAKE_ACTOR_INVALID`): the poster stamps THAT identity on every posted accrual and audit row, never the consumer's own claim. The body is strict: `commissionIntakeEnabled` (boolean) and the optional `intakeActorTenantUserId`, nothing else. Requires an Idempotency-Key; replaying it returns the stored response and does not switch again. Audited at `warning` with the before and after switch (never an amount). The `hr_commission` module must be enabled for the tenant (Module Management gate).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`HrCommissionIntakeSettingInput`](#schema-hrcommissionintakesettinginput)
+
+**Responses**
+
+| Status | Description                  | Schema                                 |
+| ------ | ---------------------------- | -------------------------------------- |
+| 200    | The switch after the change. | object                                 |
+| 400    | Validation error.            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.  | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.        | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/hr-commission/my-accruals` — List your own commission accruals
 
 - **operationId**: `hrCommissionMyAccrualsList`
@@ -16234,6 +16304,22 @@ Enum values: `pending`, `approved`, `payable`, `paid`, `voided`.
 ```json
 {
   "reasonCode": "string"
+}
+```
+
+### Schema: HrCommissionIntakeSettingInput
+
+| Field                     | Type          | Required | Nullable | Description                                                                                                                                                      |
+| ------------------------- | ------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commissionIntakeEnabled` | boolean       | yes      | no       |                                                                                                                                                                  |
+| `intakeActorTenantUserId` | string (uuid) | no       | yes      | An ACTIVE user of this tenant. Required to switch intake ON (here or already stored); omitted keeps the stored value; null clears it (only while switching OFF). |
+
+**Example**
+
+```json
+{
+  "commissionIntakeEnabled": false,
+  "intakeActorTenantUserId": "00000000-0000-0000-0000-000000000000"
 }
 ```
 

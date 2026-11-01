@@ -773,6 +773,10 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // only by the accrual's own triggers: INSERT and SELECT only.
   awcms_hr_commission_accruals: ["SELECT", "INSERT", "UPDATE"],
   awcms_hr_commission_transitions: ["SELECT", "INSERT"],
+  // ADR-0147 / `sql/316`. NOT retired. The tenant's intake switch is upserted,
+  // never deleted. (The intake QUEUE keeps all four verbs: the poster purges
+  // settled rows as `awcms_app`, and a trigger refuses to delete work.)
+  awcms_hr_commission_intake_settings: ["SELECT", "INSERT", "UPDATE"],
   // ADR-0132 / `sql/198`. The events are APPEND-ONLY: awcms_app holds no UPDATE
   // or DELETE (privilege), and a trigger refuses both as the second layer.
   awcms_hr_attendance_events: ["SELECT", "INSERT"],
@@ -1753,7 +1757,19 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // compromised worker cannot read a verdict, a band or an employment.
   awcms_hr_attendance_location_evidence: ["DELETE"],
   awcms_hr_workforce_settings: ["SELECT"],
-  awcms_hr_employments: ["SELECT"]
+  awcms_hr_employments: ["SELECT"],
+  // Issue #1189 / ADR-0147 (sql/316). The event consumer of a derived
+  // repository runs in `domain-events:dispatch` as `awcms_worker` and SUBMITS a
+  // commission request to the intake queue: INSERT and NOTHING else on it (no
+  // SELECT, UPDATE or DELETE, so it cannot read back what it submitted or how it
+  // was settled), and no privilege on any payroll-family relation. The queue is
+  // drained by `hr-commission:intents:post` as `awcms_app`. The insert carries a
+  // bare `ON CONFLICT DO NOTHING` (no arbiter), which is why INSERT alone is
+  // enough here, unlike the `ON CONFLICT ON CONSTRAINT` rows sql/127 repaired.
+  awcms_hr_commission_intents: ["INSERT"]
+  // `awcms_hr_commission_intake_settings` is deliberately absent: the worker
+  // holds only a COLUMN-level SELECT on (tenant_id, commission_intake_enabled)
+  // (see WORKER_COLUMN_GRANTS), which the port and the intake insert trigger read.
 };
 
 /**
@@ -1827,6 +1843,12 @@ export const WORKER_COLUMN_GRANTS: Record<
     UPDATE: ["status", "decided_by", "decided_at", "updated_at"]
   },
   awcms_hr_employments: { UPDATE: ["updated_at"] },
+  // sql/316 (Issue #1189, ADR-0147): the commission intake switch. The port and
+  // the intake insert trigger read exactly these two columns; the intake system
+  // actor and the stamps are not readable by the worker.
+  awcms_hr_commission_intake_settings: {
+    SELECT: ["tenant_id", "commission_intake_enabled"]
+  },
   // sql/314 (Issue #1089): the dispatcher settles a delivery / disables a dead
   // device, and the auth-secret backfill moves the secret from plaintext to
   // ciphertext. The endpoint, its hash and the p256dh key are not writable.
@@ -2671,6 +2693,9 @@ export const DEFINER_OWNER_ROLES: readonly string[] = [
   // sql/306 (Issue #970): owns the operator-run erasure of one employment's
   // location-evidence verdicts; DELETE and a two-column SELECT on that table.
   "awcms_hr_geo_evidence_eraser",
+  // sql/316 (Issue #1189): the count-only owner for the commission intake
+  // queue's retention backlog; column SELECT on (tenant_id, updated_at) only.
+  "awcms_hr_commission_lifecycle_counter",
   "awcms_hr_workforce_lifecycle_counter",
   "awcms_inventory_lifecycle_counter",
   "awcms_partner_view",
