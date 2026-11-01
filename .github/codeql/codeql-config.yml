@@ -1,0 +1,25 @@
+# CodeQL scan configuration — referenced by `.github/workflows/codeql.yml`.
+#
+# `design/` is reference-only design material (design/README.md): it is not
+# shipped, calls no API and is never imported by `src/`. Its contents are an
+# exported Design Component canvas, and CodeQL misreads both halves of it:
+#
+# - `*.dc.html` uses `onClick="{{handler}}"` template placeholders. The HTML
+#   extractor parses an event-handler attribute as JavaScript, so every
+#   placeholder becomes a block-statement expression and is reported as
+#   `js/useless-expression` (26 alerts, #173-#198).
+# - `support.js` is a byte-identical copy of the vendor runtime in
+#   `ahliweb/omes` `ui/control-center/support.js` (design/.../README.md), kept
+#   identical on purpose. Its `message` listener is `js/missing-origin-check`
+#   (alert #172) in a preview-only page that holds no secret and no session.
+#
+# Editing the files to satisfy the extractor would either break the template
+# syntax or break the byte-identity with the vendor copy; an inline suppression
+# comment is ineffective here (skill awcms-codeql-triage). Excluding the folder
+# is the honest form: the scan says it does not cover it, and the
+# `State coverage` step in the workflow counts files with the same exclusion.
+#
+# Moving any of this material into `src/` (shipped code) makes it subject to
+# the scan again — nothing under `src/` is excluded.
+paths-ignore:
+  - design
