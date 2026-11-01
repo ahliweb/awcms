@@ -136,6 +136,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   whatsapp_delivery: "operations",
   // ADR-0140 (Issue #965). The fourth delivery channel; beside the others.
   telegram_delivery: "operations",
+  // ADR-0148 (Issue #1140). The account and credential control plane every
+  // channel above conforms to; placed even though the module declares NO
+  // navigation yet (the connection manager, #1154, is a separate issue): this map
+  // must cover every registered module so its first screen lands in operations.
+  channel_accounts: "operations",
   // ADR-0122 (ahliweb/omes#196). Placed even though the module declares NO navigation yet:
   // this map must cover every registered module so its first screen lands in operations.
   omes_control: "operations",

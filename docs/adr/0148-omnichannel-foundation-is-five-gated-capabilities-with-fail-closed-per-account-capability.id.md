@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md)
 
-<!-- i18n-source-hash: sha256:36f4c5400b8e6d6c6afc85870278a206e949294be9d11a1125a1b4925566380d -->
+<!-- i18n-source-hash: sha256:d4f43ce3613b8acb3560d5f5e8b9ac35557d404a279676176e94d1ec595d1dba -->
 
 # ADR-0148 — Fondasi omnichannel adalah lima kapabilitas yang digerbangi terpisah, bukan satu modul; kapabilitas provider bersifat fail-closed per akun
 
@@ -132,6 +132,7 @@ Setiap issue implementasi membutuhkan: Definition of Ready-nya sendiri; `bun run
 - **Positif:** satu model akun yang dipatuhi setiap kanal; bagian berbahaya (secret, kapabilitas, fallback, penggabungan identitas) diputuskan sebelum kode ada; sekitar 30 issue yang menunggu dibuka sesuai urutan §10.
 - **Negatif / pertukaran:** satu modul baru dan amendemen aturan kredensial yang telah terbit; jangkauan kredensial dispatcher bertambah (§5); beberapa baris platform tetap `unverified` sampai pemiliknya menyediakan bukti; Fase A masih punya ADR terbuka untuk inbound, pelanggan Telegram, email, dan realtime.
 - **Netral:** tidak ada perubahan perilaku untuk deployment mana pun sampai akun dibuat, dan setiap flag provider mati secara default.
+- **Risiko sisa (review #1140 M4, pendudukan id eksternal):** akun yang didaftarkan manual (`api_token`, `bot_token`, `device_key`) tidak diverifikasi saat dibuat, dan baris `pending` sudah memegang klaim GLOBAL `(provider, external_id)` (`sql/318`, unik di antara baris hidup). Sebuah tenant karena itu dapat mendaftarkan id eksternal yang tidak ia kuasai dan membuat pendaftaran pemilik sebenarnya dijawab `409 ACCOUNT_ALREADY_REGISTERED` (satu jawaban untuk tenant ini dan tenant lain, jadi konflik bukan oracle, sekaligus menyembunyikan siapa pemegangnya). Dikurangi, tidak dihapus: akun OAuth tidak dapat terikat ke koneksi yang bukan `active`; pendaftaran butuh izin `accounts.create` dan diaudit; pemegang dapat menghapus atau memutus akun untuk melepas id. Belum dikurangi: hanya klaim terverifikasi yang memegang id, atau kedaluwarsa klaim tak terverifikasi, yang menutupnya, dan keduanya butuh pembacaan lintas tenant atas klaim tenant lain yang sengaja dilarang RLS, sehingga ia milik job ber-scope platform. Dicatat sebagai tindak lanjut; sampai itu, operator platform menyelesaikan id yang disengketakan secara manual.
 - **Persetujuan manusia yang masih diperlukan (tidak dilakukan di sini):** pengendali atau DPO untuk DPIA dan teks consent; penasihat hukum atau pemilik bisnis untuk teks pengakuan risiko StarSender dan pembacaan perjanjian LinkedIn; pemilik untuk persetujuan app developer provider (Meta, TikTok, YouTube, LinkedIn); dan tinjauan keamanan #1140 sebelum digabung.
 
 ## Alternatif yang ditolak

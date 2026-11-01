@@ -2393,7 +2393,13 @@ export const CREDENTIAL_COLUMNS: readonly string[] = [
   // Keyed hashes of identifying values (NIK, NPWP, ...): an offline guessing
   // oracle for a low-entropy identifier, so treated as credential material.
   "awcms_profile_identifiers.value_hash",
-  "awcms_procurement_supplier_identifiers.value_hash"
+  "awcms_procurement_supplier_identifiers.value_hash",
+  // Channel accounts control plane (sql/318, ADR-0148): envelope-encrypted
+  // provider secrets, per-account webhook callback token hashes and in-flight
+  // OAuth state hashes.
+  "awcms_channel_secrets.ciphertext",
+  "awcms_channel_webhook_subscriptions.callback_token_hash",
+  "awcms_channel_oauth_states.state_hash"
 ];
 
 /**
@@ -2432,6 +2438,12 @@ export const CREDENTIAL_LOOKING_COLUMN_PATTERN =
 export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
   "awcms_auth_providers.client_secret_env_var":
     "the NAME of an environment variable, not its value (sql/025)",
+  "awcms_channel_oauth_states.redirect_uri_hash":
+    "hash of the OAuth callback redirect URI the authorisation request was started with; not a secret (sql/318)",
+  "awcms_channel_provider_connections.redirect_uri_hash":
+    "hash of the OAuth callback redirect URI the grant was issued against; not a secret (sql/318)",
+  "awcms_channel_provider_connections.scope_list_hash":
+    "hash of the granted OAuth scopes list recorded as capability evidence; not a secret (sql/318)",
   "awcms_comments_abuse_events.fingerprint_hash":
     "keyed hash of a request fingerprint for abuse counting; not a login secret",
   "awcms_comments_abuse_events.ip_hash":

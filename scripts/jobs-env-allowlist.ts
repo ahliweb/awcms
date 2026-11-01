@@ -423,6 +423,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
     ]
   },
   {
+    name: "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+    reason:
+      "the ring that encrypts every tenant's provider credentials at rest (ADR-0148 section 5); whoever holds it can read every stored token, device key and bot token",
+    jobs: [
+      {
+        target: "channel-accounts:secrets:rekey",
+        reason:
+          "operator run: re-encrypts channel secrets under the new first key (#1140)"
+      }
+    ]
+  },
+  {
     name: "TELEGRAM_CHAT_ENCRYPTION_KEYS",
     reason:
       "the ring that encrypts Telegram chat ids at rest; whoever holds it can read every bound chat",

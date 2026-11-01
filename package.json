@@ -52,6 +52,7 @@
     "workflow:escalations:dispatch": "bun scripts/workflow-escalations-dispatch.ts",
     "push:auth-secret:backfill": "bun scripts/push-auth-secret-backfill.ts",
     "push:auth-secret:rekey": "bun scripts/push-auth-secret-backfill.ts --rekey",
+    "channel-accounts:secrets:rekey": "bun scripts/channel-accounts-secrets-rekey.ts",
     "telegram:chat:rekey": "bun scripts/telegram-chat-rekey.ts",
     "hr-commission:intents:post": "bun scripts/hr-commission-intents-post.ts",
     "push:dispatch": "bun scripts/push-dispatch.ts",

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-foundation.md)
 
-<!-- i18n-source-hash: sha256:d18210d854791ea3d4766fb42527c345395d405908cc73539dca425a25072c5f -->
+<!-- i18n-source-hash: sha256:f7eef3e7492d9e7999df376e5c430c9325d064ac7ac6c6f86a92a1376aec2a98 -->
 
 # Fondasi omnichannel — paket kesiapan (v1, 24 Oktober 2026)
 
@@ -291,3 +291,16 @@ Setiap issue di bawah siap dimulai bila ADR-0148 Diterima **dan** barisnya sendi
 | #1150 LinkedIn                | **Tidak dibangun.** Persetujuan produk dibuktikan, perjanjian dibaca dan kewajiban dicatat oleh manusia, #1145 digabung; Lead Sync butuh otorisasi tertulis sendiri |
 
 **Persetujuan yang membutuhkan manusia dan tidak diberikan di sini:** (1) pengendali atau DPO untuk teks consent, periode retensi, dan keputusan DPIA di bawah UU PDP Pasal 34; (2) penasihat hukum atau pemilik bisnis untuk pembacaan perjanjian LinkedIn, teks pengakuan risiko StarSender, dan tafsir kebijakan Meta apa pun; (3) pemilik bisnis untuk persetujuan app developer provider dan verifikasi bisnis; (4) peninjau keamanan untuk #1140 sebelum digabung; (5) pemilik untuk keputusan pemilik O5 (operator sebagai pengendali atau prosesor).
+
+## 13. Rekonsiliasi implementasi: Issue #1140 (`channel_accounts`)
+
+Bagian 1 sampai 12 tetap menjadi acuan desain. Apa yang dibangun Issue #1140, dan di mana ia berbeda dari nama kerja di atas (modul [`src/modules/channel-accounts/`](../../src/modules/channel-accounts/README.id.md), `sql/318` sampai `sql/320`, [`openapi/modules/channel-accounts.openapi.yaml`](../../openapi/modules/channel-accounts.openapi.yaml)):
+
+- **Delapan tabel, bukan tujuh.** Ketujuhnya ditambah `awcms_channel_oauth_states` (nonce `state` sekali pakai dan referensi verifier PKCE dari alur yang sedang berjalan). Tabel langganan webhook hanya metadata: belum ada rute yang membacanya.
+- **Kesehatan adalah satu baris per akun** (upsert). Riwayat terbatas tidak disimpan: log append tanpa batas akan membutuhkan purge sendiri sebelum ada konsumen.
+- **Nama izin.** `AccessAction` adalah kosakata tertutup, sehingga `.connect`, `.disconnect`, `.capabilities.grant` dan `.assignments.manage` menjadi `accounts.create`, `accounts.revoke`, `capabilities.configure` dan `assignments.assign`; `accounts.read` dan `credentials.manage` tidak berubah. `senders.use` dan izin pengirim `whatsapp_delivery.*` **tidak** di-seed: belum ada yang menegakkannya sampai #1141.
+- **Key ring dan rotasi (bagian 6).** `CHANNEL_SECRETS_ENCRYPTION_KEYS` (`config:validate` memeriksa bahwa ia tidak berbagi kunci dengan ring Telegram atau push) dan `bun run channel-accounts:secrets:rekey` (manual, berjalan sebagai `awcms_app`). Penghitung dekripsi adalah `snapshotSecretDecryptCounts()`. Flag `CHANNEL_ACCOUNTS_ENABLED` dibangun, default mati; setiap rute menjawab `503 CHANNEL_ACCOUNTS_DISABLED` setelah otorisasi.
+- **Callback terverifikasi (T1) adalah hand-off terverifikasi.** Callback mengonsumsi state dan menyimpan kode otorisasi sebagai ciphertext pada koneksi `pending`. Pertukaran token adalah I/O penyedia (I10) dan milik job konektor pertama (`activateConnectionGrant`).
+- **Belum dibangun:** `ChannelAccountPort` dan event `channel.account.*` (belum ada konsumen; `resolveCapability` adalah fungsi yang akan dibungkus port, konsumen pertama #1141).
+- **Retensi.** Tiap tabel menjawab pertanyaan retensi pada perubahan yang sama lewat bentuk yang diterima gerbang: deskriptor `subjectData` (`NO_SUBJECT_DATA` beralasan untuk tabel kesehatan) dan entri `BOUNDED_BY_DESIGN` beralasan per tabel. Deskriptor `data_lifecycle` terdelegasi untuk `oauth_states` ditolak: ia memerlukan grant baca worker pada tabel control plane.
+- **Cermin kode matriks** adalah `src/modules/channel-accounts/domain/provider-matrix.ts`, ditahan setara dengan bagian 3 di atas oleh `tests/channel-accounts-provider-matrix.test.ts`, sel demi sel.

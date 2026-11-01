@@ -313,7 +313,7 @@ fi
 # Source: appConnectionTargets() in scripts/jobs-env-allowlist.ts, derived from each
 # target's import closure. Do not edit between the markers; regenerate.
 case "$JOB" in
-  blog:legacy:article-paths | blog:legacy:cutover:verify | blog:legacy:import | blog:legacy:redirects:import | changesets:policy:check | check:astro-frontmatter:check | check:astro-scripts:check | check:docs | check:docs:translation | ci:local | data-lifecycle:registry:check | db:migrate | deps:audit:check | deps:freshness | docs:i18n:stamp | docs:i18n:stamp:check | email:templates:seed-defaults | entitlements:backfill | family:conformance:check | graph:artifacts:check | hr-commission:intents:post | identity-access:permissions:backfill | identity:mfa-collisions:preflight | identity:principals:preflight | modules:table-writes:check | payroll:catalog-boundary:check | payroll:sql-boundary:check | release:verify | telegram:chat:rekey | version:check)
+  blog:legacy:article-paths | blog:legacy:cutover:verify | blog:legacy:import | blog:legacy:redirects:import | changesets:policy:check | channel-accounts:secrets:rekey | check:astro-frontmatter:check | check:astro-scripts:check | check:docs | check:docs:translation | ci:local | data-lifecycle:registry:check | db:migrate | deps:audit:check | deps:freshness | docs:i18n:stamp | docs:i18n:stamp:check | email:templates:seed-defaults | entitlements:backfill | family:conformance:check | graph:artifacts:check | hr-commission:intents:post | identity-access:permissions:backfill | identity:mfa-collisions:preflight | identity:principals:preflight | modules:table-writes:check | payroll:catalog-boundary:check | payroll:sql-boundary:check | release:verify | telegram:chat:rekey | version:check)
     WITHHOLD_DATABASE_URL=0
     ;;
   *)

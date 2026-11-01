@@ -93,6 +93,8 @@ tags:
     description: "Versioned commission rules (hr_commission module, Issue #950, ADR-0132, phase 2 of the hr_* family). A rule is jurisdiction-neutral, tenant-authored configuration: a percent of a base amount or a fixed amount per unit, in one currency, rounded under one explicit mode and scale, with an optional floor and ceiling; it references no person or employment. A rule changes only by a new version; a draft is editable, a published version is immutable (also by database trigger) and may only become retired, and no two published windows of one rule overlap. Rates and amounts are decimal strings. publish and retire are high-risk, separately grantable, idempotency-keyed and audited; a back-dated publish needs a reason. Issue #951 adds the accrual LEDGER: one commission per (source, employment), exactly once (a redelivery returns the original), its amount computed from the published rule in force on the event's own date and never asserted by a client, an advancing status (pending, approved, payable, paid, or voided) with an append-only transition log, a beneficiary who cannot approve their own accrual, and high-risk idempotency-keyed approve, release, void and pay audited without any amount. Employee commission only. Reversal and payroll are later phases."
   - name: Telegram Delivery
     description: "Operator and self-service surface of the optional Telegram delivery adapter (telegram_delivery module, ADR-0140, Issue #965), which carries OPERATIONAL AND STAFF ALERTS ONLY to staff who bound their own private chat. There is NO enqueue or send endpoint: queueing is a capability-port call (TelegramDeliveryPort) made in the consuming module's own transaction, and the provider is called only by the dispatcher job, outside any transaction (ADR-0006). A chat is bound by an audited, revocable handshake: a staff member requests a one-time code for themselves, opens it in a PRIVATE Telegram chat (the unauthenticated bot webhook, secret-verified before any work), and must then confirm the displayed Telegram name from their own authenticated session. The Telegram chat id is stored only as ciphertext plus a keyed hash and is never returned by any endpoint: chats are masked in every response and message bodies and variables are never returned. One queue per deployment, never a fallback for another channel (ADR-0139). Credentials are per deployment from the environment, never per tenant. Ships inert behind TELEGRAM_ENABLED and a per-tenant switch."
+  - name: Channel Accounts
+    description: "Account and credential CONTROL PLANE of the omnichannel foundation (channel_accounts module, Issue #1140, ADR-0148 capability C1): a tenant's connected external accounts (WhatsApp WABA phone numbers and StarSender devices, Pages, profiles, channels, bots, Mailketing ESP logins), the provider connections (OAuth 2.0 grants with single-use state and PKCE, API tokens, bot tokens, device keys) behind them, FAIL-CLOSED per-account capability evaluated against the provider matrix v1, write-only envelope-encrypted credentials, health and per-account assignments. There is NO send or publish endpoint and NO provider call: dispatch belongs to later issues. No operation ever returns a credential, an OAuth token, an authorisation code, a PKCE verifier, an OAuth state or the reference to any of them. A live external account belongs to ONE tenant. Ships inert behind CHANNEL_ACCOUNTS_ENABLED."
 paths:
   /api/v1/abac/policies:
     get:
@@ -9317,6 +9319,1064 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "409":
           description: SCHEDULE_NOT_EDITABLE.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts:
+    get:
+      operationId: listChannelAccounts
+      tags:
+        - Channel Accounts
+      summary: The tenant's connected accounts, newest first (keyset).
+      description: An account with assignees is listed only to its assignees and to holders of `channel_accounts.assignments.assign`. Never contains a credential or its reference, only `hasCredential`. Requires `channel_accounts.accounts.read`.
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChannelAccountStatus"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChannelAccount"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createChannelAccount
+      tags:
+        - Channel Accounts
+      summary: Register an external account.
+      description: "`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). Binding to a `connectionId` lends the account that connection's token, so it needs authority over the CONNECTION (its business scope; a tenant-wide connection: its creator or an unconfined caller) and `owner` authority over accounts already bound to it; otherwise `422 CONNECTION_NOT_FOUND`. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChannelAccountRequest"
+      responses:
+        "201":
+          description: The registered account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelAccount"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`ACCOUNT_ALREADY_REGISTERED` (this tenant or another holds the external account) or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "The combination is not admitted: `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`, `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`, `CONNECTION_MISMATCH`, `CONNECTION_NOT_ACTIVE` (the connection's grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or `SCOPE_UNRESOLVED` (the named business scope does not exist in this tenant)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getChannelAccount
+      tags:
+        - Channel Accounts
+      summary: One account.
+      description: An unknown id, another tenant's id and an account the caller is not assigned to all answer the same 404. Requires `channel_accounts.accounts.read`.
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelAccount"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateChannelAccount
+      tags:
+        - Channel Accounts
+      summary: Rename an account, or disable / re-enable it.
+      description: "`status` may be `disabled` or `pending` only: a re-enabled account stays `pending` until a connector verifies it again. `connected` and `degraded` cannot be set by a person. Disabling is audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                displayName:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                status:
+                  type: string
+                  enum:
+                    - disabled
+                    - pending
+      responses:
+        "200":
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelAccount"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`ACCOUNT_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteChannelAccount
+      tags:
+        - Channel Accounts
+      summary: Soft-delete an account.
+      description: "Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`ACCOUNT_STATE_INVALID`, `HAS_CHILD_ACCOUNTS` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/assignments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listChannelAccountAssignments
+      tags:
+        - Channel Accounts
+      summary: Who may operate this account.
+      description: Requires `channel_accounts.accounts.read`.
+      responses:
+        "200":
+          description: The assignments.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChannelAccountAssignment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: setChannelAccountAssignment
+      tags:
+        - Channel Accounts
+      summary: Make a person of this tenant an owner, operator or viewer of the account.
+      description: An upsert per person. From the first assignment on, the account is visible and operable only to its assignees and holders of `channel_accounts.assignments.assign`. Additive to the permission checks, never a substitute. Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantUserId
+                - kind
+              additionalProperties: false
+              properties:
+                tenantUserId:
+                  type: string
+                  format: uuid
+                kind:
+                  $ref: "#/components/schemas/ChannelAssignmentKind"
+      responses:
+        "200":
+          description: The assignment.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelAccountAssignment"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`USER_NOT_FOUND` (the person is not in this tenant)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/assignments/{assignmentId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: assignmentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: removeChannelAccountAssignment
+      tags:
+        - Channel Accounts
+      summary: Remove one assignee.
+      description: Removing the LAST assignee returns the account to tenant-wide visibility, which is intended and is why this is audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.assignments.assign`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      assignmentId:
+                        type: string
+                        format: uuid
+                      removed:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/capabilities:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listChannelAccountCapabilities
+      tags:
+        - Channel Accounts
+      summary: All nine capabilities with the matrix cell and the effective verdict.
+      description: "Each capability carries the provider matrix cell, the stored record (`absent` when none: absent means denied) and the EFFECTIVE verdict right now with its denial code. An unsupported or unevidenced action is reported as denied; nothing degrades one action into another. Requires `channel_accounts.accounts.read`."
+      responses:
+        "200":
+          description: The capabilities.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      matrixVersion:
+                        type: integer
+                      capabilities:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChannelAccountCapability"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/capabilities/{capability}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: capability
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ChannelCapabilityName"
+    put:
+      operationId: setChannelAccountCapability
+      tags:
+        - Channel Accounts
+      summary: Record or withdraw one capability with its evidence.
+      description: "Refused (`422`) at write time when the provider matrix can never allow the cell (`CAPABILITY_NOT_GRANTABLE`, `PROVIDER_UNVERIFIED`, `PROVIDER_BARRED`), and a `restricted` cell needs a `contract_reference` or `written_authorization` evidence kind (`PROVIDER_RESTRICTED`). Granting does NOT make the capability usable by itself: every use is re-evaluated against the matrix, the evidence, the account status and its connection's grant. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.capabilities.configure`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - state
+              additionalProperties: false
+              properties:
+                state:
+                  type: string
+                  enum:
+                    - granted
+                    - pending_approval
+                    - denied
+                evidenceKind:
+                  $ref: "#/components/schemas/ChannelEvidenceKind"
+                evidenceRef:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                  description: An opaque reference to the approval, scope list or contract. Required when `state` is `granted`. Never a secret.
+      responses:
+        "200":
+          description: The recorded capability.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelAccountCapability"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`CAPABILITY_NOT_GRANTABLE`, `PROVIDER_BARRED`, `PROVIDER_UNVERIFIED`, `PROVIDER_RESTRICTED` or `ACCOUNT_STATE_INVALID`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/credential:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: writeChannelAccountCredential
+      tags:
+        - Channel Accounts
+      summary: Write or replace the account's credential (WRITE-ONLY).
+      description: |-
+        Stores an API token, device key or bot token as envelope-encrypted ciphertext (AES-256-GCM, the shared field-encryption helper, associated data binding purpose, tenant and secret). There is no GET and no "show token": the response is `{ replaced, cipherVersion }`, never the value and never the reference, and neither the audit row, the stored idempotency response nor any log carries the value. An OAuth account has no credential of its own (`409 CREDENTIAL_NOT_APPLICABLE`); a `revoked` or `disabled` account is not re-armed by writing one (`409 ACCOUNT_STATE_INVALID`).
+
+        HIGH-RISK: the permission is separately grantable and declares `requiresMfaEnrolment` (a holder with no MFA factor is refused `403 MFA_ENROLMENT_REQUIRED`); a person WITH a factor must also present a fresh step-up (conditional, ADR-0141 section 4); `Idempotency-Key` is required; the audit row is `warning`. `503 SECRET_STORE_UNAVAILABLE` when CHANNEL_SECRETS_ENCRYPTION_KEYS is not a valid key ring (fail closed: there is no plaintext fallback). Requires `channel_accounts.credentials.manage`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - secret
+              additionalProperties: false
+              properties:
+                secret:
+                  type: string
+                  minLength: 8
+                  maxLength: 4096
+                  writeOnly: true
+                  description: The credential. No whitespace. Never echoed, in a response or in an error message.
+      responses:
+        "200":
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      replaced:
+                        type: boolean
+                      cipherVersion:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`CREDENTIAL_NOT_APPLICABLE`, `ACCOUNT_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/disconnect:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: disconnectChannelAccount
+      tags:
+        - Channel Accounts
+      summary: Disconnect an account and erase its credential.
+      description: "The account becomes `revoked`, its OWN stored credential is hard-deleted and its webhook subscriptions are revoked. Effective on the next use: every capability check reads the status. Does not call the provider and does not touch a shared connection (revoke the connection for that). High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Disconnected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      account:
+                        $ref: "#/components/schemas/ChannelAccount"
+                      credentialErased:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`ACCOUNT_STATE_INVALID` (already disconnected) or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/health:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getChannelAccountHealth
+      tags:
+        - Channel Accounts
+      summary: The account's status and latest recorded health.
+      description: "Read-only on purpose: health is REPORTED by a provider connector's check or a dispatch failure, never asserted by a person, so a caller cannot mark a broken account healthy. `health` is `null` until a connector has reported once. Requires `channel_accounts.accounts.read`."
+      responses:
+        "200":
+          description: Status and health.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accountId:
+                        type: string
+                        format: uuid
+                      status:
+                        $ref: "#/components/schemas/ChannelAccountStatus"
+                      statusReason:
+                        type: string
+                        nullable: true
+                      health:
+                        $ref: "#/components/schemas/ChannelAccountHealth"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/connections:
+    get:
+      operationId: listChannelConnections
+      tags:
+        - Channel Accounts
+      summary: The tenant's provider connections.
+      description: State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection is listed to the holder of its business scope (or, for a tenant-wide connection, the tenant administrator), to the person who started it, and to anyone who may see at least one account bound to it (assignment and business scope). Requires `channel_accounts.accounts.read`.
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The connections.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ChannelConnection"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/connections/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: revokeChannelConnection
+      tags:
+        - Channel Accounts
+      summary: Revoke a provider connection.
+      description: "The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. Break-glass: whoever holds the connection's business scope (or, for a tenant-wide connection, the unconfined holder of `assignments.assign`) can always revoke it, so no account can veto a revocation. Anyone else needs `owner` authority over EVERY account bound to it (a connection with no account belongs to whoever started it); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      connectionId:
+                        type: string
+                        format: uuid
+                      grantState:
+                        type: string
+                        enum:
+                          - revoked
+                      accountsRevoked:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`GRANT_STATE_INVALID` (already revoked) or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/connections/oauth/callback:
+    get:
+      operationId: completeChannelOAuthCallback
+      tags:
+        - Channel Accounts
+      summary: The provider's redirect target.
+      description: |-
+        A top-level browser navigation that carries the signed-in session; it is authorised like any call (`channel_accounts.accounts.create`) and is NOT a public endpoint. The `state` must exist, be unexpired and unconsumed, belong to THIS tenant and to THIS signed-in person, and have been issued against this deployment's own redirect URI. Every failure, replay and cross-tenant or cross-person attempt answers the same `400 STATE_INVALID`. The state is consumed by a compare-and-swap, so two racing callbacks have one winner.
+
+        It does NOT exchange the code: that is provider I/O and must not run inside this transaction. It leaves a durable hand-off (a `pending` connection holding the authorisation code as ciphertext) for the connector's job. Neither the code nor the state is echoed in the response, the audit row or any log. A provider-side denial answers `403 AUTHORIZATION_DENIED`.
+      parameters:
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The hand-off was recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      connectionId:
+                        type: string
+                        format: uuid
+                      grantState:
+                        type: string
+                        enum:
+                          - pending
+                      awaitingExchange:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          description: "`STATE_INVALID`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/connections/oauth/start:
+    post:
+      operationId: startChannelOAuth
+      tags:
+        - Channel Accounts
+      summary: Begin an OAuth 2.0 authorisation for a provider.
+      description: |-
+        Creates a single-use `state` (256 random bits, stored only as a SHA-256, bound to this tenant and this person, valid 10 minutes) and, where the provider offers PKCE, an S256 challenge whose verifier is held server-side as ciphertext. The redirect URI is this deployment's own fixed callback and is NOT an input. Returns the provider's authorisation URL.
+
+        `422 PROVIDER_ADAPTER_UNAVAILABLE` for a provider whose connector is not installed: this module does not guess a provider's authorisation endpoint. `429 TOO_MANY_PENDING` caps unconsumed states per person. Not idempotency-keyed: each call deliberately mints a fresh state. Requires `channel_accounts.accounts.create`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider
+                - scopes
+              additionalProperties: false
+              properties:
+                provider:
+                  type: string
+                scopes:
+                  type: array
+                  maxItems: 64
+                  items:
+                    type: string
+                businessScope:
+                  $ref: "#/components/schemas/ChannelBusinessScope"
+      responses:
+        "200":
+          description: The authorisation URL to send the browser to.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      authorizationUrl:
+                        type: string
+                        format: uri
+                      expiresAt:
+                        type: string
+                        format: date-time
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: "`PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID`, `PROVIDER_ADAPTER_UNAVAILABLE` or `SCOPE_UNRESOLVED`. A `businessScope` the caller does not hold (or an omitted one, for a scope-confined caller) is `403 ACCESS_DENIED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: "`TOO_MANY_PENDING`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/providers:
+    get:
+      operationId: listChannelProviders
+      tags:
+        - Channel Accounts
+      summary: The provider capability matrix v1, as the code enforces it.
+      description: "Registrable providers with their account kinds and authentication modes, and the verdict of each capability cell (`candidate`, `restricted`, `not_offered`, `unverified`, `not_applicable`, `barred`). A `candidate` cell is NOT a promise: an account still needs a granted capability with evidence. Requires `channel_accounts.accounts.read`."
+      responses:
+        "200":
+          description: The matrix.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelProviderMatrix"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
           content:
             application/json:
               schema:
@@ -33284,6 +34344,305 @@ components:
         updatedAt:
           type: string
           format: date-time
+    ChannelAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessScope:
+          allOf:
+            - $ref: "#/components/schemas/ChannelBusinessScope"
+          nullable: true
+        provider:
+          type: string
+        accountKind:
+          type: string
+        externalId:
+          type: string
+          description: The provider-stable identity. Immutable.
+        displayName:
+          type: string
+        authMode:
+          $ref: "#/components/schemas/ChannelAuthMode"
+        connectionId:
+          type: string
+          format: uuid
+          nullable: true
+        parentAccountId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ChannelAccountStatus"
+        statusReason:
+          type: string
+          nullable: true
+        hasCredential:
+          type: boolean
+          description: Whether a credential is stored. The credential and its reference are never returned.
+        connectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+    ChannelAccountAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        tenantUserId:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/ChannelAssignmentKind"
+        createdAt:
+          type: string
+          format: date-time
+    ChannelAccountCapability:
+      type: object
+      properties:
+        capability:
+          $ref: "#/components/schemas/ChannelCapabilityName"
+        matrixCell:
+          type: string
+          enum:
+            - candidate
+            - restricted
+            - not_offered
+            - unverified
+            - not_applicable
+            - barred
+        state:
+          type: string
+          enum:
+            - granted
+            - pending_approval
+            - denied
+            - not_offered
+            - absent
+        evidenceKind:
+          allOf:
+            - $ref: "#/components/schemas/ChannelEvidenceKind"
+          nullable: true
+        evidenceRef:
+          type: string
+          nullable: true
+        matrixVersion:
+          type: integer
+          nullable: true
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        effective:
+          type: object
+          description: The decision for a use right now.
+          required:
+            - allowed
+          properties:
+            allowed:
+              type: boolean
+            code:
+              type: string
+              description: Present when `allowed` is false.
+    ChannelAccountHealth:
+      type: object
+      nullable: true
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+            - ok
+            - degraded
+            - failing
+            - unknown
+        reasonCode:
+          type: string
+          nullable: true
+          description: A fixed code, never provider text.
+        checkedAt:
+          type: string
+          format: date-time
+        tokenExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        quotaRemaining:
+          type: number
+          nullable: true
+        quotaLimit:
+          type: number
+          nullable: true
+    ChannelAccountStatus:
+      type: string
+      enum:
+        - pending
+        - connected
+        - degraded
+        - revoked
+        - disabled
+        - deleted
+    ChannelAssignmentKind:
+      type: string
+      enum:
+        - owner
+        - operator
+        - viewer
+    ChannelAuthMode:
+      type: string
+      enum:
+        - oauth2
+        - api_token
+        - bot_token
+        - device_key
+    ChannelBusinessScope:
+      type: object
+      required:
+        - type
+        - id
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          description: Lower snake case; the generic business-scope pair (no new ABAC attribute).
+        id:
+          type: string
+          format: uuid
+    ChannelCapabilityName:
+      type: string
+      enum:
+        - publish
+        - reply
+        - dm
+        - inbound
+        - comments
+        - analytics
+        - leads
+        - ads
+        - broadcast
+    ChannelConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        authMode:
+          $ref: "#/components/schemas/ChannelAuthMode"
+        grantState:
+          type: string
+          enum:
+            - pending
+            - active
+            - expired
+            - revoked
+            - failed
+        label:
+          type: string
+          nullable: true
+        grantedScopes:
+          type: array
+          items:
+            type: string
+        issuedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        refreshExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        hasAccessCredential:
+          type: boolean
+        awaitingExchange:
+          type: boolean
+        connectedBy:
+          type: string
+          format: uuid
+          nullable: true
+        businessScope:
+          description: The authority boundary of the grant, carried from the authorisation that started it; null is tenant-wide.
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ChannelBusinessScope"
+        createdAt:
+          type: string
+          format: date-time
+    ChannelEvidenceKind:
+      type: string
+      enum:
+        - scope_list_hash
+        - app_review_reference
+        - contract_reference
+        - written_authorization
+    ChannelProviderMatrix:
+      type: object
+      properties:
+        matrixVersion:
+          type: integer
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChannelCapabilityName"
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+              label:
+                type: string
+              registrable:
+                type: boolean
+              authModes:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelAuthMode"
+              accountKinds:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    kind:
+                      type: string
+                    container:
+                      type: boolean
+                    parentKind:
+                      type: string
+                      nullable: true
+              capabilityCells:
+                type: object
+                additionalProperties:
+                  type: string
     CollectVisitBeaconRequest:
       type: object
       required:
@@ -33485,6 +34844,40 @@ components:
           type: array
           items:
             type: object
+    CreateChannelAccountRequest:
+      type: object
+      required:
+        - provider
+        - accountKind
+        - authMode
+        - externalId
+        - displayName
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+        accountKind:
+          type: string
+        authMode:
+          $ref: "#/components/schemas/ChannelAuthMode"
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        businessScope:
+          $ref: "#/components/schemas/ChannelBusinessScope"
+        connectionId:
+          type: string
+          format: uuid
+          description: Required for `oauth2` accounts, refused for the other modes.
+        parentAccountId:
+          type: string
+          format: uuid
+          description: Required for a child kind (a phone number's WABA, a sender's ESP account).
     CreateInvitationInput:
       type: object
       required:
