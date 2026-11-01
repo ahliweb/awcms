@@ -73,6 +73,8 @@ export type ConnectionView = {
   /** An authorisation code waits for its token exchange. */
   awaitingExchange: boolean;
   connectedBy: string | null;
+  /** The authority boundary of the grant; null = tenant-wide. */
+  businessScope: { type: string; id: string } | null;
   createdAt: string;
 };
 
@@ -90,12 +92,15 @@ type ConnectionRow = {
   access_secret_id: string | null;
   pending_code_secret_id: string | null;
   connected_by: string | null;
+  business_scope_type: string | null;
+  business_scope_id: string | null;
   created_at: Date;
 };
 
 const CONNECTION_COLUMNS = `id, provider, auth_mode, grant_state, label,
   granted_scopes, issued_at, expires_at, refresh_expires_at, revoked_at,
-  access_secret_id, pending_code_secret_id, connected_by, created_at`;
+  access_secret_id, pending_code_secret_id, connected_by,
+  business_scope_type, business_scope_id, created_at`;
 
 function toConnectionView(row: ConnectionRow): ConnectionView {
   return {
@@ -112,6 +117,10 @@ function toConnectionView(row: ConnectionRow): ConnectionView {
     hasAccessCredential: row.access_secret_id !== null,
     awaitingExchange: row.pending_code_secret_id !== null,
     connectedBy: row.connected_by,
+    businessScope:
+      row.business_scope_type && row.business_scope_id
+        ? { type: row.business_scope_type, id: row.business_scope_id }
+        : null,
     createdAt: row.created_at.toISOString()
   };
 }
@@ -133,16 +142,30 @@ export async function listConnections(
   return rows.map(toConnectionView);
 }
 
+/**
+ * `lock: true` takes the row lock: callers that decide something from the state
+ * (activation, failure, revocation authority) must not race a revocation.
+ */
 export async function fetchConnection(
   tx: Bun.SQL,
   tenantId: string,
-  connectionId: string
+  connectionId: string,
+  options: { lock?: boolean } = {}
 ): Promise<ConnectionView | null> {
-  const rows = (await tx`
+  const rows = (
+    options.lock
+      ? await tx`
     SELECT ${tx.unsafe(CONNECTION_COLUMNS)}
     FROM awcms_channel_provider_connections
     WHERE tenant_id = ${tenantId} AND id = ${connectionId}
-  `) as ConnectionRow[];
+    FOR UPDATE
+  `
+      : await tx`
+    SELECT ${tx.unsafe(CONNECTION_COLUMNS)}
+    FROM awcms_channel_provider_connections
+    WHERE tenant_id = ${tenantId} AND id = ${connectionId}
+  `
+  ) as ConnectionRow[];
 
   return rows.length === 0 ? null : toConnectionView(rows[0]!);
 }
@@ -339,7 +362,8 @@ export async function completeOAuthCallback(
 
   const rows = (await tx`
     SELECT id, provider, initiated_by, pkce_secret_id, redirect_uri_hash,
-           requested_scopes, consumed_at, expires_at
+           requested_scopes, business_scope_type, business_scope_id,
+           consumed_at, expires_at
     FROM awcms_channel_oauth_states
     WHERE tenant_id = ${tenantId} AND state_hash = ${hashOAuthState(parsed.token)}
     FOR UPDATE
@@ -350,6 +374,8 @@ export async function completeOAuthCallback(
     pkce_secret_id: string | null;
     redirect_uri_hash: string;
     requested_scopes: string[];
+    business_scope_type: string | null;
+    business_scope_id: string | null;
     consumed_at: Date | null;
     expires_at: Date;
   }[];
@@ -394,10 +420,12 @@ export async function completeOAuthCallback(
   const created = (await tx`
     INSERT INTO awcms_channel_provider_connections
       (tenant_id, provider, auth_mode, grant_state, redirect_uri_hash,
-       oauth_state_id, pending_code_secret_id, connected_by)
+       oauth_state_id, pending_code_secret_id, connected_by,
+       business_scope_type, business_scope_id)
     VALUES (${tenantId}, ${state.provider}, 'oauth2', 'pending',
             ${state.redirect_uri_hash}, ${state.id}, ${code.secretId},
-            ${tenantUserId})
+            ${tenantUserId}, ${state.business_scope_type},
+            ${state.business_scope_id})
     RETURNING id
   `) as { id: string }[];
 
@@ -465,7 +493,9 @@ export async function activateConnectionGrant(
   grant: GrantTokens,
   now: Date
 ): Promise<ActivateGrantOutcome> {
-  const current = await fetchConnection(tx, tenantId, connectionId);
+  const current = await fetchConnection(tx, tenantId, connectionId, {
+    lock: true
+  });
 
   if (!current) return { outcome: "not_found" };
   if (current.grantState !== "pending") {
@@ -512,7 +542,9 @@ export async function failConnectionGrant(
   tenantId: string,
   connectionId: string
 ): Promise<boolean> {
-  const current = await fetchConnection(tx, tenantId, connectionId);
+  const current = await fetchConnection(tx, tenantId, connectionId, {
+    lock: true
+  });
 
   if (!current || current.grantState !== "pending") return false;
 

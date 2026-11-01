@@ -152,8 +152,10 @@ BEGIN
   IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
      OR NEW.provider IS DISTINCT FROM OLD.provider
      OR NEW.auth_mode IS DISTINCT FROM OLD.auth_mode
+     OR NEW.business_scope_type IS DISTINCT FROM OLD.business_scope_type
+     OR NEW.business_scope_id IS DISTINCT FROM OLD.business_scope_id
      OR NEW.id IS DISTINCT FROM OLD.id THEN
-    RAISE EXCEPTION 'a provider connection tenant, provider and auth mode are immutable'
+    RAISE EXCEPTION 'a provider connection tenant, provider, auth mode and business scope are immutable'
       USING ERRCODE = '23514';
   END IF;
 

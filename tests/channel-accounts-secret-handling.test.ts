@@ -27,6 +27,7 @@ import {
   validateOAuthStart,
   validateSetCapability,
   validateUpdateAccount,
+  validateOAuthCallbackQuery,
   validateWriteCredential
 } from "../src/modules/channel-accounts/domain/channel-accounts-validation";
 
@@ -230,6 +231,30 @@ describe("request validators are strict about credential-shaped fields", () => {
     expect(validateWriteCredential({ secret: CANARY, extra: 1 }).valid).toBe(
       false
     );
+  });
+
+  test("credential and code limits count UTF-8 bytes, so a stored envelope can never exceed its CHECK", () => {
+    // 4096 euro signs are 4096 characters but 12288 bytes: refused with a 400-shaped
+    // validation error instead of reaching the 8192-character envelope CHECK.
+    const euros = "\u20ac".repeat(4096);
+
+    expect(validateWriteCredential({ secret: euros }).valid).toBe(false);
+    expect(validateWriteCredential({ secret: "a".repeat(4096) }).valid).toBe(
+      true
+    );
+    expect(validateWriteCredential({ secret: "a".repeat(4097) }).valid).toBe(
+      false
+    );
+    expect(
+      validateOAuthCallbackQuery(
+        new URLSearchParams({ state: "s", code: euros })
+      ).valid
+    ).toBe(false);
+    expect(
+      validateOAuthCallbackQuery(
+        new URLSearchParams({ state: "s", code: "a".repeat(4096) })
+      ).valid
+    ).toBe(true);
   });
 
   test("the OAuth start takes no redirect URI", () => {

@@ -135,7 +135,7 @@ export const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 /** A refresh lease: long enough for one provider round trip, short enough that a crashed refresher does not block the next one for long (T12). */
 export const REFRESH_LEASE_SECONDS = 30;
 
-/** Largest accepted credential, in characters. Real tokens are far shorter; this bounds abuse of the write-only endpoint. */
+/** Largest accepted credential, in UTF-8 BYTES (the stored envelope is capped at 8192 characters, and a multi-byte value grows it). Real tokens are far shorter; this bounds abuse of the write-only endpoint. */
 export const MAX_SECRET_LENGTH = 4096;
 
 export const MAX_SCOPES = 64;

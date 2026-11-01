@@ -5,11 +5,14 @@ import {
   auditChannelAccounts,
   badId,
   commonRefusal,
-  connectionAccountAccess,
+  mayRevokeConnection,
   readIdempotencyKey,
   runIdempotent
 } from "../../../../../../modules/channel-accounts/application/channel-accounts-route-support";
-import { revokeConnection } from "../../../../../../modules/channel-accounts/application/connection-directory";
+import {
+  fetchConnection,
+  revokeConnection
+} from "../../../../../../modules/channel-accounts/application/connection-directory";
 import { defaultSecretStore } from "../../../../../../modules/channel-accounts/application/secret-store";
 import { CHANNEL_ACCOUNTS_GUARDS } from "../../../../../../modules/channel-accounts/domain/channel-accounts-constants";
 
@@ -47,20 +50,24 @@ export const POST = defineTenantRoute<Prepared>({
     const { tx, tenantId, auth, prepared } = context;
     const actor = auth.context.tenantUserId;
 
-    // Revoking a connection revokes EVERY account bound to it, so it needs the
-    // authority to disconnect each of them: owner assignment where assigned,
-    // and the business scope where scoped. One missing = the uniform 404, the
-    // same answer as an unknown connection (confused-deputy guard, review M1).
-    const access = (
-      await connectionAccountAccess(
+    // Lock the connection FIRST, then decide: the authority is computed over
+    // the state this transaction will act on (audit L2). Revoking revokes EVERY
+    // account bound to it, so it needs break-glass authority over the connection
+    // (its scope holder, or the tenant administrator) or `owner` authority over
+    // each account; one missing = the uniform 404 of an unknown connection, so a
+    // foreign account can neither be revoked through it nor veto it (H1).
+    const connection = await fetchConnection(tx, tenantId, prepared.id, {
+      lock: true
+    });
+
+    if (
+      !connection ||
+      !(await mayRevokeConnection(
         context,
         CHANNEL_ACCOUNTS_GUARDS.disconnect,
-        "owner",
-        { connectionId: prepared.id, provider: null }
-      )
-    ).get(prepared.id);
-
-    if (access && access.allowed < access.accounts) {
+        connection
+      ))
+    ) {
       return fail(404, "RESOURCE_NOT_FOUND", "Connection not found.");
     }
 

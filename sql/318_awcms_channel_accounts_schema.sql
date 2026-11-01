@@ -146,6 +146,12 @@ CREATE TABLE IF NOT EXISTS awcms_channel_provider_connections (
   oauth_state_id uuid,
   pending_code_secret_id uuid,
   connected_by uuid,
+  -- The business scope the grant was started for (carried from the OAuth state).
+  -- It is the authority boundary of the connection: an account may be bound to
+  -- it only by someone who holds this scope, and only someone who holds it (or a
+  -- tenant-wide administrator) can revoke it. NULL = tenant-wide.
+  business_scope_type text,
+  business_scope_id uuid,
   -- Provenance of the grant (ADR-0148 / pack 2.1): which consent text the person
   -- saw and a hash of the redirect URI the grant was issued against.
   consent_text_version text,
@@ -171,6 +177,14 @@ CREATE TABLE IF NOT EXISTS awcms_channel_provider_connections (
     CHECK (cardinality(granted_scopes) <= 64),
   CONSTRAINT awcms_channel_provider_connections_failures_check
     CHECK (refresh_failure_count >= 0),
+  CONSTRAINT awcms_channel_provider_connections_scope_pair_check CHECK (
+    (business_scope_type IS NULL AND business_scope_id IS NULL)
+    OR (
+      business_scope_type IS NOT NULL
+      AND business_scope_id IS NOT NULL
+      AND business_scope_type ~ '^[a-z][a-z0-9_]*$'
+    )
+  ),
   -- A revoked grant holds no credential reference: revocation clears them.
   CONSTRAINT awcms_channel_provider_connections_revoked_clears_secrets
     CHECK (

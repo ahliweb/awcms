@@ -31,7 +31,10 @@ export type ChannelSecretContext = {
 function fieldContext(context: ChannelSecretContext) {
   return {
     purpose: `${CHANNEL_SECRET_AAD_PURPOSE_PREFIX}${context.purpose}`,
-    tenantId: context.tenantId,
+    // Canonical (lower-case) id: the same tenant can reach this code spelled in
+    // either case (a request header is not canonicalised), and associated data
+    // that differs by case would make the secret undecryptable by the rekey job.
+    tenantId: context.tenantId.toLowerCase(),
     rowId: context.secretId
   };
 }

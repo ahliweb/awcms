@@ -20,6 +20,7 @@ import {
   readJsonBody
 } from "../../../lib/security/request-body-limit";
 import { authorizeInTransaction } from "../../identity-access/application/access-guard";
+import type { ConnectionView } from "./connection-directory";
 import { officeScopeHierarchyPortAdapter } from "../../tenant-admin/application/office-scope-hierarchy-port-adapter";
 import type { AccessRequest } from "../../identity-access/domain/access-control";
 import {
@@ -248,14 +249,62 @@ type AccountRouteContext = Pick<
   "tx" | "tenantId" | "tokenHash" | "auth" | "now" | "request" | "clientAddress"
 >;
 
-/** Whether the caller may see EVERY account regardless of assignments: holders of `assignments.manage`. */
-export function canSeeAllAccounts(context: AccountRouteContext): boolean {
-  const { moduleKey, activityCode, action } =
-    CHANNEL_ACCOUNTS_GUARDS.manageAssignments;
+/**
+ * One memo per request: the decisions below are asked several times while one
+ * request is served (every account of a list, every connection), and nothing
+ * they depend on changes inside a request. Keyed by the `Request` object so it
+ * dies with it and can never leak a decision to another caller.
+ */
+const decisionMemo = new WeakMap<Request, Map<string, Promise<boolean>>>();
 
-  return context.auth.grantedPermissionKeys.has(
-    `${moduleKey}.${activityCode}.${action}`
-  );
+function memoised(
+  context: AccountRouteContext,
+  key: string,
+  decide: () => Promise<boolean>
+): Promise<boolean> {
+  let memo = decisionMemo.get(context.request);
+
+  if (!memo) {
+    memo = new Map();
+    decisionMemo.set(context.request, memo);
+  }
+
+  let pending = memo.get(key);
+
+  if (!pending) {
+    pending = decide();
+    memo.set(key, pending);
+  }
+
+  return pending;
+}
+
+/**
+ * Whether the caller may see EVERY account regardless of assignments: the
+ * holder of `assignments.assign`, decided by the access CHOKEPOINT (so an ABAC
+ * deny policy on that action closes the bypass), not read from the raw role
+ * grants (ADR-0148 audit M-a).
+ */
+export function canSeeAllAccounts(
+  context: AccountRouteContext
+): Promise<boolean> {
+  return memoised(context, "manage-assignments", async () => {
+    const decision = await authorizeInTransaction(
+      context.tx,
+      context.tenantId,
+      context.tokenHash,
+      context.now,
+      {
+        ...CHANNEL_ACCOUNTS_GUARDS.manageAssignments,
+        resourceType: "channel_account"
+      },
+      {
+        clientIp: resolveClientIp(context.request, context.clientAddress)
+      }
+    );
+
+    return decision.allowed;
+  });
 }
 
 /**
@@ -276,11 +325,24 @@ type AccountGuard = Pick<
  * Whether the caller holds `scope`, re-evaluated through the SAME chokepoint
  * with the route's own guard, so a deny policy and the decision log both apply.
  */
-export async function scopeCoveredFor(
+export function scopeCoveredFor(
   context: AccountRouteContext,
   guard: AccountGuard,
   scope: ScopeRef,
   resource: { type: string; id?: string } = { type: "channel_account" }
+): Promise<boolean> {
+  return memoised(
+    context,
+    `scope:${guard.activityCode}.${guard.action}:${scope.type}:${scope.id}:${resource.type}:${resource.id ?? ""}`,
+    () => decideScope(context, guard, scope, resource)
+  );
+}
+
+async function decideScope(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  scope: ScopeRef,
+  resource: { type: string; id?: string }
 ): Promise<boolean> {
   const decision = await authorizeInTransaction(
     context.tx,
@@ -312,7 +374,13 @@ export async function scopeCoveredFor(
  * and a confined operator is not allowed to mint a tenant-wide account that
  * escapes the confinement they were given (ADR-0148 review M3).
  */
-export async function callerIsScopeConfined(
+export function callerIsScopeConfined(
+  context: AccountRouteContext
+): Promise<boolean> {
+  return memoised(context, "confined", () => queryScopeConfined(context));
+}
+
+async function queryScopeConfined(
   context: AccountRouteContext
 ): Promise<boolean> {
   const rows = (await context.tx`
@@ -381,7 +449,7 @@ export async function connectionAccountAccess(
     context.tenantId,
     {
       tenantUserId: context.auth.context.tenantUserId,
-      bypass: canSeeAllAccounts(context)
+      bypass: await canSeeAllAccounts(context)
     },
     minimumKind,
     filter
@@ -418,6 +486,134 @@ export async function connectionAccountAccess(
 }
 
 /**
+ * Break-glass authority over a connection: the people who can ALWAYS see and
+ * revoke it, whatever the assignments on the accounts bound to it, so no account
+ * can be used to veto a revocation (ADR-0148 audit H1):
+ *
+ *   - whoever holds the connection's business scope (a scoped connection);
+ *   - the tenant administrator: not confined to business scopes, and holding
+ *     `assignments.assign` (decided by the chokepoint). An unconfined holder of
+ *     `accounts.revoke` alone is NOT enough: that would let them disconnect
+ *     accounts they may not even see (the confused-deputy case of review M1).
+ */
+export async function connectionBreakGlass(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  connection: ConnectionView
+): Promise<boolean> {
+  if (
+    connection.businessScope &&
+    (await scopeCoveredFor(context, guard, connection.businessScope, {
+      type: "channel_connection",
+      id: connection.id
+    }))
+  ) {
+    return true;
+  }
+
+  return (
+    !(await callerIsScopeConfined(context)) &&
+    (await canSeeAllAccounts(context))
+  );
+}
+
+const isCreator = (context: AccountRouteContext, connection: ConnectionView) =>
+  connection.connectedBy === context.auth.context.tenantUserId;
+
+/** Keeps the connections the caller may see: break-glass, the creator, or at least one visible account. */
+export async function filterVisibleConnections(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  connections: ConnectionView[],
+  provider: string | null
+): Promise<ConnectionView[]> {
+  const access = await connectionAccountAccess(context, guard, "viewer", {
+    connectionId: null,
+    provider
+  });
+  const visible: ConnectionView[] = [];
+
+  for (const connection of connections) {
+    const entry = access.get(connection.id);
+
+    if (
+      (entry && entry.allowed > 0) ||
+      isCreator(context, connection) ||
+      (await connectionBreakGlass(context, guard, connection))
+    ) {
+      visible.push(connection);
+    }
+  }
+
+  return visible;
+}
+
+/**
+ * Whether the caller may revoke `connection` (already locked by the caller, so
+ * the decision cannot race a concurrent change): break-glass always; otherwise
+ * `owner` authority over EVERY account bound to it; a connection with no
+ * account yet belongs to whoever started it.
+ */
+export async function mayRevokeConnection(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  connection: ConnectionView
+): Promise<boolean> {
+  if (await connectionBreakGlass(context, guard, connection)) return true;
+
+  const entry = (
+    await connectionAccountAccess(context, guard, "owner", {
+      connectionId: connection.id,
+      provider: null
+    })
+  ).get(connection.id);
+
+  return entry
+    ? entry.allowed === entry.accounts
+    : isCreator(context, connection);
+}
+
+/**
+ * Binding an account to an existing connection lends it that connection's
+ * token, so it is an act on the CONNECTION: the caller must hold the
+ * connection's business scope, or (for a tenant-wide connection) be its creator
+ * or an unconfined caller, and must have `owner` authority over every account
+ * already bound unless they hold break-glass authority. A connection the caller
+ * has no authority over answers like one that does not exist. Null = go on.
+ */
+export async function authorizeConnectionBinding(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  connection: ConnectionView | null
+): Promise<Response | null> {
+  if (!connection) return null; // `createAccount` answers CONNECTION_NOT_FOUND
+
+  const refuse = () =>
+    fail(
+      422,
+      "CONNECTION_NOT_FOUND",
+      "The account cannot be registered as requested."
+    );
+
+  if (await connectionBreakGlass(context, guard, connection)) return null;
+
+  const eligible =
+    !connection.businessScope &&
+    (isCreator(context, connection) || !(await callerIsScopeConfined(context)));
+
+  if (!eligible) return refuse();
+
+  const entry = (
+    await connectionAccountAccess(context, guard, "owner", {
+      connectionId: connection.id,
+      provider: null
+    })
+  ).get(connection.id);
+
+  return !entry || entry.allowed === entry.accounts ? null : refuse();
+}
+
+/**
  * Loads an account and applies the two PER-ACCOUNT gates that sit on top of the
  * route's tenant-wide permission (ADR-0148 I1, pack 2.1 `channel_account_assignment`):
  *
@@ -448,7 +644,7 @@ export async function loadAuthorizedAccount(
     context.tenantId,
     accountId,
     context.auth.context.tenantUserId,
-    canSeeAllAccounts(context),
+    await canSeeAllAccounts(context),
     minimumKind
   );
 

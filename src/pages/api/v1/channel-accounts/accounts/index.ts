@@ -4,8 +4,10 @@ import {
   createAccount,
   listAccounts
 } from "../../../../../modules/channel-accounts/application/account-directory";
+import { fetchConnection } from "../../../../../modules/channel-accounts/application/connection-directory";
 import {
   auditChannelAccounts,
+  authorizeConnectionBinding,
   authorizeRequestedScope,
   canSeeAllAccounts,
   commonRefusal,
@@ -50,7 +52,7 @@ export const GET = defineTenantRoute<ListAccountsQuery>({
       context.tenantId,
       {
         tenantUserId: context.auth.context.tenantUserId,
-        bypass: canSeeAllAccounts(context),
+        bypass: await canSeeAllAccounts(context),
         // Per-row business-scope decision through the chokepoint (review M2):
         // the list shows exactly what `GET /accounts/{id}` would.
         scopeAllowed: (scope) =>
@@ -104,6 +106,22 @@ export const POST = defineTenantRoute<Prepared>({
     );
 
     if (scopeRefusal) return scopeRefusal;
+
+    // Binding to a connection lends the account that connection's token: an act
+    // on the connection, authorised against ITS scope (audit H1).
+    if (context.prepared.input.connectionId) {
+      const bindingRefusal = await authorizeConnectionBinding(
+        context,
+        CHANNEL_ACCOUNTS_GUARDS.connect,
+        await fetchConnection(
+          context.tx,
+          context.tenantId,
+          context.prepared.input.connectionId
+        )
+      );
+
+      if (bindingRefusal) return bindingRefusal;
+    }
 
     const { tx, tenantId, auth, prepared } = context;
     const actor = auth.context.tenantUserId;

@@ -301,13 +301,13 @@ export function validateWriteCredential(
   if (
     secret === null ||
     secret.length < 8 ||
-    secret.length > MAX_SECRET_LENGTH ||
+    Buffer.byteLength(secret, "utf8") > MAX_SECRET_LENGTH ||
     /\s/.test(secret) ||
     CONTROL_CHARS.test(secret)
   ) {
     errors.push({
       field: "secret",
-      message: `Must be 8 to ${MAX_SECRET_LENGTH} characters with no whitespace.`
+      message: `Must be 8 to ${MAX_SECRET_LENGTH} bytes (UTF-8) with no whitespace.`
     });
   }
 
@@ -524,7 +524,11 @@ export function validateOAuthCallbackQuery(
     errors.push({ field: "state", message: "Missing or invalid state." });
   }
 
-  if (code !== null && (code.length > 4096 || CONTROL_CHARS.test(code))) {
+  if (
+    code !== null &&
+    (Buffer.byteLength(code, "utf8") > MAX_SECRET_LENGTH ||
+      CONTROL_CHARS.test(code))
+  ) {
     errors.push({ field: "code", message: "Invalid code." });
   }
 

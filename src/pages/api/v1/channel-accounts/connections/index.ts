@@ -2,7 +2,7 @@ import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import {
   commonRefusal,
-  connectionAccountAccess
+  filterVisibleConnections
 } from "../../../../../modules/channel-accounts/application/channel-accounts-route-support";
 import { listConnections } from "../../../../../modules/channel-accounts/application/connection-directory";
 import { CHANNEL_ACCOUNTS_GUARDS } from "../../../../../modules/channel-accounts/domain/channel-accounts-constants";
@@ -34,22 +34,16 @@ export const GET = defineTenantRoute<string | null>({
       context.tenantId,
       context.prepared
     );
-    // A connection is never more visible than the accounts behind it: it is
-    // listed when the caller may see at least one of them (assignment AND
-    // business scope), or when it has none yet (review M1).
-    const access = await connectionAccountAccess(
-      context,
-      CHANNEL_ACCOUNTS_GUARDS.read,
-      "viewer",
-      { connectionId: null, provider: context.prepared }
-    );
-
+    // A connection is never more visible than the authority behind it: listed
+    // when the caller holds break-glass authority over it, started it, or may
+    // see at least one account bound to it (assignment AND business scope).
     return ok(
-      connections.filter((connection) => {
-        const entry = access.get(connection.id);
-
-        return !entry || entry.allowed > 0;
-      })
+      await filterVisibleConnections(
+        context,
+        CHANNEL_ACCOUNTS_GUARDS.read,
+        connections,
+        context.prepared
+      )
     );
   }
 });

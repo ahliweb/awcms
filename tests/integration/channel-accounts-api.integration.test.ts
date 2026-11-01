@@ -66,6 +66,10 @@ import {
   POST as postAssignment
 } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/assignments/index";
 import { GET as listConnections } from "../../src/pages/api/v1/channel-accounts/connections/index";
+import { POST as createPolicyRoute } from "../../src/pages/api/v1/access/policies/index";
+import { POST as enablePolicy } from "../../src/pages/api/v1/access/policies/[id]/enable";
+import { rekeyChannelSecretsForTenant } from "../../src/modules/channel-accounts/application/secret-rekey";
+import { resolveChannelSecretsRing } from "../../src/modules/channel-accounts/domain/channel-accounts-config";
 import { POST as revokeConnection } from "../../src/pages/api/v1/channel-accounts/connections/[id]/revoke";
 import { POST as startOAuth } from "../../src/pages/api/v1/channel-accounts/connections/oauth/start";
 import { GET as oauthCallback } from "../../src/pages/api/v1/channel-accounts/connections/oauth/callback";
@@ -1232,11 +1236,21 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       `;
     }
 
-    async function seedConnection(): Promise<string> {
+    async function seedConnection(
+      options: {
+        state?: string;
+        officeId?: string;
+        connectedBy?: string;
+      } = {}
+    ): Promise<string> {
       const rows = (await admin()`
         INSERT INTO awcms_channel_provider_connections
-          (tenant_id, provider, auth_mode, grant_state)
-        VALUES (${env.tenantId}, 'facebook', 'oauth2', 'failed')
+          (tenant_id, provider, auth_mode, grant_state, connected_by,
+           business_scope_type, business_scope_id)
+        VALUES (${env.tenantId}, 'facebook', 'oauth2',
+                ${options.state ?? "failed"}, ${options.connectedBy ?? null},
+                ${options.officeId ? "office" : null},
+                ${options.officeId ?? null})
         RETURNING id
       `) as { id: string }[];
 
@@ -1371,7 +1385,8 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         });
       const ids = (await list(operator.token)).body.data!.map((c) => c.id);
 
-      expect(ids.sort()).toEqual([visible, empty].sort());
+      // `empty` has no account and was not started by this person: not theirs.
+      expect(ids).toEqual([visible]);
 
       await holdScope(operator.tenantUserId, office);
 
@@ -1379,13 +1394,15 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         (c) => c.id
       );
 
-      expect(withScope.sort()).toEqual([visible, empty, scopedAway].sort());
+      expect(withScope.sort()).toEqual([visible, scopedAway].sort());
 
-      // The assignment manager sees through assignments, but a scope still binds.
+      // The tenant administrator (unconfined, holds assignments.assign) is
+      // break-glass over every connection of the tenant.
       const ownerIds = (await list(env.token)).body.data!.map((c) => c.id);
 
-      expect(ownerIds).toContain(assignedAway);
-      expect(ownerIds).not.toContain(scopedAway);
+      expect(ownerIds.sort()).toEqual(
+        [visible, assignedAway, scopedAway, empty].sort()
+      );
     });
 
     test("the accounts list and GET /accounts/{id} agree on business scope", async () => {
@@ -1504,6 +1521,199 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect(
         (await start(operator.token, { type: "office", id: heldOffice })).status
       ).toBe(422);
+    });
+    const facebookPage = (
+      externalId: string,
+      connectionId: string,
+      officeId: string | null
+    ) => ({
+      provider: "facebook",
+      accountKind: "page",
+      authMode: "oauth2",
+      externalId,
+      displayName: `Page ${externalId}`,
+      connectionId,
+      businessScope: officeId ? { type: "office", id: officeId } : null
+    });
+    const bind = (token: string, body: Record<string, unknown>) =>
+      call<Account>(createAccount, {
+        method: "POST",
+        path: `${BASE}/accounts`,
+        token,
+        body
+      });
+
+    test("H1: an operator of scope A cannot bind an account to scope B's connection, and the revocation cannot be vetoed", async () => {
+      if (!handlerReady) return;
+
+      const officeA = await seedOffice("h1-a");
+      const officeB = await seedOffice("h1-b");
+      const opA = await seedUser(env.tenantId, "h1-a", OPERATOR_KEYS);
+      const opB = await seedUser(env.tenantId, "h1-b", OPERATOR_KEYS);
+
+      await holdScope(opA.tenantUserId, officeA);
+      await holdScope(opB.tenantUserId, officeB);
+
+      const connection = await seedConnection({
+        state: "active",
+        officeId: officeB,
+        connectedBy: opB.tenantUserId
+      });
+
+      // The PoC: A binds an account of its own scope to B's grant.
+      const hijack = await bind(
+        opA.token,
+        facebookPage("h1-hijack", connection, officeA)
+      );
+
+      expect(hijack.status).toBe(422);
+      expect(hijack.body.error?.code).toBe("CONNECTION_NOT_FOUND");
+
+      const written = (await admin()`
+        SELECT 1 FROM awcms_channel_accounts WHERE external_id = 'h1-hijack'
+      `) as unknown[];
+
+      expect(written).toHaveLength(0);
+
+      // B (who holds the connection's scope) can bind.
+      const mine = await bind(
+        opB.token,
+        facebookPage("h1-mine", connection, officeB)
+      );
+
+      expect(mine.status).toBe(201);
+
+      // Someone else is assigned the account: no veto over the revocation.
+      await assign(mine.body.data!.id, env.ownerTenantUserId, "owner");
+
+      expect((await revoke(connection, opA.token)).status).toBe(404);
+      expect(await grantState(connection)).toBe("active");
+
+      const done = await revoke(connection, opB.token);
+
+      expect(done.status).toBe(200);
+      expect(done.body.data!.accountsRevoked).toBe(1);
+
+      // The tenant administrator can revoke a scoped connection too.
+      const other = await seedConnection({
+        state: "active",
+        officeId: officeB,
+        connectedBy: opB.tenantUserId
+      });
+
+      await seedBoundAccount(other, "h1-other", { officeId: officeB });
+      expect((await revoke(other, env.token)).status).toBe(200);
+    });
+
+    test("L5: a connection with no account belongs to whoever started it and to the administrator", async () => {
+      if (!handlerReady) return;
+
+      const starter = await seedUser(env.tenantId, "l5-start", OPERATOR_KEYS);
+      const stranger = await seedUser(env.tenantId, "l5-other", OPERATOR_KEYS);
+      const connection = await seedConnection({
+        connectedBy: starter.tenantUserId
+      });
+      const seen = async (token: string) =>
+        (
+          await call<{ id: string }[]>(listConnections, {
+            path: `${BASE}/connections`,
+            token
+          })
+        ).body.data!.map((c) => c.id);
+
+      expect(await seen(starter.token)).toEqual([connection]);
+      expect(await seen(stranger.token)).toEqual([]);
+      expect(await seen(env.token)).toEqual([connection]);
+
+      expect((await revoke(connection, stranger.token)).status).toBe(404);
+      expect(await grantState(connection)).toBe("failed");
+      expect((await revoke(connection, starter.token)).status).toBe(200);
+    });
+
+    test("M-a: an ABAC deny on assignments.assign closes the assignment-visibility bypass", async () => {
+      if (!handlerReady) return;
+
+      const manager = await seedUser(env.tenantId, "ma-mgr", [
+        ...OPERATOR_KEYS,
+        "channel_accounts.assignments.assign"
+      ]);
+      const connection = await seedConnection();
+      const account = await seedBoundAccount(connection, "ma-account");
+
+      await assign(account, env.ownerTenantUserId, "owner");
+
+      const read = () =>
+        call(getAccount, {
+          path: `${BASE}/accounts/${account}`,
+          params: { id: account },
+          token: manager.token
+        });
+
+      // Holding assignments.assign sees through the assignment...
+      expect((await read()).status).toBe(200);
+
+      // ...until an ABAC policy denies that action: the raw grant no longer counts.
+      const policy = await call<{ policy: { id: string } }>(createPolicyRoute, {
+        method: "POST",
+        path: "/api/v1/access/policies",
+        body: {
+          policyCode: "test.deny-channel-assign",
+          effect: "deny",
+          moduleKey: "channel_accounts",
+          activityCode: "assignments",
+          action: "assign",
+          conditions: { allOf: [] }
+        }
+      });
+
+      expect(policy.status).toBe(200);
+
+      const enabled = await call(enablePolicy, {
+        method: "POST",
+        path: `/api/v1/access/policies/${policy.body.data!.policy.id}/enable`,
+        params: { id: policy.body.data!.policy.id }
+      });
+
+      expect(enabled.status).toBe(200);
+      expect((await read()).status).toBe(404);
+    });
+
+    test("M-b: a credential written under an upper-case tenant header rekeys under the canonical id", async () => {
+      if (!handlerReady) return;
+
+      const id = (await register("case-dev")).body.data!.id;
+      const holder = await seedUser(
+        env.tenantId,
+        "case",
+        ["channel_accounts.credentials.manage"],
+        { enrolled: true, steppedUp: true }
+      );
+      const written = await call(putCredential, {
+        method: "PUT",
+        path: `${BASE}/accounts/${id}/credential`,
+        params: { id },
+        token: holder.token,
+        tenantId: env.tenantId.toUpperCase(),
+        body: { secret: CANARY }
+      });
+
+      expect(written.status).toBe(200);
+
+      const rotated = resolveChannelSecretsRing({
+        CHANNEL_SECRETS_ENCRYPTION_KEYS: `k2:${Buffer.from(
+          Array.from({ length: 32 }, (_, i) => (i * 17 + 5) % 251)
+        ).toString("base64")},${RING}`
+      } as unknown as NodeJS.ProcessEnv);
+
+      if (!rotated.ok) throw new Error(rotated.reason);
+
+      expect(
+        await rekeyChannelSecretsForTenant(
+          getHandlerDatabaseClient(),
+          env.tenantId,
+          rotated
+        )
+      ).toEqual({ converted: 1, failed: 0, complete: true });
     });
   });
 });

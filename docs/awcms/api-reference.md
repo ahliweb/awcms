@@ -14824,7 +14824,7 @@ An account with assignees is listed only to its assignees and to holders of `cha
 - **operationId**: `createChannelAccount`
 - **Security**: bearerAuth + tenantHeader
 
-`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). `Idempotency-Key` required. Requires `channel_accounts.accounts.create`.
+`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). Binding to a `connectionId` lends the account that connection's token, so it needs authority over the CONNECTION (its business scope; a tenant-wide connection: its creator or an unconfined caller) and `owner` authority over accounts already bound to it; otherwise `422 CONNECTION_NOT_FOUND`. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`.
 
 **Parameters**
 
@@ -14895,7 +14895,7 @@ An unknown id, another tenant's id and an account the caller is not assigned to 
 - **operationId**: `deleteChannelAccount`
 - **Security**: bearerAuth + tenantHeader
 
-Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. The caller must be allowed to disconnect EVERY account bound to the connection (owner assignment where assigned, business scope where scoped); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
 
 **Parameters**
 
@@ -15109,7 +15109,7 @@ Read-only on purpose: health is REPORTED by a provider connector's check or a di
 - **operationId**: `listChannelConnections`
 - **Security**: bearerAuth + tenantHeader
 
-State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection that has accounts is listed only when the caller may see at least one of them (assignment and business scope). Requires `channel_accounts.accounts.read`.
+State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection is listed to the holder of its business scope (or, for a tenant-wide connection, the tenant administrator), to the person who started it, and to anyone who may see at least one account bound to it (assignment and business scope). Requires `channel_accounts.accounts.read`.
 
 **Parameters**
 
@@ -15132,7 +15132,7 @@ State, granted scopes, expiry, whether a credential is stored and whether an aut
 - **operationId**: `revokeChannelConnection`
 - **Security**: bearerAuth + tenantHeader
 
-The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. The caller must be allowed to disconnect EVERY account bound to the connection (owner assignment where assigned, business scope where scoped); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. Break-glass: whoever holds the connection's business scope (or, for a tenant-wide connection, the unconfined holder of `assignments.assign`) can always revoke it, so no account can veto a revocation. Anyone else needs `owner` authority over EVERY account bound to it (a connection with no account belongs to whoever started it); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
 
 **Parameters**
 

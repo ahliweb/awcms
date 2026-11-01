@@ -1861,6 +1861,33 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       ).toBeNull();
     });
 
+    test("a secret written under an upper-case tenant id decrypts and rekeys under the canonical id (audit M-b)", async () => {
+      const id = await created(T1, U1, "case-dev");
+      const upper = T1.toUpperCase();
+
+      expect(upper).not.toBe(T1);
+      await inTenant(T1, (tx) =>
+        writeAccountCredential(tx, store, upper, U1, id, CANARY)
+      );
+
+      const secretId = (await inTenant(T1, (tx) =>
+        fetchAccountRecord(tx, T1, id)
+      ))!.secretId!;
+
+      expect(
+        await inTenant(T1, (tx) =>
+          store.resolve(tx, {
+            tenantId: T1,
+            secretId,
+            purpose: "device_key"
+          })
+        )
+      ).toBe(CANARY);
+      expect(
+        await rekeyChannelSecretsForTenant(getRuntimeSql(), T1, ROTATED)
+      ).toEqual({ converted: 1, failed: 0, complete: true });
+    });
+
     test("a delete racing a credential write leaves no orphaned ciphertext", async () => {
       const id = await created(T1, U1, "race-del");
       const pool = createRuntimePool(4);
