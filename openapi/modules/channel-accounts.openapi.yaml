@@ -151,8 +151,12 @@ paths:
         one is tenant-wide). Binding to a `connectionId` lends the account that
         connection's token, so it needs authority over the CONNECTION (its
         business scope; a tenant-wide connection: its creator or an unconfined
-        caller) and `owner` authority over accounts already bound to it; otherwise
-        `422 CONNECTION_NOT_FOUND`. `Idempotency-Key` required. Requires
+        caller) and `owner` authority over accounts already bound to it, which
+        holding the connection's scope does NOT replace (only the tenant
+        administrator, the holder of `assignments.assign`, skips that check);
+        otherwise `422 CONNECTION_NOT_FOUND`. A connection of another provider
+        answers the same `CONNECTION_NOT_FOUND` as an unknown one. `Idempotency-Key`
+        required. Requires
         `channel_accounts.accounts.create`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -196,8 +200,13 @@ paths:
           description: >-
             The combination is not admitted: `PROVIDER_UNKNOWN`,
             `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`,
-            `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`,
-            `CONNECTION_MISMATCH`, `CONNECTION_NOT_ACTIVE` (the connection's
+            `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`
+            (also, for an `oauth2` account, for a connection of another
+            provider; a connection id sent with a non-`oauth2` shape is still
+            answered by shape first, so this is not a complete existence
+            oracle yet: Issue #1215 L2), `CONNECTION_MISMATCH` (only for a
+            connection id on an account that does not use one),
+            `CONNECTION_NOT_ACTIVE` (the connection's
             grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or
             `SCOPE_UNRESOLVED` (the named business scope does not exist in this
             tenant).
@@ -1008,9 +1017,10 @@ paths:
         account bound to it becomes `revoked`. Does not call the provider's
         revoke endpoint (the connector's job): the local half must not depend on
         the provider being reachable. High-risk, audited at `warning`.
-        Break-glass: whoever holds the connection's business scope (or, for a
-        tenant-wide connection, the unconfined holder of `assignments.assign`)
-        can always revoke it, so no account can veto a revocation. Anyone else
+        Break-glass: whoever holds the connection's business scope, or the tenant
+        administrator (the holder of `assignments.assign`, decided by the access
+        chokepoint; holding a business scope of one's own does not take that
+        away), can always revoke it, so no account can veto a revocation. Anyone else
         needs `owner` authority over EVERY account bound to it (a connection with
         no account belongs to whoever started it); otherwise the answer is the
         same `404` as an unknown connection. `Idempotency-Key` required. Requires

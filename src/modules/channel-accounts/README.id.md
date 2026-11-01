@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:2bb0ae6f3f83b21016f453aeb94a6f7dc8c67452178ebcbbb699a96fc1153333 -->
+<!-- i18n-source-hash: sha256:08f5ad9953ab6f4dd0a9e037367931a1198881027a4559fe55418dc799bae668 -->
 
 # `channel_accounts`
 
@@ -48,7 +48,7 @@ Setiap mutasi kecuali start dan callback OAuth mewajibkan `Idempotency-Key` (has
 
 ## Akses per akun
 
-Tiga lapis, semuanya default-deny: izin tingkat tenant; gerbang **assignment** (akun yang punya assignee hanya terlihat dan dapat dioperasikan oleh mereka pada jenis yang dibutuhkan, ditambah pemegang `assignments.assign`); dan **ABAC business scope** (akun yang terikat pada scope mensyaratkan pemanggil memegang scope itu, dievaluasi ulang lewat chokepoint yang sama sehingga kebijakan deny dan decision log tetap berlaku).
+Tiga lapis, semuanya default-deny: izin tingkat tenant; gerbang **assignment** (akun yang punya assignee hanya terlihat dan dapat dioperasikan oleh mereka pada jenis yang dibutuhkan, ditambah pemegang `assignments.assign`); dan **ABAC business scope** (akun yang terikat pada scope mensyaratkan pemanggil memegang scope itu, dievaluasi ulang lewat chokepoint yang sama sehingga kebijakan deny dan decision log tetap berlaku). Break-glass connection dipegang pemegang scope connection itu dan administrator tenant (`assignments.assign` sebagaimana diputuskan chokepoint, bukan diturunkan dari memegang scope; amendemen ADR-0148, #1215).
 
 ## OAuth
 
