@@ -1114,8 +1114,14 @@ export const READER_BUDGET_BYTES = 24_000;
  * the four controls were being hand-built per screen (the audit trail, the
  * procurement and inventory filters), and the point of the primitives is that
  * the next screen to adopt them adds markup, not another copy of these rules.
+ *
+ * **Raised for the `astro` 7.4.2 -> 7.4.4 update** (Issue #1173): +9 B,
+ * measured (346,344 -> 346,353 on the same source, built once on `main` and once
+ * with only the lockfile and `package.json` changed). Nothing in `src/` moved:
+ * the difference is the compiler's output for the same components, so there is no
+ * per-screen duplication to recover and no island to trim.
  */
-export const APP_BUDGET_BYTES = 346_344;
+export const APP_BUDGET_BYTES = 346_353;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
