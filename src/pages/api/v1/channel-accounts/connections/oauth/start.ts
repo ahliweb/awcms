@@ -2,6 +2,7 @@ import { fail, ok } from "../../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-route";
 import {
   auditChannelAccounts,
+  authorizeRequestedScope,
   commonRefusal,
   readValidatedBody,
   secretStoreUnavailable
@@ -41,6 +42,15 @@ export const POST = defineTenantRoute<OAuthStartInput>({
     const unavailable = secretStoreUnavailable();
 
     if (unavailable) return unavailable;
+
+    // The scope the client names is a request, not a fact (ADR-0148 review M3).
+    const scopeRefusal = await authorizeRequestedScope(
+      context,
+      CHANNEL_ACCOUNTS_GUARDS.connect,
+      context.prepared.businessScope
+    );
+
+    if (scopeRefusal) return scopeRefusal;
 
     const { tx, tenantId, auth, prepared, now } = context;
     const result = await startOAuthGrant(

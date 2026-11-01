@@ -66,6 +66,7 @@ import {
   POST as postAssignment
 } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/assignments/index";
 import { GET as listConnections } from "../../src/pages/api/v1/channel-accounts/connections/index";
+import { POST as revokeConnection } from "../../src/pages/api/v1/channel-accounts/connections/[id]/revoke";
 import { POST as startOAuth } from "../../src/pages/api/v1/channel-accounts/connections/oauth/start";
 import { GET as oauthCallback } from "../../src/pages/api/v1/channel-accounts/connections/oauth/callback";
 
@@ -1201,6 +1202,308 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data).toEqual([]);
+    });
+  });
+  describe("business scope and connection authority (ADR-0148 review M1, M2, M3)", () => {
+    const OPERATOR_KEYS = [
+      "channel_accounts.accounts.read",
+      "channel_accounts.accounts.create",
+      "channel_accounts.accounts.revoke"
+    ];
+
+    async function seedOffice(code: string): Promise<string> {
+      const rows = (await admin()`
+        INSERT INTO awcms_offices (tenant_id, office_code, office_name)
+        VALUES (${env.tenantId}, ${code}, ${`Office ${code}`})
+        RETURNING id
+      `) as { id: string }[];
+
+      return rows[0]!.id;
+    }
+
+    /** Confines a person to an office, as an active business-scope assignment. */
+    async function holdScope(tenantUserId: string, officeId: string) {
+      await admin()`
+        INSERT INTO awcms_business_scope_assignments
+          (tenant_id, tenant_user_id, scope_type, scope_id,
+           granted_by_tenant_user_id)
+        VALUES (${env.tenantId}, ${tenantUserId}, 'office', ${officeId},
+                ${env.ownerTenantUserId})
+      `;
+    }
+
+    async function seedConnection(): Promise<string> {
+      const rows = (await admin()`
+        INSERT INTO awcms_channel_provider_connections
+          (tenant_id, provider, auth_mode, grant_state)
+        VALUES (${env.tenantId}, 'facebook', 'oauth2', 'failed')
+        RETURNING id
+      `) as { id: string }[];
+
+      return rows[0]!.id;
+    }
+
+    async function seedBoundAccount(
+      connectionId: string,
+      externalId: string,
+      scope: { officeId: string } | null = null
+    ): Promise<string> {
+      const rows = (await admin()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, connection_id, business_scope_type, business_scope_id)
+        VALUES (${env.tenantId}, 'facebook', 'page', ${externalId},
+                ${`Page ${externalId}`}, 'oauth2', ${connectionId},
+                ${scope ? "office" : null}, ${scope?.officeId ?? null})
+        RETURNING id
+      `) as { id: string }[];
+
+      return rows[0]!.id;
+    }
+
+    function assign(accountId: string, tenantUserId: string, kind: string) {
+      return call(postAssignment, {
+        method: "POST",
+        path: `${BASE}/accounts/${accountId}/assignments`,
+        params: { id: accountId },
+        body: { tenantUserId, kind }
+      });
+    }
+
+    function revoke(connectionId: string, token: string) {
+      return call<{ accountsRevoked: number }>(revokeConnection, {
+        method: "POST",
+        path: `${BASE}/connections/${connectionId}/revoke`,
+        params: { id: connectionId },
+        token
+      });
+    }
+
+    const grantState = async (connectionId: string) =>
+      (
+        (await admin()`
+          SELECT grant_state FROM awcms_channel_provider_connections
+          WHERE id = ${connectionId}
+        `) as { grant_state: string }[]
+      )[0]!.grant_state;
+
+    test("revoking a connection needs owner authority over EVERY account it holds, else the uniform 404", async () => {
+      if (!handlerReady) return;
+
+      const operator = await seedUser(env.tenantId, "op", OPERATOR_KEYS);
+      const connection = await seedConnection();
+      const mine = await seedBoundAccount(connection, "page-mine");
+      const theirs = await seedBoundAccount(connection, "page-theirs");
+
+      expect((await assign(mine, operator.tenantUserId, "owner")).status).toBe(
+        200
+      );
+      expect(
+        (await assign(theirs, env.ownerTenantUserId, "owner")).status
+      ).toBe(200);
+
+      const unknown = await revoke(crypto.randomUUID(), operator.token);
+      const refused = await revoke(connection, operator.token);
+
+      expect(refused.status).toBe(404);
+      expect(refused.body).toEqual(unknown.body);
+      expect(await grantState(connection)).toBe("failed");
+
+      // Operator on the second account is not enough: revoking needs `owner`.
+      expect(
+        (await assign(theirs, operator.tenantUserId, "operator")).status
+      ).toBe(200);
+      expect((await revoke(connection, operator.token)).status).toBe(404);
+      expect(await grantState(connection)).toBe("failed");
+
+      expect(
+        (await assign(theirs, operator.tenantUserId, "owner")).status
+      ).toBe(200);
+
+      const done = await revoke(connection, operator.token);
+
+      expect(done.status).toBe(200);
+      expect(done.body.data!.accountsRevoked).toBe(2);
+      expect(await grantState(connection)).toBe("revoked");
+    });
+
+    test("a connection holding a scoped account needs that scope to be revoked", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("rev-office");
+      const operator = await seedUser(env.tenantId, "scoped-op", OPERATOR_KEYS);
+      const connection = await seedConnection();
+
+      await seedBoundAccount(connection, "page-scoped", { officeId: office });
+
+      const without = await revoke(connection, operator.token);
+
+      expect(without.status).toBe(404);
+      expect(await grantState(connection)).toBe("failed");
+
+      await holdScope(operator.tenantUserId, office);
+
+      expect((await revoke(connection, operator.token)).status).toBe(200);
+      expect(await grantState(connection)).toBe("revoked");
+    });
+
+    test("the connections list hides a connection whose every account the caller cannot see", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("list-office");
+      const operator = await seedUser(env.tenantId, "list-op", OPERATOR_KEYS);
+      const visible = await seedConnection();
+      const assignedAway = await seedConnection();
+      const scopedAway = await seedConnection();
+      const empty = await seedConnection();
+
+      await seedBoundAccount(visible, "list-visible");
+
+      const away = await seedBoundAccount(assignedAway, "list-away");
+
+      await assign(away, env.ownerTenantUserId, "owner");
+      await seedBoundAccount(scopedAway, "list-scoped", { officeId: office });
+
+      const list = (token: string) =>
+        call<{ id: string }[]>(listConnections, {
+          path: `${BASE}/connections`,
+          token
+        });
+      const ids = (await list(operator.token)).body.data!.map((c) => c.id);
+
+      expect(ids.sort()).toEqual([visible, empty].sort());
+
+      await holdScope(operator.tenantUserId, office);
+
+      const withScope = (await list(operator.token)).body.data!.map(
+        (c) => c.id
+      );
+
+      expect(withScope.sort()).toEqual([visible, empty, scopedAway].sort());
+
+      // The assignment manager sees through assignments, but a scope still binds.
+      const ownerIds = (await list(env.token)).body.data!.map((c) => c.id);
+
+      expect(ownerIds).toContain(assignedAway);
+      expect(ownerIds).not.toContain(scopedAway);
+    });
+
+    test("the accounts list and GET /accounts/{id} agree on business scope", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("acct-office");
+      const operator = await seedUser(env.tenantId, "acct-op", OPERATOR_KEYS);
+      const connection = await seedConnection();
+      const open = await seedBoundAccount(connection, "acct-open");
+      const scoped = await seedBoundAccount(connection, "acct-scoped", {
+        officeId: office
+      });
+
+      const listed = async () =>
+        (
+          await call<{ items: Account[] }>(listAccounts, {
+            path: `${BASE}/accounts`,
+            token: operator.token
+          })
+        ).body.data!.items.map((item) => item.id);
+      const read = async (id: string) =>
+        (
+          await call(getAccount, {
+            path: `${BASE}/accounts/${id}`,
+            params: { id },
+            token: operator.token
+          })
+        ).status;
+
+      expect(await listed()).toEqual([open]);
+      expect(await read(scoped)).toBe(404);
+
+      await holdScope(operator.tenantUserId, office);
+
+      expect((await listed()).sort()).toEqual([open, scoped].sort());
+      expect(await read(scoped)).toBe(200);
+    });
+
+    test("a business scope in a request is authorised and verified, never trusted", async () => {
+      if (!handlerReady) return;
+
+      const heldOffice = await seedOffice("held-office");
+      const otherOffice = await seedOffice("other-office");
+      const operator = await seedUser(env.tenantId, "mint-op", OPERATOR_KEYS);
+      const create = (token: string, scope: unknown, external: string) =>
+        register(external, token, { businessScope: scope });
+
+      // Nobody holds a scope yet: the owner (unconfined) names one it does not
+      // hold and is refused, and names none and is allowed (tenant-wide).
+      expect(
+        (await create(env.token, { type: "office", id: heldOffice }, "own-1"))
+          .status
+      ).toBe(403);
+      expect((await register("own-2")).status).toBe(201);
+
+      await holdScope(operator.tenantUserId, heldOffice);
+
+      // Confined: another office is refused, so is omitting the scope.
+      expect(
+        (
+          await create(
+            operator.token,
+            { type: "office", id: otherOffice },
+            "op-1"
+          )
+        ).status
+      ).toBe(403);
+      expect((await register("op-2", operator.token)).status).toBe(403);
+
+      // The held office resolves and is allowed.
+      const minted = await create(
+        operator.token,
+        { type: "office", id: heldOffice },
+        "op-3"
+      );
+
+      expect(minted.status).toBe(201);
+
+      // A held assignment to a scope that does not exist is still refused.
+      const ghost = crypto.randomUUID();
+
+      await holdScope(operator.tenantUserId, ghost);
+
+      const unresolved = await create(
+        operator.token,
+        { type: "office", id: ghost },
+        "op-4"
+      );
+
+      expect(unresolved.status).toBe(422);
+      expect(unresolved.body.error?.code).toBe("SCOPE_UNRESOLVED");
+
+      // Nothing was written for the refusals.
+      const written = (await admin()`
+        SELECT external_id FROM awcms_channel_accounts
+        WHERE external_id IN ('own-1', 'op-1', 'op-2', 'op-4')
+      `) as unknown[];
+
+      expect(written).toHaveLength(0);
+
+      // OAuth start takes the same gate, before it reaches any provider.
+      const start = (token: string, scope: unknown) =>
+        call(startOAuth, {
+          method: "POST",
+          path: `${BASE}/connections/oauth/start`,
+          token,
+          body: { provider: "facebook", scopes: [], businessScope: scope }
+        });
+
+      expect(
+        (await start(operator.token, { type: "office", id: otherOffice }))
+          .status
+      ).toBe(403);
+      expect((await start(operator.token, null)).status).toBe(403);
+      // Allowed through the gate, then refused for want of an installed connector.
+      expect(
+        (await start(operator.token, { type: "office", id: heldOffice })).status
+      ).toBe(422);
     });
   });
 });

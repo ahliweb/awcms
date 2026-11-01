@@ -1,6 +1,9 @@
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
-import { commonRefusal } from "../../../../../modules/channel-accounts/application/channel-accounts-route-support";
+import {
+  commonRefusal,
+  connectionAccountAccess
+} from "../../../../../modules/channel-accounts/application/channel-accounts-route-support";
 import { listConnections } from "../../../../../modules/channel-accounts/application/connection-directory";
 import { CHANNEL_ACCOUNTS_GUARDS } from "../../../../../modules/channel-accounts/domain/channel-accounts-constants";
 
@@ -26,8 +29,27 @@ export const GET = defineTenantRoute<string | null>({
 
     if (refused) return refused;
 
+    const connections = await listConnections(
+      context.tx,
+      context.tenantId,
+      context.prepared
+    );
+    // A connection is never more visible than the accounts behind it: it is
+    // listed when the caller may see at least one of them (assignment AND
+    // business scope), or when it has none yet (review M1).
+    const access = await connectionAccountAccess(
+      context,
+      CHANNEL_ACCOUNTS_GUARDS.read,
+      "viewer",
+      { connectionId: null, provider: context.prepared }
+    );
+
     return ok(
-      await listConnections(context.tx, context.tenantId, context.prepared)
+      connections.filter((connection) => {
+        const entry = access.get(connection.id);
+
+        return !entry || entry.allowed > 0;
+      })
     );
   }
 });

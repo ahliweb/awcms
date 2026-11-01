@@ -9395,7 +9395,7 @@ paths:
       tags:
         - Channel Accounts
       summary: Register an external account.
-      description: "`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`."
+      description: "`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). `Idempotency-Key` required. Requires `channel_accounts.accounts.create`."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -9433,7 +9433,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "422":
-          description: "The combination is not admitted: `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`, `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`, `CONNECTION_MISMATCH`, `PARENT_REQUIRED` or `PARENT_INVALID`."
+          description: "The combination is not admitted: `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`, `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`, `CONNECTION_MISMATCH`, `CONNECTION_NOT_ACTIVE` (the connection's grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or `SCOPE_UNRESOLVED` (the named business scope does not exist in this tenant)."
           content:
             application/json:
               schema:
@@ -9552,7 +9552,7 @@ paths:
       tags:
         - Channel Accounts
       summary: Soft-delete an account.
-      description: "Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
+      description: "Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. The caller must be allowed to disconnect EVERY account bound to the connection (owner assignment where assigned, business scope where scoped); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -9761,6 +9761,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "503":
           description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
           content:
@@ -10098,7 +10104,7 @@ paths:
       tags:
         - Channel Accounts
       summary: The tenant's provider connections.
-      description: State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. Requires `channel_accounts.accounts.read`.
+      description: State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection that has accounts is listed only when the caller may see at least one of them (assignment and business scope). Requires `channel_accounts.accounts.read`.
       parameters:
         - name: provider
           in: query
@@ -10148,7 +10154,7 @@ paths:
       tags:
         - Channel Accounts
       summary: Revoke a provider connection.
-      description: "The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
+      description: "The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. The caller must be allowed to disconnect EVERY account bound to the connection (owner assignment where assigned, business scope where scoped); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -10325,7 +10331,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "422":
-          description: "`PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID` or `PROVIDER_ADAPTER_UNAVAILABLE`."
+          description: "`PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID`, `PROVIDER_ADAPTER_UNAVAILABLE` or `SCOPE_UNRESOLVED`. A `businessScope` the caller does not hold (or an omitted one, for a scope-confined caller) is `403 ACCESS_DENIED`."
           content:
             application/json:
               schema:

@@ -1695,6 +1695,212 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
     });
   });
 
+  describe("review hardening (ADR-0148 review M2, M4, M5)", () => {
+    const facebookPage = {
+      provider: "facebook",
+      accountKind: "page",
+      authMode: "oauth2" as const
+    };
+
+    test("an account cannot be bound to a connection whose grant is not active", async () => {
+      const active = await activeConnection(T1, U1);
+
+      // pending: the hand-off exists, the token exchange has not happened.
+      registerFakeAdapter();
+
+      const handed = await callback(T1, U1, await startFlow(T1, U1));
+
+      if (handed.outcome !== "handed_off") throw new Error("fixture");
+
+      expect(
+        await page(T1, U1, "pg-pending", {
+          ...facebookPage,
+          connectionId: handed.connectionId
+        })
+      ).toEqual({ outcome: "refused", code: "CONNECTION_NOT_ACTIVE" });
+
+      // failed
+      await inTenant(T1, (tx) =>
+        failConnectionGrant(tx, store, T1, handed.connectionId)
+      );
+      expect(
+        await page(T1, U1, "pg-failed", {
+          ...facebookPage,
+          connectionId: handed.connectionId
+        })
+      ).toEqual({ outcome: "refused", code: "CONNECTION_NOT_ACTIVE" });
+
+      // active works; once revoked it no longer does, and nothing was claimed.
+      await created(T1, U1, "pg-live", {
+        ...facebookPage,
+        connectionId: active
+      });
+      await inTenant(T1, (tx) => revokeConnection(tx, store, T1, active));
+      expect(
+        await page(T1, U1, "pg-revoked", {
+          ...facebookPage,
+          connectionId: active
+        })
+      ).toEqual({ outcome: "refused", code: "CONNECTION_NOT_ACTIVE" });
+
+      const claimed = (await getAdminSql()`
+        SELECT external_id FROM awcms_channel_accounts
+        WHERE external_id IN ('pg-pending', 'pg-failed', 'pg-revoked')
+      `) as unknown[];
+
+      expect(claimed).toHaveLength(0);
+    });
+
+    test("listAccounts applies the per-row business-scope decision and its cursor still walks the raw pages", async () => {
+      const scopeA = crypto.randomUUID();
+      const scopeB = crypto.randomUUID();
+      const open = await created(T1, U1, "scope-open");
+      const inA = await created(T1, U1, "scope-a", {
+        businessScope: { type: "brand", id: scopeA }
+      });
+
+      await created(T1, U1, "scope-b", {
+        businessScope: { type: "brand", id: scopeB }
+      });
+
+      const asked: string[] = [];
+      const seen = async (limit: number, cursor: string | null) =>
+        inTenant(T1, (tx) =>
+          listAccounts(
+            tx,
+            T1,
+            {
+              tenantUserId: U1,
+              bypass: true,
+              scopeAllowed: async (scope) => {
+                asked.push(scope.id);
+
+                return scope.id === scopeA;
+              }
+            },
+            { provider: null, status: null, limit, cursor }
+          )
+        );
+      const all = await seen(10, null);
+
+      expect(all.ok && all.items.map((item) => item.id).sort()).toEqual(
+        [open, inA].sort()
+      );
+      // Decided once per distinct scope, never for the unscoped account.
+      expect(asked.sort()).toEqual([scopeA, scopeB].sort());
+
+      // Pages of one raw row: filtered pages are short, but nothing is skipped
+      // or repeated.
+      const collected: string[] = [];
+      let cursor: string | null = null;
+
+      for (let guard = 0; guard < 5; guard += 1) {
+        const next = await seen(1, cursor);
+
+        if (!next.ok) throw new Error("cursor");
+
+        collected.push(...next.items.map((item) => item.id));
+        cursor = next.nextCursor;
+
+        if (!cursor) break;
+      }
+
+      expect(collected.sort()).toEqual([open, inA].sort());
+    });
+
+    test("a credential write racing a disconnect cannot land on the revoked account", async () => {
+      const id = await created(T1, U1, "race-dev");
+      const pool = createRuntimePool(4);
+      let release!: () => void;
+      let locked!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const lockedFirst = new Promise<void>((resolve) => (locked = resolve));
+
+      try {
+        const disconnecting = withTenantOrThrow(pool, T1, async (tx) => {
+          const result = await disconnectAccount(tx, store, T1, U1, id);
+
+          locked();
+          await gate; // the row lock is held until this transaction commits
+
+          return result;
+        });
+
+        await lockedFirst;
+
+        const writing = withTenantOrThrow(pool, T1, (tx) =>
+          writeAccountCredential(tx, store, T1, U1, id, CANARY)
+        );
+        const early = await Promise.race([
+          writing.then(() => "done"),
+          Bun.sleep(500).then(() => "blocked")
+        ]);
+
+        expect(early).toBe("blocked");
+
+        release();
+
+        const [disconnected, written] = await Promise.all([
+          disconnecting,
+          writing
+        ]);
+
+        expect(disconnected.outcome).toBe("disconnected");
+        expect(written).toEqual({
+          outcome: "refused",
+          code: "ACCOUNT_STATE_INVALID"
+        });
+      } finally {
+        release();
+        await pool.close({ timeout: 1 });
+      }
+
+      expect(await secretCount(T1)).toBe(0);
+      expect(
+        (await inTenant(T1, (tx) => fetchAccountRecord(tx, T1, id)))?.secretId
+      ).toBeNull();
+    });
+
+    test("a delete racing a credential write leaves no orphaned ciphertext", async () => {
+      const id = await created(T1, U1, "race-del");
+      const pool = createRuntimePool(4);
+      let release!: () => void;
+      let locked!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const lockedFirst = new Promise<void>((resolve) => (locked = resolve));
+
+      try {
+        const deleting = withTenantOrThrow(pool, T1, async (tx) => {
+          const result = await deleteAccount(tx, store, T1, U1, id);
+
+          locked();
+          await gate;
+
+          return result;
+        });
+
+        await lockedFirst;
+
+        const writing = withTenantOrThrow(pool, T1, (tx) =>
+          writeAccountCredential(tx, store, T1, U1, id, CANARY)
+        );
+
+        await Bun.sleep(300);
+        release();
+
+        const [deleted, written] = await Promise.all([deleting, writing]);
+
+        expect(deleted.outcome).toBe("deleted");
+        expect(written.outcome).toBe("not_found");
+      } finally {
+        release();
+        await pool.close({ timeout: 1 });
+      }
+
+      expect(await secretCount(T1)).toBe(0);
+    });
+  });
+
   describe("integrity guards", () => {
     test("an account identity is immutable and a deleted account is terminal", async () => {
       const id = await created(T1, U1, "immutable-dev");

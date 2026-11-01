@@ -145,7 +145,10 @@ paths:
         is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds
         it (one answer, so the conflict is not an oracle). The account starts
         `pending` and becomes `connected` only when a connector verifies it. No
-        credential is accepted here. `Idempotency-Key` required. Requires
+        credential is accepted here. A `businessScope` is a request, not a fact:
+        the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a
+        caller confined to business scopes may not omit it (an account without
+        one is tenant-wide). `Idempotency-Key` required. Requires
         `channel_accounts.accounts.create`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -190,7 +193,10 @@ paths:
             The combination is not admitted: `PROVIDER_UNKNOWN`,
             `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`,
             `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`,
-            `CONNECTION_MISMATCH`, `PARENT_REQUIRED` or `PARENT_INVALID`.
+            `CONNECTION_MISMATCH`, `CONNECTION_NOT_ACTIVE` (the connection's
+            grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or
+            `SCOPE_UNRESOLVED` (the named business scope does not exist in this
+            tenant).
           content:
             application/json:
               schema:
@@ -321,7 +327,11 @@ paths:
         first) and while it has child accounts. Erases the account's stored
         credential and releases its external id for re-registration. Terminal:
         the database refuses to un-delete. High-risk, audited at `warning`.
-        `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+        The caller must be allowed to disconnect EVERY account bound to the
+        connection (owner assignment where assigned, business scope where
+        scoped); otherwise the answer is the same `404` as an unknown
+        connection. `Idempotency-Key` required. Requires
+        `channel_accounts.accounts.revoke`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -915,6 +925,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "503":
           description: "`CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment."
           content:
@@ -930,7 +946,9 @@ paths:
       description: >-
         State, granted scopes, expiry, whether a credential is stored and whether
         an authorisation code awaits its token exchange. Never a token, an
-        authorisation code, a PKCE verifier or a secret reference. Requires
+        authorisation code, a PKCE verifier or a secret reference. A connection
+        that has accounts is listed only when the caller may see at least one of
+        them (assignment and business scope). Requires
         `channel_accounts.accounts.read`.
       parameters:
         - name: provider
@@ -988,7 +1006,11 @@ paths:
         account bound to it becomes `revoked`. Does not call the provider's
         revoke endpoint (the connector's job): the local half must not depend on
         the provider being reachable. High-risk, audited at `warning`.
-        `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+        The caller must be allowed to disconnect EVERY account bound to the
+        connection (owner assignment where assigned, business scope where
+        scoped); otherwise the answer is the same `404` as an unknown
+        connection. `Idempotency-Key` required. Requires
+        `channel_accounts.accounts.revoke`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -1107,8 +1129,10 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           description: >-
-            `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID`
-            or `PROVIDER_ADAPTER_UNAVAILABLE`.
+            `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID`,
+            `PROVIDER_ADAPTER_UNAVAILABLE` or `SCOPE_UNRESOLVED`. A
+            `businessScope` the caller does not hold (or an omitted one, for a
+            scope-confined caller) is `403 ACCESS_DENIED`.
           content:
             application/json:
               schema:

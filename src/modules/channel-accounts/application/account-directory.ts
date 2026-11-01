@@ -110,12 +110,22 @@ export function toPublicAccount(record: AccountRecord): AccountView {
   return view;
 }
 
+/**
+ * Loads one live account. `lock: true` takes the row lock (`FOR UPDATE`): every
+ * path that READS an account and then WRITES based on what it read (credential
+ * write, disconnect, delete, update) must lock, or a concurrent disconnect lets
+ * a credential land on an account that has just been revoked, or leaves an
+ * orphaned ciphertext (ADR-0148 review M5). Read-only callers do not lock.
+ */
 export async function fetchAccountRecord(
   tx: Bun.SQL,
   tenantId: string,
-  accountId: string
+  accountId: string,
+  options: { lock?: boolean } = {}
 ): Promise<AccountRecord | null> {
-  const rows = (await tx`
+  const rows = (
+    options.lock
+      ? await tx`
     SELECT id, business_scope_type, business_scope_id, provider, account_kind,
            external_id, display_name, auth_mode, connection_id, parent_account_id,
            secret_id, status, status_reason, connected_at, revoked_at,
@@ -123,7 +133,18 @@ export async function fetchAccountRecord(
     FROM awcms_channel_accounts
     WHERE tenant_id = ${tenantId} AND id = ${accountId}
       AND deleted_at IS NULL
-  `) as AccountRow[];
+    FOR UPDATE
+  `
+      : await tx`
+    SELECT id, business_scope_type, business_scope_id, provider, account_kind,
+           external_id, display_name, auth_mode, connection_id, parent_account_id,
+           secret_id, status, status_reason, connected_at, revoked_at,
+           created_at, updated_at, version
+    FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND id = ${accountId}
+      AND deleted_at IS NULL
+  `
+  ) as AccountRow[];
 
   return rows.length === 0 ? null : toRecord(rows[0]!);
 }
@@ -181,6 +202,7 @@ export type CreateAccountOutcome =
         | "AUTH_MODE_INVALID"
         | "CONNECTION_NOT_FOUND"
         | "CONNECTION_MISMATCH"
+        | "CONNECTION_NOT_ACTIVE"
         | "CONNECTION_REQUIRED"
         | "PARENT_REQUIRED"
         | "PARENT_INVALID"
@@ -208,10 +230,14 @@ export async function createAccount(
       return { outcome: "refused", code: "CONNECTION_REQUIRED" };
     }
 
+    // `FOR SHARE`: a revocation (which locks the row `FOR UPDATE`) cannot
+    // commit between this check and the insert below.
     const connection = (await tx`
-      SELECT provider, auth_mode FROM awcms_channel_provider_connections
+      SELECT provider, auth_mode, grant_state
+      FROM awcms_channel_provider_connections
       WHERE tenant_id = ${tenantId} AND id = ${input.connectionId}
-    `) as { provider: string; auth_mode: string }[];
+      FOR SHARE
+    `) as { provider: string; auth_mode: string; grant_state: string }[];
 
     if (connection.length === 0) {
       return { outcome: "refused", code: "CONNECTION_NOT_FOUND" };
@@ -222,6 +248,13 @@ export async function createAccount(
       connection[0]!.auth_mode !== "oauth2"
     ) {
       return { outcome: "refused", code: "CONNECTION_MISMATCH" };
+    }
+
+    // A revoked, failed or still-pending grant holds no usable token: binding a
+    // new account to it would either squat an external id under a dead grant or
+    // resurrect a connection somebody revoked (ADR-0148 review M4).
+    if (connection[0]!.grant_state !== "active") {
+      return { outcome: "refused", code: "CONNECTION_NOT_ACTIVE" };
     }
   } else if (input.connectionId) {
     return { outcome: "refused", code: "CONNECTION_MISMATCH" };
@@ -283,7 +316,16 @@ export type ListAccountsResult =
 export async function listAccounts(
   tx: Bun.SQL,
   tenantId: string,
-  viewer: { tenantUserId: string; bypass: boolean },
+  viewer: {
+    tenantUserId: string;
+    bypass: boolean;
+    /**
+     * Per-row business-scope decision, taken by the route through the access
+     * chokepoint (ADR-0148 review M2). Absent = scope is not applied (service
+     * callers that are not a person). An unscoped account is never asked about.
+     */
+    scopeAllowed?: (scope: { type: string; id: string }) => Promise<boolean>;
+  },
   query: ListAccountsQuery
 ): Promise<ListAccountsResult> {
   const cursor = query.cursor ? decodeKeysetCursor(query.cursor) : null;
@@ -321,10 +363,37 @@ export async function listAccounts(
 
   const page = rows.slice(0, query.limit);
   const last = page[page.length - 1];
+  const items: AccountView[] = [];
+  const decided = new Map<string, boolean>();
 
+  for (const row of page) {
+    if (
+      row.business_scope_type &&
+      row.business_scope_id &&
+      viewer.scopeAllowed
+    ) {
+      const key = `${row.business_scope_type}:${row.business_scope_id}`;
+      let allowed = decided.get(key);
+
+      if (allowed === undefined) {
+        allowed = await viewer.scopeAllowed({
+          type: row.business_scope_type,
+          id: row.business_scope_id
+        });
+        decided.set(key, allowed);
+      }
+
+      if (!allowed) continue;
+    }
+
+    items.push(toView(row));
+  }
+
+  // The cursor follows the RAW page, so a page that lost rows to the scope
+  // filter is short but never skips or repeats one (keyset, not offset).
   return {
     ok: true,
-    items: page.map(toView),
+    items,
     nextCursor:
       rows.length > query.limit && last
         ? encodeKeysetCursor(last.created_at_cursor!, last.id)
@@ -344,7 +413,9 @@ export async function updateAccount(
   accountId: string,
   input: UpdateAccountInput
 ): Promise<UpdateAccountOutcome> {
-  const current = await fetchAccountRecord(tx, tenantId, accountId);
+  const current = await fetchAccountRecord(tx, tenantId, accountId, {
+    lock: true
+  });
 
   if (!current) return { outcome: "not_found" };
 
@@ -418,7 +489,9 @@ export async function writeAccountCredential(
   accountId: string,
   plaintext: string
 ): Promise<WriteCredentialOutcome> {
-  const account = await fetchAccountRecord(tx, tenantId, accountId);
+  const account = await fetchAccountRecord(tx, tenantId, accountId, {
+    lock: true
+  });
 
   if (!account) return { outcome: "not_found" };
 
@@ -470,6 +543,83 @@ export async function writeAccountCredential(
 }
 
 // ---------------------------------------------------------------------------
+// Accounts behind a connection (a connection is only as visible as its accounts)
+// ---------------------------------------------------------------------------
+
+export type ConnectionAccountBinding = {
+  connectionId: string;
+  accountId: string;
+  businessScope: { type: string; id: string } | null;
+  /** Whether the ASSIGNMENT rule lets this caller at least `minimumKind` on the account. */
+  assignable: boolean;
+};
+
+/**
+ * The live accounts bound to ONE connection (`connectionId`) or to the tenant's
+ * 200 newest connections of a provider (`connectionId` null) — the same window
+ * `listConnections` shows — with the assignment decision made in SQL, exactly
+ * the rule of {@link isAccountVisibleTo}. The business-scope half is the
+ * caller's (it needs the chokepoint). Revoked accounts are included on purpose:
+ * revoking a connection must still be authorised against every account it holds.
+ */
+export async function listConnectionAccountBindings(
+  tx: Bun.SQL,
+  tenantId: string,
+  viewer: { tenantUserId: string; bypass: boolean },
+  minimumKind: ChannelAssignmentKind,
+  filter: { connectionId: string | null; provider: string | null }
+): Promise<ConnectionAccountBinding[]> {
+  const rows = (await tx`
+    SELECT acc.id, acc.connection_id, acc.business_scope_type,
+           acc.business_scope_id,
+           (
+             ${viewer.bypass}::boolean
+             OR NOT EXISTS (
+               SELECT 1 FROM awcms_channel_account_assignments AS a
+               WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id)
+             OR EXISTS (
+               SELECT 1 FROM awcms_channel_account_assignments AS a
+               WHERE a.tenant_id = acc.tenant_id AND a.account_id = acc.id
+                 AND a.tenant_user_id = ${viewer.tenantUserId}
+                 AND (${minimumKind}::text = 'viewer'
+                      OR (a.kind IN ('owner', 'operator')
+                          AND ${minimumKind}::text = 'operator')
+                      OR (a.kind = 'owner' AND ${minimumKind}::text = 'owner')))
+           ) AS assignable
+    FROM awcms_channel_accounts AS acc
+    WHERE acc.tenant_id = ${tenantId}
+      AND acc.deleted_at IS NULL
+      AND acc.connection_id IS NOT NULL
+      AND (${filter.connectionId}::uuid IS NULL
+           OR acc.connection_id = ${filter.connectionId})
+      AND (${filter.connectionId}::uuid IS NOT NULL
+           OR acc.connection_id IN (
+             SELECT c.id FROM awcms_channel_provider_connections AS c
+             WHERE c.tenant_id = ${tenantId}
+               AND (${filter.provider}::text IS NULL
+                    OR c.provider = ${filter.provider})
+             ORDER BY c.created_at DESC, c.id DESC
+             LIMIT 200))
+  `) as {
+    id: string;
+    connection_id: string;
+    business_scope_type: string | null;
+    business_scope_id: string | null;
+    assignable: boolean;
+  }[];
+
+  return rows.map((row) => ({
+    connectionId: row.connection_id,
+    accountId: row.id,
+    businessScope:
+      row.business_scope_type && row.business_scope_id
+        ? { type: row.business_scope_type, id: row.business_scope_id }
+        : null,
+    assignable: row.assignable
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Disconnect / delete
 // ---------------------------------------------------------------------------
 
@@ -508,7 +658,9 @@ export async function disconnectAccount(
   actorTenantUserId: string,
   accountId: string
 ): Promise<DisconnectOutcome> {
-  const account = await fetchAccountRecord(tx, tenantId, accountId);
+  const account = await fetchAccountRecord(tx, tenantId, accountId, {
+    lock: true
+  });
 
   if (!account) return { outcome: "not_found" };
   if (account.status === "revoked") {
@@ -561,7 +713,9 @@ export async function deleteAccount(
   actorTenantUserId: string,
   accountId: string
 ): Promise<DeleteOutcome> {
-  const account = await fetchAccountRecord(tx, tenantId, accountId);
+  const account = await fetchAccountRecord(tx, tenantId, accountId, {
+    lock: true
+  });
 
   if (!account) return { outcome: "not_found" };
   if (account.status === "connected" || account.status === "degraded") {

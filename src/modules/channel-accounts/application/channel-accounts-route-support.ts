@@ -20,6 +20,7 @@ import {
   readJsonBody
 } from "../../../lib/security/request-body-limit";
 import { authorizeInTransaction } from "../../identity-access/application/access-guard";
+import { officeScopeHierarchyPortAdapter } from "../../tenant-admin/application/office-scope-hierarchy-port-adapter";
 import type { AccessRequest } from "../../identity-access/domain/access-control";
 import {
   CHANNEL_ACCOUNTS_GUARDS,
@@ -31,6 +32,7 @@ import { isUuid, type Validated } from "../domain/channel-accounts-validation";
 import {
   fetchAccountRecord,
   isAccountVisibleTo,
+  listConnectionAccountBindings,
   type AccountRecord
 } from "./account-directory";
 
@@ -257,6 +259,165 @@ export function canSeeAllAccounts(context: AccountRouteContext): boolean {
 }
 
 /**
+ * The scope resolver the business-scope check consults. Without a port the
+ * chokepoint resolves NO facts and denies every scoped request, so a scoped
+ * account would be unreachable by anyone; this is the composition root's wiring
+ * (ADR-0011, ADR-0060), the same adapter the business-scope assignment API uses.
+ */
+const HIERARCHY_PORT = officeScopeHierarchyPortAdapter;
+
+type ScopeRef = { type: string; id: string };
+type AccountGuard = Pick<
+  AccessRequest,
+  "moduleKey" | "activityCode" | "action"
+>;
+
+/**
+ * Whether the caller holds `scope`, re-evaluated through the SAME chokepoint
+ * with the route's own guard, so a deny policy and the decision log both apply.
+ */
+export async function scopeCoveredFor(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  scope: ScopeRef,
+  resource: { type: string; id?: string } = { type: "channel_account" }
+): Promise<boolean> {
+  const decision = await authorizeInTransaction(
+    context.tx,
+    context.tenantId,
+    context.tokenHash,
+    context.now,
+    {
+      ...guard,
+      resourceType: resource.type,
+      ...(resource.id ? { resourceId: resource.id } : {}),
+      resourceAttributes: {
+        requiredScopeType: scope.type,
+        requiredScopeId: scope.id
+      }
+    },
+    {
+      clientIp: resolveClientIp(context.request, context.clientAddress),
+      hierarchyPort: HIERARCHY_PORT
+    }
+  );
+
+  return decision.allowed;
+}
+
+/**
+ * A caller whose access is CONFINED to business scopes (holds at least one
+ * currently-effective, non-tenant-wide scope assignment). Such a caller must
+ * name a scope they hold when creating an account: "no scope" means tenant-wide,
+ * and a confined operator is not allowed to mint a tenant-wide account that
+ * escapes the confinement they were given (ADR-0148 review M3).
+ */
+export async function callerIsScopeConfined(
+  context: AccountRouteContext
+): Promise<boolean> {
+  const rows = (await context.tx`
+    SELECT 1 FROM awcms_business_scope_assignments
+    WHERE tenant_id = ${context.tenantId}
+      AND tenant_user_id = ${context.auth.context.tenantUserId}
+      AND status = 'active'
+      AND scope_type <> 'tenant'
+      AND effective_from <= ${context.now}
+      AND (effective_to IS NULL OR effective_to > ${context.now})
+    LIMIT 1
+  `) as unknown[];
+
+  return rows.length > 0;
+}
+
+/**
+ * The business scope a CLIENT asks an account to carry is not a fact: it is
+ * authorised as the required scope (the caller must hold it), and it must
+ * resolve to a real scope of THIS tenant. Absent = tenant-wide, which a
+ * scope-confined caller may not create. Returns the refusal, or null to go on.
+ */
+export async function authorizeRequestedScope(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  scope: ScopeRef | null
+): Promise<Response | null> {
+  const denied = () => fail(403, "ACCESS_DENIED", "Access denied.");
+
+  if (!scope) {
+    return (await callerIsScopeConfined(context)) ? denied() : null;
+  }
+
+  if (!(await scopeCoveredFor(context, guard, scope))) return denied();
+
+  const resolution = await HIERARCHY_PORT.resolveScope(
+    context.tx,
+    context.tenantId,
+    scope.type,
+    scope.id
+  );
+
+  return resolution.resolved
+    ? null
+    : fail(
+        422,
+        "SCOPE_UNRESOLVED",
+        "The business scope does not exist in this tenant."
+      );
+}
+
+/**
+ * How many of each connection's accounts the caller may act on (assignment of at
+ * least `minimumKind` AND the business scope), so a connection is never wider
+ * than the accounts behind it: `revoke` needs ALL of them, a list needs ANY.
+ * A connection with no accounts has no entry.
+ */
+export async function connectionAccountAccess(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  minimumKind: ChannelAssignmentKind,
+  filter: { connectionId: string | null; provider: string | null }
+): Promise<Map<string, { accounts: number; allowed: number }>> {
+  const bindings = await listConnectionAccountBindings(
+    context.tx,
+    context.tenantId,
+    {
+      tenantUserId: context.auth.context.tenantUserId,
+      bypass: canSeeAllAccounts(context)
+    },
+    minimumKind,
+    filter
+  );
+  const decided = new Map<string, boolean>();
+  const result = new Map<string, { accounts: number; allowed: number }>();
+
+  for (const binding of bindings) {
+    let ok = binding.assignable;
+
+    if (ok && binding.businessScope) {
+      const key = `${binding.businessScope.type}:${binding.businessScope.id}`;
+      let covered = decided.get(key);
+
+      if (covered === undefined) {
+        covered = await scopeCoveredFor(context, guard, binding.businessScope);
+        decided.set(key, covered);
+      }
+
+      ok = covered;
+    }
+
+    const entry = result.get(binding.connectionId) ?? {
+      accounts: 0,
+      allowed: 0
+    };
+
+    entry.accounts += 1;
+    if (ok) entry.allowed += 1;
+    result.set(binding.connectionId, entry);
+  }
+
+  return result;
+}
+
+/**
  * Loads an account and applies the two PER-ACCOUNT gates that sit on top of the
  * route's tenant-wide permission (ADR-0148 I1, pack 2.1 `channel_account_assignment`):
  *
@@ -271,7 +432,7 @@ export function canSeeAllAccounts(context: AccountRouteContext): boolean {
 export async function loadAuthorizedAccount(
   context: AccountRouteContext,
   accountId: string,
-  guard: Pick<AccessRequest, "moduleKey" | "activityCode" | "action">,
+  guard: AccountGuard,
   minimumKind: ChannelAssignmentKind = "viewer"
 ): Promise<{ account: AccountRecord } | { denied: Response }> {
   const account = await fetchAccountRecord(
@@ -293,27 +454,14 @@ export async function loadAuthorizedAccount(
 
   if (!visible) return { denied: accountNotFound() };
 
-  if (account.businessScope) {
-    const scoped = await authorizeInTransaction(
-      context.tx,
-      context.tenantId,
-      context.tokenHash,
-      context.now,
-      {
-        ...guard,
-        resourceType: "channel_account",
-        resourceId: accountId,
-        resourceAttributes: {
-          requiredScopeType: account.businessScope.type,
-          requiredScopeId: account.businessScope.id
-        }
-      },
-      {
-        clientIp: resolveClientIp(context.request, context.clientAddress)
-      }
-    );
-
-    if (!scoped.allowed) return { denied: accountNotFound() };
+  if (
+    account.businessScope &&
+    !(await scopeCoveredFor(context, guard, account.businessScope, {
+      type: "channel_account",
+      id: accountId
+    }))
+  ) {
+    return { denied: accountNotFound() };
   }
 
   return { account };

@@ -65,6 +65,18 @@ export const GET = defineTenantRoute<OAuthCallbackQuery>({
     );
 
     if (result.outcome === "refused") {
+      // A forged, replayed, expired or foreign state is exactly what an attack
+      // on the grant flow looks like: leave a trace. Neither the state nor the
+      // code is recorded (ADR-0148 review N1).
+      await auditChannelAccounts(context, {
+        action: "channel_accounts.oauth.callback_refused",
+        resourceType: "channel_connection",
+        resourceId: null,
+        severity: "warning",
+        message: "Provider authorisation callback refused.",
+        attributes: { code: result.code }
+      });
+
       return fail(
         400,
         result.code,

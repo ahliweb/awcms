@@ -47,7 +47,13 @@ const MAX_PENDING_STATES_PER_PERSON = 10;
 const MAX_REFRESH_FAILURES = 5;
 const MAX_REFRESH_BACKOFF_SECONDS = 3600;
 
-function sha256Tagged(value: string): string {
+/**
+ * A tagged SHA-256 of a PUBLIC, non-secret value (this deployment's own redirect
+ * URI, a list of granted OAuth scope names), kept so a later request can be
+ * compared with what the flow started with. It is a fingerprint for equality,
+ * never a password or credential hash (CodeQL alert 200 is that false positive).
+ */
+function publicValueDigest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
@@ -281,7 +287,7 @@ export async function startOAuthGrant(
        redirect_uri_hash, requested_scopes, business_scope_type,
        business_scope_id, expires_at)
     VALUES (${tenantId}, ${input.provider}, ${hashOAuthState(rawState)},
-            ${actorTenantUserId}, ${pkceSecretId}, ${sha256Tagged(redirectUri)},
+            ${actorTenantUserId}, ${pkceSecretId}, ${publicValueDigest(redirectUri)},
             ${input.scopes}, ${scope?.type ?? null}, ${scope?.id ?? null},
             ${expiresAt})
   `;
@@ -357,7 +363,7 @@ export async function completeOAuthCallback(
     state.initiated_by !== tenantUserId ||
     // The deployment's callback URI must be the one the flow was started with.
     state.redirect_uri_hash !==
-      sha256Tagged(resolveChannelOAuthRedirectUri(env))
+      publicValueDigest(resolveChannelOAuthRedirectUri(env))
   ) {
     return invalid;
   }
@@ -488,7 +494,7 @@ export async function activateConnectionGrant(
     UPDATE awcms_channel_provider_connections
     SET grant_state = 'active', access_secret_id = ${access.secretId},
         refresh_secret_id = ${refresh?.secretId ?? null},
-        granted_scopes = ${scopes}, scope_list_hash = ${sha256Tagged(scopes.join(" "))},
+        granted_scopes = ${scopes}, scope_list_hash = ${publicValueDigest(scopes.join(" "))},
         issued_at = ${now}, expires_at = ${grant.expiresAt},
         refresh_expires_at = ${grant.refreshExpiresAt},
         refresh_failure_count = 0, refresh_lease_until = NULL,

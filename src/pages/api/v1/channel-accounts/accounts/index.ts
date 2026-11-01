@@ -6,11 +6,13 @@ import {
 } from "../../../../../modules/channel-accounts/application/account-directory";
 import {
   auditChannelAccounts,
+  authorizeRequestedScope,
   canSeeAllAccounts,
   commonRefusal,
   readIdempotencyKey,
   readValidatedBody,
-  runIdempotent
+  runIdempotent,
+  scopeCoveredFor
 } from "../../../../../modules/channel-accounts/application/channel-accounts-route-support";
 import { CHANNEL_ACCOUNTS_GUARDS } from "../../../../../modules/channel-accounts/domain/channel-accounts-constants";
 import {
@@ -48,7 +50,11 @@ export const GET = defineTenantRoute<ListAccountsQuery>({
       context.tenantId,
       {
         tenantUserId: context.auth.context.tenantUserId,
-        bypass: canSeeAllAccounts(context)
+        bypass: canSeeAllAccounts(context),
+        // Per-row business-scope decision through the chokepoint (review M2):
+        // the list shows exactly what `GET /accounts/{id}` would.
+        scopeAllowed: (scope) =>
+          scopeCoveredFor(context, CHANNEL_ACCOUNTS_GUARDS.read, scope)
       },
       context.prepared
     );
@@ -88,6 +94,16 @@ export const POST = defineTenantRoute<Prepared>({
     const refused = commonRefusal(context.auth);
 
     if (refused) return refused;
+
+    // The scope the client names is a request, not a fact (review M3). Checked
+    // before the idempotent section: a refusal is never stored for replay.
+    const scopeRefusal = await authorizeRequestedScope(
+      context,
+      CHANNEL_ACCOUNTS_GUARDS.connect,
+      context.prepared.input.businessScope
+    );
+
+    if (scopeRefusal) return scopeRefusal;
 
     const { tx, tenantId, auth, prepared } = context;
     const actor = auth.context.tenantUserId;

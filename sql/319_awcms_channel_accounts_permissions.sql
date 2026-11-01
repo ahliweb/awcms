@@ -31,7 +31,7 @@
 --
 -- Same limitation as every prior permission-seed migration: this extends the
 -- GLOBAL catalog only; a tenant created earlier needs
--- `bun run identity-access:owner-permission-backfill`.
+-- `bun run identity-access:permissions:backfill`.
 INSERT INTO awcms_permissions (module_key, activity_code, action, description)
 VALUES
   ('channel_accounts', 'accounts', 'read',

@@ -14824,7 +14824,7 @@ An account with assignees is listed only to its assignees and to holders of `cha
 - **operationId**: `createChannelAccount`
 - **Security**: bearerAuth + tenantHeader
 
-`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. `Idempotency-Key` required. Requires `channel_accounts.accounts.create`.
+`(provider, accountKind, authMode)` must be a combination the provider matrix admits. A live external account belongs to ONE tenant: a duplicate is `409 ACCOUNT_ALREADY_REGISTERED` whether this tenant or another holds it (one answer, so the conflict is not an oracle). The account starts `pending` and becomes `connected` only when a connector verifies it. No credential is accepted here. A `businessScope` is a request, not a fact: the caller must hold that scope (`403 ACCESS_DENIED` otherwise), and a caller confined to business scopes may not omit it (an account without one is tenant-wide). `Idempotency-Key` required. Requires `channel_accounts.accounts.create`.
 
 **Parameters**
 
@@ -14836,15 +14836,15 @@ An account with assignees is listed only to its assignees and to holders of `cha
 
 **Responses**
 
-| Status | Description                                                                                                                                                                                                                                | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| 201    | The registered account.                                                                                                                                                                                                                    | object                                 |
-| 400    | Validation error.                                                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
-| 409    | `ACCOUNT_ALREADY_REGISTERED` (this tenant or another holds the external account) or `IDEMPOTENCY_CONFLICT`.                                                                                                                                | [`ApiError`](#standard-error-envelope) |
-| 422    | The combination is not admitted: `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`, `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`, `CONNECTION_MISMATCH`, `PARENT_REQUIRED` or `PARENT_INVALID`. | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment.                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                                                                                                                                                                               | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The registered account.                                                                                                                                                                                                                                                                                                                                                                   | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | `ACCOUNT_ALREADY_REGISTERED` (this tenant or another holds the external account) or `IDEMPOTENCY_CONFLICT`.                                                                                                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 422    | The combination is not admitted: `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`, `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`, `CONNECTION_MISMATCH`, `CONNECTION_NOT_ACTIVE` (the connection's grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or `SCOPE_UNRESOLVED` (the named business scope does not exist in this tenant). | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment.                                                                                                                                                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/channel-accounts/accounts/{id}` — One account.
 
@@ -14895,7 +14895,7 @@ An unknown id, another tenant's id and an account the caller is not assigned to 
 - **operationId**: `deleteChannelAccount`
 - **Security**: bearerAuth + tenantHeader
 
-Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+Refused while the account is `connected` or `degraded` (disconnect it first) and while it has child accounts. Erases the account's stored credential and releases its external id for re-registration. Terminal: the database refuses to un-delete. High-risk, audited at `warning`. The caller must be allowed to disconnect EVERY account bound to the connection (owner assignment where assigned, business scope where scoped); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
 
 **Parameters**
 
@@ -14983,6 +14983,7 @@ Removing the LAST assignee returns the account to tenant-wide visibility, which 
 | 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/channel-accounts/accounts/{id}/capabilities` — All nine capabilities with the matrix cell and the effective verdict.
@@ -15108,7 +15109,7 @@ Read-only on purpose: health is REPORTED by a provider connector's check or a di
 - **operationId**: `listChannelConnections`
 - **Security**: bearerAuth + tenantHeader
 
-State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. Requires `channel_accounts.accounts.read`.
+State, granted scopes, expiry, whether a credential is stored and whether an authorisation code awaits its token exchange. Never a token, an authorisation code, a PKCE verifier or a secret reference. A connection that has accounts is listed only when the caller may see at least one of them (assignment and business scope). Requires `channel_accounts.accounts.read`.
 
 **Parameters**
 
@@ -15131,7 +15132,7 @@ State, granted scopes, expiry, whether a credential is stored and whether an aut
 - **operationId**: `revokeChannelConnection`
 - **Security**: bearerAuth + tenantHeader
 
-The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
+The grant becomes `revoked` (terminal; the database refuses to undo it), every credential it held (access, refresh, an unexchanged authorisation code, the PKCE verifier) is cleared and its ciphertext deleted, and every account bound to it becomes `revoked`. Does not call the provider's revoke endpoint (the connector's job): the local half must not depend on the provider being reachable. High-risk, audited at `warning`. The caller must be allowed to disconnect EVERY account bound to the connection (owner assignment where assigned, business scope where scoped); otherwise the answer is the same `404` as an unknown connection. `Idempotency-Key` required. Requires `channel_accounts.accounts.revoke`.
 
 **Parameters**
 
@@ -15191,15 +15192,15 @@ Creates a single-use `state` (256 random bits, stored only as a SHA-256, bound t
 
 **Responses**
 
-| Status | Description                                                                                            | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| 200    | The authorisation URL to send the browser to.                                                          | object                                 |
-| 400    | Validation error.                                                                                      | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                            | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                            | [`ApiError`](#standard-error-envelope) |
-| 422    | `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID` or `PROVIDER_ADAPTER_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
-| 429    | `TOO_MANY_PENDING`.                                                                                    | [`ApiError`](#standard-error-envelope) |
-| 503    | `CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`.                                             | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                                    | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The authorisation URL to send the browser to.                                                                                                                                                                                                  | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 422    | `PROVIDER_UNKNOWN`, `PROVIDER_NOT_REGISTRABLE`, `AUTH_MODE_INVALID`, `PROVIDER_ADAPTER_UNAVAILABLE` or `SCOPE_UNRESOLVED`. A `businessScope` the caller does not hold (or an omitted one, for a scope-confined caller) is `403 ACCESS_DENIED`. | [`ApiError`](#standard-error-envelope) |
+| 429    | `TOO_MANY_PENDING`.                                                                                                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`.                                                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/channel-accounts/providers` — The provider capability matrix v1, as the code enforces it.
 

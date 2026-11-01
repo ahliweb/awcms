@@ -5,6 +5,7 @@ import {
   auditChannelAccounts,
   badId,
   commonRefusal,
+  connectionAccountAccess,
   readIdempotencyKey,
   runIdempotent
 } from "../../../../../../modules/channel-accounts/application/channel-accounts-route-support";
@@ -45,6 +46,23 @@ export const POST = defineTenantRoute<Prepared>({
 
     const { tx, tenantId, auth, prepared } = context;
     const actor = auth.context.tenantUserId;
+
+    // Revoking a connection revokes EVERY account bound to it, so it needs the
+    // authority to disconnect each of them: owner assignment where assigned,
+    // and the business scope where scoped. One missing = the uniform 404, the
+    // same answer as an unknown connection (confused-deputy guard, review M1).
+    const access = (
+      await connectionAccountAccess(
+        context,
+        CHANNEL_ACCOUNTS_GUARDS.disconnect,
+        "owner",
+        { connectionId: prepared.id, provider: null }
+      )
+    ).get(prepared.id);
+
+    if (access && access.allowed < access.accounts) {
+      return fail(404, "RESOURCE_NOT_FOUND", "Connection not found.");
+    }
 
     return runIdempotent(
       tx,
