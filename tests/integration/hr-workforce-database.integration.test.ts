@@ -814,6 +814,13 @@ suite("hr_workforce database invariants (Issue #945, ADR-0132)", () => {
         // log and the workflow store (tests/integration/hr-attendance-*), and it
         // lives in this ONE column of this ONE table. Events carry no such column.
         .filter((c) => c !== "awcms_hr_attendance_corrections.reason")
+        // Issue #1189 (ADR-0147): the reason of a queued commission VOID. It is a
+        // short snake-case CODE (`sale_voided`), never free text: the table's CHECK
+        // is `^[a-z][a-z0-9_.-]{0,39}$` (sql/316) and the port runs the ledger's
+        // own `validateVoidRequest`, which holds the same pattern. It exists only
+        // on `void` rows (a CHECK makes it NULL on `accrue` rows) and is kept out of
+        // every audit row (the intake audit carries the outcome code only).
+        .filter((c) => c !== "awcms_hr_commission_intents.reason")
         // Issue #970 (ADR-0138): the centre of a tenant's WORK SITE. A geofence
         // describes a place of business, not a person, and it is the ONLY table
         // with a coordinate; the evidence table keeps just a reference to it, and

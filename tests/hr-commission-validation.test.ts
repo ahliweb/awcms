@@ -310,16 +310,17 @@ describe("the hr_commission descriptor", () => {
     ]);
   });
 
-  test("provides the commission_accrual port and publishes exactly the voided event (Issue #1109)", () => {
+  test("provides the commission_accrual port (Issue #1109) and the commission_intake port (Issue #1189), and publishes exactly the voided event", () => {
     expect(hrCommissionModule.capabilities?.provides).toEqual([
-      "commission_accrual"
+      "commission_accrual",
+      "commission_intake"
     ]);
     expect(hrCommissionModule.events?.publishes).toEqual([
       "awcms.hr.commission.voided"
     ]);
   });
 
-  test("declares the five rule permissions, the six accrual permissions and the one own-accrual read, and no payroll or compensation power", () => {
+  test("declares the five rule permissions, the six accrual permissions, the one own-accrual read and the two intake permissions, and no payroll or compensation power", () => {
     const keys = (hrCommissionModule.permissions ?? []).map(
       (p) => `${p.activityCode}.${p.action}`
     );
@@ -331,6 +332,8 @@ describe("the hr_commission descriptor", () => {
       "accruals.pay",
       "accruals.read",
       "accruals.release",
+      "intake.configure",
+      "intake.read",
       "my_accruals.read",
       "rules.create",
       "rules.publish",
@@ -340,14 +343,30 @@ describe("the hr_commission descriptor", () => {
     ]);
   });
 
-  test("no table asserts a retention period or a purge (BOUNDED_BY_DESIGN answers all three); subject-data answers every table", () => {
-    // No table asserts a retention period or a purge mode: nothing purges. All
-    // three are answered by BOUNDED_BY_DESIGN entries (retained, no period).
-    expect(hrCommissionModule.dataLifecycle ?? []).toEqual([]);
+  test("the ledger and the rules assert no retention period or purge (BOUNDED_BY_DESIGN answers them); only the intake queue and its switch have descriptors; subject-data answers every table", () => {
+    // Nothing purges the rules, the accruals or the transitions: all three are
+    // answered by BOUNDED_BY_DESIGN entries (retained, no period). The intake
+    // queue (#1189) is transient and has a purge, so it declares one, delegated
+    // to the poster job; its one-boolean switch follows the HR settings precedent.
+    expect(
+      (hrCommissionModule.dataLifecycle ?? []).map((d) => d.tableName)
+    ).toEqual([
+      "awcms_hr_commission_intents",
+      "awcms_hr_commission_intake_settings"
+    ]);
+    expect(
+      (hrCommissionModule.dataLifecycle ?? []).every(
+        (d) => d.executionMode === "delegated"
+      )
+    ).toBe(true);
 
-    expect(hrCommissionModule.subjectData?.map((d) => d.tableName)).toEqual([
-      "awcms_hr_commission_rules",
+    expect(
+      (hrCommissionModule.subjectData ?? []).map((d) => d.tableName).sort()
+    ).toEqual([
       "awcms_hr_commission_accruals",
+      "awcms_hr_commission_intake_settings",
+      "awcms_hr_commission_intents",
+      "awcms_hr_commission_rules",
       "awcms_hr_commission_transitions"
     ]);
   });

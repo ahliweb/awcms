@@ -857,6 +857,16 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/hr-commission/intake/exceptions.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/hr-commission/intake/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/hr-commission/my-accruals/[id].ts",
       "workClass": "interactive",
       "source": "factory"

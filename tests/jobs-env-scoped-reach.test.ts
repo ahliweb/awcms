@@ -594,6 +594,16 @@ describe("DATABASE_URL is withheld from jobs that cannot reach the app connectio
       ].map((match) => match[1] as string)
     )
   ];
+  // The ONE scheduled job that runs as awcms_app on purpose, with the reason: it
+  // posts the commission intake queue into the accrual ledger, and the payroll
+  // boundary lets only the request role touch an accrual (ADR-0147, Issue #1189).
+  // The event consumer that feeds the queue stays awcms_worker with INSERT only.
+  const APP_ROLE_SCHEDULED_JOBS = new Map([
+    [
+      "hr-commission:intents:post",
+      "ADR-0147: posts accruals; only awcms_app may"
+    ]
+  ]);
   // Tracing every package target takes seconds; do it once for the block.
   let appTargets: string[] = [];
   beforeAll(() => {
@@ -610,8 +620,16 @@ describe("DATABASE_URL is withheld from jobs that cannot reach the app connectio
     expect(
       crontabTargets()
         .filter((target) => keepers.has(target))
+        .filter((target) => !APP_ROLE_SCHEDULED_JOBS.has(target))
         .sort()
     ).toEqual([]);
+
+    // The exception is itself pinned: it must really keep the credential, or it
+    // would be a stale entry that quietly widens "none of them" again.
+    for (const job of APP_ROLE_SCHEDULED_JOBS.keys()) {
+      expect(keepers.has(job), job).toBe(true);
+      expect(crontabTargets()).toContain(job);
+    }
   });
 
   test("an independent count agrees: no file in a scheduled job's reach calls the app client", () => {
@@ -625,6 +643,14 @@ describe("DATABASE_URL is withheld from jobs that cannot reach the app connectio
             strippedSource(file)
           )
       );
+
+      if (APP_ROLE_SCHEDULED_JOBS.has(target)) {
+        // It reaches the app connection from its own entrypoint and nowhere else.
+        expect(offenders, `${target} opens the app connection`).toEqual([
+          "scripts/hr-commission-intents-post.ts"
+        ]);
+        continue;
+      }
 
       expect(offenders, `${target} reaches the app connection`).toEqual([]);
     }

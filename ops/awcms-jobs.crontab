@@ -99,6 +99,18 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # expired/abandoned drafts past the retention cutoff, for every active tenant.
 15 3 * * * /usr/bin/flock -n $AWCMS_LOCK/form-drafts-purge.lock $AWCMS_RUN_JOB form-drafts:purge >> $AWCMS_JOB_LOG/form-drafts-purge.log 2>&1
 
+# hr_commission — Drains the commission intake queue (Issue #1189, ADR-0147)
+# into the accrual ledger: claims due intake rows per tenant (FOR UPDATE SKIP
+# LOCKED, with a lease), posts each through the one existing posting core
+# (accrueCommission / voidCommissionBySource) in its own tenant transaction
+# with the stored actor, and settles the row as posted, refused (a business
+# refusal: terminal, never retried) or, after a bounded number of transient
+# errors, failed. A void that arrives before the accrual it reverses waits for
+# it. Also purges settled rows past retention (posted 30 days, refused and
+# failed 90). Audit rows, domain events and the transition log are the
+# synchronous path's own; no amount reaches a log or an audit row.
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/hr-commission-intents-post.lock $AWCMS_RUN_JOB hr-commission:intents:post >> $AWCMS_JOB_LOG/hr-commission-intents-post.log 2>&1
+
 # identity_access — Transitions business-scope assignments and SoD conflict
 # exceptions past their effective_to to expired, recording append-only
 # lifecycle events and an aggregate audit entry per tenant (per-exception

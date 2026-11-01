@@ -69,7 +69,13 @@ export const DELEGATED_COUNT_FUNCTIONS: Readonly<Record<string, string>> = {
   awcms_booking_schedules: "awcms_booking_lifecycle_eligible_count",
   awcms_booking_service_offerings: "awcms_booking_lifecycle_eligible_count",
   awcms_booking_settings: "awcms_booking_lifecycle_eligible_count",
-  awcms_booking_staff_assignments: "awcms_booking_lifecycle_eligible_count"
+  awcms_booking_staff_assignments: "awcms_booking_lifecycle_eligible_count",
+  // Issue #1189 / ADR-0147 (sql/316): the commission intake queue, which the
+  // worker may only INSERT into and so can never SELECT.
+  awcms_hr_commission_intents: "awcms_hr_commission_lifecycle_eligible_count",
+  // Its worker grant is column-level, so the snapshot goes through the function too.
+  awcms_hr_commission_intake_settings:
+    "awcms_hr_commission_lifecycle_eligible_count"
 };
 
 export const COUNT_FUNCTION_PATTERN =

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:db9e18c991fdd7b19eaf0ab88a6050239989edd94b7c2244c2dd467914ae1f79 -->
+<!-- i18n-source-hash: sha256:27077b1e0d333662c53d36b75ab0dceb47941f070852fd49312d779b366efb92 -->
 
 # Scripts AWCMS
 
@@ -110,6 +110,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `family:conformance:check`                | `family-conformance-check.ts`                  | ✅   |
 | `form-drafts:purge`                       | `form-draft-purge.ts`                          | —    |
 | `graph:artifacts:check`                   | `graph-artifacts-check.ts`                     | —    |
+| `hr-commission:intents:post`              | `hr-commission-intents-post.ts`                | —    |
 | `i18n:catalog:check`                      | `i18n-catalog-check.ts`                        | ✅   |
 | `i18n:compile`                            | `i18n-compile.ts`                              | —    |
 | `i18n:screens:check`                      | `i18n-screen-coverage-check.ts`                | ✅   |

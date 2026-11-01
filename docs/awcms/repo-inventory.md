@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 34    |
-| Migrations                          | 233   |
-| `awcms_*` tables                    | 230   |
-| Tables with `FORCE` RLS             | 212   |
+| Migrations                          | 235   |
+| `awcms_*` tables                    | 232   |
+| Tables with `FORCE` RLS             | 214   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 752   |
-| Route files                         | 592   |
+| Test files                          | 755   |
+| Route files                         | 594   |
 | ADR                                 | 314   |
 
 ### Modules
@@ -51,7 +51,7 @@
 | `hr_workforce`         | 0.2.0   | active       | domain | no   | `tenant_admin`, `profile_identity`, `domain_event_runtime`                                                         |
 | `whatsapp_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `profile_identity`, `logging`, `domain_event_runtime`                                              |
 | `booking`              | 0.3.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                               |
-| `hr_commission`        | 0.4.0   | active       | domain | no   | `tenant_admin`, `hr_workforce`, `domain_event_runtime`                                                             |
+| `hr_commission`        | 0.5.0   | active       | domain | no   | `tenant_admin`, `hr_workforce`, `domain_event_runtime`                                                             |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 | `channel_accounts`     | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                       |
 
@@ -289,9 +289,11 @@
 | 228 | `sql/313_awcms_hr_self_service_permissions.sql`                    |
 | 229 | `sql/314_awcms_push_subscription_auth_secret_ciphertext.sql`       |
 | 230 | `sql/315_awcms_push_messages_recipient.sql`                        |
-| 231 | `sql/318_awcms_channel_accounts_schema.sql`                        |
-| 232 | `sql/319_awcms_channel_accounts_permissions.sql`                   |
-| 233 | `sql/320_awcms_channel_accounts_integrity_guards.sql`              |
+| 231 | `sql/316_awcms_hr_commission_intake.sql`                           |
+| 232 | `sql/317_awcms_hr_commission_intake_permissions.sql`               |
+| 233 | `sql/318_awcms_channel_accounts_schema.sql`                        |
+| 234 | `sql/319_awcms_channel_accounts_permissions.sql`                   |
+| 235 | `sql/320_awcms_channel_accounts_integrity_guards.sql`              |
 
 ### Tables & Row-Level Security
 
@@ -376,6 +378,8 @@
 | `awcms_hr_attendance_events`                   | `sql/198_awcms_hr_attendance_schema.sql`                   | yes | yes   |
 | `awcms_hr_attendance_location_evidence`        | `sql/306_awcms_hr_geolocation_evidence.sql`                | yes | yes   |
 | `awcms_hr_commission_accruals`                 | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
+| `awcms_hr_commission_intake_settings`          | `sql/316_awcms_hr_commission_intake.sql`                   | yes | yes   |
+| `awcms_hr_commission_intents`                  | `sql/316_awcms_hr_commission_intake.sql`                   | yes | yes   |
 | `awcms_hr_commission_rules`                    | `sql/182_awcms_hr_commission_rules_schema.sql`             | yes | yes   |
 | `awcms_hr_commission_transitions`              | `sql/188_awcms_hr_commission_accruals_schema.sql`          | yes | yes   |
 | `awcms_hr_employment_terms`                    | `sql/176_awcms_hr_workforce_schema.sql`                    | yes | yes   |
@@ -532,16 +536,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 571        |
+| `(root)`      | 572        |
 | `e2e`         | 26         |
-| `integration` | 154        |
+| `integration` | 156        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 480   |
+| `/api/v1/**`    | 482   |
 | `/admin/**`     | 81    |
 | publik / anonim | 31    |
 

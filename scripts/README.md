@@ -108,6 +108,7 @@ scheduled, or by a specific CI workflow.
 | `family:conformance:check`                | `family-conformance-check.ts`                  | ✅   |
 | `form-drafts:purge`                       | `form-draft-purge.ts`                          | —    |
 | `graph:artifacts:check`                   | `graph-artifacts-check.ts`                     | —    |
+| `hr-commission:intents:post`              | `hr-commission-intents-post.ts`                | —    |
 | `i18n:catalog:check`                      | `i18n-catalog-check.ts`                        | ✅   |
 | `i18n:compile`                            | `i18n-compile.ts`                              | —    |
 | `i18n:screens:check`                      | `i18n-screen-coverage-check.ts`                | ✅   |
