@@ -1678,6 +1678,222 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect((await read()).status).toBe(404);
     });
 
+    /** The API refuses an assignment on a scoped account to someone outside the scope; the fixture writes it directly. */
+    async function assignDirect(
+      accountId: string,
+      tenantUserId: string,
+      kind: string
+    ) {
+      await admin()`
+        INSERT INTO awcms_channel_account_assignments
+          (tenant_id, account_id, tenant_user_id, kind)
+        VALUES (${env.tenantId}, ${accountId}, ${tenantUserId}, ${kind})
+      `;
+    }
+
+    test("#1215 M1/L1: holding one business scope does not take the administrator's break-glass away, and an unconfined one still has it", async () => {
+      if (!handlerReady) return;
+
+      const officeA = await seedOffice("m1-a");
+      const officeB = await seedOffice("m1-b");
+      const opB = await seedUser(env.tenantId, "m1-b", OPERATOR_KEYS);
+
+      await holdScope(opB.tenantUserId, officeB);
+
+      const connection = () =>
+        seedConnection({
+          state: "active",
+          officeId: officeB,
+          connectedBy: opB.tenantUserId
+        });
+      const unconfined = await connection();
+      const guarded = await connection();
+      const idsFor = async (token: string) =>
+        (
+          await call<{ id: string }[]>(listConnections, {
+            path: `${BASE}/connections`,
+            token
+          })
+        ).body.data!.map((c) => c.id);
+
+      // Someone else owns the only account, so only break-glass can reach it.
+      for (const id of [unconfined, guarded]) {
+        const account = await seedBoundAccount(id, `m1-${id}`, {
+          officeId: officeB
+        });
+
+        await assignDirect(account, opB.tenantUserId, "owner");
+      }
+
+      // L1, the "not confined" side: the owner holds no scope at all.
+      expect((await idsFor(env.token)).sort()).toEqual(
+        [unconfined, guarded].sort()
+      );
+      expect((await revoke(unconfined, env.token)).status).toBe(200);
+
+      // M1: now the owner is given scope A (and nothing else). Scope B's
+      // connection stays reachable: break-glass is decided by the chokepoint on
+      // the tenant-level permission, not by the existence of a scope row.
+      await holdScope(env.ownerTenantUserId, officeA);
+
+      expect((await idsFor(env.token)).sort()).toEqual(
+        [unconfined, guarded].sort()
+      );
+      expect((await revoke(guarded, env.token)).status).toBe(200);
+      expect(await grantState(guarded)).toBe("revoked");
+    });
+
+    test("#1215 M2: a colleague of the same scope cannot borrow the token of a connection whose accounts are someone else's", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("m2-office");
+      const first = await seedUser(env.tenantId, "m2-first", OPERATOR_KEYS);
+      const second = await seedUser(env.tenantId, "m2-second", OPERATOR_KEYS);
+
+      await holdScope(first.tenantUserId, office);
+      await holdScope(second.tenantUserId, office);
+
+      const connection = await seedConnection({
+        state: "active",
+        officeId: office,
+        connectedBy: first.tenantUserId
+      });
+      const bound = await seedBoundAccount(connection, "m2-bound", {
+        officeId: office
+      });
+
+      await assignDirect(bound, first.tenantUserId, "owner");
+
+      const withdrawn = (await admin()`
+        SELECT count(*)::int AS n FROM awcms_channel_accounts
+        WHERE connection_id = ${connection}
+      `) as { n: number }[];
+
+      // The second holder of the scope shares it, but is not an owner of the
+      // account bound to the connection: refused like an unknown connection.
+      const borrowed = await bind(
+        second.token,
+        facebookPage("m2-borrow", connection, office)
+      );
+      const unknown = await bind(
+        second.token,
+        facebookPage("m2-borrow", crypto.randomUUID(), office)
+      );
+
+      expect(borrowed.status).toBe(422);
+      expect(borrowed.body).toEqual(unknown.body);
+
+      const after = (await admin()`
+        SELECT count(*)::int AS n FROM awcms_channel_accounts
+        WHERE connection_id = ${connection}
+      `) as { n: number }[];
+
+      expect(after[0]!.n).toBe(withdrawn[0]!.n);
+
+      // The owner of the bound account may extend its own connection; so may the
+      // tenant administrator.
+      expect(
+        (await bind(first.token, facebookPage("m2-mine", connection, office)))
+          .status
+      ).toBe(201);
+      expect(
+        (await bind(env.token, facebookPage("m2-admin", connection, null)))
+          .status
+      ).toBe(201);
+    });
+
+    test("#1215 M3: one GET /connections writes a decision-log row count that does not grow with the connections", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("m3-office");
+      const operator = await seedUser(env.tenantId, "m3-op", OPERATOR_KEYS);
+
+      await holdScope(operator.tenantUserId, office);
+
+      const rowsWrittenByOneList = async () => {
+        const count = async () =>
+          (
+            (await admin()`
+              SELECT count(*)::int AS n FROM awcms_abac_decision_logs
+              WHERE tenant_id = ${env.tenantId}
+            `) as { n: number }[]
+          )[0]!.n;
+        const before = await count();
+        const list = await call<{ id: string }[]>(listConnections, {
+          path: `${BASE}/connections`,
+          token: operator.token
+        });
+
+        expect(list.status).toBe(200);
+
+        return {
+          rows: (await count()) - before,
+          listed: list.body.data!.length
+        };
+      };
+      const addScopedConnections = async (howMany: number, tag: string) => {
+        for (let i = 0; i < howMany; i += 1) {
+          const id = await seedConnection({
+            state: "active",
+            officeId: office
+          });
+
+          await seedBoundAccount(id, `m3-${tag}-${i}`, { officeId: office });
+
+          // Not visible through any account (none): reached only through the
+          // per-connection break-glass check, the path that used to log per row.
+          await seedConnection({ state: "active", officeId: office });
+        }
+      };
+
+      await addScopedConnections(2, "few");
+
+      const few = await rowsWrittenByOneList();
+
+      await addScopedConnections(10, "many");
+
+      const many = await rowsWrittenByOneList();
+
+      expect(few.listed).toBe(4);
+      expect(many.listed).toBe(24);
+      expect(many.rows).toBe(few.rows);
+      expect(many.rows).toBeLessThanOrEqual(6);
+    });
+
+    test("#1215 L2: a connection of another provider answers the same as one that does not exist", async () => {
+      if (!handlerReady) return;
+
+      const connection = await seedConnection({ state: "active" });
+      const mismatched = await call<Account>(createAccount, {
+        method: "POST",
+        path: `${BASE}/accounts`,
+        body: {
+          provider: "instagram",
+          accountKind: "professional_account",
+          authMode: "oauth2",
+          externalId: "l2-mismatch",
+          displayName: "Page l2",
+          connectionId: connection
+        }
+      });
+      const unknown = await call<Account>(createAccount, {
+        method: "POST",
+        path: `${BASE}/accounts`,
+        body: {
+          provider: "instagram",
+          accountKind: "professional_account",
+          authMode: "oauth2",
+          externalId: "l2-mismatch",
+          displayName: "Page l2",
+          connectionId: crypto.randomUUID()
+        }
+      });
+
+      expect(mismatched.status).toBe(422);
+      expect(mismatched.body).toEqual(unknown.body);
+      expect(mismatched.body.error?.code).toBe("CONNECTION_NOT_FOUND");
+    });
+
     test("M-b: a credential written under an upper-case tenant header rekeys under the canonical id", async () => {
       if (!handlerReady) return;
 

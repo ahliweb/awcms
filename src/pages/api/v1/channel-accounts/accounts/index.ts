@@ -137,9 +137,18 @@ export const POST = defineTenantRoute<Prepared>({
         const result = await createAccount(tx, tenantId, actor, prepared.input);
 
         if (result.outcome === "refused") {
+          // A connection that exists but is of another provider answers exactly
+          // like one that does not exist (audit L2): otherwise the pair of codes
+          // tells a caller which ids name a real connection.
+          const code =
+            result.code === "CONNECTION_MISMATCH" &&
+            prepared.input.authMode === "oauth2"
+              ? "CONNECTION_NOT_FOUND"
+              : result.code;
+
           return fail(
-            result.code === "ACCOUNT_ALREADY_REGISTERED" ? 409 : 422,
-            result.code,
+            code === "ACCOUNT_ALREADY_REGISTERED" ? 409 : 422,
+            code,
             result.code === "ACCOUNT_ALREADY_REGISTERED"
               ? "This external account is already registered."
               : "The account cannot be registered as requested."

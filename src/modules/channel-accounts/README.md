@@ -46,7 +46,7 @@ Every mutation except the OAuth start and callback requires `Idempotency-Key` (a
 
 ## Per-account access
 
-Three layers, all default-deny: the tenant-wide permission; the **assignment** gate (an account with assignees is visible and operable only to them at the required kind, plus holders of `assignments.assign`); and **business-scope ABAC** (an account bound to a scope requires the caller to hold it, re-evaluated through the same chokepoint, so a deny policy and the decision log both apply).
+Three layers, all default-deny: the tenant-wide permission; the **assignment** gate (an account with assignees is visible and operable only to them at the required kind, plus holders of `assignments.assign`); and **business-scope ABAC** (an account bound to a scope requires the caller to hold it, re-evaluated through the same chokepoint, so a deny policy and the decision log both apply). Connection break-glass belongs to the holder of the connection's scope and to the tenant administrator (`assignments.assign` as decided by the chokepoint, not derived from holding a scope; ADR-0148 amendment, #1215).
 
 ## OAuth
 

@@ -20,6 +20,10 @@ import {
   readJsonBody
 } from "../../../lib/security/request-body-limit";
 import { authorizeInTransaction } from "../../identity-access/application/access-guard";
+import {
+  createAuthorizationReadCache,
+  type AuthorizationReadCache
+} from "../../identity-access/application/authorization-read-cache";
 import type { ConnectionView } from "./connection-directory";
 import { officeScopeHierarchyPortAdapter } from "../../tenant-admin/application/office-scope-hierarchy-port-adapter";
 import type { AccessRequest } from "../../identity-access/domain/access-control";
@@ -280,6 +284,25 @@ function memoised(
 }
 
 /**
+ * One authorization read cache per request (ADR-0148 audit M3): every decision
+ * below re-reads the same principal-scoped inputs (session, grants, scope facts,
+ * policies), and a list asks several decisions in one request. Keyed by the
+ * `Request` so it dies with it; it memoises reads, never a decision.
+ */
+const readCaches = new WeakMap<Request, AuthorizationReadCache>();
+
+function readCacheFor(context: AccountRouteContext): AuthorizationReadCache {
+  let cache = readCaches.get(context.request);
+
+  if (!cache) {
+    cache = createAuthorizationReadCache();
+    readCaches.set(context.request, cache);
+  }
+
+  return cache;
+}
+
+/**
  * Whether the caller may see EVERY account regardless of assignments: the
  * holder of `assignments.assign`, decided by the access CHOKEPOINT (so an ABAC
  * deny policy on that action closes the bypass), not read from the raw role
@@ -299,7 +322,8 @@ export function canSeeAllAccounts(
         resourceType: "channel_account"
       },
       {
-        clientIp: resolveClientIp(context.request, context.clientAddress)
+        clientIp: resolveClientIp(context.request, context.clientAddress),
+        readCache: readCacheFor(context)
       }
     );
 
@@ -324,16 +348,21 @@ type AccountGuard = Pick<
 /**
  * Whether the caller holds `scope`, re-evaluated through the SAME chokepoint
  * with the route's own guard, so a deny policy and the decision log both apply.
+ *
+ * The question is "does the caller hold this SCOPE", so it is decided per scope
+ * and carries NO resource id: with the id in the memo key a list wrote one
+ * decision-log row per connection or account (ADR-0148 audit M3). A resource
+ * TYPE is kept so a policy can still tell the questions apart.
  */
 export function scopeCoveredFor(
   context: AccountRouteContext,
   guard: AccountGuard,
   scope: ScopeRef,
-  resource: { type: string; id?: string } = { type: "channel_account" }
+  resource: { type: string } = { type: "channel_account" }
 ): Promise<boolean> {
   return memoised(
     context,
-    `scope:${guard.activityCode}.${guard.action}:${scope.type}:${scope.id}:${resource.type}:${resource.id ?? ""}`,
+    `scope:${guard.activityCode}.${guard.action}:${scope.type}:${scope.id}:${resource.type}`,
     () => decideScope(context, guard, scope, resource)
   );
 }
@@ -342,7 +371,7 @@ async function decideScope(
   context: AccountRouteContext,
   guard: AccountGuard,
   scope: ScopeRef,
-  resource: { type: string; id?: string }
+  resource: { type: string }
 ): Promise<boolean> {
   const decision = await authorizeInTransaction(
     context.tx,
@@ -352,7 +381,6 @@ async function decideScope(
     {
       ...guard,
       resourceType: resource.type,
-      ...(resource.id ? { resourceId: resource.id } : {}),
       resourceAttributes: {
         requiredScopeType: scope.type,
         requiredScopeId: scope.id
@@ -360,7 +388,8 @@ async function decideScope(
     },
     {
       clientIp: resolveClientIp(context.request, context.clientAddress),
-      hierarchyPort: HIERARCHY_PORT
+      hierarchyPort: HIERARCHY_PORT,
+      readCache: readCacheFor(context)
     }
   );
 
@@ -491,10 +520,12 @@ export async function connectionAccountAccess(
  * can be used to veto a revocation (ADR-0148 audit H1):
  *
  *   - whoever holds the connection's business scope (a scoped connection);
- *   - the tenant administrator: not confined to business scopes, and holding
- *     `assignments.assign` (decided by the chokepoint). An unconfined holder of
- *     `accounts.revoke` alone is NOT enough: that would let them disconnect
- *     accounts they may not even see (the confused-deputy case of review M1).
+ *   - the tenant administrator: the holder of `assignments.assign`, a
+ *     tenant-level permission decided by the chokepoint. Holding a business
+ *     scope does NOT take it away (audit M1: the old "scope-confined" test made
+ *     an owner who was given one scope lose authority over every other
+ *     connection). A holder of `accounts.revoke` alone is NOT enough: that
+ *     would let them disconnect accounts they may not even see (review M1).
  */
 export async function connectionBreakGlass(
   context: AccountRouteContext,
@@ -504,17 +535,13 @@ export async function connectionBreakGlass(
   if (
     connection.businessScope &&
     (await scopeCoveredFor(context, guard, connection.businessScope, {
-      type: "channel_connection",
-      id: connection.id
+      type: "channel_connection"
     }))
   ) {
     return true;
   }
 
-  return (
-    !(await callerIsScopeConfined(context)) &&
-    (await canSeeAllAccounts(context))
-  );
+  return canSeeAllAccounts(context);
 }
 
 const isCreator = (context: AccountRouteContext, connection: ConnectionView) =>
@@ -575,11 +602,14 @@ export async function mayRevokeConnection(
 
 /**
  * Binding an account to an existing connection lends it that connection's
- * token, so it is an act on the CONNECTION: the caller must hold the
+ * token, so it is an act on the connection: the caller must hold the
  * connection's business scope, or (for a tenant-wide connection) be its creator
- * or an unconfined caller, and must have `owner` authority over every account
- * already bound unless they hold break-glass authority. A connection the caller
- * has no authority over answers like one that does not exist. Null = go on.
+ * or an unconfined caller, AND must have `owner` authority over every account
+ * already bound. Only the tenant administrator (`assignments.assign`) skips the
+ * owner check: holding the connection's scope is NOT enough, or a colleague of
+ * the same scope could borrow the token of an account assigned to someone else
+ * (audit M2). A connection the caller has no authority over answers like one
+ * that does not exist. Null = go on.
  */
 export async function authorizeConnectionBinding(
   context: AccountRouteContext,
@@ -595,11 +625,13 @@ export async function authorizeConnectionBinding(
       "The account cannot be registered as requested."
     );
 
-  if (await connectionBreakGlass(context, guard, connection)) return null;
+  if (await canSeeAllAccounts(context)) return null;
 
-  const eligible =
-    !connection.businessScope &&
-    (isCreator(context, connection) || !(await callerIsScopeConfined(context)));
+  const eligible = connection.businessScope
+    ? await scopeCoveredFor(context, guard, connection.businessScope, {
+        type: "channel_connection"
+      })
+    : isCreator(context, connection) || !(await callerIsScopeConfined(context));
 
   if (!eligible) return refuse();
 
@@ -653,8 +685,7 @@ export async function loadAuthorizedAccount(
   if (
     account.businessScope &&
     !(await scopeCoveredFor(context, guard, account.businessScope, {
-      type: "channel_account",
-      id: accountId
+      type: "channel_account"
     }))
   ) {
     return { denied: accountNotFound() };
