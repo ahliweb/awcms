@@ -45,7 +45,8 @@ function cellOf(raw: string): MatrixCell {
 
 function documentedMatrix(): Map<string, MatrixCell[]> {
   const start = DOC.indexOf("## 3. Provider capability matrix v1");
-  const end = DOC.indexOf("## 4.", start);
+  const subsection = DOC.indexOf("\n### 3.1", start);
+  const end = subsection !== -1 ? subsection : DOC.indexOf("## 4.", start);
   const rows = new Map<string, MatrixCell[]>();
 
   for (const line of DOC.slice(start, end).split("\n")) {
