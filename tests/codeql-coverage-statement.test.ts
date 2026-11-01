@@ -124,3 +124,30 @@ describe("codeql.yml — the surface it claims to cover is real", () => {
     }
   });
 });
+
+describe("codeql.yml — the one excluded folder", () => {
+  const config = readFileSync(
+    path.join(ROOT, ".github/codeql/codeql-config.yml"),
+    "utf8"
+  );
+  const ignored = [...config.matchAll(/^\s+-\s+(\S+)\s*$/gm)].map(
+    (match) => match[1]
+  );
+
+  test("every analysed language loads the config file", () => {
+    expect(workflow).toContain(
+      "config-file: ./.github/codeql/codeql-config.yml"
+    );
+  });
+
+  test("only reference-only `design/` is excluded, never shipped code", () => {
+    // Widening this list is how a scan quietly stops covering `src/`. The
+    // assertion pins the whole list rather than checking for `src` alone, so
+    // adding `scripts` or `tests` fails here too and has to be argued for.
+    expect(ignored).toEqual(["design"]);
+  });
+
+  test("the coverage count excludes the same folder it says it does not scan", () => {
+    expect(coverageStep()).toContain("':!design'");
+  });
+});
