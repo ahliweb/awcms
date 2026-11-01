@@ -57,7 +57,8 @@ import {
   getIntakeSetting,
   listIntakeExceptions,
   parseExceptionCursor,
-  setIntakeEnabled
+  setIntakeEnabled,
+  summarizeIntake
 } from "../../src/modules/hr-commission/application/hr-commission-intake-store";
 import { createCommissionIntakePort } from "../../src/modules/hr-commission/application/hr-commission-intake-port-adapter";
 import {
@@ -326,7 +327,7 @@ suite("hr_commission intake queue and poster (Issue #1189)", () => {
     test("RLS is ENABLED and FORCED with USING and WITH CHECK on both new tables", async () => {
       const found = (await getAdminSql()`
         SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
-               bool_and(p.polqual IS NOT NULL AND p.polwithcheck IS NOT NULL) AS both
+               bool_and(p.polqual IS NOT NULL AND (p.polcmd = 'r' OR p.polwithcheck IS NOT NULL)) AS both
         FROM pg_class c
         JOIN pg_policy p ON p.polrelid = c.oid
         WHERE c.relname IN ('awcms_hr_commission_intents', 'awcms_hr_commission_intake_settings')
@@ -1201,24 +1202,29 @@ suite("hr_commission intake queue and poster (Issue #1189)", () => {
       if (!workerRoleActivated) return;
 
       await submitVoidAsWorker(TENANT_A, reversal(employment), manager);
-      await submitAsWorker(TENANT_A, sale(employment, "ORD-1"));
 
       const first = await post(TENANT_A);
 
       expect(first.deferred).toBe(1);
-      expect(first.posted).toBe(1);
+      expect(first.posted).toBe(0);
+
+      // Waiting is not an error (L7, Issue #1211): the deferral is counted
+      // apart from `attempts`, and the claim's attempt is given back.
       expect(
         (await getAdminSql()`
-          SELECT status FROM awcms_hr_commission_accruals WHERE tenant_id = ${TENANT_A}
-        `) as { status: string }[]
-      ).toEqual([{ status: "pending" }]);
+          SELECT attempts, deferrals FROM awcms_hr_commission_intents
+          WHERE tenant_id = ${TENANT_A} AND kind = 'void'
+        `) as { attempts: number; deferrals: number }[]
+      ).toEqual([{ attempts: 0, deferrals: 1 }]);
 
+      await submitAsWorker(TENANT_A, sale(employment, "ORD-1"));
       await getAdminSql()`
         UPDATE awcms_hr_commission_intents SET next_attempt_at = now() - interval '1 second'
         WHERE tenant_id = ${TENANT_A} AND status = 'pending'
       `;
 
-      expect((await post(TENANT_A)).posted).toBe(1);
+      // Accrue is claimed before the void in the same batch, so both settle.
+      expect((await post(TENANT_A)).posted).toBe(2);
       expect(
         (await getAdminSql()`
           SELECT status FROM awcms_hr_commission_accruals WHERE tenant_id = ${TENANT_A}
@@ -1830,6 +1836,170 @@ suite("hr_commission intake queue and poster (Issue #1189)", () => {
       );
 
       expect(answered[0]!.n).toBe(1);
+    });
+  });
+
+  describe("live-row cap, fair claims and idle tenants (Issue #1211)", () => {
+    const CAP = 10_000;
+
+    /** Fills a tenant's live queue to the cap in one statement, bypassing the insert guard as a superuser fixture. */
+    async function fillLive(tenantId: string, employmentId: string, n: number) {
+      const admin = getAdminSql();
+
+      await admin`ALTER TABLE awcms_hr_commission_intents DISABLE TRIGGER awcms_hr_commission_intents_guard_insert`;
+
+      try {
+        await admin`
+          INSERT INTO awcms_hr_commission_intents
+            (tenant_id, kind, source_type, source_ref, source_line, employment_id,
+             rule_key, base_amount, currency_code, occurred_at, occurred_on, request_digest)
+          SELECT ${tenantId}, 'accrue', 'sale_line', 'FILL-' || g, '1', ${employmentId},
+                 'upsell', 1, 'XTS', now(), current_date, encode(sha256(('fill-' || g)::bytea), 'hex')
+          FROM generate_series(1, ${n}) AS g
+        `;
+      } finally {
+        await admin`ALTER TABLE awcms_hr_commission_intents ENABLE TRIGGER awcms_hr_commission_intents_guard_insert`;
+      }
+    }
+
+    test("a tenant's live queue is bounded; a replay still answers duplicate, and room returns once rows settle", async () => {
+      if (!workerRoleActivated) return;
+
+      expect(
+        (await submitAsWorker(TENANT_A, sale(employment, "ORD-1"))).outcome
+      ).toBe("queued");
+      await fillLive(TENANT_A, employment, CAP - 1);
+
+      expect(
+        (await submitAsWorker(TENANT_A, sale(employment, "ORD-3"))).outcome
+      ).toBe("full");
+      expect(
+        (await submitAsWorker(TENANT_A, sale(employment, "ORD-1"))).outcome
+      ).toBe("duplicate");
+      expect(await count("awcms_hr_commission_intents", TENANT_A)).toBe(CAP);
+
+      // Settling a row frees room: the oldest due rows are claimed first.
+      await post(TENANT_A, { claimBatch: 5, maxPasses: 1 });
+
+      expect(
+        (await submitAsWorker(TENANT_A, sale(employment, "ORD-3"))).outcome
+      ).toBe("queued");
+    }, 60_000);
+
+    test("a flood in one tenant does not consume another tenant's room", async () => {
+      if (!workerRoleActivated) return;
+
+      const actorB = await seedTenantUser(TENANT_B);
+      const employmentB = await seedEmployment(TENANT_B, actorB);
+
+      await publishedRule(TENANT_B);
+      await inTenant(TENANT_B, (tx) =>
+        setIntakeEnabled(tx, TENANT_B, true, actorB, actorB)
+      );
+
+      await fillLive(TENANT_A, employment, CAP);
+      expect(
+        (await submitAsWorker(TENANT_A, sale(employment, "ORD-2"))).outcome
+      ).toBe("full");
+      expect(
+        (
+          await asWorker(TENANT_B, (tx) =>
+            port.submitAccrual(tx, TENANT_B, null, sale(employmentB, "ORD-1"))
+          )
+        ).outcome
+      ).toBe("queued");
+    }, 60_000);
+
+    test("a tenant whose module is disabled gets `disabled`, and nothing is written", async () => {
+      if (!workerRoleActivated) return;
+
+      await getAdminSql()`
+        INSERT INTO awcms_modules (module_key, module_name)
+        VALUES ('hr_commission', 'HR Commission')
+        ON CONFLICT (module_key) DO NOTHING
+      `;
+      await getAdminSql()`
+        INSERT INTO awcms_tenant_modules (tenant_id, module_key, enabled)
+        VALUES (${TENANT_A}, 'hr_commission', false)
+        ON CONFLICT (tenant_id, module_key) DO UPDATE SET enabled = false
+      `;
+
+      expect(
+        (await submitAsWorker(TENANT_A, sale(employment, "ORD-1"))).outcome
+      ).toBe("disabled");
+      expect(await count("awcms_hr_commission_intents", TENANT_A)).toBe(0);
+    });
+
+    test("claims are fair across employments: one employment's backlog does not starve another's row", async () => {
+      if (!workerRoleActivated) return;
+
+      const other = await seedEmployment(TENANT_A);
+
+      for (const ref of ["F-1", "F-2", "F-3", "F-4"]) {
+        await submitAsWorker(TENANT_A, sale(employment, ref));
+      }
+
+      await submitAsWorker(TENANT_A, sale(other, "G-1"));
+
+      const run = await post(TENANT_A, { claimBatch: 2, maxPasses: 1 });
+
+      expect(run.claimed).toBe(2);
+
+      const settled = (await getAdminSql()`
+        SELECT source_ref FROM awcms_hr_commission_intents
+        WHERE tenant_id = ${TENANT_A} AND status <> 'pending'
+        ORDER BY source_ref
+      `) as { source_ref: string }[];
+
+      expect(settled.map((row) => row.source_ref)).toContain("G-1");
+    });
+
+    test("the job skips idle tenants and the discovery function names only tenants with work or the switch", async () => {
+      if (!workerRoleActivated) return;
+
+      const ids = async () =>
+        (
+          (await getRuntimeSql()`
+            SELECT tenant_id FROM awcms_hr_commission_intake_non_idle_tenants()
+          `) as { tenant_id: string }[]
+        ).map((row) => row.tenant_id);
+
+      expect(await ids()).toEqual([TENANT_A]);
+
+      const summary = await runIntakePosterJob(getRuntimeSql(), {});
+
+      expect(summary.tenantsSkipped).toBeGreaterThanOrEqual(1);
+      expect(summary.tenantsErrored).toBe(0);
+    });
+
+    test("the dry-run retention count never counts live work (L4)", async () => {
+      if (!workerRoleActivated) return;
+
+      await submitAsWorker(TENANT_A, sale(employment, "ORD-1"));
+
+      const counted = (await asWorker(
+        TENANT_A,
+        (tx) => tx`
+          SELECT awcms_hr_commission_lifecycle_eligible_count(
+            'awcms_hr_commission_intents', ${TENANT_A}, now() + interval '1 day'
+          ) AS n
+        `
+      )) as Count[];
+
+      expect(counted).toEqual([{ n: 0 }]);
+    });
+
+    test("the exceptions summary counts are capped", async () => {
+      if (!workerRoleActivated) return;
+
+      await submitAsWorker(TENANT_A, sale(employment, "ORD-1"));
+      await submitAsWorker(TENANT_A, sale(employment, "ORD-2"));
+
+      const summary = await inTenant(TENANT_A, (tx) =>
+        summarizeIntake(tx, TENANT_A, 1)
+      );
+
+      expect(summary.counts.pending).toBe(1);
     });
   });
 

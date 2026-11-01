@@ -48,6 +48,20 @@ export const INTAKE_LEASE_SECONDS = 300;
 /** Rows one claim takes per tenant. */
 export const INTAKE_CLAIM_BATCH = 50;
 
+/**
+ * Maximum live (`pending` + `posting`) rows a tenant may hold in the intake
+ * queue at once (Issue #1211). Enforced at insert time by the SECURITY DEFINER
+ * insert guard trigger; further inserts return `{ outcome: "full" }`.
+ */
+export const INTAKE_MAX_LIVE_PER_TENANT = 10_000;
+
+/**
+ * Per-status count ceiling for the interactive `summarizeIntake` query on the
+ * exceptions endpoint (Issue #1211), so the summary never performs an unbounded
+ * table scan.
+ */
+export const INTAKE_SUMMARY_COUNT_CAP = 10_000;
+
 /** Retention of terminal rows (ADR-0147: default 30 days, floor 7, ceiling 90). */
 export const INTAKE_RETENTION_MIN_DAYS = 7;
 export const INTAKE_RETENTION_DEFAULT_DAYS = 30;
