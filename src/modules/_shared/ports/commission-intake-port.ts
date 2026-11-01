@@ -44,8 +44,12 @@
  *   - `input_invalid`: a malformed request, or an employment id that does not
  *     exist in the tenant.
  *   - `actor_required`: a `void` with no person (every status edge stamps one).
- *   - `disabled`: the tenant has not switched commission intake on. Nothing is
- *     written. Default-deny.
+ *   - `disabled`: the tenant has not switched commission intake on, or the
+ *     `hr_commission` module is disabled for the tenant. Nothing is written.
+ *     Default-deny.
+ *   - `full`: the tenant's live intake queue (`pending` + `posting`) has reached
+ *     its per-tenant cap (`INTAKE_MAX_LIVE_PER_TENANT`, Issue #1211). Nothing is
+ *     written and the caller's transaction stays usable.
  *
  * ## Authorization is registration plus the switch, not a session
  *
@@ -58,7 +62,7 @@
  *
  * `tx` is the caller's tenant-scoped transaction. Plain database writes only, no
  * provider call (ADR-0006). The port's only write is the single INSERT, and it
- * runs in a savepoint: after `input_invalid` or `disabled` the caller's
+ * runs in a savepoint: after `input_invalid`, `disabled` or `full` the caller's
  * transaction is still usable, and a result other than `queued`/`duplicate`
  * means NOTHING was written (the caller may carry on, or throw to undo its own
  * writes). The port reads the tenant switch first; it never reads the ledger. Money is a decimal STRING (never a JS number).
@@ -69,7 +73,9 @@ import type {
 } from "./commission-accrual-port";
 
 export type CommissionIntakeOutcome =
-  | { outcome: "queued" | "duplicate" | "actor_required" | "disabled" }
+  | {
+      outcome: "queued" | "duplicate" | "actor_required" | "disabled" | "full";
+    }
   | { outcome: "input_invalid"; message: string };
 
 export type CommissionIntakePort = {

@@ -41,6 +41,7 @@ import {
 } from "../domain/hr-commission-accrual-validation";
 import {
   INTAKE_CORRELATION_PATTERN,
+  INTAKE_SUMMARY_COUNT_CAP,
   intakeRequestDigest,
   maskIdentifier,
   maskUuid,
@@ -266,6 +267,10 @@ async function insertIntent(
       return { outcome: "disabled" };
     }
 
+    if (code === "54000") {
+      return { outcome: "full" };
+    }
+
     throw error;
   }
 
@@ -433,8 +438,13 @@ export function parseExceptionCursor(cursor: string): KeysetCursor | null {
 
 export async function summarizeIntake(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  countCap: number = INTAKE_SUMMARY_COUNT_CAP
 ): Promise<IntakeSummary> {
+  const cap = Math.max(
+    1,
+    Math.min(INTAKE_SUMMARY_COUNT_CAP, Math.floor(countCap))
+  );
   const counts: Record<IntakeStatus, number> = {
     pending: 0,
     posting: 0,
@@ -443,10 +453,19 @@ export async function summarizeIntake(
     failed: 0
   };
   const grouped = (await tx`
-    SELECT status, count(*)::int AS count
-    FROM awcms_hr_commission_intents
-    WHERE tenant_id = ${tenantId}
-    GROUP BY status
+    SELECT
+      s.status::text AS status,
+      (
+        SELECT count(*)::int
+        FROM (
+          SELECT 1
+          FROM awcms_hr_commission_intents AS i
+          WHERE i.tenant_id = ${tenantId}
+            AND i.status = s.status
+          LIMIT ${cap}
+        ) AS bounded
+      ) AS count
+    FROM unnest(ARRAY['pending', 'posting', 'posted', 'refused', 'failed']::text[]) AS s(status)
   `) as { status: IntakeStatus; count: number }[];
 
   for (const row of grouped) {
@@ -454,9 +473,24 @@ export async function summarizeIntake(
   }
 
   const oldest = (await tx`
-    SELECT extract(epoch FROM (now() - min(created_at)))::float8 AS age
-    FROM awcms_hr_commission_intents
-    WHERE tenant_id = ${tenantId} AND status IN ('pending', 'posting')
+    SELECT extract(epoch FROM (now() - min(oldest_at)))::float8 AS age
+    FROM (
+      (
+        SELECT created_at AS oldest_at
+        FROM awcms_hr_commission_intents
+        WHERE tenant_id = ${tenantId} AND status = 'pending'
+        ORDER BY created_at ASC
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT created_at AS oldest_at
+        FROM awcms_hr_commission_intents
+        WHERE tenant_id = ${tenantId} AND status = 'posting'
+        ORDER BY created_at ASC
+        LIMIT 1
+      )
+    ) AS live_oldest
   `) as { age: number | null }[];
   const age = oldest[0]?.age;
 

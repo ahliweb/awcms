@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 34    |
-| Migrations                          | 235   |
+| Migrations                          | 236   |
 | `awcms_*` tables                    | 232   |
 | Tables with `FORCE` RLS             | 214   |
 | RLS-free tables (global, by design) | 18    |
@@ -294,6 +294,7 @@
 | 233 | `sql/318_awcms_channel_accounts_schema.sql`                        |
 | 234 | `sql/319_awcms_channel_accounts_permissions.sql`                   |
 | 235 | `sql/320_awcms_channel_accounts_integrity_guards.sql`              |
+| 236 | `sql/321_awcms_hr_commission_intake_cap_and_fairness.sql`          |
 
 ### Tables & Row-Level Security
 

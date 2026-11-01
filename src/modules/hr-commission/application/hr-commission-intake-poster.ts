@@ -98,6 +98,8 @@ export type PosterOptions = {
   /** Retention of `refused` and `failed` rows (default and ceiling 90); clamped the same way. */
   exceptionRetentionDays?: number;
   maxPasses?: number;
+  /** When true, skip `purgeTerminalIntents` (used by multi-round fair job scheduling on pass > 0). */
+  skipPurge?: boolean;
   correlationId?: string;
   /** Count what would happen; write nothing. */
   dryRun?: boolean;
@@ -156,37 +158,61 @@ type ClaimedRow = {
   claimed_by_tenant_user_id: string | null;
   correlation_id: string | null;
   attempts: number;
+  deferrals: number;
   created_at: Date | string;
   age_seconds: number;
+  kind_turn?: number;
+  kind_rank?: number;
 };
 
 const CLAIMED_COLUMNS = `i.id, i.kind, i.source_type, i.source_ref, i.source_line,
   i.employment_id, i.rule_key, i.base_amount::text AS base_amount, i.units,
   i.currency_code::text AS currency_code, i.occurred_at,
   to_char(i.occurred_on, 'YYYY-MM-DD') AS occurred_on, i.reason,
-  i.claimed_by_tenant_user_id, i.correlation_id, i.attempts, i.created_at,
+  i.claimed_by_tenant_user_id, i.correlation_id, i.attempts, i.deferrals, i.created_at,
   extract(epoch FROM (now() - i.created_at))::float8 AS age_seconds`;
 
 /**
  * Is the module switched on for the tenant (no row means on), and the intake
  * switch? Also returns the tenant's intake system actor, the ONLY identity this
  * poster ever stamps: the worker's own claim about who acted is not trusted.
+ * When skipped, also reports whether the tenant has any rows in the intake
+ * table so idle tenants skip purge and live-age transactions (Issue #1211).
  */
 async function gate(
   sql: Bun.SQL,
   tenantId: string
-): Promise<{ skipped: PosterTenantResult["skipped"]; actor: string | null }> {
+): Promise<{
+  skipped: PosterTenantResult["skipped"];
+  actor: string | null;
+  hasRows: boolean;
+}> {
   return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
+      const checkHasRows = async (): Promise<boolean> => {
+        const present = (await tx`
+          SELECT 1 AS present
+          FROM awcms_hr_commission_intents
+          WHERE tenant_id = ${tenantId}
+          LIMIT 1
+        `) as unknown[];
+
+        return present.length > 0;
+      };
+
       const module = (await tx`
         SELECT enabled FROM awcms_tenant_modules
         WHERE tenant_id = ${tenantId} AND module_key = ${HR_COMMISSION_MODULE_KEY}
       `) as { enabled: boolean }[];
 
       if (module[0] && module[0].enabled === false) {
-        return { skipped: "module_disabled" as const, actor: null };
+        return {
+          skipped: "module_disabled" as const,
+          actor: null,
+          hasRows: await checkHasRows()
+        };
       }
 
       const setting = (await tx`
@@ -205,20 +231,38 @@ async function gate(
       const row = setting[0];
 
       if (row?.commission_intake_enabled !== true) {
-        return { skipped: "intake_disabled" as const, actor: null };
+        return {
+          skipped: "intake_disabled" as const,
+          actor: null,
+          hasRows: await checkHasRows()
+        };
       }
 
       // The actor is re-validated every tick: a deactivated system actor stops
       // the queue (nothing is claimed) instead of stamping an inactive identity.
       return row.intake_actor_tenant_user_id && row.actor_active
-        ? { skipped: null, actor: row.intake_actor_tenant_user_id }
-        : { skipped: "actor_inactive" as const, actor: null };
+        ? {
+            skipped: null,
+            actor: row.intake_actor_tenant_user_id,
+            hasRows: true
+          }
+        : {
+            skipped: "actor_inactive" as const,
+            actor: null,
+            hasRows: await checkHasRows()
+          };
     },
     { workClass: "maintenance" }
   );
 }
 
-/** Settle poison first, then take the due rows. Returns what this poster now owns. */
+/**
+ * Settle poison first, then take the due rows in fair order across kinds and
+ * employments (Issue #1211): within each kind (`accrue`, `void`), rows are
+ * interleaved across `employment_id`, and `accrue` and `void` alternate turn by
+ * turn (`accrue` first in each pair so an accrual posts before its reversal).
+ * A flood of one kind or one employment cannot starve the others.
+ */
 async function claim(
   sql: Bun.SQL,
   tenantId: string,
@@ -253,16 +297,51 @@ async function claim(
       }
 
       const rows = (await tx`
-        WITH due AS (
-          SELECT id
+        WITH by_employment AS (
+          SELECT
+            id,
+            kind,
+            created_at,
+            row_number() OVER (
+              PARTITION BY kind, employment_id
+              ORDER BY created_at, id
+            ) AS emp_seq
           FROM awcms_hr_commission_intents
           WHERE tenant_id = ${tenantId}
             AND status IN ('pending', 'posting')
             AND next_attempt_at <= now()
             AND attempts < ${INTAKE_MAX_ATTEMPTS}
-          ORDER BY created_at, id
+        ),
+        ranked AS (
+          SELECT
+            id,
+            created_at,
+            row_number() OVER (
+              PARTITION BY kind
+              ORDER BY emp_seq, created_at, id
+            ) AS kind_turn,
+            CASE WHEN kind = 'accrue' THEN 0 ELSE 1 END AS kind_rank
+          FROM by_employment
+        ),
+        -- Pick the batch from the ranking alone, then lock ONLY those rows. The
+        -- ranking is never joined back to the whole table: right after a flood
+        -- the table statistics are stale, and a join planned on them rescans
+        -- the ranking per row.
+        picked AS MATERIALIZED (
+          SELECT id, kind_turn, kind_rank
+          FROM ranked
+          ORDER BY kind_turn, kind_rank, created_at, id
           LIMIT ${batch}
-          FOR UPDATE SKIP LOCKED
+        ),
+        due AS (
+          SELECT i.id, picked.kind_turn, picked.kind_rank
+          FROM picked
+          JOIN awcms_hr_commission_intents AS i ON i.id = picked.id
+          WHERE i.tenant_id = ${tenantId}
+            AND i.status IN ('pending', 'posting')
+            AND i.next_attempt_at <= now()
+            AND i.attempts < ${INTAKE_MAX_ATTEMPTS}
+          FOR UPDATE OF i SKIP LOCKED
         )
         UPDATE awcms_hr_commission_intents AS i
         SET status = 'posting',
@@ -270,12 +349,16 @@ async function claim(
             next_attempt_at = now() + make_interval(secs => ${leaseSeconds})
         FROM due
         WHERE i.id = due.id AND i.tenant_id = ${tenantId}
-        RETURNING ${tx.unsafe(CLAIMED_COLUMNS)}
+        RETURNING ${tx.unsafe(CLAIMED_COLUMNS)},
+                  due.kind_turn::int AS kind_turn,
+                  due.kind_rank::int AS kind_rank
       `) as ClaimedRow[];
 
-      // RETURNING has no order; a void must follow the accrue it reverses.
+      // Preserve the fair claim order (and accrue before void within each turn).
       rows.sort(
         (a, b) =>
+          (a.kind_turn ?? 0) - (b.kind_turn ?? 0) ||
+          (a.kind_rank ?? 0) - (b.kind_rank ?? 0) ||
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime() ||
           a.id.localeCompare(b.id)
       );
@@ -368,7 +451,9 @@ async function post(
       const held = (await tx`
         SELECT id FROM awcms_hr_commission_intents
         WHERE tenant_id = ${tenantId} AND id = ${row.id}
-          AND status = 'posting' AND attempts = ${row.attempts}
+          AND status = 'posting'
+          AND attempts = ${row.attempts}
+          AND deferrals = ${row.deferrals}
         FOR UPDATE
       `) as { id: string }[];
 
@@ -457,11 +542,13 @@ async function post(
 
       if (settlement.disposition === "defer") {
         // Waiting is not an error: give the claim back so it does not spend the
-        // retry budget meant for failures (the guard trigger allows exactly this).
+        // retry budget meant for failures, and increment the separate deferrals
+        // counter (L7, Issue #1211).
         await tx`
           UPDATE awcms_hr_commission_intents
           SET status = 'pending',
               attempts = attempts - 1,
+              deferrals = deferrals + 1,
               next_attempt_at = now() + make_interval(secs => ${INTAKE_DEFER_DELAY_SECONDS})
           WHERE tenant_id = ${tenantId} AND id = ${row.id}
         `;
@@ -523,7 +610,9 @@ async function retryOrFail(
           UPDATE awcms_hr_commission_intents
           SET status = 'failed', outcome_code = 'error'
           WHERE tenant_id = ${tenantId} AND id = ${row.id}
-            AND status = 'posting' AND attempts = ${row.attempts}
+            AND status = 'posting'
+            AND attempts = ${row.attempts}
+            AND deferrals = ${row.deferrals}
           RETURNING id
         `) as { id: string }[];
 
@@ -556,7 +645,9 @@ async function retryOrFail(
         SET status = 'pending',
             next_attempt_at = now() + make_interval(secs => ${retryDelaySeconds(row.attempts)})
         WHERE tenant_id = ${tenantId} AND id = ${row.id}
-          AND status = 'posting' AND attempts = ${row.attempts}
+          AND status = 'posting'
+          AND attempts = ${row.attempts}
+          AND deferrals = ${row.deferrals}
         RETURNING id
       `) as { id: string }[];
 
@@ -730,6 +821,10 @@ export async function runIntakePosterForTenant(
     log("warning", "hr_commission.intake.actor_inactive", { tenantId });
   }
 
+  if (result.skipped !== null && !opened.hasRows) {
+    return result;
+  }
+
   if (options.dryRun) {
     const preview = await previewTenant(sql, tenantId, purgeOptions);
 
@@ -797,7 +892,9 @@ export async function runIntakePosterForTenant(
     }
   }
 
-  result.purged = await purgeTerminalIntents(sql, tenantId, purgeOptions);
+  if (!options.skipPurge) {
+    result.purged = await purgeTerminalIntents(sql, tenantId, purgeOptions);
+  }
   result.oldestLiveAgeSeconds = await liveAge(sql, tenantId);
 
   if (
