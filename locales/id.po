@@ -4101,6 +4101,9 @@ msgstr "Dikompres dari {original} menjadi {final} sebelum diunggah. Metadata kam
 msgid "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image."
 msgstr "GIF ini berukuran {original}, melebihi batas {cap}. Berkas GIF tidak pernah dikompres ulang karena animasinya akan hilang. Pilih GIF yang lebih kecil, atau gunakan gambar JPEG, PNG, atau WebP."
 
+msgid "This animated image is {original}, over the {cap} limit. Animated images are never re-compressed because that would remove the animation. Choose a smaller file, or use a still JPEG, PNG or WebP image."
+msgstr "Gambar animasi ini berukuran {original}, melebihi batas {cap}. Gambar animasi tidak pernah dikompres ulang karena animasinya akan hilang. Pilih berkas yang lebih kecil, atau gunakan gambar JPEG, PNG, atau WebP yang tidak beranimasi."
+
 msgid "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded."
 msgstr "Berkas ini berukuran {original}, melebihi batas {cap}, dan jenisnya tidak dapat dikompres di peramban. Tidak ada yang diunggah."
 

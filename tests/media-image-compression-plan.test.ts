@@ -17,6 +17,11 @@ import {
   planCompressionAttempts,
   renameForOutputType
 } from "../src/lib/ui/media-image-compression-plan";
+import {
+  detectAnimation,
+  readPixelDimensions,
+  sniffImageType
+} from "../src/lib/ui/media-image-header";
 
 const MIB = 1024 * 1024;
 const CAP = 2 * MIB;
@@ -426,5 +431,245 @@ describe("fillMessage", () => {
 
   test("a value containing a brace pattern is not expanded again", () => {
     expect(fillMessage("{a} {b}", { a: "{b}", b: "x" })).toBe("{b} x");
+  });
+});
+
+// ---- Header fixtures: tiny hand-built byte arrays, no binary files. ----
+
+const ascii = (text: string): number[] => [...text].map((c) => c.charCodeAt(0));
+const be32 = (n: number): number[] => [
+  (n >>> 24) & 255,
+  (n >>> 16) & 255,
+  (n >>> 8) & 255,
+  n & 255
+];
+const le32 = (n: number): number[] => [
+  n & 255,
+  (n >>> 8) & 255,
+  (n >>> 16) & 255,
+  (n >>> 24) & 255
+];
+const le24 = (n: number): number[] => [
+  n & 255,
+  (n >>> 8) & 255,
+  (n >>> 16) & 255
+];
+
+const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function pngChunk(type: string, data: number[]): number[] {
+  return [...be32(data.length), ...ascii(type), ...data, 0, 0, 0, 0];
+}
+
+function png(width: number, height: number, ...extra: number[][]): Uint8Array {
+  const ihdr = [...be32(width), ...be32(height), 8, 6, 0, 0, 0];
+  return new Uint8Array([
+    ...PNG_SIG,
+    ...pngChunk("IHDR", ihdr),
+    ...extra.flat(),
+    ...pngChunk("IDAT", [1, 2, 3])
+  ]);
+}
+
+function jpeg(width: number, height: number, withApp = true): Uint8Array {
+  const app = withApp ? [0xff, 0xe1, 0x00, 0x06, 1, 2, 3, 4] : [];
+  const sof = [
+    0xff,
+    0xc0,
+    0x00,
+    0x11,
+    8,
+    (height >> 8) & 255,
+    height & 255,
+    (width >> 8) & 255,
+    width & 255,
+    3,
+    1,
+    0x22,
+    0,
+    2,
+    0x11,
+    1,
+    3,
+    0x11,
+    1
+  ];
+  return new Uint8Array([0xff, 0xd8, ...app, ...sof, 0xff, 0xd9]);
+}
+
+function riff(...chunks: number[][]): Uint8Array {
+  const body = [...ascii("WEBP"), ...chunks.flat()];
+  return new Uint8Array([...ascii("RIFF"), ...le32(body.length), ...body]);
+}
+
+function webpChunk(fourcc: string, data: number[]): number[] {
+  return [
+    ...ascii(fourcc),
+    ...le32(data.length),
+    ...data,
+    ...(data.length % 2 === 1 ? [0] : [])
+  ];
+}
+
+function vp8x(width: number, height: number, flags: number): number[] {
+  return webpChunk("VP8X", [
+    flags,
+    0,
+    0,
+    0,
+    ...le24(width - 1),
+    ...le24(height - 1)
+  ]);
+}
+
+describe("sniffImageType", () => {
+  test("recognises JPEG, PNG and WebP by magic bytes only", () => {
+    expect(sniffImageType(jpeg(1, 1))).toBe("image/jpeg");
+    expect(sniffImageType(png(1, 1))).toBe("image/png");
+    expect(sniffImageType(riff(vp8x(1, 1, 0)))).toBe("image/webp");
+  });
+
+  test("GIF, SVG, RIFF-but-not-WEBP and empty bytes are not recognised", () => {
+    expect(sniffImageType(new Uint8Array(ascii("GIF89a....")))).toBeNull();
+    expect(sniffImageType(new Uint8Array(ascii("<svg xmlns=...>")))).toBeNull();
+    expect(
+      sniffImageType(
+        new Uint8Array([...ascii("RIFF"), 0, 0, 0, 0, ...ascii("WAVE")])
+      )
+    ).toBeNull();
+    expect(sniffImageType(new Uint8Array(0))).toBeNull();
+  });
+});
+
+describe("detectAnimation", () => {
+  test("APNG: an acTL chunk before IDAT is animated", () => {
+    const actl = pngChunk("acTL", [0, 0, 0, 2, 0, 0, 0, 0]);
+    expect(detectAnimation(png(10, 10, actl), "image/png")).toBe(true);
+  });
+
+  test("a still PNG, and an acTL-looking chunk after IDAT, are not animated", () => {
+    expect(detectAnimation(png(10, 10), "image/png")).toBe(false);
+    const late = new Uint8Array([
+      ...png(10, 10),
+      ...pngChunk("acTL", [0, 0, 0, 2, 0, 0, 0, 0])
+    ]);
+    expect(detectAnimation(late, "image/png")).toBe(false);
+  });
+
+  test("animated WebP: the VP8X animation flag, or an ANIM chunk", () => {
+    expect(detectAnimation(riff(vp8x(10, 10, 0x02)), "image/webp")).toBe(true);
+    expect(
+      detectAnimation(
+        riff(vp8x(10, 10, 0), webpChunk("ANIM", [0, 0, 0, 0, 0, 0])),
+        "image/webp"
+      )
+    ).toBe(true);
+  });
+
+  test("a still WebP (VP8X without the flag, or plain VP8L) is not animated", () => {
+    expect(detectAnimation(riff(vp8x(10, 10, 0x10)), "image/webp")).toBe(false);
+    expect(
+      detectAnimation(riff(webpChunk("VP8L", [0x2f, 0, 0, 0, 0])), "image/webp")
+    ).toBe(false);
+  });
+
+  test("JPEG and truncated input are never animated and never throw", () => {
+    expect(detectAnimation(jpeg(10, 10), "image/jpeg")).toBe(false);
+    expect(detectAnimation(new Uint8Array(PNG_SIG), "image/png")).toBe(false);
+    expect(detectAnimation(new Uint8Array(ascii("RIFF")), "image/webp")).toBe(
+      false
+    );
+  });
+});
+
+describe("readPixelDimensions", () => {
+  test("PNG IHDR", () => {
+    expect(readPixelDimensions(png(12000, 9000), "image/png")).toEqual({
+      width: 12000,
+      height: 9000
+    });
+  });
+
+  test("JPEG SOF0 after an APP segment, and SOF2 (progressive)", () => {
+    expect(readPixelDimensions(jpeg(4032, 3024), "image/jpeg")).toEqual({
+      width: 4032,
+      height: 3024
+    });
+    const progressive = jpeg(640, 480, false);
+    progressive[3] = 0xc2;
+    expect(readPixelDimensions(progressive, "image/jpeg")).toEqual({
+      width: 640,
+      height: 480
+    });
+  });
+
+  test("JPEG: a DHT marker (C4) is not mistaken for a frame header", () => {
+    const dht = [0xff, 0xc4, 0x00, 0x04, 0, 0];
+    const bytes = new Uint8Array([
+      0xff,
+      0xd8,
+      ...dht,
+      ...jpeg(300, 200, false).slice(2)
+    ]);
+    expect(readPixelDimensions(bytes, "image/jpeg")).toEqual({
+      width: 300,
+      height: 200
+    });
+  });
+
+  test("WebP VP8X, lossy VP8 and lossless VP8L", () => {
+    expect(
+      readPixelDimensions(riff(vp8x(20000, 9000, 0)), "image/webp")
+    ).toEqual({
+      width: 20000,
+      height: 9000
+    });
+
+    const vp8 = webpChunk("VP8 ", [
+      0,
+      0,
+      0,
+      0x9d,
+      0x01,
+      0x2a,
+      ...[1280 & 255, 1280 >> 8],
+      ...[720 & 255, 720 >> 8]
+    ]);
+    expect(readPixelDimensions(riff(vp8), "image/webp")).toEqual({
+      width: 1280,
+      height: 720
+    });
+
+    const bits = (800 - 1) | ((600 - 1) << 14);
+    const vp8l = webpChunk("VP8L", [
+      0x2f,
+      ...le32(bits >>> 0),
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]);
+    expect(readPixelDimensions(riff(vp8l), "image/webp")).toEqual({
+      width: 800,
+      height: 600
+    });
+  });
+
+  test("an unreadable or truncated header yields null, never a throw", () => {
+    expect(
+      readPixelDimensions(new Uint8Array(PNG_SIG), "image/png")
+    ).toBeNull();
+    expect(
+      readPixelDimensions(new Uint8Array([0xff, 0xd8, 0xff]), "image/jpeg")
+    ).toBeNull();
+    expect(
+      readPixelDimensions(
+        new Uint8Array([0xff, 0xd8, 0x12, 0x34, 0, 0]),
+        "image/jpeg"
+      )
+    ).toBeNull();
+    expect(readPixelDimensions(riff(), "image/webp")).toBeNull();
   });
 });
