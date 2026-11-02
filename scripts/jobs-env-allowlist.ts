@@ -877,6 +877,11 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
       "verified by the webhook route; the registration script is run by an operator, not scheduled"
   },
   {
+    name: "WEBSITE_ENGAGEMENT_KEYS",
+    reason:
+      "a secret: the ring that encrypts website submissions' contact details and keys every source-token and identifier hash (ADR-0155); read only by the public intake and the admin routes. The retention purge deletes aged rows by id under column-only grants and never decrypts, so no cron job reads it"
+  },
+  {
     name: "SETUP_DATABASE_URL",
     reason:
       "the awcms_setup bootstrap connection, used by POST /api/v1/setup/initialize only; handing it to cron jobs would defeat the role split"

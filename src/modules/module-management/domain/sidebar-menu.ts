@@ -110,6 +110,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // Issue #598 — a subscriber list is audience engagement, not content: it is
   // about who is reached, not about what is published.
   newsletter: "engagement",
+  // ADR-0155 (Issue #1153). Audience engagement: it captures what a visitor
+  // submits on a website. Placed even though the module declares NO navigation
+  // yet (the operator screen is a follow-up): this map must cover every
+  // registered module so its first screen lands in `engagement`.
+  website_engagement: "engagement",
   // ADR-0127. Placed even though the module declares NO navigation yet (the
   // rule-authoring screens are a recorded follow-up): this map must cover every
   // registered module, so its first screen lands in `commerce` rather than

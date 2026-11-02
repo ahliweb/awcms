@@ -33,6 +33,7 @@ import { bookingModule } from "./booking/module";
 import { hrCommissionModule } from "./hr-commission/module";
 import { telegramDeliveryModule } from "./telegram-delivery/module";
 import { channelAccountsModule } from "./channel-accounts/module";
+import { websiteEngagementModule } from "./website-engagement/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -242,7 +243,16 @@ const baseModules: ModuleDescriptor[] = [
   // depends on it yet (the WhatsApp sender key, #1141, is its first consumer).
   // Ships INERT: CHANNEL_ACCOUNTS_ENABLED is off by default. See
   // src/modules/channel-accounts/module.ts's `description`.
-  channelAccountsModule
+  channelAccountsModule,
+  // Admitted by ADR-0155 (Issue #1153): tenant-scoped website lead/contact
+  // capture and inbound website interaction events. INTAKE ONLY: one public,
+  // token- and Origin-authenticated endpoint, consent provenance, and an outbox
+  // event a CRM adapter consumes. Creates, matches and merges no person.
+  // Depends on tenant_admin/identity_access/logging/module_management/
+  // tenant_domain/domain_event_runtime/profile_identity (all above), so the DAG
+  // stays acyclic; nothing depends on it. Inert until a tenant creates a source.
+  // See src/modules/website-engagement/module.ts's `description`.
+  websiteEngagementModule
 ];
 
 /**

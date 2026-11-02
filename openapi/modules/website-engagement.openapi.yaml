@@ -1,0 +1,1024 @@
+# Source fragment for the "website_engagement" module (Issue #1153, ADR-0155).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses) only resolve after
+# `bun run openapi:bundle` merges this file with the root fragment and every
+# sibling module fragment into openapi/awcms-public-api.openapi.yaml. Edit this
+# file (or the root fragment for shared components), never the generated bundle.
+#
+# ## Intake only
+#
+# One PUBLIC operation (`websiteEngagementSubmit`) and a set of default-deny
+# administrator operations. Nothing here is a CRM: no stage, owner, score,
+# deduplication or conversion, and no operation creates, matches or merges a
+# person. The outward contract a CRM adapter consumes is the pair of domain
+# events in asyncapi/awcms-domain-events.asyncapi.yaml.
+#
+# ## Why the public operation has `security: []`
+#
+# It is unauthenticated BY DESIGN (a visitor's browser calls it) and is
+# authenticated by a different mechanism: the source token in the body plus the
+# verified Origin host. It deliberately takes NO tenant header: the tenant is
+# opened from the token, and a tenant id anywhere else is never believed.
+paths:
+  /api/v1/website-engagement/submissions:
+    post:
+      operationId: websiteEngagementSubmit
+      tags:
+        - Website Engagement
+      summary: Submit a website contact request, lead or interaction
+      security: []
+      description: >-
+        PUBLIC and unauthenticated by design. Authenticated by the per-source
+        token in the body (`sourceToken`, opaque, shown once to the tenant's
+        administrator, stored only as a keyed hash) AND by the request's verified
+        `Origin` host, which must be a domain registered for that source. The
+        token is a bearer secret that sits in a page's source, so the Origin
+        check, the challenge and the rate limits are co-equal controls, not
+        optional ones.
+
+
+        Checks run cheapest first and before any database work: per-IP rate
+        limit, `Content-Type: application/json`, a 16 KiB body cap, SHAPE
+        validation against a closed, versioned field set, then the token, tenant,
+        module, source and Origin proof; then the per-source rate limit, the
+        source's own rules (accepted kinds, the current consent copy version), the
+        duplicate probe, a honeypot and fill-time signal, the Turnstile challenge
+        where the deployment runs it, and finally one transaction that stores the
+        submission and its outbox event.
+
+
+        Every failure BEFORE the source is proven answers the SAME `403
+        SUBMISSION_REFUSED` without a CORS grant: an unparseable token, an unknown
+        tenant or source, a wrong secret, a paused or revoked source, a disabled
+        module and an unregistered Origin cannot be told apart. A `tenantId` or
+        `sourceId` in the body or query that disagrees with the token is refused
+        with that same answer, and a `tenant_code` query parameter is refused
+        outright; the tenant always comes from the token.
+
+
+        Idempotent on `(source, eventId)`: a duplicate stores nothing, publishes
+        nothing and answers the SAME `200` as the first. The body never reveals
+        whether this event or this person was seen before. The honeypot and
+        fill-time catches also answer that `200` and store nothing.
+
+
+        A `contact` or `lead` is stored only with an explicit
+        `consent.purposes` including `respond_to_inquiry` and a
+        `consent.copyVersion` equal to the source's current copy version
+        (`422 CONSENT_REQUIRED`, `409 CONSENT_COPY_MISMATCH`). Marketing follow-up
+        is a separate purpose and is never implied. An `interaction` carries no
+        contact details and no consent. No IP address, fingerprint, cookie or user
+        agent is stored, and no HTML, upload or URL is accepted or fetched.
+
+
+        CORS answers only the verified Origin, never `*`, never with credentials,
+        and carries `Vary: Origin` on every response. The route also answers the
+        browser's `OPTIONS` preflight (not a documented operation, as for the
+        newsletter): always `204`, granting `Access-Control-Allow-Origin` only when
+        the `Origin` is an active, verified domain of some tenant on this
+        deployment (a refusal is the ABSENCE of that header),
+        `Access-Control-Allow-Headers` is `content-type` and nothing else, and it
+        shares this operation's per-IP rate limit. CORS is not authorization: the
+        POST still verifies the token and that the host is registered for that
+        source.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteEngagementSubmitRequest"
+      responses:
+        "200":
+          description: >-
+            Accepted. The same body for a new submission, a duplicate and a
+            honeypot catch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteEngagementReceived"
+        "400":
+          description: >-
+            The submission's SHAPE is invalid (`VALIDATION_ERROR`). Decided before
+            the token is looked at, so it is the same answer whether or not the
+            token is valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: >-
+            `SUBMISSION_REFUSED`: the uniform refusal (see above), or a failed
+            challenge after the source was proven.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: "`CONSENT_COPY_MISMATCH`: the consent text version is not the one the source currently shows. Only after proof."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: The body exceeds 16 KiB (`PAYLOAD_TOO_LARGE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "415":
+          description: "`Content-Type` is not `application/json` (`UNSUPPORTED_MEDIA_TYPE`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`KIND_NOT_ACCEPTED` or `CONSENT_REQUIRED`. Only after proof."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many submissions from this address or for this source (`RATE_LIMITED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The deployment has no key ring configured (`SERVICE_UNAVAILABLE`). Fails closed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    get:
+      operationId: listWebsiteEngagementSubmissions
+      tags:
+        - Website Engagement
+      summary: List website submissions (masked)
+      description: >-
+        Requires `website_engagement.submissions.read`. Newest first,
+        keyset-paginated. Contact details are MASKED (`emailMasked`,
+        `phoneMasked`); the decrypted details are only available from the
+        `reveal` operation under a separate permission.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+        - name: sourceId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [contact, lead, interaction]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [received, withdrawn]
+      responses:
+        "200":
+          description: A page of submissions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WebsiteEngagementSubmission"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/website-engagement/submissions/{id}:
+    get:
+      operationId: getWebsiteEngagementSubmission
+      tags:
+        - Website Engagement
+      summary: Read one website submission (masked)
+      description: >-
+        Requires `website_engagement.submissions.read`. An id in another tenant
+        answers exactly like one that does not exist.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The submission.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/WebsiteEngagementSubmission"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/website-engagement/submissions/{id}/reveal:
+    post:
+      operationId: revealWebsiteEngagementSubmission
+      tags:
+        - Website Engagement
+      summary: Decrypt a submission's contact details
+      description: >-
+        Requires `website_engagement.submissions.reveal`, a separately grantable
+        permission, and is audited at warning with the submission id and never the
+        values. This is the sanctioned read a downstream CRM adapter uses, and a
+        machine credential may call it. `POST` rather than `GET` because the
+        response carries personal data and must not be cached or logged as a URL
+        (`Cache-Control: no-store`). A withdrawn submission answers `409
+        SUBMISSION_WITHDRAWN`; an interaction answers `409 NOTHING_TO_REVEAL`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The decrypted contact details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      contact:
+                        $ref: "#/components/schemas/WebsiteEngagementContact"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`SUBMISSION_WITHDRAWN` or `NOTHING_TO_REVEAL`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/website-engagement/submissions/{id}/withdraw:
+    post:
+      operationId: withdrawWebsiteEngagementSubmission
+      tags:
+        - Website Engagement
+      summary: Withdraw a submission (controller opt-out)
+      description: >-
+        Requires `website_engagement.submissions.withdraw` and a signed-in person
+        (a machine credential is refused with `403 INTERACTIVE_SESSION_REQUIRED`).
+        Marks the submission withdrawn and publishes
+        `awcms.website_engagement.submission.withdrawn`, which downstream
+        consumers must honour. One-way, audited at warning, and idempotent: the
+        same `Idempotency-Key` replays the stored answer, and withdrawing an
+        already withdrawn submission changes and publishes nothing. A raw public
+        withdrawal request is a recorded limitation of this first slice.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  enum:
+                    [
+                      data_subject_request,
+                      consent_withdrawn,
+                      controller_decision
+                    ]
+      responses:
+        "200":
+          description: The withdrawn submission (masked).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/WebsiteEngagementSubmission"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`: the key was used with a different request."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/website-engagement/sources:
+    get:
+      operationId: listWebsiteEngagementSources
+      tags:
+        - Website Engagement
+      summary: List website sources
+      description: >-
+        Requires `website_engagement.sources.read`. Never returns a token or its
+        hash: only the six-character prefix. `challengeEffective` is the
+        challenge the source ACTUALLY gets on this deployment, so a source set to
+        `turnstile` on an offline/LAN profile is visibly running on the
+        non-third-party controls alone.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant's sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WebsiteEngagementSource"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createWebsiteEngagementSource
+      tags:
+        - Website Engagement
+      summary: Create a website source (token shown once)
+      description: >-
+        Requires `website_engagement.sources.manage` and a signed-in person.
+        Audited at warning. The response carries the token ONCE (`token`,
+        `revealed: true`); a replay of the same `Idempotency-Key` answers the
+        stored body WITHOUT it (`revealed: false`). `409 SOURCE_CODE_TAKEN` for a
+        duplicate code; `422 DOMAIN_NOT_FOUND` when a listed domain is not a live
+        domain of this tenant (another tenant's domain answers the same).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteEngagementCreateSource"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteEngagementSourceWithToken"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`SOURCE_CODE_TAKEN` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`DOMAIN_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/website-engagement/sources/{id}:
+    get:
+      operationId: getWebsiteEngagementSource
+      tags:
+        - Website Engagement
+      summary: Read one website source
+      description: >-
+        Requires `website_engagement.sources.read`. An id in another tenant
+        answers exactly like one that does not exist.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The source.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/WebsiteEngagementSource"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateWebsiteEngagementSource
+      tags:
+        - Website Engagement
+      summary: Change a website source
+      description: >-
+        Requires `website_engagement.sources.manage` and a signed-in person.
+        Rename, pause or resume, change the consent copy version, the challenge
+        mode, the accepted kinds or the host list. Audited at warning (the changed
+        field NAMES, never values). Revocation is its own operation, and a revoked
+        source cannot be changed (`409 SOURCE_REVOKED`).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebsiteEngagementUpdateSource"
+      responses:
+        "200":
+          description: The changed source.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/WebsiteEngagementSource"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`SOURCE_REVOKED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`DOMAIN_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteWebsiteEngagementSource
+      tags:
+        - Website Engagement
+      summary: Delete (soft) a website source
+      description: >-
+        Requires `website_engagement.sources.manage` and a signed-in person.
+        Soft delete: the source stops accepting at once, and its submissions stay
+        until the retention purge removes them. Audited at warning.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/website-engagement/sources/{id}/rotate:
+    post:
+      operationId: rotateWebsiteEngagementSource
+      tags:
+        - Website Engagement
+      summary: Rotate a source's token (shown once)
+      description: >-
+        Requires `website_engagement.sources.manage` and a signed-in person.
+        Audited at warning. The previous token stops working IMMEDIATELY (no grace
+        window). The new token is in this response ONCE (`revealed: true`); a
+        replay of the same `Idempotency-Key` answers the stored body without it,
+        so a lost token is recovered by rotating again with a new key, never by
+        reading it back. A revoked source cannot be rotated (`409 SOURCE_REVOKED`).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Rotated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebsiteEngagementSourceWithToken"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`SOURCE_REVOKED` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/website-engagement/sources/{id}/revoke:
+    post:
+      operationId: revokeWebsiteEngagementSource
+      tags:
+        - Website Engagement
+      summary: Revoke a website source
+      description: >-
+        Requires `website_engagement.sources.manage` and a signed-in person.
+        Permanently stops the source accepting submissions. One-way, and
+        idempotent BY STATE: revoking a revoked source answers the same and audits
+        nothing the second time, so no `Idempotency-Key` is needed. A revoked
+        source cannot be reactivated (the database refuses it).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The revoked source.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/WebsiteEngagementSource"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  schemas:
+    WebsiteEngagementSubmitRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceToken, eventId, kind]
+      description: >-
+        Contract v1, a CLOSED field set: an unknown key is a `400`, never stored
+        and never echoed. A `contact` carries `contact` (with a message and an
+        email or phone) and `consent`; a `lead` carries `contact` (an email or
+        phone) and `consent`; an `interaction` carries `interaction` and nothing
+        personal.
+      properties:
+        sourceToken:
+          type: string
+          maxLength: 160
+          description: >-
+            The source's opaque bearer token, `wes1.<tenantId>.<sourceId>.<secret>`.
+            The tenant is opened FROM it. Never put it in a URL.
+        tenantId:
+          type: string
+          format: uuid
+          description: Optional and never trusted. Refused if it disagrees with the token.
+        sourceId:
+          type: string
+          format: uuid
+          description: Optional and never trusted. Refused if it disagrees with the token.
+        eventId:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{8,64}$"
+          description: >-
+            The client-generated idempotency/replay key. The same `(source,
+            eventId)` is stored once.
+        kind:
+          type: string
+          enum: [contact, lead, interaction]
+        occurredAt:
+          type: string
+          format: date-time
+          description: Within the last 7 days and no more than 5 minutes ahead. Defaults to the receive time.
+        locale:
+          type: string
+          pattern: "^[a-z]{2}(-[A-Z]{2})?$"
+          description: Selects the language of the answer (`en`, `id`) and is stored.
+        topic:
+          type: string
+          pattern: "^[a-z][a-z0-9_.-]{0,59}$"
+        contact:
+          type: object
+          additionalProperties: false
+          properties:
+            name: { type: string, maxLength: 120 }
+            email: { type: string, maxLength: 254 }
+            phone: { type: string, maxLength: 32 }
+            company: { type: string, maxLength: 120 }
+            subject: { type: string, maxLength: 150 }
+            message: { type: string, maxLength: 2000 }
+          description: >-
+            Text only. Control characters, bidi overrides and tag-shaped input
+            are refused; the stored value is escaped on output by whoever renders
+            it.
+        interaction:
+          type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum:
+                - form_view
+                - form_start
+                - cta_click
+                - call_click
+                - whatsapp_click
+                - map_click
+                - download_click
+        consent:
+          type: object
+          additionalProperties: false
+          properties:
+            purposes:
+              type: array
+              maxItems: 8
+              items:
+                type: string
+                enum: [respond_to_inquiry, marketing_follow_up]
+              description: >-
+                Explicitly ticked, never pre-ticked or inferred. Marketing follow-up
+                is separate from, and never implied by, responding to the inquiry.
+            copyVersion:
+              type: string
+              pattern: "^[A-Za-z0-9._-]{1,32}$"
+              description: The exact consent copy version the website showed.
+            pagePath:
+              type: string
+              maxLength: 200
+              description: The site path the consent was shown on. No query or fragment.
+        attribution:
+          type: object
+          additionalProperties: false
+          properties:
+            landingPath: { type: string, maxLength: 200 }
+            referrerHost:
+              type: string
+              description: A hostname, shape-checked and stored, never resolved or fetched.
+            utmSource: { type: string, maxLength: 100 }
+            utmMedium: { type: string, maxLength: 100 }
+            utmCampaign: { type: string, maxLength: 100 }
+            utmTerm: { type: string, maxLength: 100 }
+            utmContent: { type: string, maxLength: 100 }
+        challengeToken:
+          type: string
+          maxLength: 2048
+          description: The Turnstile response, where the deployment runs the challenge. Never logged.
+        honeypot:
+          type: string
+          description: Honeypot, named so a browser will not autofill it. Leave empty; a non-empty value is answered like a success and stored as nothing.
+        fillMs:
+          type: integer
+          minimum: 0
+          description: Client-reported time to fill the form. A very short time is treated like the honeypot. A cheap signal, never proof.
+    WebsiteEngagementReceived:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: object
+          properties:
+            received:
+              type: boolean
+              enum: [true]
+            message:
+              type: string
+              description: Localised (`en`, `id`) by the submitted `locale`. Says nothing about the person or the event.
+        meta:
+          type: object
+    WebsiteEngagementContact:
+      type: object
+      properties:
+        name: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        company: { type: string, nullable: true }
+        subject: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+    WebsiteEngagementSubmission:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+        sourceCode: { type: string }
+        kind: { type: string, enum: [contact, lead, interaction] }
+        interactionType: { type: string, nullable: true }
+        topic: { type: string, nullable: true }
+        locale: { type: string, nullable: true }
+        status: { type: string, enum: [received, withdrawn] }
+        privacyClass: { type: string, enum: [personal, anonymous] }
+        occurredAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        emailMasked: { type: string, nullable: true }
+        phoneMasked: { type: string, nullable: true }
+        consent:
+          type: object
+          properties:
+            purposes:
+              type: array
+              items:
+                type: string
+                enum: [respond_to_inquiry, marketing_follow_up]
+            copyVersion: { type: string, nullable: true }
+            pagePath: { type: string, nullable: true }
+            consentAt: { type: string, format: date-time, nullable: true }
+        attribution:
+          type: object
+          properties:
+            landingPath: { type: string, nullable: true }
+            referrerHost: { type: string, nullable: true }
+            utmSource: { type: string, nullable: true }
+            utmMedium: { type: string, nullable: true }
+            utmCampaign: { type: string, nullable: true }
+            utmTerm: { type: string, nullable: true }
+            utmContent: { type: string, nullable: true }
+        provenance:
+          type: object
+          properties:
+            originHost: { type: string }
+            originVia: { type: string, enum: [origin, referer] }
+            challenge:
+              type: string
+              enum: [turnstile_verified, not_required, source_none]
+        withdrawnAt: { type: string, format: date-time, nullable: true }
+        withdrawalReason:
+          type: string
+          nullable: true
+          enum:
+            [data_subject_request, consent_withdrawn, controller_decision, null]
+    WebsiteEngagementSource:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [active, paused, revoked] }
+        contractVersion: { type: string, enum: ["1"] }
+        acceptedKinds:
+          type: array
+          items:
+            type: string
+            enum: [contact, lead, interaction]
+        consentCopyVersion: { type: string }
+        challengeMode: { type: string, enum: [turnstile, none] }
+        challengeEffective:
+          type: string
+          enum: [turnstile, none]
+          description: What this deployment actually runs for this source.
+        tokenPrefix:
+          type: string
+          description: Six non-sensitive characters, to tell which token is on which site. Never accepted as proof.
+        tokenRotatedAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        domains:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              hostname: { type: string }
+              status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WebsiteEngagementSourceWithToken:
+      type: object
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          allOf:
+            - $ref: "#/components/schemas/WebsiteEngagementSource"
+            - type: object
+              properties:
+                token:
+                  type: string
+                  description: Present ONLY when `revealed` is true, in the one response that creates or rotates it.
+                revealed:
+                  type: boolean
+        meta:
+          type: object
+    WebsiteEngagementCreateSource:
+      type: object
+      additionalProperties: false
+      required: [code, name, consentCopyVersion]
+      properties:
+        code:
+          type: string
+          pattern: "^[a-z][a-z0-9_-]{1,39}$"
+        name: { type: string, minLength: 1, maxLength: 120 }
+        consentCopyVersion:
+          type: string
+          pattern: "^[A-Za-z0-9._-]{1,32}$"
+        challengeMode:
+          type: string
+          enum: [turnstile, none]
+          default: turnstile
+        acceptedKinds:
+          type: array
+          items:
+            type: string
+            enum: [contact, lead, interaction]
+        domainIds:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }
+          description: Live `tenant_domain` ids of THIS tenant. The browser Origin host must be one of the ACTIVE ones.
+    WebsiteEngagementUpdateSource:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        consentCopyVersion:
+          type: string
+          pattern: "^[A-Za-z0-9._-]{1,32}$"
+        challengeMode:
+          type: string
+          enum: [turnstile, none]
+        acceptedKinds:
+          type: array
+          items:
+            type: string
+            enum: [contact, lead, interaction]
+        status:
+          type: string
+          enum: [active, paused]
+        domainIds:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }

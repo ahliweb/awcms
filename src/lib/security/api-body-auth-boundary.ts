@@ -193,6 +193,13 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
       "Must work from an email link, for someone who may never have had an account."
   },
 
+  {
+    method: "POST",
+    pattern: "/api/v1/website-engagement/submissions",
+    reason:
+      "A visitor's browser posts a website contact request, lead or interaction. Authenticated by the per-source token in the body and the verified Origin host (ADR-0155), rate-limited per address and per source, with one uniform refusal before the source is proven."
+  },
+
   // ---- Node-to-node: signed, not sessioned ----
   {
     method: "POST",

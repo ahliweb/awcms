@@ -746,6 +746,39 @@ channels:
       Documented contract only; producer is
       `pages/api/v1/blog/internal-tag-links/settings.ts`'s
       `blog-content.internal-tag-linking-policy.updated` log line.
+  awcms.website_engagement.submission.received:
+    address: awcms.website_engagement.submission.received
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A website form or interaction was accepted by the public intake, in the
+      transaction that stored it (ADR-0155, Issue #1153). Producer:
+      `website-engagement/application/submission-intake.ts`'s
+      `recordSubmission`. The envelope `payload` is
+      `WebsiteEngagementSubmissionReceived` (contract version 1): the opaque
+      `submissionId`, the `sourceId`/`sourceCode`, the client's `clientEventId`,
+      the `kind`, the authenticated `provenance` (source authenticated, Origin
+      host verified, which `challenge` protected it), the explicit `consent`
+      provenance, the source `attribution`, which `identifiers` the submission
+      holds and its `privacyClass`. Never a name, address, phone number or
+      message: a CRM adapter reads those through `POST
+      /api/v1/website-engagement/submissions/{id}/reveal` under its own
+      permission. A duplicate submission publishes nothing. This event creates,
+      matches and merges no person; linking to one is downstream, through
+      `contact_link_evidence` (ADR-0148 section 6).
+  awcms.website_engagement.submission.withdrawn:
+    address: awcms.website_engagement.submission.withdrawn
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A controller withdrew a website submission (ADR-0155, Issue #1153).
+      Producer: `website-engagement/application/submission-directory.ts`'s
+      `withdrawSubmission`. The envelope `payload` is
+      `WebsiteEngagementSubmissionWithdrawn`. Downstream consumers MUST honour
+      it. Idempotent: withdrawing an already withdrawn submission publishes
+      nothing.
 operations:
   publishDomainEventRuntimeSampleRecorded:
     action: send
@@ -1161,6 +1194,18 @@ operations:
       $ref: "#/channels/awcms.blog-content.internal-tag-linking-policy.updated"
     messages:
       - $ref: "#/channels/awcms.blog-content.internal-tag-linking-policy.updated/messages/DomainEvent"
+  publishWebsiteEngagementSubmissionReceived:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.website_engagement.submission.received"
+    messages:
+      - $ref: "#/channels/awcms.website_engagement.submission.received/messages/DomainEvent"
+  publishWebsiteEngagementSubmissionWithdrawn:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.website_engagement.submission.withdrawn"
+    messages:
+      - $ref: "#/channels/awcms.website_engagement.submission.withdrawn/messages/DomainEvent"
 components:
   messages:
     DomainEvent:
@@ -1207,3 +1252,110 @@ components:
           properties:
             sourceModule: { type: string }
             schemaVersion: { type: string }
+    WebsiteEngagementSubmissionReceived:
+      type: object
+      description: >-
+        The `payload` of `awcms.website_engagement.submission.received`, eventVersion
+        1.0, contractVersion 1. An opaque reference and facts ABOUT the submission;
+        never the visitor's details.
+      required:
+        - contractVersion
+        - submissionId
+        - sourceId
+        - sourceCode
+        - clientEventId
+        - kind
+        - occurredAt
+        - receivedAt
+        - provenance
+        - consent
+        - identifiers
+        - privacyClass
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        submissionId: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+        sourceCode: { type: string }
+        clientEventId:
+          type: string
+          description: The client-supplied idempotency/replay key (the provider-event-id analogue).
+        kind: { type: string, enum: [contact, lead, interaction] }
+        interactionType: { type: string, nullable: true }
+        topic: { type: string, nullable: true }
+        locale: { type: string, nullable: true }
+        occurredAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        provenance:
+          type: object
+          required:
+            [
+              sourceAuthenticated,
+              originVerified,
+              originHost,
+              originVia,
+              challenge
+            ]
+          properties:
+            sourceAuthenticated: { type: boolean, enum: [true] }
+            originVerified: { type: boolean, enum: [true] }
+            originHost: { type: string }
+            originVia: { type: string, enum: [origin, referer] }
+            challenge:
+              type: string
+              enum: [turnstile_verified, not_required, source_none]
+        consent:
+          type: object
+          required: [purposes]
+          properties:
+            purposes:
+              type: array
+              items:
+                {
+                  type: string,
+                  enum: [respond_to_inquiry, marketing_follow_up]
+                }
+            copyVersion: { type: string, nullable: true }
+            pagePath: { type: string, nullable: true }
+            consentAt: { type: string, format: date-time, nullable: true }
+        attribution:
+          type: object
+          description: Only the fields the visitor's browser reported.
+          properties:
+            landingPath: { type: string }
+            referrerHost: { type: string }
+            utmSource: { type: string }
+            utmMedium: { type: string }
+            utmCampaign: { type: string }
+            utmTerm: { type: string }
+            utmContent: { type: string }
+        identifiers:
+          type: array
+          description: Which kinds of identifier the submission holds. The values are never carried.
+          items: { type: string, enum: [email, phone] }
+        privacyClass: { type: string, enum: [personal, anonymous] }
+    WebsiteEngagementSubmissionWithdrawn:
+      type: object
+      description: >-
+        The `payload` of `awcms.website_engagement.submission.withdrawn`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          submissionId,
+          sourceId,
+          sourceCode,
+          reason,
+          withdrawnAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        submissionId: { type: string, format: uuid }
+        sourceId: { type: string, format: uuid }
+        sourceCode: { type: string }
+        reason:
+          {
+            type: string,
+            enum: [data_subject_request, consent_withdrawn, controller_decision]
+          }
+        withdrawnAt: { type: string, format: date-time }
+        privacyClass: { type: string, enum: [personal, anonymous] }

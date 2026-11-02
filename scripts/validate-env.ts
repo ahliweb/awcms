@@ -19,6 +19,7 @@ import {
   isDeclaredAppUrl,
   resolveChannelSecretsRing
 } from "../src/modules/channel-accounts/domain/channel-accounts-config";
+import { resolveWebsiteEngagementRing } from "../src/modules/website-engagement/domain/engagement-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -390,6 +391,42 @@ const RULES: readonly Rule[] = [
     required: false,
     type: "string",
     secret: true
+  },
+
+  // website_engagement (ADR-0155, Issue #1153). No deployment switch: the module
+  // is inert until a tenant creates a source. The ring encrypts every submission's
+  // contact details and keys every source-token and identifier hash, and is a
+  // secret, never echoed. Absent means the public intake and source creation fail
+  // closed; present it is validated below.
+  {
+    name: "WEBSITE_ENGAGEMENT_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
   },
 
   // telegram_delivery (ADR-0140, Issue #965). Off by default; off means enqueue
@@ -989,6 +1026,52 @@ export function validateEnv(env: EnvBag): string[] {
         if (sharesKey) {
           problems.push(
             `CHANNEL_SECRETS_ENCRYPTION_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
+          );
+        }
+      }
+    }
+  }
+
+  // website_engagement (ADR-0155): the key ring is optional (the module is inert
+  // without a source), but a ring that is PRESENT must be valid, parsed by the
+  // same helper the runtime uses, and must not share a key with another module's
+  // ring: one compromised ring would then open two datasets. No value is echoed.
+  if ((env.WEBSITE_ENGAGEMENT_KEYS ?? "").trim() !== "") {
+    const engagementRing = resolveWebsiteEngagementRing(
+      env as NodeJS.ProcessEnv
+    );
+
+    if (!engagementRing.ok) {
+      problems.push(
+        `${engagementRing.reason} Cincin kunci website_engagement tidak valid (tanpa kunci yang sah, kontak pengunjung tidak dapat disimpan; tidak ada fallback plaintext).`
+      );
+    } else {
+      for (const other of [
+        "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_HASH_KEYS",
+        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+        "WHATSAPP_RECIPIENT_HASH_KEYS"
+      ]) {
+        const sharesKey = (env[other] ?? "").split(",").some((entry) => {
+          const separator = entry.indexOf(":");
+
+          if (separator < 1) return false;
+
+          const decoded = Buffer.from(
+            entry.slice(separator + 1).trim(),
+            "base64"
+          );
+
+          return (
+            decoded.length > 0 &&
+            engagementRing.keys.some((key) => key.key.equals(decoded))
+          );
+        });
+
+        if (sharesKey) {
+          problems.push(
+            `WEBSITE_ENGAGEMENT_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
           );
         }
       }
