@@ -257,6 +257,27 @@ playwright test`, Bun-only), separate from `bun test`
 > viewport is one `test()` in the same file with the same assertion; no
 > screen or width is exempted.
 
+> **Media upload compression (Issue #1221).** The browser-side image
+> compression behind the 2 MiB default cap is tested in three layers.
+> `tests/media-image-compression-plan.test.ts` (the pure planner: within-cap
+> untouched, GIF over the cap refused, never upscales, alpha keeps WebP, the
+> quality/long-edge steps and the floor),
+> `tests/media-image-compression.test.ts` (the orchestration against a fake
+> codec whose output size is a function of size and quality, so "fits at
+> quality 0.65" and "reaches the floor" are exact assertions) and
+> `tests/media-image-compression-browser.test.ts` (the `createImageBitmap` +
+> canvas adapter through an injected fake environment — `bun test` has no
+> canvas) run in `bun run check`; `tests/media-upload-client.test.ts` pins that
+> the session claims the compressed `byteSize` and type, and
+> `tests/admin-media-upload-compression-contract.test.ts` pins the page wiring
+> (live regions, `data-max-bytes`, translated messages, no CSP exemption). The
+> real-browser spec `tests/e2e/media-upload-compression.e2e.ts` (an oversize JPEG
+> is compressed and accepted, an oversize GIF is refused, the 360 px layout) is
+> WRITE_WAVE and **cannot run in the default `e2e-smoke` job**: the uploader is
+> rendered only with `NEWS_MEDIA_R2_ENABLED=true`, so it skips there (storage is
+> mocked with `page.route`, so a placeholder `NEWS_MEDIA_R2_*` block is enough
+> to run it).
+
 > **Test runner.** The runner is **`bun test`** (`bun:test`), with files in
 > `tests/`. The list of targets below is a **planning target for the ERP modules**,
 > not today's implementation status — not a single ERP module

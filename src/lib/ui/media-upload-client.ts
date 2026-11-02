@@ -39,6 +39,18 @@
  * explicitly supports. The server verifies the bytes it received either way;
  * the client checksum is corroboration, not the guarantee.
  *
+ * ## Compression happens BEFORE step 1 (Issue #1221)
+ *
+ * `uploadMediaFile` re-encodes an oversize JPEG/PNG/WebP in the browser first,
+ * then hands the result to `uploadMediaBytes`, which derives `byteSize` from
+ * the buffer and `mimeType` from the type it is given. So the size and type the
+ * session claims are those of the bytes that are actually sent, by
+ * construction rather than by a second copy of the numbers. The server is
+ * untouched and still the source of truth: it checks the claimed `byteSize` at
+ * session creation and the real object at finalize. A file that cannot be
+ * brought within the cap is refused here with a named reason; nothing oversize
+ * is ever sent "in case the server allows it".
+ *
  * ## Why the dependencies are injected
  *
  * The orchestration here — what cancels when, what the operator is told, which
@@ -46,6 +58,13 @@
  * part a browser test would be slowest at. The transport is passed in so the
  * sequence can be driven in a plain unit test.
  */
+
+import {
+  compressImageForUpload,
+  type CompressionFailureReason,
+  type ImageCompressionPorts
+} from "./media-image-compression";
+import { fillMessage, formatByteSize } from "./media-image-compression-plan";
 
 export type UploadSessionData = {
   objectId: string;
@@ -229,4 +248,262 @@ export function formatProgress(progress: UploadProgress): string {
   );
 
   return `${percent}%`;
+}
+
+/** What the browser hands over for a chosen file (a `File` satisfies this). */
+export type ChosenImageFile = Blob & { name: string };
+
+/** How a file was changed on its way to the session. `null` when it was not. */
+export type CompressionSummary = {
+  originalByteSize: number;
+  byteSize: number;
+  mimeType: string;
+  name: string;
+  width: number;
+  height: number;
+};
+
+export type UploadMediaFileOutcome =
+  | { ok: true; objectId: string; compression: CompressionSummary | null }
+  | { ok: false; step: UploadStep; errorCode: string }
+  | {
+      ok: false;
+      step: "compress";
+      reason: CompressionFailureReason;
+      maxBytes: number;
+      originalByteSize: number;
+      smallestByteSize: number | null;
+    };
+
+export type UploadMediaFileDeps = {
+  transport: UploadTransport;
+  /**
+   * The cap the server enforces. `null` means the page could not tell, in which
+   * case the file is sent as chosen and the SERVER decides (it refuses over its
+   * cap) rather than this client guessing one.
+   */
+  maxBytes: number | null;
+  /** Builds the browser ports lazily; see `createBrowserImagePorts`. */
+  loadPorts: () => Promise<ImageCompressionPorts | null>;
+  onCompressing?: () => void;
+  /** Called once the compressed bytes are ready, before anything is sent. */
+  onCompressed?: (summary: CompressionSummary) => void;
+  onProgress?: (progress: UploadProgress) => void;
+};
+
+/**
+ * Brings the chosen file within the cap if it needs it, then uploads it.
+ *
+ * The one rule this function exists to hold: the size and type claimed to the
+ * server are those of the bytes sent. `uploadMediaBytes` reads both off the
+ * buffer and type it is given, and this function gives it the COMPRESSED buffer
+ * and the COMPRESSED type, never the original's.
+ */
+export async function uploadMediaFile(
+  file: ChosenImageFile,
+  deps: UploadMediaFileDeps
+): Promise<UploadMediaFileOutcome> {
+  const { maxBytes } = deps;
+
+  let upload: { name: string; type: string; bytes: ArrayBuffer };
+  let compression: CompressionSummary | null = null;
+
+  if (maxBytes === null) {
+    upload = {
+      name: file.name,
+      type: file.type,
+      bytes: await file.arrayBuffer()
+    };
+  } else {
+    const result = await compressImageForUpload(
+      { name: file.name, type: file.type, size: file.size, blob: file },
+      maxBytes,
+      { loadPorts: deps.loadPorts, onCompressing: deps.onCompressing }
+    );
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        step: "compress",
+        reason: result.reason,
+        maxBytes: result.maxBytes,
+        originalByteSize: result.originalByteSize,
+        smallestByteSize: result.smallestByteSize ?? null
+      };
+    }
+
+    if (result.changed) {
+      upload = {
+        name: result.name,
+        type: result.mimeType,
+        bytes: await result.blob.arrayBuffer()
+      };
+      compression = {
+        originalByteSize: result.originalByteSize,
+        byteSize: result.byteSize,
+        mimeType: result.mimeType,
+        name: result.name,
+        width: result.width,
+        height: result.height
+      };
+    } else {
+      upload = {
+        name: file.name,
+        type: file.type,
+        bytes: await file.arrayBuffer()
+      };
+    }
+
+    // The bytes about to be sent, measured, not the number a result claimed.
+    // A file that changed on disk between the size check and this read, or a
+    // codec that lied about a blob's size, cannot slip an oversize upload past.
+    if (upload.bytes.byteLength > maxBytes) {
+      return {
+        ok: false,
+        step: "compress",
+        reason: "floor_reached",
+        maxBytes,
+        originalByteSize: file.size,
+        smallestByteSize: upload.bytes.byteLength
+      };
+    }
+
+    if (compression !== null) deps.onCompressed?.(compression);
+  }
+
+  const outcome = await uploadMediaBytes(
+    upload,
+    deps.transport,
+    deps.onProgress
+  );
+
+  return outcome.ok ? { ...outcome, compression } : outcome;
+}
+
+/** Placeholders: `{cap}`, `{original}`, `{final}`, `{smallest}`. */
+export type CompressionMessages = {
+  compressing: string;
+  compressed: string;
+  gifOverCap: string;
+  typeNotCompressible: string;
+  floorReached: string;
+  unsupportedBrowser: string;
+  decodeFailed: string;
+  sourceTooLarge: string;
+  noEncoder: string;
+  alphaNeedsWebp: string;
+  invalidInput: string;
+};
+
+/**
+ * English fallbacks. The page passes the SERVER-translated templates down as
+ * `data-*` attributes (client scripts cannot translate: the catalogue is a
+ * server module), and these are what a missing attribute degrades to, so a
+ * wiring slip shows readable English rather than an empty message.
+ */
+export const DEFAULT_COMPRESSION_MESSAGES: CompressionMessages = {
+  compressing: "Compressing the image in your browser ({original})…",
+  compressed:
+    "Compressed from {original} to {final} before upload. Camera and location metadata (EXIF) is not kept.",
+  gifOverCap:
+    "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image.",
+  typeNotCompressible:
+    "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded.",
+  floorReached:
+    "Even at the smallest size tried, the image is still {smallest}, over the {cap} limit. Choose a smaller image. Nothing was uploaded.",
+  unsupportedBrowser:
+    "This image is {original}, over the {cap} limit, and this browser cannot compress images. Use a current version of Chrome, Edge, Firefox or Safari, or choose a smaller image. Nothing was uploaded.",
+  decodeFailed:
+    "This image could not be read, so it could not be compressed to fit the {cap} limit. Nothing was uploaded.",
+  sourceTooLarge:
+    "This image has too many pixels to compress in the browser. Resize it first, or choose a smaller image. Nothing was uploaded.",
+  noEncoder:
+    "This browser cannot write the image formats needed to compress this file to fit the {cap} limit. Nothing was uploaded.",
+  alphaNeedsWebp:
+    "This image has transparency and this browser cannot write WebP, so it cannot be compressed without losing the transparency. Choose a smaller image. Nothing was uploaded.",
+  invalidInput:
+    "This file could not be checked against the {cap} limit. Nothing was uploaded."
+};
+
+const FAILURE_MESSAGE_KEY: Record<
+  CompressionFailureReason,
+  keyof CompressionMessages
+> = {
+  gif_over_cap: "gifOverCap",
+  type_not_compressible: "typeNotCompressible",
+  invalid_input: "invalidInput",
+  unsupported_browser: "unsupportedBrowser",
+  decode_failed: "decodeFailed",
+  source_too_large: "sourceTooLarge",
+  invalid_dimensions: "decodeFailed",
+  no_encoder: "noEncoder",
+  alpha_needs_webp: "alphaNeedsWebp",
+  floor_reached: "floorReached"
+};
+
+/** The sentence for a refused or failed compression, naming the cap. */
+export function describeCompressionFailure(
+  failure: Extract<UploadMediaFileOutcome, { step: "compress" }>,
+  messages: CompressionMessages = DEFAULT_COMPRESSION_MESSAGES,
+  locale?: string
+): string {
+  const template = messages[FAILURE_MESSAGE_KEY[failure.reason]];
+
+  return fillMessage(template, {
+    cap: formatByteSize(failure.maxBytes, locale),
+    original: formatByteSize(failure.originalByteSize, locale),
+    smallest: formatByteSize(
+      failure.smallestByteSize ?? failure.originalByteSize,
+      locale
+    )
+  });
+}
+
+/** "Compressed from X to Y" for a result that changed the file. */
+export function describeCompressionSuccess(
+  summary: CompressionSummary,
+  messages: CompressionMessages = DEFAULT_COMPRESSION_MESSAGES,
+  locale?: string
+): string {
+  return fillMessage(messages.compressed, {
+    original: formatByteSize(summary.originalByteSize, locale),
+    final: formatByteSize(summary.byteSize, locale)
+  });
+}
+
+const MESSAGE_DATASET_KEYS: Record<keyof CompressionMessages, string> = {
+  compressing: "msgCompressing",
+  compressed: "msgCompressed",
+  gifOverCap: "msgGifOverCap",
+  typeNotCompressible: "msgTypeNotCompressible",
+  floorReached: "msgFloorReached",
+  unsupportedBrowser: "msgUnsupportedBrowser",
+  decodeFailed: "msgDecodeFailed",
+  sourceTooLarge: "msgSourceTooLarge",
+  noEncoder: "msgNoEncoder",
+  alphaNeedsWebp: "msgAlphaNeedsWebp",
+  invalidInput: "msgInvalidInput"
+};
+
+/**
+ * Reads the server-translated templates off the form's `data-msg-*`
+ * attributes (`dataset.msgCompressing` is `data-msg-compressing`). Anything
+ * absent or blank falls back to the English default, so the uploader never
+ * shows an empty message.
+ */
+export function readCompressionMessages(
+  dataset: Readonly<Record<string, string | undefined>>
+): CompressionMessages {
+  const messages = { ...DEFAULT_COMPRESSION_MESSAGES };
+
+  for (const key of Object.keys(MESSAGE_DATASET_KEYS) as Array<
+    keyof CompressionMessages
+  >) {
+    const value = dataset[MESSAGE_DATASET_KEYS[key]];
+    if (typeof value === "string" && value.trim().length > 0) {
+      messages[key] = value;
+    }
+  }
+
+  return messages;
 }

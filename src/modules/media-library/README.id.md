@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:5739c87f4b0fd1f5ebb92bc653ff9ae23c1d56c9514afb44d17a5e88c1cecc59 -->
+<!-- i18n-source-hash: sha256:9eb4a7a15e29733801d357719d667bea49fcc173c3cc4af1579f68aa88ab3148 -->
 
 # media_library
 
@@ -56,6 +56,89 @@ validation off is the exploit `sql/043`'s header records as
 confirmed-exploitable. The only rollback is a deployment-level `NEWS_MEDIA_R2_*`
 change (fail-closed via readiness). Guarded by
 `tests/media-enforcement-one-way.test.ts`.
+
+## Batas ukuran upload dan kompresi di peramban (Issue #1221)
+
+**Ukuran maksimum default satu gambar yang diunggah adalah 2 MiB (2.097.152
+byte).** Sebelumnya 10 MiB. Atur `NEWS_MEDIA_R2_MAX_UPLOAD_BYTES` (bilangan bulat
+positif dalam byte; nilai yang salah bentuk kembali ke default) untuk
+mengubahnya per deployment — misalnya `10485760` untuk mempertahankan batas lama.
+Deployment yang sudah mengatur variabel ini tidak terpengaruh. Batas yang sama
+berlaku untuk semua tipe gambar yang diizinkan; tidak ada batas per tipe.
+
+**Server tetap sumber kebenaran, dan itu tidak berubah.** `byteSize` yang
+diklaim diperiksa saat sesi upload dibuat (`domain/media-upload-session-validation.ts`,
+`400 VALIDATION_ERROR` bila melebihi batas), dan objek yang sebenarnya diukur lagi
+saat finalize (`application/media-r2-verification.ts`, yang menghentikan
+pembacaan begitu melewati batas). Klien yang melewati kompresi, misalnya skrip
+yang memanggil API langsung, ditolak bila melebihi batas. Tidak ada pustaka
+gambar di sisi server dan alur presigned-upload tidak disentuh: server tidak
+pernah men-decode gambar untuk mengecilkannya.
+
+**Yang dilakukan pengunggah admin (`/admin/media`) sebelum mengirim apa pun:**
+
+| Berkas yang dipilih                       | Yang terjadi                                                                                                                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dalam batas (tipe apa pun yang diizinkan) | Diunggah **apa adanya**. Tanpa penurunan kualitas, dan metadatanya (EXIF, GPS) tetap ada.                                                                                                                         |
+| JPEG, PNG, atau WebP melebihi batas       | Di-encode ulang di peramban sampai muat, lalu diunggah. Sesi mengklaim ukuran dan tipe **byte hasil kompresi**, bukan milik berkas asli.                                                                          |
+| GIF melebihi batas                        | **Ditolak**, dengan pesan yang menyebut batasnya. GIF tidak pernah di-encode ulang: canvas hanya menggambar satu frame, sehingga animasinya akan hilang tanpa pemberitahuan. GIF dalam batas diunggah apa adanya. |
+| SVG, atau tipe lain melebihi batas        | Ditolak. SVG tetap dikecualikan dari daftar izin default (lihat §Keamanan upload SVG).                                                                                                                            |
+
+Cara JPEG, PNG, atau WebP dikompres (`src/lib/ui/media-image-compression-plan.ts`,
+perencana murni; `media-image-compression.ts` menjalankan rencananya;
+`media-image-compression-browser.ts` adalah adaptor tipis `createImageBitmap` +
+canvas):
+
+- **Decode dengan orientasi EXIF diterapkan** (`createImageBitmap(file,
+{ imageOrientation: "from-image" })`), sehingga foto ponsel potret tidak
+  terunggah miring.
+- **Tipe keluaran.** WebP, atau JPEG, mana yang lebih kecil. Gambar dengan
+  transparansi hanya WebP, sehingga logo PNG transparan tetap transparan dan
+  tidak mendapat kotak hitam. JPEG opak di-encode sebagai keduanya dan yang lebih
+  kecil dipakai. Bila peramban tidak bisa meng-encode WebP (ia menjawab PNG),
+  gambar opak jatuh ke JPEG, dan gambar bertransparansi ditolak, bukan diratakan.
+- **Urutan percobaan:** sisi terpanjang dimulai dari **2560 px** (tidak pernah
+  lebih besar dari gambarnya sendiri; **tidak pernah diperbesar**) dan untuk
+  tiap sisi terpanjang kualitas turun **0,85, 0,75, 0,65, 0,55, 0,5**; bila masih
+  melebihi batas, sisi terpanjang turun ke **1920, 1600, lalu 1280 px** dan
+  kualitas diulang. Percobaan pertama yang muat dipakai. **Batas bawahnya 1280
+  px pada kualitas 0,5**; gambar yang sudah lebih kecil dari satu langkah tidak
+  diperkecil di bawah ukurannya sendiri.
+- **Nama berkas mengikuti isinya:** `holiday.png` yang di-encode ulang sebagai
+  WebP dikirim sebagai `holiday.webp`.
+
+**EXIF dan GPS dibuang saat di-encode ulang, dengan sengaja.** Menggambar ke
+canvas lalu meng-encode-nya menulis berkas baru tanpa metadata, sehingga gambar
+hasil kompresi tidak membawa data kamera maupun lokasi. Ini manfaat privasi, dan
+hanya berlaku untuk berkas yang dikompres; berkas yang diunggah apa adanya
+mempertahankan apa pun yang dimilikinya.
+
+**Kegagalan bersifat eksplisit.** Tidak ada berkas berukuran berlebih yang pernah
+dikirim "siapa tahu server mengizinkan". Pengguna diberi tahu, dalam bahasanya dan
+dengan menyebut batas, ketika:
+
+- gambar **masih melebihi batas pada batas bawah** (pesan menampilkan ukuran
+  terkecil yang tercapai);
+- peramban **tidak punya `createImageBitmap` atau encoder canvas** (peramban
+  lama tetap bisa mengunggah berkas yang sudah dalam batas);
+- gambar **bertransparansi dan peramban tidak bisa meng-encode WebP**;
+- berkas **tidak bisa di-decode**, atau memiliki **lebih dari 100 juta piksel**
+  (bitmap hasil decode sebesar itu tidak muat di memori tab ponsel).
+
+Berkas yang ditolak tidak pernah membuat sesi upload, sehingga tidak
+meninggalkan baris `pending_upload`. Status kompresi ("Mengompres gambar di
+peramban Anda (4,2 MiB)…") dan hasilnya ("Dikompres dari 4,2 MiB menjadi 1,6
+MiB…") diumumkan lewat region `aria-live="polite"` yang ruangnya sudah
+dicadangkan di tata letak.
+
+**Di luar cakupan:** thumbnail atau varian di sisi server, upload video dan
+dokumen, batas per tipe, dan perubahan daftar tipe yang diizinkan. Klien API lain
+(misalnya `awcms-astro`) harus menjaga unggahannya dalam batas sendiri; hanya
+layar media admin yang mengompres. Pengujian: perencana, orkestrasi, dan adaptor
+diuji unit dengan fake (`tests/media-image-compression*.test.ts`); perilaku di
+peramban sungguhan adalah spec Playwright
+`tests/e2e/media-upload-compression.e2e.ts`, yang membutuhkan server dengan
+`NEWS_MEDIA_R2_ENABLED=true` dan dilewati bila tidak ada.
 
 ## Layout
 
@@ -168,15 +251,14 @@ or purge. Four permissions — `media.read`, `.delete`, `.restore`, `.purge`.
 Every mutation posts to the guarded endpoint with a fresh `Idempotency-Key`
 (unlike `/admin/sync`, where no endpoint wants one, all three here require it).
 
-Three deliberate absences, each pinned by
+Three deliberate absences (the upload form is NOT one of them any more — Issue
+#595 added it, and Issue #1221 added browser-side compression to it; see
+§Upload size cap above), each pinned by
 `tests/admin-media-page-contract.test.ts` so they stay decisions rather than
 becoming gaps:
 
-- **Upload** (`media.create`/`.verify`/`.cancel`) — a three-step browser flow
-  (create session → PUT to R2 → finalize) with file input, progress, and
-  client-side failure modes. A button that starts a session this page cannot
-  finish leaves a `pending_upload` row on every misclick, which is exactly the
-  litter the reconciliation job cleans up.
+- **`media.verify`/`media.cancel` as page gates** — `cancel` is driven by the
+  uploader's own failure handling, and nothing on this screen verifies.
 - **`enforcement.*`** — a tenant-wide ONE-WAY policy switch, not an object
   action. It lives on `/admin/security` with the other policy controls.
 - **No `<img>` preview.** A row can be `pending_upload` or `failed`: the bytes

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:c8fd997ee886149ffc969d6339e4a8a0157df019c6c275a155dfb3a948abd933 -->
+<!-- i18n-source-hash: sha256:305da9e3a6deed0dbef93e4ee50a04a84a63dec73de0ab6fd0f6f57bdcf0369f -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -260,6 +260,27 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > **768px** (tablet potret) dan **1024px** (tumpang-tindih topbar #843). Tiap
 > viewport adalah satu `test()` di berkas yang sama dengan asersi yang sama;
 > tak ada layar atau lebar yang dikecualikan.
+
+> **Kompresi upload media (Issue #1221).** Kompresi gambar di peramban di balik
+> batas default 2 MiB diuji dalam tiga lapis.
+> `tests/media-image-compression-plan.test.ts` (perencana murni: dalam batas
+> tidak disentuh, GIF melebihi batas ditolak, tidak pernah memperbesar, alpha
+> tetap WebP, langkah kualitas/sisi terpanjang dan batas bawah),
+> `tests/media-image-compression.test.ts` (orkestrasi terhadap codec palsu yang
+> ukuran keluarannya fungsi dari ukuran dan kualitas, sehingga "muat pada
+> kualitas 0,65" dan "mencapai batas bawah" adalah asersi yang tepat) dan
+> `tests/media-image-compression-browser.test.ts` (adaptor `createImageBitmap` +
+> canvas lewat lingkungan palsu yang diinjeksi — `bun test` tidak punya canvas)
+> berjalan di `bun run check`; `tests/media-upload-client.test.ts` memastikan
+> sesi mengklaim `byteSize` dan tipe hasil kompresi, dan
+> `tests/admin-media-upload-compression-contract.test.ts` memastikan kabel halaman
+> (live region, `data-max-bytes`, pesan terjemahan, tanpa pengecualian CSP). Spec
+> peramban sungguhan `tests/e2e/media-upload-compression.e2e.ts` (JPEG melebihi
+> batas dikompres dan diterima, GIF melebihi batas ditolak, tata letak 360 px)
+> adalah WRITE_WAVE dan **tidak dapat berjalan di job `e2e-smoke` default**:
+> pengunggah hanya dirender dengan `NEWS_MEDIA_R2_ENABLED=true`, sehingga dilewati
+> di sana (storage di-mock dengan `page.route`, jadi blok `NEWS_MEDIA_R2_*`
+> placeholder sudah cukup untuk menjalankannya).
 
 > **Runner test.** Runner = **`bun test`** (`bun:test`), berkas di
 > `tests/`. Daftar target di bawah bersifat **target rencana modul ERP**,

@@ -132,6 +132,10 @@ export const WRITE_WAVE: readonly string[] = [
   // writes only procurement/inventory rows, but it mutates through the app.
   "admin-procurement-write.e2e.ts",
   "admin-modules-toggle.e2e.ts",
+  // Issue #1221 — drives the media uploader with an oversize JPEG and GIF. The
+  // upload endpoints are mocked with `page.route` and never reach the app, but
+  // it ATTEMPTS non-GET requests to them, which is what classifies it.
+  "media-upload-compression.e2e.ts",
   "admin-offices-create.e2e.ts",
   "admin-offices-edit.e2e.ts",
   "admin-profiles-create.e2e.ts",
