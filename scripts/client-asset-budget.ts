@@ -1143,8 +1143,18 @@ export const READER_BUDGET_BYTES = 24_000;
  * that no longer overwrites a `disabled` the page changed mid-flight. All of it
  * lives in the ONE shared module (no per-screen copy), so there is nothing to
  * recover elsewhere.
+ *
+ * **Raised again for the #1221 review follow-up**: +2,160 B (356,240 -> 358,400),
+ * of which 2,141 B measured locally (356,240 -> 358,381 on `main` b2c0731f) and
+ * 19 B of margin for the local/CI build difference seen on #1224. The review
+ * found that an over-cap animated WebP or APNG was silently flattened to one
+ * frame and that the 100 MP guard ran only after the full bitmap had been
+ * decoded; the fixes are `media-image-header.ts` (magic-byte sniffing, animation
+ * flags, pixel dimensions read from the header before any decode) and one more
+ * translated refusal message. Same single screen (`/admin/media`), same single
+ * copy of the code.
  */
-export const APP_BUDGET_BYTES = 356_240;
+export const APP_BUDGET_BYTES = 358_400;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
