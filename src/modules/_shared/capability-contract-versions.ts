@@ -121,5 +121,18 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // `checkOut`, `markNoShow`, `get`, `getOffering`, `listOfferings` and the
     // anonymous `availability` read, plus the refusals `CHECK_IN_TOO_EARLY` and
     // `NO_SHOW_TOO_EARLY`. No existing signature changed (a MINOR bump).
-    booking: "1.1.0"
+    booking: "1.1.0",
+    // whatsapp_delivery is provided by the base `whatsapp_delivery` module
+    // (ADR-0133), port `_shared/ports/whatsapp-delivery-port.ts`. `1.0.0` was the
+    // shape of Issue #963; `1.1.0` (Issue #1141, ADR-0148 section 4) ADDS the
+    // optional `senderAccountId`, `inReplyToMessageId` and `businessScope` inputs
+    // and the refusals `SENDER_UNAVAILABLE`, `SENDER_AFFINITY_CONFLICT` and
+    // `REPLY_TARGET_UNKNOWN`. No existing signature changed (a MINOR bump), so
+    // booking and the commerce adapter behind `awcms-one`'s mode router compile
+    // and behave unchanged. First entry for this key.
+    whatsapp_delivery: "1.1.0",
+    // channel_account is provided by the base `channel_accounts` module (Issue
+    // #1141, ADR-0148 capability C1) and consumed, optionally, by
+    // `whatsapp_delivery`. First assigned number, not a stability milestone.
+    channel_account: "1.0.0"
   });

@@ -8,6 +8,7 @@ import {
   type NormalizedPhone
 } from "./whatsapp-recipient";
 import type { SuppressionReason } from "./whatsapp-eligibility";
+import { isWhatsappRecordUuid, parseBusinessScope } from "./whatsapp-sender";
 
 export type ValidationResult<T> =
   { valid: true; value: T } | { valid: false; errors: string[] };
@@ -157,6 +158,71 @@ export function validateSuppressionCreateInput(
         value: {
           phone: phone as string,
           reason: reason as SuppressionCreateInput["reason"]
+        }
+      };
+}
+
+export type SenderPolicyInput = {
+  /** `null` is the tenant-wide default. */
+  businessScope: { type: string; id: string } | null;
+  /** `null` selects the deployment sender for the scope, explicitly. */
+  defaultSenderAccountId: string | null;
+};
+
+/**
+ * `PUT /api/v1/whatsapp/sender-policy` (Issue #1141). BOTH keys are required,
+ * even when `null`: leaving one out must not read as "do not change it" or as a
+ * decision to use the deployment sender. Strict, so a body that tries to smuggle
+ * a token, a phone number id, a device id or a provider name is a 400, never
+ * silently ignored: the sender is an account of this tenant, nothing else.
+ */
+export function validateSenderPolicyInput(
+  raw: unknown
+): ValidationResult<SenderPolicyInput> {
+  const shape = checkShape(raw, ["businessScope", "defaultSenderAccountId"]);
+
+  if ("errors" in shape) {
+    return { valid: false, errors: shape.errors };
+  }
+
+  const errors: string[] = [];
+  const { businessScope, defaultSenderAccountId } = shape.record;
+
+  if (businessScope === undefined) {
+    errors.push(
+      "businessScope is required (an object, or null for tenant-wide)."
+    );
+  }
+
+  if (defaultSenderAccountId === undefined) {
+    errors.push(
+      "defaultSenderAccountId is required (an account id, or null for the deployment sender)."
+    );
+  }
+
+  const scope = parseBusinessScope(businessScope);
+
+  if (scope === "invalid") {
+    errors.push(
+      "businessScope must be null or { type: lowercase snake_case, id: uuid }."
+    );
+  }
+
+  if (
+    defaultSenderAccountId !== undefined &&
+    defaultSenderAccountId !== null &&
+    !isWhatsappRecordUuid(defaultSenderAccountId)
+  ) {
+    errors.push("defaultSenderAccountId must be a uuid or null.");
+  }
+
+  return errors.length > 0
+    ? { valid: false, errors }
+    : {
+        valid: true,
+        value: {
+          businessScope: scope as SenderPolicyInput["businessScope"],
+          defaultSenderAccountId: defaultSenderAccountId as string | null
         }
       };
 }

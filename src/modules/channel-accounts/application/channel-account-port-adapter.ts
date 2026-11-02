@@ -1,0 +1,224 @@
+/**
+ * The `ChannelAccountPort` adapter (Issue #1141, ADR-0148 capability C1; the
+ * port is `_shared/ports/channel-account-port.ts`, ADR-0011). It answers one
+ * question for a channel module: may this tenant-owned account send a WhatsApp
+ * message RIGHT NOW, for this purpose? It returns metadata and a verdict,
+ * **never a secret**: this file deliberately does not import the secret store,
+ * so a job that only enqueues (booking's reminder dispatch) can reach it
+ * without reaching the key ring (`tests/jobs-env-scoped-reach.test.ts`).
+ *
+ * ## It runs as two roles
+ *
+ * As `awcms_app` on the enqueue path and as `awcms_worker` in the dispatcher.
+ * The worker holds COLUMN-ONLY SELECT (`sql/322`), so every query below names
+ * exactly the columns it needs and nothing else; widening a SELECT here without
+ * widening the grant fails with `permission denied` under the worker role.
+ *
+ * ## Fail closed
+ *
+ * The decision is {@link evaluateCapability} — the same single place that
+ * decides every capability use (ADR-0148 I2) — preceded by the account-state
+ * reasons it cannot name. Every query is `WHERE tenant_id = $1` inside the
+ * caller's tenant-scoped transaction (RLS `FORCE`), so another tenant's account
+ * and an unknown id are one answer: `ACCOUNT_NOT_FOUND`.
+ */
+import type {
+  ChannelAccountPort,
+  ResolveWhatsappSenderResult,
+  SenderUnavailableReason,
+  WhatsappSenderProvider
+} from "../../_shared/ports/channel-account-port";
+import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
+import {
+  evaluateCapability,
+  getProviderRow,
+  type CapabilityEvidenceKind,
+  type CapabilityRowFacts
+} from "../domain/provider-matrix";
+
+/** The (provider, kind) pairs that are a WhatsApp SENDING identity. A container (a WABA) holds no capability of its own; its numbers do. */
+const WHATSAPP_SENDER_KINDS: Readonly<
+  Record<WhatsappSenderProvider, readonly string[]>
+> = {
+  whatsapp_cloud: ["waba_phone_number"],
+  starsender: ["device"]
+};
+
+export function isWhatsappSenderShape(
+  provider: string,
+  accountKind: string
+): provider is WhatsappSenderProvider {
+  return (
+    Object.hasOwn(WHATSAPP_SENDER_KINDS, provider) &&
+    WHATSAPP_SENDER_KINDS[provider as WhatsappSenderProvider].includes(
+      accountKind
+    )
+  );
+}
+
+export type SenderAccountRow = {
+  id: string;
+  business_scope_type: string | null;
+  business_scope_id: string | null;
+  provider: string;
+  account_kind: string;
+  external_id: string;
+  auth_mode: string;
+  connection_id: string | null;
+  parent_account_id: string | null;
+  secret_id: string | null;
+  status: string;
+};
+
+/** The worker-readable column set of `awcms_channel_accounts` (sql/322). */
+export async function loadSenderAccount(
+  tx: Bun.SQL,
+  tenantId: string,
+  accountId: string
+): Promise<SenderAccountRow | null> {
+  const rows = (await tx`
+    SELECT id, business_scope_type, business_scope_id, provider, account_kind,
+           external_id, auth_mode, connection_id, parent_account_id, secret_id,
+           status
+    FROM awcms_channel_accounts
+    WHERE tenant_id = ${tenantId} AND id = ${accountId}
+      AND deleted_at IS NULL
+  `) as SenderAccountRow[];
+
+  return rows[0] ?? null;
+}
+
+export function reasonForAccountStatus(
+  status: string
+): SenderUnavailableReason | null {
+  switch (status) {
+    case "connected":
+      return null;
+    case "pending":
+      return "ACCOUNT_PENDING";
+    case "degraded":
+      return "ACCOUNT_DEGRADED";
+    case "revoked":
+      return "ACCOUNT_REVOKED";
+    case "disabled":
+      return "ACCOUNT_DISABLED";
+    default:
+      // `deleted` is filtered by the query; anything unknown is not usable.
+      return "ACCOUNT_NOT_FOUND";
+  }
+}
+
+type CapabilityRow = {
+  state: CapabilityRowFacts["state"];
+  evidence_kind: CapabilityEvidenceKind | null;
+  evidence_ref: string | null;
+  matrix_version: number;
+};
+
+export type ChannelAccountPortOptions = {
+  env?: NodeJS.ProcessEnv;
+};
+
+export function createChannelAccountPortAdapter(
+  options: ChannelAccountPortOptions = {}
+): ChannelAccountPort {
+  return {
+    async resolveWhatsappSender(
+      tx,
+      input
+    ): Promise<ResolveWhatsappSenderResult> {
+      if (!isChannelAccountsEnabled(options.env ?? process.env)) {
+        return { usable: false, reason: "CHANNEL_ACCOUNTS_DISABLED" };
+      }
+
+      const account = await loadSenderAccount(
+        tx,
+        input.tenantId,
+        input.accountId
+      );
+
+      if (!account) return { usable: false, reason: "ACCOUNT_NOT_FOUND" };
+
+      if (
+        !getProviderRow(account.provider) ||
+        !isWhatsappSenderShape(account.provider, account.account_kind)
+      ) {
+        return { usable: false, reason: "NOT_A_WHATSAPP_SENDER" };
+      }
+
+      const statusReason = reasonForAccountStatus(account.status);
+
+      if (statusReason) return { usable: false, reason: statusReason };
+
+      let connectionGrantState: string | null = null;
+
+      if (account.connection_id) {
+        const connection = (await tx`
+          SELECT grant_state FROM awcms_channel_provider_connections
+          WHERE tenant_id = ${input.tenantId} AND id = ${account.connection_id}
+        `) as { grant_state: string }[];
+
+        // A connection that cannot be read is NOT an active one.
+        connectionGrantState = connection[0]?.grant_state ?? "missing";
+      }
+
+      const capabilityRows = (await tx`
+        SELECT state, evidence_kind, evidence_ref, matrix_version
+        FROM awcms_channel_account_capabilities
+        WHERE tenant_id = ${input.tenantId} AND account_id = ${account.id}
+          AND capability = ${input.capability}
+      `) as CapabilityRow[];
+      const row = capabilityRows[0];
+      const verdict = evaluateCapability({
+        account: {
+          provider: account.provider,
+          accountKind: account.account_kind,
+          status: account.status,
+          connectionGrantState
+        },
+        capability: input.capability,
+        row: row
+          ? {
+              state: row.state,
+              evidenceKind: row.evidence_kind,
+              evidenceRef: row.evidence_ref,
+              matrixVersion: row.matrix_version
+            }
+          : null
+      });
+
+      if (!verdict.allowed) {
+        return {
+          usable: false,
+          reason:
+            verdict.code === "CONNECTION_NOT_ACTIVE"
+              ? "CONNECTION_NOT_ACTIVE"
+              : verdict.code === "ACCOUNT_NOT_USABLE"
+                ? "ACCOUNT_DEGRADED"
+                : "CAPABILITY_DENIED"
+        };
+      }
+
+      return {
+        usable: true,
+        sender: {
+          accountId: account.id,
+          provider: account.provider,
+          accountKind: account.account_kind,
+          externalId: account.external_id,
+          businessScope:
+            account.business_scope_type && account.business_scope_id
+              ? {
+                  type: account.business_scope_type,
+                  id: account.business_scope_id
+                }
+              : null
+        }
+      };
+    }
+  };
+}
+
+/** The adapter the composition roots hand to `whatsapp_delivery`. Reads `CHANNEL_ACCOUNTS_ENABLED` on every call. */
+export const channelAccountPortAdapter: ChannelAccountPort =
+  createChannelAccountPortAdapter();

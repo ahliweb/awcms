@@ -431,6 +431,11 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "channel-accounts:secrets:rekey",
         reason:
           "operator run: re-encrypts channel secrets under the new first key (#1140)"
+      },
+      {
+        target: "whatsapp:dispatch",
+        reason:
+          "decrypts a tenant-owned WhatsApp sender's credential in memory, per lane, for the claimed row's tenant (#1141, the residual risk ADR-0148 section 5 accepts). The job that only ENQUEUES (booking:reminders:dispatch) never reaches the secret store"
       }
     ]
   },

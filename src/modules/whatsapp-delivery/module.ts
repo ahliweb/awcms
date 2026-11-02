@@ -89,7 +89,7 @@ export const whatsappDeliveryModule = defineModule({
    */
   status: "active",
   description:
-    "Generic WhatsApp delivery capability (Issue #963, ADR-0133 phase 1) for any module that must send a WhatsApp message — booking reminders, hr_payroll notices, a downstream commerce adapter. A WhatsApp-specific `WhatsappDeliveryPort` (`_shared/ports/whatsapp-delivery-port.ts`, deliberately NOT a multi-channel facade) whose `enqueue` is one INSERT in the CALLER's transaction; a tenant-scoped queue and per-attempt ledger (`sql/178`); a claim/send/finalise dispatcher (`bun run whatsapp:dispatch`) with lease-based claiming, backoff, a circuit breaker and no network I/O inside a transaction; provider adapters for Meta Cloud API and Fonnte plus a safe `log` adapter, chosen per DEPLOYMENT from the environment (never per tenant); a template registry keyed by module-prefixed `templateKey` with ONE purpose per template and a variable allow-list that drops unlisted variables; purpose classes (transactional, security, marketing) with an independent consent store (marketing needs an explicit recorded opt-in, checked at enqueue AND again at dispatch, and never inferred from segment membership), a suppression list that provider hard failures feed, security-class expiry (`expired`, never sent late) and secrets cleared from the row at a terminal state; the phone number is E.164-normalised, stored raw in exactly one column and masked or hashed everywhere else, including logs, audit rows and domain events. It is a channel queue table, the repo's third after email and push — ADR-0133 section 3: what is refused is a SECOND WHATSAPP queue, one per consuming domain, so booking, hr and commerce all enqueue through this module's single queue. Operator surface: /admin/whatsapp. Ships INERT — without WHATSAPP_ENABLED=true enqueue returns `refused: DISABLED` and the dispatcher claims nothing.",
+    "Generic WhatsApp delivery capability (Issue #963, ADR-0133 phase 1) for any module that must send a WhatsApp message — booking reminders, hr_payroll notices, a downstream commerce adapter. A WhatsApp-specific `WhatsappDeliveryPort` (`_shared/ports/whatsapp-delivery-port.ts`, deliberately NOT a multi-channel facade) whose `enqueue` is one INSERT in the CALLER's transaction; a tenant-scoped queue and per-attempt ledger (`sql/178`); a claim/send/finalise dispatcher (`bun run whatsapp:dispatch`) with lease-based claiming, backoff, a circuit breaker and no network I/O inside a transaction; provider adapters for Meta Cloud API and Fonnte plus a safe `log` adapter for the DEPLOYMENT sender (`sender_account_id` NULL), chosen from the environment (never from a request); sender-aware routing (Issue #1141, ADR-0148 section 4) on the SAME queue: an immutable nullable `sender_account_id` snapshotted at enqueue from the explicit sender, the thread's sender (reply affinity) or the prospective per-business-scope default policy, the adapter and credential resolved from the tenant's own `channel_accounts` record in the dispatcher (never a request-supplied token, phone number id or device id), per-sender lanes with fair claiming, breaker, hourly and daily caps and diagnostics, and a sender that cannot send refused at enqueue and failed terminally at dispatch, never rerouted to another sender, number or provider (port version 1.1.0, additive); a template registry keyed by module-prefixed `templateKey` with ONE purpose per template and a variable allow-list that drops unlisted variables; purpose classes (transactional, security, marketing) with an independent consent store (marketing needs an explicit recorded opt-in, checked at enqueue AND again at dispatch, and never inferred from segment membership), a suppression list that provider hard failures feed, security-class expiry (`expired`, never sent late) and secrets cleared from the row at a terminal state; the phone number is E.164-normalised, stored raw in exactly one column and masked or hashed everywhere else, including logs, audit rows and domain events. It is a channel queue table, the repo's third after email and push — ADR-0133 section 3: what is refused is a SECOND WHATSAPP queue, one per consuming domain, so booking, hr and commerce all enqueue through this module's single queue. Operator surface: /admin/whatsapp. Ships INERT — without WHATSAPP_ENABLED=true enqueue returns `refused: DISABLED` and the dispatcher claims nothing.",
   dependencies: [
     "tenant_admin",
     "profile_identity",
@@ -98,7 +98,22 @@ export const whatsappDeliveryModule = defineModule({
   ],
   type: "system",
   capabilities: {
-    provides: ["whatsapp_delivery"]
+    provides: ["whatsapp_delivery"],
+    // Issue #1141, ADR-0148 section 4: a message may name a tenant-owned sender
+    // (a `channel_accounts` row). Optional: with no sender named and no policy
+    // configured nothing here is consulted and the deployment sender is used
+    // exactly as before. The adapter is loaded lazily by
+    // `infrastructure/channel-account-port-loader.ts` (the sender-resolution
+    // adapter, which holds no secret); the credential adapter is composed only
+    // by `scripts/whatsapp-dispatch.ts`. A soft edge, NOT a `dependencies`
+    // entry: switching `channel_accounts` off must not strand a tenant's queue.
+    consumes: [
+      {
+        capability: "channel_account",
+        providedBy: "channel_accounts",
+        optional: true
+      }
+    ]
   },
   api: {
     openApiPath: "openapi/modules/whatsapp-delivery.openapi.yaml",
@@ -181,6 +196,18 @@ export const whatsappDeliveryModule = defineModule({
       action: "read",
       description:
         "Read the registered WhatsApp templates (key, purpose, allowed variables)"
+    },
+    {
+      activityCode: "senders",
+      action: "read",
+      description:
+        "Read this tenant's WhatsApp senders with queue, quota and availability diagnostics, and the default-sender policy (never a credential or a number)"
+    },
+    {
+      activityCode: "sender_policy",
+      action: "configure",
+      description:
+        "Set or clear the default WhatsApp sender of a business scope; affects later messages only (high-risk, audited at warning)"
     }
   ],
   navigation: [
@@ -281,6 +308,16 @@ export const whatsappDeliveryModule = defineModule({
         "Numbers that stopped receiving WhatsApp, why, and who suppressed them. A suppression is itself a privacy decision, so the record survives erasure with the actor detached; the hash and masked number are cleared.",
       redactedColumns: ["recipient_hash"],
       anonymizedColumns: ["recipient_hash", "recipient_masked"]
+    },
+    {
+      key: "whatsapp_delivery.whatsapp_sender_policies",
+      tableName: "awcms_whatsapp_sender_policies",
+      ownerModuleKey: WHATSAPP_MODULE_KEY,
+      subjectColumns: [{ column: "changed_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The default WhatsApp sender per business scope, with its configuration version. The row describes which of the tenant's own accounts speaks for a scope, not a person; its only person-shaped column is the stamp of the administrator who last changed it, which resolves to nobody once that identity is anonymised."
     },
     {
       key: "whatsapp_delivery.whatsapp_delivery_attempts",

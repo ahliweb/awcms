@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 34    |
-| Migrations                          | 236   |
-| `awcms_*` tables                    | 232   |
-| Tables with `FORCE` RLS             | 214   |
+| Migrations                          | 238   |
+| `awcms_*` tables                    | 233   |
+| Tables with `FORCE` RLS             | 215   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 764   |
-| Route files                         | 594   |
+| Test files                          | 766   |
+| Route files                         | 596   |
 | ADR                                 | 314   |
 
 ### Modules
@@ -295,6 +295,8 @@
 | 234 | `sql/319_awcms_channel_accounts_permissions.sql`                   |
 | 235 | `sql/320_awcms_channel_accounts_integrity_guards.sql`              |
 | 236 | `sql/321_awcms_hr_commission_intake_cap_and_fairness.sql`          |
+| 237 | `sql/322_awcms_whatsapp_sender_routing.sql`                        |
+| 238 | `sql/323_awcms_whatsapp_sender_routing_permissions.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -524,6 +526,7 @@
 | `awcms_whatsapp_consents`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_delivery_attempts`             | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_messages`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_sender_policies`               | `sql/322_awcms_whatsapp_sender_routing.sql`                | yes | yes   |
 | `awcms_whatsapp_suppressions`                  | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_workflow_decisions`                     | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_definitions`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
@@ -537,16 +540,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 578        |
+| `(root)`      | 579        |
 | `e2e`         | 29         |
-| `integration` | 156        |
+| `integration` | 157        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 482   |
+| `/api/v1/**`    | 484   |
 | `/admin/**`     | 81    |
 | publik / anonim | 31    |
 
