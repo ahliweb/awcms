@@ -26,6 +26,8 @@ import {
  *
  * Refused with `PROVIDER_ADAPTER_UNAVAILABLE` for a provider whose connector is
  * not installed: this module does not guess a provider's authorisation endpoint.
+ * The same code when the deployment declares no usable `APP_URL`: the callback
+ * origin is never a built-in default (#1215 L7).
  * Not idempotency-keyed: each call deliberately mints a fresh state, and the
  * number of unconsumed states per person is capped.
  */

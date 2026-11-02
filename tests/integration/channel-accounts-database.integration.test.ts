@@ -1988,6 +1988,83 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       );
     });
 
+    test("#1215 L4: a connection's business scope is immutable, and a consumed OAuth state is frozen", async () => {
+      const admin = getAdminSql();
+      const scopeId = crypto.randomUUID();
+      const otherScopeId = crypto.randomUUID();
+      const connection = (await admin`
+        INSERT INTO awcms_channel_provider_connections
+          (tenant_id, provider, auth_mode, grant_state, business_scope_type,
+           business_scope_id)
+        VALUES (${T1}, 'facebook', 'oauth2', 'active', 'office', ${scopeId})
+        RETURNING id
+      `) as { id: string }[];
+      const unscoped = (await admin`
+        INSERT INTO awcms_channel_provider_connections
+          (tenant_id, provider, auth_mode, grant_state)
+        VALUES (${T1}, 'facebook', 'oauth2', 'active')
+        RETURNING id
+      `) as { id: string }[];
+
+      // Every change of scope is refused: re-pointing, widening to tenant-wide
+      // (NULL both) and narrowing a tenant-wide connection to a scope.
+      await assertRejected(
+        admin`UPDATE awcms_channel_provider_connections SET business_scope_id = ${otherScopeId} WHERE id = ${connection[0]!.id}`,
+        "re-pointing a connection's business scope id"
+      );
+      await assertRejected(
+        admin`UPDATE awcms_channel_provider_connections SET business_scope_type = 'brand' WHERE id = ${connection[0]!.id}`,
+        "changing a connection's business scope type"
+      );
+      await assertRejected(
+        admin`UPDATE awcms_channel_provider_connections SET business_scope_type = NULL, business_scope_id = NULL WHERE id = ${connection[0]!.id}`,
+        "widening a scoped connection to tenant-wide"
+      );
+      await assertRejected(
+        admin`UPDATE awcms_channel_provider_connections SET business_scope_type = 'office', business_scope_id = ${scopeId} WHERE id = ${unscoped[0]!.id}`,
+        "narrowing a tenant-wide connection to a scope"
+      );
+
+      const kept = (await admin`
+        SELECT business_scope_type, business_scope_id
+        FROM awcms_channel_provider_connections WHERE id = ${connection[0]!.id}
+      `) as { business_scope_type: string; business_scope_id: string }[];
+
+      expect(kept[0]).toEqual({
+        business_scope_type: "office",
+        business_scope_id: scopeId
+      });
+
+      // An OAuth state: identity fields are always immutable; the scope it
+      // carries is frozen once consumed.
+      const redirectHash = `sha256:${"c".repeat(64)}`;
+      const state = (await admin`
+        INSERT INTO awcms_channel_oauth_states
+          (tenant_id, provider, state_hash, initiated_by, redirect_uri_hash,
+           business_scope_type, business_scope_id, expires_at)
+        VALUES (${T1}, 'facebook', ${`sha256:${"d".repeat(64)}`}, ${U1},
+                ${redirectHash}, 'office', ${scopeId},
+                now() + interval '10 minutes')
+        RETURNING id
+      `) as { id: string }[];
+
+      await assertRejected(
+        admin`UPDATE awcms_channel_oauth_states SET redirect_uri_hash = ${`sha256:${"e".repeat(64)}`} WHERE id = ${state[0]!.id}`,
+        "re-pointing an OAuth state's redirect"
+      );
+
+      await admin`UPDATE awcms_channel_oauth_states SET consumed_at = now() WHERE id = ${state[0]!.id}`;
+
+      await assertRejected(
+        admin`UPDATE awcms_channel_oauth_states SET business_scope_id = ${otherScopeId} WHERE id = ${state[0]!.id}`,
+        "changing a consumed OAuth state's business scope id"
+      );
+      await assertRejected(
+        admin`UPDATE awcms_channel_oauth_states SET business_scope_type = NULL, business_scope_id = NULL WHERE id = ${state[0]!.id}`,
+        "clearing a consumed OAuth state's business scope"
+      );
+    });
+
     test("a business-scope pair is both or neither", async () => {
       await assertRejected(
         getAdminSql()`

@@ -209,27 +209,58 @@ export type CreateAccountOutcome =
         | "ACCOUNT_ALREADY_REGISTERED";
     };
 
-export async function createAccount(
-  tx: Bun.SQL,
-  tenantId: string,
-  actorTenantUserId: string,
-  input: CreateAccountInput
-): Promise<CreateAccountOutcome> {
+/**
+ * Everything about a registration that can be refused WITHOUT looking at the
+ * connection row: the `(provider, kind, authMode)` shape and whether a
+ * connection id is the right thing to send for the auth mode. A route runs it
+ * BEFORE it fetches the connection, so the answer for a malformed request never
+ * depends on whether the id names a real connection (#1215 L2): a
+ * `CONNECTION_MISMATCH` for a real id and a `CONNECTION_NOT_FOUND` for an
+ * invented one would tell a caller which ids exist.
+ */
+export function checkRegistrationShape(
+  input: Pick<
+    CreateAccountInput,
+    "provider" | "accountKind" | "authMode" | "connectionId"
+  >
+):
+  | { ok: true; parentKind: string | null }
+  | { ok: false; code: CreateRefusalCode } {
   const shape = checkAccountShape(
     input.provider,
     input.accountKind,
     input.authMode
   );
 
-  if (!shape.ok) return { outcome: "refused", code: shape.code };
+  if (!shape.ok) return { ok: false, code: shape.code };
 
   // OAuth accounts hang off a connection (the token holder); the other modes
   // carry their own credential and may not claim one.
   if (input.authMode === "oauth2") {
-    if (!input.connectionId) {
-      return { outcome: "refused", code: "CONNECTION_REQUIRED" };
-    }
+    if (!input.connectionId) return { ok: false, code: "CONNECTION_REQUIRED" };
+  } else if (input.connectionId) {
+    return { ok: false, code: "CONNECTION_MISMATCH" };
+  }
 
+  return { ok: true, parentKind: shape.parentKind };
+}
+
+type CreateRefusalCode = Extract<
+  CreateAccountOutcome,
+  { outcome: "refused" }
+>["code"];
+
+export async function createAccount(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  input: CreateAccountInput
+): Promise<CreateAccountOutcome> {
+  const shape = checkRegistrationShape(input);
+
+  if (!shape.ok) return { outcome: "refused", code: shape.code };
+
+  if (input.authMode === "oauth2") {
     // `FOR SHARE`: a revocation (which locks the row `FOR UPDATE`) cannot
     // commit between this check and the insert below.
     const connection = (await tx`
@@ -256,8 +287,6 @@ export async function createAccount(
     if (connection[0]!.grant_state !== "active") {
       return { outcome: "refused", code: "CONNECTION_NOT_ACTIVE" };
     }
-  } else if (input.connectionId) {
-    return { outcome: "refused", code: "CONNECTION_MISMATCH" };
   }
 
   if (shape.parentKind) {

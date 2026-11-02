@@ -1,6 +1,7 @@
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import {
+  checkRegistrationShape,
   createAccount,
   listAccounts
 } from "../../../../../modules/channel-accounts/application/account-directory";
@@ -72,6 +73,32 @@ export const GET = defineTenantRoute<ListAccountsQuery>({
 type Prepared = { idempotencyKey: string; input: CreateAccountInput };
 
 /**
+ * One spelling of a registration refusal. A connection that exists but is of
+ * another provider answers exactly like one that does not exist (audit L2):
+ * otherwise the pair of codes tells a caller which ids name a real connection.
+ */
+function refusalResponse(
+  refusedCode: Extract<
+    Awaited<ReturnType<typeof createAccount>>,
+    { outcome: "refused" }
+  >["code"],
+  input: CreateAccountInput
+): Response {
+  const code =
+    refusedCode === "CONNECTION_MISMATCH" && input.authMode === "oauth2"
+      ? "CONNECTION_NOT_FOUND"
+      : refusedCode;
+
+  return fail(
+    code === "ACCOUNT_ALREADY_REGISTERED" ? 409 : 422,
+    code,
+    code === "ACCOUNT_ALREADY_REGISTERED"
+      ? "This external account is already registered."
+      : "The account cannot be registered as requested."
+  );
+}
+
+/**
  * `POST /api/v1/channel-accounts/accounts` (Issue #1140) — register an external
  * account. `(provider, accountKind, authMode)` must be a combination the provider
  * matrix admits. A live external account belongs to ONE tenant: a duplicate is
@@ -107,8 +134,16 @@ export const POST = defineTenantRoute<Prepared>({
 
     if (scopeRefusal) return scopeRefusal;
 
+    // What can be refused without looking at the connection is refused FIRST
+    // (audit L2): the answer for a malformed request must not depend on whether
+    // the connection id names a real connection.
+    const shape = checkRegistrationShape(context.prepared.input);
+
+    if (!shape.ok) return refusalResponse(shape.code, context.prepared.input);
+
     // Binding to a connection lends the account that connection's token: an act
-    // on the connection, authorised against ITS scope (audit H1).
+    // on the connection, authorised against ITS scope (audit H1), and the
+    // account's scope must be contained in the connection's (#1215).
     if (context.prepared.input.connectionId) {
       const bindingRefusal = await authorizeConnectionBinding(
         context,
@@ -117,7 +152,8 @@ export const POST = defineTenantRoute<Prepared>({
           context.tx,
           context.tenantId,
           context.prepared.input.connectionId
-        )
+        ),
+        context.prepared.input.businessScope
       );
 
       if (bindingRefusal) return bindingRefusal;
@@ -137,22 +173,7 @@ export const POST = defineTenantRoute<Prepared>({
         const result = await createAccount(tx, tenantId, actor, prepared.input);
 
         if (result.outcome === "refused") {
-          // A connection that exists but is of another provider answers exactly
-          // like one that does not exist (audit L2): otherwise the pair of codes
-          // tells a caller which ids name a real connection.
-          const code =
-            result.code === "CONNECTION_MISMATCH" &&
-            prepared.input.authMode === "oauth2"
-              ? "CONNECTION_NOT_FOUND"
-              : result.code;
-
-          return fail(
-            code === "ACCOUNT_ALREADY_REGISTERED" ? 409 : 422,
-            code,
-            result.code === "ACCOUNT_ALREADY_REGISTERED"
-              ? "This external account is already registered."
-              : "The account cannot be registered as requested."
-          );
+          return refusalResponse(result.code, prepared.input);
         }
 
         await auditChannelAccounts(context, {
@@ -165,7 +186,10 @@ export const POST = defineTenantRoute<Prepared>({
             provider: result.account.provider,
             accountKind: result.account.accountKind,
             authMode: result.account.authMode,
-            scoped: result.account.businessScope !== null
+            scoped: result.account.businessScope !== null,
+            // The internal id of the connection the account borrows a token
+            // from (a UUID, never an external identifier): who bound what.
+            connectionId: result.account.connectionId
           }
         });
 

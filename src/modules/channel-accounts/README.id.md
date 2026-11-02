@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:08f5ad9953ab6f4dd0a9e037367931a1198881027a4559fe55418dc799bae668 -->
+<!-- i18n-source-hash: sha256:ce5df6b4f47fd49123b6b62c4745805e37ce74fd33cd21b526cd0414727f2be8 -->
 
 # `channel_accounts`
 
@@ -73,4 +73,32 @@ Tiap tabel menjawab kedua pertanyaan pada perubahan yang sama. Deskriptor `subje
 - Belum ada adapter penyedia, pertukaran token, panggilan refresh, pemeriksaan kesehatan, atau penerima webhook; `recordAccountHealth` dan `activateConnectionGrant` adalah titik masuk yang dipanggil issue-issue itu.
 - Belum ada domain event (`channel.account.*`) yang diterbitkan: belum ada konsumen, dan garis besar kontrak menyerahkannya kepada issue yang membutuhkannya.
 - Belum ada `ChannelAccountPort` yang diekspor; `resolveCapability` adalah fungsi yang akan dibungkusnya (konsumen pertama: #1141).
-- Key ring harus berisi kunci yang berbeda dari ring modul lain (`config:validate` memeriksa ring Telegram dan push).
+- Key ring harus berisi kunci yang berbeda dari ring modul lain (`config:validate` memeriksa ring Telegram, push, dan hash penerima WhatsApp).
+
+## Aturan scope pengikatan (#1215)
+
+Sebuah akun meminjamkan token connection-nya kepada siapa pun yang dapat bertindak atas akun itu, sehingga **business scope akun harus tercakup dalam scope connection-nya, tanpa pengecualian administrator**:
+
+| connection \ akun | tenant-wide | scope A | scope B |
+| ----------------- | ----------- | ------- | ------- |
+| tenant-wide       | boleh       | boleh   | boleh   |
+| scope A           | ditolak     | boleh   | ditolak |
+
+"Tercakup" berarti **kesamaan persis `(type, id)`** untuk connection ber-scope; hierarki business-scope (ADR-0060) tidak dipakai (pembacaan paling ketat, gagal tertutup; lihat pertanyaan terbuka). Penolakan dijawab seperti connection yang tidak ada (`422 CONNECTION_NOT_FOUND`). Pemeriksaan ini berjalan sebelum setiap pemeriksaan wewenang, jadi administrator tenant juga terikat. Wewenang datang setelah cakupan: connection yang belum punya akun hanya dapat diikat oleh pembuatnya atau pemegang break-glass (wewenang yang sama dengan mencabutnya); yang sudah punya akun membutuhkan wewenang `owner` atas semuanya, yang hanya dilewati administrator tenant. Baris audit `account.create` membawa `connectionId` internal (UUID).
+
+`canSeeAllAccounts` (bypass administrator) mensyaratkan `assignments.assign` lewat **grant tenant-wide** (`scope_type = 'tenant'`) selain izin chokepoint: ADR-0080 membiarkan kunci grant ber-scope tetap tingkat tenant di chokepoint, sehingga tanpa ini grant yang dikurung ke satu office bertindak sebagai administrator semua office. Penulis grant hari ini hanya menulis `tenant`; ini adalah **syarat mengikat untuk PR yang menambah penulis grant ber-scope** (`holdsTenantWidePermissionKey`, dipaku oleh `tests/integration/channel-accounts-api.integration.test.ts`, LOW-1).
+
+Break-glass connection menanyakan pertanyaan tingkat tenant lebih dulu (satu keputusan termemo per permintaan); hanya pemanggil yang bukan administrator membayar keputusan per scope, dan hanya untuk scope berbeda yang ditanyakan, bukan per connection.
+
+`APP_URL` wajib saat modul aktif dan satu-satunya sumber origin callback OAuth: `resolveChannelOAuthRedirectUri` mengembalikan `null` (start menjawab `PROVIDER_ADAPTER_UNAVAILABLE`, callback `STATE_INVALID`) alih-alih jatuh ke host bawaan, dan `config:validate` menolak boot deployment-nya (#1215 L7).
+
+## Sisa pekerjaan dan pertanyaan terbuka (#1215, keputusan pemilik)
+
+Tidak dikerjakan di sini; masing-masing butuh keputusan desain pemilik dan, sebagian besar, migrasi:
+
+- **M-c**, model assignment fail-open: menghapus assignee terakhir membuka akun ke seluruh tenant (usul: kolom `access_mode` eksplisit dan menolak menghapus owner terakhir). Erasure juga belum punya baris audit modul.
+- **Squatting id eksternal** (M4 review pertama): baris `pending` sudah memegang klaim global `(provider, external_id)`. Butuh klaim terverifikasi atau kedaluwarsa klaim, yaitu job ber-scope platform.
+- **N2** (sweep state OAuth hanya saat start berikutnya), **N3** (daftar `LIMIT 200` tanpa cursor), dan L5/L6 sebagaimana di issue (inkonsistensi kecil, oracle lintas-tenant yang terdokumentasi).
+- **`awcms_channel_accounts.business_scope_*` tidak punya trigger immutability** (connection dan state OAuth yang sudah dikonsumsi punya, `sql/320`). Tidak ada jalur API yang mengubahnya, tetapi aturan cakupan di atas hanya sekuat kolom itu; menjaganya butuh migrasi.
+- **Cakupan hierarkis**: bolehkah scope anak (office di bawah region) mengikat connection milik scope induk? Dipilih kesamaan persis; melonggarkannya adalah keputusan pemilik.
+- `sql/318` membawa komentar usang (N10) yang tidak boleh diedit pada migrasi terapan; pernyataan yang akurat ada di README ini dan ADR-0148.

@@ -1796,8 +1796,19 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
         (await bind(first.token, facebookPage("m2-mine", connection, office)))
           .status
       ).toBe(201);
+      // A tenant-wide account on this scoped connection is refused by
+      // containment even for the administrator (#1215)...
       expect(
-        (await bind(env.token, facebookPage("m2-admin", connection, null)))
+        (await bind(env.token, facebookPage("m2-wide", connection, null)))
+          .status
+      ).toBe(422);
+
+      // ...who binds an account of the connection's own scope (an account's
+      // scope is authorised through the chokepoint too, so the administrator
+      // holds the scope first).
+      await holdScope(env.ownerTenantUserId, office);
+      expect(
+        (await bind(env.token, facebookPage("m2-admin", connection, office)))
           .status
       ).toBe(201);
     });
@@ -1892,6 +1903,262 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect(mismatched.status).toBe(422);
       expect(mismatched.body).toEqual(unknown.body);
       expect(mismatched.body.error?.code).toBe("CONNECTION_NOT_FOUND");
+    });
+
+    test("#1215 containment: the account's scope must lie inside the connection's scope, and the administrator is no exception", async () => {
+      if (!handlerReady) return;
+
+      const officeA = await seedOffice("cont-a");
+      const officeB = await seedOffice("cont-b");
+      const scopedB = await seedConnection({
+        state: "active",
+        officeId: officeB
+      });
+      const wide = await seedConnection({ state: "active" });
+
+      const writtenFor = async (externalId: string) =>
+        (
+          (await admin()`
+            SELECT 1 FROM awcms_channel_accounts WHERE external_id = ${externalId}
+          `) as unknown[]
+        ).length;
+
+      // The PoC of the audit: the administrator mints a tenant-wide (or scope-A)
+      // account on scope B's token. Refused like an unknown connection, written nowhere.
+      const unknown = await bind(
+        env.token,
+        facebookPage("cont-unknown", crypto.randomUUID(), null)
+      );
+
+      const expectRefused = async (
+        id: string,
+        connectionId: string,
+        officeId: string | null
+      ) => {
+        const refused = await bind(
+          env.token,
+          facebookPage(id, connectionId, officeId)
+        );
+
+        expect(refused.status).toBe(422);
+        expect(refused.body.error?.code).toBe("CONNECTION_NOT_FOUND");
+        expect(refused.body.error).toEqual(unknown.body.error);
+        expect(await writtenFor(id)).toBe(0);
+      };
+
+      await expectRefused("cont-wide-on-b", scopedB, null);
+
+      // A tenant-wide account may bind ONLY a tenant-wide connection.
+      expect(
+        (await bind(env.token, facebookPage("cont-wide-on-wide", wide, null)))
+          .status
+      ).toBe(201);
+
+      // Naming a scope needs holding it (the chokepoint), so the administrator
+      // holds both; the containment rule is what stops the cross-scope binding.
+      // (Holding a scope also confines CREATION: no more tenant-wide accounts.)
+      await holdScope(env.ownerTenantUserId, officeA);
+      await holdScope(env.ownerTenantUserId, officeB);
+      await expectRefused("cont-a-on-b", scopedB, officeA);
+
+      // A scope-B account may bind scope B's connection, or a tenant-wide one.
+      expect(
+        (await bind(env.token, facebookPage("cont-b-on-b", scopedB, officeB)))
+          .status
+      ).toBe(201);
+      expect(
+        (await bind(env.token, facebookPage("cont-b-on-wide", wide, officeB)))
+          .status
+      ).toBe(201);
+
+      // The audit row names the internal connection id (a UUID, no external id).
+      const audit = (await admin()`
+        SELECT attributes FROM awcms_audit_events
+        WHERE action = 'channel_accounts.account.create'
+          AND resource_id = (SELECT id::text FROM awcms_channel_accounts WHERE external_id = 'cont-b-on-b')
+      `) as { attributes: Record<string, unknown> }[];
+
+      expect(audit[0]!.attributes.connectionId).toBe(scopedB);
+    });
+
+    test("#1215 containment: a scope-A operator may bind a tenant-wide connection it started, but never a tenant-wide account to a scoped one", async () => {
+      if (!handlerReady) return;
+
+      const officeA = await seedOffice("cont2-a");
+      const operator = await seedUser(env.tenantId, "cont2-a", OPERATOR_KEYS);
+
+      await holdScope(operator.tenantUserId, officeA);
+
+      const mine = await seedConnection({
+        state: "active",
+        connectedBy: operator.tenantUserId
+      });
+      const scopedA = await seedConnection({
+        state: "active",
+        officeId: officeA,
+        connectedBy: operator.tenantUserId
+      });
+
+      expect(
+        (
+          await bind(
+            operator.token,
+            facebookPage("cont2-a-wide", mine, officeA)
+          )
+        ).status
+      ).toBe(201);
+      expect(
+        (
+          await bind(
+            operator.token,
+            facebookPage("cont2-a-a", scopedA, officeA)
+          )
+        ).status
+      ).toBe(201);
+      // Tenant-wide account on a scope-A connection: refused (a confined
+      // operator may not mint a tenant-wide account at all).
+      expect(
+        (await bind(operator.token, facebookPage("cont2-w-a", scopedA, null)))
+          .status
+      ).toBe(403);
+    });
+
+    test("#1215 LOW-1 (ADR-0080): a permission key conferred by a SCOPED grant does not make the holder the tenant administrator", async () => {
+      if (!handlerReady) return;
+
+      const office = await seedOffice("low1-office");
+      const holder = await seedUser(env.tenantId, "low1", [
+        "channel_accounts.accounts.read",
+        "channel_accounts.assignments.assign"
+      ]);
+      const connection = await seedConnection({ state: "active" });
+      const account = await seedBoundAccount(connection, "low1-acc");
+
+      await assignDirect(account, env.ownerTenantUserId, "owner");
+
+      const read = () =>
+        call(getAccount, {
+          path: `${BASE}/accounts/${account}`,
+          params: { id: account },
+          token: holder.token
+        });
+
+      // A TENANT-wide grant of assignments.assign: the administrator's bypass.
+      expect((await read()).status).toBe(200);
+
+      // The same grant re-scoped to one office confers the key to the chokepoint
+      // (ADR-0080 keeps the key tenant-level) but must NOT carry the bypass.
+      await admin()`
+        UPDATE awcms_access_policies
+        SET scope_type = 'office', scope_id = ${office}
+        WHERE tenant_id = ${env.tenantId}
+          AND tenant_user_id = ${holder.tenantUserId}
+      `;
+
+      expect((await read()).status).toBe(404);
+    });
+
+    test("#1215 LOW-2: a connection id answers identically whether it exists or not, for every shape", async () => {
+      if (!handlerReady) return;
+
+      const operator = await seedUser(env.tenantId, "low2", OPERATOR_KEYS);
+      const connection = await seedConnection({ state: "active" });
+      const answer = async (authMode: string, connectionId: string) => {
+        const response = await call<Account>(createAccount, {
+          method: "POST",
+          path: `${BASE}/accounts`,
+          token: operator.token,
+          body: {
+            provider: "starsender",
+            accountKind: "device",
+            authMode,
+            externalId: `low2-${authMode}`,
+            displayName: "Device low2",
+            connectionId
+          }
+        });
+
+        return { status: response.status, error: response.body.error };
+      };
+
+      for (const authMode of ["device_key", "api_token"]) {
+        const real = await answer(authMode, connection);
+        const nonexistent = await answer(authMode, crypto.randomUUID());
+
+        expect(real).toEqual(nonexistent);
+        expect(real.status).toBe(422);
+      }
+    });
+
+    test("#1215 LOW-3: binding to an empty tenant-wide connection needs the revoke authority, creator or administrator", async () => {
+      if (!handlerReady) return;
+
+      const starter = await seedUser(env.tenantId, "low3-start", OPERATOR_KEYS);
+      const stranger = await seedUser(
+        env.tenantId,
+        "low3-other",
+        OPERATOR_KEYS
+      );
+      const connection = await seedConnection({
+        state: "active",
+        connectedBy: starter.tenantUserId
+      });
+
+      expect(
+        (await bind(stranger.token, facebookPage("low3-s", connection, null)))
+          .status
+      ).toBe(422);
+      expect(
+        (await bind(starter.token, facebookPage("low3-c", connection, null)))
+          .status
+      ).toBe(201);
+    });
+
+    test("#1215 LOW-3: an administrator listing connections of many scopes writes no per-scope decision rows", async () => {
+      if (!handlerReady) return;
+
+      const rowsOfOneList = async () => {
+        const count = async () =>
+          (
+            (await admin()`
+              SELECT count(*)::int AS n FROM awcms_abac_decision_logs
+              WHERE tenant_id = ${env.tenantId}
+            `) as { n: number }[]
+          )[0]!.n;
+        const before = await count();
+        const list = await call<{ id: string }[]>(listConnections, {
+          path: `${BASE}/connections`
+        });
+
+        expect(list.status).toBe(200);
+
+        return {
+          rows: (await count()) - before,
+          listed: list.body.data!.length
+        };
+      };
+
+      for (let i = 0; i < 2; i += 1) {
+        await seedConnection({
+          state: "active",
+          officeId: await seedOffice(`low3-s${i}`)
+        });
+      }
+
+      const few = await rowsOfOneList();
+
+      for (let i = 2; i < 8; i += 1) {
+        await seedConnection({
+          state: "active",
+          officeId: await seedOffice(`low3-s${i}`)
+        });
+      }
+
+      const many = await rowsOfOneList();
+
+      expect(few.listed).toBe(2);
+      expect(many.listed).toBe(8);
+      expect(many.rows).toBe(few.rows);
     });
 
     test("M-b: a credential written under an upper-case tenant header rekeys under the canonical id", async () => {
