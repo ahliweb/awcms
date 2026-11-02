@@ -99,11 +99,16 @@ describe("accessibility", () => {
 
   test("the file input and the submit button are locked while the image is being compressed", () => {
     const script = PAGE.slice(PAGE.lastIndexOf("<script>"));
-    const lock = script.indexOf("submit.disabled = true");
+    // Issue #1224: the submit button is locked (and a second submit ignored) by
+    // the shared `onSubmit` helper for the WHOLE handler, compression included,
+    // so the upload must run inside `onSubmit` and the form must not bind its
+    // own listener any more. The file input is this page's to lock.
+    const bind = script.indexOf('onSubmit("media-upload-form"');
     const call = script.indexOf("await uploadMediaFile(");
 
-    expect(lock).toBeGreaterThan(-1);
-    expect(call).toBeGreaterThan(lock);
+    expect(bind).toBeGreaterThan(-1);
+    expect(call).toBeGreaterThan(bind);
+    expect(script).not.toContain("uploadForm.addEventListener(");
     expect(script).toContain("fileInput.disabled = true");
   });
 });
