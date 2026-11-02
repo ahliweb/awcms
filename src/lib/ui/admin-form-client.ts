@@ -113,7 +113,9 @@ function release(element: HTMLButtonElement, lock?: ControlLock): void {
   if (!held || (lock && held !== lock)) return;
 
   controlLocks.delete(element);
-  element.disabled = held.disabled;
+  // Only undo OUR disable: if the page changed `disabled` during the flight
+  // (dirty tracking, a save bar), its value stands.
+  if (element.disabled) element.disabled = held.disabled;
   if (held.label !== undefined) element.textContent = held.label;
 }
 
@@ -415,8 +417,8 @@ export type FlightPorts<K> = {
  * Different keys are independent — two rows of one table may act at once.
  *
  * The flag is released in `finally`, so a throw and a failed outcome both free
- * the key. The one exception is `holds`: a task that ends by navigating keeps
- * its key until {@link createSingleFlight}'s `release()` (the bfcache restore).
+ * the key. The one exception is `holds`: a task that RETURNS having started a
+ * navigation keeps its key until {@link createSingleFlight}'s `release()` (the bfcache restore).
  */
 export function createSingleFlight<K>(ports: FlightPorts<K>) {
   const active = new Set<K>();
@@ -429,10 +431,14 @@ export function createSingleFlight<K>(ports: FlightPorts<K>) {
       active.add(key);
       ports.enter(key);
 
+      let keep = false;
+
       try {
         await task();
+        // Hold only after a NORMAL return: a throw always frees the key.
+        keep = ports.holds(key);
       } finally {
-        if (ports.holds(key)) held.add(key);
+        if (keep) held.add(key);
         else {
           active.delete(key);
           ports.leave(key);
@@ -453,6 +459,7 @@ export function createSingleFlight<K>(ports: FlightPorts<K>) {
 }
 
 let navigating = false;
+let navTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Says the handler is about to leave the page (reload, redirect), so its form
@@ -463,6 +470,11 @@ let navigating = false;
 export function holdForNavigation(): void {
   navigating = true;
   armPageShow();
+  // A navigation that never replaces this page (download, cancelled unload)
+  // must not leave the form locked: if the page is still alive after 10 s, the
+  // hold is released. A page that really left never runs this.
+  clearTimeout(navTimer);
+  navTimer = setTimeout(() => restoreOnPageShow({ persisted: true }), 1e4);
 }
 
 let pageShowArmed = false;
@@ -526,10 +538,13 @@ const singleFlight = /* @__PURE__ */ createSingleFlight<HTMLElement>({
   },
   holds(host) {
     const control = controlOf(host);
+    // The navigation hold is ONE-SHOT: it belongs to the flight that settles
+    // next, so a concurrent flight on another control is not held by it.
+    const nav = navigating;
 
-    return (
-      navigating || (!!control && controlLocks.get(control)?.page === true)
-    );
+    navigating = false;
+
+    return nav || (!!control && controlLocks.get(control)?.page === true);
   }
 });
 

@@ -12,7 +12,8 @@
  *    enough because the helpers only use `getElementById`, `closest`,
  *    attributes, `disabled`/`textContent` and `addEventListener`. The
  *    browser-level proof (a real double click on a real form) is
- *    `tests/e2e/admin-offices-create.e2e.ts` and `tests/e2e/login.e2e.ts`.
+ *    `tests/e2e/admin-offices-double-submit.e2e.ts` and
+ *    `tests/e2e/login-double-submit.e2e.ts`.
  */
 import {
   afterAll,
@@ -92,6 +93,24 @@ describe("createSingleFlight", () => {
 
     expect(events).toEqual(["enter:a", "leave:a"]);
     // ...so the next attempt is accepted.
+    expect(await flight.run("a", () => undefined)).toBe(true);
+  });
+
+  test("a throw ALWAYS releases, even when holds() would say the page still holds a lock", async () => {
+    // Mirrors the DOM adapter: `holds` is true once the handler ran
+    // `lockElement` and never unlocked (the control's `page` flag).
+    let pageLocked = false;
+    const { flight, events } = recorder(() => pageLocked);
+
+    await expect(
+      flight.run("a", async () => {
+        pageLocked = true; // lockElement(submit, "Saving…") ...
+        throw new Error("boom"); // ... then a throw before unlock()
+      })
+    ).rejects.toThrow("boom");
+
+    expect(events).toEqual(["enter:a", "leave:a"]);
+    // The key is free: the next run starts instead of being ignored.
     expect(await flight.run("a", () => undefined)).toBe(true);
   });
 
@@ -196,6 +215,7 @@ const registry = new Map<string, FakeElement>();
 const documentListeners = new Map<string, Listener[]>();
 const requests: string[] = [];
 const reloads: number[] = [];
+const windowListeners = new Map<string, Listener[]>();
 
 const g = globalThis as Record<string, unknown>;
 const saved: Record<string, unknown> = {};
@@ -228,7 +248,12 @@ beforeAll(() => {
     }
   };
   g.window = {
-    addEventListener: () => {},
+    addEventListener: (type: string, listener: Listener) => {
+      windowListeners.set(type, [
+        ...(windowListeners.get(type) ?? []),
+        listener
+      ]);
+    },
     location: { reload: () => reloads.push(1) }
   };
 });
@@ -400,6 +425,86 @@ describe("onSubmit: single flight", () => {
 
     expect(submit.disabled).toBe(true);
     restoreOnPageShow({ persisted: true }); // leave the module clean
+  });
+
+  test("release() leaves a disabled value the page set during the flight", async () => {
+    const { form, submit } = makeForm("f");
+    const gate = deferred();
+    onSubmit("f", () => gate.promise);
+
+    form.fire("submit");
+    expect(submit.disabled).toBe(true);
+    submit.disabled = false; // page-owned change during the flight
+    gate.resolve();
+    await settle();
+    expect(submit.disabled).toBe(false);
+  });
+
+  test("the pageshow listener the module registered releases held locks (persisted only)", async () => {
+    const { form, submit } = makeForm("f");
+    onSubmit("f", async () => {
+      holdForNavigation();
+    });
+
+    form.fire("submit");
+    await settle();
+    expect(submit.disabled).toBe(true);
+
+    const listeners = windowListeners.get("pageshow") ?? [];
+    expect(listeners.length).toBe(1);
+    for (const listener of listeners) listener({ persisted: false });
+    expect(submit.disabled).toBe(true);
+    for (const listener of listeners) listener({ persisted: true });
+    expect(submit.disabled).toBe(false);
+    expect(form.getAttribute("aria-busy")).toBeNull();
+  });
+
+  test("the navigation hold is one-shot: a concurrent flight on another form settles normally", async () => {
+    const a = makeForm("a");
+    const b = makeForm("b");
+    const gate = deferred();
+    onSubmit("a", async () => {
+      holdForNavigation();
+    });
+    onSubmit("b", () => gate.promise);
+
+    b.form.fire("submit");
+    a.form.fire("submit");
+    await settle();
+    expect(a.submit.disabled).toBe(true); // a is navigating: held
+
+    gate.resolve();
+    await settle();
+    expect(b.submit.disabled).toBe(false); // b is not
+    restoreOnPageShow({ persisted: true });
+  });
+
+  test("a hold that never navigates is released after 10 s (page still alive)", async () => {
+    const { form, submit } = makeForm("f");
+    onSubmit("f", async () => {
+      holdForNavigation();
+    });
+    const realSetTimeout = globalThis.setTimeout;
+    let fire: (() => void) | undefined;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      if (ms === 1e4) {
+        fire = fn;
+        return 0;
+      }
+      return realSetTimeout(fn, ms);
+    }) as unknown as typeof setTimeout;
+
+    try {
+      form.fire("submit");
+      await settle();
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+
+    expect(submit.disabled).toBe(true);
+    fire!();
+    expect(submit.disabled).toBe(false);
+    expect(form.getAttribute("aria-busy")).toBeNull();
   });
 
   test("mutateAndReload on success holds the lock through the reload", async () => {

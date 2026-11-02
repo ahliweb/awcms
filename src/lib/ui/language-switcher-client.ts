@@ -27,7 +27,11 @@
  * mechanism rather than a decoration.
  */
 import { LOCALE_COOKIE_NAME } from "../i18n/request-locale";
-import { holdForNavigation, onSubmitAll } from "./admin-form-client";
+import {
+  holdForNavigation,
+  onSubmitAll,
+  type SubmitContext
+} from "./admin-form-client";
 
 const form = document.querySelector<HTMLFormElement>(".locale-switcher");
 const select = form?.querySelector<HTMLSelectElement>(
@@ -41,8 +45,12 @@ function localeCookieIsSet(): boolean {
     .some((entry) => entry.startsWith(`${LOCALE_COOKIE_NAME}=`));
 }
 
-async function applyLocale(): Promise<void> {
-  if (!form || !select) return;
+async function applyLocale({ form }: SubmitContext): Promise<void> {
+  // The SUBMITTED form's own select, not the first form's.
+  const select = form.querySelector<HTMLSelectElement>(
+    ".locale-switcher-select"
+  );
+  if (!select) return;
 
   const returnTo = form.querySelector<HTMLInputElement>(
     'input[name="return_to"]'
