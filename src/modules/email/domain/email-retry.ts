@@ -9,6 +9,16 @@
  */
 export const EMAIL_MAX_RETRY_DELAY_MINUTES = 60;
 
+/**
+ * Total time a message may be held back for a provider that reports no credit
+ * (Issue #1159). Past this the message fails with a named reason instead of
+ * being delivered hours late (OTP / password reset).
+ */
+export const EMAIL_CREDIT_HOLD_BUDGET_MS = 60 * 60_000;
+
+/** How long a configuration error defers a claimed message (no retry spent, no attempt written, never terminal). */
+export const EMAIL_CONFIG_ERROR_HOLD_MS = 5 * 60_000;
+
 export type EmailRetryEvaluation = {
   eligible: boolean;
   nextAttemptAt?: Date;

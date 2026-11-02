@@ -70,6 +70,16 @@ export type EmailDeliveryResult =
        * row is due again on the next pass.
        */
       holdMs?: number;
+      /** Issue #1159 — with `skipped`+`holdMs`: the hold is a credit hold, bounded by `EMAIL_CREDIT_HOLD_BUDGET_MS`. */
+      creditHold?: true;
+      /** Issue #1159 — with `skipped`: the deployment is misconfigured. The claim is undone (never terminal) and the dispatcher reports it loudly. */
+      configError?: true;
+      /**
+       * Issue #1159 — delivery state is unknown: the provider may have accepted
+       * the message (e.g. a 200 with no boolean `success`). Not retried (a retry
+       * could send duplicates); counted as uncertain.
+       */
+      uncertain?: true;
       /**
        * Issue #1159 — with `retryable` (a provider 429): the provider's own
        * `Retry-After`, already clamped. The retry is scheduled no sooner than

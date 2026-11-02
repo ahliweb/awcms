@@ -20,7 +20,9 @@ import {
   resolveChannelSecretsRing
 } from "../src/modules/channel-accounts/domain/channel-accounts-config";
 import {
+  MAILKETING_V2_UNVERIFIED_WARNING,
   isMailketingTokenHeaderSafe,
+  isMailketingV2Verified,
   resolveMailketingV2BaseUrl
 } from "../src/modules/email/domain/mailketing-v2-contract";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
@@ -302,6 +304,7 @@ const RULES: readonly Rule[] = [
   { name: "EMAIL_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
   { name: "EMAIL_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
   // Issue #1159 (ADR-0151 §1). Unset = v1; anything else but v1/v2 is an error.
+  { name: "EMAIL_MAILKETING_V2_VERIFIED", required: false, type: "bool" },
   {
     name: "EMAIL_MAILKETING_API_VERSION",
     required: false,
@@ -693,6 +696,23 @@ function isValidUrl(value: string, protocols: readonly string[]): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Non-fatal advisories printed by `config:validate` (never change its exit
+ * code). Today: Mailketing v2 selected without the stage-2 acknowledgement.
+ */
+export function collectEnvWarnings(env: EnvBag): string[] {
+  const warnings: string[] = [];
+
+  if (
+    env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
+    !isMailketingV2Verified(env as NodeJS.ProcessEnv)
+  ) {
+    warnings.push(MAILKETING_V2_UNVERIFIED_WARNING);
+  }
+
+  return warnings;
 }
 
 export function validateEnv(env: EnvBag): string[] {
@@ -1248,6 +1268,10 @@ if (import.meta.main) {
   }
 
   const problems = validateEnv(env);
+
+  for (const warning of collectEnvWarnings(env)) {
+    console.warn(`  ! PERINGATAN: ${warning}`);
+  }
 
   if (problems.length > 0) {
     for (const problem of problems) console.error(`  - ${problem}`);

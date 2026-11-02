@@ -7,7 +7,10 @@ import { describe, expect, test } from "bun:test";
 import {
   MAILKETING_V2_MAX_RETRY_AFTER_MS,
   MAILKETING_V2_MIN_RETRY_AFTER_MS,
+  MAILKETING_V2_UNVERIFIED_WARNING,
   buildMailketingV2Headers,
+  isMailketingTokenHeaderSafe,
+  isMailketingV2Verified,
   buildMailketingV2SendBody,
   classifyMailketingV2Response,
   parseRetryAfterMs,
@@ -158,6 +161,17 @@ describe("classifyMailketingV2Response", () => {
     });
   });
 
+  test("an address-looking message_id is never kept (no @)", () => {
+    for (const id of ["user@example.com", "a@b", "msg_1@host"]) {
+      expect(
+        classify(
+          200,
+          JSON.stringify({ success: true, data: { message_id: id } })
+        )
+      ).toEqual({ kind: "accepted", messageId: undefined });
+    }
+  });
+
   test("200 success:false = refused; only a safe code survives", () => {
     expect(
       classify(
@@ -207,5 +221,35 @@ describe("classifyMailketingV2Response", () => {
       category: "rate_limited",
       retryAfterMs: undefined
     });
+  });
+});
+
+describe("token header safety and the stage-2 acknowledgement flag", () => {
+  test.each([
+    "abc def",
+    " abc",
+    "abc ",
+    "abc\n",
+    "abc\r\nX: y",
+    "ab\u00e9",
+    ""
+  ])("%j is not header-safe", (token) => {
+    expect(isMailketingTokenHeaderSafe(token)).toBe(false);
+  });
+
+  test("a plain visible-ASCII token is header-safe", () => {
+    expect(
+      isMailketingTokenHeaderSafe(["AbC", "123", "_xyz", ".~+/="].join("-"))
+    ).toBe(true);
+  });
+
+  test("v2 is unverified unless EMAIL_MAILKETING_V2_VERIFIED is exactly true", () => {
+    const e = (v?: string) =>
+      ({ EMAIL_MAILKETING_V2_VERIFIED: v }) as unknown as NodeJS.ProcessEnv;
+    expect(isMailketingV2Verified(e())).toBe(false);
+    expect(isMailketingV2Verified(e("false"))).toBe(false);
+    expect(isMailketingV2Verified(e("1"))).toBe(false);
+    expect(isMailketingV2Verified(e("true"))).toBe(true);
+    expect(MAILKETING_V2_UNVERIFIED_WARNING).toMatch(/NOT approved/);
   });
 });

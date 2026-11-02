@@ -411,15 +411,16 @@ Planned as a reusable base module for password reset, system announcements, and
 workflow notifications (e.g. finance/procurement approvals needing multi-level
 sign-off) — provider-neutral.
 
-| Var                            | Required   | Default | Sensitive | Purpose                                                                                             |
-| ------------------------------ | ---------- | ------- | --------- | --------------------------------------------------------------------------------------------------- |
-| `EMAIL_ENABLED`                | –          | `false` | –         | Enable the email module                                                                             |
-| `EMAIL_PROVIDER`               | if enabled | –       | –         | Email provider adapter (`log` for dev without credentials)                                          |
-| `EMAIL_FROM_ADDRESS`           | if enabled | –       | –         | Default sender address                                                                              |
-| `EMAIL_FROM_NAME`              | –          | `AWCMS` | –         | Default sender name                                                                                 |
-| `EMAIL_SEND_TIMEOUT_MS`        | –          | `10000` | –         | Timeout for a single send attempt (dispatcher)                                                      |
-| `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –         | Retry attempt limit before a final `failed`                                                         |
-| `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –         | Mailketing API version: `v1` (default) or `v2` (opt-in, fixed host, header-only token; Issue #1159) |
+| Var                            | Required   | Default | Sensitive | Purpose                                                                                                                                      |
+| ------------------------------ | ---------- | ------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_ENABLED`                | –          | `false` | –         | Enable the email module                                                                                                                      |
+| `EMAIL_PROVIDER`               | if enabled | –       | –         | Email provider adapter (`log` for dev without credentials)                                                                                   |
+| `EMAIL_FROM_ADDRESS`           | if enabled | –       | –         | Default sender address                                                                                                                       |
+| `EMAIL_FROM_NAME`              | –          | `AWCMS` | –         | Default sender name                                                                                                                          |
+| `EMAIL_SEND_TIMEOUT_MS`        | –          | `10000` | –         | Timeout for a single send attempt (dispatcher)                                                                                               |
+| `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –         | Retry attempt limit before a final `failed`                                                                                                  |
+| `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –         | Mailketing API version: `v1` (default) or `v2` (opt-in, fixed host, header-only token; Issue #1159)                                          |
+| `EMAIL_MAILKETING_V2_VERIFIED` | –          | unset   | –         | Stage-2 acknowledgement for Mailketing v2; production v2 is NOT approved until the live check is done (silences the UNVERIFIED warning only) |
 
 Concrete email provider credentials (e.g. `EMAIL_<PROVIDER>_API_TOKEN`) are
 added once that provider adapter is actually implemented — they are not

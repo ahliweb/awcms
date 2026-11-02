@@ -322,4 +322,132 @@ suite("email dispatch + Mailketing v2 fake (Issue #1159)", () => {
     expect(calls).toHaveLength(0);
     expect((await rowOf(id)).status).toBe("queued");
   });
+
+  test("L4: the database is reachable — a set-but-unreachable DATABASE_URL fails here, loudly, instead of skipping", async () => {
+    const rows = (await getAdminSql()`SELECT 1 AS one`) as { one: number }[];
+    expect(rows[0]!.one).toBe(1);
+  });
+
+  test("L4: the real claim SQL marks ONLY the expired-lease row as reclaimed in a mixed batch (fresh claim vs reclaim)", async () => {
+    const fresh = await seedMessage(TENANT_A, { address: "fresh@example.com" });
+    const stale = await seedMessage(TENANT_A, {
+      address: "stale@example.com",
+      status: "sending",
+      nextAttemptAt: new Date(NOW.getTime() - 60_000)
+    });
+    const result = await run(TENANT_A, provider(ok("mk_mixed")));
+
+    expect(result).toMatchObject({ claimed: 2, sent: 2, uncertain: 1 });
+    expect((await rowOf(fresh)).last_error).toBeNull();
+    expect((await rowOf(stale)).last_error).toContain("Uncertain delivery");
+  });
+
+  test("M1: a misconfigured run keeps every queued message (none failed, no attempts) and they send once the config is fixed", async () => {
+    const { resolveEmailProvider } =
+      await import("../../src/modules/email/infrastructure/email-provider-resolver");
+    const ids = [
+      await seedMessage(TENANT_A, { address: "a@example.com" }),
+      await seedMessage(TENANT_A, { address: "b@example.com" })
+    ];
+
+    const broken = await run(TENANT_A, () =>
+      resolveEmailProvider({
+        EMAIL_PROVIDER: "mailketing",
+        EMAIL_MAILKETING_API_VERSION: "V2",
+        EMAIL_MAILKETING_API_TOKEN: TOKEN
+      } as unknown as NodeJS.ProcessEnv)
+    );
+
+    expect(broken).toMatchObject({
+      claimed: 2,
+      deferred: 2,
+      misconfigured: 2,
+      failed: 0
+    });
+
+    for (const id of ids) {
+      const row = await rowOf(id);
+      expect(row.status).toBe("queued");
+      expect(row.retry_count).toBe(0);
+      expect(row.next_attempt_at!.getTime()).toBeGreaterThan(NOW.getTime());
+      expect(await attemptsOf(id)).toEqual([]);
+    }
+
+    // Config fixed, hold elapsed: the very same rows are sent.
+    const later = new Date(NOW.getTime() + 10 * 60_000);
+    const fixed = await dispatchEmailQueue(getRuntimeSql(), TENANT_A, {
+      now: later,
+      env: ENV,
+      resolveProvider: provider(ok("mk_fixed"))
+    });
+
+    expect(fixed).toMatchObject({ claimed: 2, sent: 2 });
+    for (const id of ids) {
+      expect((await rowOf(id)).status).toBe("sent");
+    }
+  });
+
+  test("M2a: a malformed 200 is terminal and sent exactly once (no duplicate copies), counted uncertain", async () => {
+    const calls: string[] = [];
+    const id = await seedMessage(TENANT_A);
+    const result = await run(
+      TENANT_A,
+      provider(
+        {
+          ok: true,
+          status: 200,
+          retryAfter: null,
+          body: "<html>gateway</html>"
+        },
+        calls
+      )
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(result).toMatchObject({ failed: 1, retried: 0, uncertain: 1 });
+
+    const row = await rowOf(id);
+    expect(row.status).toBe("failed");
+    expect(row.last_error).toContain("UNCERTAIN_MALFORMED_RESPONSE");
+
+    const again = await run(TENANT_A, provider(ok(), calls));
+    expect(again.claimed).toBe(0);
+    expect(calls).toHaveLength(1);
+  });
+
+  test("L1: a message held for credit past the budget fails with a named reason; a young one stays held", async () => {
+    const young = await seedMessage(TENANT_A, { address: "young@example.com" });
+    const old = await seedMessage(TENANT_A, { address: "old@example.com" });
+    await getAdminSql()`
+      UPDATE awcms_email_messages SET created_at = ${new Date(NOW.getTime() - 2 * 3_600_000)}
+      WHERE id = ${old}
+    `;
+    await getAdminSql()`
+      UPDATE awcms_email_messages SET created_at = ${new Date(NOW.getTime() - 60_000)}
+      WHERE id = ${young}
+    `;
+
+    const result = await run(TENANT_A, provider(http(402)));
+
+    expect(result).toMatchObject({ deferred: 1, failed: 1 });
+    expect((await rowOf(young)).status).toBe("queued");
+
+    const failed = await rowOf(old);
+    expect(failed.status).toBe("failed");
+    expect(failed.last_error).toContain("CREDIT_HOLD_BUDGET_EXCEEDED");
+    expect(failed.last_error).not.toContain("example.com");
+  });
+
+  test("L2: a reclaimed row that is deferred carries the note and is not counted uncertain", async () => {
+    const id = await seedMessage(TENANT_A, {
+      status: "sending",
+      nextAttemptAt: new Date(NOW.getTime() - 60_000)
+    });
+    const result = await run(TENANT_A, provider(http(402)));
+
+    expect(result).toMatchObject({ deferred: 1, uncertain: 0 });
+    const row = await rowOf(id);
+    expect(row.status).toBe("queued");
+    expect(row.last_error).toContain("uncertain");
+  });
 });

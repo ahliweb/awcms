@@ -14,6 +14,10 @@
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import {
+  MAILKETING_V2_UNVERIFIED_WARNING,
+  isMailketingV2Verified
+} from "../src/modules/email/domain/mailketing-v2-contract";
 import { dispatchEmailQueue } from "../src/modules/email/application/email-dispatch";
 
 const MAX_PASSES_PER_TENANT = 20;
@@ -43,6 +47,7 @@ async function main() {
     let totalDeferred = 0;
     let totalSuppressed = 0;
     let totalUncertain = 0;
+    let totalMisconfigured = 0;
     let breakerSeenOpen = false;
 
     for (const tenant of tenants) {
@@ -58,6 +63,7 @@ async function main() {
         totalDeferred += result.deferred;
         totalSuppressed += result.suppressed;
         totalUncertain += result.uncertain;
+        totalMisconfigured += result.misconfigured;
         breakerSeenOpen ||= result.breakerOpen;
 
         if (result.claimed === 0) {
@@ -71,9 +77,28 @@ async function main() {
         `tenants=${tenants.length} claimed=${totalClaimed} sent=${totalSent} ` +
         `retried=${totalRetried} failed=${totalFailed} ` +
         `deferred=${totalDeferred} suppressed=${totalSuppressed} ` +
-        `uncertain=${totalUncertain} ` +
+        `uncertain=${totalUncertain} misconfigured=${totalMisconfigured} ` +
         `breakerOpen=${breakerSeenOpen}`
     );
+
+    if (totalMisconfigured > 0) {
+      // A configuration error never fails a message: they stay queued and send
+      // once it is fixed. But it must not look like a quiet pass, so this is a
+      // loud error and a non-zero exit.
+      console.error(
+        `email:dispatch CONFIGURATION ERROR — ${totalMisconfigured} message(s) were deferred (kept queued, none failed) ` +
+          "because the email provider is misconfigured. Run `bun run config:validate` and `bun run email:provider:health`."
+      );
+      process.exitCode = 1;
+    }
+
+    if (
+      process.env.EMAIL_PROVIDER === "mailketing" &&
+      process.env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
+      !isMailketingV2Verified(process.env)
+    ) {
+      console.warn(`email:dispatch — ${MAILKETING_V2_UNVERIFIED_WARNING}`);
+    }
 
     if (totalUncertain > 0) {
       // Issue #1159: re-claimed after an expired lease; the previous worker may
@@ -90,7 +115,7 @@ async function main() {
       // in `queued` with their retries intact, and the next scheduled pass
       // sends them. Paging on it would page on the provider's weather.
       console.warn(
-        `email:dispatch — the Mailketing circuit breaker was open; ` +
+        `email:dispatch — the Mailketing circuit breaker was open or sends were held (credit, configuration); ` +
           `${totalDeferred} claimed message(s) were released back to 'queued' ` +
           "without an attempt. They go out on the next pass once the breaker closes."
       );

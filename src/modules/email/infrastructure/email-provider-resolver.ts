@@ -12,6 +12,7 @@ import {
   resolveEmailSendTimeoutMs
 } from "../domain/email-config";
 import type { EmailProvider } from "../domain/email-provider-contract";
+import { EMAIL_CONFIG_ERROR_HOLD_MS } from "../domain/email-retry";
 import { createLogEmailProvider } from "./log-email-provider";
 import {
   isMailketingTokenHeaderSafe,
@@ -21,10 +22,27 @@ import {
 import { createMailketingEmailProvider } from "./mailketing-provider";
 import { createMailketingV2Provider } from "./mailketing-v2-provider";
 
+/**
+ * A configuration error must NEVER consume messages. The dispatcher claims a
+ * batch before it resolves the provider, so answering `retryable: false` here
+ * used to mark up to a whole batch `failed` — OTP and password-reset mail lost
+ * to a typo. `skipped` undoes the claim: the row stays `queued`, no attempt is
+ * written, no retry is spent, and `configError` makes the dispatcher log and
+ * summarise it loudly. It is held `EMAIL_CONFIG_ERROR_HOLD_MS` so a pass does
+ * not re-claim it in a tight loop; once the configuration is fixed the queue
+ * simply drains. `healthCheck` still reports the reason as a failure.
+ */
 function createMisconfiguredProvider(reason: string): EmailProvider {
   return {
     async send() {
-      return { ok: false, error: reason, retryable: false };
+      return {
+        ok: false,
+        error: reason,
+        retryable: true,
+        skipped: true,
+        holdMs: EMAIL_CONFIG_ERROR_HOLD_MS,
+        configError: true
+      };
     },
     async healthCheck() {
       return { ok: false, error: reason };

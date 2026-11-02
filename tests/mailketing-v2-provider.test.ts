@@ -92,19 +92,49 @@ describe("Mailketing v2 send — classification (ADR-0151 §1 table)", () => {
     expect(calls[0]!.method).toBe("POST");
   });
 
-  test("200 success:false = refusal, non-retryable, no breaker spend", async () => {
-    const { provider } = v2(
-      json(200, { success: false, error: { code: "INVALID_RECIPIENT" } })
+  test("200 success:false = refusal, non-retryable; one bad recipient does not trip the breaker", async () => {
+    const refuse = json(200, {
+      success: false,
+      error: { code: "INVALID_RECIPIENT" }
+    });
+    let current: Script = refuse;
+    const provider = createMailketingV2Provider({
+      apiToken: TOKEN,
+      now: () => NOW,
+      transport: async () => current as MailketingV2TransportResult
+    });
+
+    for (let round = 0; round < 3; round += 1) {
+      // Four refusals then a success, repeatedly: the success resets the streak.
+      current = refuse;
+      for (let i = 0; i < 4; i += 1) {
+        expect(await provider.send(MESSAGE)).toMatchObject({
+          ok: false,
+          retryable: false
+        });
+      }
+      current = json(200, { success: true, data: { message_id: "ok" } });
+      expect(await provider.send(MESSAGE)).toMatchObject({ ok: true });
+    }
+  });
+
+  test("a streak of 5 refusals (wrong field name while /credits stays green) opens the breaker: the queue stops being marked failed", async () => {
+    const { provider, calls } = v2(
+      json(200, { success: false, error: { code: "INVALID_FIELD" } })
     );
 
-    for (let i = 0; i < 10; i += 1) {
-      const result = await provider.send(MESSAGE);
-      expect(result).toMatchObject({ ok: false, retryable: false });
+    for (let i = 0; i < 5; i += 1) {
+      expect(await provider.send(MESSAGE)).toMatchObject({
+        ok: false,
+        retryable: false
+      });
     }
 
-    // Ten refusals did not open the breaker: the next send is still attempted.
-    const next = await provider.send(MESSAGE);
-    expect(next).not.toMatchObject({ skipped: true });
+    expect(await provider.send(MESSAGE)).toMatchObject({
+      ok: false,
+      skipped: true
+    });
+    expect(calls).toHaveLength(5);
   });
 
   test("401 = invalid token: terminal, not retryable", async () => {
@@ -178,20 +208,46 @@ describe("Mailketing v2 send — classification (ADR-0151 §1 table)", () => {
     }
   });
 
-  test("an SSRF-policy denial is a misconfiguration: terminal, not an outage", async () => {
-    const { provider } = v2({ ok: false, reason: "policy" });
-    expect(await provider.send(MESSAGE)).toMatchObject({
-      ok: false,
-      retryable: false
-    });
+  test("an egress-policy denial (DNS sinkhole, refused redirect) is retryable and counts toward the breaker, never terminal", async () => {
+    const { provider, calls } = v2({ ok: false, reason: "policy" });
+
+    for (let i = 0; i < 5; i += 1) {
+      expect(await provider.send(MESSAGE)).toMatchObject({
+        ok: false,
+        retryable: true
+      });
+    }
+
+    expect(await provider.send(MESSAGE)).toMatchObject({ skipped: true });
+    expect(calls).toHaveLength(5);
   });
 
-  test("invalid JSON / HTML on 200 = retryable (uncertain), counts as a service fault", async () => {
-    const { provider } = v2(json(200, "<html>gateway</html>"));
-    expect(await provider.send(MESSAGE)).toMatchObject({
-      ok: false,
-      retryable: true
-    });
+  test("a 200 with no boolean success is UNCERTAIN: not retried (no duplicate copies), counted toward the breaker", async () => {
+    for (const body of [
+      "<html>gateway</html>",
+      '{"ok":true}',
+      '{"success":"yes"}',
+      ""
+    ]) {
+      resetProviderCircuitBreakersForTests();
+      const { provider, calls } = v2(json(200, body));
+      const result = await provider.send(MESSAGE);
+
+      expect(result).toMatchObject({
+        ok: false,
+        retryable: false,
+        uncertain: true,
+        error: expect.stringContaining("UNCERTAIN_MALFORMED_RESPONSE")
+      });
+      expect(calls).toHaveLength(1);
+    }
+
+    resetProviderCircuitBreakersForTests();
+    const { provider } = v2(json(200, "<html>"));
+    for (let i = 0; i < 5; i += 1) {
+      await provider.send(MESSAGE);
+    }
+    expect(await provider.send(MESSAGE)).toMatchObject({ skipped: true });
   });
 
   test("a throwing transport is a retryable network failure and its message is not surfaced", async () => {
@@ -227,22 +283,23 @@ describe("Mailketing v2 — breaker (single-account model)", () => {
     expect(calls).toHaveLength(5);
   });
 
-  test("repeated 401 stops claiming too (account-level fault), 422 does not", async () => {
-    const auth = v2(json(401, {}));
-    for (let i = 0; i < 5; i += 1) {
-      await auth.provider.send(MESSAGE);
+  test.each([401, 403, 422, 404])(
+    "five consecutive HTTP %i open the breaker (account fault or wrong contract); a success in between resets it",
+    async (status) => {
+      const bad = v2(json(status, {}));
+      for (let i = 0; i < 5; i += 1) {
+        await bad.provider.send(MESSAGE);
+      }
+      expect(await bad.provider.send(MESSAGE)).toMatchObject({
+        skipped: true
+      });
     }
-    expect(await auth.provider.send(MESSAGE)).toMatchObject({ skipped: true });
+  );
 
-    resetProviderCircuitBreakersForTests();
-
-    const invalid = v2(json(422, {}));
-    for (let i = 0; i < 20; i += 1) {
-      await invalid.provider.send(MESSAGE);
-    }
-    expect(await invalid.provider.send(MESSAGE)).not.toMatchObject({
-      skipped: true
-    });
+  test("a single 422 never trips the breaker", async () => {
+    const { provider } = v2(json(422, {}));
+    await provider.send(MESSAGE);
+    expect(await provider.send(MESSAGE)).not.toMatchObject({ skipped: true });
   });
 });
 
@@ -408,7 +465,7 @@ describe("Mailketing v2 — real wire through the SSRF-guarded transport", () =>
     }
   });
 
-  test("without the test allow-list a loopback host is denied as a misconfiguration", async () => {
+  test("without the test allow-list a loopback host is denied by the egress policy (retryable, not terminal)", async () => {
     const provider = createMailketingV2Provider({
       apiToken: TOKEN,
       baseUrl: "http://127.0.0.1:9",
@@ -419,7 +476,7 @@ describe("Mailketing v2 — real wire through the SSRF-guarded transport", () =>
 
     expect(await provider.send(MESSAGE)).toMatchObject({
       ok: false,
-      retryable: false
+      retryable: true
     });
   });
 });
@@ -562,7 +619,12 @@ describe("v1 is unchanged and remains the default", () => {
         env as unknown as NodeJS.ProcessEnv
       );
       const sent = await provider.send(MESSAGE);
-      expect(sent).toMatchObject({ ok: false, retryable: false });
+      // A configuration error DEFERS (claim undone, never terminal).
+      expect(sent).toMatchObject({
+        ok: false,
+        skipped: true,
+        configError: true
+      });
       expect(JSON.stringify(sent)).not.toContain("attacker");
       expect((await provider.healthCheck()).ok).toBe(false);
     }
@@ -570,17 +632,40 @@ describe("v1 is unchanged and remains the default", () => {
     expect(calls).toHaveLength(0); // no network call was ever made
   });
 
-  test("resolver fails closed on a token that cannot be a header value (CR/LF injection)", async () => {
-    const calls = stubFetch(() => Response.json({ success: true }));
+  test.each([
+    ["CR/LF injection", "abc\r\nX-Evil: 1"],
+    ["a space", "abc def"],
+    ["a trailing newline", "abc\n"],
+    ["non-ASCII", "abc\u00e9"]
+  ])(
+    "resolver fails closed on a token with %s: deferred, no network call",
+    async (_label, token) => {
+      const calls = stubFetch(() => Response.json({ success: true }));
+      const provider = resolveEmailProvider({
+        ...baseEnv,
+        EMAIL_MAILKETING_API_VERSION: "v2",
+        EMAIL_MAILKETING_API_TOKEN: token
+      } as unknown as NodeJS.ProcessEnv);
+
+      expect(await provider.send(MESSAGE)).toMatchObject({
+        ok: false,
+        skipped: true,
+        configError: true
+      });
+      expect(calls).toHaveLength(0);
+    }
+  );
+
+  test("the pre-existing v1 missing-token case also defers instead of failing terminally", async () => {
+    const calls = stubFetch(() => Response.json({ status: "success" }));
     const provider = resolveEmailProvider({
-      ...baseEnv,
-      EMAIL_MAILKETING_API_VERSION: "v2",
-      EMAIL_MAILKETING_API_TOKEN: "abc\r\nX-Evil: 1"
+      EMAIL_PROVIDER: "mailketing"
     } as unknown as NodeJS.ProcessEnv);
 
     expect(await provider.send(MESSAGE)).toMatchObject({
       ok: false,
-      retryable: false
+      skipped: true,
+      configError: true
     });
     expect(calls).toHaveLength(0);
   });

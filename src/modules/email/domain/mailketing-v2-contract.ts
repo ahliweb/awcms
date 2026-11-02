@@ -41,6 +41,22 @@ export const MAILKETING_V2_DEFAULT_BASE_URL = "https://api.mailketing.co.id";
 export const MAILKETING_V2_MAX_RESPONSE_BYTES = 64 * 1024;
 export const MAILKETING_V2_MIN_RETRY_AFTER_MS = 1_000;
 export const MAILKETING_V2_MAX_RETRY_AFTER_MS = 60 * 60_000;
+/**
+ * Rollout stage-2 acknowledgement (ADR-0151 §1). Until an operator sets
+ * `EMAIL_MAILKETING_V2_VERIFIED=true` after the live check (field names, auth
+ * scheme, /credits shape), v2 works but is NOT approved for production and every
+ * dispatch pass / `config:validate` says so.
+ */
+export function isMailketingV2Verified(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return env.EMAIL_MAILKETING_V2_VERIFIED?.trim() === "true";
+}
+
+export const MAILKETING_V2_UNVERIFIED_WARNING =
+  "Mailketing v2 contract UNVERIFIED: production v2 is NOT approved until the live stage-2 check " +
+  "(send-body field names, auth scheme, /credits shape) is done and EMAIL_MAILKETING_V2_VERIFIED=true is set (ADR-0151).";
+
 /** How long a 402 (no credit) holds a message without spending a retry. */
 export const MAILKETING_V2_CREDIT_HOLD_MS = 15 * 60_000;
 
@@ -209,7 +225,8 @@ export function parseRetryAfterMs(
   );
 }
 
-const SAFE_ID = /^[A-Za-z0-9._:@+=-]{1,128}$/;
+// No `@`: an address-looking value must never be stored as a provider id.
+const SAFE_ID = /^[A-Za-z0-9._:+=-]{1,128}$/;
 const SAFE_CODE = /^[A-Za-z0-9_.-]{1,64}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

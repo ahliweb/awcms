@@ -405,15 +405,16 @@ Direncanakan sebagai modul base reusable untuk password reset, system
 announcement, dan notifikasi workflow (mis. approval finance/procurement
 yang butuh persetujuan berjenjang) — provider-neutral.
 
-| Var                            | Wajib      | Default | Sensitif | Fungsi                                                                                                 |
-| ------------------------------ | ---------- | ------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `EMAIL_ENABLED`                | –          | `false` | –        | Aktifkan modul email                                                                                   |
-| `EMAIL_PROVIDER`               | bila aktif | –       | –        | Adapter provider email (`log` untuk dev tanpa kredensial)                                              |
-| `EMAIL_FROM_ADDRESS`           | bila aktif | –       | –        | Alamat pengirim default                                                                                |
-| `EMAIL_FROM_NAME`              | –          | `AWCMS` | –        | Nama pengirim default                                                                                  |
-| `EMAIL_SEND_TIMEOUT_MS`        | –          | `10000` | –        | Timeout satu percobaan kirim (dispatcher)                                                              |
-| `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –        | Batas percobaan retry sebelum `failed` final                                                           |
-| `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –        | Versi API Mailketing: `v1` (bawaan) atau `v2` (opt-in, host tetap, token hanya di header; Issue #1159) |
+| Var                            | Wajib      | Default | Sensitif | Fungsi                                                                                                                                      |
+| ------------------------------ | ---------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_ENABLED`                | –          | `false` | –        | Aktifkan modul email                                                                                                                        |
+| `EMAIL_PROVIDER`               | bila aktif | –       | –        | Adapter provider email (`log` untuk dev tanpa kredensial)                                                                                   |
+| `EMAIL_FROM_ADDRESS`           | bila aktif | –       | –        | Alamat pengirim default                                                                                                                     |
+| `EMAIL_FROM_NAME`              | –          | `AWCMS` | –        | Nama pengirim default                                                                                                                       |
+| `EMAIL_SEND_TIMEOUT_MS`        | –          | `10000` | –        | Timeout satu percobaan kirim (dispatcher)                                                                                                   |
+| `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –        | Batas percobaan retry sebelum `failed` final                                                                                                |
+| `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –        | Versi API Mailketing: `v1` (bawaan) atau `v2` (opt-in, host tetap, token hanya di header; Issue #1159)                                      |
+| `EMAIL_MAILKETING_V2_VERIFIED` | –          | kosong  | –        | Pengakuan tahap 2 untuk Mailketing v2; v2 produksi BELUM disetujui sampai pemeriksaan live selesai (hanya membungkam peringatan UNVERIFIED) |
 
 Kredensial provider email konkret (mis. `EMAIL_<PROVIDER>_API_TOKEN`)
 ditambahkan begitu adapter provider tersebut benar-benar diimplementasikan —

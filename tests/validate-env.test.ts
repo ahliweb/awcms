@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { validateEnv } from "../scripts/validate-env";
+import { collectEnvWarnings, validateEnv } from "../scripts/validate-env";
 
 const base = {
   APP_ENV: "development",
@@ -300,6 +300,40 @@ describe("validateEnv", () => {
         problems.some((p) => p.startsWith("EMAIL_MAILKETING_API_TOKEN"))
       ).toBe(true);
       expect(problems.join("\n")).not.toContain("sekrit");
+    });
+
+    test("v2 without the stage-2 acknowledgement warns that production v2 is NOT approved; it is not an error", () => {
+      const env = {
+        ...email,
+        EMAIL_MAILKETING_API_VERSION: "v2",
+        EMAIL_MAILKETING_API_TOKEN: "real-looking-token"
+      };
+
+      expect(validateEnv(env)).toEqual([]);
+      expect(collectEnvWarnings(env).join(" ")).toMatch(/UNVERIFIED/);
+      expect(collectEnvWarnings(env).join(" ")).toMatch(/NOT approved/);
+    });
+
+    test("the acknowledgement silences the warning; v1 and unset never warn", () => {
+      expect(
+        collectEnvWarnings({
+          ...email,
+          EMAIL_MAILKETING_API_VERSION: "v2",
+          EMAIL_MAILKETING_V2_VERIFIED: "true"
+        })
+      ).toEqual([]);
+      expect(collectEnvWarnings(email)).toEqual([]);
+      expect(
+        collectEnvWarnings({ ...email, EMAIL_MAILKETING_API_VERSION: "v1" })
+      ).toEqual([]);
+    });
+
+    test("EMAIL_MAILKETING_V2_VERIFIED must be a boolean", () => {
+      expect(
+        validateEnv({ ...email, EMAIL_MAILKETING_V2_VERIFIED: "yes" }).some(
+          (p) => p.startsWith("EMAIL_MAILKETING_V2_VERIFIED")
+        )
+      ).toBe(true);
     });
 
     test("v2 with email enabled requires the token; disabled email does not", () => {

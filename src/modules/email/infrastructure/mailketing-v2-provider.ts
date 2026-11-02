@@ -21,12 +21,14 @@
  *   dispatcher's `uncertain` counter) — no provider-side dedupe is claimed.
  * - Breaker (same key as v1, `email-mailketing`, so the dispatcher's
  *   short-circuit works for either version): counts statements about the
- *   service or the account that make EVERY message fail the same way — network,
- *   timeout, 5xx, 429, non-JSON/malformed, and 401/402/403 (a bad token, no
- *   credit or an unverified sender fails the whole deployment sender, and
- *   stopping the pass limits the damage and the vendor's failed-request quota
- *   per IP). Per-message refusals (`success:false`, 404/422/other 4xx) do not.
- *   This is the single-account model; per-connection keys are #1160.
+ *   service, the account, or a contract the adapter may have wrong — network,
+ *   timeout, egress-policy denial, 5xx, 429, malformed 200, 401/402/403, and
+ *   also refusals (`success:false`, 404/422/other 4xx). The shared breaker needs
+ *   5 CONSECUTIVE failures and any success resets it, so one bad recipient never
+ *   trips it, but a wrong field name (every send refused while `/credits` stays
+ *   green) stops claiming instead of silently failing the queue. Stopping also
+ *   protects the vendor's failed-request quota per IP. Single-account model;
+ *   per-connection keys are #1160.
  */
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
 import { ssrfSafeFetch } from "../../../lib/auth/ssrf-guard";
@@ -209,12 +211,15 @@ export function createMailketingV2Provider(
 
       if (!result.ok) {
         if (result.reason === "policy") {
-          // The SSRF guard refused the fixed host (e.g. DNS now answers a
-          // private address): a misconfiguration, not a provider outage.
+          // The SSRF guard refused the fixed host (a DNS sinkhole, a redirect
+          // Location it will not follow). Often transient and, either way, not
+          // a statement about this message: retryable and it counts toward the
+          // breaker, never terminal.
+          breaker.recordFailure(attemptedAt);
           return {
             ok: false,
             error: "Mailketing v2 request was blocked by the egress policy.",
-            retryable: false
+            retryable: true
           };
         }
 
@@ -234,7 +239,12 @@ export function createMailketingV2Provider(
           return { ok: true, providerMessageId: outcome.messageId };
 
         case "refused":
-          // 200 + success:false. The provider is up; it refused THIS message.
+          // 200 + success:false. Usually THIS message (a bad address), but a
+          // wrong field name or auth scheme looks identical from here. It counts
+          // toward the breaker so a streak (the shared 5-consecutive threshold)
+          // stops claiming instead of marking the whole queue `failed`; any
+          // success in between resets it, so one bad recipient never trips it.
+          breaker.recordFailure(attemptedAt);
           return {
             ok: false,
             error: `Mailketing v2 refused the message${outcome.code ? ` (code ${outcome.code})` : ""}.`,
@@ -242,13 +252,16 @@ export function createMailketingV2Provider(
           };
 
         case "malformed":
-          // Could have been accepted; retry may duplicate (accepted trade-off,
-          // ADR-0151 §1), same as v1's non-JSON branch.
+          // The provider may have accepted it. A retry could send up to
+          // max-retries+1 copies, so this is terminal and UNCERTAIN, not retried.
           breaker.recordFailure(attemptedAt);
           return {
             ok: false,
-            error: "Mailketing v2 returned a malformed or non-JSON response.",
-            retryable: true
+            error:
+              "Mailketing v2 returned a malformed 200 response (UNCERTAIN_MALFORMED_RESPONSE); " +
+              "the provider may have accepted the message, so it is not retried.",
+            retryable: false,
+            uncertain: true
           };
 
         case "http":
@@ -322,7 +335,8 @@ export function createMailketingV2Provider(
           error: "Mailketing v2 reports insufficient credit (HTTP 402).",
           retryable: true,
           skipped: true,
-          holdMs: MAILKETING_V2_CREDIT_HOLD_MS
+          holdMs: MAILKETING_V2_CREDIT_HOLD_MS,
+          creditHold: true
         };
       case "sender":
         breaker.recordFailure(attemptedAt);
@@ -348,6 +362,9 @@ export function createMailketingV2Provider(
           retryable: true
         };
       case "invalid":
+        // Per-message 404/422/other 4xx, but a wrong contract looks the same:
+        // counts toward the breaker (5 consecutive, reset by any success).
+        breaker.recordFailure(attemptedAt);
         return {
           ok: false,
           error: `Mailketing v2 rejected the request (HTTP ${status}).`,
