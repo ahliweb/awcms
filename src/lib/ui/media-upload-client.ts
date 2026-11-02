@@ -385,6 +385,7 @@ export type CompressionMessages = {
   compressing: string;
   compressed: string;
   gifOverCap: string;
+  animatedOverCap: string;
   typeNotCompressible: string;
   floorReached: string;
   unsupportedBrowser: string;
@@ -407,6 +408,8 @@ export const DEFAULT_COMPRESSION_MESSAGES: CompressionMessages = {
     "Compressed from {original} to {final} before upload. Camera and location metadata (EXIF) is not kept.",
   gifOverCap:
     "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image.",
+  animatedOverCap:
+    "This animated image is {original}, over the {cap} limit. Animated images are never re-compressed because that would remove the animation. Choose a smaller file, or use a still JPEG, PNG or WebP image.",
   typeNotCompressible:
     "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded.",
   floorReached:
@@ -430,6 +433,7 @@ const FAILURE_MESSAGE_KEY: Record<
   keyof CompressionMessages
 > = {
   gif_over_cap: "gifOverCap",
+  animated_over_cap: "animatedOverCap",
   type_not_compressible: "typeNotCompressible",
   invalid_input: "invalidInput",
   unsupported_browser: "unsupportedBrowser",
@@ -475,6 +479,7 @@ const MESSAGE_DATASET_KEYS: Record<keyof CompressionMessages, string> = {
   compressing: "msgCompressing",
   compressed: "msgCompressed",
   gifOverCap: "msgGifOverCap",
+  animatedOverCap: "msgAnimatedOverCap",
   typeNotCompressible: "msgTypeNotCompressible",
   floorReached: "msgFloorReached",
   unsupportedBrowser: "msgUnsupportedBrowser",

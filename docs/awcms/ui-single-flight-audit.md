@@ -34,7 +34,10 @@ flag per form** (per button for `onAction`):
 3. Success that navigates keeps the lock: `mutateAndReload` and the new
    `holdForNavigation()` keep the form locked until the page leaves, and a
    `lockElement` a page leaves held (as every page did on success) counts the
-   same. A `pageshow` with `persisted` (the bfcache back button) releases it.
+   same, but only when the handler RETURNS: a throw always releases. A
+   `pageshow` with `persisted` (the bfcache back button) releases it, and so
+   does a 10 s timer when the navigation never replaced the page (a download, a
+   cancelled unload).
 4. Server side stays authoritative. This removes the duplicate request; it does
    not replace an `Idempotency-Key` or a unique constraint (§4).
 

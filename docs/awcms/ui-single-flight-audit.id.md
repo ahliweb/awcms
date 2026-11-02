@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ui-single-flight-audit.md)
 
-<!-- i18n-source-hash: sha256:de449e2b2f2f49c2b0e0827b265bec6588b0a2c214b68d77034c374ade4d5889 -->
+<!-- i18n-source-hash: sha256:4092ae86acbf6f9fdd013daa83ee2d219b825f3e419b20c839894c3317085992 -->
 
 # Single flight secara bawaan: audit setiap form dan titik masuk mutasi
 
@@ -39,7 +39,10 @@ in-flight per form** (per tombol untuk `onAction`):
    `holdForNavigation()` yang baru menjaga form tetap terkunci sampai halaman
    ditinggalkan, dan `lockElement` yang dibiarkan tertahan oleh halaman
    (seperti yang selalu dilakukan setiap halaman saat sukses) dihitung sama.
-   `pageshow` dengan `persisted` (tombol kembali bfcache) melepaskannya.
+   tetapi hanya bila handler KEMBALI dengan normal: sebuah throw selalu
+   melepaskannya. `pageshow` dengan `persisted` (tombol kembali bfcache)
+   melepaskannya, begitu juga timer 10 dtk bila navigasi tidak pernah
+   menggantikan halaman (unduhan, unload yang dibatalkan).
 4. Sisi server tetap otoritatif. Ini menghilangkan request ganda; ia tidak
    menggantikan `Idempotency-Key` atau unique constraint (§4).
 

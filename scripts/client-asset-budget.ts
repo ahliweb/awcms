@@ -1134,8 +1134,27 @@ export const READER_BUDGET_BYTES = 24_000;
  * image processing) would have moved the cost to a native dependency and a decoder
  * of untrusted bytes. It loads only on `/admin/media`; a reader downloads none of
  * it (`READER_BUDGET_BYTES` is untouched) and neither does any other admin screen.
+ *
+ * **Raised for the Issue #1224 review fixes**: +92 B (356,148 -> 356,240), of
+ * which 79 B measured locally on top of #1221 and 13 B of margin because CI's
+ * build of the same tree measured 9 B above the local one. The shared single-flight
+ * guard in `admin-form-client.ts` gained a one-shot navigation hold, a 10 s
+ * recovery timer for a navigation that never replaces the page, and a release
+ * that no longer overwrites a `disabled` the page changed mid-flight. All of it
+ * lives in the ONE shared module (no per-screen copy), so there is nothing to
+ * recover elsewhere.
+ *
+ * **Raised again for the #1221 review follow-up**: +2,160 B (356,240 -> 358,400),
+ * of which 2,141 B measured locally (356,240 -> 358,381 on `main` b2c0731f) and
+ * 19 B of margin for the local/CI build difference seen on #1224. The review
+ * found that an over-cap animated WebP or APNG was silently flattened to one
+ * frame and that the 100 MP guard ran only after the full bitmap had been
+ * decoded; the fixes are `media-image-header.ts` (magic-byte sniffing, animation
+ * flags, pixel dimensions read from the header before any decode) and one more
+ * translated refusal message. Same single screen (`/admin/media`), same single
+ * copy of the code.
  */
-export const APP_BUDGET_BYTES = 356_148;
+export const APP_BUDGET_BYTES = 358_400;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
