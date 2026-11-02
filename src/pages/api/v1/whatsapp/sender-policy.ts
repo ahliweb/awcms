@@ -39,8 +39,18 @@ type Prepared = { payload: unknown; idempotencyKey: string };
  * `Idempotency-Key`, and an audit row at `warning`. The sender must be an
  * account of THIS tenant that may send a business-initiated message right now;
  * anything else, including another tenant's account, is the same
- * `422 SENDER_UNAVAILABLE` (no existence oracle). The body is validated AFTER
- * authorization so an unauthorised token learns nothing about the schema.
+ * `422 SENDER_UNAVAILABLE` (no existence oracle).
+ *
+ * Order, exactly (Issue #1231 L4): `prepare` runs FIRST, for any caller that
+ * presents a bearer token and a tenant, before the permission check. So a
+ * missing or oversized `Idempotency-Key` (`400 IDEMPOTENCY_REQUIRED`), a body
+ * over the size limit (`413`) and a body that is not valid JSON (`400`) are
+ * answered to a caller who may not hold `sender_policy.configure` at all; those
+ * answers say nothing about the policy schema. Only the SCHEMA validation of the
+ * parsed body (`validateSenderPolicyInput`, the field-level `400` with its error
+ * list) runs after authorization, so an unauthorised token learns nothing about
+ * the fields. Moving `prepare` behind the guard was considered and not done: it
+ * would need the idempotency/body reading to move into the transaction.
  *
  * Per-account access applies (Issue #1233 M1), by the rules of
  * `channel_accounts`: the business scope named (or tenant-wide, `null`) must be
