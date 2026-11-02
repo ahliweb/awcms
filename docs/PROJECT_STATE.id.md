@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:22b6628ca30cada6700869571e2f3822f399be92044eac18c0dbccddd6277774 -->
+<!-- i18n-source-hash: sha256:ea2d7e73dbe083c10eee1132a4ed3fc75961b1185132dbcc5bf11548b15ab764 -->
 
 # AWCMS — Project State & Continuation
 
@@ -139,7 +139,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **236** (`sql/001`–`321`)                                                                                  | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0156** (`0000` = template; status ADR tertinggi: **Accepted**)                                  | `ls docs/adr/`                                                                          |
 | Layar admin                        | **80** berkas `.astro` di `src/pages/admin/`; **1 dari 34** modul tanpa `navigation:` (`channel-accounts`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **102** (59.227 baris) — soal typecheck lihat §6                                                           | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **102** (59.177 baris) — soal typecheck lihat §6                                                           | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **69** di rantai `bun run check`                                                                           | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                  | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

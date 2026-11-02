@@ -226,19 +226,13 @@ const hasToken = token.length > 0;
       // The import is deliberate — it forces Astro to bundle this script to an
       // external file (an import-free script would be inlined, and inline
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
-      import { lockElement } from "../lib/ui/admin-form-client";
+      import { lockElement, onSubmit } from "../lib/ui/admin-form-client";
       import { MIN_PASSWORD_LENGTH } from "../modules/identity-access/domain/password-reset-validation";
 
-      const form = document.getElementById(
-        "invitation-form"
-      ) as HTMLFormElement | null;
       const errorBox = document.getElementById("invitation-error");
       const noticeBox = document.getElementById("invitation-notice");
       const summary = document.getElementById("invitation-summary");
       const loginLink = document.getElementById("invitation-login-link");
-      const submitButton = document.getElementById(
-        "invitation-submit"
-      ) as HTMLButtonElement | null;
       const passwordInput = document.getElementById(
         "invitation-password"
       ) as HTMLInputElement | null;
@@ -314,13 +308,12 @@ const hasToken = token.length > 0;
 
       void loadPreview();
 
-      form?.addEventListener("submit", async (event) => {
-        event.preventDefault();
-
-        if (!submitButton || submitButton.disabled) return;
+      // `onSubmit` owns the single-flight guard (#1224): a second submit while
+      // this handler is pending is ignored, released on ANY settled outcome so
+      // the person can retry after a refusal.
+      onSubmit("invitation-form", async ({ form, data: formData, submit }) => {
         if (errorBox) errorBox.hidden = true;
 
-        const formData = new FormData(form);
         const token = String(formData.get("token") ?? "");
         const tenantId = String(formData.get("tenantId") ?? "").trim();
         const password = String(formData.get("password") ?? "");
@@ -343,7 +336,7 @@ const hasToken = token.length > 0;
           return;
         }
 
-        const unlock = lockElement(submitButton, "Please wait…");
+        const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
 
         try {
           const response = await fetch(

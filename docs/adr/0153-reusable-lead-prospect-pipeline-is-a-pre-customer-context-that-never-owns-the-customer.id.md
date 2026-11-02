@@ -1,13 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.md)
 
-<!-- i18n-source-hash: sha256:7ea7fc55d94d9bbb48dd6ae758ad833c4c7165d9ebeffbfbc70e6688f7dec6c7 -->
+<!-- i18n-source-hash: sha256:cfe4e26f1d5f898895a55ebbc77e31258a2d90d9f608a83df8e3479233998036 -->
 
 # ADR-0153 — Pipeline lead/prospek yang dapat dipakai ulang diadmisi sebagai konteks pra-pelanggan `crm_leads` dengan katalog tahap yang ditentukan tenant dan berversi; ia tidak pernah memiliki pelanggan, identitas, atau consent
 
-- **Status:** Diusulkan
-- **Tinjauan:** menjadi Diterima setelah ditinjau maintainer. Sampai saat itu ia adalah rekomendasi. Tidak ada isinya yang mengotorisasi kode, dan issue implementasi #1166 serta issue lanjutan #1165 tetap terblokir olehnya.
+- **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** @ahliweb (menunggu tinjauan maintainer)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan:** Issue #1163 (admisi pipeline lead/prospek generik)
 - **Memperluas:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (invarian I1 sampai I13 mengikat; C4 dan C5 menentukan di mana percakapan dan pelanggan berada), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md) (subjek data dijawab per tenant), [ADR-0137](0137-payout-account-encryption-at-rest-and-keyed-hashing.id.md) (ciphertext ditambah hash berkunci untuk nilai pribadi), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.id.md), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.id.md) (upstream lebih dulu), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.id.md), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.id.md) (tanpa facade, tanpa fallback)
 - **Terkait:** Issue #1139, #1140 (akun kanal), #1144 (batas inbound), #1153 (sumber lead situs web), [ADR-0155](0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.id.md) (modul intake `website_engagement`, Diusulkan), #1164 (proyeksi percakapan dan SLA), #1165 (kadens tindak lanjut), #1166 (implementasi), ADR-0152 (Proposed, Issue #1155) (kontak Telegram); downstream `ahliweb/awcms-one` #462 (standar kebutuhan CRM), #463 (pemetaan pelanggan), #464 (proyeksi laporan) dan AW Business PRD-nya; modul `profile_identity` dan `external_customer_ref` opak milik modul `booking` ([ADR-0131](0131-generic-booking-module-admission.id.md))

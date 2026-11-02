@@ -2,9 +2,9 @@
 
 # ADR-0154 — Realtime progress is SSE-first on the existing Bun process and reads durable state; WebSocket is not admitted until a bidirectional need is proven
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** pending — acceptance is the maintainer's decision (ADR-0148 and Issue #1168 require an approved ADR before any gateway code)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves:** Issue #1168 (evaluate a tenant-safe Bun realtime gateway). It is the gate for Issue #1171 (the implementation).
 - **Extends:** [ADR-0075](0075-sse-reauthorizes-every-tick.md) (an SSE connection re-authorizes on every tick; this ADR does not relax it), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) invariants I1, I2, I3, I8, I10 and I13, [ADR-0074](0074-push-delivery-is-a-second-outbox.md) (the first SSE consumer), [ADR-0002](0002-bun-only-runtime.md) (Bun only)
 - **Related:** [ADR-0006](0006-offline-first-sync-outbox.md), [ADR-0027](0027-mfa-totp-session-assurance-step-up.md) (session assurance), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) (one queue per channel), Issues #1139, #1144, #1167, #1170, #1171; downstream `ahliweb/awcms-one` #458, #459, #461 and #430 to #432; the readiness pack [`docs/awcms/bun-delivery-realtime-runtime.md`](../awcms/bun-delivery-realtime-runtime.md) (the proposed boundary from PR #1169)

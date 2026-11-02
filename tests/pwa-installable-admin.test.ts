@@ -318,7 +318,9 @@ describe("guidance markup (accessibility + i18n)", () => {
     );
 
     expect(source).not.toMatch(/Notification\.requestPermission/);
-    expect(source).toContain('enableButton?.addEventListener("click"');
+    // Bound through `onAction` since #1224 (single flight): still a click
+    // handler, and still the only place the permission prompt is reachable.
+    expect(source).toContain('onAction("#push-enable-button"');
     expect(
       client.match(/await Notification\.requestPermission\(\)/g)?.length
     ).toBe(1);

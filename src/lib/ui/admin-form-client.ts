@@ -32,28 +32,113 @@
  * object costs its property names at every call site — about 30 B minified,
  * ninety-two times — which is a meaningful slice of the saving this exists to
  * produce.
+ *
+ * ## Single flight is the DEFAULT here (Issue #1224)
+ *
+ * Until #1224 the only protection against a double submit was a page script
+ * remembering to call {@link lockElement} on its own button — `onSubmit`,
+ * `onSubmitAll` and `onAction` kept no state at all, so a page that forgot
+ * (or a future page) shipped a form that created two records on a fast double
+ * tap. The three binders now own an in-flight flag per form (per button for
+ * `onAction`): while the handler's promise is pending, a further `submit` or
+ * `click` is IGNORED — not queued — and the flag is released in `finally`, so a
+ * throw, an `{ ok: false }` and a network error all leave the form usable.
+ *
+ * The state machine is {@link createSingleFlight}: pure, no DOM, driven through
+ * three injected ports so `tests/admin-single-flight.test.ts` can exercise it
+ * without a browser. The DOM adapter below it is thin.
+ *
+ * - **Visible state.** While pending the form gets `aria-busy="true"` and its
+ *   submit button is disabled, WITHOUT touching its label. A page that already
+ *   calls `lockElement(submit, "Saving…")` keeps its own busy label: every
+ *   disable goes through ONE registry (`controlLocks`), so the second
+ *   `lockElement` on an already-locked control never captures the busy label as
+ *   the "original", and releasing restores exactly what was there before.
+ * - **Implicit submission.** The flag, not the disabled button, is the guard:
+ *   a disabled default button does not stop every browser's Enter-key submit,
+ *   and `preventDefault()` runs for the ignored event too, so it never falls
+ *   through to a native POST.
+ * - **Success that navigates keeps the lock.** A page that reloads/redirects
+ *   on success calls {@link holdForNavigation} (`mutateAndReload` already does),
+ *   or simply leaves its own `lockElement` un-released as it always did; either
+ *   way the form stays locked until the navigation. A `pageshow` with
+ *   `persisted` (the bfcache back button restores the DOM exactly as it was
+ *   left, locked) releases every held lock again.
+ * - **Server side stays authoritative.** None of this replaces an
+ *   `Idempotency-Key` or a unique constraint; it removes the duplicate request
+ *   before it exists. The audit of every entry point is
+ *   `docs/awcms/ui-single-flight-audit.md`, and
+ *   `tests/single-flight-source-contract.test.ts` fails when a page script
+ *   binds `submit` or a mutating `click` outside these helpers.
  */
 
 /**
+ * The ONE place a control is disabled for a request. Keyed by the control so
+ * that `lockElement` (a page's own busy label) and the in-flight guard (below)
+ * share a single record instead of each remembering "the original".
+ *
+ * `label` is `undefined` until a caller swaps it: the guard disables a button
+ * without rewriting its text (and `textContent =` would flatten any icon the
+ * button holds), so only a `lockElement` captures and restores a label.
+ * `page` marks a lock some page took itself — and, if it is still held when
+ * the handler settles, the page meant it to outlive the handler (it is
+ * navigating).
+ */
+type ControlLock = {
+  disabled: boolean;
+  label?: string | null;
+  page: boolean;
+};
+
+const controlLocks = new Map<HTMLButtonElement, ControlLock>();
+
+function acquire(element: HTMLButtonElement): ControlLock {
+  let lock = controlLocks.get(element);
+
+  if (!lock) {
+    lock = { disabled: element.disabled, page: false };
+    controlLocks.set(element, lock);
+    element.disabled = true;
+    armPageShow();
+  }
+
+  return lock;
+}
+
+function release(element: HTMLButtonElement, lock?: ControlLock): void {
+  const held = controlLocks.get(element);
+
+  // `lock` identifies the caller's own acquisition: a stale `unlock()` from an
+  // earlier request must not release a later, unrelated one.
+  if (!held || (lock && held !== lock)) return;
+
+  controlLocks.delete(element);
+  element.disabled = held.disabled;
+  if (held.label !== undefined) element.textContent = held.label;
+}
+
+/**
  * Disables a button and swaps its label to a busy string for the duration of
- * an async action, returning an `unlock()` that restores both. Guards against
- * double-submit (a fast double-click firing two requests before a redirect).
+ * an async action, returning an `unlock()` that restores both.
+ *
+ * Idempotent (#1224): locking a control the in-flight guard has ALREADY
+ * disabled only swaps its label, and the first of the two releases restores
+ * the original disabled state and label — never the busy one.
  */
 export function lockElement(
   element: HTMLButtonElement,
   busyLabel: string
 ): () => void {
-  const originalLabel = element.textContent;
-  element.disabled = true;
+  // Idempotent: on a control the in-flight guard (or an earlier call) already
+  // locked, this only swaps the label — it never records the BUSY label as the
+  // original.
+  const lock = acquire(element);
+
+  if (lock.label === undefined) lock.label = element.textContent;
+  lock.page = true;
   element.textContent = busyLabel;
 
-  let unlocked = false;
-  return () => {
-    if (unlocked) return;
-    unlocked = true;
-    element.disabled = false;
-    element.textContent = originalLabel;
-  };
+  return () => release(element, lock);
 }
 
 /** The methods every admin mutation helper here accepts. */
@@ -310,6 +395,144 @@ export function integerValue(id: string, fallback: number): number {
   return Number.isInteger(parsed) ? parsed : fallback;
 }
 
+/**
+ * What the in-flight state machine needs from its host. Three ports, no DOM:
+ * the browser adapter below implements them with `aria-busy` and the control
+ * registry, and the unit test with a recorder.
+ */
+export type FlightPorts<K> = {
+  /** Show the busy state on `key` (a flight has started). */
+  enter(key: K): void;
+  /** Undo `enter` (the flight ended, or its held lock is being released). */
+  leave(key: K): void;
+  /** Asked once the task has settled: keep the lock because the page is leaving? */
+  holds(key: K): boolean;
+};
+
+/**
+ * Single-flight per key: while a task for `key` is pending, a second `run` for
+ * the same key is IGNORED (resolves `false`, runs nothing, queues nothing).
+ * Different keys are independent — two rows of one table may act at once.
+ *
+ * The flag is released in `finally`, so a throw and a failed outcome both free
+ * the key. The one exception is `holds`: a task that ends by navigating keeps
+ * its key until {@link createSingleFlight}'s `release()` (the bfcache restore).
+ */
+export function createSingleFlight<K>(ports: FlightPorts<K>) {
+  const active = new Set<K>();
+  const held = new Set<K>();
+
+  return {
+    async run(key: K, task: () => unknown): Promise<boolean> {
+      if (active.has(key)) return false;
+
+      active.add(key);
+      ports.enter(key);
+
+      try {
+        await task();
+      } finally {
+        if (ports.holds(key)) held.add(key);
+        else {
+          active.delete(key);
+          ports.leave(key);
+        }
+      }
+
+      return true;
+    },
+    /** Frees every key kept by `holds` (the page came back from the bfcache). */
+    release(): void {
+      for (const key of held) {
+        held.delete(key);
+        active.delete(key);
+        ports.leave(key);
+      }
+    }
+  };
+}
+
+let navigating = false;
+
+/**
+ * Says the handler is about to leave the page (reload, redirect), so its form
+ * must stay locked until the navigation instead of being re-armed on a page
+ * that is already going away. `mutateAndReload` calls it; a page that does its
+ * own `location.reload()/assign()` after a request calls it too.
+ */
+export function holdForNavigation(): void {
+  navigating = true;
+  armPageShow();
+}
+
+let pageShowArmed = false;
+
+/**
+ * The bfcache back button restores the DOM exactly as it was when the user left
+ * it — locked, with a busy label — and no script re-runs. This is the only way
+ * back to a usable form.
+ */
+export function restoreOnPageShow(event: { persisted?: boolean }): void {
+  if (!event.persisted) return;
+
+  navigating = false;
+  singleFlight.release();
+  for (const element of [...controlLocks.keys()]) release(element);
+}
+
+function armPageShow(): void {
+  if (pageShowArmed || typeof window === "undefined") return;
+
+  pageShowArmed = true;
+  window.addEventListener("pageshow", restoreOnPageShow);
+}
+
+/** The submit control of a form: a descendant, or `form="<id>"` outside it. */
+function submitOf(form: HTMLFormElement): HTMLButtonElement | null {
+  // A form's submit button is USUALLY a descendant, but `SettingsSaveBar`
+  // (Issue #854 part 2) renders it outside the `<form>` and links it back
+  // with `form="<id>"` — the standard HTML mechanism for a submit control
+  // that is not nested inside the form it submits. Falling back to that
+  // lookup keeps the busy-label/disable behaviour working for a form adopting
+  // the bar, without requiring every OTHER form on this screen to also have
+  // an id (the fallback only runs when the first query finds nothing).
+  return (
+    form.querySelector<HTMLButtonElement>('button[type="submit"]') ??
+    (form.id
+      ? document.querySelector<HTMLButtonElement>(
+          `button[type="submit"][form="${form.id}"]`
+        )
+      : null)
+  );
+}
+
+/** The control a flight disables: the form's submit button, or the button itself. */
+function controlOf(host: HTMLElement): HTMLButtonElement | null {
+  return host instanceof HTMLFormElement
+    ? submitOf(host)
+    : (host as HTMLButtonElement);
+}
+
+const singleFlight = /* @__PURE__ */ createSingleFlight<HTMLElement>({
+  enter(host) {
+    host.setAttribute("aria-busy", "true");
+    const control = controlOf(host);
+    if (control) acquire(control);
+  },
+  leave(host) {
+    host.removeAttribute("aria-busy");
+    const control = controlOf(host);
+    if (control) release(control);
+  },
+  holds(host) {
+    const control = controlOf(host);
+
+    return (
+      navigating || (!!control && controlLocks.get(control)?.page === true)
+    );
+  }
+});
+
 /** What {@link onSubmit} hands its handler. */
 export type SubmitContext = {
   form: HTMLFormElement;
@@ -325,39 +548,23 @@ export type SubmitContext = {
   submit: HTMLButtonElement | null;
 };
 
+function submitContext(form: HTMLFormElement): SubmitContext {
+  return { form, data: new FormData(form), submit: submitOf(form) };
+}
+
 /**
  * Binds a submit handler to the form with `formId`, with `preventDefault`
  * already called and the `FormData` already read.
+ *
+ * Single flight (#1224): a second `submit` while the handler's promise is
+ * pending is ignored (the native POST is still suppressed), and the form shows
+ * `aria-busy` with its submit button disabled until the handler settles.
  *
  * Binding is unconditional and silently does nothing when the form is absent —
  * which is the normal case, not an error: admin forms render only inside a
  * `canCreate`-style branch, while Astro hoists every `<script>` at build time
  * and ships it to every viewer of the page.
  */
-function submitContext(form: HTMLFormElement): SubmitContext {
-  // A form's submit button is USUALLY a descendant, but `SettingsSaveBar`
-  // (Issue #854 part 2) renders it outside the `<form>` and links it back
-  // with `form="<id>"` — the standard HTML mechanism for a submit control
-  // that is not nested inside the form it submits. Falling back to that
-  // lookup keeps `lockElement`'s busy-label/disable behaviour working for a
-  // form adopting the bar, without requiring every OTHER form on this screen
-  // to also have an id (the fallback only runs when the first query finds
-  // nothing).
-  const submit =
-    form.querySelector<HTMLButtonElement>('button[type="submit"]') ??
-    (form.id
-      ? document.querySelector<HTMLButtonElement>(
-          `button[type="submit"][form="${form.id}"]`
-        )
-      : null);
-
-  return {
-    form,
-    data: new FormData(form),
-    submit
-  };
-}
-
 export function onSubmit(
   formId: string,
   handler: (context: SubmitContext) => void | Promise<void>
@@ -367,7 +574,7 @@ export function onSubmit(
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    void handler(submitContext(form));
+    void singleFlight.run(form, () => handler(submitContext(form)));
   });
 }
 
@@ -388,7 +595,7 @@ export function onSubmitAll(
     if (!(form instanceof HTMLFormElement)) return;
 
     event.preventDefault();
-    void handler(submitContext(form));
+    void singleFlight.run(form, () => handler(submitContext(form)));
   });
 }
 
@@ -398,7 +605,9 @@ export function onSubmitAll(
  * Delegation rather than `querySelectorAll(...).forEach(addEventListener)`:
  * one listener instead of one per row, and it keeps working for rows the page
  * renders later. Disabled buttons are skipped here so no caller repeats the
- * double-click guard.
+ * double-click guard, and (#1224) each BUTTON is single-flight: a click while
+ * its own handler is pending is ignored. Other buttons stay independent, so two
+ * rows of one table can still act at once.
  */
 export function onAction(
   selector: string,
@@ -411,7 +620,7 @@ export function onAction(
     const button = target.closest(selector);
     if (!(button instanceof HTMLButtonElement) || button.disabled) return;
 
-    void handler(button);
+    void singleFlight.run(button, () => handler(button));
   });
 
   markDelegationReady();
@@ -462,7 +671,9 @@ function markDelegationReady(): void {
  *
  * There is deliberately no `unlock()` on the success path. The page is being
  * replaced; restoring the button first would flash the old label and briefly
- * re-arm a control whose row is about to disappear.
+ * re-arm a control whose row is about to disappear. {@link holdForNavigation}
+ * says the same to the in-flight guard, which would otherwise re-arm the form
+ * when this handler's promise resolves a moment before the reload lands.
  */
 export async function mutateAndReload(
   button: HTMLButtonElement | null,
@@ -477,6 +688,7 @@ export async function mutateAndReload(
   const result = await send();
 
   if (result.ok) {
+    holdForNavigation();
     window.location.reload();
     return;
   }
