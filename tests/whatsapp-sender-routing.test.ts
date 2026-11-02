@@ -1737,10 +1737,10 @@ describe("sender hardening (Issue #1231)", () => {
     expect(sql).toContain("SET search_path = public, pg_temp");
     // The shape is the one `isWhatsappSenderShape` accepts.
     expect(sql).toContain(
-      "account_provider = 'whatsapp_cloud' AND account_kind = 'waba_phone_number'"
+      "v_provider = 'whatsapp_cloud' AND v_kind = 'waba_phone_number'"
     );
     expect(sql).toContain(
-      "account_provider = 'starsender' AND account_kind = 'device'"
+      "v_provider = 'starsender' AND v_kind = 'device'"
     );
     expect(isWhatsappSenderShape("whatsapp_cloud", "waba_phone_number")).toBe(
       true
@@ -1748,7 +1748,7 @@ describe("sender hardening (Issue #1231)", () => {
     expect(isWhatsappSenderShape("starsender", "device")).toBe(true);
     expect(isWhatsappSenderShape("whatsapp_cloud", "waba")).toBe(false);
     // The default must be `connected`, and the check is on insert or a changed default.
-    expect(sql).toContain("account_status <> 'connected'");
+    expect(sql).toContain("v_status <> 'connected'");
     expect(sql).toContain("TG_OP = 'INSERT'");
     expect(sql).toContain(
       "NEW.default_sender_account_id IS DISTINCT FROM OLD.default_sender_account_id"

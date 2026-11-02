@@ -53,11 +53,11 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $function$
 DECLARE
-  account_status text;
-  account_provider text;
-  account_kind text;
-  account_scope_type text;
-  account_scope_id uuid;
+  v_status text;
+  v_provider text;
+  v_kind text;
+  v_scope_type text;
+  v_scope_id uuid;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     IF NEW.sender_account_id IS DISTINCT FROM OLD.sender_account_id
@@ -74,28 +74,28 @@ BEGIN
 
   IF NEW.sender_account_id IS NOT NULL THEN
     SELECT status, provider, account_kind, business_scope_type, business_scope_id
-      INTO account_status, account_provider, account_kind,
-           account_scope_type, account_scope_id
+      INTO v_status, v_provider, v_kind,
+           v_scope_type, v_scope_id
     FROM awcms_channel_accounts
     WHERE tenant_id = NEW.tenant_id AND id = NEW.sender_account_id
       AND deleted_at IS NULL;
 
-    IF NOT FOUND OR account_status <> 'connected' THEN
+    IF NOT FOUND OR v_status <> 'connected' THEN
       RAISE EXCEPTION 'a WhatsApp message needs a connected sender account of its own tenant'
         USING ERRCODE = '23514';
     END IF;
 
     IF NOT (
-      (account_provider = 'whatsapp_cloud' AND account_kind = 'waba_phone_number')
-      OR (account_provider = 'starsender' AND account_kind = 'device')
+      (v_provider = 'whatsapp_cloud' AND v_kind = 'waba_phone_number')
+      OR (v_provider = 'starsender' AND v_kind = 'device')
     ) THEN
       RAISE EXCEPTION 'a WhatsApp message sender account must be a WhatsApp number (whatsapp_cloud phone number or starsender device)'
         USING ERRCODE = '23514';
     END IF;
 
-    IF account_scope_type IS NOT NULL
-       AND (account_scope_type IS DISTINCT FROM NEW.business_scope_type
-            OR account_scope_id IS DISTINCT FROM NEW.business_scope_id) THEN
+    IF v_scope_type IS NOT NULL
+       AND (v_scope_type IS DISTINCT FROM NEW.business_scope_type
+            OR v_scope_id IS DISTINCT FROM NEW.business_scope_id) THEN
       RAISE EXCEPTION 'a scoped sender account may only send within its own business scope'
         USING ERRCODE = '23514';
     END IF;
@@ -111,11 +111,11 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $function$
 DECLARE
-  account_status text;
-  account_provider text;
-  account_kind text;
-  account_scope_type text;
-  account_scope_id uuid;
+  v_status text;
+  v_provider text;
+  v_kind text;
+  v_scope_type text;
+  v_scope_id uuid;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
@@ -137,8 +137,8 @@ BEGIN
      AND (TG_OP = 'INSERT'
           OR NEW.default_sender_account_id IS DISTINCT FROM OLD.default_sender_account_id) THEN
     SELECT status, provider, account_kind, business_scope_type, business_scope_id
-      INTO account_status, account_provider, account_kind,
-           account_scope_type, account_scope_id
+      INTO v_status, v_provider, v_kind,
+           v_scope_type, v_scope_id
     FROM awcms_channel_accounts
     WHERE tenant_id = NEW.tenant_id AND id = NEW.default_sender_account_id
       AND deleted_at IS NULL;
@@ -148,22 +148,22 @@ BEGIN
         USING ERRCODE = '23514';
     END IF;
 
-    IF account_status <> 'connected' THEN
+    IF v_status <> 'connected' THEN
       RAISE EXCEPTION 'a WhatsApp sender policy default needs a connected sender account (not pending, degraded, revoked or disabled)'
         USING ERRCODE = '23514';
     END IF;
 
     IF NOT (
-      (account_provider = 'whatsapp_cloud' AND account_kind = 'waba_phone_number')
-      OR (account_provider = 'starsender' AND account_kind = 'device')
+      (v_provider = 'whatsapp_cloud' AND v_kind = 'waba_phone_number')
+      OR (v_provider = 'starsender' AND v_kind = 'device')
     ) THEN
       RAISE EXCEPTION 'a WhatsApp sender policy default must be a WhatsApp number (whatsapp_cloud phone number or starsender device)'
         USING ERRCODE = '23514';
     END IF;
 
-    IF account_scope_type IS NOT NULL
-       AND (account_scope_type IS DISTINCT FROM NEW.business_scope_type
-            OR account_scope_id IS DISTINCT FROM NEW.business_scope_id) THEN
+    IF v_scope_type IS NOT NULL
+       AND (v_scope_type IS DISTINCT FROM NEW.business_scope_type
+            OR v_scope_id IS DISTINCT FROM NEW.business_scope_id) THEN
       RAISE EXCEPTION 'a scoped sender account may only be the default of its own business scope'
         USING ERRCODE = '23514';
     END IF;
