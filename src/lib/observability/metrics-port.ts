@@ -524,6 +524,16 @@ export const METRIC_DEFINITIONS = {
       "3 — code-defined outcomes (accepted, invalid, rate_limited).",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
+  website_engagement_submission_total: {
+    name: "website_engagement_submission_total",
+    type: "counter",
+    description:
+      "Count of public website-engagement submission attempts by outcome — the abuse-pressure signal for an anonymous write endpoint (ADR-0155). `refused` deliberately covers an unparseable token, an unknown tenant or source, a wrong secret, a paused or revoked source, a disabled module and an unregistered Origin alike: the endpoint answers one body for all of them, and a metric that separated them would rebuild the oracle the response refuses to be. `accepted` covers a new submission, a duplicate and a honeypot catch alike for the same reason.",
+    allowedLabelKeys: ["outcome"],
+    approxCardinality:
+      "At most 7 — code-defined outcomes (accepted, invalid, refused, rate_limited, rule_refused, challenge_failed, unavailable).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
   comments_abuse_blocks_total: {
     name: "comments_abuse_blocks_total",
     type: "counter",

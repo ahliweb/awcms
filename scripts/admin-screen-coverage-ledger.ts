@@ -257,5 +257,18 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // manager (Issue #1154), which is where an operator picks the accounts a
   // policy names. `/admin/whatsapp` stays gated on `messages.read` meanwhile.
   "whatsapp_delivery.senders.read",
-  "whatsapp_delivery.sender_policy.configure"
+  "whatsapp_delivery.sender_policy.configure",
+  // website_engagement (5) — ADR-0155 / Issue #1153. API-first and
+  // `experimental`: the operator screen (sources and their hosts, a one-time
+  // token display, the masked submission list with its consent provenance, the
+  // audited reveal and the withdrawal) is the recorded follow-up that flips the
+  // module to `active` and adds its navigation entry in the same change (a nav
+  // entry without a page is a permanent 404). The WCAG contract of that screen
+  // (the source token is shown ONCE; the `none` challenge must be visible) is in
+  // docs/awcms/website-engagement.md.
+  "website_engagement.sources.manage",
+  "website_engagement.sources.read",
+  "website_engagement.submissions.read",
+  "website_engagement.submissions.reveal",
+  "website_engagement.submissions.withdraw"
 ];

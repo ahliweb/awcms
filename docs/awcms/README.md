@@ -136,6 +136,10 @@ See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every tas
 
 [**Omnichannel foundation readiness pack v1**](omnichannel-foundation.md) accompanies [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (Issue [#1139](https://github.com/ahliweb/awcms/issues/1139)): the five-capability split, the logical data dictionary, the provider capability matrix (fail-closed per account), multi-sender semantics, the threat model, the compliance reading, the contracts outline, the rollout and the test matrix. **Design only**: no module, table, route or connector exists yet.
 
+## Website engagement (implemented)
+
+[**Website engagement**](website-engagement.md) documents the `website_engagement` module ([ADR-0155](../adr/0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md), Issue [#1153](https://github.com/ahliweb/awcms/issues/1153)): tenant-scoped website lead and contact capture, intake only, authenticated by a per-source token and the verified Origin host, with explicit consent provenance and an outbox event contract for a downstream CRM adapter.
+
 ## Omnichannel UI/UX screen contracts
 
 [**Upstream Omnichannel UI/UX v1.0**](omnichannel-ui-ux-screen-contracts.md) maps **UP-01–UP-16** existing email/WhatsApp/Push/staff Telegram and proposed multi-account/social/Mailketing **v2.0.2**/leads/inbox/SSE-WS screens, with states, access and release tests. Tracked [#1174](https://github.com/ahliweb/awcms/issues/1174). This is target documentation, not working multi-account API.

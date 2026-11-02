@@ -69,6 +69,17 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   "newsletterSubscribe",
   "newsletterConfirm",
   "newsletterUnsubscribe",
+  // website_engagement (Issue #1153, ADR-0155) — the public intake is
+  // unauthenticated BY DESIGN (a visitor's browser calls it) and
+  // authenticated by a different mechanism: the per-source token in the body
+  // (stored only as a keyed hash, shown once) AND the verified Origin host
+  // against the domains registered for that source. They take NO tenant header
+  // (the tenant is opened from the token and a tenant id anywhere else is never
+  // believed), are rate-limited per address and per source, answer one uniform
+  // refusal before the source is proven, and answer the same 200 for a new
+  // submission, a duplicate and a honeypot catch. (The route's OPTIONS preflight
+  // is not a documented operation, as for the newsletter.)
+  "websiteEngagementSubmit",
   // site_search (ADR-0040, ported from awcms-micro Issue #270) — the public
   // search + typeahead endpoints are anonymous by design: a site visitor has no
   // session. Both resolve the tenant from the request HOST (never a

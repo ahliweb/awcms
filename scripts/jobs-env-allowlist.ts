@@ -882,6 +882,11 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
       "verified by the webhook route; the registration script is run by an operator, not scheduled"
   },
   {
+    name: "WEBSITE_ENGAGEMENT_KEYS",
+    reason:
+      "a secret: the ring that encrypts website submissions' contact details and keys every source-token and identifier hash (ADR-0155); read only by the public intake and the admin routes. The retention purge deletes aged rows by id under column-only grants and never decrypts, so no cron job reads it"
+  },
+  {
     name: "SETUP_DATABASE_URL",
     reason:
       "the awcms_setup bootstrap connection, used by POST /api/v1/setup/initialize only; handing it to cron jobs would defeat the role split"
@@ -1048,6 +1053,18 @@ export const GLOBAL_SECRETS: readonly {
     kind: "not-a-secret",
     reason:
       "the public origin of the application, used to build absolute links; carries no credential"
+  },
+  {
+    name: "EMAIL_MAILKETING_V2_VERIFIED",
+    kind: "not-a-secret",
+    reason:
+      "operator acknowledgement that the live Mailketing v2 stage-2 check was done; a flag, not a credential"
+  },
+  {
+    name: "EMAIL_MAILKETING_API_VERSION",
+    kind: "not-a-secret",
+    reason:
+      "selects the Mailketing API version (v1 default, v2 opt-in); a mode switch, not a credential"
   },
   {
     name: "EMAIL_MAILKETING_API_BASE_URL",

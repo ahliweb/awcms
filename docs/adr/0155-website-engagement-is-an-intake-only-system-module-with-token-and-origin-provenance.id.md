@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md)
 
-<!-- i18n-source-hash: sha256:15aec8548d33fae9983d0bfa46046ef5361104b78951823b2dafe89ac615d2df -->
+<!-- i18n-source-hash: sha256:e820b3ae1462dea9468acb83074953fd84977be557cfd482e81babb07395fd7e -->
 
 # ADR-0155 — Penangkapan lead dan kontak situs web adalah modul sistem khusus intake, `website_engagement`, dengan provenance token sumber dan Origin
 
@@ -12,7 +12,7 @@
 - **Harus selaras dengan (belum diputuskan):** ADR-0153 (Issue #1163, pipeline lead/prospek). ADR ini tidak mendahului hasilnya; lihat §6.
 - **Terkait:** Issue #1153, #1139, #1144, #1163; `docs/awcms/21_module_admission_governance.id.md`
 
-**Hanya dokumen dan tata kelola. NOT YET IMPLEMENTED IN THIS REPO.** ADR ini tidak menambah modul, tabel, migrasi, rute, path OpenAPI, kanal AsyncAPI, atau dependensi. Tidak ada di sini yang menjadi bukti bahwa penangkapan situs web berfungsi.
+**Diimplementasikan oleh Issue #1153 (2 November 2026)** sebagai modul `website_engagement`: migrasi `sql/325`-`sql/327` (`321-322` yang dicadangkan di bagian 9 dipakai pekerjaan lain), `openapi/modules/website-engagement.openapi.yaml`, dua kanal AsyncAPI. Pertanyaan tantangan bagian 7 dijawab oleh penerimaan ADR ini dengan opsi yang direkomendasikan (Turnstile, diverifikasi terhadap host Origin milik permintaan itu sendiri, dengan fallback `none` yang terlihat); widget tertanam telah dinilai dan tidak dibangun, dan layar admin ditunda. Lihat [`docs/awcms/website-engagement.id.md`](../awcms/website-engagement.id.md). Teks di bawah adalah keputusan sebagaimana diterima.
 
 ## Konteks
 

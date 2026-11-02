@@ -519,6 +519,12 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "Tenant Domains",
       "Theming",
       "Visitor Analytics",
+      // "Website Engagement" (website_engagement, ADR-0155, Issue #1153) --
+      // genuinely new surface. The ONE anonymous operation is the public
+      // intake (`websiteEngagementSubmit`), authenticated by the per-source token
+      // and the verified Origin host, individually justified in
+      // ALLOWED_PUBLIC_OPERATIONS.
+      "Website Engagement",
       // "WhatsApp Delivery" (whatsapp_delivery, ADR-0133, Issue #963) — genuinely
       // new surface: queue diagnostics, cancel, templates, suppressions and the
       // consent store. Nothing here is anonymous.

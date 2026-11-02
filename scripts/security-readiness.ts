@@ -710,6 +710,14 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // nothing on its own — a distinction found by querying a real database, not
   // by reading the migration.
   awcms_subject_requests: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0155 / `sql/325` (Issue #1153). NOT retired -- the website intake's
+  // source registry and its submissions, both actively written. Narrowed by
+  // removing exactly one verb, DELETE: a source is revoked (a state), never
+  // removed by the runtime that serves the public endpoint, and a submission is
+  // evidence that only the retention job (`awcms_worker`, DELETE on a
+  // column-only grant) may purge, so a compromised web process cannot erase it.
+  awcms_engagement_sources: ["SELECT", "INSERT", "UPDATE"],
+  awcms_engagement_submissions: ["SELECT", "INSERT", "UPDATE"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
@@ -1603,6 +1611,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // an unsubscribe record is what answers a later complaint.
   // SELECT is column-only since sql/304: see WORKER_COLUMN_GRANTS.
   awcms_newsletter_subscribers: ["DELETE"],
+  // ADR-0155 (Issue #1153) -- data-lifecycle:archive-purge (sql/325): the
+  // retention sweep over website submissions. DELETE to remove aged rows; SELECT
+  // is COLUMN-ONLY (id, tenant_id, received_at): see WORKER_COLUMN_GRANTS. No
+  // UPDATE and no INSERT: a submission is evidence written by the public intake
+  // on awcms_app, and a compromised job can read no identifier, hash or
+  // ciphertext.
+  awcms_engagement_submissions: ["DELETE"],
   // ADR-0127 — data-lifecycle:archive-purge (sql/172): SELECT to find aged tax
   // snapshots, DELETE to remove them. No UPDATE — a snapshot is never edited,
   // and the immutability trigger refuses to delete anything younger than 1826
@@ -1934,6 +1949,11 @@ export const WORKER_COLUMN_GRANTS: Record<
   awcms_delegated_access_grants: { SELECT: ["id", "tenant_id", "created_at"] },
   awcms_omes_enrollments: { SELECT: ["id", "tenant_id", "created_at"] },
   awcms_newsletter_subscribers: { SELECT: ["id", "tenant_id", "created_at"] },
+  // sql/325 (Issue #1153): the generic purge's candidate selection and delete
+  // subquery need the key, the tenant and the cursor, nothing about the person.
+  awcms_engagement_submissions: {
+    SELECT: ["id", "tenant_id", "received_at"]
+  },
   // `confirmed` too: comments:retention filters `confirmed = false`.
   awcms_comments_reply_subscriptions: {
     SELECT: ["id", "tenant_id", "created_at", "confirmed"]
@@ -2458,6 +2478,14 @@ export const CREDENTIAL_COLUMNS: readonly string[] = [
   "awcms_omes_enrollments.enrollment_challenge_hash",
   "awcms_newsletter_subscribers.confirmation_token_hash",
   "awcms_newsletter_subscribers.unsubscribe_token_hash",
+  // website_engagement (sql/325, ADR-0155): the source's bearer-token keyed hash,
+  // the envelope-encrypted contact blob and the keyed hashes of a visitor's
+  // email and phone (an offline guessing oracle for a low-entropy identifier,
+  // so treated as credential material, like profile identifier hashes).
+  "awcms_engagement_sources.token_hash",
+  "awcms_engagement_submissions.contact_encrypted",
+  "awcms_engagement_submissions.email_hash",
+  "awcms_engagement_submissions.phone_hash",
   "awcms_comments_reply_subscriptions.unsubscribe_token_hash",
   "awcms_telegram_link_codes.code_hash",
   "awcms_telegram_bindings.pin_hash",

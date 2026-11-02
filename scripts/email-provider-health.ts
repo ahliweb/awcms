@@ -15,6 +15,10 @@
  * rule).
  */
 import { resolveEmailProvider } from "../src/modules/email/infrastructure/email-provider-resolver";
+import {
+  MAILKETING_V2_UNVERIFIED_WARNING,
+  isMailketingV2Verified
+} from "../src/modules/email/domain/mailketing-v2-contract";
 import { safeErrorDetail } from "../src/lib/logging/error-sanitizer";
 
 async function main() {
@@ -36,6 +40,14 @@ async function main() {
     );
     process.exitCode = 1;
     return;
+  }
+
+  if (
+    process.env.EMAIL_PROVIDER === "mailketing" &&
+    process.env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
+    !isMailketingV2Verified(process.env)
+  ) {
+    console.warn(`email:provider:health — ${MAILKETING_V2_UNVERIFIED_WARNING}`);
   }
 
   console.log(

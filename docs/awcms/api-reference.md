@@ -15260,6 +15260,324 @@ Registrable providers with their account kinds and authentication modes, and the
 | 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
 
+## Website Engagement
+
+Tenant-scoped website lead/contact capture and inbound website interaction events (website_engagement module, Issue #1153, ADR-0155). INTAKE ONLY: one PUBLIC, unauthenticated-by-design submission endpoint authenticated by an opaque per-source token (keyed hash at rest, shown once, rotatable, revocable; the tenant is opened FROM it and a tenant id anywhere else is never believed) and by the verified Origin host against the domains registered for that source, with per-address and per-source rate limits, an optional Turnstile challenge, a closed versioned field set, idempotency on (source, eventId) and explicit consent provenance; plus default-deny administrator operations for sources, masked submissions, an audited reveal and the controller's withdrawal. It creates, matches and merges no person; a CRM adapter consumes the outbox events in the AsyncAPI contract.
+
+### `GET /api/v1/website-engagement/sources` — List website sources
+
+- **operationId**: `listWebsiteEngagementSources`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.read`. Never returns a token or its hash: only the six-character prefix. `challengeEffective` is the challenge the source ACTUALLY gets on this deployment, so a source set to `turnstile` on an offline/LAN profile is visibly running on the non-third-party controls alone.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The tenant's sources.       | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/website-engagement/sources` — Create a website source (token shown once)
+
+- **operationId**: `createWebsiteEngagementSource`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.manage` and a signed-in person. Audited at warning. The response carries the token ONCE (`token`, `revealed: true`); a replay of the same `Idempotency-Key` answers the stored body WITHOUT it (`revealed: false`). `409 SOURCE_CODE_TAKEN` for a duplicate code; `422 DOMAIN_NOT_FOUND` when a listed domain is not a live domain of this tenant (another tenant's domain answers the same).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`WebsiteEngagementCreateSource`](#schema-websiteengagementcreatesource)
+
+**Responses**
+
+| Status | Description                                                         | Schema                                                                         |
+| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 201    | Created.                                                            | [`WebsiteEngagementSourceWithToken`](#schema-websiteengagementsourcewithtoken) |
+| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `SOURCE_CODE_TAKEN` or `IDEMPOTENCY_CONFLICT`.                      | [`ApiError`](#standard-error-envelope)                                         |
+| 422    | `DOMAIN_NOT_FOUND`.                                                 | [`ApiError`](#standard-error-envelope)                                         |
+| 503    | The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope)                                         |
+
+### `GET /api/v1/website-engagement/sources/{id}` — Read one website source
+
+- **operationId**: `getWebsiteEngagementSource`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.read`. An id in another tenant answers exactly like one that does not exist.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The source.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/website-engagement/sources/{id}` — Change a website source
+
+- **operationId**: `updateWebsiteEngagementSource`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.manage` and a signed-in person. Rename, pause or resume, change the consent copy version, the challenge mode, the accepted kinds or the host list. Audited at warning (the changed field NAMES, never values, plus the old and new `challengeMode` when it changes). Setting `challengeMode` to `none` REQUIRES an `Idempotency-Key` (`400 IDEMPOTENCY_REQUIRED` without it). Revocation is its own operation, and a revoked source cannot be changed (`409 SOURCE_REVOKED`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Request body** (required): [`WebsiteEngagementUpdateSource`](#schema-websiteengagementupdatesource)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The changed source.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+| 409    | `SOURCE_REVOKED`.           | [`ApiError`](#standard-error-envelope) |
+| 422    | `DOMAIN_NOT_FOUND`.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/website-engagement/sources/{id}` — Delete (soft) a website source
+
+- **operationId**: `deleteWebsiteEngagementSource`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.manage` and a signed-in person. Soft delete: the source stops accepting at once, and its submissions stay until the retention purge removes them. Audited at warning.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Deleted.                    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/website-engagement/sources/{id}/revoke` — Revoke a website source
+
+- **operationId**: `revokeWebsiteEngagementSource`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.manage` and a signed-in person. Permanently stops the source accepting submissions. One-way, and idempotent BY STATE: revoking a revoked source answers the same and audits nothing the second time, so no `Idempotency-Key` is needed. A revoked source cannot be reactivated (the database refuses it).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The revoked source.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/website-engagement/sources/{id}/rotate` — Rotate a source's token (shown once)
+
+- **operationId**: `rotateWebsiteEngagementSource`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.sources.manage` and a signed-in person. Audited at warning. The previous token stops working IMMEDIATELY (no grace window). The new token is in this response ONCE (`revealed: true`); a replay of the same `Idempotency-Key` answers the stored body without it, so a lost token is recovered by rotating again with a new key, never by reading it back. A revoked source cannot be rotated (`409 SOURCE_REVOKED`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                         | Schema                                                                         |
+| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 200    | Rotated.                                                            | [`WebsiteEngagementSourceWithToken`](#schema-websiteengagementsourcewithtoken) |
+| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope)                                         |
+| 404    | Resource not found.                                                 | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `SOURCE_REVOKED` or `IDEMPOTENCY_CONFLICT`.                         | [`ApiError`](#standard-error-envelope)                                         |
+| 503    | The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope)                                         |
+
+### `GET /api/v1/website-engagement/submissions` — List website submissions (masked)
+
+- **operationId**: `listWebsiteEngagementSubmissions`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.submissions.read`. Newest first, keyset-paginated. Contact details are MASKED (`emailMasked`, `phoneMasked`); the decrypted details are only available from the `reveal` operation under a separate permission.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                   | Description |
+| ------------------ | ------ | -------- | -------------------------------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string                                 |             |
+| `limit`            | query  | no       | integer                                |             |
+| `cursor`           | query  | no       | string                                 |             |
+| `sourceId`         | query  | no       | string (uuid)                          |             |
+| `kind`             | query  | no       | enum(`contact`, `lead`, `interaction`) |             |
+| `status`           | query  | no       | enum(`received`, `withdrawn`)          |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of submissions.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/website-engagement/submissions` — Submit a website contact request, lead or interaction
+
+- **operationId**: `websiteEngagementSubmit`
+- **Security**: none (public endpoint)
+
+PUBLIC and unauthenticated by design. Authenticated by the per-source token in the body (`sourceToken`, opaque, shown once to the tenant's administrator, stored only as a keyed hash) AND by the request's verified `Origin` host, which must be a domain registered for that source. The token is a bearer secret that sits in a page's source, so the Origin check, the challenge and the rate limits are co-equal controls, not optional ones.
+
+Checks run cheapest first and before any database work: per-IP rate limit, `Content-Type: application/json`, a 16 KiB body cap, SHAPE validation against a closed, versioned field set, then the token, tenant, module, source and Origin proof (the Origin must be `https`, or a localhost dev host); then the source's own rules (accepted kinds, the current consent copy version), a honeypot and fill-time signal, the Turnstile challenge where the deployment runs it (none for an `interaction`), THEN the per-source budget (an `interaction` has its own, lower one), and finally one transaction that stores the submission and its outbox event. The per-source budget is spent only after the challenge succeeded, so a scraped token replayed with a forged Origin or a failing challenge cannot keep the real form at `429`; the per-address key is the IPv6 /64 prefix. There is no duplicate probe before the challenge (it would be an `eventId` oracle): a duplicate is decided by the insert.
+
+Every failure BEFORE the source is proven answers the SAME `403 SUBMISSION_REFUSED` without a CORS grant: an unparseable token, an unknown tenant or source, a wrong secret, a paused or revoked source, a disabled module and an unregistered Origin cannot be told apart. A `tenantId` or `sourceId` in the body or query that disagrees with the token is refused with that same answer, and a `tenant_code` query parameter is refused outright; the tenant always comes from the token.
+
+Idempotent on `(source, eventId)`: a duplicate stores nothing, publishes nothing and answers the SAME `200` as the first. The body never reveals whether this event or this person was seen before. The honeypot and fill-time catches also answer that `200` and store nothing.
+
+A `contact` or `lead` is stored only with an explicit `consent.purposes` including `respond_to_inquiry` and a `consent.copyVersion` equal to the source's current copy version (`422 CONSENT_REQUIRED`, `409 CONSENT_COPY_MISMATCH`). Marketing follow-up is a separate purpose and is never implied. An `interaction` carries no contact details and no consent. No IP address, fingerprint, cookie or user agent is stored, and no HTML, upload or URL is accepted or fetched.
+
+CORS answers only the verified Origin, never `*`, never with credentials, and carries `Vary: Origin` on every response. The route also answers the browser's `OPTIONS` preflight (not a documented operation, as for the newsletter): always `204`, granting `Access-Control-Allow-Origin` only when the `Origin` is an active, verified domain of some tenant on this deployment (a refusal is the ABSENCE of that header), `Access-Control-Allow-Headers` is `content-type` and nothing else, and it shares this operation's per-IP rate limit. CORS is not authorization: the POST still verifies the token and that the host is registered for that source.
+
+**Request body** (required): [`WebsiteEngagementSubmitRequest`](#schema-websiteengagementsubmitrequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                                | Schema                                                           |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 200    | Accepted. The same body for a new submission, a duplicate and a honeypot catch.                                                                            | [`WebsiteEngagementReceived`](#schema-websiteengagementreceived) |
+| 400    | The submission's SHAPE is invalid (`VALIDATION_ERROR`). Decided before the token is looked at, so it is the same answer whether or not the token is valid. | [`ApiError`](#standard-error-envelope)                           |
+| 403    | `SUBMISSION_REFUSED`: the uniform refusal (see above), or a failed challenge after the source was proven.                                                  | [`ApiError`](#standard-error-envelope)                           |
+| 409    | `CONSENT_COPY_MISMATCH`: the consent text version is not the one the source currently shows. Only after proof.                                             | [`ApiError`](#standard-error-envelope)                           |
+| 413    | The body exceeds 16 KiB (`PAYLOAD_TOO_LARGE`).                                                                                                             | [`ApiError`](#standard-error-envelope)                           |
+| 415    | `Content-Type` is not `application/json` (`UNSUPPORTED_MEDIA_TYPE`).                                                                                       | [`ApiError`](#standard-error-envelope)                           |
+| 422    | `KIND_NOT_ACCEPTED` or `CONSENT_REQUIRED`. Only after proof.                                                                                               | [`ApiError`](#standard-error-envelope)                           |
+| 429    | Too many submissions from this address or for this source (`RATE_LIMITED`).                                                                                | [`ApiError`](#standard-error-envelope)                           |
+| 503    | The deployment has no key ring configured (`SERVICE_UNAVAILABLE`). Fails closed.                                                                           | [`ApiError`](#standard-error-envelope)                           |
+
+### `GET /api/v1/website-engagement/submissions/{id}` — Read one website submission (masked)
+
+- **operationId**: `getWebsiteEngagementSubmission`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.submissions.read`. An id in another tenant answers exactly like one that does not exist.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The submission.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/website-engagement/submissions/{id}/reveal` — Decrypt a submission's contact details
+
+- **operationId**: `revealWebsiteEngagementSubmission`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.submissions.reveal`, a separately grantable permission, and is audited at warning with the submission id and never the values. This is the sanctioned read a downstream CRM adapter uses, and a machine credential may call it. `POST` rather than `GET` because the response carries personal data and must not be cached or logged as a URL (`Cache-Control: no-store`). A withdrawn submission answers `409 SUBMISSION_WITHDRAWN`; an interaction answers `409 NOTHING_TO_REVEAL`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                         | Schema                                 |
+| ------ | ------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The decrypted contact details.                                      | object                                 |
+| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | `SUBMISSION_WITHDRAWN` or `NOTHING_TO_REVEAL`.                      | [`ApiError`](#standard-error-envelope) |
+| 503    | The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/website-engagement/submissions/{id}/withdraw` — Withdraw a submission (controller opt-out)
+
+- **operationId**: `withdrawWebsiteEngagementSubmission`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `website_engagement.submissions.withdraw` and a signed-in person (a machine credential is refused with `403 INTERACTIVE_SESSION_REQUIRED`). Marks the submission withdrawn and publishes `awcms.website_engagement.submission.withdrawn`, which downstream consumers must honour. One-way, audited at warning, and idempotent: the same `Idempotency-Key` replays the stored answer, and withdrawing an already withdrawn submission changes and publishes nothing. A raw public withdrawal request is a recorded limitation of this first slice.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                        | Schema                                 |
+| ------ | ------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The withdrawn submission (masked).                                 | object                                 |
+| 400    | Validation error.                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`: the key was used with a different request. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -19142,6 +19460,230 @@ At least one field required. `status` may not be `active` (use verify); `hostnam
 }
 ```
 
+### Schema: WebsiteEngagementCreateSource
+
+| Field                | Type                                            | Required | Nullable | Description                                                                                      |
+| -------------------- | ----------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `code`               | string                                          | yes      | no       |                                                                                                  |
+| `name`               | string                                          | yes      | no       |                                                                                                  |
+| `consentCopyVersion` | string                                          | yes      | no       |                                                                                                  |
+| `challengeMode`      | enum(`turnstile`, `none`)                       | no       | no       |                                                                                                  |
+| `acceptedKinds`      | array of enum(`contact`, `lead`, `interaction`) | no       | no       |                                                                                                  |
+| `domainIds`          | array of string (uuid)                          | no       | no       | Live `tenant_domain` ids of THIS tenant. The browser Origin host must be one of the ACTIVE ones. |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "consentCopyVersion": "string",
+  "challengeMode": "turnstile",
+  "acceptedKinds": ["contact"],
+  "domainIds": ["00000000-0000-0000-0000-000000000000"]
+}
+```
+
+### Schema: WebsiteEngagementReceived
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "received": true,
+    "message": "string"
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: WebsiteEngagementSource
+
+| Field                | Type                                            | Required | Nullable | Description                                                                                  |
+| -------------------- | ----------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
+| `id`                 | string (uuid)                                   | no       | no       |                                                                                              |
+| `code`               | string                                          | no       | no       |                                                                                              |
+| `name`               | string                                          | no       | no       |                                                                                              |
+| `status`             | enum(`active`, `paused`, `revoked`)             | no       | no       |                                                                                              |
+| `contractVersion`    | enum(`1`)                                       | no       | no       |                                                                                              |
+| `acceptedKinds`      | array of enum(`contact`, `lead`, `interaction`) | no       | no       |                                                                                              |
+| `consentCopyVersion` | string                                          | no       | no       |                                                                                              |
+| `challengeMode`      | enum(`turnstile`, `none`)                       | no       | no       |                                                                                              |
+| `challengeEffective` | enum(`turnstile`, `none`)                       | no       | no       | What this deployment actually runs for this source.                                          |
+| `tokenPrefix`        | string                                          | no       | no       | Six non-sensitive characters, to tell which token is on which site. Never accepted as proof. |
+| `tokenRotatedAt`     | string (date-time)                              | no       | no       |                                                                                              |
+| `revokedAt`          | string (date-time)                              | no       | yes      |                                                                                              |
+| `domains`            | array of object                                 | no       | no       |                                                                                              |
+| `createdAt`          | string (date-time)                              | no       | no       |                                                                                              |
+| `updatedAt`          | string (date-time)                              | no       | no       |                                                                                              |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "code": "string",
+  "name": "string",
+  "status": "active",
+  "contractVersion": "1",
+  "acceptedKinds": ["contact"],
+  "consentCopyVersion": "string",
+  "challengeMode": "turnstile",
+  "challengeEffective": "turnstile",
+  "tokenPrefix": "string",
+  "tokenRotatedAt": "2026-01-01T00:00:00.000Z",
+  "revokedAt": "2026-01-01T00:00:00.000Z",
+  "domains": [
+    {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "hostname": "tenant.example.com",
+      "status": "string"
+    }
+  ],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: WebsiteEngagementSourceWithToken
+
+| Field     | Type                                                                  | Required | Nullable | Description |
+| --------- | --------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `success` | enum(`true`)                                                          | no       | no       |             |
+| `data`    | [`WebsiteEngagementSource`](#schema-websiteengagementsource) & object | no       | no       |             |
+| `meta`    | object                                                                | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "code": "string",
+    "name": "string",
+    "status": "active",
+    "contractVersion": "1",
+    "acceptedKinds": ["contact"],
+    "consentCopyVersion": "string",
+    "challengeMode": "turnstile",
+    "challengeEffective": "turnstile",
+    "tokenPrefix": "string",
+    "tokenRotatedAt": "2026-01-01T00:00:00.000Z",
+    "revokedAt": "2026-01-01T00:00:00.000Z",
+    "domains": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "hostname": "tenant.example.com",
+        "status": "string"
+      }
+    ],
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "token": "string",
+    "revealed": false
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: WebsiteEngagementSubmitRequest
+
+Contract v1, a CLOSED field set: an unknown key is a `400`, never stored and never echoed. A `contact` carries `contact` (with a message and an email or phone) and `consent`; a `lead` carries `contact` (an email or phone) and `consent`; an `interaction` carries `interaction` and nothing personal.
+
+| Field            | Type                                   | Required | Nullable | Description                                                                                                                                  |
+| ---------------- | -------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourceToken`    | string                                 | yes      | no       | The source's opaque bearer token, `wes1.<tenantId>.<sourceId>.<secret>`. The tenant is opened FROM it. Never put it in a URL.                |
+| `tenantId`       | string (uuid)                          | no       | no       | Optional and never trusted. Refused if it disagrees with the token.                                                                          |
+| `sourceId`       | string (uuid)                          | no       | no       | Optional and never trusted. Refused if it disagrees with the token.                                                                          |
+| `eventId`        | string                                 | yes      | no       | The client-generated idempotency/replay key. The same `(source, eventId)` is stored once.                                                    |
+| `kind`           | enum(`contact`, `lead`, `interaction`) | yes      | no       |                                                                                                                                              |
+| `occurredAt`     | string (date-time)                     | no       | no       | Within the last 7 days and no more than 5 minutes ahead. Defaults to the receive time.                                                       |
+| `locale`         | string                                 | no       | no       | Selects the language of the answer (`en`, `id`) and is stored.                                                                               |
+| `topic`          | string                                 | no       | no       |                                                                                                                                              |
+| `contact`        | object                                 | no       | no       | Text only. Control characters, bidi overrides and tag-shaped input are refused; the stored value is escaped on output by whoever renders it. |
+| `interaction`    | object                                 | no       | no       |                                                                                                                                              |
+| `consent`        | object                                 | no       | no       |                                                                                                                                              |
+| `attribution`    | object                                 | no       | no       |                                                                                                                                              |
+| `challengeToken` | string                                 | no       | no       | The Turnstile response, where the deployment runs the challenge. Never logged.                                                               |
+| `honeypot`       | string                                 | no       | no       | Honeypot, named so a browser will not autofill it. Leave empty; a non-empty value is answered like a success and stored as nothing.          |
+| `fillMs`         | integer                                | no       | no       | Client-reported time to fill the form. A very short time is treated like the honeypot. A cheap signal, never proof.                          |
+
+**Example**
+
+```json
+{
+  "sourceToken": "string",
+  "tenantId": "00000000-0000-0000-0000-000000000000",
+  "sourceId": "00000000-0000-0000-0000-000000000000",
+  "eventId": "string",
+  "kind": "contact",
+  "occurredAt": "2026-01-01T00:00:00.000Z",
+  "locale": "string",
+  "topic": "string",
+  "contact": {
+    "name": "string",
+    "email": "user@example.com",
+    "phone": "string",
+    "company": "string",
+    "subject": "string",
+    "message": "string"
+  },
+  "interaction": {
+    "type": "form_view"
+  },
+  "consent": {
+    "purposes": ["respond_to_inquiry"],
+    "copyVersion": "string",
+    "pagePath": "string"
+  },
+  "attribution": {
+    "landingPath": "string",
+    "referrerHost": "string",
+    "utmSource": "string",
+    "utmMedium": "string",
+    "utmCampaign": "string",
+    "utmTerm": "string",
+    "utmContent": "string"
+  },
+  "challengeToken": "string",
+  "honeypot": "string",
+  "fillMs": 0
+}
+```
+
+### Schema: WebsiteEngagementUpdateSource
+
+| Field                | Type                                            | Required | Nullable | Description |
+| -------------------- | ----------------------------------------------- | -------- | -------- | ----------- |
+| `name`               | string                                          | no       | no       |             |
+| `consentCopyVersion` | string                                          | no       | no       |             |
+| `challengeMode`      | enum(`turnstile`, `none`)                       | no       | no       |             |
+| `acceptedKinds`      | array of enum(`contact`, `lead`, `interaction`) | no       | no       |             |
+| `status`             | enum(`active`, `paused`)                        | no       | no       |             |
+| `domainIds`          | array of string (uuid)                          | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "consentCopyVersion": "string",
+  "challengeMode": "turnstile",
+  "acceptedKinds": ["contact"],
+  "status": "active",
+  "domainIds": ["00000000-0000-0000-0000-000000000000"]
+}
+```
+
 ### Schema: WhatsappBusinessScope
 
 A brand or unit (the generic business-scope pair). Null is tenant-wide.
@@ -19289,7 +19831,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (68)
+### Channels (70)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -19344,6 +19886,8 @@ consumer/subscriber contract in this file).
 - `awcms.tax.rule_version.published` — A tax rule version was published and became the rule in force from its effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishRuleVersionPublishedEvent`, called by `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The payload carries identifiers, codes and dates only — `ruleVersionId`, `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and `closedVersionId` (the predecessor whose window this ended, or null).
 - `awcms.tax.snapshot.finalised` — A document's tax was finalised into an immutable snapshot (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written — an idempotent replay publishes nothing. The payload carries the opaque document reference, the rule version used, the tax date and decimal-string totals; no customer data of any kind.
 - `awcms.tax.snapshot.reversed` — A finalised document's tax was reversed from its original snapshot (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is written. Same payload shape as `snapshot.finalised`; the totals are negative decimal strings and `originalSnapshotId` is set.
+- `awcms.website_engagement.submission.received` — A website form or interaction was accepted by the public intake, in the transaction that stored it (ADR-0155, Issue #1153). Producer: `website-engagement/application/submission-intake.ts`'s `recordSubmission`. The envelope `payload` is `WebsiteEngagementSubmissionReceived` (contract version 1): the opaque `submissionId`, the `sourceId`/`sourceCode`, the client's `clientEventId`, the `kind`, the authenticated `provenance` (source authenticated, Origin host verified, which `challenge` protected it), the explicit `consent` provenance, the source `attribution`, which `identifiers` the submission holds and its `privacyClass`. Never a name, address, phone number or message: a CRM adapter reads those through `POST /api/v1/website-engagement/submissions/{id}/reveal` under its own permission. A duplicate submission publishes nothing. This event creates, matches and merges no person; linking to one is downstream, through `contact_link_evidence` (ADR-0148 section 6).
+- `awcms.website_engagement.submission.withdrawn` — A controller withdrew a website submission (ADR-0155, Issue #1153). Producer: `website-engagement/application/submission-directory.ts`'s `withdrawSubmission`. The envelope `payload` is `WebsiteEngagementSubmissionWithdrawn`. Downstream consumers MUST honour it. Idempotent: withdrawing an already withdrawn submission publishes nothing.
 - `awcms.whatsapp.consent.granted` — A recipient's WhatsApp marketing consent was recorded (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-consent- directory.ts`'s `grantMarketingConsent`. Payload: `consentId`, `purpose`, `recipientMasked`. Never the number.
 - `awcms.whatsapp.consent.withdrawn` — A recipient's WhatsApp marketing consent was withdrawn; their waiting marketing messages were cancelled in the same transaction (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-consent- directory.ts`'s `withdrawMarketingConsent`. Same payload shape as `consent.granted`.
 - `awcms.whatsapp.dispatch.failed` — A WhatsApp dispatcher pass failed as a whole — job level, not one message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp- dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.

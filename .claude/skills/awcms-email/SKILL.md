@@ -105,6 +105,7 @@ Follow `src/modules/email/README.md` (full architecture: provider contract, Mail
 - Send with `EMAIL_PROVIDER=log` first (no Mailketing credentials) —
   look at the `email.log_provider.send` log (masked address) to confirm the
   end-to-end flow before switching real Mailketing on.
+- Mailketing v2 (Issue #1159) is opt-in via `EMAIL_MAILKETING_API_VERSION=v2` (default v1, fail-closed on unknown values; fixed host, header-only token, 402 held, 429 honours `Retry-After`; live API NOT yet verified). Do not add a new send path; use the v2 adapter behind `EmailProvider`.
 - `bun run email:provider:health` — check real Mailketing connectivity
   (a live network call; run it manually/as a smoke test, not part of CI).
 - `bun test tests/integration/email-*.integration.test.ts` against a

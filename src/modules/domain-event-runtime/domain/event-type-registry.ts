@@ -158,8 +158,32 @@ export const BOOKING_RESERVATION_NO_SHOW_EVENT_TYPE =
 export const BOOKING_RESERVATION_EXPIRED_EVENT_TYPE =
   "awcms.booking.reservation.expired";
 
+/**
+ * `website_engagement` (ADR-0155, Issue #1153). Declared here -- not imported
+ * from `website-engagement/domain/website-engagement-constants.ts` -- for the
+ * same reason as `inventory` above. The literals are kept identical by the
+ * AsyncAPI parity gate and by `tests/website-engagement-contract.test.ts`.
+ */
+export const WEBSITE_ENGAGEMENT_EVENT_VERSION = "1.0";
+export const WEBSITE_ENGAGEMENT_SUBMISSION_RECEIVED_EVENT_TYPE =
+  "awcms.website_engagement.submission.received";
+export const WEBSITE_ENGAGEMENT_SUBMISSION_WITHDRAWN_EVENT_TYPE =
+  "awcms.website_engagement.submission.withdrawn";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
+    {
+      eventType: WEBSITE_ENGAGEMENT_SUBMISSION_RECEIVED_EVENT_TYPE,
+      eventVersion: WEBSITE_ENGAGEMENT_EVENT_VERSION,
+      description:
+        "A website form or interaction was accepted by the public intake, in the transaction that stored it. Carries the opaque submission id, the source, the kind, the authenticated provenance (source authenticated, Origin host verified, which challenge protected it), the explicit consent provenance and the source attribution; never a name, address, phone number or message. A downstream CRM adapter reads the details through the audited reveal endpoint."
+    },
+    {
+      eventType: WEBSITE_ENGAGEMENT_SUBMISSION_WITHDRAWN_EVENT_TYPE,
+      eventVersion: WEBSITE_ENGAGEMENT_EVENT_VERSION,
+      description:
+        "A controller withdrew a website submission (data subject request, consent withdrawn or controller decision). Downstream consumers must honour it. Carries the opaque submission id, the source, a coded reason and the instant only."
+    },
     {
       eventType: HR_COMMISSION_ACCRUAL_VOIDED_EVENT_TYPE,
       eventVersion: HR_COMMISSION_EVENT_VERSION,
