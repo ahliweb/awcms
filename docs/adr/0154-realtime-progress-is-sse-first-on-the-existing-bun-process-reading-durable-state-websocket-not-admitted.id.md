@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md)
 
-<!-- i18n-source-hash: sha256:8d9b731e420d8e2b3ccee71c996d785b557f23820911f843c87cda9c1f363da5 -->
+<!-- i18n-source-hash: sha256:dcbb49e89df5d3b82039e72e1e02d507aed48d7da49801419970f15953c7c38e -->
 
 # ADR-0154 — Progres realtime memakai SSE lebih dulu di proses Bun yang sudah ada dan membaca state durable; WebSocket belum diadmisi sampai kebutuhan dua arah terbukti
 
-- **Status:** Diusulkan
+- **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** menunggu — penerimaan adalah keputusan maintainer (ADR-0148 dan Issue #1168 mensyaratkan ADR yang disetujui sebelum kode gateway apa pun)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan:** Issue #1168 (evaluasi gateway realtime Bun yang aman per tenant). Ia gerbang bagi Issue #1171 (implementasinya).
 - **Memperluas:** [ADR-0075](0075-sse-reauthorizes-every-tick.md) (koneksi SSE mengotorisasi ulang di setiap tick; ADR ini tidak melonggarkannya), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) invarian I1, I2, I3, I8, I10 dan I13, [ADR-0074](0074-push-delivery-is-a-second-outbox.md) (konsumen SSE pertama), [ADR-0002](0002-bun-only-runtime.md) (hanya Bun)
 - **Terkait:** [ADR-0006](0006-offline-first-sync-outbox.md), [ADR-0027](0027-mfa-totp-session-assurance-step-up.md) (assurance sesi), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) (satu antrean per kanal), Issue #1139, #1144, #1167, #1170, #1171; hilir `ahliweb/awcms-one` #458, #459, #461 dan #430 sampai #432; paket kesiapan [`docs/awcms/bun-delivery-realtime-runtime.md`](../awcms/bun-delivery-realtime-runtime.md) (batas yang diusulkan dari PR #1169)

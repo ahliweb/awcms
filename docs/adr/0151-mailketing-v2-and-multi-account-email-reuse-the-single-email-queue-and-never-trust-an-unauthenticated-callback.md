@@ -2,10 +2,9 @@
 
 # ADR-0151 — Mailketing v2 and multi-account email reuse the single `email` queue, and an unauthenticated provider callback never changes customer state
 
-- **Status:** Proposed
-- **Review:** becomes Accepted once a maintainer reviews it. Issues #1159 to #1162 stay blocked until then. Docs only: nothing here is evidence that the v2 adapter, multi-account routing or the webhook works.
+- **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** ahliweb (maintainer review pending)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves:** Issue #1158 (Mailketing multi-account email management, v2 migration and CRM ownership). It is the email ADR that [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §9 left to this issue.
 - **Extends, does not supersede:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (I1 to I13, §3 matrix, §5 credentials). It conforms to all thirteen invariants. It treats a Mailketing connection as a `channel_account` and applies the §5 amendment of ADR-0074/0133 to **tenant-owned** email accounts only. [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) (one queue per channel, purpose classes, consent independent of segments), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0103](0103-newsletter-is-its-own-module.md) (`newsletter` owns consent), [ADR-0006](0006-offline-first-sync-outbox.md) (provider I/O outside transactions), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md), ADR-0150 (Proposed in the #1144 branch) (the inbound verification gate and the "no authenticated provenance, no state change" rule).
 - **Related:** Issues #1139, #1140 (account registry), #1154, #1159, #1160, #1161, #1162, #1167, #1168, #1172; downstream `ahliweb/awcms-one` #458, #459, #461 and its `commerce` segments and campaigns (#114, #360, #362); the UI traceability draft (PR #1175, UP-01..16); the readiness pack [`docs/awcms/omnichannel-foundation.md`](../awcms/omnichannel-foundation.md) §2, §3, §5.

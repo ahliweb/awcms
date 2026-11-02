@@ -2,10 +2,9 @@
 
 # ADR-0150 — Inbound omnichannel events enter as verified, redacted envelopes; no generic interactions store is admitted
 
-- **Status:** Proposed
-- **Review:** becomes Accepted once a maintainer reviews it. Issue #1164 (the first inbound implementation) and every other inbound-dependent issue stay blocked until then. Docs only: nothing here is evidence that any inbound connector works.
+- **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** ahliweb (maintainer review pending)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves:** Issue #1144 (the inbound conversation and webhook admission boundary). It is the "inbound interaction boundary" (C4) that [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §1 and §9 left to this issue.
 - **Extends, does not supersede:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (§2 invariants I1 to I13, §6 default, §3 matrix). It **conforms to all thirteen invariants** and departs from none of the §6 defaults. [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) and [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md) (event consumers), [ADR-0140](0140-telegram-delivery-adapter-ops-staff-alerts-only.md) (the one existing verified webhook; staff Telegram stays unchanged), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md) (per-tenant data-subject answers).
 - **Related:** Issues #1139, #1140 (account registry), #1153 (website events), #1155 and #1156 (Telegram customer bots), #1152 (additional platforms), #1164 (first inbound implementation), #1168 (realtime gateway); downstream `ahliweb/awcms-one` #458, #460 and its commerce inbox; the readiness pack [`docs/awcms/omnichannel-foundation.md`](../awcms/omnichannel-foundation.md) §2.4, §3, §5 and §11.
