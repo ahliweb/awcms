@@ -390,6 +390,13 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  // Rows sent before a tenant-owned sender is re-validated mid-pass (Issue #1231 L1).
+  {
+    name: "WHATSAPP_SENDER_REVALIDATE_EVERY_ROWS",
+    required: false,
+    type: "int",
+    min: 1
+  },
   {
     name: "WHATSAPP_RATE_SECURITY_PER_RECIPIENT_PER_HOUR",
     required: false,

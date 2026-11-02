@@ -2066,6 +2066,356 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     );
   });
 
+  describe("sender hardening (#1231 M2, L1, L5, L6)", () => {
+    /** Marks messages as really sent `agoMinutes` ago, the way the dispatcher leaves them. */
+    async function markSent(ids: string[], agoMinutes = 1): Promise<void> {
+      const admin = getAdminSql();
+
+      await admin`
+        UPDATE awcms_whatsapp_messages
+        SET status = 'sent', sent_at = now() - make_interval(mins => ${agoMinutes})
+        WHERE id = ANY(${admin.array(ids, "uuid")})
+      `;
+    }
+
+    workerTest(
+      "M2: overlapping passes never exceed the per-sender cap (the allowance is computed and claimed under one lock)",
+      async () => {
+        const account = await seedAccount(TENANT_A);
+        const cap = 3;
+        const env = {
+          ...ENV,
+          WHATSAPP_SENDER_RATE_PER_HOUR: String(cap)
+        } as NodeJS.ProcessEnv;
+
+        for (let i = 0; i < 30; i += 1) {
+          await enqueue(TENANT_A, {
+            senderAccountId: account.id,
+            correlationId: `m2-${i}`
+          });
+        }
+
+        const harness = makeHarness();
+        // Many workers, each with a share far above the cap: before the fix each
+        // read the same allowance in its own transaction and claimed up to
+        // `share`, so the cap was exceeded by about `workers x share`.
+        const results = await Promise.all(
+          Array.from({ length: 8 }, () =>
+            dispatch(TENANT_A, harness, { env, limit: 10 })
+          )
+        );
+
+        expect(
+          results.reduce((n, r) => n + r.claimed, 0),
+          "claimed across all passes is exactly the cap"
+        ).toBe(cap);
+        expect(harness.sent).toHaveLength(cap);
+        expect(await count("awcms_whatsapp_messages", "status = 'sent'")).toBe(
+          cap
+        );
+        // Nothing is stranded in `sending`, and the rest simply wait.
+        expect(
+          await count("awcms_whatsapp_messages", "status = 'sending'")
+        ).toBe(0);
+        expect(
+          await count("awcms_whatsapp_messages", "status = 'queued'")
+        ).toBe(27);
+      }
+    );
+
+    workerTest(
+      "M2: the claim of a lane at its cap claims nothing and reports `quota_reached`",
+      async () => {
+        const account = await seedAccount(TENANT_A);
+        const env = {
+          ...ENV,
+          WHATSAPP_SENDER_RATE_PER_HOUR: "2"
+        } as NodeJS.ProcessEnv;
+        const ids: string[] = [];
+
+        for (let i = 0; i < 2; i += 1) {
+          ids.push(
+            queuedId(await enqueue(TENANT_A, { senderAccountId: account.id }))
+          );
+        }
+
+        await markSent(ids);
+        await enqueue(TENANT_A, { senderAccountId: account.id });
+
+        const harness = makeHarness();
+        const result = await dispatch(TENANT_A, harness, { env });
+
+        expect(result).toMatchObject({ claimed: 0, sent: 0 });
+        expect(result.senders[0]).toMatchObject({
+          senderAccountId: account.id,
+          skipped: "quota_reached"
+        });
+        expect(harness.sent).toHaveLength(0);
+      }
+    );
+
+    workerTest(
+      "L1: a sender revoked mid-pass fails closed within N rows, and the stale credential is never used again",
+      async () => {
+        const account = await seedAccount(TENANT_A);
+        const rowIds: string[] = [];
+
+        for (let i = 0; i < 6; i += 1) {
+          rowIds.push(
+            queuedId(await enqueue(TENANT_A, { senderAccountId: account.id }))
+          );
+        }
+
+        // The tenant revokes the sender while the first row is being sent.
+        const harness = makeHarness(async (_sent, call) => {
+          if (call === 1) await setStatus(account.id, "revoked");
+
+          return { ok: true, providerMessageId: `wamid.${call}` };
+        });
+        const result = await dispatch(TENANT_A, harness, {
+          senderRevalidateEveryRows: 2
+        });
+
+        // Rows 1 and 2 ran on the verdict resolved at claim time; the re-check
+        // before row 3 sees the revocation.
+        expect(harness.sent).toHaveLength(2);
+        expect(result).toMatchObject({
+          claimed: 6,
+          sent: 2,
+          failed: 4,
+          held: 0
+        });
+
+        for (const id of rowIds.slice(2)) {
+          const failed = await row(id);
+
+          expect(failed.status).toBe("failed");
+          expect(failed.failure_code).toBe("sender_unavailable");
+        }
+
+        // The provider (and with it the decrypted token) was built once and
+        // dropped; it was not rebuilt for a sender that is no longer usable.
+        expect(harness.built).toHaveLength(1);
+        expect(
+          harness.sent.every((s) => s.senderAccountId === account.id)
+        ).toBe(true);
+      }
+    );
+
+    workerTest(
+      "L1: the remaining window is the revalidation interval, and a large interval documents the old behaviour (the whole claimed lane)",
+      async () => {
+        const account = await seedAccount(TENANT_A);
+
+        for (let i = 0; i < 6; i += 1) {
+          await enqueue(TENANT_A, { senderAccountId: account.id });
+        }
+
+        const harness = makeHarness(async (_sent, call) => {
+          if (call === 1) await setStatus(account.id, "revoked");
+
+          return { ok: true, providerMessageId: `wamid.${call}` };
+        });
+
+        await dispatch(TENANT_A, harness, { senderRevalidateEveryRows: 1000 });
+
+        expect(harness.sent).toHaveLength(6);
+      }
+    );
+
+    workerTest(
+      "L1: revalidating every row also re-reads the credential, so a rotated token is used from the next row",
+      async () => {
+        const account = await seedAccount(TENANT_A);
+
+        for (let i = 0; i < 3; i += 1) {
+          await enqueue(TENANT_A, { senderAccountId: account.id });
+        }
+
+        const harness = makeHarness();
+
+        await dispatch(TENANT_A, harness, { senderRevalidateEveryRows: 1 });
+
+        expect(harness.sent).toHaveLength(3);
+        // One provider built per row: nothing is cached across a re-check.
+        expect(harness.built).toHaveLength(3);
+      }
+    );
+
+    workerTest(
+      "L5: lanes at their cap take neither a share nor a discovery slot from healthy lanes",
+      async () => {
+        const env = {
+          ...ENV,
+          WHATSAPP_SENDER_RATE_PER_HOUR: "5"
+        } as NodeJS.ProcessEnv;
+        const capped: { id: string }[] = [];
+
+        for (let i = 0; i < 3; i += 1) capped.push(await seedAccount(TENANT_A));
+        const healthy = [
+          await seedAccount(TENANT_A),
+          await seedAccount(TENANT_A)
+        ];
+
+        // Capped senders: at their cap, with the OLDEST waiting rows.
+        for (const account of capped) {
+          const sentIds: string[] = [];
+
+          for (let i = 0; i < 5; i += 1) {
+            sentIds.push(
+              queuedId(await enqueue(TENANT_A, { senderAccountId: account.id }))
+            );
+          }
+
+          await markSent(sentIds);
+          const waiting = queuedId(
+            await enqueue(TENANT_A, { senderAccountId: account.id })
+          );
+
+          await getAdminSql()`
+            UPDATE awcms_whatsapp_messages
+            SET created_at = now() - interval '3 hours' WHERE id = ${waiting}
+          `;
+        }
+
+        for (const account of healthy) {
+          for (let i = 0; i < 4; i += 1) {
+            await enqueue(TENANT_A, { senderAccountId: account.id });
+          }
+        }
+
+        const harness = makeHarness();
+        const result = await dispatch(TENANT_A, harness, { env, limit: 4 });
+
+        // Two healthy lanes share the pass of 4: 2 each. Counting the three
+        // capped lanes the share was floor(4 / 5) -> 1 each.
+        for (const account of healthy) {
+          expect(
+            result.senders.find((s) => s.senderAccountId === account.id)
+          ).toMatchObject({ claimed: 2, sent: 2, skipped: null });
+        }
+
+        for (const account of capped) {
+          expect(
+            result.senders.find((s) => s.senderAccountId === account.id)
+          ).toMatchObject({ claimed: 0, skipped: "quota_reached" });
+        }
+
+        expect(result.claimed).toBe(4);
+      }
+    );
+
+    test("L6: the insert guard refuses a sender that is not a WhatsApp number, whatever the application did", async () => {
+      const admin = getAdminSql();
+      const insert = (
+        key: string,
+        senderId: string,
+        scope: { type: string; id: string } | null = null
+      ) => admin`
+        INSERT INTO awcms_whatsapp_messages
+          (tenant_id, idempotency_key, template_key, purpose, recipient,
+           recipient_hash, recipient_masked, body, status, sender_account_id,
+           sender_selection, business_scope_type, business_scope_id)
+        VALUES (${TENANT_A}, ${key}, 'it1141.reminder', 'transactional',
+                ${PHONE}, 'k1:x', '+*', 'x', 'queued', ${senderId}, 'explicit',
+                ${scope?.type ?? null}, ${scope?.id ?? null})
+      `;
+      const telegram = await seedAccount(TENANT_A, {
+        provider: "telegram",
+        kind: "bot",
+        authMode: "bot_token",
+        capabilities: []
+      });
+      const container = await seedAccount(TENANT_A, {
+        provider: "whatsapp_cloud",
+        kind: "waba",
+        capabilities: []
+      });
+
+      await assertPgRejected(
+        insert("l6-telegram", telegram.id),
+        "a connected telegram bot as the sender",
+        { errno: "23514", message: "must be a WhatsApp number" }
+      );
+      await assertPgRejected(
+        insert("l6-waba", container.id),
+        "a connected WABA container as the sender",
+        { errno: "23514", message: "must be a WhatsApp number" }
+      );
+
+      // A connected WhatsApp number and a StarSender device are accepted by the
+      // database (which adapters this build ships is the application's decision).
+      const cloud = await seedAccount(TENANT_A);
+      const device = await seedAccount(TENANT_A, { provider: "starsender" });
+
+      await insert("l6-cloud", cloud.id);
+      await insert("l6-device", device.id);
+      expect(
+        await count("awcms_whatsapp_messages", "idempotency_key LIKE 'l6-%'")
+      ).toBe(2);
+    });
+
+    test("L6: the policy guard refuses a default the application layer would refuse", async () => {
+      const admin = getAdminSql();
+      const policyFor = (accountId: string) => admin`
+        INSERT INTO awcms_whatsapp_sender_policies
+          (tenant_id, default_sender_account_id)
+        VALUES (${TENANT_A}, ${accountId})
+      `;
+
+      for (const status of ["pending", "degraded"] as const) {
+        const account = await seedAccount(TENANT_A, { status });
+
+        await assertPgRejected(
+          policyFor(account.id),
+          `a ${status} account as a policy default`,
+          { errno: "23514", message: "needs a connected sender account" }
+        );
+      }
+
+      const telegram = await seedAccount(TENANT_A, {
+        provider: "telegram",
+        kind: "bot",
+        authMode: "bot_token",
+        capabilities: []
+      });
+
+      await assertPgRejected(
+        policyFor(telegram.id),
+        "a telegram bot as a policy default",
+        { errno: "23514", message: "must be a WhatsApp number" }
+      );
+      await assertPgRejected(
+        policyFor(crypto.randomUUID()),
+        "an unknown account as a policy default",
+        { errno: "23514", message: "needs a live sender account" }
+      );
+
+      // A connected WhatsApp number is accepted, and once stored, a later change
+      // of the account's status does not block an unrelated update of the row,
+      // nor re-pointing it to NULL.
+      const good = await seedAccount(TENANT_A);
+
+      await policyFor(good.id);
+      await setStatus(good.id, "degraded");
+      await admin`UPDATE awcms_whatsapp_sender_policies SET updated_at = now()`;
+      await admin`
+        UPDATE awcms_whatsapp_sender_policies
+        SET default_sender_account_id = NULL, config_version = config_version + 1
+      `;
+
+      // Re-pointing to a degraded account is refused again (the default changes).
+      await assertPgRejected(
+        admin`
+          UPDATE awcms_whatsapp_sender_policies
+          SET default_sender_account_id = ${good.id}
+        `,
+        "re-pointing a policy at a degraded account",
+        { errno: "23514", message: "needs a connected sender account" }
+      );
+    });
+  });
+
   describe("consent and suppression follow the recipient, never the sender", () => {
     test("one opt-in covers every sender of the tenant; an opt-out and a suppression stop all of them", async () => {
       const first = await seedAccount(TENANT_A);

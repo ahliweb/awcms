@@ -34,6 +34,7 @@ import {
   WHATSAPP_CIRCUIT_BREAKER_KEY,
   resolveWhatsappSenderRatePerDay,
   resolveWhatsappSenderRatePerHour,
+  resolveWhatsappSenderRevalidateEveryRows,
   whatsappSenderBreakerKey
 } from "../src/modules/whatsapp-delivery/domain/whatsapp-config";
 import {
@@ -1532,5 +1533,240 @@ describe("static contracts", () => {
 
     expect(resolver).toContain("env.WHATSAPP_PROVIDER");
     expect(resolver).not.toMatch(/channel|sender/i);
+  });
+});
+
+describe("sender hardening (Issue #1231)", () => {
+  const strip = (text: string) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const dispatchSource = strip(
+    readFileSync(
+      "src/modules/whatsapp-delivery/application/whatsapp-dispatch.ts",
+      "utf8"
+    )
+  );
+  const between = (text: string, from: string, to: string) =>
+    text.slice(text.indexOf(from), text.indexOf(to));
+
+  test("L1: the revalidation interval has a safe default, takes a configured value, and never goes below 1", () => {
+    expect(resolveWhatsappSenderRevalidateEveryRows({})).toBe(10);
+    expect(
+      resolveWhatsappSenderRevalidateEveryRows({
+        WHATSAPP_SENDER_REVALIDATE_EVERY_ROWS: "3"
+      } as unknown as NodeJS.ProcessEnv)
+    ).toBe(3);
+
+    for (const garbage of ["", "nope", "0", "-4", "NaN"]) {
+      expect(
+        resolveWhatsappSenderRevalidateEveryRows({
+          WHATSAPP_SENDER_REVALIDATE_EVERY_ROWS: garbage
+        } as unknown as NodeJS.ProcessEnv)
+      ).toBe(10);
+    }
+
+    expect(
+      resolveWhatsappSenderRevalidateEveryRows({
+        WHATSAPP_SENDER_REVALIDATE_EVERY_ROWS: "0.4"
+      } as unknown as NodeJS.ProcessEnv)
+    ).toBe(1);
+  });
+
+  test("L1: the gate drops the cached verdicts AND the built provider every N rows, and never clears a provider-rejected credential", () => {
+    const gate = between(
+      dispatchSource,
+      "async function gateRow(",
+      "async function processRow("
+    );
+
+    expect(gate).toContain("lane.rowsSinceRevalidation >= revalidateEveryRows");
+    expect(gate).toContain("lane.verdicts.clear()");
+    expect(gate).toContain("lane.provider = null");
+    // The refresh sits BEFORE the first use of the cached state.
+    expect(gate.indexOf("lane.verdicts.clear()")).toBeLessThan(
+      gate.indexOf("resolveLaneSender(")
+    );
+    expect(gate.indexOf("lane.provider = null")).toBeLessThan(
+      gate.indexOf("if (!lane.provider)")
+    );
+    // A 401 from the provider is a fact about its answer, not a cached verdict.
+    expect(gate).not.toMatch(/credentialRejected\s*=\s*false/);
+  });
+
+  test("M2: the allowance is computed and claimed in ONE transaction under a per-sender advisory lock", () => {
+    const claim = between(
+      dispatchSource,
+      "async function claimEligibleMessages(",
+      "async function finalizeTerminal("
+    );
+
+    expect(claim).toContain("pg_advisory_xact_lock");
+    expect(claim).toContain("hashtextextended(");
+    expect(claim).toContain("senderAllowance(");
+    // Lock first, then the allowance, then the claim: the order inside the transaction.
+    expect(claim.indexOf("pg_advisory_xact_lock")).toBeLessThan(
+      claim.indexOf("senderAllowance(")
+    );
+    expect(claim.indexOf("senderAllowance(")).toBeLessThan(
+      claim.indexOf("FOR UPDATE SKIP LOCKED")
+    );
+    // The locked scan keeps the due predicate and the lane predicate.
+    expect(claim).toContain("FOR UPDATE SKIP LOCKED");
+    expect(claim).toContain("sender_account_id = ${laneSenderId}::uuid");
+    // The lock is keyed on the sender (and its tenant), one lock per transaction.
+    expect(claim.match(/pg_advisory_xact_lock/g)).toHaveLength(1);
+    expect(claim).toContain("${tenantId}:${laneSenderId}");
+  });
+
+  test("M2: the allowance is no longer read in a separate transaction before the claim", () => {
+    const main = between(
+      dispatchSource,
+      "export async function dispatchWhatsappQueue(",
+      "async function senderPort("
+    );
+
+    expect(main).not.toContain("senderAllowance(");
+    expect(main).toContain("claimEligibleMessages(");
+  });
+
+  test("M2: nothing network-bound runs inside the locked claim transaction", () => {
+    const claim = between(
+      dispatchSource,
+      "async function claimEligibleMessages(",
+      "async function finalizeTerminal("
+    );
+
+    expect(claim).not.toMatch(
+      /\.send\(|resolveProvider|fetch\(|resolveLaneSender/
+    );
+  });
+
+  test("L5: lane discovery splits quota-held lanes from servable ones, and only servable lanes set the fair share", () => {
+    const discover = between(
+      dispatchSource,
+      "async function discoverLanes(",
+      "async function claimEligibleMessages("
+    );
+
+    expect(discover).toContain("sent_hour");
+    expect(discover).toContain("in_flight");
+    expect(discover).toContain("WHERE NOT held");
+    expect(discover).toContain("WHERE held");
+    expect(discover.match(/LIMIT \$\{MAX_LANES_PER_PASS\}/g)).toHaveLength(2);
+
+    const main = between(
+      dispatchSource,
+      "export async function dispatchWhatsappQueue(",
+      "async function senderPort("
+    );
+
+    expect(main).toContain("discovered.quotaHeld");
+    expect(main).toContain("const lanes = discovered.servable");
+    // The share is computed from the servable lanes only.
+    expect(main).toMatch(
+      /lanes\.filter\(\(lane\) => lane !== null \|\| !breakerOpen\)/
+    );
+    expect(main).not.toContain("discovered.quotaHeld.length");
+  });
+
+  test("L5: the discovery pre-filter counts the way senderAllowance does (sent in the hour and day, plus in flight)", () => {
+    const directory = readFileSync(
+      "src/modules/whatsapp-delivery/application/whatsapp-sender-directory.ts",
+      "utf8"
+    );
+    const allowance = between(
+      directory,
+      "export async function senderAllowance(",
+      "export function logSenderRefusal("
+    );
+    const discover = between(
+      dispatchSource,
+      "async function discoverLanes(",
+      "async function claimEligibleMessages("
+    );
+
+    for (const fragment of [
+      "status = 'sent'",
+      "interval '1 hour'",
+      "interval '1 day'",
+      "status = 'sending'"
+    ]) {
+      expect(allowance).toContain(fragment);
+      expect(discover).toContain(fragment);
+    }
+  });
+
+  test("L4: the route comment and the OpenAPI text state the real order (prepare first, schema after authorization)", () => {
+    const route = readFileSync(
+      "src/pages/api/v1/whatsapp/sender-policy.ts",
+      "utf8"
+    );
+    const openapi = readFileSync(
+      "openapi/modules/whatsapp-delivery.openapi.yaml",
+      "utf8"
+    );
+    const policyOp = openapi.slice(
+      openapi.indexOf("/api/v1/whatsapp/sender-policy:"),
+      openapi.indexOf("operationId", openapi.indexOf("sender-policy:") + 400) +
+        3000
+    );
+
+    expect(route).not.toContain(
+      "The body is validated AFTER\n * authorization so an unauthorised token learns nothing about the schema."
+    );
+    expect(route).toContain("`prepare` runs FIRST");
+    expect(route).toContain("before the permission check");
+    expect(policyOp).toContain("before the");
+    expect(policyOp).toContain("permission check");
+    expect(policyOp).not.toContain(
+      "The\n        body is validated after authorization."
+    );
+  });
+
+  test("L6: migration 329 replaces both guards with the WhatsApp shape and the connected-default rule, never editing an applied migration", () => {
+    const sql = readFileSync(
+      "sql/329_awcms_whatsapp_sender_guard_shape.sql",
+      "utf8"
+    );
+
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION awcms_whatsapp_messages_sender_guard()"
+    );
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION awcms_whatsapp_sender_policies_guard()"
+    );
+    expect(sql).toContain("SET search_path = public, pg_temp");
+    // The shape is the one `isWhatsappSenderShape` accepts.
+    expect(sql).toContain(
+      "account_provider = 'whatsapp_cloud' AND account_kind = 'waba_phone_number'"
+    );
+    expect(sql).toContain(
+      "account_provider = 'starsender' AND account_kind = 'device'"
+    );
+    expect(isWhatsappSenderShape("whatsapp_cloud", "waba_phone_number")).toBe(
+      true
+    );
+    expect(isWhatsappSenderShape("starsender", "device")).toBe(true);
+    expect(isWhatsappSenderShape("whatsapp_cloud", "waba")).toBe(false);
+    // The default must be `connected`, and the check is on insert or a changed default.
+    expect(sql).toContain("account_status <> 'connected'");
+    expect(sql).toContain("TG_OP = 'INSERT'");
+    expect(sql).toContain(
+      "NEW.default_sender_account_id IS DISTINCT FROM OLD.default_sender_account_id"
+    );
+    // Forward-only: no trigger or table is dropped or recreated here.
+    expect(sql).not.toMatch(/DROP (TRIGGER|TABLE|FUNCTION)/i);
+    expect(sql).not.toMatch(/CREATE TRIGGER/i);
+
+    // The immutability and scope checks of `sql/322` survive in the replacement.
+    for (const kept of [
+      "a WhatsApp message sender snapshot is immutable",
+      "a scoped sender account may only send within its own business scope",
+      "a WhatsApp sender policy tenant and business scope are immutable",
+      "a WhatsApp sender policy version only moves forward",
+      "a scoped sender account may only be the default of its own business scope",
+      "a WhatsApp message needs a connected sender account of its own tenant"
+    ]) {
+      expect(sql).toContain(kept);
+    }
   });
 });

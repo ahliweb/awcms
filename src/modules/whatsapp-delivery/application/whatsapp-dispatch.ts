@@ -55,8 +55,11 @@
  * daily cap counted from what it really sent, and its own provider adapter and
  * credential, resolved from THAT sender's record in THIS tenant
  * (`ChannelAccountPort`, `ChannelSenderCredentialPort`), in memory, once per
- * lane per pass, never from a request. Revocation therefore takes effect on the
- * next claim.
+ * lane per pass and again every `WHATSAPP_SENDER_REVALIDATE_EVERY_ROWS` rows
+ * (default 10), never from a request. Revocation therefore takes effect on the
+ * next claim, or within at most that many rows of a pass already in flight
+ * (Issue #1231 L1); the row being sent at the instant of revocation is not
+ * recalled.
  *
  * A sender that cannot send now never sends through anything else:
  *
@@ -64,7 +67,12 @@
  *   with no adapter: the row is `failed` with `sender_unavailable` (terminal);
  * - degraded, pending, a token awaiting refresh, no key ring, the control plane
  *   switched off: the lane is HELD (rows stay waiting, nothing is claimed);
- * - an open per-sender breaker or a reached cap: the lane waits.
+ * - an open per-sender breaker or a reached cap: the lane waits. The cap is
+ *   computed and claimed in ONE transaction under a per-sender advisory lock, so
+ *   overlapping passes cannot each claim up to `share` against the same
+ *   allowance (Issue #1231 M2); a lane at its cap is reported as
+ *   `quota_reached` and takes neither a share nor a discovery slot from the
+ *   healthy lanes (L5). The per-sender breaker is in-process, per worker.
  *
  * There is no rotation to another number to escape a limit, a quality rating or
  * a failure (ADR-0148 I4, I5).
@@ -89,6 +97,9 @@ import {
   isWhatsappEnabled,
   resolveWhatsappSendMaxRetries,
   resolveWhatsappSendTimeoutMs,
+  resolveWhatsappSenderRatePerDay,
+  resolveWhatsappSenderRatePerHour,
+  resolveWhatsappSenderRevalidateEveryRows,
   whatsappSenderBreakerKey
 } from "../domain/whatsapp-config";
 import { decideEligibility } from "../domain/whatsapp-eligibility";
@@ -176,6 +187,12 @@ export type DispatchWhatsappQueueOptions = {
   senders?: ChannelAccountPort;
   /** Issue #1141. Decrypts a sender's credential, in memory, per lane. Supplied ONLY by the dispatcher's composition root; omitted, every tenant-owned sender lane is held (fail closed). */
   credentials?: ChannelSenderCredentialPort;
+  /**
+   * Issue #1231 L1. Rows of one tenant-owned sender lane sent before the
+   * sender's verdict and credential are resolved afresh. Omitted: the
+   * environment (`WHATSAPP_SENDER_REVALIDATE_EVERY_ROWS`, default 10).
+   */
+  senderRevalidateEveryRows?: number;
   /** Issue #1141. A test seam for the sender adapter factory (no network). */
   buildSenderProvider?: (
     input: BuildSenderProviderInput
@@ -217,36 +234,93 @@ export type DispatchWhatsappQueueResult = {
 
 type Terminal = "failed" | "expired" | "cancelled";
 
+/** What lane discovery found: the lanes this pass serves, and the lanes that wait on their own quota. */
+type DiscoveredLanes = {
+  /** Senders with rows due now AND room under their caps, oldest-waiting first (`null` is the deployment sender). */
+  servable: (string | null)[];
+  /** Tenant-owned senders with rows due now but no allowance: they wait, claim nothing, and do not shrink anybody's share. */
+  quotaHeld: string[];
+};
+
 /**
  * The senders that have rows due now, oldest-waiting first (`null` is the
  * deployment sender). The due predicate is the claim's own, so a lane listed
  * here has something the claim below can take.
+ *
+ * A tenant-owned sender that is already AT its hourly or daily cap (counted the
+ * way `senderAllowance` counts: sent in the trailing hour/day plus in flight) is
+ * reported apart as `quotaHeld`. It stays "due" for as long as the window runs,
+ * so listing it among the servable lanes would let a handful of capped senders
+ * (a) fill the `MAX_LANES_PER_PASS` discovery slots ahead of healthy senders
+ * whose rows are younger and (b) shrink every healthy lane's fair share for
+ * nothing (Issue #1231 L5). The authoritative check still happens inside the
+ * claim, under the sender's lock; this one is the cheap pre-filter.
  */
 async function discoverLanes(
   sql: Bun.SQL,
   tenantId: string,
-  now: Date
-): Promise<(string | null)[]> {
+  now: Date,
+  env: NodeJS.ProcessEnv
+): Promise<DiscoveredLanes> {
+  const ratePerHour = resolveWhatsappSenderRatePerHour(env);
+  const ratePerDay = resolveWhatsappSenderRatePerDay(env);
   const rows = (await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
-      SELECT sender_account_id
-      FROM awcms_whatsapp_messages
-      WHERE tenant_id = ${tenantId}
-        AND (
-          (status IN ('queued', 'retry_wait')
-            AND (next_attempt_at IS NULL OR next_attempt_at <= ${now}))
-          OR (status = 'sending' AND next_attempt_at <= ${now})
-        )
-      GROUP BY sender_account_id
-      ORDER BY min(created_at), sender_account_id NULLS FIRST
-      LIMIT ${MAX_LANES_PER_PASS}
+      WITH due_lanes AS (
+        SELECT sender_account_id, min(created_at) AS oldest
+        FROM awcms_whatsapp_messages
+        WHERE tenant_id = ${tenantId}
+          AND (
+            (status IN ('queued', 'retry_wait')
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ${now}))
+            OR (status = 'sending' AND next_attempt_at <= ${now})
+          )
+        GROUP BY sender_account_id
+      ),
+      usage AS (
+        SELECT m.sender_account_id,
+          count(*) FILTER (WHERE m.status = 'sent'
+                             AND m.sent_at > now() - interval '1 hour') AS sent_hour,
+          count(*) FILTER (WHERE m.status = 'sent'
+                             AND m.sent_at > now() - interval '1 day') AS sent_day,
+          count(*) FILTER (WHERE m.status = 'sending') AS in_flight
+        FROM awcms_whatsapp_messages m
+        WHERE m.tenant_id = ${tenantId}
+          AND m.sender_account_id IN (
+            SELECT sender_account_id FROM due_lanes
+            WHERE sender_account_id IS NOT NULL)
+          AND (m.status = 'sending'
+               OR (m.status = 'sent' AND m.sent_at > now() - interval '1 day'))
+        GROUP BY m.sender_account_id
+      ),
+      lanes AS (
+        SELECT d.sender_account_id, d.oldest,
+          (d.sender_account_id IS NOT NULL AND LEAST(
+             ${ratePerHour}::bigint - coalesce(u.sent_hour, 0) - coalesce(u.in_flight, 0),
+             ${ratePerDay}::bigint - coalesce(u.sent_day, 0) - coalesce(u.in_flight, 0)
+           ) <= 0) AS held
+        FROM due_lanes d
+        LEFT JOIN usage u ON u.sender_account_id = d.sender_account_id
+      )
+      (SELECT sender_account_id, held FROM lanes WHERE NOT held
+        ORDER BY oldest, sender_account_id NULLS FIRST
+        LIMIT ${MAX_LANES_PER_PASS})
+      UNION ALL
+      (SELECT sender_account_id, held FROM lanes WHERE held
+        ORDER BY oldest, sender_account_id
+        LIMIT ${MAX_LANES_PER_PASS})
     `,
     { workClass: "background_sync" }
-  )) as { sender_account_id: string | null }[];
+  )) as { sender_account_id: string | null; held: boolean }[];
 
-  return rows.map((row) => row.sender_account_id);
+  return {
+    servable: rows.filter((r) => !r.held).map((r) => r.sender_account_id),
+    quotaHeld: rows
+      .filter((r) => r.held)
+      .map((r) => r.sender_account_id as string)
+  };
 }
 
 /**
@@ -266,16 +340,49 @@ async function claimEligibleMessages(
   sql: Bun.SQL,
   tenantId: string,
   now: Date,
-  limit: number,
-  leaseMs: number,
-  laneSenderId: string | null
-): Promise<ClaimedRow[]> {
-  const leaseExpiry = new Date(now.getTime() + leaseMs);
-
+  share: number,
+  leaseMsFor: (take: number) => number,
+  laneSenderId: string | null,
+  quotaEnv: NodeJS.ProcessEnv | null
+): Promise<{ rows: ClaimedRow[]; take: number; quotaReached: boolean }> {
   return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
+      let limit = share;
+
+      if (laneSenderId !== null && quotaEnv !== null) {
+        // The allowance is computed and CLAIMED in this one transaction, under a
+        // lock keyed on the sender (Issue #1231 M2). Computed in one transaction
+        // and claimed in another, two overlapping passes both read the same
+        // allowance and each claimed up to `share`, so the cap was exceeded by
+        // about `workers x share`. Now the second claimer waits here until the
+        // first has COMMITTED its `sending` rows, and then counts them as in
+        // flight. One lock per transaction, taken first and before any row lock
+        // (the claim below is `SKIP LOCKED` and never waits), so there is no
+        // lock order to get wrong and no deadlock. The lock is released by
+        // COMMIT/ROLLBACK; it is never held across a network send.
+        await tx`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(${`awcms_whatsapp_sender_quota:${tenantId}:${laneSenderId}`}, 0)
+          )
+        `;
+
+        const allowance = await senderAllowance(
+          tx,
+          tenantId,
+          laneSenderId,
+          quotaEnv
+        );
+
+        limit = Math.min(share, allowance);
+
+        if (limit <= 0) {
+          return { rows: [], take: 0, quotaReached: true };
+        }
+      }
+
+      const leaseExpiry = new Date(now.getTime() + leaseMsFor(limit));
       // `MATERIALIZED` is load-bearing. Without it the planner may inline the
       // locking sub-select into the UPDATE, and on stale statistics for a
       // near-empty table it then re-runs the `LIMIT` once per outer row, so
@@ -323,12 +430,17 @@ async function claimEligibleMessages(
       const rank = (purpose: string) =>
         purpose === "security" ? 0 : purpose === "transactional" ? 1 : 2;
 
-      return (rows as unknown as ClaimedRow[]).sort(
-        (a, b) =>
-          rank(a.purpose) - rank(b.purpose) ||
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime() ||
-          a.id.localeCompare(b.id)
-      );
+      return {
+        rows: (rows as unknown as ClaimedRow[]).sort(
+          (a, b) =>
+            rank(a.purpose) - rank(b.purpose) ||
+            new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime() ||
+            a.id.localeCompare(b.id)
+        ),
+        take: limit,
+        quotaReached: false
+      };
     },
     { workClass: "background_sync" }
   );
@@ -599,6 +711,8 @@ type LaneState = {
   providerFailure: { kind: "terminal" | "hold"; reason: string } | null;
   /** The provider rejected this sender's credential: the rest of the lane fails closed without another call. */
   credentialRejected: boolean;
+  /** Rows gated since the verdict and provider were last resolved (Issue #1231 L1). */
+  rowsSinceRevalidation: number;
 };
 
 type RowGate =
@@ -669,7 +783,23 @@ export async function dispatchWhatsappQueue(
 
   const startedAt = Date.now();
   const clock = () => new Date(now.getTime() + (Date.now() - startedAt));
-  const lanes = await discoverLanes(sql, tenantId, now);
+  const discovered = await discoverLanes(sql, tenantId, now, env);
+  const lanes = discovered.servable;
+
+  // A sender waiting on its own quota claims nothing and is not part of the fair
+  // share, so it cannot shrink a healthy lane's share or crowd it out of the
+  // discovery window (Issue #1231 L5). It is still reported.
+  for (const quotaHeldId of discovered.quotaHeld) {
+    result.senders.push({
+      senderAccountId: quotaHeldId,
+      claimed: 0,
+      sent: 0,
+      retried: 0,
+      failed: 0,
+      held: 0,
+      skipped: "quota_reached"
+    });
+  }
 
   if (lanes.length === 0) {
     return result;
@@ -679,6 +809,11 @@ export async function dispatchWhatsappQueue(
   // lane counts only while its breaker is closed.
   const servable = lanes.filter((lane) => lane !== null || !breakerOpen);
   const share = Math.max(1, Math.floor(limit / Math.max(1, servable.length)));
+  const revalidateEveryRows =
+    options.senderRevalidateEveryRows !== undefined &&
+    Number.isFinite(options.senderRevalidateEveryRows)
+      ? Math.max(1, Math.floor(options.senderRevalidateEveryRows))
+      : resolveWhatsappSenderRevalidateEveryRows(env);
   let channelPort: ChannelAccountPort | null | undefined;
 
   for (const laneSenderId of lanes) {
@@ -709,9 +844,10 @@ export async function dispatchWhatsappQueue(
       deployment: null,
       provider: null,
       providerFailure: null,
-      credentialRejected: false
+      credentialRejected: false,
+      rowsSinceRevalidation: 0
     };
-    let take = share;
+    let enforceQuota = false;
 
     if (laneSenderId !== null) {
       if (!getProviderCircuitBreaker(lane.breakerKey).canAttempt(now)) {
@@ -747,42 +883,36 @@ export async function dispatchWhatsappQueue(
       // capability it holds: a sender approved only for `broadcast` or `reply` is
       // `CAPABILITY_DENIED` for `dm` and must not escape its quota because of it.
       // A sender that is gone (terminal at account level) fails its rows, which
-      // sends nothing, so it spends no quota and is not throttled.
-      if (availability.usable || !accountLevelDenial) {
-        const allowance = await withTenantOrThrow(
-          sql,
-          tenantId,
-          (tx) => senderAllowance(tx, tenantId, laneSenderId, env),
-          { workClass: "background_sync" }
-        );
-
-        take = Math.min(share, allowance);
-
-        if (take <= 0) {
-          summary.skipped = "quota_reached";
-          continue;
-        }
-      }
+      // sends nothing, so it spends no quota and is not throttled. The allowance
+      // itself is computed INSIDE the claim, under the sender's lock (M2).
+      enforceQuota = availability.usable || !accountLevelDenial;
     }
 
     // The claim lease must outlive the whole lane batch (see the header): `take`
-    // rows at the worst-case provider timeout, plus a margin.
-    const claimLeaseMs =
-      take * resolveWhatsappSendTimeoutMs(env) +
-      WHATSAPP_DISPATCH_LEASE_MINUTES * 60_000;
+    // rows at the worst-case provider timeout, plus a margin. `take` is only
+    // known inside the claim (it depends on the allowance), so the lease is a
+    // function of it.
     const claimed = await claimEligibleMessages(
       sql,
       tenantId,
       now,
-      take,
-      claimLeaseMs,
-      laneSenderId
+      share,
+      (take) =>
+        take * resolveWhatsappSendTimeoutMs(env) +
+        WHATSAPP_DISPATCH_LEASE_MINUTES * 60_000,
+      laneSenderId,
+      enforceQuota ? env : null
     );
 
-    result.claimed += claimed.length;
-    summary.claimed = claimed.length;
+    if (claimed.quotaReached) {
+      summary.skipped = "quota_reached";
+      continue;
+    }
 
-    if (claimed.length === 0) {
+    result.claimed += claimed.rows.length;
+    summary.claimed = claimed.rows.length;
+
+    if (claimed.rows.length === 0) {
       continue;
     }
 
@@ -799,11 +929,11 @@ export async function dispatchWhatsappQueue(
       correlationId,
       tenantId,
       moduleKey: MODULE_KEY,
-      count: claimed.length,
+      count: claimed.rows.length,
       ...(laneSenderId ? { senderAccountId: laneSenderId } : {})
     });
 
-    for (const entry of claimed) {
+    for (const entry of claimed.rows) {
       const owned: { lease: Date | null } = { lease: null };
 
       try {
@@ -916,6 +1046,26 @@ export async function dispatchWhatsappQueue(
     }
 
     const accountId = lane.senderAccountId;
+
+    // Bounded revocation window (Issue #1231 L1). The verdict and the built
+    // provider (the decrypted token, in memory) used to live for the whole
+    // claimed lease, so a sender revoked mid-pass kept sending until the batch
+    // ended. Every `revalidateEveryRows` rows both are dropped and resolved
+    // afresh: a sender that is no longer usable then fails closed through the
+    // normal policy (terminal or held, per `classifySenderUnavailable`), and the
+    // stale credential is never used again. The window that remains: the rows
+    // sent between two re-checks (at most `revalidateEveryRows`, each bounded by
+    // the send timeout), and the one row already in flight when the revocation
+    // lands. `credentialRejected` is a fact about the provider's answer, not a
+    // cached verdict, so it is deliberately NOT reset here.
+    if (lane.rowsSinceRevalidation >= revalidateEveryRows) {
+      lane.verdicts.clear();
+      lane.provider = null;
+      lane.providerFailure = null;
+      lane.rowsSinceRevalidation = 0;
+    }
+
+    lane.rowsSinceRevalidation += 1;
 
     if (lane.credentialRejected) {
       // A 401 is as likely to be a token the tenant is about to reconnect (or a
