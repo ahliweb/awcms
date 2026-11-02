@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:c8fd997ee886149ffc969d6339e4a8a0157df019c6c275a155dfb3a948abd933 -->
+<!-- i18n-source-hash: sha256:fef1252c03962bd83b82f3c543dad374ecc7a4456738997c953bc1e22af9d50f -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -260,6 +260,25 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > **768px** (tablet potret) dan **1024px** (tumpang-tindih topbar #843). Tiap
 > viewport adalah satu `test()` di berkas yang sama dengan asersi yang sama;
 > tak ada layar atau lebar yang dikecualikan.
+
+> **Single flight (Issue #1224).** Setiap form dilindungi dari double submit oleh
+> helper bersama di `src/lib/ui/admin-form-client.ts`, dan itu diuji pada tiga
+> tingkat. `tests/admin-single-flight.test.ts` menguji unit mesin state in-flight
+> yang murni (`createSingleFlight`, port yang disuntikkan) dan adaptor DOM
+> terhadap `document` palsu minimal: `submit` kedua saat tertunda tidak
+> mengirim request kedua, flag dilepas saat throw dan saat `{ ok: false }`,
+> label `lockElement` milik halaman tetap utuh, `lockElement` idempoten, sukses
+> yang berpindah halaman mempertahankan kunci, dan `pageshow` dengan `persisted`
+> memulihkannya. `tests/single-flight-source-contract.test.ts` gagal bila
+> script halaman memasang `submit` atau `click` yang mengubah data di luar
+> helper (allow-list eksplisit di `scripts/lib/single-flight-audit.ts`) atau bila
+> tabel audit di `docs/awcms/ui-single-flight-audit.id.md` usang. Bukti di
+> browser adalah `tests/e2e/admin-offices-double-submit.e2e.ts` (gelombang
+> write: klik ganda dan Enter menghasilkan satu `POST` dan satu baris) dan
+> `tests/e2e/login-double-submit.e2e.ts` (gelombang read: request login
+> dipenuhi oleh spec, satu percobaan terkirim, dan percobaan yang ditolak bisa
+> diulang). Seperti semua spec e2e, keduanya berjalan di tempat yang punya
+> browser dan tenant ter-seed (CI `e2e-smoke`).
 
 > **Runner test.** Runner = **`bun test`** (`bun:test`), berkas di
 > `tests/`. Daftar target di bawah bersifat **target rencana modul ERP**,

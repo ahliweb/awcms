@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](14_ui_ux_design_system.md)
 
-<!-- i18n-source-hash: sha256:3c57fff2b3cc373b97e8eec0159be369a8625c0d396fe0924b28f3e8ab67b9e5 -->
+<!-- i18n-source-hash: sha256:96566e15bc1545a4807b0057d3142dcb3968d8821b4c374402bf70c8e0318607 -->
 
 # Bagian 14 — UI/UX Design System dan Spesifikasi Layar
 
@@ -167,6 +167,8 @@ Komponen dasar direncanakan di `src/components/ui`, dipakai lintas persona dan l
 Helper klien non-visual `src/lib/ui/admin-form-client.ts` **ADA dan dipakai bersama oleh `<script>` tiap layar admin** untuk fetch + pesan + anti-double-submit. Permukaan sesungguhnya: `onSubmit`/`onSubmitAll`/`onAction`/`mutateAndReload` (perangkaian), `sendJson`/`sendJsonRequest`/`sendJsonForData` (permintaan), `lockElement` + `messageBox` (umpan balik), dan pembaca field `field`/`inputValue`/`blankToNull`/`checkboxChecked`/`integerValue`/`localDateTimeToInstant`. **Baca daftar ekspornya sebelum menulis kodenya** — `grep -n "^export" src/lib/ui/admin-form-client.ts` — karena revisi terdahulu dokumen ini menyebut pasangan `submitJson`/`showBanner` yang tidak pernah ada, dan beberapa skill masih menyuruh memanggil `postJson`, yang **dihapus 22 Agustus 2026** (PROJECT_STATE D12 — nol pemanggil, dengan docblock yang mengklaim sebaliknya).
 
 Import dari modul ini wajib, bukan sekadar DRY: di bawah `default-src 'self'` Astro meng-inline `<script>` tanpa import lalu CSP memblokirnya diam-diam, sedangkan script yang meng-import dari modul ini dibundel ke `/_astro/*.js` eksternal yang diizinkan `'self'`.
+
+**Single flight adalah bawaan untuk setiap form (Issue #1224).** `onSubmit`, `onSubmitAll`, dan `onAction` memegang flag in-flight per form (per tombol untuk `onAction`): selama promise handler tertunda, `submit`/`click` berikutnya **diabaikan, tidak diantrikan**, POST native tetap dibatalkan (sehingga Enter dan implicit submission tidak bisa lolos), dan flag dilepas di `finally` — throw, `{ ok: false }`, dan kegagalan jaringan semuanya meninggalkan form dapat dipakai, yang menjaga tantangan Turnstile yang ditolak atau kode MFA yang salah tetap bisa dicoba ulang. Selama tertunda, form menampilkan `aria-busy="true"` dan tombol submit-nya dinonaktifkan **tanpa mengubah labelnya**; halaman yang juga memanggil `lockElement(submit, "Saving…")` mempertahankan label sibuknya sendiri (`lockElement` idempoten, pelepasan mengembalikan persis keadaan sebelumnya). Handler yang berpindah halaman saat sukses menjaga form tetap terkunci sampai halaman ditinggalkan (`mutateAndReload` melakukannya; halaman yang memanggil sendiri `location.reload()/assign()` memanggil `holdForNavigation()` lebih dulu) dan tombol kembali bfcache (`pageshow` dengan `persisted`) memulihkannya. Konsekuensi bagi penulis layar: pasang lewat helper ini, jangan pernah dengan `addEventListener("submit", …)` atau flag `disabled` buatan sendiri; jangan menambah `Idempotency-Key` pada operasi yang secara alami idempoten (server tetap otoritatif — penjaga hanya menghilangkan request ganda). [`ui-single-flight-audit.id.md`](ui-single-flight-audit.id.md) mendaftar setiap titik masuk dan ditegakkan oleh `tests/single-flight-source-contract.test.ts`.
 
 ### Migrasi bertahap layar besar (pola, bukan status)
 

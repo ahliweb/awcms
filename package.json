@@ -110,6 +110,7 @@
     "i18n:catalog:check": "bun scripts/i18n-catalog-check.ts",
     "i18n:screens:check": "bun scripts/i18n-screen-coverage-check.ts",
     "design:token-contrast:check": "bun scripts/design-token-contrast-check.ts",
+    "ui:single-flight:audit": "bun scripts/ui-single-flight-audit.ts",
     "deps:audit:check": "bun scripts/dependency-audit-check.ts",
     "deps:freshness": "bun scripts/dependency-freshness.ts",
     "access:chokepoint:check": "bun scripts/access-chokepoint-check.ts",

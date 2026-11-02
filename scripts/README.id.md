@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:53ea4d46a5fe8ecab96aa02ef481bf992673da3e64849263d0428c1382396df8 -->
+<!-- i18n-source-hash: sha256:ed21ce4bf6e6e1fe88e77a84afacc3ef9e82b360679522964eb6b20e695d37ff -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-154 target menjalankan berkas di `scripts/`; 65 di antaranya
+155 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -183,6 +183,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `telegram:templates:check`                | `telegram-templates-check.ts`                  | ✅   |
 | `telegram:webhook:register`               | `telegram-webhook-register.ts`                 | —    |
 | `tenant-domain:dns:sync`                  | `tenant-domain-dns-sync.ts`                    | —    |
+| `ui:single-flight:audit`                  | `ui-single-flight-audit.ts`                    | —    |
 | `version:check`                           | `version-check.ts`                             | ✅   |
 | `whatsapp:dispatch`                       | `whatsapp-dispatch.ts`                         | —    |
 | `whatsapp:queue:purge`                    | `whatsapp-queue-purge.ts`                      | —    |

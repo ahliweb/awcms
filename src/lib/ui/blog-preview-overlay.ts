@@ -243,8 +243,13 @@ export function mountBlogPreviewOverlay(doc: Document): void {
     finishEditing(editing.element);
   };
 
+  // Enter saves, and a held or double-pressed Enter fires `keydown` again while
+  // the PATCH is in flight (Issue #1224). This overlay is a standalone bundle
+  // with no `<form>`, so it cannot use the shared single-flight binders.
+  let saving = false;
+
   const saveEditing = async (): Promise<void> => {
-    if (!editing) {
+    if (!editing || saving) {
       return;
     }
 
@@ -282,11 +287,13 @@ export function mountBlogPreviewOverlay(doc: Document): void {
     // No `Idempotency-Key`: `PATCH /api/v1/blog/posts/{id}` requires none, and
     // a same-body retry converges to the same end state. Only the body is
     // sent — a PATCH is partial, and this overlay owns exactly one field.
+    saving = true;
     const result = await sendJson(
       "PATCH",
       `/api/v1/blog/posts/${state.postId}`,
       { bodyPortableText: replaceBlockAt(body, index, rebuilt) }
     );
+    saving = false;
 
     if (!result.ok) {
       status.show(

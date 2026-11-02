@@ -651,6 +651,7 @@ const messageColumns = canCancel ? 8 : 7;
   // import-free script would be inlined, and inline scripts are blocked by this
   // app's CSP.
   import {
+    holdForNavigation,
     messageBox,
     onAction,
     sendJson
@@ -673,9 +674,6 @@ const messageColumns = canCancel ? 8 : 7;
   ) as HTMLButtonElement | null;
   const disableButton = document.getElementById(
     "push-disable-button"
-  ) as HTMLButtonElement | null;
-  const testButton = document.getElementById(
-    "push-test-button"
   ) as HTMLButtonElement | null;
 
   function setState(message: string): void {
@@ -770,7 +768,11 @@ const messageColumns = canCancel ? 8 : 7;
     }
   }
 
-  enableButton?.addEventListener("click", async () => {
+  // Bound through `onAction` (#1224): each button is single-flight in the
+  // helper — a second click while its handler is pending is ignored, and the
+  // button is disabled for the duration — so none of these keeps a
+  // `disabled` flag of its own any more.
+  onAction("#push-enable-button", async () => {
     if (!devicePanel) return;
     errorBox.clear();
 
@@ -781,72 +783,54 @@ const messageColumns = canCancel ? 8 : 7;
       return;
     }
 
-    enableButton.disabled = true;
     setState("Asking this browser for permission…");
 
-    try {
-      const outcome = await enablePushOnThisDevice(key);
+    const outcome = await enablePushOnThisDevice(key);
 
-      if (!outcome.ok) {
-        errorBox.show(outcome.reason);
-        // Re-evaluates the state, so a refusal (`denied`) swaps the button for
-        // the explanation instead of leaving a control that cannot work.
-        await refreshDeviceState();
-        return;
-      }
-
-      await refreshDeviceState();
-    } finally {
-      enableButton.disabled = false;
+    if (!outcome.ok) {
+      errorBox.show(outcome.reason);
+      // Re-evaluates the state, so a refusal (`denied`) swaps the button for
+      // the explanation instead of leaving a control that cannot work.
     }
+
+    await refreshDeviceState();
   });
 
-  disableButton?.addEventListener("click", async () => {
-    const subscriptionId = disableButton.dataset.subscriptionId ?? "";
+  onAction("#push-disable-button", async (button) => {
+    const subscriptionId = button.dataset.subscriptionId ?? "";
 
     if (subscriptionId === "") return;
     errorBox.clear();
 
-    disableButton.disabled = true;
+    const outcome = await disablePushOnThisDevice(subscriptionId);
 
-    try {
-      const outcome = await disablePushOnThisDevice(subscriptionId);
-
-      if (!outcome.ok) {
-        errorBox.show(outcome.reason ?? "The device could not be revoked.");
-        return;
-      }
-
-      await refreshDeviceState();
-    } finally {
-      disableButton.disabled = false;
+    if (!outcome.ok) {
+      errorBox.show(outcome.reason ?? "The device could not be revoked.");
+      return;
     }
+
+    await refreshDeviceState();
   });
 
-  testButton?.addEventListener("click", async () => {
+  onAction("#push-test-button", async () => {
     errorBox.clear();
-    testButton.disabled = true;
 
-    try {
-      const result = await sendJson("POST", "/api/v1/push/test");
+    const result = await sendJson("POST", "/api/v1/push/test");
 
-      if (!result.ok) {
-        errorBox.show(
-          result.errorCode === "NO_ACTIVE_SUBSCRIPTION"
-            ? "You have no active device. Enable notifications above first."
-            : result.errorCode === "PUSH_DISABLED"
-              ? "Push delivery is switched off on this deployment."
-              : "The test notification could not be queued."
-        );
-        return;
-      }
-
-      setState(
-        "Test notification queued. It arrives on the next push:dispatch pass."
+    if (!result.ok) {
+      errorBox.show(
+        result.errorCode === "NO_ACTIVE_SUBSCRIPTION"
+          ? "You have no active device. Enable notifications above first."
+          : result.errorCode === "PUSH_DISABLED"
+            ? "Push delivery is switched off on this deployment."
+            : "The test notification could not be queued."
       );
-    } finally {
-      testButton.disabled = false;
+      return;
     }
+
+    setState(
+      "Test notification queued. It arrives on the next push:dispatch pass."
+    );
   });
 
   onAction("button.push-cancel", async (button) => {
@@ -854,7 +838,6 @@ const messageColumns = canCancel ? 8 : 7;
     if (!messageId) return;
 
     errorBox.clear();
-    button.disabled = true;
 
     const result = await sendJson(
       "POST",
@@ -862,7 +845,6 @@ const messageColumns = canCancel ? 8 : 7;
     );
 
     if (!result.ok) {
-      button.disabled = false;
       errorBox.show(
         result.errorCode === "PUSH_MESSAGE_NOT_CANCELLABLE"
           ? "That message is no longer waiting in the queue — it was already sent, failed, or is being sent right now."
@@ -871,6 +853,8 @@ const messageColumns = canCancel ? 8 : 7;
       return;
     }
 
+    // The button stays locked through the reload (it is gone with the page).
+    holdForNavigation();
     window.location.reload();
   });
 

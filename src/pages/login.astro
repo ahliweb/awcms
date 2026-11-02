@@ -226,15 +226,13 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
       // The import is deliberate — it forces Astro to bundle this script to an
       // external file (an import-free script would be inlined, and inline
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
-      import { lockElement } from "../lib/ui/admin-form-client";
+      import {
+        holdForNavigation,
+        lockElement,
+        onSubmit
+      } from "../lib/ui/admin-form-client";
 
-      const form = document.getElementById(
-        "login-form"
-      ) as HTMLFormElement | null;
       const errorBox = document.getElementById("login-error");
-      const submitButton = document.getElementById(
-        "login-submit"
-      ) as HTMLButtonElement | null;
 
       // Password visibility toggle — pure enhancement, wired here (no inline
       // handler) so the strict CSP is respected. Absent-safe if the elements
@@ -269,17 +267,15 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         errorBox.hidden = false;
       }
 
-      form?.addEventListener("submit", async (event) => {
-        event.preventDefault();
-
-        // Guard + disable the submit button for the request duration so a fast
-        // double-click can't fire two login POSTs before the redirect lands.
-        if (!submitButton || submitButton.disabled) return;
-        const unlock = lockElement(submitButton, "Please wait…");
+      // `onSubmit` owns the single-flight guard (#1224): a second submit —
+      // click, double tap or Enter — while this handler is pending is ignored,
+      // and it is released on ANY settled outcome, so a refused or expired
+      // Turnstile challenge still lets the person retry.
+      onSubmit("login-form", async ({ data: formData, submit }) => {
+        const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
 
         if (errorBox) errorBox.hidden = true;
 
-        const formData = new FormData(form);
         const tenantId = String(formData.get("tenantId") ?? "").trim();
         const loginIdentifier = String(
           formData.get("loginIdentifier") ?? ""
@@ -317,8 +313,9 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
             return;
           }
 
-          // Navigating away — leave the button disabled so it can't be
-          // re-clicked during the redirect.
+          // Navigating away — leave the form locked so it can't be re-submitted
+          // during the redirect (released again by a bfcache `pageshow`).
+          holdForNavigation();
           window.location.href = "/admin";
         } catch {
           showError("Network error. Please try again.");

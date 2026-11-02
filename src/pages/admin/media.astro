@@ -898,10 +898,12 @@ const columnCount = canActOnAny ? 9 : 8;
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   import {
+    holdForNavigation,
     inputValue,
     messageBox,
     mutateAndReload,
     onAction,
+    onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
   import { confirmAction } from "../../lib/ui/confirm-dialog-client";
@@ -924,13 +926,12 @@ const columnCount = canActOnAny ? 9 : 8;
 
   if (uploadForm instanceof HTMLFormElement) {
     const fileInput = document.getElementById("media-upload-file");
-    const submit = document.getElementById("media-upload-submit");
     const progress = document.getElementById("media-upload-progress");
     const uploadError = messageBox("media-upload-error");
 
-    uploadForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-
+    // Through `onSubmit` (#1224): single flight is the helper's job now, so a
+    // second submit while the upload runs is ignored without a flag of its own.
+    onSubmit("media-upload-form", async () => {
       if (!(fileInput instanceof HTMLInputElement)) return;
       const file = fileInput.files?.[0];
 
@@ -942,8 +943,8 @@ const columnCount = canActOnAny ? 9 : 8;
       uploadError.clear();
 
       // Locked for the whole flow: a second submit would create a second
-      // session for the same file and leave one of them orphaned.
-      if (submit instanceof HTMLButtonElement) submit.disabled = true;
+      // session for the same file and leave one of them orphaned. The submit
+      // button is locked by `onSubmit`; only the file input is this page's.
       fileInput.disabled = true;
 
       const showProgress = (text: string) => {
@@ -969,6 +970,7 @@ const columnCount = canActOnAny ? 9 : 8;
 
         if (outcome.ok) {
           showProgress("Uploaded. Reloading…");
+          holdForNavigation();
           window.location.reload();
           return;
         }
@@ -981,7 +983,6 @@ const columnCount = canActOnAny ? 9 : 8;
         );
         if (progress instanceof HTMLElement) progress.hidden = true;
       } finally {
-        if (submit instanceof HTMLButtonElement) submit.disabled = false;
         fileInput.disabled = false;
       }
     });
@@ -1067,9 +1068,7 @@ const columnCount = canActOnAny ? 9 : 8;
   if (rightsForm instanceof HTMLFormElement) {
     const rightsError = messageBox("media-rights-error");
 
-    rightsForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-
+    onSubmit("media-rights-fields", async () => {
       const id = inputValue("media-rights-id");
       if (!id) return;
 

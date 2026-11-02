@@ -62,7 +62,18 @@ describe("no native form POST survives Astro's origin check", () => {
       )
     );
 
-    expect(client).toContain("preventDefault");
+    // Since #1224 the cancellation lives in the shared binder, which also owns
+    // the single-flight guard: the switcher must bind THROUGH it, and the
+    // binder must cancel before it does anything else.
+    expect(client).toContain('onSubmitAll(".locale-switcher"');
+
+    const helper = stripComments(
+      readFileSync(join(SRC_ROOT, "lib", "ui", "admin-form-client.ts"), "utf8")
+    );
+
+    expect(helper).toMatch(
+      /event\.preventDefault\(\);\s*void singleFlight\.run\(form,/
+    );
   });
 
   /**
