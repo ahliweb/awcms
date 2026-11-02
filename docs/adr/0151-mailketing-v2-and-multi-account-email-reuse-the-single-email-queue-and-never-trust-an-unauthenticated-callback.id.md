@@ -1,13 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0151-mailketing-v2-and-multi-account-email-reuse-the-single-email-queue-and-never-trust-an-unauthenticated-callback.md)
 
-<!-- i18n-source-hash: sha256:db2f44d4396c52823d5fb3eb6c06179c89a688cb34498b56d1dc73f168bff7e4 -->
+<!-- i18n-source-hash: sha256:c1da1106ef651ffe4badcd60aae17163bc24141e4e6393329b8db0f3307bd15c -->
 
 # ADR-0151 — Mailketing v2 dan email multi-akun memakai ulang satu antrean `email`, dan callback provider tanpa autentikasi tidak pernah mengubah state pelanggan
 
-- **Status:** Diusulkan
-- **Tinjauan:** menjadi Diterima setelah maintainer meninjaunya. Issue #1159 sampai #1162 tetap terblokir sampai saat itu. Hanya dokumen: tidak ada di sini yang menjadi bukti bahwa adapter v2, routing multi-akun, atau webhook berfungsi.
+- **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** ahliweb (menunggu tinjauan maintainer)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan:** Issue #1158 (manajemen email Mailketing multi-akun, migrasi v2, dan kepemilikan CRM). Ini adalah ADR email yang oleh [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §9 diserahkan kepada issue ini.
 - **Memperluas, tidak menggantikan:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (I1 sampai I13, matriks §3, kredensial §5). Ia mematuhi ketiga belas invarian. Ia memperlakukan koneksi Mailketing sebagai `channel_account` dan menerapkan amendemen §5 atas ADR-0074/0133 hanya untuk akun email **milik tenant**. [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.id.md) (satu antrean per kanal, kelas tujuan, persetujuan terlepas dari segmen), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.id.md) (tanpa fasad, tanpa fallback), [ADR-0103](0103-newsletter-is-its-own-module.id.md) (`newsletter` memiliki persetujuan), [ADR-0006](0006-offline-first-sync-outbox.id.md) (I/O provider di luar transaksi), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md), ADR-0150 (Diusulkan di branch #1144) (gerbang verifikasi inbound dan aturan "tanpa provenance terautentikasi, tanpa perubahan state").
 - **Terkait:** Issue #1139, #1140 (registri akun), #1154, #1159, #1160, #1161, #1162, #1167, #1168, #1172; hilir `ahliweb/awcms-one` #458, #459, #461 beserta segmen dan kampanye `commerce`-nya (#114, #360, #362); draf keterlacakan UI (PR #1175, UP-01..16); paket kesiapan [`docs/awcms/omnichannel-foundation.id.md`](../awcms/omnichannel-foundation.id.md) §2, §3, §5.

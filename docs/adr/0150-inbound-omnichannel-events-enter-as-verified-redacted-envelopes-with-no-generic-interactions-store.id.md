@@ -1,13 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0150-inbound-omnichannel-events-enter-as-verified-redacted-envelopes-with-no-generic-interactions-store.md)
 
-<!-- i18n-source-hash: sha256:8f5632ae42e9b915981691537f49162be4467cf174e863e6fc7240076ebfec1a -->
+<!-- i18n-source-hash: sha256:f3ec0bcee057e5013db06b8feacb45568d35d21a07dc9a5f10b3b11f6bf064db -->
 
 # ADR-0150 — Event masuk omnichannel masuk sebagai envelope terverifikasi dan teredaksi; tidak ada store interaksi generik yang diadmisi
 
-- **Status:** Diusulkan
-- **Tinjauan:** menjadi Diterima setelah maintainer meninjaunya. Issue #1164 (implementasi inbound pertama) dan semua issue lain yang bergantung pada inbound tetap terblokir sampai saat itu. Hanya dokumen: tidak ada di sini yang menjadi bukti bahwa konektor inbound mana pun berfungsi.
+- **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** ahliweb (menunggu tinjauan maintainer)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan:** Issue #1144 (batas admisi percakapan inbound dan webhook). Ini adalah "batas interaksi inbound" (C4) yang oleh [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §1 dan §9 diserahkan kepada issue ini.
 - **Memperluas, tidak menggantikan:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (invarian §2 I1 sampai I13, default §6, matriks §3). Ia **mematuhi ketiga belas invarian** dan tidak menyimpang dari default §6 mana pun. [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.id.md) dan [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.id.md) (tanpa fasad, tanpa fallback), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md) (konsumer event), [ADR-0140](0140-telegram-delivery-adapter-ops-staff-alerts-only.id.md) (satu-satunya webhook terverifikasi yang ada; Telegram staf tidak berubah), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md) (jawaban subjek data per tenant).
 - **Terkait:** Issue #1139, #1140 (registri akun), #1153 (event situs), #1155 dan #1156 (bot Telegram pelanggan), #1152 (platform tambahan), #1164 (implementasi inbound pertama), #1168 (gateway realtime); hilir `ahliweb/awcms-one` #458, #460 dan inbox commerce-nya; paket kesiapan [`docs/awcms/omnichannel-foundation.id.md`](../awcms/omnichannel-foundation.id.md) §2.4, §3, §5 dan §11.

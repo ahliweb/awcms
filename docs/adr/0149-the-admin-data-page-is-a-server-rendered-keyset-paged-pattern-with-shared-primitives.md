@@ -2,10 +2,9 @@
 
 # ADR-0149 — The admin data page is a server-rendered, keyset-paged pattern with four shared primitives
 
-- **Status:** Proposed
-- **Review:** becomes Accepted once a maintainer reviews it. The primitives and the first adopter (`/admin/users`) land in the same change as this record because a standard no screen uses is a claim, not a standard; the pattern binds new screens only after acceptance.
+- **Status:** Accepted
 - **Date:** 2026-10-26
-- **Decision maker:** ahliweb (maintainer review pending)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves:** Issue #1196 (adopting the data-page pattern from the October 2026 admin redesign proposal).
 - **Extends, does not supersede:** [ADR-0120](0120-the-admin-redesign-splits-one-hue-into-three-roles.md) (tokens, shell, the contrast gate) and [`docs/awcms/14_ui_ux_design_system.md`](../awcms/14_ui_ux_design_system.md) §Component library (its Table, Pagination and `FilterBar` rows). It changes **no token name and no contrast-measured value**.
 - **Related:** [ADR-0095](0095-the-interface-speaks-the-readers-language.md) (gettext catalogues), [ADR-0125](0125-admin-v2-primitives-confirm-dialog-save-bar-reason-panel.md) (the sibling component decision), [`design/redesain-ui-ux-2026-10/`](../../design/redesain-ui-ux-2026-10/README.md) (`PolaData.dc.html`, `AwcmsUsers.dc.html`, `AwcmsAudit.dc.html` — reference only), `src/modules/_shared/keyset-pagination.ts`, `src/lib/ui/admin-data-page.ts`, `src/components/admin/`.

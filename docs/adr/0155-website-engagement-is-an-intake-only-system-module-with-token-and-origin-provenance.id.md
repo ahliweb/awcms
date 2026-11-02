@@ -1,12 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md)
 
-<!-- i18n-source-hash: sha256:3a1d39f2620d922ba86a9caaf50efcc735c5b8af5e49a3382690ab1a951da5ae -->
+<!-- i18n-source-hash: sha256:15aec8548d33fae9983d0bfa46046ef5361104b78951823b2dafe89ac615d2df -->
 
 # ADR-0155 — Penangkapan lead dan kontak situs web adalah modul sistem khusus intake, `website_engagement`, dengan provenance token sumber dan Origin
 
-- **Status:** Diusulkan
+- **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** ahliweb (maintainer) — **penerimaan adalah keputusan maintainer, bukan keputusan dokumen ini**
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan (bila diterima):** gerbang admisi modul Issue #1153. Sebelum diterima, #1153 belum siap diimplementasikan.
 - **Memperluas:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (§2 invarian I1, I7, I8, I9, I12; §6 aturan penautan kontak; §10 baris Fase C untuk #1153), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md), [ADR-0103](0103-newsletter-is-its-own-module.id.md) (pola intake publik), [ADR-0037](0037-data-lifecycle-module-admission.id.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md)
 - **Harus selaras dengan (belum diputuskan):** ADR-0153 (Issue #1163, pipeline lead/prospek). ADR ini tidak mendahului hasilnya; lihat §6.

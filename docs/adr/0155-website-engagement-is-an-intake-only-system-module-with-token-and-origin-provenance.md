@@ -2,9 +2,9 @@
 
 # ADR-0155 — Website lead and contact capture is an intake-only system module, `website_engagement`, with source-token and Origin provenance
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** ahliweb (maintainer) — **acceptance is the maintainer's decision, not made by this document**
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves (when accepted):** the module-admission gate of Issue #1153. Until accepted, #1153 is not ready to implement.
 - **Extends:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (§2 invariants I1, I7, I8, I9, I12; §6 contact-linkage rule; §10 Phase C row for #1153), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md), [ADR-0103](0103-newsletter-is-its-own-module.md) (the public-intake pattern), [ADR-0037](0037-data-lifecycle-module-admission.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md)
 - **Must conform to (not yet decided):** ADR-0153 (Issue #1163, the lead/prospect pipeline). This ADR neither presumes nor pre-empts its outcome; see §6.
