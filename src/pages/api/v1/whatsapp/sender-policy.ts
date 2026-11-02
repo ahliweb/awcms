@@ -13,9 +13,15 @@ import {
 import { recordAuditEvent } from "../../../../modules/logging/application/audit-log";
 import { setSenderPolicy } from "../../../../modules/whatsapp-delivery/application/whatsapp-sender-directory";
 import { validateSenderPolicyInput } from "../../../../modules/whatsapp-delivery/domain/whatsapp-validation";
+import { loadSenderAccess } from "../../../../modules/whatsapp-delivery/infrastructure/channel-account-access-loader";
 import { loadChannelAccountPort } from "../../../../modules/whatsapp-delivery/infrastructure/channel-account-port-loader";
 
 const IDEMPOTENCY_SCOPE = "whatsapp_sender_policy_set";
+const GUARD = {
+  moduleKey: "whatsapp_delivery",
+  activityCode: "sender_policy",
+  action: "configure"
+} as const;
 
 type Prepared = { payload: unknown; idempotencyKey: string };
 
@@ -35,6 +41,15 @@ type Prepared = { payload: unknown; idempotencyKey: string };
  * anything else, including another tenant's account, is the same
  * `422 SENDER_UNAVAILABLE` (no existence oracle). The body is validated AFTER
  * authorization so an unauthorised token learns nothing about the schema.
+ *
+ * Per-account access applies (Issue #1233 M1), by the rules of
+ * `channel_accounts`: the business scope named (or tenant-wide, `null`) must be
+ * one the caller holds, a caller confined to business scopes cannot set the
+ * tenant-wide default, and the sender must be an account the caller may use
+ * (assignment rule, `assignments.assign` bypass, and the account's own scope).
+ * Anything refused for access is the SAME `403 ACCESS_DENIED` (scope) or
+ * `422 SENDER_UNAVAILABLE` (sender) as an unknown id; default-deny when the
+ * channel module cannot be loaded.
  */
 export const PUT = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -66,7 +81,8 @@ export const PUT = defineTenantRoute<Prepared>({
     activityCode: "sender_policy",
     action: "configure"
   },
-  handler: async ({ tx, tenantId, auth, prepared, locals }) => {
+  handler: async (context) => {
+    const { tx, tenantId, auth, prepared, locals } = context;
     const validation = validateSenderPolicyInput(prepared.payload);
 
     if (!validation.valid) {
@@ -76,6 +92,39 @@ export const PUT = defineTenantRoute<Prepared>({
         "Sender policy request is invalid.",
         {},
         validation.errors
+      );
+    }
+
+    const access = await loadSenderAccess();
+
+    if (!access) return fail(403, "ACCESS_DENIED", "Access denied.");
+
+    // The scope the client names is a request, not a fact: authorised as the
+    // required scope, resolved against this tenant, and refused for a confined
+    // caller when it is tenant-wide. Before the idempotent section, so a refusal
+    // is never stored for replay and a replay by a caller who has since lost the
+    // scope is refused.
+    const scopeRefusal = await access.authorizeScope(
+      context,
+      GUARD,
+      validation.value.businessScope
+    );
+
+    if (scopeRefusal) return scopeRefusal;
+
+    if (
+      validation.value.defaultSenderAccountId !== null &&
+      !(await access.canUseAccount(
+        context,
+        GUARD,
+        validation.value.defaultSenderAccountId,
+        "operator"
+      ))
+    ) {
+      return fail(
+        422,
+        "SENDER_UNAVAILABLE",
+        "That sender cannot be the default: it must be an account of this tenant that may send WhatsApp messages now."
       );
     }
 

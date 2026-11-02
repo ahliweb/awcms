@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 34    |
-| Migrations                          | 239   |
+| Migrations                          | 240   |
 | `awcms_*` tables                    | 233   |
 | Tables with `FORCE` RLS             | 215   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 766   |
+| Test files                          | 767   |
 | Route files                         | 596   |
 | ADR                                 | 314   |
 
@@ -298,6 +298,7 @@
 | 237 | `sql/322_awcms_whatsapp_sender_routing.sql`                        |
 | 238 | `sql/323_awcms_whatsapp_sender_routing_permissions.sql`            |
 | 239 | `sql/324_awcms_whatsapp_sender_routing_hardening.sql`              |
+| 240 | `sql/328_awcms_whatsapp_sender_secret_visibility.sql`              |
 
 ### Tables & Row-Level Security
 
@@ -543,7 +544,7 @@
 | ------------- | ---------- |
 | `(root)`      | 579        |
 | `e2e`         | 29         |
-| `integration` | 157        |
+| `integration` | 158        |
 | `unit`        | 1          |
 
 ### Routes

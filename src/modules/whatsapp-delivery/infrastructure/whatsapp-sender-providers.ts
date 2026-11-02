@@ -29,6 +29,19 @@ import type { WhatsappHttpClient } from "./whatsapp-http-client";
 const PHONE_NUMBER_ID = /^\d{5,25}$/;
 const API_VERSION = /^v\d+\.\d+$/;
 
+/** The Graph API version in force, or `null` when the operator's value is malformed. */
+export function resolveWhatsappMetaApiVersion(
+  env: NodeJS.ProcessEnv
+): string | null {
+  const version = env.WHATSAPP_META_API_VERSION?.trim() || "v21.0";
+
+  return API_VERSION.test(version) ? version : null;
+}
+
+export function isWhatsappMetaApiVersionValid(env: NodeJS.ProcessEnv): boolean {
+  return resolveWhatsappMetaApiVersion(env) !== null;
+}
+
 /** Whether this deployment can send through a sender of `provider`. Checked at ENQUEUE so a row that could never be sent is refused instead of queued. */
 export function hasWhatsappSenderAdapter(provider: string): boolean {
   return provider === "whatsapp_cloud";

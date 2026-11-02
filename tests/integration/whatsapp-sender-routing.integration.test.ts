@@ -40,6 +40,7 @@ import {
   getRuntimeSql,
   getWorkerRoleSql,
   integrationEnabled,
+  reassertRuntimeRoleLogins,
   resetDatabase,
   setupIntegrationDatabase,
   teardownIntegrationDatabase,
@@ -463,12 +464,57 @@ const dispatch = (
     harness.options({ now: new Date(Date.now() + 1000), ...over })
   );
 
+/**
+ * A worker-role test FAILS when the worker role cannot be used; it never passes
+ * by returning early (Issue #1233). `awcms_worker` is cluster-scoped and another
+ * process's teardown puts it back to NOLOGIN, so LOGIN is re-asserted first; if
+ * the role still is not usable the test fails loudly, because a green run that
+ * skipped every privilege assertion proves nothing.
+ */
+async function requireWorkerRole(): Promise<void> {
+  await reassertRuntimeRoleLogins();
+
+  if (!workerRoleActivated) {
+    throw new Error(
+      "awcms_worker is not provisioned or cannot log in: the worker-role assertions cannot run, and a skipped assertion is not a pass."
+    );
+  }
+}
+
 function workerTest(name: string, fn: () => Promise<void>): void {
   test(name, async () => {
-    if (!workerRoleActivated) return;
-
+    await requireWorkerRole();
     await fn();
   });
+}
+
+/**
+ * `assertRejected` that also pins WHY: the SQLSTATE, and optionally a message
+ * fragment or constraint name, so a test that expects the immutability trigger
+ * cannot pass because of an unrelated error (a typo, a missing column, RLS).
+ */
+async function assertPgRejected(
+  promise: Promise<unknown>,
+  what: string,
+  expected: { errno: string; message?: string; constraint?: string }
+): Promise<void> {
+  const error = (await assertRejected(promise, what)) as Error & {
+    errno?: unknown;
+    constraint?: unknown;
+  };
+
+  expect(
+    String(error.errno),
+    `${what}: expected SQLSTATE ${expected.errno}, got ${String(error.errno)} (${error.message})`
+  ).toBe(expected.errno);
+
+  if (expected.message !== undefined) {
+    expect(error.message).toContain(expected.message);
+  }
+
+  if (expected.constraint !== undefined) {
+    expect(String(error.constraint)).toBe(expected.constraint);
+  }
 }
 
 async function seedTenants(): Promise<void> {
@@ -627,7 +673,7 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     test("cross-tenant sender forgery at the DATABASE: the composite FK and RLS refuse a row that points at another tenant's account", async () => {
       const aAccount = await seedAccount(TENANT_A);
 
-      await assertRejected(
+      await assertPgRejected(
         inTenant(
           TENANT_B,
           (tx) => tx`
@@ -640,8 +686,42 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
                   'explicit')
         `
         ),
-        "a message of tenant B whose sender is tenant A's account"
+        "a message of tenant B whose sender is tenant A's account",
+        { errno: "23514", message: "of its own tenant" }
       );
+      expect(await count("awcms_whatsapp_messages")).toBe(0);
+    });
+
+    test("the composite FK ITSELF refuses another tenant's sender when the BEFORE INSERT guard is out of the way (#1233 test gap c)", async () => {
+      const aAccount = await seedAccount(TENANT_A);
+      const admin = getAdminSql();
+
+      // The guard trigger would raise first and make this test prove the guard,
+      // not the constraint. Disable it for this statement only (table owner),
+      // and put it back whatever happens: triggers survive `resetDatabase`.
+      await admin`ALTER TABLE awcms_whatsapp_messages DISABLE TRIGGER awcms_whatsapp_messages_sender_guard`;
+
+      try {
+        await assertPgRejected(
+          admin`
+            INSERT INTO awcms_whatsapp_messages
+              (tenant_id, idempotency_key, template_key, purpose, recipient,
+               recipient_hash, recipient_masked, body, status, sender_account_id,
+               sender_selection)
+            VALUES (${TENANT_B}, 'forged-fk', 'it1141.reminder', 'transactional',
+                    ${PHONE}, 'k1:x', '+*', 'x', 'queued', ${aAccount.id},
+                    'explicit')
+          `,
+          "a message of tenant B whose sender is tenant A's account, guard disabled",
+          {
+            errno: "23503",
+            constraint: "awcms_whatsapp_messages_sender_account_fk"
+          }
+        );
+      } finally {
+        await admin`ALTER TABLE awcms_whatsapp_messages ENABLE TRIGGER awcms_whatsapp_messages_sender_guard`;
+      }
+
       expect(await count("awcms_whatsapp_messages")).toBe(0);
     });
 
@@ -813,13 +893,15 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           sql`UPDATE awcms_whatsapp_messages SET business_scope_type = 'brand', business_scope_id = ${SCOPE_X.id} WHERE id = ${id}`
       ]) {
         // The table owner bypasses RLS but not the trigger.
-        await assertRejected(
+        await assertPgRejected(
           Promise.resolve(change(getAdminSql())),
-          "an UPDATE of the sender snapshot"
+          "an UPDATE of the sender snapshot",
+          { errno: "23514", message: "sender snapshot is immutable" }
         );
-        await assertRejected(
+        await assertPgRejected(
           inTenant(TENANT_A, (tx) => Promise.resolve(change(tx))),
-          "an UPDATE of the sender snapshot as the runtime role"
+          "an UPDATE of the sender snapshot as the runtime role",
+          { errno: "23514", message: "sender snapshot is immutable" }
         );
       }
 
@@ -839,7 +921,7 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     test("the database refuses a row whose sender is not connected, whatever the application did", async () => {
       const account = await seedAccount(TENANT_A, { status: "revoked" });
 
-      await assertRejected(
+      await assertPgRejected(
         getAdminSql()`
           INSERT INTO awcms_whatsapp_messages
             (tenant_id, idempotency_key, template_key, purpose, recipient,
@@ -848,9 +930,10 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           VALUES (${TENANT_A}, 'raw', 'it1141.reminder', 'transactional',
                   ${PHONE}, 'k1:x', '+*', 'x', 'queued', ${account.id}, 'explicit')
         `,
-        "a message whose sender is revoked"
+        "a message whose sender is revoked",
+        { errno: "23514", message: "needs a connected sender account" }
       );
-      await assertRejected(
+      await assertPgRejected(
         getAdminSql()`
           INSERT INTO awcms_whatsapp_messages
             (tenant_id, idempotency_key, template_key, purpose, recipient,
@@ -859,7 +942,11 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           VALUES (${TENANT_A}, 'raw2', 'it1141.reminder', 'transactional',
                   ${PHONE}, 'k1:x', '+*', 'x', 'queued', NULL, 'explicit')
         `,
-        "an explicit selection with no sender"
+        "an explicit selection with no sender",
+        {
+          errno: "23514",
+          constraint: "awcms_whatsapp_messages_sender_null_check"
+        }
       );
     });
   });
@@ -1037,19 +1124,22 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         await inTenant(TENANT_B, (tx) => listSenderPolicies(tx, TENANT_B))
       ).toEqual([]);
 
-      await assertRejected(
+      await assertPgRejected(
         getAdminSql()`UPDATE awcms_whatsapp_sender_policies SET business_scope_type = 'brand', business_scope_id = ${SCOPE_X.id}`,
-        "re-scoping a policy"
+        "re-scoping a policy",
+        { errno: "23514", message: "tenant and business scope are immutable" }
       );
-      await assertRejected(
+      await assertPgRejected(
         getAdminSql()`UPDATE awcms_whatsapp_sender_policies SET config_version = 0`,
-        "moving a policy version backwards"
+        "moving a policy version backwards",
+        { errno: "23514", message: "only moves forward" }
       );
-      await assertRejected(
+      await assertPgRejected(
         getAdminSql()`
           UPDATE awcms_whatsapp_sender_policies SET tenant_id = ${TENANT_B}
         `,
-        "moving a policy to another tenant"
+        "moving a policy to another tenant",
+        { errno: "23514", message: "tenant and business scope are immutable" }
       );
     });
 
@@ -1098,9 +1188,10 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           (tx: Bun.SQL) =>
             tx`INSERT INTO awcms_whatsapp_sender_policies (tenant_id) VALUES (${TENANT_A})`
         ]) {
-          await assertRejected(
+          await assertPgRejected(
             inTenantWorker(TENANT_A, (tx) => write(tx)),
-            "a worker write to the sender policy"
+            "a worker write to the sender policy",
+            { errno: "42501", message: "permission denied" }
           );
         }
       }
@@ -1484,7 +1575,7 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     );
 
     workerTest(
-      "the provider rejecting a sender's credential fails the lane closed after ONE call, and no other sender is tried",
+      "the provider rejecting a sender's credential holds the lane after ONE call (retry with backoff, counted), and no other sender is tried",
       async () => {
         const rejected = await seedAccount(TENANT_A);
         const other = await seedAccount(TENANT_A);
@@ -1507,11 +1598,23 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         );
         const result = await dispatch(TENANT_A, harness);
 
-        expect(result).toMatchObject({ claimed: 5, sent: 1, failed: 4 });
+        // L1 (#1233): a 401 is NOT terminal. Nothing failed; four rows wait.
+        expect(result).toMatchObject({
+          claimed: 5,
+          sent: 1,
+          retried: 4,
+          failed: 0
+        });
         expect(
           harness.sent.filter((s) => s.senderAccountId === rejected.id)
         ).toHaveLength(1);
         expect((await row(queuedId(otherMessage))).status).toBe("sent");
+        expect(
+          await count(
+            "awcms_whatsapp_messages",
+            `status = 'retry_wait' AND retry_count = 1`
+          )
+        ).toBe(4);
         expect(
           await count(
             "awcms_whatsapp_messages",
@@ -1524,8 +1627,192 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
             `failure_code = 'sender_unavailable'`
           )
         ).toBe(3);
+        expect(
+          await count("awcms_whatsapp_messages", `status = 'failed'`)
+        ).toBe(0);
       }
     );
+
+    workerTest(
+      "a credential that STAYS rejected ends in a terminal failure after the bounded retries, never by falling back to another sender",
+      async () => {
+        const rejected = await seedAccount(TENANT_A);
+        const other = await seedAccount(TENANT_A);
+
+        for (let i = 0; i < 3; i += 1) {
+          await enqueue(TENANT_A, { senderAccountId: rejected.id });
+        }
+        await enqueue(TENANT_A, {});
+
+        const harness = makeHarness((sent) =>
+          sent.senderAccountId === rejected.id
+            ? {
+                ok: false,
+                error: "Meta rejected the configured credentials.",
+                retryable: false,
+                failureCode: "unauthorized"
+              }
+            : { ok: true, providerMessageId: "wamid.ok" }
+        );
+        const env = {
+          ...ENV,
+          WHATSAPP_SEND_MAX_RETRIES: "2"
+        } as unknown as NodeJS.ProcessEnv;
+        const hour = 3_600_000;
+
+        for (let pass = 1; pass <= 4; pass += 1) {
+          await dispatch(TENANT_A, harness, {
+            env,
+            now: new Date(Date.now() + pass * hour)
+          });
+        }
+
+        expect(
+          await count("awcms_whatsapp_messages", `status = 'failed'`)
+        ).toBe(3);
+        expect(
+          await count(
+            "awcms_whatsapp_messages",
+            `failure_code = 'unauthorized'`
+          )
+        ).toBe(1);
+        expect(
+          await count(
+            "awcms_whatsapp_messages",
+            `failure_code = 'sender_unavailable'`
+          )
+        ).toBe(2);
+        // Only the rejected sender's own provider was ever called, a bounded
+        // number of times; no other sender and not the deployment sender.
+        expect(
+          harness.sent.filter((s) => s.senderAccountId === rejected.id).length
+        ).toBeLessThanOrEqual(3);
+        expect(
+          harness.sent.filter(
+            (s) =>
+              s.senderAccountId !== rejected.id && s.senderAccountId !== null
+          )
+        ).toHaveLength(0);
+        expect(other.id).not.toBe(rejected.id);
+      }
+    );
+
+    workerTest(
+      "a malformed WHATSAPP_META_API_VERSION HOLDS the lane (bounded retry), builds nothing and never uses another sender or provider",
+      async () => {
+        const account = await seedAccount(TENANT_A);
+        const queued = await enqueue(TENANT_A, { senderAccountId: account.id });
+        const deployment = await enqueue(TENANT_A, {});
+        const harness = makeHarness();
+        const bad = {
+          ...ENV,
+          WHATSAPP_META_API_VERSION: "latest",
+          WHATSAPP_SEND_MAX_RETRIES: "1"
+        } as unknown as NodeJS.ProcessEnv;
+        const first = await dispatch(TENANT_A, harness, { env: bad });
+
+        expect(first).toMatchObject({ sent: 1, retried: 1, failed: 0 });
+        expect(harness.built).toHaveLength(0);
+        expect(harness.sent.map((s) => s.senderAccountId)).toEqual([null]);
+        expect((await row(queuedId(queued))).status).toBe("retry_wait");
+        expect((await row(queuedId(deployment))).status).toBe("sent");
+
+        // Fixed by the operator: the same row goes out through the same sender.
+        const fixed = await dispatch(TENANT_A, harness, {
+          now: new Date(Date.now() + 3_600_000)
+        });
+
+        expect(fixed).toMatchObject({ sent: 1, failed: 0 });
+        expect(harness.sent[1]!.senderAccountId).toBe(account.id);
+
+        // Left broken, the bounded retries end in a terminal failure.
+        const stuck = await enqueue(TENANT_A, { senderAccountId: account.id });
+
+        for (let pass = 1; pass <= 3; pass += 1) {
+          await dispatch(TENANT_A, harness, {
+            env: bad,
+            now: new Date(Date.now() + (pass + 1) * 3_600_000)
+          });
+        }
+
+        expect((await row(queuedId(stuck))).status).toBe("failed");
+        expect((await row(queuedId(stuck))).failure_code).toBe(
+          "sender_unavailable"
+        );
+      }
+    );
+  });
+
+  describe("audit residuals (#1233 L2, L3)", () => {
+    test("L2: a scope's own policy row (even an explicit NULL deployment sender) is never lost to the tenant-wide default, however many other scopes exist", async () => {
+      const account = await seedAccount(TENANT_A);
+      const admin = getAdminSql();
+
+      await admin`
+        INSERT INTO awcms_whatsapp_sender_policies
+          (tenant_id, default_sender_account_id)
+        VALUES (${TENANT_A}, ${account.id})
+      `;
+      // The scope's own row: an explicit decision to use the deployment sender.
+      await admin`
+        INSERT INTO awcms_whatsapp_sender_policies
+          (tenant_id, business_scope_type, business_scope_id,
+           default_sender_account_id)
+        VALUES (${TENANT_A}, 'brand', ${SCOPE_X.id}, NULL)
+      `;
+      // More than the old 500-row window of other scopes that sort BEFORE it.
+      await admin`
+        INSERT INTO awcms_whatsapp_sender_policies
+          (tenant_id, business_scope_type, business_scope_id)
+        SELECT ${TENANT_A}, 'aaa_brand', gen_random_uuid()
+        FROM generate_series(1, 520)
+      `;
+
+      const scoped = await enqueue(TENANT_A, { businessScope: SCOPE_X });
+
+      expect(
+        (await row(queuedId(scoped))).sender_account_id,
+        "the scope's own NULL row decides: the deployment sender"
+      ).toBeNull();
+      expect((await row(queuedId(scoped))).sender_selection).toBe("deployment");
+
+      // A scope with no row still gets the tenant-wide default.
+      const other = await enqueue(TENANT_A, { businessScope: SCOPE_Y });
+
+      expect((await row(queuedId(other))).sender_account_id).toBe(account.id);
+      expect((await row(queuedId(other))).sender_selection).toBe("policy");
+    });
+
+    test("L3: a marketing message linked to an earlier message still needs `broadcast`; affinity pins the sender, never relaxes the capability", async () => {
+      const account = await seedAccount(TENANT_A, {
+        capabilities: ["dm", "reply"]
+      });
+
+      await inTenant(TENANT_A, (tx) =>
+        grantMarketingConsent(tx, TENANT_A, null, {
+          phone: PHONE,
+          source: "form"
+        })
+      );
+
+      const opening = await enqueue(TENANT_A, { senderAccountId: account.id });
+
+      expect(opening.status).toBe("queued");
+
+      // Same recipient, linked to the opening message, marketing.
+      expect(
+        await enqueue(TENANT_A, {
+          templateKey: "it1141.promo",
+          inReplyToMessageId: queuedId(opening)
+        })
+      ).toEqual({ status: "refused", reason: "SENDER_UNAVAILABLE" });
+
+      // The same linked message as a transactional reply is still allowed.
+      expect(
+        (await enqueue(TENANT_A, { inReplyToMessageId: queuedId(opening) }))
+          .status
+      ).toBe("queued");
+    });
   });
 
   describe("per-sender breaker, quota and fair claiming", () => {
@@ -1969,9 +2256,10 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           (tx: Bun.SQL) =>
             tx`SELECT account_id FROM awcms_channel_account_health`
         ]) {
-          await assertRejected(
+          await assertPgRejected(
             inTenantWorker(TENANT_A, (tx) => probe(tx)),
-            "a worker read outside its column grant"
+            "a worker read outside its column grant",
+            { errno: "42501", message: "permission denied" }
           );
         }
 
@@ -1985,9 +2273,10 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           (tx: Bun.SQL) =>
             tx`INSERT INTO awcms_channel_account_capabilities (tenant_id, account_id, capability, state, matrix_version) VALUES (${TENANT_A}, ${account.id}, 'ads', 'granted', 1)`
         ]) {
-          await assertRejected(
+          await assertPgRejected(
             inTenantWorker(TENANT_A, (tx) => write(tx)),
-            "a worker write to the channel control plane"
+            "a worker write to the channel control plane",
+            { errno: "42501", message: "permission denied" }
           );
         }
       }
@@ -1996,92 +2285,191 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
 
   describe("audit hardening (H1, M1, M3, L2, L3)", () => {
     workerTest(
-      "H1: the worker cannot see refresh-token, bot-token or webhook-secret ciphertext, and still reads what a send needs",
+      "H1 (#1233): the worker sees only WhatsApp sender credentials: never another provider's token, an unreferenced secret, a refresh token, bot token, webhook secret, PKCE verifier or authorisation code; and a send still works",
       async () => {
-        const purposes = [
+        const putSecret = (
+          tenantId: string,
+          purpose: Parameters<typeof store.put>[1]["purpose"],
+          plaintext: string
+        ) =>
+          inTenant(tenantId, (tx) =>
+            store.put(tx, { tenantId, purpose, plaintext, createdBy: null })
+          );
+
+        // ---- what the worker MAY read: a WhatsApp sender's own credential ----
+        const cloud = await seedAccount(TENANT_A);
+        const device = await seedAccount(TENANT_A, {
+          provider: "starsender",
+          capabilities: ["dm"]
+        });
+        const oauth = await seedOauthChild(TENANT_A);
+
+        // ---- what it may NOT read, each of the audit's categories ----
+        const hidden = new Map<string, string>();
+
+        // 1. Other providers' tokens in the very purposes the worker is allowed
+        //    (`api_token`, `device_key`, `provider_access_token`).
+        for (const provider of [
+          "facebook",
+          "instagram",
+          "threads",
+          "tiktok",
+          "youtube",
+          "linkedin",
+          "mailketing"
+        ]) {
+          const other = await seedAccount(TENANT_A, {
+            provider,
+            kind: "page",
+            authMode: "api_token",
+            capabilities: null
+          });
+          const row = (await getAdminSql()`
+            SELECT secret_id FROM awcms_channel_accounts WHERE id = ${other.id}
+          `) as { secret_id: string }[];
+
+          hidden.set(`${provider} api_token`, row[0]!.secret_id);
+        }
+
+        const socialAccess = await putSecret(
+          TENANT_A,
           "provider_access_token",
-          "api_token",
-          "device_key",
+          "SOCIAL-ACCESS"
+        );
+        const socialRefresh = await putSecret(
+          TENANT_A,
           "provider_refresh_token",
+          "SOCIAL-REFRESH"
+        );
+
+        await getAdminSql()`
+          INSERT INTO awcms_channel_provider_connections
+            (tenant_id, provider, auth_mode, grant_state, access_secret_id,
+             refresh_secret_id)
+          VALUES (${TENANT_A}, 'facebook', 'oauth2', 'active',
+                  ${socialAccess.secretId}, ${socialRefresh.secretId})
+        `;
+        hidden.set("facebook oauth access token", socialAccess.secretId);
+        hidden.set("facebook oauth refresh token", socialRefresh.secretId);
+
+        // 2. A WhatsApp connection's refresh token (purpose hides it).
+        hidden.set(
+          "whatsapp refresh token",
+          (
+            (await getAdminSql()`
+              SELECT refresh_secret_id AS id
+              FROM awcms_channel_provider_connections WHERE id = ${oauth.connectionId}
+            `) as { id: string }[]
+          )[0]!.id
+        );
+
+        // 3. A device key of a provider that is not WhatsApp, and rows of every
+        //    other purpose, referenced by nothing the dispatcher resolves.
+        for (const purpose of [
+          "device_key",
           "bot_token",
           "webhook_signing_secret",
           "oauth_pkce_verifier",
-          "oauth_authorization_code"
-        ] as const;
-        const ids = new Map<string, string>();
-
-        for (const purpose of purposes) {
-          const ref = await inTenant(TENANT_A, (tx) =>
-            store.put(tx, {
-              tenantId: TENANT_A,
-              purpose,
-              plaintext: `SECRET-${purpose}`,
-              createdBy: null
-            })
+          "oauth_authorization_code",
+          "provider_access_token",
+          "api_token"
+        ] as const) {
+          hidden.set(
+            `unreferenced ${purpose}`,
+            (await putSecret(TENANT_A, purpose, `LOOSE-${purpose}`)).secretId
           );
-
-          ids.set(purpose, ref.secretId);
         }
 
         // Another tenant's rows are invisible to a worker in tenant A anyway.
-        await inTenant(TENANT_B, (tx) =>
-          store.put(tx, {
-            tenantId: TENANT_B,
-            purpose: "api_token",
-            plaintext: "other",
-            createdBy: null
-          })
-        );
+        const foreign = await seedAccount(TENANT_B);
 
         const visible = (await inTenantWorker(
           TENANT_A,
-          (tx) => tx`SELECT purpose FROM awcms_channel_secrets ORDER BY purpose`
-        )) as { purpose: string }[];
+          (tx) =>
+            tx`SELECT id, purpose FROM awcms_channel_secrets ORDER BY purpose, id`
+        )) as { id: string; purpose: string }[];
+        const wanted = (await getAdminSql()`
+          SELECT secret_id AS id FROM awcms_channel_accounts
+          WHERE id IN (${cloud.id}, ${device.id})
+          UNION
+          SELECT access_secret_id AS id
+          FROM awcms_channel_provider_connections WHERE id = ${oauth.connectionId}
+        `) as { id: string }[];
 
-        expect(visible.map((row) => row.purpose)).toEqual([
-          "api_token",
-          "device_key",
-          "provider_access_token"
-        ]);
+        expect(visible.map((row) => row.id).sort()).toEqual(
+          wanted.map((row) => row.id).sort()
+        );
+        expect(visible).toHaveLength(3);
 
-        // Asking for a hidden row BY ID, with the tenant set correctly, finds nothing.
-        for (const hidden of [
-          "provider_refresh_token",
-          "bot_token",
-          "webhook_signing_secret",
-          "oauth_pkce_verifier",
-          "oauth_authorization_code"
-        ]) {
+        // Asking for a hidden row BY ID, tenant set correctly, finds nothing:
+        // ZERO rows, not an error and not a row.
+        for (const [label, id] of hidden) {
           expect(
             await inTenantWorker(
               TENANT_A,
               (tx) =>
-                tx`SELECT ciphertext FROM awcms_channel_secrets WHERE id = ${ids.get(hidden)!}`
-            )
+                tx`SELECT id, ciphertext FROM awcms_channel_secrets WHERE id = ${id}`
+            ),
+            `the worker must not see: ${label}`
           ).toHaveLength(0);
-          expect(
-            await inTenantWorker(
-              TENANT_A,
-              (tx) =>
-                tx`SELECT count(*)::int AS n FROM awcms_channel_secrets WHERE purpose = ${hidden}`
-            )
-          ).toEqual([{ n: 0 }]);
         }
 
-        // The dispatcher's own resolution of an access token and an API token still works.
-        const account = await seedAccount(TENANT_A);
+        // ... including by purpose, for every purpose the worker is allowed.
+        expect(
+          await inTenantWorker(
+            TENANT_A,
+            (tx) =>
+              tx`SELECT count(*)::int AS n FROM awcms_channel_secrets
+                 WHERE purpose IN ('provider_refresh_token', 'bot_token', 'webhook_signing_secret', 'oauth_pkce_verifier', 'oauth_authorization_code')`
+          )
+        ).toEqual([{ n: 0 }]);
 
+        // Another tenant's WhatsApp credential is not visible with tenant A set.
+        expect(
+          await inTenantWorker(
+            TENANT_A,
+            (tx) =>
+              tx`SELECT id FROM awcms_channel_secrets WHERE tenant_id = ${TENANT_B}`
+          )
+        ).toHaveLength(0);
+        expect(foreign.token).not.toBeNull();
+
+        // A sender that was soft-deleted no longer exposes its credential.
+        const retired = await seedAccount(TENANT_A);
+        const retiredSecret = (
+          (await getAdminSql()`
+            SELECT secret_id AS id FROM awcms_channel_accounts WHERE id = ${retired.id}
+          `) as { id: string }[]
+        )[0]!.id;
+
+        expect(
+          await inTenantWorker(
+            TENANT_A,
+            (tx) =>
+              tx`SELECT id FROM awcms_channel_secrets WHERE id = ${retiredSecret}`
+          )
+        ).toHaveLength(1);
+        await getAdminSql()`
+          UPDATE awcms_channel_accounts
+          SET status = 'deleted', deleted_at = now() WHERE id = ${retired.id}
+        `;
+        expect(
+          await inTenantWorker(
+            TENANT_A,
+            (tx) =>
+              tx`SELECT id FROM awcms_channel_secrets WHERE id = ${retiredSecret}`
+          )
+        ).toHaveLength(0);
+
+        // The dispatcher's own resolution still works for each kind of sender.
         expect(
           await inTenantWorker(TENANT_A, (tx) =>
             credentials.resolveWhatsappCredential(tx, {
               tenantId: TENANT_A,
-              accountId: account.id
+              accountId: cloud.id
             })
           )
-        ).toEqual({ ok: true, credential: account.token! });
-
-        const oauth = await seedOauthChild(TENANT_A);
-
+        ).toEqual({ ok: true, credential: cloud.token! });
         expect(
           await inTenantWorker(TENANT_A, (tx) =>
             credentials.resolveWhatsappCredential(tx, {
@@ -2091,14 +2479,25 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           )
         ).toEqual({ ok: true, credential: oauth.token });
 
+        // ... and a real dispatch pass sends through it.
+        const queued = await enqueue(TENANT_A, { senderAccountId: cloud.id });
+        const harness = makeHarness();
+
+        expect(await dispatch(TENANT_A, harness)).toMatchObject({
+          sent: 1,
+          failed: 0
+        });
+        expect(harness.sent[0]!.credential).toBe(cloud.token!);
+        expect((await row(queuedId(queued))).status).toBe("sent");
+
         // The permissive tenant-isolation policy is untouched: the app role is not
         // narrowed (it must still read every purpose to rekey and disconnect).
-        expect(
-          (await inTenant(
-            TENANT_A,
-            (tx) => tx`SELECT count(*)::int AS n FROM awcms_channel_secrets`
-          )) as { n: number }[]
-        ).toEqual([{ n: purposes.length + 1 + 2 }]);
+        const everything = (await inTenant(
+          TENANT_A,
+          (tx) => tx`SELECT count(*)::int AS n FROM awcms_channel_secrets`
+        )) as { n: number }[];
+
+        expect(everything[0]!.n).toBeGreaterThan(visible.length + hidden.size);
       }
     );
 
@@ -2263,16 +2662,18 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         )
       );
 
-      await assertRejected(
+      await assertPgRejected(
         getAdminSql()`DELETE FROM awcms_whatsapp_sender_policies`,
-        "deleting a sender policy as the table owner"
+        "deleting a sender policy as the table owner",
+        { errno: "23514", message: "never deleted" }
       );
-      await assertRejected(
+      await assertPgRejected(
         inTenant(
           TENANT_A,
           (tx) => tx`DELETE FROM awcms_whatsapp_sender_policies`
         ),
-        "deleting a sender policy as the runtime role"
+        "deleting a sender policy as the runtime role",
+        { errno: "23514", message: "never deleted" }
       );
       expect(await count("awcms_whatsapp_sender_policies")).toBe(1);
     });

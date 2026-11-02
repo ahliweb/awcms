@@ -1,0 +1,15 @@
+---
+"awcms": minor
+---
+
+security(whatsapp_delivery): residual findings of the independent audit of the sender-aware routing (Issue #1233, follow-up of #1230).
+
+**H1, worker visibility of channel secrets (`sql/328`).** The restrictive policy that `sql/324` put on `awcms_channel_secrets` for `awcms_worker` looked at the PURPOSE only, and `api_token`, `device_key` and `provider_access_token` also belong to Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn and Mailketing, so a compromised `whatsapp:dispatch` (it holds `CHANNEL_SECRETS_ENCRYPTION_KEYS`) could have decrypted every tenant's social and email tokens. The policy is replaced by a provider-aware one: a secret is visible to the worker only when a live `whatsapp_cloud` or `starsender` account's `secret_id`, or a `whatsapp_cloud` connection's `access_secret_id`, references it. No new grant. `security:readiness` now fails if the policy is dropped or stops naming that test. The residual risk ADR-0148 section 5 accepts is restated plainly in the module README (EN and ID), the ADR amendment note and `omnichannel-foundation`: the worker can still decrypt the WhatsApp sender credentials of any tenant, and the in-process decrypt counter is telemetry that bounds nothing (stale claims to the contrary removed).
+
+**M1, per-account access on the sender routes.** `PUT /api/v1/whatsapp/sender-policy` and `GET /api/v1/whatsapp/senders` now apply the assignments and business-scope confinement of `channel_accounts`: a caller confined to one brand cannot set another brand's or the tenant-wide default, cannot bind a sender they cannot see (same `422 SENDER_UNAVAILABLE` as an unknown id; at least the `operator` assignment is required), and `GET` returns only the senders and policies they may see. Default-deny.
+
+**L1, L2, L3.** A provider `401` or a malformed `WHATSAPP_META_API_VERSION` now HOLDS rows (retry with backoff, counted against `WHATSAPP_SEND_MAX_RETRIES`, then a terminal failure) instead of failing them at once; revoked, disconnected, unapproved and wrong-tenant senders stay terminal; there is no fallback to another sender or provider. The policy of a message's scope and the tenant-wide policy are read directly, so a scope's own row (including an explicit `NULL` deployment sender) can no longer be lost to the tenant-wide default in a tenant with many policies. A marketing message linked to an earlier message now always needs `broadcast`. L4 (the per-sender cap is counted outside the claim lock and can be overshot by up to one batch) is documented as a residual risk.
+
+Tests: worker-role integration tests now fail loudly (re-asserting LOGIN first) instead of passing by returning when `awcms_worker` cannot log in; the composite-FK test proves the constraint with the guard trigger disabled; rejection assertions pin the SQLSTATE and message; a worker-role test proves Facebook, Instagram, Mailketing, refresh-token, webhook, bot-token and authorisation-code rows return zero rows while a WhatsApp sender credential stays readable and a dispatch still sends.
+
+Operator action: run `bun run db:migrate` (applies `sql/328`). No new environment variable.

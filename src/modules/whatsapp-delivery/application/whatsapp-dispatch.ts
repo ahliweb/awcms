@@ -110,6 +110,7 @@ import { loadChannelAccountPort } from "../infrastructure/channel-account-port-l
 import { resolveWhatsappProvider } from "../infrastructure/whatsapp-provider-resolver";
 import {
   buildWhatsappSenderProvider,
+  isWhatsappMetaApiVersionValid,
   type BuildSenderProviderInput
 } from "../infrastructure/whatsapp-sender-providers";
 import { senderAllowance } from "./whatsapp-sender-directory";
@@ -136,6 +137,11 @@ const MAX_RESPONSE_SNIPPET_LENGTH = 500;
 
 /** How long a row is parked when its sender cannot send for a reason that is not the message's own (the lane is HELD). */
 const SENDER_HOLD_MS = 5 * 60_000;
+/** Holds that COUNT an attempt and end in a terminal failure, not an indefinite wait (Issue #1233 L1). */
+const BOUNDED_HOLD_REASONS: ReadonlySet<string> = new Set([
+  "CREDENTIAL_REJECTED",
+  "PROVIDER_CONFIG_INVALID"
+]);
 /** Most lanes one pass serves; the oldest-waiting come first, so a lane past this limit is served by the next pass, not starved. */
 const MAX_LANES_PER_PASS = 64;
 
@@ -912,7 +918,10 @@ export async function dispatchWhatsappQueue(
     const accountId = lane.senderAccountId;
 
     if (lane.credentialRejected) {
-      return { ok: false, kind: "terminal", reason: "CREDENTIAL_REJECTED" };
+      // A 401 is as likely to be a token the tenant is about to reconnect (or a
+      // transient provider fault) as a revoked one: the row waits and is retried
+      // with backoff, bounded by `WHATSAPP_SEND_MAX_RETRIES` (Issue #1233 L1).
+      return { ok: false, kind: "hold", reason: "CREDENTIAL_REJECTED" };
     }
 
     // This sender's breaker only: another sender's failures never reach it.
@@ -985,6 +994,21 @@ export async function dispatchWhatsappQueue(
         lane.providerFailure = {
           kind: classifySenderUnavailable(credential.reason),
           reason: credential.reason
+        };
+
+        return { ok: false, ...lane.providerFailure };
+      }
+
+      if (
+        verdict.sender.provider === "whatsapp_cloud" &&
+        !isWhatsappMetaApiVersionValid(env)
+      ) {
+        // An operator misconfiguration, not a fact about this message or sender:
+        // the row waits (bounded retries) until the deployment is fixed. It is
+        // never sent through another sender or provider (Issue #1233 L1).
+        lane.providerFailure = {
+          kind: "hold",
+          reason: "PROVIDER_CONFIG_INVALID"
         };
 
         return { ok: false, ...lane.providerFailure };
@@ -1102,6 +1126,51 @@ export async function dispatchWhatsappQueue(
     const gate = await gateRow(lane, entry);
 
     if (!gate.ok) {
+      if (gate.kind === "hold" && BOUNDED_HOLD_REASONS.has(gate.reason)) {
+        // Retry with backoff and COUNT the attempt, so a sender whose credential
+        // stays rejected (or a deployment that stays misconfigured) ends in a
+        // terminal failure instead of waiting forever. No send was attempted
+        // this time, so no delivery attempt is recorded.
+        const retry = evaluateWhatsappRetry(retryCount, maxRetries, now);
+
+        if (retry.eligible && retry.nextAttemptAt) {
+          const delay = retry.nextAttemptAt.getTime() - now.getTime();
+
+          await scheduleRetry(
+            sql,
+            tenantId,
+            entry.id,
+            retryCount + 1,
+            new Date(clock().getTime() + delay),
+            SENDER_UNAVAILABLE_FAILURE_CODE,
+            `The sender cannot send this message yet (${gate.reason}).`,
+            leaseUntil
+          );
+          result.retried += 1;
+          summary.retried += 1;
+
+          return;
+        }
+
+        await terminal(
+          "failed",
+          retryCount + 1,
+          SENDER_UNAVAILABLE_FAILURE_CODE,
+          `The sender cannot send this message (${gate.reason}).`
+        );
+        log("warning", "whatsapp.dispatch.sender_unavailable", {
+          correlationId: messageCorrelationId,
+          tenantId,
+          moduleKey: MODULE_KEY,
+          senderAccountId: lane.senderAccountId,
+          reason: gate.reason
+        });
+        result.failed += 1;
+        summary.failed += 1;
+
+        return;
+      }
+
       if (gate.kind === "hold") {
         await holdMessage(
           sql,
@@ -1302,7 +1371,14 @@ export async function dispatchWhatsappQueue(
       return;
     }
 
-    const retry = sendResult.retryable
+    // A tenant-owned sender's 401 is retried with backoff like any transient
+    // failure (bounded), not failed on the spot: the tenant may reconnect, and the
+    // rest of this lane is held meanwhile (Issue #1233 L1).
+    const retryable =
+      sendResult.retryable ||
+      (sendResult.failureCode === "unauthorized" &&
+        lane.senderAccountId !== null);
+    const retry = retryable
       ? evaluateWhatsappRetry(retryCount, maxRetries, now)
       : { eligible: false as const };
 

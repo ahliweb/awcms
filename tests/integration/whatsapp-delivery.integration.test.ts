@@ -41,6 +41,7 @@ import {
   resetDatabase,
   setupIntegrationDatabase,
   teardownIntegrationDatabase,
+  reassertRuntimeRoleLogins,
   workerRoleActivated
 } from "./harness";
 import {
@@ -245,7 +246,16 @@ async function seedTenants(): Promise<void> {
  */
 function workerTest(name: string, fn: () => Promise<void>): void {
   test(name, async () => {
-    if (!workerRoleActivated) return;
+    // Re-assert LOGIN (cluster-scoped role, another process's teardown can shut
+    // it) and FAIL if the role is still unusable: a worker assertion that is
+    // skipped is not a pass (Issue #1233).
+    await reassertRuntimeRoleLogins();
+
+    if (!workerRoleActivated) {
+      throw new Error(
+        "awcms_worker is not provisioned or cannot log in: the worker-role assertions cannot run."
+      );
+    }
 
     await fn();
   });
