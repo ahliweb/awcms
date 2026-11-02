@@ -81,6 +81,7 @@ shrink it.
 | Within the cap (any allowed type)   | Uploaded **unchanged**. No quality loss, and its metadata (EXIF, GPS) is kept.                                                                                                                    |
 | JPEG, PNG or WebP over the cap      | Re-encoded in the browser until it fits, then uploaded. The session claims the size and type of the **compressed** bytes, never the original's.                                                   |
 | GIF over the cap                    | **Refused**, with a message naming the cap. A GIF is never re-encoded: a canvas draws one frame, so re-encoding would silently destroy the animation. A GIF within the cap is uploaded unchanged. |
+| Animated WebP or APNG over the cap  | **Refused**, like a GIF: detected from the header bytes (not the claimed type), because a canvas draws one frame. Within the cap it is uploaded unchanged.                                        |
 | SVG, or any other type over the cap | Refused. SVG stays excluded from the default allow-list (see §SVG upload safety).                                                                                                                 |
 
 How a JPEG, PNG or WebP is compressed (`src/lib/ui/media-image-compression-plan.ts`,

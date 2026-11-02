@@ -354,10 +354,19 @@ describe("formatProgress", () => {
 const MIB = 1024 * 1024;
 const CAP = 2 * MIB;
 
+const MAGIC: Record<string, number[]> = {
+  "image/jpeg": [0xff, 0xd8, 0xff, 0xe0],
+  "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  "image/webp": [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]
+};
+
 function chosenFile(size: number, type: string, name: string): File {
   // Real bytes of the claimed size: `size` is what the browser reports and
   // `arrayBuffer()` is what is sent, and the client must trust only the latter.
-  return new File([new Uint8Array(size)], name, { type });
+  const bytes = new Uint8Array(size);
+  // The real magic bytes of the claimed type: compression decides from them.
+  bytes.set(MAGIC[type] ?? []);
+  return new File([bytes], name, { type });
 }
 
 function portsProducing(
@@ -675,6 +684,7 @@ describe("compression messages", () => {
   test("every failure reason has a message that names the cap", () => {
     const reasons = [
       "gif_over_cap",
+      "animated_over_cap",
       "type_not_compressible",
       "invalid_input",
       "unsupported_browser",

@@ -32,6 +32,11 @@
  *   animated GIF silently destroys the animation. A GIF over the cap is refused
  *   with its own message rather than flattened into a still the person did not
  *   ask for.
+ * - **Animated WebP and APNG are refused too.** The same one-frame argument
+ *   applies, but the claimed type does not reveal it, so the orchestrator
+ *   detects it from the header bytes (`media-image-header.ts`) and refuses an
+ *   over-cap animated file with `animated_over_cap`. Under the cap it is
+ *   untouched like any other file.
  * - **Only JPEG, PNG and WebP are re-encoded.** Those are the raster types the
  *   server allow-list names that a canvas can reproduce faithfully. SVG is
  *   excluded by default on the server, and is not a bitmap to re-encode anyway.
@@ -82,6 +87,8 @@ export type CompressionOptions = {
 export type CompressionRefusalReason =
   /** A GIF over the cap: re-encoding would destroy its animation. */
   | "gif_over_cap"
+  /** An animated WebP/APNG over the cap: a canvas keeps one frame, as for GIF. */
+  | "animated_over_cap"
   /** Any other type over the cap that this module does not re-encode (SVG, unknown). */
   | "type_not_compressible"
   | "invalid_input";

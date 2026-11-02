@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9eb4a7a15e29733801d357719d667bea49fcc173c3cc4af1579f68aa88ab3148 -->
+<!-- i18n-source-hash: sha256:e1b655e900f37f7c1daf09881e85ba6797930470b6f5d7d296643b7f4abb5e0f -->
 
 # media_library
 
@@ -82,6 +82,7 @@ pernah men-decode gambar untuk mengecilkannya.
 | Dalam batas (tipe apa pun yang diizinkan) | Diunggah **apa adanya**. Tanpa penurunan kualitas, dan metadatanya (EXIF, GPS) tetap ada.                                                                                                                         |
 | JPEG, PNG, atau WebP melebihi batas       | Di-encode ulang di peramban sampai muat, lalu diunggah. Sesi mengklaim ukuran dan tipe **byte hasil kompresi**, bukan milik berkas asli.                                                                          |
 | GIF melebihi batas                        | **Ditolak**, dengan pesan yang menyebut batasnya. GIF tidak pernah di-encode ulang: canvas hanya menggambar satu frame, sehingga animasinya akan hilang tanpa pemberitahuan. GIF dalam batas diunggah apa adanya. |
+| WebP atau APNG beranimasi melebihi batas  | **Ditolak**, seperti GIF: dideteksi dari byte header (bukan tipe yang diklaim), karena canvas hanya menggambar satu frame. Di bawah batas, diunggah apa adanya.                                                   |
 | SVG, atau tipe lain melebihi batas        | Ditolak. SVG tetap dikecualikan dari daftar izin default (lihat §Keamanan upload SVG).                                                                                                                            |
 
 Cara JPEG, PNG, atau WebP dikompres (`src/lib/ui/media-image-compression-plan.ts`,

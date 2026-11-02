@@ -4114,6 +4114,9 @@ msgstr ""
 msgid "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image."
 msgstr ""
 
+msgid "This animated image is {original}, over the {cap} limit. Animated images are never re-compressed because that would remove the animation. Choose a smaller file, or use a still JPEG, PNG or WebP image."
+msgstr ""
+
 msgid "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded."
 msgstr ""
 

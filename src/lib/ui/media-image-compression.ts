@@ -24,6 +24,12 @@ import {
   type CompressionOptions,
   type CompressionRefusalReason
 } from "./media-image-compression-plan";
+import {
+  detectAnimation,
+  HEADER_SCAN_BYTES,
+  readPixelDimensions,
+  sniffImageType
+} from "./media-image-header";
 
 /**
  * Above this many source pixels the image is refused rather than decoded. A
@@ -167,6 +173,37 @@ export async function compressImageForUpload(
     };
   }
 
+  // The claimed type is never trusted for a decision: the magic bytes are. A
+  // read failure is an empty header, which sniffs as "not compressible".
+  let header: Uint8Array;
+  try {
+    header = new Uint8Array(
+      await input.blob.slice(0, HEADER_SCAN_BYTES).arrayBuffer()
+    );
+  } catch {
+    header = new Uint8Array(0);
+  }
+
+  const sniffed = sniffImageType(header);
+
+  if (sniffed === null) return fail("type_not_compressible", input, maxBytes);
+
+  // A canvas keeps one frame, exactly as for GIF: refuse rather than flatten.
+  if (detectAnimation(header, sniffed)) {
+    return fail("animated_over_cap", input, maxBytes);
+  }
+
+  // Refuse on the header's own size BEFORE decode allocates the bitmap. An
+  // unreadable header falls through; the post-decode check below is the backstop.
+  const headerSize = readPixelDimensions(header, sniffed);
+
+  if (
+    headerSize !== null &&
+    headerSize.width * headerSize.height > MAX_SOURCE_PIXELS
+  ) {
+    return fail("source_too_large", input, maxBytes);
+  }
+
   hooks.onCompressing?.();
 
   let ports: ImageCompressionPorts | null;
@@ -191,11 +228,12 @@ export async function compressImageForUpload(
     }
 
     // Only PNG and WebP can carry transparency; a JPEG never does, so the
-    // pixel scan is skipped for it. When the scan itself cannot run, assume
+    // pixel scan is skipped for it. The SNIFFED type decides, not the claimed
+    // one: a PNG labelled image/jpeg must still be scanned. When the scan itself cannot run, assume
     // transparency: the cost of a wrong "yes" is WebP-only output, the cost of
     // a wrong "no" is a transparent logo flattened onto black.
     let hasAlpha = false;
-    if (input.type.trim().toLowerCase() !== "image/jpeg") {
+    if (sniffed !== "image/jpeg") {
       try {
         hasAlpha = await decoded.hasAlpha();
       } catch {
@@ -205,7 +243,7 @@ export async function compressImageForUpload(
 
     const plan = planCompressionAttempts(
       {
-        mimeType: input.type,
+        mimeType: sniffed,
         width: decoded.width,
         height: decoded.height,
         hasAlpha
