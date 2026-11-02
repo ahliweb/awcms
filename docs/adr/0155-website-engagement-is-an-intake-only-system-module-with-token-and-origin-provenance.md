@@ -10,7 +10,7 @@
 - **Must conform to (not yet decided):** ADR-0153 (Issue #1163, the lead/prospect pipeline). This ADR neither presumes nor pre-empts its outcome; see §6.
 - **Related:** Issues #1153, #1139, #1144, #1163; `docs/awcms/21_module_admission_governance.md`
 
-**Docs and governance only. NOT YET IMPLEMENTED IN THIS REPO.** This ADR adds no module, table, migration, route, OpenAPI path, AsyncAPI channel or dependency. Nothing here is evidence that website capture works.
+**Implemented by Issue #1153 (2 November 2026)** as the `website_engagement` module: migrations `sql/325`-`sql/327` (the `321-322` reserved in section 9 were taken by other work), `openapi/modules/website-engagement.openapi.yaml`, two AsyncAPI channels. The section 7 challenge question is answered by this ADR's acceptance with the recommended option (Turnstile, verified against the request's own Origin host, with a visible `none` fallback); the embeddable widget was assessed and not built, and the admin screen is deferred. See [`docs/awcms/website-engagement.md`](../awcms/website-engagement.md). The text below is the decision as accepted.
 
 ## Context
 

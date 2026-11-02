@@ -99,6 +99,16 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0148 / Issue #1140. Every row is AUTHORED by an administrator registering an external account the tenant really operates (a page, a number, a bot), never accumulated by traffic: the ceiling is the number of accounts a business connects, and an account is soft-deleted (terminal) when it is retired. Nothing in a request path or a job inserts one."
   },
   {
+    table: "awcms_engagement_sources",
+    reason:
+      "ADR-0155 / Issue #1153. Every row is AUTHORED by an administrator registering a website or form channel the tenant really operates, never accumulated by traffic: the ceiling is the number of sites a business runs, a source is soft-deleted (terminal) when retired, and nothing in the public intake path inserts one. The visitor's own data lives in awcms_engagement_submissions, which has its own retention descriptor."
+  },
+  {
+    table: "awcms_engagement_source_domains",
+    reason:
+      "ADR-0155 / Issue #1153. A link between a source and a tenant domain, written only by an administrator holding `sources.manage` and capped at 20 per source by the validator: the ceiling is sources times that cap. It holds no visitor data and is replaced as a set when the host list is edited."
+  },
+  {
     table: "awcms_channel_provider_connections",
     reason:
       "ADR-0148 / Issue #1140. One row per authorisation an administrator granted a provider, written only through the authenticated OAuth callback or the connector that completes it. Abandoned `pending` hand-offs are failed and their authorisation-code ciphertext erased by the bounded sweep on the next authorisation start (`sweepExpiredOAuthStates`); a revoked row keeps no credential reference, so it is an inert few-hundred-byte record of the fact."

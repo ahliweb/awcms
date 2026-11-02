@@ -564,7 +564,14 @@ describe("the real repository", () => {
       // number of brands an administrator configures, written by no request path
       // and no job. A generic age purge would silently reset a brand's default
       // sender to the deployment sender.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(28);
+      // **30 since the WhatsApp sender policy (Issue #1141) AND `website_engagement` (Issue #1153, ADR-0155).** Two more, both
+      // bounded by AUTHORSHIP: `awcms_engagement_sources` (an administrator
+      // registers a website/form channel; the public intake never inserts one) and
+      // `awcms_engagement_source_domains` (a link the same administrator writes,
+      // capped at 20 per source). The table that DOES grow with traffic, the
+      // visitor's submissions, has a real `dataLifecycle` descriptor with a
+      // retention window and a legal-hold-aware purge, not an exemption.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(30);
     });
 
     test("every entry names a table that really exists in sql/", () => {
