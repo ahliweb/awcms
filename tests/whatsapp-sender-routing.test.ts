@@ -1739,9 +1739,7 @@ describe("sender hardening (Issue #1231)", () => {
     expect(sql).toContain(
       "v_provider = 'whatsapp_cloud' AND v_kind = 'waba_phone_number'"
     );
-    expect(sql).toContain(
-      "v_provider = 'starsender' AND v_kind = 'device'"
-    );
+    expect(sql).toContain("v_provider = 'starsender' AND v_kind = 'device'");
     expect(isWhatsappSenderShape("whatsapp_cloud", "waba_phone_number")).toBe(
       true
     );
