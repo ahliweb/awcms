@@ -17,7 +17,9 @@ export type EmailRetryEvaluation = {
 export function evaluateEmailRetry(
   retryCount: number,
   maxRetries: number,
-  now: Date
+  now: Date,
+  /** A provider-requested minimum delay (429 `Retry-After`, Issue #1159). Never shortens the backoff. */
+  minDelayMs = 0
 ): EmailRetryEvaluation {
   if (retryCount >= maxRetries) {
     return { eligible: false };
@@ -25,8 +27,13 @@ export function evaluateEmailRetry(
 
   const delayMinutes = Math.min(2 ** retryCount, EMAIL_MAX_RETRY_DELAY_MINUTES);
 
+  const delayMs = Math.max(
+    delayMinutes * 60_000,
+    Math.min(Math.max(minDelayMs, 0), EMAIL_MAX_RETRY_DELAY_MINUTES * 60_000)
+  );
+
   return {
     eligible: true,
-    nextAttemptAt: new Date(now.getTime() + delayMinutes * 60_000)
+    nextAttemptAt: new Date(now.getTime() + delayMs)
   };
 }

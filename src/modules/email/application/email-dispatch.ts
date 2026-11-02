@@ -55,6 +55,8 @@ const CIRCUIT_BREAKER_KEY = "email-mailketing";
 export const EMAIL_DISPATCH_DEFAULT_LIMIT = 25;
 export const EMAIL_DISPATCH_LEASE_MINUTES = 2;
 const MAX_RESPONSE_SNIPPET_LENGTH = 500;
+const UNCERTAIN_REDELIVERY_NOTE =
+  "Uncertain delivery: re-sent after an expired claim lease; a previous attempt may have been accepted by the provider (possible duplicate).";
 
 type ClaimedRow = {
   id: string;
@@ -66,6 +68,8 @@ type ClaimedRow = {
   subject: string;
   variables: Record<string, unknown> | null;
   retry_count: string | number;
+  /** True when this claim took over a `sending` row whose lease had expired (Issue #1159). */
+  reclaimed: boolean;
 };
 
 export type DispatchEmailQueueOptions = {
@@ -91,6 +95,14 @@ export type DispatchEmailQueueResult = {
    * separately from `failed`/`retried` precisely because it is neither.
    */
   deferred: number;
+  /**
+   * Issue #1159 — messages sent on a re-claim of an expired lease: a previous
+   * worker may have died AFTER the provider accepted the message and BEFORE
+   * finalize, so this send may be a duplicate. Counted (and the sent row
+   * annotated) rather than hidden; no provider-side dedupe exists (ADR-0151).
+   * These rows are ALSO counted in `sent`/`retried`/`failed`.
+   */
+  uncertain: number;
   breakerOpen: boolean;
 };
 
@@ -147,7 +159,7 @@ async function claimEligibleEntries(
       // (Issue #1007). The CTE computes the locked, limited id set once.
       const rows = await tx`
         WITH due AS MATERIALIZED (
-          SELECT id FROM awcms_email_messages
+          SELECT id, (status = 'sending') AS reclaimed FROM awcms_email_messages
           WHERE tenant_id = ${tenantId}
             AND (
               (status IN ('queued', 'retry_wait')
@@ -166,7 +178,7 @@ async function claimEligibleEntries(
         WHERE t.id = due.id
         RETURNING t.id, t.correlation_id, t.category, t.template_key,
                   t.to_address, t.to_address_hash, t.subject, t.variables,
-                  t.retry_count
+                  t.retry_count, due.reclaimed
       `;
 
       return rows as unknown as ClaimedRow[];
@@ -230,7 +242,8 @@ async function finalizeSent(
   tenantId: string,
   id: string,
   providerName: string,
-  providerMessageId: string | undefined
+  providerMessageId: string | undefined,
+  uncertainNote: string | null
 ): Promise<void> {
   await withTenantOrThrow(
     sql,
@@ -238,7 +251,8 @@ async function finalizeSent(
     (tx) => tx`
       UPDATE awcms_email_messages
       SET status = 'sent', sent_at = now(), next_attempt_at = null,
-          provider_name = ${providerName}, provider_message_id = ${providerMessageId ?? null}
+          provider_name = ${providerName}, provider_message_id = ${providerMessageId ?? null},
+          last_error = COALESCE(${uncertainNote}, last_error)
       WHERE tenant_id = ${tenantId} AND id = ${id} AND status = 'sending'
     `,
     { workClass: "background_sync" }
@@ -296,14 +310,15 @@ async function finalizeDeferred(
   sql: Bun.SQL,
   tenantId: string,
   id: string,
-  reason: string
+  reason: string,
+  holdUntil: Date | null = null
 ): Promise<void> {
   await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
       UPDATE awcms_email_messages
-      SET status = 'queued', next_attempt_at = null,
+      SET status = 'queued', next_attempt_at = ${holdUntil},
           last_error = ${`Deferred (no attempt made): ${reason}`}
       WHERE tenant_id = ${tenantId} AND id = ${id} AND status = 'sending'
     `,
@@ -319,10 +334,11 @@ async function finalizeFailure(
   maxRetries: number,
   retryable: boolean,
   now: Date,
-  errorMessage: string
+  errorMessage: string,
+  retryAfterMs?: number
 ): Promise<{ eligible: boolean }> {
   const evaluation = retryable
-    ? evaluateEmailRetry(currentRetryCount, maxRetries, now)
+    ? evaluateEmailRetry(currentRetryCount, maxRetries, now, retryAfterMs)
     : { eligible: false as const };
 
   if (evaluation.eligible) {
@@ -420,6 +436,7 @@ export async function dispatchEmailQueue(
     failed: 0,
     suppressed: 0,
     deferred: 0,
+    uncertain: 0,
     breakerOpen
   };
 
@@ -514,6 +531,19 @@ export async function dispatchEmailQueue(
       continue;
     }
 
+    if (entry.reclaimed) {
+      // Issue #1159: taken over from an expired lease — a previous worker may
+      // have died after the provider accepted this message. Sent anyway (the
+      // accepted ADR-0151 trade-off), but classified, never silent.
+      result.uncertain += 1;
+      log("warning", "email.dispatch.uncertain_redelivery", {
+        correlationId: messageCorrelationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        category: entry.category
+      });
+    }
+
     const rendered = renderEmailTemplate(
       template,
       toStringVariables(entry.variables),
@@ -553,7 +583,8 @@ export async function dispatchEmailQueue(
         tenantId,
         entry.id,
         env.EMAIL_PROVIDER ?? "unknown",
-        deliveryResult.providerMessageId
+        deliveryResult.providerMessageId,
+        entry.reclaimed ? UNCERTAIN_REDELIVERY_NOTE : null
       );
       log("info", "email.dispatch.sent", {
         correlationId: messageCorrelationId,
@@ -575,7 +606,15 @@ export async function dispatchEmailQueue(
       // needs releasing; breaking would leave them in `sending` until their
       // lease expires. `provider.send` returns immediately once the breaker is
       // open, so finishing the batch costs nothing outbound.
-      await finalizeDeferred(sql, tenantId, entry.id, safeError);
+      await finalizeDeferred(
+        sql,
+        tenantId,
+        entry.id,
+        safeError,
+        deliveryResult.holdMs
+          ? new Date(now.getTime() + deliveryResult.holdMs)
+          : null
+      );
       log("warning", "email.dispatch.deferred", {
         correlationId: messageCorrelationId,
         tenantId,
@@ -606,7 +645,8 @@ export async function dispatchEmailQueue(
       maxRetries,
       deliveryResult.retryable,
       now,
-      safeError
+      safeError,
+      deliveryResult.retryAfterMs
     );
 
     if (finalized.eligible) {

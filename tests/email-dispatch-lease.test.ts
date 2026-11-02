@@ -48,6 +48,7 @@ type MessageRow = {
   subject: string;
   variables: Record<string, unknown> | null;
   retry_count: number;
+  reclaimed: boolean;
 };
 
 function messageRow(overrides: Partial<MessageRow> = {}): MessageRow {
@@ -61,6 +62,7 @@ function messageRow(overrides: Partial<MessageRow> = {}): MessageRow {
     subject: "Hello",
     variables: { userName: "User" },
     retry_count: 0,
+    reclaimed: false,
     ...overrides
   };
 }
@@ -272,5 +274,164 @@ describe("email dispatcher template lookup (Issue #153, second N+1)", () => {
         query.text.includes("FROM awcms_email_templates")
       )
     ).toHaveLength(1);
+  });
+});
+
+function failingProvider(
+  failure: Extract<Awaited<ReturnType<EmailProvider["send"]>>, { ok: false }>
+): EmailProvider {
+  return {
+    send: async () => failure,
+    healthCheck: async () => ({ ok: true })
+  } as unknown as EmailProvider;
+}
+
+function updateOf(queries: CapturedQuery[], status: string): CapturedQuery {
+  const found = queries.find(
+    (query) =>
+      query.text.includes("UPDATE awcms_email_messages") &&
+      query.text.includes(`SET status = '${status}'`) &&
+      !query.text.includes("SET status = 'sending'")
+  );
+
+  expect(found).toBeDefined();
+
+  return found!;
+}
+
+describe("email dispatcher — Mailketing v2 outcomes (Issue #1159)", () => {
+  test("a fresh claim is not classified uncertain", async () => {
+    const { sql, queries } = createFakeSql([messageRow()]);
+
+    const result = await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () => okProvider([])
+    });
+
+    expect(result.uncertain).toBe(0);
+    expect(updateOf(queries, "sent").values).not.toContain(
+      expect.stringContaining("Uncertain delivery")
+    );
+  });
+
+  test("a re-claimed expired lease is sent, counted uncertain, and the sent row is annotated (crash after provider acceptance)", async () => {
+    const sent: string[] = [];
+    const { sql, queries } = createFakeSql([messageRow({ reclaimed: true })]);
+
+    const result = await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () => okProvider(sent)
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(result.sent).toBe(1);
+    expect(result.uncertain).toBe(1);
+    expect(updateOf(queries, "sent").values).toContainEqual(
+      expect.stringContaining("Uncertain delivery")
+    );
+  });
+
+  test("the claim marks re-claimed rows from the pre-update status", async () => {
+    const { sql, queries } = createFakeSql([]);
+
+    await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () => okProvider([])
+    });
+
+    expect(claimQueryOf(queries).text).toContain(
+      "(status = 'sending') AS reclaimed"
+    );
+  });
+
+  test("402 (skipped + holdMs): returned to queued, no attempt row, no retry spent, held until now + holdMs", async () => {
+    const { sql, queries } = createFakeSql([messageRow()]);
+
+    const result = await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () =>
+        failingProvider({
+          ok: false,
+          error: "Mailketing v2 reports insufficient credit (HTTP 402).",
+          retryable: true,
+          skipped: true,
+          holdMs: 900_000
+        })
+    });
+
+    expect(result.deferred).toBe(1);
+    expect(result.retried).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(
+      queries.some((q) =>
+        q.text.includes("INSERT INTO awcms_email_delivery_attempts")
+      )
+    ).toBe(false);
+    expect(updateOf(queries, "queued").values).toContainEqual(
+      new Date(NOW.getTime() + 900_000)
+    );
+  });
+
+  test("a skipped result without holdMs keeps the old behaviour (due again immediately)", async () => {
+    const { sql, queries } = createFakeSql([messageRow()]);
+
+    await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () =>
+        failingProvider({
+          ok: false,
+          error: "breaker open",
+          retryable: true,
+          skipped: true
+        })
+    });
+
+    expect(updateOf(queries, "queued").values).toContainEqual(null);
+  });
+
+  test("429 with Retry-After schedules the retry no sooner than the provider asked", async () => {
+    const { sql, queries } = createFakeSql([messageRow()]);
+
+    const result = await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () =>
+        failingProvider({
+          ok: false,
+          error: "Mailketing v2 rate limited the request (HTTP 429).",
+          retryable: true,
+          retryAfterMs: 600_000
+        })
+    });
+
+    expect(result.retried).toBe(1);
+    expect(updateOf(queries, "retry_wait").values).toContainEqual(
+      new Date(NOW.getTime() + 600_000)
+    );
+  });
+
+  test("a non-retryable refusal goes terminal and the stored error carries no recipient", async () => {
+    const { sql, queries } = createFakeSql([messageRow()]);
+
+    const result = await dispatchEmailQueue(sql, TENANT_ID, {
+      now: NOW,
+      env: ENV,
+      resolveProvider: () =>
+        failingProvider({
+          ok: false,
+          error: "Mailketing v2 refused the message (code INVALID_RECIPIENT).",
+          retryable: false
+        })
+    });
+
+    expect(result.failed).toBe(1);
+    expect(JSON.stringify(updateOf(queries, "failed").values)).not.toContain(
+      "user@example.com"
+    );
   });
 });

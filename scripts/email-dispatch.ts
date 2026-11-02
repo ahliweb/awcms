@@ -42,6 +42,7 @@ async function main() {
     // sent nothing at all could still print `sent=0 failed=0` and look idle.
     let totalDeferred = 0;
     let totalSuppressed = 0;
+    let totalUncertain = 0;
     let breakerSeenOpen = false;
 
     for (const tenant of tenants) {
@@ -56,6 +57,7 @@ async function main() {
         totalFailed += result.failed;
         totalDeferred += result.deferred;
         totalSuppressed += result.suppressed;
+        totalUncertain += result.uncertain;
         breakerSeenOpen ||= result.breakerOpen;
 
         if (result.claimed === 0) {
@@ -69,8 +71,18 @@ async function main() {
         `tenants=${tenants.length} claimed=${totalClaimed} sent=${totalSent} ` +
         `retried=${totalRetried} failed=${totalFailed} ` +
         `deferred=${totalDeferred} suppressed=${totalSuppressed} ` +
+        `uncertain=${totalUncertain} ` +
         `breakerOpen=${breakerSeenOpen}`
     );
+
+    if (totalUncertain > 0) {
+      // Issue #1159: re-claimed after an expired lease; the previous worker may
+      // have died after the provider accepted the message (possible duplicate).
+      console.warn(
+        `email:dispatch — ${totalUncertain} message(s) were re-sent after an expired claim lease ` +
+          "and are marked as uncertain delivery (a possible duplicate, ADR-0151)."
+      );
+    }
 
     if (totalDeferred > 0 || breakerSeenOpen) {
       // Deliberately not a non-zero exit, unlike `site-search:reconcile`. An

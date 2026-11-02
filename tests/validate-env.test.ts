@@ -234,4 +234,83 @@ describe("validateEnv", () => {
       ).toBe(true);
     });
   });
+
+  describe("Mailketing API version switch (Issue #1159)", () => {
+    const email = { ...base, EMAIL_ENABLED: "true" };
+
+    test("unset is clean (v1 is the default; nothing is required)", () => {
+      expect(validateEnv(email)).toEqual([]);
+    });
+
+    test("v1 is clean and does not constrain the v1 base URL", () => {
+      expect(
+        validateEnv({
+          ...email,
+          EMAIL_MAILKETING_API_VERSION: "v1",
+          EMAIL_MAILKETING_API_BASE_URL: "https://mock.internal.test"
+        })
+      ).toEqual([]);
+    });
+
+    test.each(["V2", "v3", "2", "true"])(
+      "%p is rejected, not coerced to v1",
+      (value) => {
+        expect(
+          validateEnv({ ...email, EMAIL_MAILKETING_API_VERSION: value }).some(
+            (p) => p.startsWith("EMAIL_MAILKETING_API_VERSION")
+          )
+        ).toBe(true);
+      }
+    );
+
+    test("v2 with a token and the default host is clean", () => {
+      expect(
+        validateEnv({
+          ...email,
+          EMAIL_MAILKETING_API_VERSION: "v2",
+          EMAIL_MAILKETING_API_TOKEN: "real-looking-token",
+          EMAIL_MAILKETING_API_BASE_URL: "https://api.mailketing.co.id"
+        })
+      ).toEqual([]);
+    });
+
+    test("v2 refuses any base URL off the allow-list, without echoing it", () => {
+      const problems = validateEnv({
+        ...email,
+        EMAIL_MAILKETING_API_VERSION: "v2",
+        EMAIL_MAILKETING_API_TOKEN: "t",
+        EMAIL_MAILKETING_API_BASE_URL: "https://user:hunter2@evil.example"
+      });
+
+      expect(
+        problems.some((p) => p.includes("EMAIL_MAILKETING_API_BASE_URL"))
+      ).toBe(true);
+      expect(problems.join("\n")).not.toContain("hunter2");
+      expect(problems.join("\n")).not.toContain("evil.example");
+    });
+
+    test("v2 refuses a token that cannot be a header value, without echoing it", () => {
+      const problems = validateEnv({
+        ...email,
+        EMAIL_MAILKETING_API_VERSION: "v2",
+        EMAIL_MAILKETING_API_TOKEN: "sekrit value\nX: y"
+      });
+
+      expect(
+        problems.some((p) => p.startsWith("EMAIL_MAILKETING_API_TOKEN"))
+      ).toBe(true);
+      expect(problems.join("\n")).not.toContain("sekrit");
+    });
+
+    test("v2 with email enabled requires the token; disabled email does not", () => {
+      expect(
+        validateEnv({ ...email, EMAIL_MAILKETING_API_VERSION: "v2" }).some(
+          (p) => p.startsWith("EMAIL_MAILKETING_API_TOKEN")
+        )
+      ).toBe(true);
+      expect(
+        validateEnv({ ...base, EMAIL_MAILKETING_API_VERSION: "v2" })
+      ).toEqual([]);
+    });
+  });
 });

@@ -64,6 +64,18 @@ export type EmailDeliveryResult =
        * to `queued` with its `retry_count` untouched and no ledger row.
        */
       skipped?: true;
+      /**
+       * Issue #1159 — with `skipped`: keep the message out of the queue for at
+       * least this long (a provider reporting no credit). Without it a skipped
+       * row is due again on the next pass.
+       */
+      holdMs?: number;
+      /**
+       * Issue #1159 — with `retryable` (a provider 429): the provider's own
+       * `Retry-After`, already clamped. The retry is scheduled no sooner than
+       * this, or the normal backoff, whichever is later.
+       */
+      retryAfterMs?: number;
     };
 
 export type EmailHealthCheckResult =
