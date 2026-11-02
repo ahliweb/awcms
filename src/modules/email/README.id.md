@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:0ad26a9b18214db6d275091a5ebc1d765ba4c4f2fad2326f097574cf3a698a0b -->
+<!-- i18n-source-hash: sha256:44ccc6a21d5a61c6c7a6bc88c0f1d31fd753d8112f3678f141167556fbf287af -->
 
 # Email
 
@@ -59,6 +59,35 @@ per pesan.
   bersifat `retryable: true`; penolakan bisnis `status:"failed"` bersifat
   `retryable: false`. Timeout + circuit breaker per provider
   (`getProviderCircuitBreaker("email-mailketing")`).
+- `infrastructure/mailketing-v2-provider.ts` — adapter Mailketing REST API
+  **v2** **opsional** (Issue #1159, ADR-0151 §1), dipilih hanya oleh
+  `EMAIL_MAILKETING_API_VERSION=v2`. `POST /api/v2/send` berformat JSON; token
+  dikirim **hanya** di `Authorization: Bearer` (tidak pernah di URL, query,
+  body, log, atau hasil). Egress lewat `ssrfSafeFetch` ke host **tetap**
+  `https://api.mailketing.co.id` (`EMAIL_MAILKETING_API_BASE_URL` harus kosong
+  atau persis origin itu), dengan `maxRedirects: 0`, timeout total, dan batas
+  ukuran respons. Klasifikasi (murni, `domain/mailketing-v2-contract.ts`): 200
+  `success:true` = **diterima/diantre provider, belum tentu terkirim**
+  (disimpan sebagai `sent`, `message_id` disimpan sebagai
+  `provider_message_id`, bukan kunci idempotensi); 200 `success:false` =
+  penolakan (final); 401 / 403 / 404 / 422 final; **402** = ditahan di `queued`
+  15 menit tanpa menghabiskan retry dan tanpa baris attempt, dan **dibatasi**:
+  setelah pesan berumur lebih dari 1 jam ia gagal dengan
+  `CREDIT_HOLD_BUDGET_EXCEEDED` alih-alih tiba terlambat; **429** = coba ulang
+  tidak lebih cepat dari `Retry-After` (dijepit 1 dtk sampai 1 jam); 5xx /
+  timeout / jaringan / penolakan kebijakan egress = dapat diulang. **200 tanpa
+  `success` boolean** (atau non-JSON) bersifat **tidak pasti**: provider mungkin
+  sudah menerimanya, sehingga final, tidak pernah diulang (tanpa salinan ganda),
+  dan dihitung `uncertain`. Hasil hanya berisi teks tetap
+  dan kode status, tidak pernah teks body provider atau penerima. Kunci breaker
+  dibagi dengan v1 (`email-mailketing`) dan menghitung kegagalan tingkat layanan,
+  200 cacat, penolakan egress, 401/402/403 **dan juga penolakan**
+  (`success:false`, 404/422/4xx lain): 5 berturut-turut membukanya dan sukses
+  apa pun mereset, sehingga satu penerima buruk tidak memicunya tetapi nama
+  field yang salah tidak bisa diam-diam menandai seluruh antrean `failed`. Health probe
+  `GET /api/v2/credits` (baca-saja, tidak pernah mengirim email). **Nama field
+  body kirim v2 dan semua status provider berasal dari kontrak terdokumentasi
+  (v2.0.2); belum diverifikasi terhadap API live.**
 - `infrastructure/log-email-provider.ts` — `EMAIL_PROVIDER=log`. Menulis satu
   baris log terstruktur (penerima dimasking, memakai ulang
   `profile-identity/domain/identifier.ts`) alih-alih memanggil provider
@@ -176,6 +205,55 @@ dikenal ditolak saat pembuatan (fail-closed).
 | `EMAIL_MAILKETING_ACCOUNT_ID`   | saat mailketing | –       | Label operator (tak pernah dikirim) |
 | `EMAIL_MAILKETING_API_TOKEN`    | saat mailketing | –       | Token API Mailketing (rahasia)      |
 | `EMAIL_MAILKETING_API_BASE_URL` | saat mailketing | –       | URL basis API Mailketing            |
+| `EMAIL_MAILKETING_API_VERSION`  | –               | `v1`    | `v1` (bawaan) atau `v2`             |
+| `EMAIL_MAILKETING_V2_VERIFIED`  | –               | kosong  | Flag pengakuan tahap 2              |
+
+**v2 produksi BELUM disetujui** sampai pemeriksaan live tahap 2 (nama field body
+kirim, skema auth, bentuk `/credits`) selesai. Selama
+`EMAIL_MAILKETING_V2_VERIFIED=true` belum disetel, `config:validate`,
+`email:provider:health`, `email:dispatch` dan setiap putaran dispatch mencetak/
+mencatat "Mailketing v2 contract UNVERIFIED". Flag itu hanya membungkam
+peringatan; tidak mengubah perilaku.
+
+**Kesalahan konfigurasi tidak pernah menggagalkan pesan.** Token hilang, versi
+tak dikenal, base URL buruk, atau token yang tak bisa jadi nilai header membuat
+resolver mengembalikan provider yang pengirimannya _ditunda_ (`skipped`): claim
+dibatalkan, baris tetap `queued` (ditahan 5 menit), tanpa baris attempt dan
+tanpa menghabiskan retry. `email:dispatch` mencatat
+`email.dispatch.misconfigured`, mencetak `misconfigured=N` plus baris
+`CONFIGURATION ERROR` dan keluar non-nol; setelah konfigurasi diperbaiki antrean
+terkuras. Ini juga mencakup kasus token-hilang v1 yang sudah ada.
+
+`EMAIL_MAILKETING_API_VERSION` bersifat fail-closed: kosong = `v1`; nilai selain
+persis `v1`/`v2` adalah kesalahan konfigurasi (resolver mengembalikan provider
+yang menolak setiap pengiriman, `config:validate` melaporkannya) — tidak pernah
+dibaca diam-diam sebagai `v1`. Dengan `v2`, `EMAIL_MAILKETING_API_BASE_URL`
+harus kosong atau persis `https://api.mailketing.co.id`; v1 tetap memakai base
+URL yang dapat dikonfigurasi.
+
+### Rollout dan rollback Mailketing v2 (ops)
+
+v1 tetap bawaan sampai pemilik membalikkannya (ADR-0151 tahap 0–3); perubahan
+ini hanya menghadirkan tahap 1 (adapter ada, nonaktif secara bawaan).
+
+1. Setel `EMAIL_MAILKETING_API_VERSION=v2` di lingkungan non-produksi dengan
+   pengirim uji, jalankan `bun run config:validate`, `bun run email:provider:health`
+   (`GET /credits` baca-saja), lalu kirim pesan uji sungguhan dan **verifikasi
+   nama field request serta status terhadap API live** — belum dilakukan.
+2. Pasang `ops/awcms-jobs.env-global` terbaru di samping `ops/run-job.sh`.
+3. **Rollback:** hapus variabelnya (atau setel `v1`) lalu restart proses
+   web/jobs. Tidak ada isi outbox yang spesifik versi, sehingga baris antrean
+   berlanjut.
+4. `email:dispatch` mencetak `uncertain=N`: pesan yang dikirim ulang setelah
+   lease kedaluwarsa mungkin sudah diterima provider sebelum worker mati
+   (kemungkinan duplikat, trade-off ADR-0151 yang terdokumentasi; tidak ada
+   dedupe di sisi provider), plus 200 tanpa `success` boolean. Catatannya
+   ditulis ke `last_error` untuk setiap hasil baris itu (sent, retried, failed,
+   deferred); hanya baris yang benar-benar dikirim ke provider yang dihitung. Email OTP / reset password memakai antrean yang sama dan tidak
+   berubah.
+5. Rentetan 401/402/403 membuka breaker (5 berturut-turut) dan dispatcher
+   berhenti meng-claim sampai menutup; perbaiki token, kredit, atau pengirim,
+   lalu cek `bun run email:provider:health`.
 
 Semua nilai di `.env.example` adalah placeholder, tidak pernah kredensial
 sungguhan. Ketika `EMAIL_ENABLED=false` (bawaan) tak ada yang memblokir

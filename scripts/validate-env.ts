@@ -19,6 +19,12 @@ import {
   isDeclaredAppUrl,
   resolveChannelSecretsRing
 } from "../src/modules/channel-accounts/domain/channel-accounts-config";
+import {
+  MAILKETING_V2_UNVERIFIED_WARNING,
+  isMailketingTokenHeaderSafe,
+  isMailketingV2Verified,
+  resolveMailketingV2BaseUrl
+} from "../src/modules/email/domain/mailketing-v2-contract";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -297,6 +303,14 @@ const RULES: readonly Rule[] = [
   { name: "EMAIL_FROM_NAME", required: false, type: "string" },
   { name: "EMAIL_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
   { name: "EMAIL_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
+  // Issue #1159 (ADR-0151 §1). Unset = v1; anything else but v1/v2 is an error.
+  { name: "EMAIL_MAILKETING_V2_VERIFIED", required: false, type: "bool" },
+  {
+    name: "EMAIL_MAILKETING_API_VERSION",
+    required: false,
+    type: "enum",
+    values: ["v1", "v2"]
+  },
 
   // Installable admin (Issue #1105). Optional branding of the Home Screen app;
   // the manifest falls back to defaults on an empty or invalid value.
@@ -684,6 +698,23 @@ function isValidUrl(value: string, protocols: readonly string[]): boolean {
   }
 }
 
+/**
+ * Non-fatal advisories printed by `config:validate` (never change its exit
+ * code). Today: Mailketing v2 selected without the stage-2 acknowledgement.
+ */
+export function collectEnvWarnings(env: EnvBag): string[] {
+  const warnings: string[] = [];
+
+  if (
+    env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
+    !isMailketingV2Verified(env as NodeJS.ProcessEnv)
+  ) {
+    warnings.push(MAILKETING_V2_UNVERIFIED_WARNING);
+  }
+
+  return warnings;
+}
+
 export function validateEnv(env: EnvBag): string[] {
   const problems: string[] = [];
   const isProduction = env.APP_ENV === "production";
@@ -765,6 +796,33 @@ export function validateEnv(env: EnvBag): string[] {
     if (problem !== null) {
       problems.push(
         `IDEMPOTENCY_HMAC_SECRET wajib berisi secret nyata (>= 32 karakter) di produksi, tetapi ${problem} (mis. \`openssl rand -base64 48\`).`
+      );
+    }
+  }
+
+  // Mailketing v2 (Issue #1159): the API host is a fixed allow-list, not an
+  // operator-supplied endpoint. Same resolver the runtime uses, so a value the
+  // validator accepts is a value the runtime accepts. v1 is unchanged.
+  if (env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2") {
+    const baseUrl = resolveMailketingV2BaseUrl(
+      env.EMAIL_MAILKETING_API_BASE_URL
+    );
+
+    if (!baseUrl.ok) {
+      problems.push(baseUrl.reason);
+    }
+
+    const v2Token = env.EMAIL_MAILKETING_API_TOKEN ?? "";
+
+    if (v2Token !== "" && !isMailketingTokenHeaderSafe(v2Token)) {
+      problems.push(
+        "EMAIL_MAILKETING_API_TOKEN tidak dapat dipakai sebagai nilai header HTTP (hanya ASCII tampak, tanpa spasi/baris baru)."
+      );
+    }
+
+    if (env.EMAIL_ENABLED === "true" && v2Token.trim() === "") {
+      problems.push(
+        "EMAIL_MAILKETING_API_TOKEN wajib diisi saat EMAIL_ENABLED=true dan EMAIL_MAILKETING_API_VERSION=v2."
       );
     }
   }
@@ -1210,6 +1268,10 @@ if (import.meta.main) {
   }
 
   const problems = validateEnv(env);
+
+  for (const warning of collectEnvWarnings(env)) {
+    console.warn(`  ! PERINGATAN: ${warning}`);
+  }
 
   if (problems.length > 0) {
     for (const problem of problems) console.error(`  - ${problem}`);

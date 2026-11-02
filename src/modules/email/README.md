@@ -53,6 +53,34 @@ re-claim can never abort the pass. Templates are looked up once per distinct
   per recipient. HTTP/network/timeout/5xx failures are `retryable: true`; a
   `status:"failed"` business rejection is `retryable: false`. Timeout +
   per-provider circuit breaker (`getProviderCircuitBreaker("email-mailketing")`).
+- `infrastructure/mailketing-v2-provider.ts` — **optional** Mailketing REST
+  API **v2** adapter (Issue #1159, ADR-0151 §1), selected only by
+  `EMAIL_MAILKETING_API_VERSION=v2`. `POST /api/v2/send` as JSON; the token is
+  sent in `Authorization: Bearer` **only** (never URL, query, body, log or
+  result). Egress goes through `ssrfSafeFetch` to the **fixed** host
+  `https://api.mailketing.co.id` (`EMAIL_MAILKETING_API_BASE_URL` must be unset
+  or exactly that origin), with `maxRedirects: 0`, a total timeout and a
+  response-size cap. Classification (pure, `domain/mailketing-v2-contract.ts`):
+  200 `success:true` = **accepted/queued by the provider, not delivered** (stored
+  as `sent`, `message_id` kept as `provider_message_id`, never an idempotency
+  key); 200 `success:false` = refusal (terminal); 401 / 403 / 404 / 422
+  terminal; **402** = held in `queued` for 15 minutes without spending a retry
+  or writing an attempt, and **bounded**: once the message is older than 1 hour
+  it fails with `CREDIT_HOLD_BUDGET_EXCEEDED` instead of arriving late;
+  **429** = retry no sooner than `Retry-After` (clamped 1 s to 1 h); 5xx /
+  timeout / network / egress-policy denial = retryable. A **200 with no boolean
+  `success`** (or non-JSON) is **uncertain**: the provider may have accepted it,
+  so it is terminal, never retried (no duplicate copies), and counted
+  `uncertain`. Results carry
+  fixed text plus a status code, never provider body text or a recipient.
+  Breaker key is shared with v1 (`email-mailketing`) and counts service-level
+  faults, malformed 200s, egress denials and 401/402/403 **and also refusals**
+  (`success:false`, 404/422/other 4xx): 5 consecutive open it and any success
+  resets it, so one bad recipient never trips it but a wrong field name cannot
+  silently mark the whole queue `failed`. Health probe
+  is `GET /api/v2/credits` (read-only, never sends mail). **The v2 send-body
+  field names and all provider statuses come from the documented contract
+  (v2.0.2); they have not been verified against the live API.**
 - `infrastructure/log-email-provider.ts` — `EMAIL_PROVIDER=log`. Writes a
   structured log line (recipient masked, reusing
   `profile-identity/domain/identifier.ts`) instead of calling a real
@@ -164,6 +192,52 @@ rejected at create (fail-closed).
 | `EMAIL_MAILKETING_ACCOUNT_ID`   | when mailketing | –       | Operator label (never sent)   |
 | `EMAIL_MAILKETING_API_TOKEN`    | when mailketing | –       | Mailketing API token (secret) |
 | `EMAIL_MAILKETING_API_BASE_URL` | when mailketing | –       | Mailketing API base URL       |
+| `EMAIL_MAILKETING_API_VERSION`  | –               | `v1`    | `v1` (default) or `v2`        |
+| `EMAIL_MAILKETING_V2_VERIFIED`  | –               | unset   | Stage-2 acknowledgement flag  |
+
+**Production v2 is NOT approved** until the live stage-2 check (send-body field
+names, auth scheme, `/credits` shape) is done. Until `EMAIL_MAILKETING_V2_VERIFIED=true`
+is set, `config:validate`, `email:provider:health`, `email:dispatch` and every
+dispatch pass print/log "Mailketing v2 contract UNVERIFIED". The flag only
+silences that warning; it changes no behaviour.
+
+**A configuration error never fails a message.** A missing token, an unknown
+version, a bad base URL or a token that cannot be a header value makes the
+resolver return a provider whose sends are _deferred_ (`skipped`): the claim is
+undone, the row stays `queued` (held 5 minutes), no attempt row is written and no
+retry is spent. `email:dispatch` logs `email.dispatch.misconfigured`, prints
+`misconfigured=N` plus a `CONFIGURATION ERROR` line and exits non-zero; once the
+configuration is fixed the queue drains. This also covers the pre-existing
+missing-token case for v1.
+
+`EMAIL_MAILKETING_API_VERSION` is fail-closed: unset/blank is `v1`; anything
+other than exactly `v1` or `v2` is a configuration error (the resolver returns a
+provider that refuses every send, `config:validate` reports it) — it is never
+silently read as `v1`. With `v2`, `EMAIL_MAILKETING_API_BASE_URL` must be unset
+or exactly `https://api.mailketing.co.id`; v1 keeps its configurable base URL.
+
+### Mailketing v2 rollout and rollback (ops)
+
+v1 stays the default until the owner flips it (ADR-0151 stages 0–3); this change
+only delivers stage 1 (adapter exists, off by default).
+
+1. Set `EMAIL_MAILKETING_API_VERSION=v2` in a non-production environment with a
+   throwaway sender, run `bun run config:validate`, `bun run email:provider:health`
+   (read-only `GET /credits`), then send a real test message and **verify the
+   request field names and statuses against the live API** — not yet done.
+2. Install the updated `ops/awcms-jobs.env-global` beside `ops/run-job.sh`.
+3. **Rollback:** unset the variable (or set `v1`) and restart the web/jobs
+   processes. Nothing in the outbox is version-specific, so queued rows continue.
+4. `email:dispatch` prints `uncertain=N`: messages re-sent after a lease expired
+   may have been accepted by the provider before the worker died (a possible
+   duplicate, the documented ADR-0151 trade-off; no provider-side dedupe
+   exists), plus 200s with no boolean `success`. The note is written to
+   `last_error` for every outcome of such a row (sent, retried, failed,
+   deferred); only rows actually sent to the provider are counted. OTP / password
+   reset mail is delivered by the same queue and is unchanged.
+5. A 401/402/403 streak opens the breaker (5 consecutive) and the dispatcher
+   stops claiming until it closes; fix the token, credit or sender, then check
+   `bun run email:provider:health`.
 
 All `.env.example` values are placeholders, never real credentials. When
 `EMAIL_ENABLED=false` (the default) nothing blocks the app: messages sit in

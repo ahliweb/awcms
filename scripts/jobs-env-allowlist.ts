@@ -1050,6 +1050,18 @@ export const GLOBAL_SECRETS: readonly {
       "the public origin of the application, used to build absolute links; carries no credential"
   },
   {
+    name: "EMAIL_MAILKETING_V2_VERIFIED",
+    kind: "not-a-secret",
+    reason:
+      "operator acknowledgement that the live Mailketing v2 stage-2 check was done; a flag, not a credential"
+  },
+  {
+    name: "EMAIL_MAILKETING_API_VERSION",
+    kind: "not-a-secret",
+    reason:
+      "selects the Mailketing API version (v1 default, v2 opt-in); a mode switch, not a credential"
+  },
+  {
     name: "EMAIL_MAILKETING_API_BASE_URL",
     kind: "not-a-secret",
     reason:

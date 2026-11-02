@@ -34,3 +34,29 @@ describe("evaluateEmailRetry", () => {
     expect(evaluation.nextAttemptAt).toBeUndefined();
   });
 });
+
+describe("evaluateEmailRetry — provider Retry-After (Issue #1159)", () => {
+  const now = new Date("2026-01-01T00:00:00Z");
+
+  test("a longer Retry-After wins over the backoff", () => {
+    expect(evaluateEmailRetry(0, 5, now, 600_000).nextAttemptAt).toEqual(
+      new Date("2026-01-01T00:10:00Z")
+    );
+  });
+
+  test("a shorter Retry-After never shortens the backoff", () => {
+    expect(evaluateEmailRetry(2, 5, now, 1_000).nextAttemptAt).toEqual(
+      new Date("2026-01-01T00:04:00Z")
+    );
+  });
+
+  test("Retry-After is capped at the maximum delay", () => {
+    expect(evaluateEmailRetry(0, 5, now, 99 * 3_600_000).nextAttemptAt).toEqual(
+      new Date("2026-01-01T01:00:00Z")
+    );
+  });
+
+  test("does not make an exhausted message eligible", () => {
+    expect(evaluateEmailRetry(5, 5, now, 1_000).eligible).toBe(false);
+  });
+});
