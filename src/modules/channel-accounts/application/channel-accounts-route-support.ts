@@ -649,14 +649,18 @@ export async function authorizeConnectionBinding(
   connection: ConnectionView | null,
   accountScope: ScopeRef | null
 ): Promise<Response | null> {
-  if (!connection) return null; // `createAccount` answers CONNECTION_NOT_FOUND
-
   const refuse = () =>
     fail(
       422,
       "CONNECTION_NOT_FOUND",
       "The account cannot be registered as requested."
     );
+
+  // Refused HERE, before the idempotent runner, with the very response a
+  // containment or authority refusal gets: were it left to `createAccount`, a
+  // replayed Idempotency-Key would answer 409 for an unknown id and 422 for a
+  // known-but-refused one, which is an existence oracle (#1215 audit LOW-1).
+  if (!connection) return refuse();
 
   if (!accountScopeWithinConnection(accountScope, connection.businessScope)) {
     return refuse();

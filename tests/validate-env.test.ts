@@ -220,5 +220,18 @@ describe("validateEnv", () => {
         validateEnv({ ...enabled, WHATSAPP_RECIPIENT_HASH_KEYS: ring(11) })
       ).toEqual([]);
     });
+
+    test("a malformed sibling entry does not hide a shared key beside it", () => {
+      // The sibling ring is not strictly valid (a placeholder entry) but still
+      // carries OUR key: the comparison is per entry, not all-or-nothing.
+      const problems = validateEnv({
+        ...enabled,
+        WHATSAPP_RECIPIENT_HASH_KEYS: `${ring(7)},k2:changeme`
+      });
+
+      expect(
+        problems.some((p) => p.includes("WHATSAPP_RECIPIENT_HASH_KEYS"))
+      ).toBe(true);
+    });
   });
 });

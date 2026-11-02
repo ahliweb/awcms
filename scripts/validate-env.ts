@@ -14,7 +14,6 @@
  */
 import { readFile } from "node:fs/promises";
 
-import { resolveKeyRing } from "../src/lib/security/field-encryption";
 import { describeIdempotencySecretProblem } from "../src/lib/security/idempotency-hmac";
 import {
   isDeclaredAppUrl,
@@ -967,21 +966,27 @@ export function validateEnv(env: EnvBag): string[] {
         // recipient hash ring, which is also a 32-byte `keyId:base64` ring.
         "WHATSAPP_RECIPIENT_HASH_KEYS"
       ]) {
-        // Lenient parse on purpose: a sibling ring that does not meet the strict
-        // shape is somebody else's problem, but a key it DOES carry must still
-        // not equal ours.
-        const otherRing = resolveKeyRing(
-          other,
-          { [other]: env[other] } as NodeJS.ProcessEnv,
-          {}
-        );
+        // Lenient on purpose, ENTRY BY ENTRY: a sibling ring that does not meet
+        // the strict shape is somebody else's problem, but a key it DOES carry
+        // must still not equal ours. Parsing the ring as a whole would skip every
+        // entry the moment one of them is malformed (#1215 audit LOW-3).
+        const sharesKey = (env[other] ?? "").split(",").some((entry) => {
+          const separator = entry.indexOf(":");
 
-        if (
-          otherRing.ok &&
-          channelRing.keys.some((key) =>
-            otherRing.keys.some((otherKey) => otherKey.key.equals(key.key))
-          )
-        ) {
+          if (separator < 1) return false;
+
+          const decoded = Buffer.from(
+            entry.slice(separator + 1).trim(),
+            "base64"
+          );
+
+          return (
+            decoded.length > 0 &&
+            channelRing.keys.some((key) => key.key.equals(decoded))
+          );
+        });
+
+        if (sharesKey) {
           problems.push(
             `CHANNEL_SECRETS_ENCRYPTION_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
           );

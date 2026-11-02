@@ -2090,6 +2090,67 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       }
     });
 
+    test("#1215 audit LOW-1: replaying an Idempotency-Key does not tell a known connection from an unknown one", async () => {
+      if (!handlerReady) return;
+
+      const operator = await seedUser(
+        env.tenantId,
+        "low1-replay",
+        OPERATOR_KEYS
+      );
+      const stranger = await seedUser(
+        env.tenantId,
+        "low1-stranger",
+        OPERATOR_KEYS
+      );
+      // A real, empty connection started by someone else: the operator is refused.
+      const refused = await seedConnection({
+        state: "active",
+        connectedBy: stranger.tenantUserId
+      });
+      const replay = async (connectionId: string) => {
+        const key = crypto.randomUUID();
+        const first = await call<Account>(createAccount, {
+          method: "POST",
+          path: `${BASE}/accounts`,
+          token: operator.token,
+          idempotencyKey: key,
+          body: {
+            provider: "starsender",
+            accountKind: "device",
+            authMode: "device_key",
+            externalId: `low1-first-${key}`,
+            displayName: "Device low1 first"
+          }
+        });
+
+        expect(first.status).toBe(201);
+
+        const second = await call<Account>(createAccount, {
+          method: "POST",
+          path: `${BASE}/accounts`,
+          token: operator.token,
+          idempotencyKey: key,
+          body: {
+            provider: "facebook",
+            accountKind: "page",
+            authMode: "oauth2",
+            externalId: `low1-second-${key}`,
+            displayName: "Page low1 second",
+            connectionId
+          }
+        });
+
+        return { status: second.status, error: second.body.error };
+      };
+
+      const known = await replay(refused);
+      const unknown = await replay(crypto.randomUUID());
+
+      expect(known).toEqual(unknown);
+      expect(known.status).toBe(422);
+    });
+
     test("#1215 LOW-3: binding to an empty tenant-wide connection needs the revoke authority, creator or administrator", async () => {
       if (!handlerReady) return;
 
