@@ -71,4 +71,32 @@ Each table answers both questions in the same change. `subjectData` descriptors 
 - No provider adapter, token exchange, refresh call, health check or webhook receiver exists yet; `recordAccountHealth` and `activateConnectionGrant` are the entry points those issues call.
 - No domain events (`channel.account.*`) are published: there is no consumer, and the contracts outline leaves them to the issues that need them.
 - No `ChannelAccountPort` is exported yet; `resolveCapability` is the function it will wrap (first consumer: #1141).
-- The key ring must contain a different key from every other module's ring (`config:validate` checks the Telegram and push rings).
+- The key ring must contain a different key from every other module's ring (`config:validate` checks the Telegram, push and WhatsApp recipient-hash rings).
+
+## Binding scope rule (#1215)
+
+An account lends its connection's token to everyone who can act on the account, so **the account's business scope must be contained in its connection's scope, with no administrator exception**:
+
+| connection \ account | tenant-wide | scope A | scope B |
+| -------------------- | ----------- | ------- | ------- |
+| tenant-wide          | allowed     | allowed | allowed |
+| scope A              | refused     | allowed | refused |
+
+"Contained" is **exact `(type, id)` equality** for a scoped connection; the business-scope hierarchy (ADR-0060) is not consulted (most restrictive, fail-closed reading; see open questions). A refusal answers like an unknown connection (`422 CONNECTION_NOT_FOUND`). The check runs before every authority check, so the tenant administrator is bound by it too. Authority comes after containment: a connection with no account yet is bound only by its creator or by break-glass (the same authority as revoking it); one with accounts needs `owner` authority over all of them, which only the tenant administrator skips. The `account.create` audit row carries the internal `connectionId` (a UUID).
+
+`canSeeAllAccounts` (the administrator bypass) requires `assignments.assign` through a **tenant-wide grant** (`scope_type = 'tenant'`) as well as the chokepoint's allow: ADR-0080 keeps a scoped grant's keys tenant-level at the chokepoint, so without this a grant confined to one office would act as the administrator of all of them. The grant writer only writes `tenant` today; this is the **binding requirement for the PR that adds a scoped-grant writer** (`holdsTenantWidePermissionKey`, pinned by `tests/integration/channel-accounts-api.integration.test.ts`, LOW-1).
+
+Connection break-glass asks the tenant-level question first (one memoised decision per request); only a caller who is not the administrator pays per-scope decisions, and only for the distinct scopes asked about, not per connection.
+
+`APP_URL` is required when the module is enabled and is the only source of the OAuth callback origin: `resolveChannelOAuthRedirectUri` returns `null` (start answers `PROVIDER_ADAPTER_UNAVAILABLE`, callback `STATE_INVALID`) instead of falling back to a built-in host, and `config:validate` refuses to boot the deployment (#1215 L7).
+
+## Residual items and open questions (#1215, owner decisions)
+
+Not done here; each needs an owner design decision and, for most, a migration:
+
+- **M-c**, the assignment model is fail-open: removing the last assignee opens an account to the whole tenant (proposed: an explicit `access_mode` column and refusing to remove the last owner). Erasure also has no module audit row.
+- **External-id squatting** (M4 of the first review): a `pending` row already holds the global `(provider, external_id)` claim. Needs verified claims or claim expiry, i.e. a platform-scoped job.
+- **N2** (OAuth state sweep runs only on the next start), **N3** (`LIMIT 200` lists without a cursor), and L5/L6 as described in the issue (small inconsistencies, the documented cross-tenant oracle).
+- **`awcms_channel_accounts.business_scope_*` has no immutability trigger** (connections and consumed OAuth states do, `sql/320`). No API path updates it, but the containment rule above is only as durable as that column; guarding it needs a migration.
+- **Hierarchy containment**: should a child scope (an office under a region) be allowed to bind a parent scope's connection? Exact equality was chosen; relaxing it is an owner decision.
+- `sql/318` carries a stale comment (N10) that cannot be edited in an applied migration; the accurate statement is this README and ADR-0148.

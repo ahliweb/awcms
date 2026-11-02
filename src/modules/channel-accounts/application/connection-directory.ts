@@ -270,6 +270,15 @@ export async function startOAuthGrant(
     return { outcome: "refused", code: "PROVIDER_ADAPTER_UNAVAILABLE" };
   }
 
+  // No declared `APP_URL` = no callback this deployment can honestly name:
+  // refused before anything is written (#1215 L7). Same code as a missing
+  // adapter: the flow cannot be run here.
+  const redirectUri = resolveChannelOAuthRedirectUri(env);
+
+  if (redirectUri === null) {
+    return { outcome: "refused", code: "PROVIDER_ADAPTER_UNAVAILABLE" };
+  }
+
   await sweepExpiredOAuthStates(tx, store, tenantId, now);
 
   const pending = (await tx`
@@ -282,7 +291,6 @@ export async function startOAuthGrant(
     return { outcome: "refused", code: "TOO_MANY_PENDING" };
   }
 
-  const redirectUri = resolveChannelOAuthRedirectUri(env);
   const rawState = generateOAuthState();
   let codeChallenge: string | null = null;
   let pkceSecretId: string | null = null;
@@ -355,8 +363,13 @@ export async function completeOAuthCallback(
     code: "STATE_INVALID"
   };
   const parsed = parseOAuthStateParam(input.stateParam);
+  const declaredRedirectUri = resolveChannelOAuthRedirectUri(env);
 
-  if (!parsed || parsed.tenantId.toLowerCase() !== tenantId.toLowerCase()) {
+  if (
+    !parsed ||
+    parsed.tenantId.toLowerCase() !== tenantId.toLowerCase() ||
+    declaredRedirectUri === null
+  ) {
     return invalid;
   }
 
@@ -388,8 +401,7 @@ export async function completeOAuthCallback(
     state.expires_at.getTime() <= now.getTime() ||
     state.initiated_by !== tenantUserId ||
     // The deployment's callback URI must be the one the flow was started with.
-    state.redirect_uri_hash !==
-      publicValueDigest(resolveChannelOAuthRedirectUri(env))
+    state.redirect_uri_hash !== publicValueDigest(declaredRedirectUri)
   ) {
     return invalid;
   }

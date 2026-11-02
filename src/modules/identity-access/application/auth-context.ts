@@ -509,3 +509,44 @@ export async function fetchGrantedPermissionKeys(
     )
   );
 }
+
+/**
+ * Whether `tenantUserId` holds `permissionKey` through a TENANT-WIDE grant
+ * (`scope_type = 'tenant'`), as opposed to through a grant confined to a
+ * business scope — Issue #1215 LOW-1, ADR-0080.
+ *
+ * ADR-0080 keeps a scoped grant's permission keys in `fetchGrantedPermissionKeys`
+ * (the chokepoint's RBAC step is tenant-level and the scope is enforced by the
+ * business-scope fact), so "the key is granted" alone does not mean "granted
+ * everywhere". A caller that turns a key into a TENANT-WIDE capability (the
+ * channel-accounts administrator bypass) must ask THIS, or a grant that was
+ * confined to one office would confer authority over every office.
+ *
+ * Same fragment, same lifecycle filtering and same soft-deleted-role rule as
+ * `fetchGrantedPermissionKeys`, with one extra predicate. A tenant-wide grant
+ * held through a group is tenant-wide too.
+ */
+export async function holdsTenantWidePermissionKey(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  permissionKey: string
+): Promise<boolean> {
+  const [moduleKey, activityCode, action] = permissionKey.split(".");
+  const rows = (await tx`
+    SELECT 1
+    FROM (${activeRoleGrants(tx, tenantId)}) grants
+    JOIN awcms_role_permissions rp ON rp.role_id = grants.role_id AND rp.tenant_id = ${tenantId}
+    JOIN awcms_permissions p ON p.id = rp.permission_id
+    JOIN awcms_roles r ON r.id = grants.role_id AND r.tenant_id = ${tenantId}
+    WHERE grants.tenant_user_id = ${tenantUserId}
+      AND grants.scope_type = 'tenant'
+      AND r.deleted_at IS NULL
+      AND p.module_key = ${moduleKey ?? ""}
+      AND p.activity_code = ${activityCode ?? ""}
+      AND p.action = ${action ?? ""}
+    LIMIT 1
+  `) as unknown[];
+
+  return rows.length > 0;
+}

@@ -14,12 +14,11 @@
  */
 import { readFile } from "node:fs/promises";
 
-import {
-  resolveKeyRing,
-  STRICT_KEY_RING_OPTIONS
-} from "../src/lib/security/field-encryption";
 import { describeIdempotencySecretProblem } from "../src/lib/security/idempotency-hmac";
-import { resolveChannelSecretsRing } from "../src/modules/channel-accounts/domain/channel-accounts-config";
+import {
+  isDeclaredAppUrl,
+  resolveChannelSecretsRing
+} from "../src/modules/channel-accounts/domain/channel-accounts-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -943,6 +942,17 @@ export function validateEnv(env: EnvBag): string[] {
   if (env.CHANNEL_ACCOUNTS_ENABLED === "true") {
     const channelRing = resolveChannelSecretsRing(env as NodeJS.ProcessEnv);
 
+    // The OAuth callback is this deployment's declared origin plus a fixed path
+    // (#1215 L7). `APP_URL` is required everywhere, but the generic reader falls
+    // back to a built-in default origin when it is blank; here a blank or
+    // malformed origin would make the module hand a provider a redirect URI at a
+    // host the operator never declared. Same predicate as the runtime.
+    if (!isDeclaredAppUrl(env.APP_URL)) {
+      problems.push(
+        "APP_URL wajib diisi dengan URL http(s) absolut tanpa kredensial saat CHANNEL_ACCOUNTS_ENABLED=true (redirect URI OAuth akun kanal adalah origin deployment ini; tanpa itu alur otorisasi ditolak)."
+      );
+    }
+
     if (!channelRing.ok) {
       problems.push(
         `${channelRing.reason} Wajib valid saat CHANNEL_ACCOUNTS_ENABLED=true (tanpa kunci, kredensial akun kanal tidak dapat disimpan; tidak ada fallback plaintext).`
@@ -951,20 +961,32 @@ export function validateEnv(env: EnvBag): string[] {
       for (const other of [
         "TELEGRAM_CHAT_ENCRYPTION_KEYS",
         "TELEGRAM_CHAT_HASH_KEYS",
-        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS"
+        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+        // #1215 N7: the check used to name three rings and skip the WhatsApp
+        // recipient hash ring, which is also a 32-byte `keyId:base64` ring.
+        "WHATSAPP_RECIPIENT_HASH_KEYS"
       ]) {
-        const otherRing = resolveKeyRing(
-          other,
-          { [other]: env[other] } as NodeJS.ProcessEnv,
-          STRICT_KEY_RING_OPTIONS
-        );
+        // Lenient on purpose, ENTRY BY ENTRY: a sibling ring that does not meet
+        // the strict shape is somebody else's problem, but a key it DOES carry
+        // must still not equal ours. Parsing the ring as a whole would skip every
+        // entry the moment one of them is malformed (#1215 audit LOW-3).
+        const sharesKey = (env[other] ?? "").split(",").some((entry) => {
+          const separator = entry.indexOf(":");
 
-        if (
-          otherRing.ok &&
-          channelRing.keys.some((key) =>
-            otherRing.keys.some((otherKey) => otherKey.key.equals(key.key))
-          )
-        ) {
+          if (separator < 1) return false;
+
+          const decoded = Buffer.from(
+            entry.slice(separator + 1).trim(),
+            "base64"
+          );
+
+          return (
+            decoded.length > 0 &&
+            channelRing.keys.some((key) => key.key.equals(decoded))
+          );
+        });
+
+        if (sharesKey) {
           problems.push(
             `CHANNEL_SECRETS_ENCRYPTION_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
           );

@@ -20,6 +20,7 @@ import {
   readJsonBody
 } from "../../../lib/security/request-body-limit";
 import { authorizeInTransaction } from "../../identity-access/application/access-guard";
+import { holdsTenantWidePermissionKey } from "../../identity-access/application/auth-context";
 import {
   createAuthorizationReadCache,
   type AuthorizationReadCache
@@ -307,6 +308,14 @@ function readCacheFor(context: AccountRouteContext): AuthorizationReadCache {
  * holder of `assignments.assign`, decided by the access CHOKEPOINT (so an ABAC
  * deny policy on that action closes the bypass), not read from the raw role
  * grants (ADR-0148 audit M-a).
+ *
+ * The key must come from a TENANT-WIDE grant (`scope_type = 'tenant'`, ADR-0080,
+ * #1215 LOW-1). ADR-0080 keeps a scoped grant's keys tenant-level at the
+ * chokepoint, so the chokepoint alone would let a grant that was confined to one
+ * office act as the administrator of every office. Today the grant writer only
+ * writes `tenant`, so this closes nothing exploitable yet; it is the binding
+ * requirement for the PR that adds a scoped-grant writer
+ * (`tests/integration/channel-accounts-api.integration.test.ts`, LOW-1).
  */
 export function canSeeAllAccounts(
   context: AccountRouteContext
@@ -327,7 +336,16 @@ export function canSeeAllAccounts(
       }
     );
 
-    return decision.allowed;
+    if (!decision.allowed) return false;
+
+    const { manageAssignments } = CHANNEL_ACCOUNTS_GUARDS;
+
+    return holdsTenantWidePermissionKey(
+      context.tx,
+      context.tenantId,
+      context.auth.context.tenantUserId,
+      `${manageAssignments.moduleKey}.${manageAssignments.activityCode}.${manageAssignments.action}`
+    );
   });
 }
 
@@ -532,16 +550,19 @@ export async function connectionBreakGlass(
   guard: AccountGuard,
   connection: ConnectionView
 ): Promise<boolean> {
-  if (
-    connection.businessScope &&
-    (await scopeCoveredFor(context, guard, connection.businessScope, {
-      type: "channel_connection"
-    }))
-  ) {
-    return true;
-  }
+  // The tenant-level question first (#1215 LOW-3): it is ONE memoised decision
+  // per request, and when it is "yes" the per-scope questions are never asked,
+  // so an administrator listing connections of many scopes writes no scope rows.
+  // Asking the scope first made every distinct scope a decision-log row, and a
+  // deny row for each scope the caller did not hold, before the answer that
+  // settles the matter anyway.
+  if (await canSeeAllAccounts(context)) return true;
 
-  return canSeeAllAccounts(context);
+  return connection.businessScope
+    ? scopeCoveredFor(context, guard, connection.businessScope, {
+        type: "channel_connection"
+      })
+    : false;
 }
 
 const isCreator = (context: AccountRouteContext, connection: ConnectionView) =>
@@ -610,20 +631,40 @@ export async function mayRevokeConnection(
  * the same scope could borrow the token of an account assigned to someone else
  * (audit M2). A connection the caller has no authority over answers like one
  * that does not exist. Null = go on.
+ *
+ * SCOPE CONTAINMENT comes first and has NO administrator exception (#1215): an
+ * account lends its connection's token to everyone who can act on the account,
+ * so the account must not be visible to a wider audience than the connection.
+ * See {@link accountScopeWithinConnection} for the exact rule. A binding that
+ * breaks it answers exactly like a connection that does not exist.
+ *
+ * A connection that holds NO account yet belongs to whoever started it (the
+ * same rule as revoking it, `mayRevokeConnection`): binding to it needs
+ * break-glass authority (administrator, or the holder of its scope) or being its
+ * creator, not merely "not scope-confined" (#1215 LOW-3).
  */
 export async function authorizeConnectionBinding(
   context: AccountRouteContext,
   guard: AccountGuard,
-  connection: ConnectionView | null
+  connection: ConnectionView | null,
+  accountScope: ScopeRef | null
 ): Promise<Response | null> {
-  if (!connection) return null; // `createAccount` answers CONNECTION_NOT_FOUND
-
   const refuse = () =>
     fail(
       422,
       "CONNECTION_NOT_FOUND",
       "The account cannot be registered as requested."
     );
+
+  // Refused HERE, before the idempotent runner, with the very response a
+  // containment or authority refusal gets: were it left to `createAccount`, a
+  // replayed Idempotency-Key would answer 409 for an unknown id and 422 for a
+  // known-but-refused one, which is an existence oracle (#1215 audit LOW-1).
+  if (!connection) return refuse();
+
+  if (!accountScopeWithinConnection(accountScope, connection.businessScope)) {
+    return refuse();
+  }
 
   if (await canSeeAllAccounts(context)) return null;
 
@@ -642,7 +683,46 @@ export async function authorizeConnectionBinding(
     })
   ).get(connection.id);
 
-  return !entry || entry.allowed === entry.accounts ? null : refuse();
+  if (!entry) {
+    // No account yet: the starter, or whoever holds the connection's scope.
+    // (`canSeeAllAccounts` was already answered above, so this adds no row.)
+    return isCreator(context, connection) ||
+      (await connectionBreakGlass(context, guard, connection))
+      ? null
+      : refuse();
+  }
+
+  return entry.allowed === entry.accounts ? null : refuse();
+}
+
+/**
+ * The binding scope rule: the scope of the ACCOUNT must be contained in the
+ * scope of the CONNECTION it borrows a token from.
+ *
+ * | connection \ account | tenant-wide | scope A | scope B |
+ * | -------------------- | ----------- | ------- | ------- |
+ * | tenant-wide          | allowed     | allowed | allowed |
+ * | scope A              | REFUSED     | allowed | REFUSED |
+ *
+ * "Contained" is EXACT equality of `(type, id)` for a scoped connection: the
+ * business-scope hierarchy (ADR-0060, a child office inside a region) is
+ * deliberately NOT consulted. That is the most restrictive reading, fail-closed:
+ * the ADRs say a scope confines what its holders may act on, not that a child
+ * scope may use a parent's token, and widening it later is a decision for the
+ * owner (open question in the module README). An unscoped connection is
+ * tenant-wide and contains every account scope.
+ */
+export function accountScopeWithinConnection(
+  accountScope: ScopeRef | null,
+  connectionScope: ScopeRef | null
+): boolean {
+  if (!connectionScope) return true;
+  if (!accountScope) return false;
+
+  return (
+    accountScope.type === connectionScope.type &&
+    accountScope.id.toLowerCase() === connectionScope.id.toLowerCase()
+  );
 }
 
 /**

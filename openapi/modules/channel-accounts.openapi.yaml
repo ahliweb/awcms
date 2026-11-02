@@ -154,9 +154,17 @@ paths:
         caller) and `owner` authority over accounts already bound to it, which
         holding the connection's scope does NOT replace (only the tenant
         administrator, the holder of `assignments.assign`, skips that check);
-        otherwise `422 CONNECTION_NOT_FOUND`. A connection of another provider
-        answers the same `CONNECTION_NOT_FOUND` as an unknown one. `Idempotency-Key`
-        required. Requires
+        otherwise `422 CONNECTION_NOT_FOUND`. A connection with no account yet
+        is bound only by its creator or by whoever holds break-glass over it
+        (the same authority as revoking it). The account's `businessScope` must
+        also be CONTAINED in the connection's scope, with no administrator
+        exception: a tenant-wide connection admits any account scope, a scoped
+        connection admits only an account of exactly that scope (a tenant-wide
+        account never), else the same `422 CONNECTION_NOT_FOUND`. A connection of
+        another provider answers the same `CONNECTION_NOT_FOUND` as an unknown
+        one, and a connection id sent for an auth mode that takes none is
+        refused by shape BEFORE the connection is looked up, so no answer
+        depends on whether the id exists. `Idempotency-Key` required. Requires
         `channel_accounts.accounts.create`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -202,10 +210,10 @@ paths:
             `PROVIDER_NOT_REGISTRABLE`, `ACCOUNT_KIND_INVALID`,
             `AUTH_MODE_INVALID`, `CONNECTION_REQUIRED`, `CONNECTION_NOT_FOUND`
             (also, for an `oauth2` account, for a connection of another
-            provider; a connection id sent with a non-`oauth2` shape is still
-            answered by shape first, so this is not a complete existence
-            oracle yet: Issue #1215 L2), `CONNECTION_MISMATCH` (only for a
-            connection id on an account that does not use one),
+            provider, one outside the caller's authority or whose scope does
+            not contain the account's scope), `CONNECTION_MISMATCH` (only for a
+            connection id on an account that does not use one, answered before
+            the connection is looked up),
             `CONNECTION_NOT_ACTIVE` (the connection's
             grant is not `active`), `PARENT_REQUIRED`, `PARENT_INVALID` or
             `SCOPE_UNRESOLVED` (the named business scope does not exist in this
@@ -1089,6 +1097,8 @@ paths:
 
         `422 PROVIDER_ADAPTER_UNAVAILABLE` for a provider whose connector is not
         installed: this module does not guess a provider's authorisation endpoint.
+        The same code when the deployment has no declared `APP_URL` (the callback
+        origin comes from it alone, never a built-in default; Issue #1215 L7).
         `429 TOO_MANY_PENDING` caps unconsumed states per person. Not
         idempotency-keyed: each call deliberately mints a fresh state. Requires
         `channel_accounts.accounts.create`.

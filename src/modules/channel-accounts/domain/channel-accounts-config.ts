@@ -45,12 +45,45 @@ export function resolveChannelSecretsRing(
  * deployment's origin plus a fixed path, NEVER client-supplied. A client-chosen
  * redirect URI would let an attacker steer the authorization code to a host they
  * control (T1). The provider app is configured to accept exactly this value.
+ *
+ * Fail closed (#1215 L7): the origin comes from `APP_URL` ONLY. The generic
+ * `resolveDeclaredBaseUrl` falls back to a built-in default origin when
+ * `APP_URL` is unset, and a redirect URI at a host the operator never declared
+ * is exactly what must never be handed to a provider. `null` means "no usable
+ * declared origin": the start route refuses and the callback treats the state as
+ * invalid. `scripts/validate-env.ts` refuses to boot a deployment that enables
+ * the module without it, so `null` is the runtime's second line, not the first.
  */
 export function resolveChannelOAuthRedirectUri(
   env: NodeJS.ProcessEnv = process.env
-): string {
+): string | null {
+  if (!isDeclaredAppUrl(env.APP_URL)) return null;
+
   return new URL(
     "/api/v1/channel-accounts/connections/oauth/callback",
     resolveDeclaredBaseUrl(env)
   ).toString();
+}
+
+/**
+ * `APP_URL` as the OAuth redirect needs it: present, an absolute http(s) URL, no
+ * embedded credentials. Shared with `scripts/validate-env.ts` so the validator
+ * cannot disagree with the runtime.
+ */
+export function isDeclaredAppUrl(raw: string | undefined): boolean {
+  const value = raw?.trim();
+
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
 }

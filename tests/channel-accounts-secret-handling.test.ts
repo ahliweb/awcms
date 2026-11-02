@@ -13,6 +13,7 @@ import {
   SecretStoreError,
   snapshotSecretDecryptCounts
 } from "../src/modules/channel-accounts/application/secret-store";
+import { accountScopeWithinConnection } from "../src/modules/channel-accounts/application/channel-accounts-route-support";
 import {
   resolveChannelOAuthRedirectUri,
   resolveChannelSecretsRing
@@ -190,6 +191,46 @@ describe("the key ring fails closed", () => {
       } as unknown as NodeJS.ProcessEnv)
     ).toBe(
       "https://cms.example.test/api/v1/channel-accounts/connections/oauth/callback"
+    );
+  });
+
+  test("#1215 L7: with no declared APP_URL there is NO redirect URI, never a built-in default host", () => {
+    for (const appUrl of [
+      undefined,
+      "",
+      "   ",
+      "not a url",
+      "ftp://cms.example.test",
+      "https://user:pw@cms.example.test"
+    ]) {
+      expect(
+        resolveChannelOAuthRedirectUri({
+          APP_URL: appUrl
+        } as unknown as NodeJS.ProcessEnv)
+      ).toBeNull();
+    }
+  });
+});
+
+describe("#1215 binding scope containment", () => {
+  const A = { type: "office", id: "11111111-1111-4111-8111-111111111111" };
+  const B = { type: "office", id: "22222222-2222-4222-8222-222222222222" };
+
+  test("a tenant-wide connection contains every account scope", () => {
+    expect(accountScopeWithinConnection(null, null)).toBe(true);
+    expect(accountScopeWithinConnection(A, null)).toBe(true);
+  });
+
+  test("a scoped connection contains only an account of exactly that scope", () => {
+    expect(accountScopeWithinConnection(A, A)).toBe(true);
+    expect(
+      accountScopeWithinConnection({ type: A.type, id: A.id.toUpperCase() }, A)
+    ).toBe(true);
+    // tenant-wide account on a scoped connection: the escape the audit found
+    expect(accountScopeWithinConnection(null, A)).toBe(false);
+    expect(accountScopeWithinConnection(B, A)).toBe(false);
+    expect(accountScopeWithinConnection({ type: "brand", id: A.id }, A)).toBe(
+      false
     );
   });
 });
