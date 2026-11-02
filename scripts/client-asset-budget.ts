@@ -1120,8 +1120,16 @@ export const READER_BUDGET_BYTES = 24_000;
  * with only the lockfile and `package.json` changed). Nothing in `src/` moved:
  * the difference is the compiler's output for the same components, so there is no
  * per-screen duplication to recover and no island to trim.
+ *
+ * **Raised for the Issue #1224 review fixes**: +74 B, measured (346,353 ->
+ * 346,427 on the same base, after trimming once). The shared single-flight
+ * guard in `admin-form-client.ts` gained a one-shot navigation hold, a 10 s
+ * recovery timer for a navigation that never replaces the page, and a release
+ * that no longer overwrites a `disabled` the page changed mid-flight. All of it
+ * lives in the ONE shared module (no per-screen copy), so there is nothing to
+ * recover elsewhere.
  */
-export const APP_BUDGET_BYTES = 346_353;
+export const APP_BUDGET_BYTES = 346_427;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
