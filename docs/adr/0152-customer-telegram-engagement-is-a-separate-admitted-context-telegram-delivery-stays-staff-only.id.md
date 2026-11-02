@@ -1,13 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0152-customer-telegram-engagement-is-a-separate-admitted-context-telegram-delivery-stays-staff-only.md)
 
-<!-- i18n-source-hash: sha256:33f48389300e80046e8cb00a0824d37e0eef0e35daf23e7f21564bdf59b8f7db -->
+<!-- i18n-source-hash: sha256:00737f07fc67ce245e4978d13052b5f979fbc83fdad7ccd5bb7e0e4045577b34 -->
 
 # ADR-0152 — Engagement Telegram pelanggan adalah konteks terpisah yang diadmisi; `telegram_delivery` tetap hanya untuk staf dan tidak berubah; banyak bot per tenant diadmisi lewat `channel_accounts`
 
-- **Status:** Diusulkan
-- **Tinjauan:** menjadi Diterima setelah ditinjau maintainer. Sampai saat itu ia adalah rekomendasi. Tidak ada isinya yang mengotorisasi kode, dan issue turunan #1156 dan #1157 tetap terblokir olehnya (Definition of Ready keduanya menyebut ADR ini).
+- **Status:** Diterima
 - **Tanggal:** 2026-10-27
-- **Pengambil keputusan:** @ahliweb (menunggu tinjauan maintainer)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan:** Issue #1155 (admisi pesan pelanggan Telegram yang oleh [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §9 diserahkan ke keputusan terpisah)
 - **Memperluas:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (invarian I1 sampai I13 mengikat di sini; bot dan kanal Telegram adalah jenis akun dari `channel_accounts`), [ADR-0140](0140-telegram-delivery-adapter-ops-staff-alerts-only.id.md) (hanya staf, satu bot per deployment: **tidak berubah**), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.id.md) (tanpa facade, tanpa fallback), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.id.md) §3 dan §4 (lihat pertanyaan terbuka O1 tentang §3), [ADR-0137](0137-payout-account-encryption-at-rest-and-keyed-hashing.id.md) (helper enkripsi field bersama), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md)
 - **Terkait:** Issue #1139, #1140 (registri akun), #1144 (batas inbound), #1145 (mesin publikasi), #1156 (implementasi: akun multi-bot dan percakapan), #1157 (implementasi: publikasi kanal), #1167, #1168 (runtime Bun dan realtime), downstream `ahliweb/awcms-one` #460 (adapter CRM); paket [`docs/awcms/omnichannel-foundation.id.md`](../awcms/omnichannel-foundation.id.md) §3 (matriks kapabilitas), [`docs/awcms/omnichannel-ui-ux-screen-contracts.id.md`](../awcms/omnichannel-ui-ux-screen-contracts.id.md); [`src/modules/telegram-delivery/README.id.md`](../../src/modules/telegram-delivery/README.id.md)

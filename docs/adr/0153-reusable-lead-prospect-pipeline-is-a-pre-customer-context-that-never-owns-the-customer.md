@@ -2,10 +2,9 @@
 
 # ADR-0153 — A reusable lead/prospect pipeline is admitted as a pre-customer `crm_leads` context with a tenant-defined, versioned stage catalog; it never owns the customer, the identity or the consent
 
-- **Status:** Proposed
-- **Review:** becomes Accepted after maintainer review. Until then it is a recommendation. Nothing in it authorises code, and the implementation issue #1166 and the follow-up issue #1165 stay blocked on it.
+- **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** @ahliweb (maintainer review pending)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves:** Issue #1163 (the admission of a generic lead/prospect pipeline)
 - **Extends:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (invariants I1 to I13 are binding; C4 and C5 define where the conversation and the customer live), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md) (a data subject is answered per tenant), [ADR-0137](0137-payout-account-encryption-at-rest-and-keyed-hashing.md) (ciphertext plus keyed hash for personal values), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (upstream first), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback)
 - **Related:** Issues #1139, #1140 (channel accounts), #1144 (inbound boundary), #1153 (website lead source), [ADR-0155](0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md) (the `website_engagement` intake module, Proposed), #1164 (conversation projection and SLA), #1165 (follow-up cadence), #1166 (implementation), ADR-0152 (Proposed, Issue #1155) (Telegram contacts); downstream `ahliweb/awcms-one` #462 (CRM requirements standard), #463 (customer mapping), #464 (report projection) and its AW Business PRD; the `profile_identity` module and the `booking` module's opaque `external_customer_ref` ([ADR-0131](0131-generic-booking-module-admission.md))

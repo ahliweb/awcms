@@ -2,10 +2,9 @@
 
 # ADR-0152 — Customer Telegram engagement is a separate admitted context; `telegram_delivery` stays staff-only and unchanged; many bots per tenant are admitted through `channel_accounts`
 
-- **Status:** Proposed
-- **Review:** becomes Accepted after maintainer review. Until then it is a recommendation. Nothing in it authorises code, and the downstream issues #1156 and #1157 stay blocked on it (their Definition of Ready names this ADR).
+- **Status:** Accepted
 - **Date:** 2026-10-27
-- **Decision maker:** @ahliweb (maintainer review pending)
+- **Decision maker:** ahliweb (owner, "Setuju" (2026-11-02, answering the pending-decision summary); the maintainer approval this ADR requires, accepted 2026-11-02)
 - **Resolves:** Issue #1155 (the Telegram customer-messaging admission that [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §9 left to a separate decision)
 - **Extends:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (invariants I1 to I13 are binding here; Telegram bots and channels are account kinds of `channel_accounts`), [ADR-0140](0140-telegram-delivery-adapter-ops-staff-alerts-only.md) (staff-only, one bot per deployment: **unchanged**), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0133](0133-generic-delivery-capability-whatsapp-promotion.md) §3 and §4 (see the open question O1 on §3), [ADR-0137](0137-payout-account-encryption-at-rest-and-keyed-hashing.md) (the shared field-encryption helper), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md)
 - **Related:** Issues #1139, #1140 (account registry), #1144 (inbound boundary), #1145 (publishing engine), #1156 (implementation: multi-bot accounts and conversations), #1157 (implementation: channel publishing), #1167, #1168 (Bun runtime and realtime), downstream `ahliweb/awcms-one` #460 (CRM adapter); the pack [`docs/awcms/omnichannel-foundation.md`](../awcms/omnichannel-foundation.md) §3 (capability matrix), [`docs/awcms/omnichannel-ui-ux-screen-contracts.md`](../awcms/omnichannel-ui-ux-screen-contracts.md); [`src/modules/telegram-delivery/README.md`](../../src/modules/telegram-delivery/README.md)

@@ -1,13 +1,12 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0149-the-admin-data-page-is-a-server-rendered-keyset-paged-pattern-with-shared-primitives.md)
 
-<!-- i18n-source-hash: sha256:f79a90b9783d687cdcffdfb974d58df12c191565d02caaca8a5efd961e03a380 -->
+<!-- i18n-source-hash: sha256:e77c22b0070620c36d1da4b4442ed7ed01716ffefddabe506f77f0ebc8c67943 -->
 
 # ADR-0149 — Halaman data admin adalah pola yang dirender server dan dipaging keyset dengan empat primitif bersama
 
-- **Status:** Diusulkan
-- **Tinjauan:** menjadi Diterima setelah ditinjau maintainer. Primitif dan pengguna pertamanya (`/admin/users`) mendarat dalam perubahan yang sama dengan catatan ini karena standar yang tidak dipakai satu layar pun hanyalah klaim, bukan standar; pola ini baru mengikat layar baru setelah diterima.
+- **Status:** Diterima
 - **Tanggal:** 2026-10-26
-- **Pengambil keputusan:** ahliweb (menunggu tinjauan maintainer)
+- **Pengambil keputusan:** ahliweb (pemilik, "Setuju" (2026-11-02, menjawab ringkasan keputusan yang tertunda); persetujuan maintainer yang disyaratkan ADR ini, diterima 2026-11-02)
 - **Menyelesaikan:** Issue #1196 (mengadopsi pola halaman data dari proposal redesain admin Oktober 2026).
 - **Memperluas, tidak men-supersede:** [ADR-0120](0120-the-admin-redesign-splits-one-hue-into-three-roles.id.md) (token, shell, gerbang kontras) dan [`docs/awcms/14_ui_ux_design_system.id.md`](../awcms/14_ui_ux_design_system.id.md) §Pustaka komponen (baris Table, Pagination, dan `FilterBar`). Ia **tidak mengubah nama token maupun nilai yang diukur kontrasnya**.
 - **Terkait:** [ADR-0095](0095-the-interface-speaks-the-readers-language.id.md) (katalog gettext), [ADR-0125](0125-admin-v2-primitives-confirm-dialog-save-bar-reason-panel.id.md) (keputusan komponen saudaranya), [`design/redesain-ui-ux-2026-10/`](../../design/redesain-ui-ux-2026-10/README.md) (`PolaData.dc.html`, `AwcmsUsers.dc.html`, `AwcmsAudit.dc.html` — hanya referensi), `src/modules/_shared/keyset-pagination.ts`, `src/lib/ui/admin-data-page.ts`, `src/components/admin/`.
