@@ -381,7 +381,7 @@ export function renderBlock(
     const note = row.beforeNote ? ` (${row.beforeNote})` : "";
 
     lines.push(
-      `| \`${row.file}\` | \`${row.target.replace(/\|/g, "\\|")}\` | ${row.binding} | ${beforeCell}${note} | ${
+      `| \`${row.file}\` | \`${row.target.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")}\` | ${row.binding} | ${beforeCell}${note} | ${
         row.after === "exception" ? labels.afterException : labels.afterSingle
       } | ${row.key ? labels.key : "—"} |`
     );
