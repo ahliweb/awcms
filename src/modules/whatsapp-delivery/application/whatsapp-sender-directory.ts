@@ -95,6 +95,7 @@ function toPolicyView(row: PolicyDbRow): SenderPolicyView {
   };
 }
 
+/** The full list, for the admin view only (never used to choose a sender). */
 async function loadPolicies(
   tx: Bun.SQL,
   tenantId: string
@@ -106,6 +107,37 @@ async function loadPolicies(
     WHERE tenant_id = ${tenantId}
     ORDER BY business_scope_type NULLS FIRST, business_scope_id
     LIMIT 500
+  `) as PolicyDbRow[];
+}
+
+/**
+ * The policy rows that can decide a message of `scope`: its OWN scope row and the
+ * tenant-wide row, each by its key (Issue #1233 L2). Never filtered out of a
+ * capped list: a tenant with more than 500 scopes would otherwise lose a scope's
+ * own row (including an explicit NULL "deployment sender") and silently fall back
+ * to the tenant-wide default.
+ */
+async function loadApplicablePolicies(
+  tx: Bun.SQL,
+  tenantId: string,
+  scope: WhatsappBusinessScope | null
+): Promise<PolicyDbRow[]> {
+  const scopeType = scope?.type ?? null;
+  const scopeId = scope?.id ?? null;
+
+  return (await tx`
+    SELECT id, business_scope_type, business_scope_id,
+           default_sender_account_id, config_version, effective_from, updated_at
+    FROM awcms_whatsapp_sender_policies
+    WHERE tenant_id = ${tenantId}
+      AND (
+        (business_scope_type IS NULL AND business_scope_id IS NULL)
+        OR (
+          ${scopeType}::text IS NOT NULL
+          AND business_scope_type = ${scopeType}
+          AND business_scope_id = ${scopeId}
+        )
+      )
   `) as PolicyDbRow[];
 }
 
@@ -222,7 +254,10 @@ export async function resolveEnqueueSender(
   // The policy is read only when nothing else decides the sender.
   const policy =
     explicit === null && thread === null
-      ? pickPolicy((await loadPolicies(tx, tenantId)).map(toPolicyRow), scope)
+      ? pickPolicy(
+          (await loadApplicablePolicies(tx, tenantId, scope)).map(toPolicyRow),
+          scope
+        )
       : null;
 
   const choice = chooseSender({

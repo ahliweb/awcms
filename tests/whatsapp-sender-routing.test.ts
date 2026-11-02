@@ -45,10 +45,13 @@ import {
   senderScopeAllows,
   type PolicyRow
 } from "../src/modules/whatsapp-delivery/domain/whatsapp-sender";
+import { resolveEnqueueSender } from "../src/modules/whatsapp-delivery/application/whatsapp-sender-directory";
 import { validateSenderPolicyInput } from "../src/modules/whatsapp-delivery/domain/whatsapp-validation";
 import {
   buildWhatsappSenderProvider,
-  hasWhatsappSenderAdapter
+  hasWhatsappSenderAdapter,
+  isWhatsappMetaApiVersionValid,
+  resolveWhatsappMetaApiVersion
 } from "../src/modules/whatsapp-delivery/infrastructure/whatsapp-sender-providers";
 import type { WhatsappHttpClient } from "../src/modules/whatsapp-delivery/infrastructure/whatsapp-http-client";
 
@@ -227,12 +230,16 @@ describe("scope and capability rules", () => {
     }
   });
 
-  test("purpose maps to the provider-matrix capability: reply, broadcast for marketing, dm otherwise", () => {
+  test("purpose maps to the provider-matrix capability: broadcast for marketing ALWAYS, reply inside a thread, dm otherwise", () => {
     expect(capabilityForSend("transactional", false)).toBe("dm");
     expect(capabilityForSend("security", false)).toBe("dm");
     expect(capabilityForSend("marketing", false)).toBe("broadcast");
-    expect(capabilityForSend("marketing", true)).toBe("reply");
+    expect(capabilityForSend("transactional", true)).toBe("reply");
     expect(capabilityForSend("security", true)).toBe("reply");
+  });
+
+  test("L3 (#1233): a marketing message linked to an earlier message still needs `broadcast`; affinity never relaxes the capability", () => {
+    expect(capabilityForSend("marketing", true)).toBe("broadcast");
   });
 
   test("an unavailable sender is terminal when it is gone or never approved, held when it may recover", () => {
@@ -256,6 +263,122 @@ describe("scope and capability rules", () => {
         expected
       );
     }
+  });
+});
+
+describe("no fallback to the deployment sender (#1233 test gap a)", () => {
+  const fakeTx = (() => {
+    throw new Error("no query may run for an explicit sender");
+  }) as unknown as Bun.SQL;
+  const decide = (
+    senders: Parameters<typeof resolveEnqueueSender>[1]["senders"],
+    input: { senderAccountId?: string } = { senderAccountId: S1 }
+  ) =>
+    resolveEnqueueSender(fakeTx, {
+      tenantId: T1,
+      input,
+      purpose: "transactional",
+      hashes: { current: "h", all: ["h"] } as never,
+      senders
+    });
+
+  test("at ENQUEUE a named sender that cannot send is a refusal, never the deployment sender", async () => {
+    for (const reason of [
+      "ACCOUNT_NOT_FOUND",
+      "ACCOUNT_REVOKED",
+      "CAPABILITY_DENIED",
+      "CHANNEL_ACCOUNTS_DISABLED",
+      "SECRET_STORE_UNAVAILABLE"
+    ] as const) {
+      const decision = await decide(async () => ({
+        resolveWhatsappSender: async () => ({ usable: false, reason })
+      }));
+
+      expect(decision).toMatchObject({
+        ok: false,
+        reason: "SENDER_UNAVAILABLE"
+      });
+    }
+  });
+
+  test("at ENQUEUE no port, a port that cannot load, or a provider without an adapter is a refusal", async () => {
+    expect(await decide(null)).toMatchObject({ ok: false });
+    expect(
+      await decide(async () => {
+        throw new Error("import failed");
+      })
+    ).toMatchObject({ ok: false, reason: "SENDER_UNAVAILABLE" });
+    expect(
+      await decide(async () => ({
+        resolveWhatsappSender: async () => ({
+          usable: true,
+          sender: {
+            accountId: S1,
+            provider: "starsender",
+            accountKind: "device",
+            externalId: "dev-1",
+            businessScope: null
+          }
+        })
+      }))
+    ).toMatchObject({ ok: false, detail: "provider_has_no_adapter" });
+  });
+
+  test("at ENQUEUE a usable sender is the one named, and the capability asked is the purpose's (marketing: broadcast)", async () => {
+    const asked: string[] = [];
+    const port = async () => ({
+      resolveWhatsappSender: async (
+        _tx: unknown,
+        input: { capability: string }
+      ) => {
+        asked.push(input.capability);
+
+        return {
+          usable: true as const,
+          sender: {
+            accountId: S1,
+            provider: "whatsapp_cloud" as const,
+            accountKind: "waba_phone_number",
+            externalId: "1234567890",
+            businessScope: null
+          }
+        };
+      }
+    });
+
+    expect(await decide(port as never)).toMatchObject({
+      ok: true,
+      senderAccountId: S1,
+      selection: "explicit"
+    });
+    await resolveEnqueueSender(fakeTx, {
+      tenantId: T1,
+      input: { senderAccountId: S1 },
+      purpose: "marketing",
+      hashes: { current: "h", all: ["h"] } as never,
+      senders: port as never
+    });
+    expect(asked).toEqual(["dm", "broadcast"]);
+  });
+
+  test("at DISPATCH the gate has no branch that picks another sender: the gate source never assigns a different lane id or the deployment provider after a refusal", () => {
+    const source = readFileSync(
+      "src/modules/whatsapp-delivery/application/whatsapp-dispatch.ts",
+      "utf8"
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const gate = source.slice(
+      source.indexOf("async function gateRow("),
+      source.indexOf("async function processRow(")
+    );
+
+    // The deployment provider is returned only for the deployment lane.
+    expect(gate.match(/lane\.deployment/g)).toHaveLength(1);
+    expect(gate).toContain("if (lane.senderAccountId === null)");
+    // Nothing in the gate resolves a provider other than the lane's own.
+    expect(gate).not.toMatch(/resolveProvider|options\.resolveProvider/);
+    expect(gate).not.toMatch(/senderAccountId\s*=[^=]/);
   });
 });
 
@@ -391,6 +514,38 @@ describe("the tenant-owned sender's provider adapter", () => {
         env: {} as NodeJS.ProcessEnv
       })
     ).toBeNull();
+  });
+
+  test("L1 (#1233): the API version is validated apart from the identity, so a malformed one can be HELD rather than failed", () => {
+    expect(resolveWhatsappMetaApiVersion({} as NodeJS.ProcessEnv)).toBe(
+      "v21.0"
+    );
+    expect(
+      resolveWhatsappMetaApiVersion({
+        WHATSAPP_META_API_VERSION: " v22.1 "
+      } as unknown as NodeJS.ProcessEnv)
+    ).toBe("v22.1");
+
+    for (const bad of ["21", "v21", "latest", "v21.0/../x"]) {
+      const env = {
+        WHATSAPP_META_API_VERSION: bad
+      } as unknown as NodeJS.ProcessEnv;
+
+      expect(resolveWhatsappMetaApiVersion(env)).toBeNull();
+      expect(isWhatsappMetaApiVersionValid(env)).toBe(false);
+      expect(
+        buildWhatsappSenderProvider({
+          sender: {
+            accountId: S1,
+            provider: "whatsapp_cloud",
+            externalId: "1234567890"
+          },
+          credential: CANARY,
+          breakerKey: whatsappSenderBreakerKey(S1),
+          env
+        })
+      ).toBeNull();
+    }
   });
 
   test("a malformed phone number id or an empty credential builds nothing (the row fails closed)", () => {
@@ -1323,6 +1478,51 @@ describe("static contracts", () => {
     expect(read("awcms-family-compatibility.yaml")).toContain(
       'whatsapp_delivery: "1.1.0"'
     );
+  });
+
+  test("#1233 H1: the worker's secret visibility is provider-aware, adds no grant, and readiness pins it", () => {
+    const migration = source(
+      "sql/328_awcms_whatsapp_sender_secret_visibility.sql"
+    );
+
+    expect(migration).toContain(
+      "CREATE POLICY awcms_channel_secrets_worker_dispatch_purposes"
+    );
+    expect(migration).toMatch(/AS RESTRICTIVE\s+FOR SELECT\s+TO awcms_worker/);
+    expect(migration).toContain(
+      "a.provider IN ('whatsapp_cloud', 'starsender')"
+    );
+    expect(migration).toContain("c.provider = 'whatsapp_cloud'");
+    expect(migration).toContain("a.secret_id = awcms_channel_secrets.id");
+    expect(migration).toContain(
+      "c.access_secret_id = awcms_channel_secrets.id"
+    );
+    // A policy, not a widening: no GRANT, no other role, no write command.
+    expect(migration).not.toMatch(/\bGRANT\b/);
+    expect(migration).not.toMatch(/FOR (ALL|INSERT|UPDATE|DELETE)/);
+
+    const readiness = source("scripts/security-readiness.ts");
+
+    expect(readiness).toContain(
+      "p.polname = 'awcms_channel_secrets_worker_dispatch_purposes'"
+    );
+    expect(readiness).toContain("LIKE '%whatsapp_cloud%'");
+  });
+
+  test("#1233 M1: both sender routes ask channel_accounts, default-deny, and never trust the body's scope", () => {
+    const put = source("src/pages/api/v1/whatsapp/sender-policy.ts");
+    const list = source("src/pages/api/v1/whatsapp/senders.ts");
+
+    for (const route of [put, list]) {
+      expect(route).toContain("loadSenderAccess");
+    }
+
+    expect(put).toContain("access.authorizeScope(");
+    expect(put).toContain("access.canUseAccount(");
+    expect(put).toContain('"ACCESS_DENIED"');
+    expect(list).toContain("access.isConfined(");
+    expect(list).toContain("access.scopeCovered(");
+    expect(list).toContain("canSee(");
   });
 
   test("the deployment sender's provider resolver is untouched by tenant senders", () => {

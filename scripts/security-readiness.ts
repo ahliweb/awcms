@@ -2344,6 +2344,33 @@ export async function checkWorkerSetupRoleGrants(
       }
     }
 
+    // The worker sees only WhatsApp sender credentials (sql/328, Issue #1233):
+    // the grant on awcms_channel_secrets.ciphertext is column-wide, and the
+    // RESTRICTIVE row policy is what keeps every tenant's social and email tokens
+    // out of a compromised dispatcher's reach. Pinned by name, kind, command,
+    // role and by naming the provider test, so dropping or weakening it is a
+    // finding rather than a silent loss.
+    if (present.includes(WORKER_ROLE)) {
+      const policy = (await sql`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_policy p
+          WHERE p.polrelid = to_regclass('awcms_channel_secrets')
+            AND p.polname = 'awcms_channel_secrets_worker_dispatch_purposes'
+            AND NOT p.polpermissive AND p.polcmd = 'r'
+            AND p.polroles = ARRAY[to_regrole('awcms_worker')::oid]
+            AND p.polqual IS NOT NULL
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%whatsapp_cloud%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%awcms_channel_accounts%'
+        ) AS has_policy
+      `) as { has_policy: boolean }[];
+
+      if (!policy[0]?.has_policy) {
+        findings.push(
+          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
+        );
+      }
+    }
+
     if (findings.length > 0) {
       return {
         name,
@@ -2502,7 +2529,7 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_telegram_bindings.chat_ciphertext":
     "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
   "awcms_channel_secrets.ciphertext":
-    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone; decrypts are counted per tenant. What does NOT bound it: AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's access tokens, API tokens and device keys"
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts)."
 };
 
 /**

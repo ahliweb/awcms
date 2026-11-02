@@ -23,7 +23,8 @@
  * `scripts/jobs-env-allowlist.ts`). Without it every tenant-owned sender lane is
  * held (fail closed) and the deployment sender is unaffected. The key ring is
  * read in memory inside the dispatch call, for the claimed row's tenant, and a
- * decrypt counter per tenant is printed in the summary line.
+ * decrypt count is printed in the summary line (telemetry only: it lives in
+ * this process, so it bounds nothing against a compromised one; Issue #1233).
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";

@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 35    |
-| Migrations                          | 242   |
+| Migrations                          | 243   |
 | `awcms_*` tables                    | 236   |
 | Tables with `FORCE` RLS             | 218   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 776   |
+| Test files                          | 777   |
 | Route files                         | 604   |
 | ADR                                 | 314   |
 
@@ -302,6 +302,7 @@
 | 240 | `sql/325_awcms_website_engagement_schema.sql`                      |
 | 241 | `sql/326_awcms_website_engagement_permissions.sql`                 |
 | 242 | `sql/327_awcms_website_engagement_integrity_guards.sql`            |
+| 243 | `sql/328_awcms_whatsapp_sender_secret_visibility.sql`              |
 
 ### Tables & Row-Level Security
 
@@ -550,7 +551,7 @@
 | ------------- | ---------- |
 | `(root)`      | 586        |
 | `e2e`         | 29         |
-| `integration` | 160        |
+| `integration` | 161        |
 | `unit`        | 1          |
 
 ### Routes

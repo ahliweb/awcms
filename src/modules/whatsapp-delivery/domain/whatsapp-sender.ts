@@ -68,17 +68,20 @@ export function sameBusinessScope(
 }
 
 /**
- * Which provider-matrix capability a send needs. A reply inside a thread is
- * `reply`; a marketing send is `broadcast` (restricted for an unofficial
- * provider, so it needs contract evidence there); everything else is `dm`.
+ * Which provider-matrix capability a send needs. A marketing send is ALWAYS
+ * `broadcast` (restricted for an unofficial provider, so it needs contract
+ * evidence there), including one linked to an earlier message: affinity may pin
+ * which SENDER is used, it never relaxes the capability the PURPOSE needs
+ * (Issue #1233 L3). A non-marketing reply inside a thread is `reply`; everything
+ * else is `dm`.
  */
 export function capabilityForSend(
   purpose: WhatsappPurpose,
   isReply: boolean
 ): WhatsappSenderCapability {
-  if (isReply) return "reply";
+  if (purpose === "marketing") return "broadcast";
 
-  return purpose === "marketing" ? "broadcast" : "dm";
+  return isReply ? "reply" : "dm";
 }
 
 /**

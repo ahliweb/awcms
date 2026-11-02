@@ -107,7 +107,12 @@ paths:
         fail terminally; they are never rerouted to another sender, number or
         provider. Bounded to 200 senders. Nothing here is a credential, a secret
         reference, a phone number or a device id: a sender is its account id.
-        Requires `whatsapp_delivery.senders.read`.
+        Requires `whatsapp_delivery.senders.read`. Only what the caller may see
+        by the rules of `channel_accounts` is returned: an account the caller is
+        not assigned to (when it has assignees) or whose business scope the
+        caller does not hold is left out, and a caller confined to business
+        scopes gets neither the tenant-wide deployment lane nor the tenant-wide
+        policy, nor a policy whose scope or sender they cannot see.
       responses:
         "200":
           description: Sender diagnostics and the default-sender policies.
