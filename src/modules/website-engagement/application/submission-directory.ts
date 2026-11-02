@@ -303,7 +303,10 @@ export type WithdrawResult =
 
 /**
  * One-way, and idempotent: withdrawing a withdrawn submission answers the same
- * and publishes nothing. The `UPDATE ... WHERE status = 'received'` is the
+ * and publishes nothing. A withdrawal ERASES the person (audit M3): the
+ * encrypted contact blob, the keyed hashes and the masked projections are set
+ * to NULL in the same statement; only the consent evidence and the attribution
+ * remain. The `UPDATE ... WHERE status = 'received'` is the
  * decision, so two concurrent withdrawals emit exactly one event.
  */
 export async function withdrawSubmission(
@@ -318,7 +321,9 @@ export async function withdrawSubmission(
   const updated = (await tx`
     UPDATE awcms_engagement_submissions
     SET status = 'withdrawn', withdrawn_at = ${now},
-        withdrawal_reason = ${reason}, withdrawn_by = ${actor}
+        withdrawal_reason = ${reason}, withdrawn_by = ${actor},
+        contact_encrypted = NULL, email_hash = NULL, phone_hash = NULL,
+        email_masked = NULL, phone_masked = NULL
     WHERE tenant_id = ${tenantId} AND id = ${submissionId} AND status = 'received'
     RETURNING id, source_id, privacy_class
   `) as {

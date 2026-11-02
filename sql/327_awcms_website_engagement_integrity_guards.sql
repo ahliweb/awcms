@@ -4,12 +4,16 @@
 --
 --   1. a source's identity (tenant, id, code) is immutable and a deleted source
 --      is terminal;
---   2. a source may only list a domain that belongs to ITS OWN tenant (a plain
---      foreign key to awcms_tenant_domains(id) would accept another tenant's
---      domain id, because a foreign-key check does not go through RLS);
+--   2. a source may only list a domain that belongs to ITS OWN tenant, on
+--      INSERT and on any UPDATE of the link (a plain foreign key to
+--      awcms_tenant_domains(id) would accept another tenant's domain id,
+--      because a foreign-key check does not go through RLS);
 --   3. a submission is append-only EVIDENCE: after insert, only the withdrawal
---      columns may change, and a withdrawal is one-way. Its consent provenance,
---      encrypted contact blob and attribution can never be rewritten.
+--      columns may change, and a withdrawal is one-way. Its consent provenance
+--      and attribution can never be rewritten. A withdrawal ERASES the person:
+--      the encrypted contact blob, the keyed hashes and the masked projections
+--      are set to NULL by the same UPDATE (the shape CHECK in sql/325 requires
+--      it), and they can never be written back.
 
 CREATE OR REPLACE FUNCTION awcms_engagement_sources_identity_guard()
 RETURNS trigger
@@ -68,7 +72,8 @@ END;
 $function$;
 
 CREATE TRIGGER awcms_engagement_source_domains_same_tenant_guard
-  BEFORE INSERT ON awcms_engagement_source_domains
+  BEFORE INSERT OR UPDATE OF tenant_id, source_id, tenant_domain_id
+  ON awcms_engagement_source_domains
   FOR EACH ROW
   EXECUTE FUNCTION awcms_engagement_source_domains_same_tenant_guard();
 
@@ -89,11 +94,6 @@ BEGIN
      OR NEW.privacy_class IS DISTINCT FROM OLD.privacy_class
      OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at
      OR NEW.received_at IS DISTINCT FROM OLD.received_at
-     OR NEW.contact_encrypted IS DISTINCT FROM OLD.contact_encrypted
-     OR NEW.email_hash IS DISTINCT FROM OLD.email_hash
-     OR NEW.phone_hash IS DISTINCT FROM OLD.phone_hash
-     OR NEW.email_masked IS DISTINCT FROM OLD.email_masked
-     OR NEW.phone_masked IS DISTINCT FROM OLD.phone_masked
      OR NEW.consent_purposes IS DISTINCT FROM OLD.consent_purposes
      OR NEW.consent_copy_version IS DISTINCT FROM OLD.consent_copy_version
      OR NEW.consent_page_path IS DISTINCT FROM OLD.consent_page_path
@@ -109,6 +109,19 @@ BEGIN
      OR NEW.origin_via IS DISTINCT FROM OLD.origin_via
      OR NEW.challenge_outcome IS DISTINCT FROM OLD.challenge_outcome
      OR NEW.contract_version IS DISTINCT FROM OLD.contract_version THEN
+    RAISE EXCEPTION 'a website submission is evidence; only its withdrawal may change'
+      USING ERRCODE = '23514';
+  END IF;
+
+  -- The identifiers (blob, hashes, masked values) change only BY a withdrawal,
+  -- which erases them; until then, and after it, they are immutable. The shape
+  -- CHECK additionally forces them to NULL on a withdrawn row.
+  IF (NEW.contact_encrypted IS DISTINCT FROM OLD.contact_encrypted
+      OR NEW.email_hash IS DISTINCT FROM OLD.email_hash
+      OR NEW.phone_hash IS DISTINCT FROM OLD.phone_hash
+      OR NEW.email_masked IS DISTINCT FROM OLD.email_masked
+      OR NEW.phone_masked IS DISTINCT FROM OLD.phone_masked)
+     AND NOT (OLD.status = 'received' AND NEW.status = 'withdrawn') THEN
     RAISE EXCEPTION 'a website submission is evidence; only its withdrawal may change'
       USING ERRCODE = '23514';
   END IF;

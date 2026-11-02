@@ -44,11 +44,17 @@ paths:
         Checks run cheapest first and before any database work: per-IP rate
         limit, `Content-Type: application/json`, a 16 KiB body cap, SHAPE
         validation against a closed, versioned field set, then the token, tenant,
-        module, source and Origin proof; then the per-source rate limit, the
-        source's own rules (accepted kinds, the current consent copy version), the
-        duplicate probe, a honeypot and fill-time signal, the Turnstile challenge
-        where the deployment runs it, and finally one transaction that stores the
-        submission and its outbox event.
+        module, source and Origin proof (the Origin must be `https`, or a
+        localhost dev host); then the source's own rules (accepted kinds, the
+        current consent copy version), a honeypot and fill-time signal, the
+        Turnstile challenge where the deployment runs it (none for an
+        `interaction`), THEN the per-source budget (an `interaction` has its own,
+        lower one), and finally one transaction that stores the submission and its
+        outbox event. The per-source budget is spent only after the challenge
+        succeeded, so a scraped token replayed with a forged Origin or a failing
+        challenge cannot keep the real form at `429`; the per-address key is the
+        IPv6 /64 prefix. There is no duplicate probe before the challenge (it
+        would be an `eventId` oracle): a duplicate is decided by the insert.
 
 
         Every failure BEFORE the source is proven answers the SAME `403
@@ -533,8 +539,10 @@ paths:
         Requires `website_engagement.sources.manage` and a signed-in person.
         Rename, pause or resume, change the consent copy version, the challenge
         mode, the accepted kinds or the host list. Audited at warning (the changed
-        field NAMES, never values). Revocation is its own operation, and a revoked
-        source cannot be changed (`409 SOURCE_REVOKED`).
+        field NAMES, never values, plus the old and new `challengeMode` when it
+        changes). Setting `challengeMode` to `none` REQUIRES an `Idempotency-Key`
+        (`400 IDEMPOTENCY_REQUIRED` without it). Revocation is its own operation,
+        and a revoked source cannot be changed (`409 SOURCE_REVOKED`).
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
         - name: id

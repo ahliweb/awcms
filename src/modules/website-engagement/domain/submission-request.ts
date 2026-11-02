@@ -151,7 +151,7 @@ const LOCALE_PATTERN = /^[a-z]{2}(-[A-Z]{2})?$/;
 const TOPIC_PATTERN = /^[a-z][a-z0-9_.-]{0,59}$/;
 const COPY_VERSION_PATTERN = /^[A-Za-z0-9._-]{1,32}$/;
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const UTM_PATTERN = /^[A-Za-z0-9 _.\-+%:]{1,100}$/;
+const UTM_PATTERN = /^[A-Za-z0-9 _.\-]{1,100}$/;
 const HOST_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 /** Control characters other than tab/newline, and the bidi override/isolate range. */
 // eslint-disable-next-line no-control-regex
@@ -240,7 +240,7 @@ function readPath(
     raw.length > MAX_PATH_LENGTH ||
     !raw.startsWith("/") ||
     raw.startsWith("//") ||
-    /[?#\\\u0000-\u001F\u007F\s<>"]/.test(raw)
+    /[?#%@\\\u0000-\u001F\u007F\s<>"]/.test(raw)
   ) {
     errors.push({
       field: path,

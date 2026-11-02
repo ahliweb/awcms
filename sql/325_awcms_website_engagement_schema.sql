@@ -272,8 +272,8 @@ CREATE TABLE IF NOT EXISTS awcms_engagement_submissions (
     CHECK (consent_copy_version IS NULL OR consent_copy_version ~ '^[A-Za-z0-9._-]{1,32}$'),
   CONSTRAINT awcms_engagement_submissions_paths_check
     CHECK (
-      (consent_page_path IS NULL OR (consent_page_path ~ '^/[^?#[:space:]]*$' AND char_length(consent_page_path) <= 200))
-      AND (landing_path IS NULL OR (landing_path ~ '^/[^?#[:space:]]*$' AND char_length(landing_path) <= 200))
+      (consent_page_path IS NULL OR (consent_page_path ~ '^/[^?#%@[:space:]]*$' AND char_length(consent_page_path) <= 200))
+      AND (landing_path IS NULL OR (landing_path ~ '^/[^?#%@[:space:]]*$' AND char_length(landing_path) <= 200))
     ),
   CONSTRAINT awcms_engagement_submissions_utm_check
     CHECK (
@@ -292,8 +292,12 @@ CREATE TABLE IF NOT EXISTS awcms_engagement_submissions (
   CONSTRAINT awcms_engagement_submissions_withdrawal_reason_check
     CHECK (withdrawal_reason IS NULL OR withdrawal_reason IN (
       'data_subject_request', 'consent_withdrawn', 'controller_decision')),
-  -- An interaction carries no person and no consent; a contact/lead carries
-  -- both. The database refuses the combinations the validator should not send.
+  -- An interaction carries no person and no consent; a received contact/lead
+  -- carries both; a WITHDRAWN contact/lead has been ERASED of everything that
+  -- identifies the person (the encrypted blob, the keyed hashes and the masked
+  -- projections) and keeps only the consent evidence and the attribution that
+  -- the controller needs to show what was agreed and when. The database refuses
+  -- the combinations the validator should not send.
   CONSTRAINT awcms_engagement_submissions_shape_check
     CHECK (
       (kind = 'interaction'
@@ -309,11 +313,18 @@ CREATE TABLE IF NOT EXISTS awcms_engagement_submissions (
       (kind IN ('contact', 'lead')
         AND interaction_type IS NULL
         AND privacy_class = 'personal'
-        AND contact_encrypted IS NOT NULL
-        AND (email_hash IS NOT NULL OR phone_hash IS NOT NULL)
         AND consent_purposes @> ARRAY['respond_to_inquiry']::text[]
         AND consent_copy_version IS NOT NULL
-        AND consent_at IS NOT NULL)
+        AND consent_at IS NOT NULL
+        AND (
+          (status = 'received'
+            AND contact_encrypted IS NOT NULL
+            AND (email_hash IS NOT NULL OR phone_hash IS NOT NULL))
+          OR
+          (status = 'withdrawn'
+            AND contact_encrypted IS NULL
+            AND email_hash IS NULL AND phone_hash IS NULL
+            AND email_masked IS NULL AND phone_masked IS NULL)))
     ),
   CONSTRAINT awcms_engagement_submissions_withdrawn_check
     CHECK (

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](website-engagement.md)
 
-<!-- i18n-source-hash: sha256:4c3c79910886fd0e2a2a9daaa115ccf961f332648ac8289ec89f4b645dfb6e44 -->
+<!-- i18n-source-hash: sha256:56bd2a85afddb4533868d8a8d592c3a84b137bc6fc4926510215934dc31749b2 -->
 
 # Website engagement — intake lead dan kontak (Issue #1153, ADR-0155)
 
@@ -41,7 +41,9 @@ Modul ini **hanya intake**. Bukan CRM, bukan pipeline lead, bukan mesin formulir
 
 ### Urutan keputusan (termurah dulu, sebelum pekerjaan database)
 
-1. rate limit per IP (`WEBSITE_ENGAGEMENT_RATE_LIMIT_*`), 2. `Content-Type`, 3. body dibatasi **16 KiB**, 4. validasi **bentuk**, 5. key ring ada (gagal tertutup), 6. parse token dan id tenant/source, 7. **bukti**: tenant, saklar modul, status source, pembandingan hash berkunci di dalam konteks tenant milik token, dan host Origin terverifikasi terhadap domain aktif milik source, 8. batas per source (**setelah** bukti, sehingga token palsu tidak bisa menghabiskan jatah source asli), 9. aturan source itu sendiri (jenis yang diterima, persetujuan), 10. probe duplikat, 11. honeypot dan waktu pengisian, 12. tantangan (di luar transaksi mana pun), 13. satu transaksi: insert, `ON CONFLICT DO NOTHING`, event outbox.
+1. rate limit per IP (`WEBSITE_ENGAGEMENT_RATE_LIMIT_*`), 2. `Content-Type`, 3. body dibatasi **16 KiB**, 4. validasi **bentuk**, 5. key ring ada (gagal tertutup), 6. parse token dan id tenant/source, 7. **bukti**: tenant, saklar modul, status source, pembandingan hash berkunci di dalam konteks tenant milik token, dan host Origin terverifikasi terhadap domain aktif milik source, 8. aturan source itu sendiri (jenis yang diterima, persetujuan), 9. honeypot dan waktu pengisian (tanpa memakai jatah), 10. tantangan (di luar transaksi mana pun; **tidak ada untuk `interaction`**), 11. **baru kemudian** jatah per source (interaksi punya jatah sendiri yang lebih rendah), 12. satu transaksi: insert, `ON CONFLICT DO NOTHING`, event outbox.
+
+Keputusan tercatat dari audit independen: **H1** jatah per source dipakai hanya setelah tantangan berhasil, sehingga token asli yang dicuri dengan Origin palsu (ditolak di langkah 7) atau tantangan yang gagal (ditolak di langkah 10) tidak memakai jatah source asli; kunci per alamat adalah prefiks **IPv6 /64**. **M1** interaksi (`form_view`, `cta_click` ...) tidak pernah membuat data kontak, jadi tanpa tantangan per event (solve widget per klik tidak praktis), dengan jatah terpisah yang lebih rendah (`WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX`, bawaan 120) dan tidak dapat menghabiskan jatah lead. **M2** tidak ada probe duplikat sebelum tantangan (dulu menjadi oracle `eventId` bagi pemegang token): duplikat diputuskan oleh insert dan dijawab seperti kiriman baru. Biayanya, klik ganda pada formulir bertantangan dapat gagal di tantangan kedua (token Turnstile sekali pakai); widget dirender ulang per submit.
 
 ### Satu penolakan sebelum bukti
 
@@ -50,7 +52,7 @@ Token yang tak bisa di-parse, tenant atau source tak dikenal, secret salah, sour
 ## Provenance: token dan Origin (ADR-0155 bagian 3)
 
 - **Token** buram, 256-bit, disimpan hanya sebagai HMAC di bawah key ring modul, ditampilkan sekali saat pembuatan atau rotasi, dapat dirotasi (yang lama berhenti seketika) dan dicabut. Ia **rahasia pembawa yang ada di sumber halaman**, jadi bukan bukti bahwa pemanggil adalah situs web itu.
-- **Origin** (atau, hanya bila tidak ada header `Origin`, host `Referer`) harus cocok dengan domain **aktif dan tidak terhapus** yang didaftarkan untuk source itu. `Origin` yang ada tetapi tak dapat dipakai (`null`, ekstensi) ditolak, tidak pernah diturunkan menjadi `Referer`. `Origin` palsu dari klien non-browser mungkin terjadi, sehingga pengecekan Origin adalah **pertahanan berlapis**, setara dengan tantangan dan rate limit. Mode server-ke-server bertanda tangan di luar cakupan.
+- **Origin** (atau, hanya bila tidak ada header `Origin`, host `Referer`) harus **`https`** (`http` biasa hanya diterima untuk host dev localhost eksplisit: `localhost`, `*.localhost`, `127.0.0.1`, `[::1]`, sehingga CORS tidak pernah memantulkan `http` untuk source produksi; **L2**) dan harus cocok dengan domain **aktif dan tidak terhapus** yang didaftarkan untuk source itu. `Origin` yang ada tetapi tak dapat dipakai (`null`, ekstensi) ditolak, tidak pernah diturunkan menjadi `Referer`. `Origin` palsu dari klien non-browser mungkin terjadi, sehingga pengecekan Origin adalah **pertahanan berlapis**, setara dengan tantangan dan rate limit. Mode server-ke-server bertanda tangan di luar cakupan.
 - **Tiga situs web dalam satu tenant adalah tiga source; dua domain tenant dipetakan ke satu atau lebih source** (`awcms_engagement_source_domains`). Sebuah source menerima tepat host miliknya sendiri.
 - CORS hanya memantulkan origin terverifikasi, tidak pernah `*`, tidak pernah berkredensial, `Vary: Origin` pada setiap jawaban. Preflight (`OPTIONS`, selalu `204`) memberi akses untuk domain tenant aktif terverifikasi mana pun, berbagi jatah per-IP dengan POST, dan hanya mengizinkan header `content-type`; POST lalu memverifikasi ulang token dan host per source.
 - **Substitusi tenant-id** ditutup tiga cara: `tenantId`/`sourceId` di body atau query yang berbeda ditolak, `tenant_code` di query ditolak sepenuhnya, dan token yang menyebut tenant yang bukan pemilik source tidak menemukan baris apa pun (pencarian terjadi di dalam konteks RLS tenant itu). Tidak ada jalur bootstrap `SECURITY DEFINER` yang ditambahkan.
@@ -62,7 +64,7 @@ Token yang tak bisa di-parse, tenant atau source tak dikenal, secret salah, sour
 ## Persetujuan, opt-out, dan minimisasi (UU PDP)
 
 - `contact`/`lead` yang disimpan butuh `respond_to_inquiry` **dan** `copyVersion` yang sama dengan versi source saat ini; `marketing_follow_up` adalah tujuan terpisah, tidak pernah tersirat. `interaction` tidak membawa detail kontak dan tidak ada persetujuan. Database menolak kombinasi lain (`awcms_engagement_submissions_shape_check`).
-- **Penarikan** adalah tindakan terkontrol-audit oleh pengendali (`submissions.withdraw`): menandai, satu event `submission.withdrawn` (idempoten saat konkuren), dan reveal ditolak sesudahnya. Kanal milik pengunjung sendiri adalah issue hak subjek data berikutnya (ADR-0094) dan merupakan keterbatasan tercatat.
+- **Penarikan** adalah tindakan terkontrol-audit oleh pengendali (`submissions.withdraw`): menandai, **menghapus** (blob kontak terenkripsi, hash berkunci, dan nilai tersamar di-NULL-kan dalam pernyataan yang sama dan tidak pernah dapat ditulis kembali; hanya bukti persetujuan dan atribusi yang tersisa; **M3**), satu event `submission.withdrawn` (idempoten saat konkuren), dan reveal ditolak sesudahnya. Kanal milik pengunjung sendiri adalah issue hak subjek data berikutnya (ADR-0094) dan merupakan keterbatasan tercatat.
 - **Terenkripsi saat disimpan**: nama, email, telepon, perusahaan, subjek, dan pesan adalah satu amplop AES-256-GCM yang terikat pada tujuan, tenant, dan id baris; hash berkunci email dan telepon tersedia untuk pencarian; daftar menampilkan nilai tersamar. Tidak ada yang mendekripsi kecuali endpoint **reveal** teraudit di bawah izinnya sendiri.
 - **Retensi** dideklarasikan sejak hari pertama lewat `data_lifecycle` (`awcms_engagement_submissions`, kursor `received_at`, **bawaan 180 hari**, batas 30-730, hard delete, sadar legal hold). Bawaan itu untuk dikonfirmasi maintainer dan tenant menentukan jendela akhir. Role worker dapat menemukan dan menghapus baris usang dan **tidak** dapat membaca identifier, hash, atau ciphertext apa pun.
 - **DPIA**, teks persetujuan, dan jendela retensi adalah persetujuan manusia yang tidak dapat diberikan perubahan ini.
@@ -80,7 +82,7 @@ Token yang tak bisa di-parse, tenant atau source tak dikenal, secret salah, sour
 | SSRF             | Tidak ada: tidak ada permintaan keluar saat menerima data; `referrerHost` hanya string yang dicek bentuknya; `verifyUrl` Turnstile adalah konfigurasi, bukan input        |
 | Pemalsuan Origin | Origin satu dari empat kontrol setara; `null` dan host mirip ditolak; tanpa penurunan ke `Referer`                                                                        |
 | Kebocoran token  | HMAC saat disimpan, ditampilkan sekali, tidak pernah didaftar, tidak pernah ada di baris audit, baris idempotensi, event, atau log; replay create/rotate menghilangkannya |
-| Enumerasi        | satu penolakan sebelum bukti, biaya sama; id admin menjawab satu 404 lintas tenant; probe duplikat hanya terjangkau setelah bukti                                         |
+| Enumerasi        | satu penolakan sebelum bukti, biaya sama; id admin menjawab satu 404 lintas tenant; tidak ada probe duplikat sebelum tantangan                                            |
 | Redaksi log      | body, token, alamat, dan token tantangan tidak pernah dilog; hanya metrik hasil berkode (`website_engagement_submission_total`)                                           |
 | Replay           | `(tenant, source, eventId)` unik; `occurredAt` dibatasi 7 hari terakhir; Turnstile sekali pakai dan tidak dipakai untuk duplikat yang sudah dikenal                       |
 | XSS tersimpan    | hanya teks, markup dan karakter kontrol ditolak, di-escape saat keluaran oleh yang merendernya                                                                            |
@@ -100,3 +102,7 @@ Tidak ada kanal penarikan publik; tidak ada mode server-ke-server bertanda tanga
 ## Pengoperasian
 
 Setel `WEBSITE_ENGAGEMENT_KEYS` (lihat `.env.example`), aktifkan modul untuk tenant di Module Management (aktif secara bawaan), buat source dengan `POST /sources` yang mendaftar id domain tenant, berikan ke situs web token sekali-tampil, versi teks persetujuan yang ditampilkannya, dan `eventId` yang dibuat per render formulir. Rotasi dengan `POST /sources/{id}/rotate`; hentikan situs dengan `POST /sources/{id}/revoke`.
+
+## Keputusan audit lanjutan
+
+**L4** Nilai atribusi memakai set karakter tertutup (`utm*`: huruf, angka, spasi, `_`, `.`, `-`; path dan `consent.pagePath` menolak `%` dan `@`, query, dan fragmen), dicerminkan oleh CHECK database, sehingga alamat atau nomor telepon tidak dapat menumpang ke event outbox lewat field itu. Nilai yang tampak teks bebas seperti `john.doe` tetap lolos: set karakter mempersempit pembawa, tidak dapat membuktikan nilai itu bukan nama. **L1** penjaga domain-tenant-sama berlaku pada `INSERT` dan pada `UPDATE` apa pun atas tautan. **L6** mengubah `challengeMode` menjadi `none` membutuhkan `Idempotency-Key` dan setiap perubahan mode menulis baris audit warning yang menyebut mode lama dan baru (kode tetap, tanpa rahasia).

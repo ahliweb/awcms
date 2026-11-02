@@ -423,6 +423,12 @@ const RULES: readonly Rule[] = [
     min: 1
   },
   {
+    name: "WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
     name: "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_WINDOW_SEC",
     required: false,
     type: "int",

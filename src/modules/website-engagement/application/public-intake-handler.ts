@@ -19,6 +19,7 @@ import {
   resolveIntakeLimits,
   resolveWebsiteEngagementRing
 } from "../domain/engagement-config";
+import { rateLimitClientKey } from "../domain/client-key";
 import { submissionCorsHeaders } from "../domain/origin-policy";
 import { publicMessage } from "../domain/public-messages";
 import { parseSourceToken } from "../domain/source-token";
@@ -36,9 +37,12 @@ import { SUBMISSION_BODY_LIMIT_BYTES } from "../domain/website-engagement-consta
  *
  * Order, cheapest first and before any database work (ADR-0155 section 4):
  * per-IP limit, content type, capped body, SHAPE validation, then the token,
- * tenant, module, source and Origin proof; then the per-SOURCE limit, the rules
- * only the source can judge, the duplicate probe, the honeypot, the challenge,
- * and finally one transaction that stores the submission and its outbox event.
+ * tenant, module, source and Origin proof (https, or a localhost dev host); then
+ * the rules only the source can judge, the honeypot, the challenge (none for an
+ * interaction), THEN the per-SOURCE budget (interactions have their own, lower
+ * one), and finally one transaction that stores the submission and its outbox
+ * event. There is no duplicate probe before the challenge: a duplicate is
+ * decided by the insert and answers like a new submission.
  *
  * ## One refusal before proof
  *
@@ -91,7 +95,7 @@ export async function handlePublicSubmission(
   const limits = resolveIntakeLimits();
   const clientIp = resolveClientIp(request, clientAddress);
   const ipBudget = await checkSharedRateLimit(
-    `website_engagement:ip:${clientIp}`,
+    `website_engagement:ip:${rateLimitClientKey(clientIp)}`,
     { maxAttempts: limits.perIpMax, windowMs: limits.perIpWindowSec * 1000 }
   );
 
@@ -219,13 +223,7 @@ export async function handlePublicSubmission(
     return refused(submission.locale);
   }
 
-  const source = await verifyIntake(
-    sql,
-    token,
-    request,
-    submission.eventId,
-    ring
-  );
+  const source = await verifyIntake(sql, token, request, ring);
 
   if (!source) {
     recordCounter("website_engagement_submission_total", {
@@ -244,28 +242,6 @@ export async function handlePublicSubmission(
       corsHeaders
     );
 
-  const sourceBudget = await checkSharedRateLimit(
-    `website_engagement:source:${source.sourceId}`,
-    {
-      maxAttempts: limits.perSourceMax,
-      windowMs: limits.perSourceWindowSec * 1000
-    }
-  );
-
-  if (!sourceBudget.allowed) {
-    recordCounter("website_engagement_submission_total", {
-      outcome: "rate_limited"
-    });
-    return fail(
-      429,
-      "RATE_LIMITED",
-      publicMessage("rateLimited", submission.locale),
-      {},
-      undefined,
-      { ...corsHeaders, "retry-after": String(sourceBudget.retryAfterSec) }
-    );
-  }
-
   const rules = checkSourceRules(source, submission);
 
   if (!rules.ok) {
@@ -282,16 +258,8 @@ export async function handlePublicSubmission(
     );
   }
 
-  // Already stored: answer success without spending a (single-use) challenge
-  // token on it, so a double-click never turns a success into a refusal.
-  if (source.duplicate) {
-    recordCounter("website_engagement_submission_total", {
-      outcome: "accepted"
-    });
-    return neutral();
-  }
-
-  // Cheap bot signals: answered like a success and stored as nothing.
+  // Cheap bot signals: answered like a success and stored as nothing. They spend
+  // no per-source budget.
   if (
     submission.honeypotTripped ||
     (submission.fillMs !== null && submission.fillMs < MIN_HUMAN_FILL_MS)
@@ -302,11 +270,19 @@ export async function handlePublicSubmission(
     return neutral();
   }
 
-  const challenge = await runChallenge(
-    source,
-    submission.challengeToken,
-    clientIp === "unknown" ? undefined : clientIp
-  );
+  // Interactions carry no contact data, so they get NO per-event challenge (a
+  // widget solve per click would be absurd and they store nothing personal) and
+  // are bounded by their own, lower, per-source ceiling below (audit M1).
+  const isInteraction = submission.kind === "interaction";
+  const challenge = isInteraction
+    ? source.challengeMode === "none"
+      ? "source_none"
+      : "not_required"
+    : await runChallenge(
+        source,
+        submission.challengeToken,
+        clientIp === "unknown" ? undefined : clientIp
+      );
 
   if (challenge === null) {
     recordCounter("website_engagement_submission_total", {
@@ -319,6 +295,35 @@ export async function handlePublicSubmission(
       {},
       undefined,
       corsHeaders
+    );
+  }
+
+  // The per-source budget is spent only AFTER the challenge succeeded (audit
+  // H1): a scraped real token with a forged Origin is refused in `verifyIntake`
+  // and a failed challenge returns above, so neither can keep a real source at
+  // 429. A duplicate is decided by the insert below and spends the budget like
+  // any other success, so it is no oracle either (audit M2).
+  const sourceBudget = await checkSharedRateLimit(
+    `website_engagement:source${isInteraction ? "-interaction" : ""}:${source.sourceId}`,
+    {
+      maxAttempts: isInteraction
+        ? limits.perSourceInteractionMax
+        : limits.perSourceMax,
+      windowMs: limits.perSourceWindowSec * 1000
+    }
+  );
+
+  if (!sourceBudget.allowed) {
+    recordCounter("website_engagement_submission_total", {
+      outcome: "rate_limited"
+    });
+    return fail(
+      429,
+      "RATE_LIMITED",
+      publicMessage("rateLimited", submission.locale),
+      {},
+      undefined,
+      { ...corsHeaders, "retry-after": String(sourceBudget.retryAfterSec) }
     );
   }
 

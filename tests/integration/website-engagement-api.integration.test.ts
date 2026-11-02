@@ -849,6 +849,60 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
     ]);
   });
 
+  test("L6: switching the challenge OFF needs an Idempotency-Key and writes a warning audit row naming old and new mode", async () => {
+    if (!handlerReady) return;
+
+    const source = (await create({ challengeMode: "turnstile" })).body.data!;
+    const id = source.id as string;
+    const patch = (body: unknown, key?: string | null) =>
+      call(patchSource, {
+        method: "PATCH",
+        path: `${BASE}/sources/${id}`,
+        params: { id },
+        idempotencyKey: key,
+        body
+      });
+
+    // A harmless change needs no key (the default test helper adds one only when undefined).
+    expect((await patch({ name: "Renamed" }, null)).status).toBe(200);
+
+    const missing = await patch({ challengeMode: "none" }, null);
+
+    expect(missing.status).toBe(400);
+    expect(missing.body.error?.code).toBe("IDEMPOTENCY_REQUIRED");
+    expect(
+      (
+        (
+          await call(getSource, {
+            path: `${BASE}/sources/${id}`,
+            params: { id }
+          })
+        ).body.data as any
+      ).challengeMode
+    ).toBe("turnstile");
+
+    const key = nextKey();
+    const done = await patch({ challengeMode: "none" }, key);
+
+    expect(done.status).toBe(200);
+    expect(done.body.data.challengeMode).toBe("none");
+    expect((await patch({ challengeMode: "none" }, key)).body).toEqual(
+      done.body
+    );
+
+    const audit = (await admin()`
+      SELECT severity, attributes FROM awcms_audit_events
+      WHERE action = 'website_engagement.source.update'
+      ORDER BY created_at DESC LIMIT 1
+    `) as { severity: string; attributes: Record<string, unknown> }[];
+
+    expect(audit[0]!.severity).toBe("warning");
+    expect(audit[0]!.attributes).toMatchObject({
+      challengeModeFrom: "turnstile",
+      challengeModeTo: "none"
+    });
+  });
+
   test("a missing key ring fails closed everywhere it would hash or decrypt", async () => {
     if (!handlerReady) return;
 

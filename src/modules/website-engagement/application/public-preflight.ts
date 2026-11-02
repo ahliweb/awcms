@@ -21,7 +21,9 @@ import {
   resolveClientIp
 } from "../../../lib/security/rate-limit";
 import { resolvePublicTenantByHost } from "../../../lib/tenant/public-host-tenant-resolver";
+import { rateLimitClientKey } from "../domain/client-key";
 import {
+  isAcceptableOriginScheme,
   isCrossOriginRequest,
   submissionPreflightHeaders
 } from "../domain/origin-policy";
@@ -43,7 +45,7 @@ export async function submissionPreflightResponse(
   }
 
   const budget = await checkSharedRateLimit(
-    `website_engagement:ip:${resolveClientIp(request, clientAddress)}`,
+    `website_engagement:ip:${rateLimitClientKey(resolveClientIp(request, clientAddress))}`,
     limits
   );
 
@@ -61,6 +63,8 @@ export async function submissionPreflightResponse(
 
   return new Response(null, {
     status: 204,
-    headers: submissionPreflightHeaders(tenant ? parsed.origin : null)
+    headers: submissionPreflightHeaders(
+      tenant && isAcceptableOriginScheme(parsed) ? parsed.origin : null
+    )
   });
 }

@@ -74,6 +74,33 @@ export function classifySubmissionOrigin(
   }
 }
 
+/**
+ * A hostname that is the developer's own machine. Only these may use plain
+ * `http` (audit L2): a production source is `https` or it is refused, so the
+ * CORS grant can never echo an `http` origin for it.
+ */
+export function isLocalDevHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    host === "::1"
+  );
+}
+
+/** `https`, or `http` for an explicit localhost/dev host only. */
+export function isAcceptableOriginScheme(origin: {
+  origin: string;
+  hostname: string;
+}): boolean {
+  return (
+    origin.origin.startsWith("https://") || isLocalDevHost(origin.hostname)
+  );
+}
+
 /** Exact, case-insensitive hostname match against the hosts registered for a source. */
 export function isRegisteredHost(
   hostname: string,

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:0b40e829eb7fe8597254d62d5cae58d9cdfd6cb607cca2ccd944e276b3940258 -->
+<!-- i18n-source-hash: sha256:f48fee685495e7b6fd93f5a209278e0b0f01c51ff982f3ef86768dec993c09d1 -->
 
 # `website_engagement`
 
@@ -17,3 +17,13 @@ Situs web milik tenant mengirim permintaan kontak, lead, atau interaksi ke SATU 
 - **Konfigurasi**: `WEBSITE_ENGAGEMENT_KEYS` (wajib untuk menyimpan apa pun; gagal tertutup) dan variabel rate limit di `.env.example`.
 
 Tata letak: `domain/` (murni: token, validator, kebijakan origin, event, pesan), `application/` (direktori source dan kiriman, intake, handler publik), `module.ts`. Rute berada di `src/pages/api/v1/website-engagement/`.
+
+## Risiko sisa
+
+- Profil offline/LAN tanpa Turnstile: token bocor ditambah Origin palsu non-browser hanya dibatasi oleh batas per alamat (berkunci IPv6 /64), jatah per source, dan retensi.
+- Limiter berjalan di dalam proses kecuali Redis dikonfigurasi.
+- Preflight menampakkan apakah sebuah hostname adalah domain tenant aktif pada deployment (seperti `newsletter`).
+- Field atribusi memakai set karakter tertutup tetapi tidak dapat membuktikan sebuah nilai bukan data pribadi.
+- Klik ganda pada formulir bertantangan dapat gagal di tantangan kedua (sekali pakai).
+- Temuan audit L3, L5, dan informasional diterima sebagaimana tercatat di laporan audit dan tidak ditangani pada irisan ini.
+- Tidak ada kanal penarikan publik, mode server-ke-server, masa tenggang rotasi, atau layar admin.

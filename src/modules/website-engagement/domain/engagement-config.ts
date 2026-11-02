@@ -32,6 +32,8 @@ export type IntakeLimits = {
   perIpWindowSec: number;
   perSourceMax: number;
   perSourceWindowSec: number;
+  /** Interactions have their own, lower, ceiling (audit M1). */
+  perSourceInteractionMax: number;
 };
 
 /** Parsed, never coerced: `Number("x")` is NaN and `count > NaN` is false, which switches a limiter OFF. */
@@ -58,6 +60,11 @@ export function resolveIntakeLimits(
       env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_WINDOW_SEC,
       300,
       "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_WINDOW_SEC"
+    ),
+    perSourceInteractionMax: parsePositiveIntSetting(
+      env.WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX,
+      120,
+      "WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX"
     )
   };
 }

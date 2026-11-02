@@ -3,9 +3,14 @@
  * (ADR-0155 section 4; ADR-0006: no provider call inside a transaction).
  *
  *   phase 1  `verifyIntake`      token (tenant opened FROM the token), tenant and
- *                                module gates, source status, Origin host, and a
- *                                cheap "already received" probe
- *   (between) rate limit, semantic checks, honeypot, Turnstile  [route]
+ *                                module gates, source status, Origin host (https
+ *                                unless a localhost dev host)
+ *   (between) semantic checks, honeypot, Turnstile, THEN the per-source budget
+ *                                [route]. There is deliberately NO "already
+ *                                received" probe before the challenge: it would
+ *                                be an eventId oracle for any token holder, so a
+ *                                duplicate is decided only by the insert below
+ *                                and answers exactly like a new submission.
  *   phase 2  `recordSubmission`  one transaction: insert + outbox event
  *
  * ## Every pre-proof failure is the SAME failure
@@ -48,6 +53,7 @@ import {
 } from "../domain/engagement-events";
 import {
   classifySubmissionOrigin,
+  isAcceptableOriginScheme,
   isRegisteredHost,
   type SubmissionOrigin
 } from "../domain/origin-policy";
@@ -82,8 +88,6 @@ export type VerifiedSource = {
   consentCopyVersion: string;
   challengeMode: ChallengeMode;
   origin: SubmissionOrigin;
-  /** The same `(source, eventId)` was already stored: answer success, do nothing else. */
-  duplicate: boolean;
 };
 
 type SourceRow = {
@@ -107,7 +111,6 @@ export async function verifyIntake(
   sql: Sql,
   token: ParsedSourceToken,
   request: Request,
-  eventId: string,
   ring: KeyRing
 ): Promise<VerifiedSource | null> {
   const origin = classifySubmissionOrigin(request);
@@ -153,13 +156,6 @@ export async function verifyIntake(
         AND d.status = 'active'
         AND d.deleted_at IS NULL
     `) as { normalized_hostname: string }[];
-    const duplicateRows = (await tx`
-      SELECT 1 AS present
-      FROM awcms_engagement_submissions
-      WHERE tenant_id = ${token.tenantId}
-        AND source_id = ${token.sourceId}
-        AND event_id = ${eventId}
-    `) as { present: number }[];
 
     const accepted =
       source !== undefined &&
@@ -168,6 +164,7 @@ export async function verifyIntake(
       tenantRows[0]?.status === "active" &&
       (moduleEntry?.tenantEnabled ?? false) &&
       origin !== null &&
+      isAcceptableOriginScheme(origin) &&
       isRegisteredHost(
         origin.hostname,
         hostRows.map((row) => row.normalized_hostname)
@@ -182,8 +179,7 @@ export async function verifyIntake(
       acceptedKinds: source.accepted_kinds,
       consentCopyVersion: source.consent_copy_version,
       challengeMode: source.challenge_mode,
-      origin,
-      duplicate: duplicateRows.length > 0
+      origin
     };
   });
 }

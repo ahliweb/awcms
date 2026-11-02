@@ -11,7 +11,9 @@ import {
   badId,
   notFound,
   personOnlyRefusal,
+  readIdempotencyKey,
   readValidatedBody,
+  runIdempotent,
   withEffectiveChallenge
 } from "../../../../../../modules/website-engagement/application/route-support";
 import {
@@ -35,15 +37,41 @@ export const GET = defineTenantRoute({
   }
 });
 
+type PatchPrepared = {
+  input: UpdateSourceInput;
+  idempotencyKey: string | null;
+};
+
+const PATCH_SCOPE = "website_engagement_source_downgrade_challenge";
+
 /**
  * `PATCH /api/v1/website-engagement/sources/{id}` — rename, pause or resume,
  * change the consent copy version, the challenge mode, the accepted kinds or
  * the host list. Revocation is its own endpoint and a revoked source cannot be
  * changed (`409 SOURCE_REVOKED`).
+ *
+ * Setting `challengeMode: "none"` (switching the third-party challenge OFF for a
+ * source, audit L6) REQUIRES an `Idempotency-Key` (`400 IDEMPOTENCY_REQUIRED`
+ * without it), and any change of the mode writes a warning audit row naming the
+ * old and the new mode. No secret is involved.
  */
-export const PATCH = defineTenantRoute<UpdateSourceInput>({
+export const PATCH = defineTenantRoute<PatchPrepared>({
   workClass: "interactive",
-  prepare: ({ request }) => readValidatedBody(request, validateUpdateSource),
+  prepare: async ({ request }) => {
+    const input = await readValidatedBody(request, validateUpdateSource);
+
+    if (input instanceof Response) return input;
+
+    if (input.challengeMode !== "none") {
+      return { input, idempotencyKey: null };
+    }
+
+    const idempotencyKey = readIdempotencyKey(request);
+
+    return idempotencyKey instanceof Response
+      ? idempotencyKey
+      : { input, idempotencyKey };
+  },
   authorize: WEBSITE_ENGAGEMENT_GUARDS.manageSources,
   handler: async (context) => {
     const refused = personOnlyRefusal(context.auth);
@@ -55,39 +83,78 @@ export const PATCH = defineTenantRoute<UpdateSourceInput>({
     if (!id) return badId();
 
     const { tx, tenantId, auth, prepared } = context;
-    const result = await updateSource(
+    const actor = auth.context.tenantUserId;
+
+    const apply = async (): Promise<
+      { status: number; body: Record<string, unknown> } | Response
+    > => {
+      const before = await fetchSource(tx, tenantId, id);
+      const result = await updateSource(
+        tx,
+        tenantId,
+        actor,
+        id,
+        prepared.input
+      );
+
+      if (result.outcome === "not_found") return notFound("Source");
+
+      if (result.outcome === "revoked") {
+        return fail(
+          409,
+          "SOURCE_REVOKED",
+          "A revoked source cannot be changed."
+        );
+      }
+
+      if (result.outcome === "domain_not_found") {
+        return fail(
+          422,
+          "DOMAIN_NOT_FOUND",
+          "A listed domain is not a live domain of this tenant."
+        );
+      }
+
+      await auditWebsiteEngagement(context, {
+        action: "website_engagement.source.update",
+        resourceType: "website_engagement_source",
+        resourceId: id,
+        severity: "warning",
+        message: "Website source changed.",
+        attributes: {
+          // Which fields changed, never their values (the two challenge modes
+          // are fixed codes, not secrets).
+          fields: Object.keys(prepared.input).sort(),
+          ...(prepared.input.challengeMode !== undefined && before
+            ? {
+                challengeModeFrom: before.challengeMode,
+                challengeModeTo: prepared.input.challengeMode
+              }
+            : {})
+        }
+      });
+
+      return {
+        status: 200,
+        body: { ...withEffectiveChallenge(result.source) }
+      };
+    };
+
+    if (prepared.idempotencyKey === null) {
+      const outcome = await apply();
+
+      return outcome instanceof Response ? outcome : ok(outcome.body);
+    }
+
+    return runIdempotent(
       tx,
       tenantId,
-      auth.context.tenantUserId,
-      id,
-      prepared
+      PATCH_SCOPE,
+      prepared.idempotencyKey,
+      actor,
+      { id, ...prepared.input },
+      apply
     );
-
-    if (result.outcome === "not_found") return notFound("Source");
-
-    if (result.outcome === "revoked") {
-      return fail(409, "SOURCE_REVOKED", "A revoked source cannot be changed.");
-    }
-
-    if (result.outcome === "domain_not_found") {
-      return fail(
-        422,
-        "DOMAIN_NOT_FOUND",
-        "A listed domain is not a live domain of this tenant."
-      );
-    }
-
-    await auditWebsiteEngagement(context, {
-      action: "website_engagement.source.update",
-      resourceType: "website_engagement_source",
-      resourceId: id,
-      severity: "warning",
-      message: "Website source changed.",
-      // Which fields changed, never their values.
-      attributes: { fields: Object.keys(prepared).sort() }
-    });
-
-    return ok(withEffectiveChallenge(result.source));
   }
 });
 

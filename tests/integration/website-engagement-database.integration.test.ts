@@ -79,6 +79,7 @@ const ENV_NAMES = [
   "WEBSITE_ENGAGEMENT_KEYS",
   "WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX",
   "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX",
+  "WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX",
   "AUTH_ONLINE_SECURITY_ENABLED",
   "AUTH_ONLINE_SECURITY_PROFILE",
   "TURNSTILE_ENABLED",
@@ -342,6 +343,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
     process.env.WEBSITE_ENGAGEMENT_KEYS = RING_SPEC;
     process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "10000";
     process.env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX = "10000";
+    delete process.env.WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX;
     await resetDatabase();
     fx = await seedFixture();
   });
@@ -828,28 +830,184 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       expect(locales.map((row) => row.locale)).toEqual(["id", "en", null]);
     });
 
-    test("the per-source ceiling is spent only AFTER the token is proven: forged tokens cannot starve a real source", async () => {
+    test("H1: a scraped REAL token with a forged Origin from many addresses cannot starve a real visitor", async () => {
       process.env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX = "2";
+      process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "5";
       resetRateLimitForTests();
 
-      const secret = fx.tokens.a!.split(".")[3]!;
-      const forged = `wes1.${T1}.${fx.sourceIds.a}.${secret.replace(/.$/, "Z")}`;
+      // Forty different addresses replay the REAL token from a foreign origin.
+      for (let i = 0; i < 40; i += 1) {
+        const attack = await submit(body(fx.tokens.a!), {
+          origin: "https://evil.example",
+          ip: `198.51.100.${i + 1}`
+        });
 
-      for (let i = 0; i < 6; i += 1) {
-        expect((await submit(body(forged))).status).toBe(403);
+        expect(attack.status).toBe(403);
       }
 
+      // ...and the real website's visitors are untouched.
       expect((await submit(body(fx.tokens.a!))).status).toBe(200);
       expect((await submit(body(fx.tokens.a!))).status).toBe(200);
 
+      // The ceiling is still a ceiling for proven, challenge-passing traffic.
       const limited = await submit(body(fx.tokens.a!));
 
       expect(limited.status).toBe(429);
       expect(limited.response.headers.get("retry-after")).not.toBeNull();
-      // The caller is proven, so it may read its own error.
       expect(limited.response.headers.get("access-control-allow-origin")).toBe(
         `https://${SHOP}`
       );
+    });
+
+    test("H1: failed challenges spend none of a real source's budget", async () => {
+      process.env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX = "2";
+      process.env.AUTH_ONLINE_SECURITY_ENABLED = "true";
+      process.env.AUTH_ONLINE_SECURITY_PROFILE = "full_online";
+      process.env.TURNSTILE_ENABLED = "true";
+      delete process.env.TURNSTILE_SECRET_KEY;
+      resetRateLimitForTests();
+
+      for (let i = 0; i < 8; i += 1) {
+        const failed = await submit(body(fx.tokens.a!), {
+          ip: `203.0.113.${i + 1}`
+        });
+
+        expect(failed.status).toBe(403);
+      }
+
+      delete process.env.TURNSTILE_ENABLED;
+
+      expect((await submit(body(fx.tokens.a!))).status).toBe(200);
+      expect((await submit(body(fx.tokens.a!))).status).toBe(200);
+      expect((await submit(body(fx.tokens.a!))).status).toBe(429);
+    });
+
+    test("H1: the per-address limiter keys an IPv6 address on its /64, not on the whole address", async () => {
+      process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "2";
+      resetRateLimitForTests();
+
+      await submit(body(fx.tokens.a!), { ip: "2001:db8:1:2::1" });
+      await submit(body(fx.tokens.a!), { ip: "2001:db8:1:2:ffff:eeee:dddd:1" });
+
+      const sameSlash64 = await submit(body(fx.tokens.a!), {
+        ip: "2001:db8:1:2:1234::9"
+      });
+      const otherSlash64 = await submit(body(fx.tokens.a!), {
+        ip: "2001:db8:1:3::1"
+      });
+
+      expect(sameSlash64.status).toBe(429);
+      expect(otherSlash64.status).toBe(200);
+    });
+
+    test("M1: interactions have their own lower budget and never spend the lead budget (and need no per-event challenge)", async () => {
+      process.env.WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX = "2";
+      process.env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX = "1000";
+      process.env.AUTH_ONLINE_SECURITY_ENABLED = "true";
+      process.env.AUTH_ONLINE_SECURITY_PROFILE = "full_online";
+      process.env.TURNSTILE_ENABLED = "true";
+      delete process.env.TURNSTILE_SECRET_KEY;
+      resetRateLimitForTests();
+
+      const click = () =>
+        submit({
+          sourceToken: fx.tokens.a!,
+          eventId: `evt-click-${(eventCounter += 1)}-xxxx`,
+          kind: "interaction",
+          interaction: { type: "cta_click" }
+        });
+
+      // Challenge is required for leads on this deployment, yet interactions pass.
+      expect((await click()).status).toBe(200);
+      expect((await click()).status).toBe(200);
+      expect((await click()).status).toBe(429);
+
+      // The lead budget is untouched: a lead still reaches (and fails) the challenge, not a 429.
+      expect((await submit(body(fx.tokens.a!))).status).toBe(403);
+
+      const rows = (await getAdminSql()`
+        SELECT challenge_outcome FROM awcms_engagement_submissions
+      `) as { challenge_outcome: string }[];
+
+      expect(rows.map((row) => row.challenge_outcome)).toEqual([
+        "not_required",
+        "not_required"
+      ]);
+    });
+
+    test("M2: a duplicate eventId is no oracle before the challenge: new and existing ids answer identically", async () => {
+      const first = body(fx.tokens.a!);
+
+      expect((await submit(first)).status).toBe(200);
+
+      process.env.AUTH_ONLINE_SECURITY_ENABLED = "true";
+      process.env.AUTH_ONLINE_SECURITY_PROFILE = "full_online";
+      process.env.TURNSTILE_ENABLED = "true";
+      delete process.env.TURNSTILE_SECRET_KEY;
+
+      const existing = await submit(first);
+      const fresh = await submit(body(fx.tokens.a!));
+
+      expect(existing.status).toBe(403);
+      expect(fresh.status).toBe(403);
+      expect(existing.text).toBe(fresh.text);
+      expect(await count("awcms_engagement_submissions", T1)).toBe(1);
+    });
+
+    test("L2: plain http is refused for a registered production host; a localhost dev host may use it", async () => {
+      const http = await submit(body(fx.tokens.a!), {
+        origin: `http://${SHOP}`
+      });
+
+      expect(http.status).toBe(403);
+      expect(
+        http.response.headers.get("access-control-allow-origin")
+      ).toBeNull();
+
+      const downgradedReferer = await submit(body(fx.tokens.a!), {
+        origin: null,
+        referer: `http://${SHOP}/kontak`
+      });
+
+      expect(downgradedReferer.status).toBe(403);
+
+      const local = await getAdminSql()`
+        INSERT INTO awcms_tenant_domains
+          (tenant_id, hostname, normalized_hostname, domain_type, status, verified_at)
+        VALUES (${T1}, 'localhost', 'localhost', 'custom_domain', 'active', now())
+        RETURNING id
+      `;
+
+      await inTenant(T1, (tx) =>
+        updateSource(tx, T1, U1, fx.sourceIds.a!, {
+          domainIds: [fx.domainIds.shop!, (local as { id: string }[])[0]!.id]
+        })
+      );
+
+      const dev = await submit(body(fx.tokens.a!), {
+        origin: "http://localhost:4321"
+      });
+
+      expect(dev.status).toBe(200);
+      expect(dev.response.headers.get("access-control-allow-origin")).toBe(
+        "http://localhost:4321"
+      );
+    });
+
+    test("L4: personal data cannot ride in utm values or paths into the outbox event", async () => {
+      for (const attribution of [
+        { utmSource: "john@example.com" },
+        { utmCampaign: "jo%40example.com" },
+        { utmTerm: "budi:08123456789" },
+        { landingPath: "/u/jo%40example.com" },
+        { landingPath: "/u/budi@example.com" }
+      ]) {
+        const result = await submit(body(fx.tokens.a!, { attribution }));
+
+        expect(result.status).toBe(400);
+      }
+
+      expect(await count("awcms_engagement_submissions")).toBe(0);
     });
 
     test("the per-address limit answers 429 before any database work", async () => {
@@ -1050,6 +1208,25 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
         // The first reason stands: a later request does not rewrite history.
         expect(second.submission.withdrawalReason).toBe("data_subject_request");
       }
+
+      // M3: the withdrawal ERASED the person; the consent evidence stays.
+      const erased = (await getAdminSql()`
+        SELECT contact_encrypted, email_hash, phone_hash, email_masked,
+               phone_masked, consent_copy_version
+        FROM awcms_engagement_submissions WHERE id = ${id}
+      `) as Record<string, unknown>[];
+
+      expect(erased[0]).toMatchObject({
+        contact_encrypted: null,
+        email_hash: null,
+        phone_hash: null,
+        email_masked: null,
+        phone_masked: null,
+        consent_copy_version: "v1"
+      });
+      expect(
+        await inTenant(T1, (tx) => revealSubmission(tx, T1, id!, ring()))
+      ).toBeNull();
 
       const withdrawn = await events(
         T1,
@@ -1367,11 +1544,54 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
         expect(String(error.message)).toContain("evidence");
       }
 
+      // A withdrawal that does NOT erase the person is refused by the shape CHECK.
+      await assertRejected(
+        admin`
+          UPDATE awcms_engagement_submissions
+          SET status = 'withdrawn', withdrawn_at = now(), withdrawal_reason = 'controller_decision'
+          WHERE id = ${id}
+        `,
+        "a withdrawal that keeps the contact blob"
+      );
+
+      // M3: the withdrawal erases the blob, the keyed hashes and the masked values.
       await admin`
         UPDATE awcms_engagement_submissions
-        SET status = 'withdrawn', withdrawn_at = now(), withdrawal_reason = 'controller_decision'
+        SET status = 'withdrawn', withdrawn_at = now(), withdrawal_reason = 'controller_decision',
+            contact_encrypted = NULL, email_hash = NULL, phone_hash = NULL,
+            email_masked = NULL, phone_masked = NULL
         WHERE id = ${id}
       `;
+
+      const erased = (await admin`
+        SELECT contact_encrypted, email_hash, phone_hash, email_masked, phone_masked,
+               consent_purposes, consent_copy_version, consent_at, landing_path
+        FROM awcms_engagement_submissions WHERE id = ${id}
+      `) as Record<string, unknown>[];
+
+      expect(erased[0]).toMatchObject({
+        contact_encrypted: null,
+        email_hash: null,
+        phone_hash: null,
+        email_masked: null,
+        phone_masked: null,
+        consent_copy_version: "v1",
+        landing_path: "/produk"
+      });
+      expect(erased[0]!.consent_purposes).toEqual(["respond_to_inquiry"]);
+
+      // ...and nothing can be written back afterwards.
+      for (const column of [
+        "contact_encrypted = 'x'",
+        "email_masked = 'a***@b.co'"
+      ]) {
+        await assertRejected(
+          admin.unsafe(
+            `UPDATE awcms_engagement_submissions SET ${column} WHERE id = '${id}'`
+          ),
+          "restoring erased identifiers"
+        );
+      }
 
       const oneWay = await assertRejected(
         admin`UPDATE awcms_engagement_submissions SET status = 'received', withdrawn_at = NULL, withdrawal_reason = NULL WHERE id = ${id}`,
@@ -1442,6 +1662,17 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       );
 
       expect(String(error.message)).toContain("own tenant");
+
+      // L1: re-pointing an EXISTING link at another tenant's domain is refused too.
+      const update = await assertRejected(
+        admin`
+          UPDATE awcms_engagement_source_domains SET tenant_domain_id = ${fx.domainIds.other}
+          WHERE source_id = ${fx.sourceIds.a}
+        `,
+        "re-pointing a link at another tenant's domain"
+      );
+
+      expect(String(update.message)).toContain("own tenant");
 
       await assertRejected(
         admin`UPDATE awcms_engagement_sources SET code = 'renamed' WHERE id = ${fx.sourceIds.a}`,
