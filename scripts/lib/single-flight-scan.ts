@@ -147,7 +147,7 @@ export function astroScripts(source: string): string {
   // quoted units; a self-closing `<script … />` has no body and must not
   // swallow the markup up to the NEXT `</script>`.
   const pattern =
-    /<script\b((?:"[^"]*"|'[^']*'|[^>"'])*)>([\s\S]*?)<\/script>/gi;
+    /<script\b((?:"[^"]*"|'[^']*'|[^>"'])*)>([\s\S]*?)<\/script\b[^>]*>/gi;
   let match: RegExpExecArray | null;
   let consumed = 0;
 

@@ -199,6 +199,21 @@ describe("the scanner itself", () => {
     expect(kinds(root)).toEqual(["onSubmit:f"]);
   });
 
+  test("an upper-case <SCRIPT> and an end tag with whitespace (</script >) are still scanned", () => {
+    const root = fixture({
+      "src/pages/a.astro": `<SCRIPT>
+        import { onSubmit, sendJson } from "../lib/ui/admin-form-client";
+        onSubmit("up", async () => { await sendJson("POST", "/api/v1/x", {}); });
+      </SCRIPT>
+<script>
+        import { onSubmit, sendJson } from "../lib/ui/admin-form-client";
+        onSubmit("sp", async () => { await sendJson("POST", "/api/v1/y", {}); });
+      </script >`
+    });
+
+    expect(kinds(root).sort()).toEqual(["onSubmit:sp", "onSubmit:up"]);
+  });
+
   test("`mutateAndReload(null, …)` is not a lock", () => {
     const root = fixture({
       "src/pages/a.astro": `<script>
