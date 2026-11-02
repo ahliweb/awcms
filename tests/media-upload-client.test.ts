@@ -13,12 +13,23 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  DEFAULT_COMPRESSION_MESSAGES,
+  describeCompressionFailure,
+  describeCompressionSuccess,
   describeUploadFailure,
   formatProgress,
+  readCompressionMessages,
   uploadMediaBytes,
+  uploadMediaFile,
+  type CompressionSummary,
+  type UploadMediaFileOutcome,
   type UploadSessionData,
   type UploadTransport
 } from "../src/lib/ui/media-upload-client";
+import type {
+  DecodedImage,
+  ImageCompressionPorts
+} from "../src/lib/ui/media-image-compression";
 
 const SESSION: UploadSessionData = {
   objectId: "obj-1",
@@ -333,5 +344,414 @@ describe("formatProgress", () => {
 
   test("a zero total does not divide by zero", () => {
     expect(formatProgress({ loaded: 0, total: 0 })).toBe("0 kB sent");
+  });
+});
+
+/**
+ * Issue #1221 — compression happens BEFORE the session exists, and the session
+ * claims the size and type of the bytes actually sent.
+ */
+const MIB = 1024 * 1024;
+const CAP = 2 * MIB;
+
+function chosenFile(size: number, type: string, name: string): File {
+  // Real bytes of the claimed size: `size` is what the browser reports and
+  // `arrayBuffer()` is what is sent, and the client must trust only the latter.
+  return new File([new Uint8Array(size)], name, { type });
+}
+
+function portsProducing(
+  encodedBytes: number,
+  options: { width?: number; height?: number; alpha?: boolean } = {}
+): ImageCompressionPorts {
+  const decoded: DecodedImage = {
+    width: options.width ?? 4000,
+    height: options.height ?? 3000,
+    async hasAlpha() {
+      return options.alpha ?? false;
+    },
+    async encode(request) {
+      return new Blob([new Uint8Array(encodedBytes)], {
+        type: request.mimeType
+      });
+    },
+    dispose() {}
+  };
+
+  return {
+    encodableTypes: ["image/webp", "image/jpeg"],
+    async decode() {
+      return decoded;
+    }
+  };
+}
+
+type Claimed = {
+  createSession: unknown[];
+  put: Array<{ bytes: number; contentType: string }>;
+};
+
+function recordingTransport(claimed: Claimed): UploadTransport {
+  return {
+    async createSession(input) {
+      claimed.createSession.push(input);
+      return { ok: true, data: SESSION, errorCode: null };
+    },
+    async putBytes({ bytes, contentType }) {
+      claimed.put.push({ bytes: bytes.byteLength, contentType });
+      return { ok: true, errorCode: null };
+    },
+    async finalize() {
+      return { ok: true, errorCode: null };
+    },
+    async cancel() {},
+    async digest() {
+      return null;
+    }
+  };
+}
+
+describe("uploadMediaFile — compression before the session", () => {
+  test("an oversize JPEG is compressed, and the session claims the COMPRESSED size and type", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+    const events: string[] = [];
+    let summary: CompressionSummary | null = null;
+
+    const outcome = await uploadMediaFile(
+      chosenFile(5 * MIB, "image/jpeg", "IMG_0001.JPG"),
+      {
+        transport: recordingTransport(claimed),
+        maxBytes: CAP,
+        loadPorts: async () => portsProducing(1.2 * MIB),
+        onCompressing: () => events.push("compressing"),
+        onCompressed: (value) => {
+          events.push("compressed");
+          summary = value;
+        }
+      }
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(events).toEqual(["compressing", "compressed"]);
+
+    // Both candidates cost the same in this fake; WebP is listed first and wins ties.
+    expect(claimed.createSession).toEqual([
+      {
+        fileName: "IMG_0001.webp",
+        mimeType: "image/webp",
+        byteSize: Math.floor(1.2 * MIB)
+      }
+    ]);
+    // And the bytes put to storage are exactly what was claimed.
+    expect(claimed.put).toEqual([
+      { bytes: Math.floor(1.2 * MIB), contentType: "image/webp" }
+    ]);
+    expect(summary).toMatchObject({
+      originalByteSize: 5 * MIB,
+      byteSize: Math.floor(1.2 * MIB),
+      mimeType: "image/webp",
+      name: "IMG_0001.webp"
+    });
+    expect(outcome.ok && outcome.compression).toEqual(summary);
+  });
+
+  test("the claimed byteSize never exceeds the cap the server enforces", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+
+    await uploadMediaFile(chosenFile(9 * MIB, "image/png", "scan.png"), {
+      transport: recordingTransport(claimed),
+      maxBytes: CAP,
+      loadPorts: async () => portsProducing(CAP)
+    });
+
+    const [session] = claimed.createSession as Array<{ byteSize: number }>;
+    expect(session!.byteSize).toBeLessThanOrEqual(CAP);
+  });
+
+  test("a file within the cap is sent unchanged: same bytes, same type, no compression", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+    let loaded = false;
+    let compressing = false;
+
+    const outcome = await uploadMediaFile(
+      chosenFile(900_000, "image/jpeg", "small.jpg"),
+      {
+        transport: recordingTransport(claimed),
+        maxBytes: CAP,
+        loadPorts: async () => {
+          loaded = true;
+          return null;
+        },
+        onCompressing: () => {
+          compressing = true;
+        }
+      }
+    );
+
+    expect(outcome).toEqual({ ok: true, objectId: "obj-1", compression: null });
+    expect(claimed.createSession).toEqual([
+      { fileName: "small.jpg", mimeType: "image/jpeg", byteSize: 900_000 }
+    ]);
+    expect(loaded).toBe(false);
+    expect(compressing).toBe(false);
+  });
+
+  test("a GIF over the cap is refused: no session, no transfer, a named reason", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+
+    const outcome = await uploadMediaFile(
+      chosenFile(3 * MIB, "image/gif", "spin.gif"),
+      {
+        transport: recordingTransport(claimed),
+        maxBytes: CAP,
+        loadPorts: async () => portsProducing(1)
+      }
+    );
+
+    expect(outcome).toEqual({
+      ok: false,
+      step: "compress",
+      reason: "gif_over_cap",
+      maxBytes: CAP,
+      originalByteSize: 3 * MIB,
+      smallestByteSize: null
+    });
+    expect(claimed.createSession).toEqual([]);
+    expect(claimed.put).toEqual([]);
+  });
+
+  test("a browser that cannot compress refuses an oversize image instead of sending it", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+
+    const outcome = await uploadMediaFile(
+      chosenFile(5 * MIB, "image/jpeg", "big.jpg"),
+      {
+        transport: recordingTransport(claimed),
+        maxBytes: CAP,
+        loadPorts: async () => null
+      }
+    );
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      step: "compress",
+      reason: "unsupported_browser"
+    });
+    expect(claimed.createSession).toEqual([]);
+  });
+
+  test("the floor reached is refused with the smallest size and nothing is created", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+
+    const outcome = await uploadMediaFile(
+      chosenFile(9 * MIB, "image/jpeg", "dense.jpg"),
+      {
+        transport: recordingTransport(claimed),
+        maxBytes: CAP,
+        loadPorts: async () => portsProducing(CAP + 5)
+      }
+    );
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      step: "compress",
+      reason: "floor_reached",
+      smallestByteSize: CAP + 5
+    });
+    expect(claimed.createSession).toEqual([]);
+  });
+
+  test("a file whose real bytes are larger than its reported size cannot slip past the cap", async () => {
+    // `size` says 1 MiB but the buffer read is 3 MiB (a file changed on disk
+    // between the check and the read). The measured length is what counts.
+    const lying = new File([new Uint8Array(3 * MIB)], "lie.jpg", {
+      type: "image/jpeg"
+    });
+    Object.defineProperty(lying, "size", { value: MIB });
+    const claimed: Claimed = { createSession: [], put: [] };
+
+    const outcome = await uploadMediaFile(lying, {
+      transport: recordingTransport(claimed),
+      maxBytes: CAP,
+      loadPorts: async () => null
+    });
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      step: "compress",
+      reason: "floor_reached",
+      smallestByteSize: 3 * MIB
+    });
+    expect(claimed.createSession).toEqual([]);
+  });
+
+  test("an unknown cap (null) sends the file as chosen and leaves the decision to the server", async () => {
+    const claimed: Claimed = { createSession: [], put: [] };
+
+    const outcome = await uploadMediaFile(
+      chosenFile(5 * MIB, "image/jpeg", "big.jpg"),
+      {
+        transport: recordingTransport(claimed),
+        maxBytes: null,
+        loadPorts: async () => {
+          throw new Error("must not compress without a known cap");
+        }
+      }
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(claimed.createSession).toEqual([
+      { fileName: "big.jpg", mimeType: "image/jpeg", byteSize: 5 * MIB }
+    ]);
+  });
+
+  test("a server-side failure after compression still cancels the session", async () => {
+    const calls: string[] = [];
+    const transport = recordingTransport({ createSession: [], put: [] });
+
+    const outcome = await uploadMediaFile(
+      chosenFile(5 * MIB, "image/jpeg", "big.jpg"),
+      {
+        transport: {
+          ...transport,
+          async finalize() {
+            return { ok: false, errorCode: "VALIDATION_ERROR" };
+          },
+          async cancel() {
+            calls.push("cancel");
+          }
+        },
+        maxBytes: CAP,
+        loadPorts: async () => portsProducing(MIB)
+      }
+    );
+
+    expect(outcome).toEqual({
+      ok: false,
+      step: "finalize",
+      errorCode: "VALIDATION_ERROR"
+    });
+    expect(calls).toEqual(["cancel"]);
+  });
+
+  test("a session refusal passes through unchanged (the server stays the source of truth)", async () => {
+    const transport = recordingTransport({ createSession: [], put: [] });
+
+    const outcome = await uploadMediaFile(
+      chosenFile(900_000, "image/jpeg", "ok.jpg"),
+      {
+        transport: {
+          ...transport,
+          async createSession() {
+            return { ok: false, data: null, errorCode: "VALIDATION_ERROR" };
+          }
+        },
+        maxBytes: CAP,
+        loadPorts: async () => null
+      }
+    );
+
+    expect(outcome).toEqual({
+      ok: false,
+      step: "session",
+      errorCode: "VALIDATION_ERROR"
+    });
+  });
+});
+
+describe("compression messages", () => {
+  const failure = (
+    reason: Extract<UploadMediaFileOutcome, { step: "compress" }>["reason"],
+    smallestByteSize: number | null = null
+  ): Extract<UploadMediaFileOutcome, { step: "compress" }> => ({
+    ok: false,
+    step: "compress",
+    reason,
+    maxBytes: CAP,
+    originalByteSize: Math.round(3.4 * MIB),
+    smallestByteSize
+  });
+
+  test("every failure reason has a message that names the cap", () => {
+    const reasons = [
+      "gif_over_cap",
+      "type_not_compressible",
+      "invalid_input",
+      "unsupported_browser",
+      "decode_failed",
+      "source_too_large",
+      "invalid_dimensions",
+      "no_encoder",
+      "alpha_needs_webp",
+      "floor_reached"
+    ] as const;
+
+    for (const reason of reasons) {
+      const text = describeCompressionFailure(failure(reason), undefined, "en");
+      expect(text.length).toBeGreaterThan(20);
+      // No unfilled placeholder may reach a person's screen.
+      expect(text).not.toMatch(/\{\w+\}/);
+    }
+  });
+
+  test("the GIF refusal names both the file size and the cap", () => {
+    const text = describeCompressionFailure(
+      failure("gif_over_cap"),
+      undefined,
+      "en"
+    );
+    expect(text).toContain("3.4 MiB");
+    expect(text).toContain("2 MiB");
+    expect(text).toContain("GIF");
+  });
+
+  test("the floor message shows the smallest size reached", () => {
+    const text = describeCompressionFailure(
+      failure("floor_reached", Math.round(2.6 * MIB)),
+      undefined,
+      "en"
+    );
+    expect(text).toContain("2.6 MiB");
+  });
+
+  test("the success message shows the original and the final size", () => {
+    const text = describeCompressionSuccess(
+      {
+        originalByteSize: Math.round(4.2 * MIB),
+        byteSize: Math.round(1.6 * MIB),
+        mimeType: "image/webp",
+        name: "a.webp",
+        width: 2560,
+        height: 1920
+      },
+      undefined,
+      "en"
+    );
+    expect(text).toContain("4.2 MiB");
+    expect(text).toContain("1.6 MiB");
+    expect(text).toContain("EXIF");
+  });
+
+  test("server-translated templates are used when present, English when absent or blank", () => {
+    const messages = readCompressionMessages({
+      msgCompressing: "Mengompres ({original})",
+      msgGifOverCap: "   "
+    });
+
+    expect(messages.compressing).toBe("Mengompres ({original})");
+    expect(messages.gifOverCap).toBe(DEFAULT_COMPRESSION_MESSAGES.gifOverCap);
+    expect(messages.floorReached).toBe(
+      DEFAULT_COMPRESSION_MESSAGES.floorReached
+    );
+  });
+
+  test("translated templates fill the same placeholders", () => {
+    const messages = readCompressionMessages({
+      msgGifOverCap: "GIF {original} melebihi {cap}"
+    });
+
+    expect(
+      describeCompressionFailure(failure("gif_over_cap"), messages, "id")
+    ).toBe("GIF 3,4 MiB melebihi 2 MiB");
   });
 });

@@ -25,7 +25,7 @@ paths:
       tags:
         - News Media
       summary: Create a direct-to-R2 presigned upload session for a news image
-      description: Gated by media_library.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser.
+      description: Gated by media_library.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser. The per-image size cap defaults to 2 MiB (NEWS_MEDIA_R2_MAX_UPLOAD_BYTES overrides it); the admin media screen compresses an oversize JPEG/PNG/WebP in the browser before calling this endpoint and never re-encodes a GIF, but the server enforces the cap regardless of what the client did.
       operationId: newsMediaUploadSessionsCreate
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
@@ -870,7 +870,7 @@ components:
         byteSize:
           type: integer
           minimum: 1
-          description: Claimed size in bytes — shape-only check against NEWS_MEDIA_R2_MAX_UPLOAD_BYTES; the real size is re-checked from R2 itself at finalize time.
+          description: Claimed size in bytes of the file that will actually be uploaded (for the admin uploader, the browser-compressed file when compression ran, never the original). Shape-only check against NEWS_MEDIA_R2_MAX_UPLOAD_BYTES, whose default is 2 MiB (2097152); a larger claim is refused with 400 VALIDATION_ERROR. The real size is re-checked from R2 itself at finalize time, so a client that skips compression is simply refused over the cap.
         originalFilename:
           type: string
           nullable: true

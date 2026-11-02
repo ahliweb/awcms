@@ -4089,8 +4089,41 @@ msgstr "Berkas dikirim langsung ke penyimpanan dari peramban ini. Server memerik
 msgid "Image file"
 msgstr "Berkas gambar"
 
-msgid "Accepted: {types}. Maximum {max} kB."
-msgstr "Diterima: {types}. Maksimum {max} kB."
+msgid "Accepted: {types}. Maximum {max} per image. A JPEG, PNG or WebP over the limit is compressed in your browser before it is sent, which removes camera and location metadata. A GIF is never changed, so a GIF over the limit is refused."
+msgstr "Diterima: {types}. Maksimum {max} per gambar. JPEG, PNG, atau WebP yang melebihi batas dikompres di peramban Anda sebelum dikirim, sehingga metadata kamera dan lokasi tidak ikut tersimpan. GIF tidak pernah diubah, jadi GIF yang melebihi batas ditolak."
+
+msgid "Compressing the image in your browser ({original})…"
+msgstr "Mengompres gambar di peramban Anda ({original})…"
+
+msgid "Compressed from {original} to {final} before upload. Camera and location metadata (EXIF) is not kept."
+msgstr "Dikompres dari {original} menjadi {final} sebelum diunggah. Metadata kamera dan lokasi (EXIF) tidak disimpan."
+
+msgid "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image."
+msgstr "GIF ini berukuran {original}, melebihi batas {cap}. Berkas GIF tidak pernah dikompres ulang karena animasinya akan hilang. Pilih GIF yang lebih kecil, atau gunakan gambar JPEG, PNG, atau WebP."
+
+msgid "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded."
+msgstr "Berkas ini berukuran {original}, melebihi batas {cap}, dan jenisnya tidak dapat dikompres di peramban. Tidak ada yang diunggah."
+
+msgid "Even at the smallest size tried, the image is still {smallest}, over the {cap} limit. Choose a smaller image. Nothing was uploaded."
+msgstr "Bahkan pada ukuran terkecil yang dicoba, gambar masih {smallest}, melebihi batas {cap}. Pilih gambar yang lebih kecil. Tidak ada yang diunggah."
+
+msgid "This image is {original}, over the {cap} limit, and this browser cannot compress images. Use a current version of Chrome, Edge, Firefox or Safari, or choose a smaller image. Nothing was uploaded."
+msgstr "Gambar ini berukuran {original}, melebihi batas {cap}, dan peramban ini tidak dapat mengompres gambar. Gunakan Chrome, Edge, Firefox, atau Safari versi terbaru, atau pilih gambar yang lebih kecil. Tidak ada yang diunggah."
+
+msgid "This image could not be read, so it could not be compressed to fit the {cap} limit. Nothing was uploaded."
+msgstr "Gambar ini tidak dapat dibaca, sehingga tidak dapat dikompres agar sesuai batas {cap}. Tidak ada yang diunggah."
+
+msgid "This image has too many pixels to compress in the browser. Resize it first, or choose a smaller image. Nothing was uploaded."
+msgstr "Gambar ini memiliki terlalu banyak piksel untuk dikompres di peramban. Perkecil dulu ukurannya, atau pilih gambar yang lebih kecil. Tidak ada yang diunggah."
+
+msgid "This browser cannot write the image formats needed to compress this file to fit the {cap} limit. Nothing was uploaded."
+msgstr "Peramban ini tidak dapat menulis format gambar yang diperlukan untuk mengompres berkas ini agar sesuai batas {cap}. Tidak ada yang diunggah."
+
+msgid "This image has transparency and this browser cannot write WebP, so it cannot be compressed without losing the transparency. Choose a smaller image. Nothing was uploaded."
+msgstr "Gambar ini memiliki transparansi dan peramban ini tidak dapat menulis WebP, sehingga tidak dapat dikompres tanpa kehilangan transparansi. Pilih gambar yang lebih kecil. Tidak ada yang diunggah."
+
+msgid "This file could not be checked against the {cap} limit. Nothing was uploaded."
+msgstr "Berkas ini tidak dapat diperiksa terhadap batas {cap}. Tidak ada yang diunggah."
 
 msgid "Upload"
 msgstr "Unggah"

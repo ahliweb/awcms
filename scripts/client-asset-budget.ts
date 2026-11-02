@@ -1121,15 +1121,30 @@ export const READER_BUDGET_BYTES = 24_000;
  * the difference is the compiler's output for the same components, so there is no
  * per-screen duplication to recover and no island to trim.
  *
- * **Raised for the Issue #1224 review fixes**: +74 B, measured (346,353 ->
- * 346,427 on the same base, after trimming once). The shared single-flight
+ * **Raised for Issue #1221** (browser-side image compression on `/admin/media`):
+ * +9,795 B, measured (346,353 -> 356,148 on `main` + this change; `main` sat
+ * exactly at its budget, so the whole delta is this feature). Almost all of it is
+ * the one script of the one screen that can use it: `media.astro`'s chunk grew to
+ * 15,257 B, carrying the pure planner, the orchestrator, the `createImageBitmap` +
+ * canvas adapter and `uploadMediaFile` (about 1,900 B of that is the English
+ * fallbacks for the compressor's eleven messages), plus a few hundred bytes of
+ * stylesheet for the status lines. It is NOT per-screen duplication to recover
+ * the way #552 was: the code exists once, in `src/lib/ui/media-image-compression*.ts`,
+ * nothing else imports it, and the alternative the issue rejected (server-side
+ * image processing) would have moved the cost to a native dependency and a decoder
+ * of untrusted bytes. It loads only on `/admin/media`; a reader downloads none of
+ * it (`READER_BUDGET_BYTES` is untouched) and neither does any other admin screen.
+ *
+ * **Raised for the Issue #1224 review fixes**: +92 B (356,148 -> 356,240), of
+ * which 79 B measured locally on top of #1221 and 13 B of margin because CI's
+ * build of the same tree measured 9 B above the local one. The shared single-flight
  * guard in `admin-form-client.ts` gained a one-shot navigation hold, a 10 s
  * recovery timer for a navigation that never replaces the page, and a release
  * that no longer overwrites a `disabled` the page changed mid-flight. All of it
  * lives in the ONE shared module (no per-screen copy), so there is nothing to
  * recover elsewhere.
  */
-export const APP_BUDGET_BYTES = 346_427;
+export const APP_BUDGET_BYTES = 356_240;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

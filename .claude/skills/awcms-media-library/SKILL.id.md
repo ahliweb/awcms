@@ -1,11 +1,11 @@
 ---
 name: awcms-media-library
-description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql/052`–`sql/054`). System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) yang MEMILIKI registry media per-tenant `awcms_news_media_objects` (tabel TIDAK di-rename — FK komposit keras dari `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verifikasi, lifecycle orphan, job `news-media:reconcile`, dan penyalaan enforcement (`GET/POST /api/v1/media/enforcement`, satu arah). Menyediakan capability `media_library` (`_shared/ports/media-library-port.ts`) yang dikonsumsi `blog_content` — konsumen kedua `news_portal` DILEBUR ke `blog_content` (ADR-0044/#300), jadi nama tabel `awcms_news_*` di sini bukan lagi petunjuk modul mana pun. Gunakan saat mengubah/menambah upload media, registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, atau enforcement. Env var `NEWS_MEDIA_R2_*` + nama tabel + command `news-media:reconcile` DIPERTAHANKAN (ADR-0036 §3/§4). Layar `/admin/media` SUDAH ADA (ADR-0056, PR #345 — `src/pages/admin/media.astro`): browse ber-filter + delete/restore/purge, tiap mutasi ber-`Idempotency-Key`. ADR-0056 SELESAI SELURUHNYA — `attach`/`detach` DICABUT (`sql/087`), `delete`/`restore`/`purge` diberi permukaan, dan rute daftar sendiri `GET /api/v1/media/objects/list` (keyset, kursor TEKS presisi mikrodetik) ditambahkan karena `?ids=` adalah resolver batch, bukan browse. Modul kini mendeklarasikan **9 permission** (7 `media.*` + 2 `enforcement.*`), nol di antaranya tak-tergerbangi. Yang sengaja TIDAK ada di layar: unggah (alur tiga langkah di browser), `enforcement.*` (saklar kebijakan tenant, tempatnya `/admin/security`), dan pratinjau `<img>`. Step 5c/5d micro (srcset, PDF) belum ada.
+description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql/052`–`sql/054`). System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) yang MEMILIKI registry media per-tenant `awcms_news_media_objects` (tabel TIDAK di-rename — FK komposit keras dari `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verifikasi, lifecycle orphan, job `news-media:reconcile`, dan penyalaan enforcement (`GET/POST /api/v1/media/enforcement`, satu arah). Menyediakan capability `media_library` (`_shared/ports/media-library-port.ts`) yang dikonsumsi `blog_content` — konsumen kedua `news_portal` DILEBUR ke `blog_content` (ADR-0044/#300), jadi nama tabel `awcms_news_*` di sini bukan lagi petunjuk modul mana pun. Gunakan saat mengubah/menambah upload media, registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, atau enforcement. Env var `NEWS_MEDIA_R2_*` + nama tabel + command `news-media:reconcile` DIPERTAHANKAN (ADR-0036 §3/§4). Layar `/admin/media` SUDAH ADA (ADR-0056, PR #345 — `src/pages/admin/media.astro`): browse ber-filter + delete/restore/purge, tiap mutasi ber-`Idempotency-Key`. ADR-0056 SELESAI SELURUHNYA — `attach`/`detach` DICABUT (`sql/087`), `delete`/`restore`/`purge` diberi permukaan, dan rute daftar sendiri `GET /api/v1/media/objects/list` (keyset, kursor TEKS presisi mikrodetik) ditambahkan karena `?ids=` adalah resolver batch, bukan browse. Modul kini mendeklarasikan **9 permission** (7 `media.*` + 2 `enforcement.*`), nol di antaranya tak-tergerbangi. Formulir unggah ADA di layar (Issue #595) dan mengompres JPEG/PNG/WebP yang melebihi batas default 2 MiB di peramban sebelum mengirim (Issue #1221; GIF tidak pernah di-encode ulang, server tetap menegakkan batas). Yang sengaja TIDAK ada di layar: `enforcement.*` (saklar kebijakan tenant, tempatnya `/admin/security`) dan pratinjau `<img>`. Step 5c/5d micro (srcset, PDF) belum ada.
 ---
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:c62514c48707fd8e9c85cf7f70108bca92e836e7052bcc37105b7b9f97dcc876 -->
+<!-- i18n-source-hash: sha256:724f9c927404f1732d0fd725b468cfc3322cdcf98b4a5b0c55e20dd8b5f120b8 -->
 
 # AWCMS — Media Library (registry media per-tenant, ADR-0036 ownership inversion)
 
@@ -60,6 +60,29 @@ description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql
 - `isManagedMediaEnforcementActiveForTenant` = readiness deployment
   (`evaluateManagedMediaReadiness`, pure) **DAN** flag per-tenant. Kedua paruh
   wajib; readiness gagal → fail-closed tanpa query DB.
+
+## Batas ukuran upload dan kompresi di peramban (Issue #1221)
+
+- Batas default per gambar adalah **2 MiB** (`NEWS_MEDIA_R2_DEFAULTS.maxUploadBytes`,
+  `domain/media-r2-public-config.ts`; override `NEWS_MEDIA_R2_MAX_UPLOAD_BYTES`).
+  Server menegakkannya tanpa berubah saat pembuatan sesi (`byteSize` yang
+  diklaim) dan saat finalize (objek nyata) — **jangan pernah melonggarkan
+  keduanya menjadi "percaya peramban"**.
+- Pengunggah admin mengompres JPEG/PNG/WebP yang melebihi batas di peramban lebih
+  dulu (`src/lib/ui/media-image-compression-plan.ts` perencana murni,
+  `media-image-compression.ts` runner, `media-image-compression-browser.ts`
+  adaptor `createImageBitmap` + canvas, dikabelkan oleh `uploadMediaFile` di
+  `media-upload-client.ts`). GIF TIDAK PERNAH di-encode ulang (animasi) — bila
+  melebihi batas ia ditolak. Encode ulang membuang EXIF/GPS (terdokumentasi,
+  disengaja).
+- Aturan saat menyentuhnya: `byteSize`/`mimeType` yang diklaim ke server adalah
+  milik byte yang benar-benar dikirim (hasil kompresi), dan kegagalan bersifat
+  eksplisit (`step: "compress"`), tidak pernah unggahan berukuran berlebih. Tanpa
+  pustaka gambar di sisi server.
+- String baru yang terlihat pengguna lewat katalog dan sampai ke klien sebagai
+  atribut `data-msg-*` pada `#media-upload-form`; penjaga
+  `tests/admin-media-upload-compression-contract.test.ts` menjaga pesan halaman
+  dan cadangan Inggris klien tetap identik.
 
 ## Aturan saat mengubah
 

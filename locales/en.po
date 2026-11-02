@@ -4102,7 +4102,40 @@ msgstr ""
 msgid "Image file"
 msgstr ""
 
-msgid "Accepted: {types}. Maximum {max} kB."
+msgid "Accepted: {types}. Maximum {max} per image. A JPEG, PNG or WebP over the limit is compressed in your browser before it is sent, which removes camera and location metadata. A GIF is never changed, so a GIF over the limit is refused."
+msgstr ""
+
+msgid "Compressing the image in your browser ({original})…"
+msgstr ""
+
+msgid "Compressed from {original} to {final} before upload. Camera and location metadata (EXIF) is not kept."
+msgstr ""
+
+msgid "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image."
+msgstr ""
+
+msgid "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded."
+msgstr ""
+
+msgid "Even at the smallest size tried, the image is still {smallest}, over the {cap} limit. Choose a smaller image. Nothing was uploaded."
+msgstr ""
+
+msgid "This image is {original}, over the {cap} limit, and this browser cannot compress images. Use a current version of Chrome, Edge, Firefox or Safari, or choose a smaller image. Nothing was uploaded."
+msgstr ""
+
+msgid "This image could not be read, so it could not be compressed to fit the {cap} limit. Nothing was uploaded."
+msgstr ""
+
+msgid "This image has too many pixels to compress in the browser. Resize it first, or choose a smaller image. Nothing was uploaded."
+msgstr ""
+
+msgid "This browser cannot write the image formats needed to compress this file to fit the {cap} limit. Nothing was uploaded."
+msgstr ""
+
+msgid "This image has transparency and this browser cannot write WebP, so it cannot be compressed without losing the transparency. Choose a smaller image. Nothing was uploaded."
+msgstr ""
+
+msgid "This file could not be checked against the {cap} limit. Nothing was uploaded."
 msgstr ""
 
 msgid "Upload"
