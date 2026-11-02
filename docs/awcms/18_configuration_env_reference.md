@@ -365,6 +365,17 @@ Local filesystem storage (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) is
 deliberately not made a separate env var — following the awcms-mini finding
 that the local/R2 switch really only needs one flag (`R2_ENABLED`).
 
+**Media library per-image cap (`NEWS_MEDIA_R2_MAX_UPLOAD_BYTES`).** The
+`media_library` upload flow (`NEWS_MEDIA_R2_*`, separate from the `R2_*` block
+above) accepts at most **2 MiB (`2097152` bytes) per image by default** (it was
+10 MiB; Issue #1221). Set the variable to a positive integer number of bytes to
+change it, for example `10485760` to keep the old limit. The admin media screen
+compresses an oversize JPEG/PNG/WebP in the browser to fit and refuses a GIF over
+the cap; the server enforces the cap at upload-session creation and again at
+finalize regardless. Details:
+[`src/modules/media-library/README.md`](../../src/modules/media-library/README.md)
+§Upload size cap.
+
 ### Edge cache / Varnish (ADR-0042)
 
 An OPTIONAL cache tier in front of the application

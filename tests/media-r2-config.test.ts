@@ -40,6 +40,43 @@ describe("resolveNewsMediaR2Config", () => {
     expect(config.orphanGraceDays).toBe(NEWS_MEDIA_R2_DEFAULTS.orphanGraceDays);
   });
 
+  test("the default per-image cap is 2 MiB (Issue #1221), and is pinned as a literal", () => {
+    expect(NEWS_MEDIA_R2_DEFAULTS.maxUploadBytes).toBe(2_097_152);
+    expect<number>(NEWS_MEDIA_R2_DEFAULTS.maxUploadBytes).toBe(2 * 1024 * 1024);
+    expect(
+      resolveNewsMediaR2Config({} as NodeJS.ProcessEnv).maxUploadBytes
+    ).toBe(2_097_152);
+    expect(
+      resolveNewsMediaR2PublicConfig({} as NodeJS.ProcessEnv).maxUploadBytes
+    ).toBe(2_097_152);
+  });
+
+  test("NEWS_MEDIA_R2_MAX_UPLOAD_BYTES still overrides the default, in either direction", () => {
+    const up = resolveNewsMediaR2Config({
+      NEWS_MEDIA_R2_MAX_UPLOAD_BYTES: "10485760"
+    } as NodeJS.ProcessEnv);
+    const down = resolveNewsMediaR2Config({
+      NEWS_MEDIA_R2_MAX_UPLOAD_BYTES: "524288"
+    } as NodeJS.ProcessEnv);
+    const publicHalf = resolveNewsMediaR2PublicConfig({
+      NEWS_MEDIA_R2_MAX_UPLOAD_BYTES: " 4194304 "
+    } as NodeJS.ProcessEnv);
+
+    expect(up.maxUploadBytes).toBe(10_485_760);
+    expect(down.maxUploadBytes).toBe(524_288);
+    expect(publicHalf.maxUploadBytes).toBe(4_194_304);
+  });
+
+  test("a malformed override falls back to the 2 MiB default, never to zero or NaN", () => {
+    for (const bad of ["abc", "-1", "0", "1.5", "2MB", ""]) {
+      expect(
+        resolveNewsMediaR2Config({
+          NEWS_MEDIA_R2_MAX_UPLOAD_BYTES: bad
+        } as NodeJS.ProcessEnv).maxUploadBytes
+      ).toBe(2_097_152);
+    }
+  });
+
   test("parses a fully-configured enabled env", () => {
     const config = resolveNewsMediaR2Config({
       NEWS_MEDIA_R2_ENABLED: "true",

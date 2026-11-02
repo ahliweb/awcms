@@ -97,6 +97,8 @@ import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
 import ReasonPanel from "../../components/ReasonPanel.astro";
 import { getTranslatorFor } from "../../lib/i18n";
+import { LOCALE_INTL_TAG } from "../../lib/i18n/locales";
+import { formatByteSize } from "../../lib/ui/media-image-compression-plan";
 import { resolveNewsMediaR2Config } from "../../modules/media-library/domain/media-r2-config";
 import {
   listMediaObjects,
@@ -302,6 +304,58 @@ const uploadAccept = uploadConfig.allowedMimeTypes.join(",");
 const uploadMaxBytes = uploadConfig.maxUploadBytes;
 
 /**
+ * Issue #1221 — the cap is shown in binary units ("2 MiB"), the same units the
+ * browser-side compressor reports sizes in, so "your file was 3.4 MiB" and "the
+ * limit is 2 MiB" are directly comparable.
+ */
+const uploadIntlTag = LOCALE_INTL_TAG[Astro.locals.locale];
+const uploadMaxLabel = formatByteSize(uploadMaxBytes, uploadIntlTag);
+
+/**
+ * The compressor's messages, translated HERE and handed to the client as
+ * `data-msg-*` attributes: a client script cannot translate (the catalogue is a
+ * server module), and shipping both languages to every browser is the cost the
+ * catalogue exists to avoid. `{original}`, `{final}`, `{cap}` and `{smallest}`
+ * are left in place on purpose — `t()` keeps a placeholder with no value
+ * verbatim — and the browser fills them with the real sizes.
+ */
+const uploadMessageAttributes = {
+  "data-msg-compressing": t(
+    "Compressing the image in your browser ({original})…"
+  ),
+  "data-msg-compressed": t(
+    "Compressed from {original} to {final} before upload. Camera and location metadata (EXIF) is not kept."
+  ),
+  "data-msg-gif-over-cap": t(
+    "This GIF is {original}, over the {cap} limit. GIF files are never re-compressed because that would remove the animation. Choose a smaller GIF, or use a JPEG, PNG or WebP image."
+  ),
+  "data-msg-type-not-compressible": t(
+    "This file is {original}, over the {cap} limit, and its type cannot be compressed in the browser. Nothing was uploaded."
+  ),
+  "data-msg-floor-reached": t(
+    "Even at the smallest size tried, the image is still {smallest}, over the {cap} limit. Choose a smaller image. Nothing was uploaded."
+  ),
+  "data-msg-unsupported-browser": t(
+    "This image is {original}, over the {cap} limit, and this browser cannot compress images. Use a current version of Chrome, Edge, Firefox or Safari, or choose a smaller image. Nothing was uploaded."
+  ),
+  "data-msg-decode-failed": t(
+    "This image could not be read, so it could not be compressed to fit the {cap} limit. Nothing was uploaded."
+  ),
+  "data-msg-source-too-large": t(
+    "This image has too many pixels to compress in the browser. Resize it first, or choose a smaller image. Nothing was uploaded."
+  ),
+  "data-msg-no-encoder": t(
+    "This browser cannot write the image formats needed to compress this file to fit the {cap} limit. Nothing was uploaded."
+  ),
+  "data-msg-alpha-needs-webp": t(
+    "This image has transparency and this browser cannot write WebP, so it cannot be compressed without losing the transparency. Choose a smaller image. Nothing was uploaded."
+  ),
+  "data-msg-invalid-input": t(
+    "This file could not be checked against the {cap} limit. Nothing was uploaded."
+  )
+};
+
+/**
  * `verified`/`attached` are the two statuses safe to reference publicly
  * (`isNewsMediaObjectSafeForPublicReference`). The rest are shown, and shown as
  * what they are — this list exists for the unhealthy ones.
@@ -413,7 +467,13 @@ const columnCount = canActOnAny ? 9 : 8;
           "The file goes straight to storage from this browser. The server checks the real bytes on arrival — the type is read from the file itself, not from its name."
         )}
       </p>
-      <form id="media-upload-form" class="admin-form media-upload-form">
+      <form
+        id="media-upload-form"
+        class="admin-form media-upload-form"
+        data-max-bytes={uploadMaxBytes}
+        data-locale={uploadIntlTag}
+        {...uploadMessageAttributes}
+      >
         <div class="form-field">
           <label class="form-label" for="media-upload-file">
             {t("Image file")}
@@ -427,13 +487,31 @@ const columnCount = canActOnAny ? 9 : 8;
             required
           />
           <p class="form-hint">
-            {t("Accepted: {types}. Maximum {max} kB.", {
-              types: uploadConfig.allowedMimeTypes.join(", "),
-              max: Math.floor(uploadMaxBytes / 1024)
-            })}
+            {t(
+              "Accepted: {types}. Maximum {max} per image. A JPEG, PNG or WebP over the limit is compressed in your browser before it is sent, which removes camera and location metadata. A GIF is never changed, so a GIF over the limit is refused.",
+              {
+                types: uploadConfig.allowedMimeTypes.join(", "),
+                max: uploadMaxLabel
+              }
+            )}
           </p>
         </div>
-        <p id="media-upload-progress" class="form-hint" role="status" hidden />
+        <div class="media-upload-status">
+          <p
+            id="media-upload-compression"
+            class="form-hint"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          ></p>
+          <p
+            id="media-upload-progress"
+            class="form-hint"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          ></p>
+        </div>
         <p
           id="media-upload-error"
           class="admin-create-error"
@@ -909,11 +987,18 @@ const columnCount = canActOnAny ? 9 : 8;
   import { confirmAction } from "../../lib/ui/confirm-dialog-client";
   import { initReasonPanel } from "../../lib/ui/reason-panel-client";
   import {
+    describeCompressionFailure,
     describeUploadFailure,
     formatProgress,
-    uploadMediaBytes
+    readCompressionMessages,
+    uploadMediaFile
   } from "../../lib/ui/media-upload-client";
   import { browserUploadTransport } from "../../lib/ui/media-upload-transport";
+  import { createBrowserImagePorts } from "../../lib/ui/media-image-compression-browser";
+  import {
+    fillMessage,
+    formatByteSize
+  } from "../../lib/ui/media-image-compression-plan";
 
   const actionError = messageBox("media-action-error");
 
@@ -927,7 +1012,26 @@ const columnCount = canActOnAny ? 9 : 8;
   if (uploadForm instanceof HTMLFormElement) {
     const fileInput = document.getElementById("media-upload-file");
     const progress = document.getElementById("media-upload-progress");
+    const compressionNote = document.getElementById("media-upload-compression");
     const uploadError = messageBox("media-upload-error");
+
+    // Issue #1221 — the cap and the translated compressor messages come from
+    // the server-rendered form. A missing/invalid cap means "unknown": the file
+    // is sent as chosen and the SERVER, which enforces the cap, decides.
+    const capAttribute = Number(uploadForm.dataset.maxBytes);
+    const maxBytes =
+      Number.isInteger(capAttribute) && capAttribute > 0 ? capAttribute : null;
+    const sizeLocale = uploadForm.dataset.locale || undefined;
+    const messages = readCompressionMessages(uploadForm.dataset);
+
+    // Two polite live regions, both rendered server-side and kept in the layout
+    // (reserved height in CSS) so text appearing in them does not move the
+    // form. Clearing is `textContent = ""`, never `hidden`.
+    const setText = (element: HTMLElement | null, text: string) => {
+      if (element instanceof HTMLElement) element.textContent = text;
+    };
+    const showProgress = (text: string) => setText(progress, text);
+    const showCompression = (text: string) => setText(compressionNote, text);
 
     // Through `onSubmit` (#1224): single flight is the helper's job now, so a
     // second submit while the upload runs is ignored without a flag of its own.
@@ -941,32 +1045,41 @@ const columnCount = canActOnAny ? 9 : 8;
       }
 
       uploadError.clear();
+      showCompression("");
+      showProgress("");
 
       // Locked for the whole flow: a second submit would create a second
       // session for the same file and leave one of them orphaned. The submit
-      // button is locked by `onSubmit`; only the file input is this page's.
+      // button is locked by `onSubmit` for the whole flow, compression
+      // included; only the file input is this page's.
       fileInput.disabled = true;
-
-      const showProgress = (text: string) => {
-        if (!(progress instanceof HTMLElement)) return;
-        progress.hidden = false;
-        progress.textContent = text;
-      };
 
       showProgress("Reading the file…");
 
       try {
-        // Read once: the same buffer is hashed and uploaded, so the two can
-        // never disagree about what was sent.
-        const bytes = await file.arrayBuffer();
-
-        showProgress("Uploading… 0%");
-
-        const outcome = await uploadMediaBytes(
-          { name: file.name, type: file.type, bytes },
-          browserUploadTransport(),
-          (reading) => showProgress(`Uploading… ${formatProgress(reading)}`)
-        );
+        const outcome = await uploadMediaFile(file, {
+          transport: browserUploadTransport(),
+          maxBytes,
+          loadPorts: () => createBrowserImagePorts(),
+          onCompressing: () => {
+            showProgress("");
+            showCompression(
+              fillMessage(messages.compressing, {
+                original: formatByteSize(file.size, sizeLocale)
+              })
+            );
+          },
+          onCompressed: (summary) => {
+            showCompression(
+              fillMessage(messages.compressed, {
+                original: formatByteSize(summary.originalByteSize, sizeLocale),
+                final: formatByteSize(summary.byteSize, sizeLocale)
+              })
+            );
+          },
+          onProgress: (reading) =>
+            showProgress(`Uploading… ${formatProgress(reading)}`)
+        });
 
         if (outcome.ok) {
           showProgress("Uploaded. Reloading…");
@@ -975,13 +1088,22 @@ const columnCount = canActOnAny ? 9 : 8;
           return;
         }
 
-        uploadError.show(describeUploadFailure(outcome));
-        if (progress instanceof HTMLElement) progress.hidden = true;
+        showProgress("");
+
+        if (outcome.step === "compress") {
+          showCompression("");
+          uploadError.show(
+            describeCompressionFailure(outcome, messages, sizeLocale)
+          );
+        } else {
+          uploadError.show(describeUploadFailure(outcome));
+        }
       } catch {
+        showCompression("");
+        showProgress("");
         uploadError.show(
           "The file could not be read from disk. Nothing was uploaded."
         );
-        if (progress instanceof HTMLElement) progress.hidden = true;
       } finally {
         fileInput.disabled = false;
       }

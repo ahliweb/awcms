@@ -676,3 +676,18 @@
   background: var(--color-danger-strong);
   color: var(--color-primary-contrast);
 }
+
+/* Issue #1221 — the media uploader's two status lines ("Compressing…",
+   "Compressed from X to Y", "Uploading… 40%"). They are polite live regions
+   that are filled and cleared by script, so the wrapper reserves the height of
+   two lines up front: text appearing in them must not push the Upload button
+   down while the person is reaching for it. `overflow-wrap: anywhere` keeps a
+   long unbroken size or file type inside a 360 px column. */
+.media-upload-status {
+  min-block-size: 3em;
+  overflow-wrap: anywhere;
+}
+
+.media-upload-status > .form-hint:empty {
+  margin: 0;
+}

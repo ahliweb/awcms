@@ -1120,8 +1120,22 @@ export const READER_BUDGET_BYTES = 24_000;
  * with only the lockfile and `package.json` changed). Nothing in `src/` moved:
  * the difference is the compiler's output for the same components, so there is no
  * per-screen duplication to recover and no island to trim.
+ *
+ * **Raised for Issue #1221** (browser-side image compression on `/admin/media`):
+ * +9,795 B, measured (346,353 -> 356,148 on `main` + this change; `main` sat
+ * exactly at its budget, so the whole delta is this feature). Almost all of it is
+ * the one script of the one screen that can use it: `media.astro`'s chunk grew to
+ * 15,257 B, carrying the pure planner, the orchestrator, the `createImageBitmap` +
+ * canvas adapter and `uploadMediaFile` (about 1,900 B of that is the English
+ * fallbacks for the compressor's eleven messages), plus a few hundred bytes of
+ * stylesheet for the status lines. It is NOT per-screen duplication to recover
+ * the way #552 was: the code exists once, in `src/lib/ui/media-image-compression*.ts`,
+ * nothing else imports it, and the alternative the issue rejected (server-side
+ * image processing) would have moved the cost to a native dependency and a decoder
+ * of untrusted bytes. It loads only on `/admin/media`; a reader downloads none of
+ * it (`READER_BUDGET_BYTES` is untouched) and neither does any other admin screen.
  */
-export const APP_BUDGET_BYTES = 346_353;
+export const APP_BUDGET_BYTES = 356_148;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:9021972e64ad08364bcfdb667532a8feba73b47eaf89737bb69d88b2459bbae6 -->
+<!-- i18n-source-hash: sha256:318f52856b2d2f3d2ec5f748a8dcda63b2ef4b45a3e889e4d715241a4b45b2ff -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -360,6 +360,17 @@ env var terpisah (mengikuti temuan awcms-mini yang men-deprecate
 Storage lokal filesystem (`STORAGE_DRIVER`/`LOCAL_STORAGE_PATH`) sengaja
 tidak dijadikan env var terpisah — mengikuti temuan awcms-mini bahwa
 switch lokal/R2 sesungguhnya cukup satu flag (`R2_ENABLED`).
+
+**Batas per gambar media library (`NEWS_MEDIA_R2_MAX_UPLOAD_BYTES`).** Alur
+upload `media_library` (`NEWS_MEDIA_R2_*`, terpisah dari blok `R2_*` di atas)
+menerima paling banyak **2 MiB (`2097152` byte) per gambar secara default**
+(sebelumnya 10 MiB; Issue #1221). Atur variabel ini ke bilangan bulat positif
+dalam byte untuk mengubahnya, misalnya `10485760` untuk mempertahankan batas
+lama. Layar media admin mengompres JPEG/PNG/WebP yang melebihi batas di peramban
+agar muat dan menolak GIF yang melebihi batas; server tetap menegakkan batas ini
+saat sesi upload dibuat dan sekali lagi saat finalize. Rincian:
+[`src/modules/media-library/README.id.md`](../../src/modules/media-library/README.id.md)
+§Batas ukuran upload.
 
 ### Cache tepi / Varnish (ADR-0042)
 

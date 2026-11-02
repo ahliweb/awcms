@@ -73,10 +73,28 @@ export const NEWS_MEDIA_R2_MAX_PRESIGNED_UPLOAD_TTL_SECONDS = 3600;
  */
 export const NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS = 30;
 
+/**
+ * Default maximum size of one uploaded image: 2 MiB (Issue #1221).
+ *
+ * It was 10 MiB, and nothing in the browser helped a person stay under it.
+ * 2 MiB is the default because the admin uploader now compresses oversize
+ * JPEG/PNG/WebP in the browser before sending them (`src/lib/ui/media-image-
+ * compression-*.ts`), so an ordinary 3-8 MB phone photo is accepted instead of
+ * refused. The SERVER is still the source of truth: this cap is enforced
+ * exactly as before, on the claimed `byteSize` when the session is created and
+ * on the real object size at finalize, so a client that skips compression is
+ * simply refused over the cap.
+ *
+ * Overridable per deployment with `NEWS_MEDIA_R2_MAX_UPLOAD_BYTES` (a positive
+ * integer count of bytes; a malformed value falls back to this default). A
+ * deployment that already sets the variable is unaffected by this default.
+ */
+export const NEWS_MEDIA_R2_DEFAULT_MAX_UPLOAD_BYTES = 2_097_152;
+
 export const NEWS_MEDIA_R2_DEFAULTS = {
   enabled: false,
   presignedUploadTtlSeconds: 300,
-  maxUploadBytes: 10_485_760,
+  maxUploadBytes: NEWS_MEDIA_R2_DEFAULT_MAX_UPLOAD_BYTES,
   allowedMimeTypes: [...NEWS_MEDIA_R2_DEFAULT_ALLOWED_MIME_TYPES] as string[],
   pendingTtlMinutes: 60,
   orphanGraceDays: NEWS_MEDIA_R2_MIN_ORPHAN_GRACE_DAYS

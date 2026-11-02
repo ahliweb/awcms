@@ -55,6 +55,88 @@ confirmed-exploitable. The only rollback is a deployment-level `NEWS_MEDIA_R2_*`
 change (fail-closed via readiness). Guarded by
 `tests/media-enforcement-one-way.test.ts`.
 
+## Upload size cap and browser-side compression (Issue #1221)
+
+**The default maximum size of one uploaded image is 2 MiB (2,097,152 bytes).**
+It was 10 MiB. Set `NEWS_MEDIA_R2_MAX_UPLOAD_BYTES` (a positive integer count of
+bytes; a malformed value falls back to the default) to change it per deployment
+— for example `10485760` to keep the old limit. A deployment that already sets
+the variable is unaffected. The same cap applies to every allowed image type;
+there is no per-type cap.
+
+**The server is the source of truth, and nothing about that changed.** The
+claimed `byteSize` is checked when the upload session is created
+(`domain/media-upload-session-validation.ts`, `400 VALIDATION_ERROR` over the
+cap), and the real object is measured again at finalize
+(`application/media-r2-verification.ts`, which aborts the read past the cap). A
+client that skips compression, such as a script calling the API directly, is
+simply refused over the cap. There is no server-side image library and the
+presigned-upload flow is untouched: the server never decodes an image to
+shrink it.
+
+**What the admin uploader (`/admin/media`) does before it sends anything:**
+
+| The chosen file                     | What happens                                                                                                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Within the cap (any allowed type)   | Uploaded **unchanged**. No quality loss, and its metadata (EXIF, GPS) is kept.                                                                                                                    |
+| JPEG, PNG or WebP over the cap      | Re-encoded in the browser until it fits, then uploaded. The session claims the size and type of the **compressed** bytes, never the original's.                                                   |
+| GIF over the cap                    | **Refused**, with a message naming the cap. A GIF is never re-encoded: a canvas draws one frame, so re-encoding would silently destroy the animation. A GIF within the cap is uploaded unchanged. |
+| SVG, or any other type over the cap | Refused. SVG stays excluded from the default allow-list (see §SVG upload safety).                                                                                                                 |
+
+How a JPEG, PNG or WebP is compressed (`src/lib/ui/media-image-compression-plan.ts`,
+a pure planner; `media-image-compression.ts` runs the plan;
+`media-image-compression-browser.ts` is the thin `createImageBitmap` + canvas
+adapter):
+
+- **Decode with the EXIF orientation applied** (`createImageBitmap(file,
+{ imageOrientation: "from-image" })`), so a portrait phone photo is not
+  uploaded sideways.
+- **Output type.** WebP, or JPEG, whichever is smaller. An image with
+  transparency is WebP only, so a transparent PNG logo stays transparent
+  rather than getting a black box. An opaque JPEG is encoded as both and the
+  smaller wins. Where the browser cannot encode WebP (it answers PNG), an
+  opaque image falls back to JPEG, and an image with transparency is refused
+  rather than flattened.
+- **Attempts, in order:** the long edge starts at **2560 px** (never larger than
+  the picture itself; **nothing is ever upscaled**) and for each long edge the
+  quality steps **0.85, 0.75, 0.65, 0.55, 0.5**; if that is still over the cap
+  the long edge steps down to **1920, 1600, then 1280 px** and the qualities run
+  again. The first attempt that fits wins. **The floor is 1280 px at quality
+  0.5**; a picture already smaller than a step is not shrunk below its own
+  size.
+- **The file name follows the bytes:** `holiday.png` re-encoded as WebP is sent
+  as `holiday.webp`.
+
+**EXIF and GPS are dropped on re-encoding, on purpose.** Drawing to a canvas and
+encoding it writes a fresh file with no metadata, so a compressed image carries
+no camera data and no location. That is a privacy benefit, and it is only true of
+files that were compressed; a file uploaded unchanged keeps whatever it had.
+
+**Failure is explicit.** Nothing oversize is ever sent "in case the server
+allows it". The person is told, in their language and naming the cap, when:
+
+- the picture is **still over the cap at the floor** (the message shows the
+  smallest size reached);
+- the browser has **no `createImageBitmap` or canvas encoder** (an old browser
+  can still upload a file that is already within the cap);
+- the image has **transparency and the browser cannot encode WebP**;
+- the file **could not be decoded**, or has **more than 100 million pixels**
+  (a decoded bitmap that large does not fit in a phone tab's memory).
+
+A refused file never creates an upload session, so it leaves no `pending_upload`
+row. The compressing state ("Compressing the image in your browser (4.2 MiB)…")
+and the result ("Compressed from 4.2 MiB to 1.6 MiB…") are announced through
+`aria-live="polite"` regions that hold their space in the layout.
+
+**Not in scope:** server-side thumbnails or variants, video and document
+uploads, a per-type cap, and any change to the allowed-type list. Other API
+clients (for example `awcms-astro`) must keep their uploads within the cap
+themselves; only the admin media screen compresses. Tests: the planner, the
+orchestration and the adapter are unit-tested with fakes
+(`tests/media-image-compression*.test.ts`); the real-browser behaviour is the
+Playwright spec `tests/e2e/media-upload-compression.e2e.ts`, which needs a
+server with `NEWS_MEDIA_R2_ENABLED=true` and skips otherwise.
+
 ## Layout
 
 ```
@@ -166,15 +248,14 @@ or purge. Four permissions — `media.read`, `.delete`, `.restore`, `.purge`.
 Every mutation posts to the guarded endpoint with a fresh `Idempotency-Key`
 (unlike `/admin/sync`, where no endpoint wants one, all three here require it).
 
-Three deliberate absences, each pinned by
+Three deliberate absences (the upload form is NOT one of them any more — Issue
+#595 added it, and Issue #1221 added browser-side compression to it; see
+§Upload size cap above), each pinned by
 `tests/admin-media-page-contract.test.ts` so they stay decisions rather than
 becoming gaps:
 
-- **Upload** (`media.create`/`.verify`/`.cancel`) — a three-step browser flow
-  (create session → PUT to R2 → finalize) with file input, progress, and
-  client-side failure modes. A button that starts a session this page cannot
-  finish leaves a `pending_upload` row on every misclick, which is exactly the
-  litter the reconciliation job cleans up.
+- **`media.verify`/`media.cancel` as page gates** — `cancel` is driven by the
+  uploader's own failure handling, and nothing on this screen verifies.
 - **`enforcement.*`** — a tenant-wide ONE-WAY policy switch, not an object
   action. It lives on `/admin/security` with the other policy controls.
 - **No `<img>` preview.** A row can be `pending_upload` or `failed`: the bytes

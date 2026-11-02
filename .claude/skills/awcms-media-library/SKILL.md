@@ -1,6 +1,6 @@
 ---
 name: awcms-media-library
-description: The media_library module EXISTS in this repo (ADR-0036 INVERSION, migrations `sql/052`–`sql/054`). A System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) that OWNS the per-tenant media registry `awcms_news_media_objects` (the table was NOT renamed — hard composite FK from `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verification, orphan lifecycle, the `news-media:reconcile` job, and enforcement activation (`GET/POST /api/v1/media/enforcement`, one-way). It provides the `media_library` capability (`_shared/ports/media-library-port.ts`) consumed by `blog_content` — the second consumer `news_portal` was MERGED into `blog_content` (ADR-0044/#300), so the `awcms_news_*` table names here are no longer a hint about any module. Use when changing/adding media upload, the registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, or enforcement. The `NEWS_MEDIA_R2_*` env vars + table names + the `news-media:reconcile` command are KEPT (ADR-0036 §3/§4). The `/admin/media` screen ALREADY EXISTS (ADR-0056, PR #345 — `src/pages/admin/media.astro`): filtered browse + delete/restore/purge, every mutation carrying an `Idempotency-Key`. ADR-0056 IS FULLY DONE — `attach`/`detach` were REVOKED (`sql/087`), `delete`/`restore`/`purge` were given a surface, and a dedicated list route `GET /api/v1/media/objects/list` (keyset, TEXT cursor with microsecond precision) was added because `?ids=` is a batch resolver, not a browse. The module now declares **9 permissions** (7 `media.*` + 2 `enforcement.*`), zero of them ungated. Deliberately NOT on the screen: upload (a three-step flow in the browser), `enforcement.*` (a tenant policy switch, which belongs in `/admin/security`), and `<img>` preview. Micro steps 5c/5d (srcset, PDF) do not exist yet.
+description: The media_library module EXISTS in this repo (ADR-0036 INVERSION, migrations `sql/052`–`sql/054`). A System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) that OWNS the per-tenant media registry `awcms_news_media_objects` (the table was NOT renamed — hard composite FK from `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verification, orphan lifecycle, the `news-media:reconcile` job, and enforcement activation (`GET/POST /api/v1/media/enforcement`, one-way). It provides the `media_library` capability (`_shared/ports/media-library-port.ts`) consumed by `blog_content` — the second consumer `news_portal` was MERGED into `blog_content` (ADR-0044/#300), so the `awcms_news_*` table names here are no longer a hint about any module. Use when changing/adding media upload, the registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, or enforcement. The `NEWS_MEDIA_R2_*` env vars + table names + the `news-media:reconcile` command are KEPT (ADR-0036 §3/§4). The `/admin/media` screen ALREADY EXISTS (ADR-0056, PR #345 — `src/pages/admin/media.astro`): filtered browse + delete/restore/purge, every mutation carrying an `Idempotency-Key`. ADR-0056 IS FULLY DONE — `attach`/`detach` were REVOKED (`sql/087`), `delete`/`restore`/`purge` were given a surface, and a dedicated list route `GET /api/v1/media/objects/list` (keyset, TEXT cursor with microsecond precision) was added because `?ids=` is a batch resolver, not a browse. The module now declares **9 permissions** (7 `media.*` + 2 `enforcement.*`), zero of them ungated. The upload form IS on the screen (Issue #595) and compresses an oversize JPEG/PNG/WebP in the browser to the 2 MiB default cap before sending (Issue #1221; GIF is never re-encoded, the server still enforces the cap). Deliberately NOT on the screen: `enforcement.*` (a tenant policy switch, which belongs in `/admin/security`) and `<img>` preview. Micro steps 5c/5d (srcset, PDF) do not exist yet.
 ---
 
 🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
@@ -58,6 +58,26 @@ description: The media_library module EXISTS in this repo (ADR-0036 INVERSION, m
 - `isManagedMediaEnforcementActiveForTenant` = deployment readiness
   (`evaluateManagedMediaReadiness`, pure) **AND** the per-tenant flag. Both halves
   are required; if readiness fails → fail-closed with no DB query.
+
+## Upload size cap and browser-side compression (Issue #1221)
+
+- Default per-image cap is **2 MiB** (`NEWS_MEDIA_R2_DEFAULTS.maxUploadBytes`,
+  `domain/media-r2-public-config.ts`; override `NEWS_MEDIA_R2_MAX_UPLOAD_BYTES`).
+  The server enforces it unchanged at session creation (claimed `byteSize`) and
+  at finalize (real object) — **never relax either to "trust the browser"**.
+- The admin uploader compresses an oversize JPEG/PNG/WebP in the browser first
+  (`src/lib/ui/media-image-compression-plan.ts` pure planner,
+  `media-image-compression.ts` runner, `media-image-compression-browser.ts`
+  `createImageBitmap` + canvas adapter, wired by `uploadMediaFile` in
+  `media-upload-client.ts`). GIF is NEVER re-encoded (animation) — over the cap
+  it is refused. Re-encoding drops EXIF/GPS (documented, intended).
+- Rule when touching it: the `byteSize`/`mimeType` claimed to the server are
+  those of the bytes actually sent (compressed ones), and a failure is explicit
+  (`step: "compress"`), never an oversize upload. No server-side image library.
+- New user-visible strings go through the catalogue and reach the client as
+  `data-msg-*` attributes on `#media-upload-form`; the
+  `tests/admin-media-upload-compression-contract.test.ts` guard keeps the page's
+  messages and the client's English fallbacks identical.
 
 ## Rules when changing things
 

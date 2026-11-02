@@ -18,7 +18,8 @@ import type {
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const ALLOWED_WITH_SVG = [...ALLOWED, "image/svg+xml"];
-const MAX_BYTES = 10_485_760;
+/** The shipped default cap, 2 MiB (Issue #1221). */
+const MAX_BYTES = 2_097_152;
 
 const JPEG_BYTES = new Uint8Array([
   0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46
