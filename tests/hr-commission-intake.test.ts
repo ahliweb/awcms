@@ -54,6 +54,12 @@ const EMPLOYMENT = "11111111-1111-4111-8111-111111111111";
 const TENANT = "22222222-2222-4222-8222-222222222222";
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 
+// ONE instant for every request this file builds. Reading `Date.now()` inside the
+// builder made two requests built in the same expression differ by a millisecond
+// whenever the clock ticked between them, and the digest includes `occurredAt`:
+// "the same request" then failed intermittently in the full run.
+const OCCURRED_AT = new Date(Date.now() - 3600_000);
+
 const accrue = (
   extra: Partial<CommissionAccrualRequest> = {}
 ): CommissionAccrualRequest => ({
@@ -62,8 +68,8 @@ const accrue = (
   source: { type: "sale_line", ref: "ORD-1", line: "1" },
   baseAmount: "1000.10",
   currencyCode: "XTS",
-  occurredAt: new Date(Date.now() - 3600_000),
-  occurredOn: new Date(Date.now() - 3600_000).toISOString().slice(0, 10),
+  occurredAt: OCCURRED_AT,
+  occurredOn: OCCURRED_AT.toISOString().slice(0, 10),
   ...extra
 });
 
