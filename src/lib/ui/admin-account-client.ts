@@ -25,6 +25,7 @@
  */
 import {
   field,
+  holdForNavigation,
   mutateAndReload,
   messageBox,
   onAction,
@@ -477,6 +478,9 @@ onAction(".account-sso-link", async (button) => {
 
   // `assign`, not `replace`: the account page should stay in history so a person
   // who abandons the provider's consent screen can come back with Back.
+  // The button stays locked while the browser leaves (#1224); a bfcache Back
+  // gets it back through the `pageshow` restore.
+  holdForNavigation();
   window.location.assign(result.data.authorizationUrl);
 });
 

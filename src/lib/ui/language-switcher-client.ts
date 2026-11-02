@@ -27,6 +27,7 @@
  * mechanism rather than a decoration.
  */
 import { LOCALE_COOKIE_NAME } from "../i18n/request-locale";
+import { holdForNavigation, onSubmitAll } from "./admin-form-client";
 
 const form = document.querySelector<HTMLFormElement>(".locale-switcher");
 const select = form?.querySelector<HTMLSelectElement>(
@@ -73,7 +74,10 @@ async function applyLocale(): Promise<void> {
     }
 
     // Re-request the page rather than swapping text in place: the locale decides
-    // the server-rendered document, `<html lang>` included.
+    // the server-rendered document, `<html lang>` included. `select` stays
+    // disabled until the reload (and `holdForNavigation` keeps the form's own
+    // single-flight lock, #1224, so Enter cannot start a second switch).
+    holdForNavigation();
     window.location.reload();
   } catch {
     select.disabled = false;
@@ -88,8 +92,9 @@ if (form && select) {
     form.requestSubmit();
   });
 
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    void applyLocale();
-  });
+  // Through the shared helper (#1224): `onSubmitAll` cancels the native POST
+  // and owns the single-flight guard, so a second `change`/Enter while a switch
+  // is in flight is ignored. (`select.disabled` below stays: it is the control
+  // the person changed, not the form's submit button.)
+  onSubmitAll(".locale-switcher", applyLocale);
 }

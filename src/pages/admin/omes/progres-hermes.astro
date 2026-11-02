@@ -453,6 +453,7 @@ function milestoneCellFor(
       inputValue,
       messageBox,
       mutateAndReload,
+      onAction,
       onSubmit,
       sendJson
     } from "../../../lib/ui/admin-form-client";
@@ -480,11 +481,8 @@ function milestoneCellFor(
       );
     });
 
-    const clearButton = document.getElementById(
-      "repo-progress-config-clear"
-    ) as HTMLButtonElement | null;
-
-    clearButton?.addEventListener("click", async () => {
+    // Through `onAction` (#1224): single flight is the helper's job.
+    onAction("#repo-progress-config-clear", async (button) => {
       if (
         !(await confirmAction(
           "Clear the configured repository? The current projection will be removed too."
@@ -494,7 +492,7 @@ function milestoneCellFor(
       }
 
       await mutateAndReload(
-        clearButton,
+        button,
         configErrorBox,
         () =>
           sendJson(

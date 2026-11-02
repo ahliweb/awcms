@@ -214,16 +214,10 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
       // The import is deliberate — it forces Astro to bundle this script to an
       // external file (an import-free script would be inlined, and inline
       // scripts are blocked by this app's CSP). See admin-form-client.ts.
-      import { lockElement } from "../lib/ui/admin-form-client";
+      import { lockElement, onSubmit } from "../lib/ui/admin-form-client";
 
-      const form = document.getElementById(
-        "register-form"
-      ) as HTMLFormElement | null;
       const errorBox = document.getElementById("register-error");
       const noticeBox = document.getElementById("register-notice");
-      const submitButton = document.getElementById(
-        "register-submit"
-      ) as HTMLButtonElement | null;
 
       function reveal(element: HTMLElement | null, message: string): void {
         if (!element) return;
@@ -231,13 +225,12 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         element.hidden = false;
       }
 
-      form?.addEventListener("submit", async (event) => {
-        event.preventDefault();
-
-        if (!submitButton || submitButton.disabled) return;
+      // `onSubmit` owns the single-flight guard (#1224): a second submit while
+      // this handler is pending is ignored, released on ANY settled outcome so
+      // a refused or expired Turnstile challenge still lets the person retry.
+      onSubmit("register-form", async ({ form, data: formData, submit }) => {
         if (errorBox) errorBox.hidden = true;
 
-        const formData = new FormData(form);
         const tenantId = String(formData.get("tenantId") ?? "").trim();
         const displayName = String(formData.get("displayName") ?? "").trim();
         const loginIdentifier = String(
@@ -245,7 +238,7 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         ).trim();
         const turnstileToken = formData.get("cf-turnstile-response");
 
-        const unlock = lockElement(submitButton, "Please wait…");
+        const unlock = submit ? lockElement(submit, "Please wait…") : () => {};
 
         try {
           const response = await fetch("/api/v1/auth/register", {

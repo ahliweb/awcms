@@ -257,6 +257,25 @@ playwright test`, Bun-only), separate from `bun test`
 > viewport is one `test()` in the same file with the same assertion; no
 > screen or width is exempted.
 
+> **Single flight (Issue #1224).** Every form is double-submit protected by the
+> shared helpers in `src/lib/ui/admin-form-client.ts`, and that is tested at
+> three levels. `tests/admin-single-flight.test.ts` unit-tests the pure
+> in-flight state machine (`createSingleFlight`, injected ports) and the DOM
+> adapter against a minimal fake `document`: a second `submit` while pending
+> sends no second request, the flag is released on a throw and on `{ ok: false }`,
+> a page's own `lockElement` label survives, `lockElement` is idempotent, a
+> success that navigates keeps the lock, and `pageshow` with `persisted`
+> restores it. `tests/single-flight-source-contract.test.ts` fails when a page
+> script binds `submit` or a mutating `click` outside the helpers (explicit
+> allow-list in `scripts/lib/single-flight-audit.ts`) or when the audit table in
+> `docs/awcms/ui-single-flight-audit.md` is stale. The browser proof is
+> `tests/e2e/admin-offices-double-submit.e2e.ts` (write wave: a double click and
+> an Enter produce one `POST` and one row) and
+> `tests/e2e/login-double-submit.e2e.ts` (read wave: the login request is
+> fulfilled by the spec, one attempt is sent, and a refused attempt can be
+> retried). Like every e2e spec they run where a browser and a seeded tenant
+> exist (CI `e2e-smoke`).
+
 > **Test runner.** The runner is **`bun test`** (`bun:test`), with files in
 > `tests/`. The list of targets below is a **planning target for the ERP modules**,
 > not today's implementation status — not a single ERP module
