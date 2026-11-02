@@ -710,6 +710,14 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // nothing on its own — a distinction found by querying a real database, not
   // by reading the migration.
   awcms_subject_requests: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0155 / `sql/325` (Issue #1153). NOT retired -- the website intake's
+  // source registry and its submissions, both actively written. Narrowed by
+  // removing exactly one verb, DELETE: a source is revoked (a state), never
+  // removed by the runtime that serves the public endpoint, and a submission is
+  // evidence that only the retention job (`awcms_worker`, DELETE on a
+  // column-only grant) may purge, so a compromised web process cannot erase it.
+  awcms_engagement_sources: ["SELECT", "INSERT", "UPDATE"],
+  awcms_engagement_submissions: ["SELECT", "INSERT", "UPDATE"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
