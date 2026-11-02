@@ -46,6 +46,7 @@ import {
   teardownIntegrationDatabase,
   workerRoleActivated
 } from "./harness";
+import { resetDatabaseCircuitBreakerForTests } from "../../src/lib/database/circuit-breaker";
 import {
   getProviderCircuitBreaker,
   resetProviderCircuitBreakersForTests
@@ -498,10 +499,18 @@ async function assertPgRejected(
   what: string,
   expected: { errno: string; message?: string; constraint?: string }
 ): Promise<void> {
-  const error = (await assertRejected(promise, what)) as Error & {
-    errno?: unknown;
-    constraint?: unknown;
-  };
+  let error: Error & { errno?: unknown; constraint?: unknown };
+
+  try {
+    error = (await assertRejected(promise, what)) as typeof error;
+  } finally {
+    // An EXPECTED failure still counts against the shared database circuit
+    // breaker; a series of them (a loop of denied probes) would open it and make
+    // the next probe fail with "Database circuit breaker is open." instead of the
+    // SQLSTATE under test. Reset after every expected rejection so each probe is
+    // judged on its own.
+    resetDatabaseCircuitBreakerForTests();
+  }
 
   expect(
     String(error.errno),

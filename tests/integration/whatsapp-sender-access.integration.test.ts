@@ -447,7 +447,7 @@ suite(
       ).toBe(200);
     });
 
-    test("GET: a confined caller sees only the senders and policies of their scope; the administrator sees all", async () => {
+    test("GET: a confined caller sees only the senders and policies of their scope; the administrator has the assignment break-glass but needs a scope to see its senders", async () => {
       const officeA = await seedOffice("office-a3");
       const officeB = await seedOffice("office-b3");
       const operator = await seedUser("geta", READ_KEYS);
@@ -486,13 +486,34 @@ suite(
         expect(JSON.stringify(confined.body)).not.toContain(hidden);
       }
 
+      // The administrator (unconfined, holds `assignments.assign` tenant-wide) has the
+      // break-glass over ASSIGNMENTS: the sender assigned to somebody else is
+      // visible. Business scope is a separate rule of `channel_accounts` that the
+      // bypass does not lift (a scoped account needs the scope itself; the same
+      // reason `GET /channel-accounts/accounts` shows an unscoped holder only the
+      // tenant-wide accounts), so the brand-scoped senders and policies stay out
+      // until the administrator holds those scopes.
       const all = await get(ownerToken);
 
       expect(all.status).toBe(200);
       expect(
         all.body.data!.senders.map((s) => s.senderAccountId).sort()
-      ).toEqual([null, senderA, senderB, assignedAway].sort());
-      expect(all.body.data!.policies).toHaveLength(3);
+      ).toEqual([null, assignedAway].sort());
+      expect(
+        all.body.data!.policies.map((p) => p.defaultSenderAccountId)
+      ).toEqual([assignedAway]);
+
+      // Holding the scopes brings them in (and, being scope-confined from then on,
+      // the administrator loses the tenant-wide deployment lane and policy).
+      await holdScope(ownerTenantUserId, officeA);
+      await holdScope(ownerTenantUserId, officeB);
+
+      const scoped = await get(ownerToken);
+
+      expect(
+        scoped.body.data!.senders.map((s) => s.senderAccountId).sort()
+      ).toEqual([senderA, senderB, assignedAway].sort());
+      expect(scoped.body.data!.policies).toHaveLength(2);
     });
 
     test("GET: no token is 401 and a user with no role is 403", async () => {
