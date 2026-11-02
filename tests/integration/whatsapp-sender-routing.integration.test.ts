@@ -253,6 +253,97 @@ async function seedAccount(
   return { id, externalId, token };
 }
 
+/**
+ * A WABA container with an OAuth connection (access AND refresh token stored
+ * through the real secret store) and ONE child phone number that has NO
+ * connection of its own and borrows the parent's (audit M3).
+ */
+async function seedOauthChild(
+  tenantId: string,
+  over: {
+    grantState?: string;
+    parentStatus?: string;
+    expiresAt?: Date | null;
+  } = {}
+): Promise<{
+  childId: string;
+  parentId: string;
+  connectionId: string;
+  externalId: string;
+  token: string;
+}> {
+  const admin = getAdminSql();
+  const grantState = over.grantState ?? "active";
+  const externalId = nextPhoneId();
+  const token = `OAUTH-${externalId}`;
+  const keep = grantState !== "revoked";
+  const access = keep
+    ? await inTenant(tenantId, (tx) =>
+        store.put(tx, {
+          tenantId,
+          purpose: "provider_access_token",
+          plaintext: token,
+          createdBy: null
+        })
+      )
+    : null;
+  const refresh = keep
+    ? await inTenant(tenantId, (tx) =>
+        store.put(tx, {
+          tenantId,
+          purpose: "provider_refresh_token",
+          plaintext: `REFRESH-${externalId}`,
+          createdBy: null
+        })
+      )
+    : null;
+  const connection = (await admin`
+    INSERT INTO awcms_channel_provider_connections
+      (tenant_id, provider, auth_mode, grant_state, access_secret_id,
+       refresh_secret_id, expires_at)
+    VALUES (${tenantId}, 'whatsapp_cloud', 'oauth2', ${grantState},
+            ${access?.secretId ?? null}, ${refresh?.secretId ?? null},
+            ${over.expiresAt ?? null})
+    RETURNING id
+  `) as { id: string }[];
+  const parent = (await admin`
+    INSERT INTO awcms_channel_accounts
+      (tenant_id, provider, account_kind, external_id, display_name,
+       auth_mode, status, connection_id)
+    VALUES (${tenantId}, 'whatsapp_cloud', 'waba', ${`waba-${externalId}`},
+            'waba', 'oauth2', ${over.parentStatus ?? "connected"},
+            ${connection[0]!.id})
+    RETURNING id
+  `) as { id: string }[];
+  const child = (await admin`
+    INSERT INTO awcms_channel_accounts
+      (tenant_id, provider, account_kind, external_id, display_name,
+       auth_mode, status, parent_account_id)
+    VALUES (${tenantId}, 'whatsapp_cloud', 'waba_phone_number', ${externalId},
+            'child', 'oauth2', 'connected', ${parent[0]!.id})
+    RETURNING id
+  `) as { id: string }[];
+
+  for (const capability of ["dm", "reply", "broadcast"]) {
+    await admin`
+      INSERT INTO awcms_channel_account_capabilities
+        (tenant_id, account_id, capability, state, evidence_kind,
+         evidence_ref, matrix_version, verified_at)
+      VALUES (${tenantId}, ${child[0]!.id}, ${capability}, 'granted',
+              'app_review_reference', 'evidence-1', ${PROVIDER_MATRIX_VERSION},
+              now())
+    `;
+  }
+
+  return {
+    childId: child[0]!.id,
+    parentId: parent[0]!.id,
+    connectionId: connection[0]!.id,
+    externalId,
+    token
+  };
+}
+
 async function setStatus(accountId: string, status: string): Promise<void> {
   await getAdminSql()`
     UPDATE awcms_channel_accounts
@@ -1901,6 +1992,327 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         }
       }
     );
+  });
+
+  describe("audit hardening (H1, M1, M3, L2, L3)", () => {
+    workerTest(
+      "H1: the worker cannot see refresh-token, bot-token or webhook-secret ciphertext, and still reads what a send needs",
+      async () => {
+        const purposes = [
+          "provider_access_token",
+          "api_token",
+          "device_key",
+          "provider_refresh_token",
+          "bot_token",
+          "webhook_signing_secret",
+          "oauth_pkce_verifier",
+          "oauth_authorization_code"
+        ] as const;
+        const ids = new Map<string, string>();
+
+        for (const purpose of purposes) {
+          const ref = await inTenant(TENANT_A, (tx) =>
+            store.put(tx, {
+              tenantId: TENANT_A,
+              purpose,
+              plaintext: `SECRET-${purpose}`,
+              createdBy: null
+            })
+          );
+
+          ids.set(purpose, ref.secretId);
+        }
+
+        // Another tenant's rows are invisible to a worker in tenant A anyway.
+        await inTenant(TENANT_B, (tx) =>
+          store.put(tx, {
+            tenantId: TENANT_B,
+            purpose: "api_token",
+            plaintext: "other",
+            createdBy: null
+          })
+        );
+
+        const visible = (await inTenantWorker(
+          TENANT_A,
+          (tx) => tx`SELECT purpose FROM awcms_channel_secrets ORDER BY purpose`
+        )) as { purpose: string }[];
+
+        expect(visible.map((row) => row.purpose)).toEqual([
+          "api_token",
+          "device_key",
+          "provider_access_token"
+        ]);
+
+        // Asking for a hidden row BY ID, with the tenant set correctly, finds nothing.
+        for (const hidden of [
+          "provider_refresh_token",
+          "bot_token",
+          "webhook_signing_secret",
+          "oauth_pkce_verifier",
+          "oauth_authorization_code"
+        ]) {
+          expect(
+            await inTenantWorker(
+              TENANT_A,
+              (tx) =>
+                tx`SELECT ciphertext FROM awcms_channel_secrets WHERE id = ${ids.get(hidden)!}`
+            )
+          ).toHaveLength(0);
+          expect(
+            await inTenantWorker(
+              TENANT_A,
+              (tx) =>
+                tx`SELECT count(*)::int AS n FROM awcms_channel_secrets WHERE purpose = ${hidden}`
+            )
+          ).toEqual([{ n: 0 }]);
+        }
+
+        // The dispatcher's own resolution of an access token and an API token still works.
+        const account = await seedAccount(TENANT_A);
+
+        expect(
+          await inTenantWorker(TENANT_A, (tx) =>
+            credentials.resolveWhatsappCredential(tx, {
+              tenantId: TENANT_A,
+              accountId: account.id
+            })
+          )
+        ).toEqual({ ok: true, credential: account.token! });
+
+        const oauth = await seedOauthChild(TENANT_A);
+
+        expect(
+          await inTenantWorker(TENANT_A, (tx) =>
+            credentials.resolveWhatsappCredential(tx, {
+              tenantId: TENANT_A,
+              accountId: oauth.childId
+            })
+          )
+        ).toEqual({ ok: true, credential: oauth.token });
+
+        // The permissive tenant-isolation policy is untouched: the app role is not
+        // narrowed (it must still read every purpose to rekey and disconnect).
+        expect(
+          (await inTenant(
+            TENANT_A,
+            (tx) => tx`SELECT count(*)::int AS n FROM awcms_channel_secrets`
+          )) as { n: number }[]
+        ).toEqual([{ n: purposes.length + 1 + 2 }]);
+      }
+    );
+
+    workerTest(
+      "M1: a sender approved only for `broadcast` is still held to the per-sender cap",
+      async () => {
+        const broadcastOnly = await seedAccount(TENANT_A, {
+          capabilities: ["broadcast"]
+        });
+
+        await inTenant(TENANT_A, (tx) =>
+          grantMarketingConsent(tx, TENANT_A, null, {
+            phone: PHONE,
+            source: "form"
+          })
+        );
+
+        for (let i = 0; i < 5; i += 1) {
+          expect(
+            (
+              await enqueue(TENANT_A, {
+                templateKey: "it1141.promo",
+                senderAccountId: broadcastOnly.id
+              })
+            ).status
+          ).toBe("queued");
+        }
+
+        const harness = makeHarness();
+        const env = {
+          ...ENV,
+          WHATSAPP_SENDER_RATE_PER_HOUR: "2"
+        } as NodeJS.ProcessEnv;
+
+        expect(await dispatch(TENANT_A, harness, { env })).toMatchObject({
+          claimed: 2,
+          sent: 2
+        });
+
+        const second = await dispatch(TENANT_A, harness, { env });
+
+        expect(second).toMatchObject({ claimed: 0, sent: 0 });
+        expect(second.senders[0]).toMatchObject({
+          senderAccountId: broadcastOnly.id,
+          skipped: "quota_reached"
+        });
+        expect(
+          await count("awcms_whatsapp_messages", "status = 'queued'")
+        ).toBe(3);
+      }
+    );
+
+    workerTest(
+      "M3: a child number whose parent's grant EXPIRED is held, not failed; a revoked grant or a disabled parent is terminal",
+      async () => {
+        const expired = await seedOauthChild(TENANT_A);
+        const queued = await enqueue(TENANT_A, {
+          senderAccountId: expired.childId
+        });
+
+        // Enqueue happened while it was usable; now the refresh failed for good.
+        expect(queued.status).toBe("queued");
+        await getAdminSql()`
+          UPDATE awcms_channel_provider_connections SET grant_state = 'expired'
+          WHERE id = ${expired.connectionId}
+        `;
+
+        const harness = makeHarness();
+        const held = await dispatch(TENANT_A, harness);
+
+        expect(held).toMatchObject({ claimed: 0, sent: 0, failed: 0 });
+        expect(held.senders[0]).toMatchObject({
+          senderAccountId: expired.childId,
+          skipped: "CONNECTION_EXPIRED"
+        });
+        expect((await row(queuedId(queued))).status).toBe("queued");
+        expect(harness.sent).toHaveLength(0);
+
+        // Re-authorised: the same row goes out through the same child.
+        await getAdminSql()`
+          UPDATE awcms_channel_provider_connections SET grant_state = 'active'
+          WHERE id = ${expired.connectionId}
+        `;
+        expect(await dispatch(TENANT_A, harness)).toMatchObject({ sent: 1 });
+        expect(harness.sent[0]!.credential).toBe(expired.token);
+        expect(harness.sent[0]!.externalId).toBe(expired.externalId);
+      }
+    );
+
+    workerTest(
+      "M3: a disabled parent lends nothing: the child's rows fail terminally and the secret is never decrypted",
+      async () => {
+        const family = await seedOauthChild(TENANT_A);
+        const queued = await enqueue(TENANT_A, {
+          senderAccountId: family.childId
+        });
+
+        await setStatus(family.parentId, "disabled");
+        resetSecretDecryptCounts();
+
+        const harness = makeHarness();
+        const result = await dispatch(TENANT_A, harness);
+
+        expect(result).toMatchObject({ claimed: 1, failed: 1, sent: 0 });
+        expect((await row(queuedId(queued))).failure_code).toBe(
+          "sender_unavailable"
+        );
+        expect(harness.sent).toHaveLength(0);
+        expect(snapshotSecretDecryptCounts()).toEqual([]);
+      }
+    );
+
+    workerTest(
+      "M3: a revoked parent connection is terminal for the child",
+      async () => {
+        const family = await seedOauthChild(TENANT_A);
+        const queued = await enqueue(TENANT_A, {
+          senderAccountId: family.childId
+        });
+
+        await getAdminSql()`
+          UPDATE awcms_channel_provider_connections
+          SET grant_state = 'revoked', access_secret_id = NULL,
+              refresh_secret_id = NULL
+          WHERE id = ${family.connectionId}
+        `;
+
+        expect(await dispatch(TENANT_A, makeHarness())).toMatchObject({
+          claimed: 1,
+          failed: 1
+        });
+        expect((await row(queuedId(queued))).failure_code).toBe(
+          "sender_unavailable"
+        );
+      }
+    );
+
+    test("M3: enqueue to a child under a disabled or expired parent is refused", async () => {
+      const disabled = await seedOauthChild(TENANT_A, {
+        parentStatus: "disabled"
+      });
+      const expired = await seedOauthChild(TENANT_A, { grantState: "expired" });
+
+      for (const family of [disabled, expired]) {
+        expect(
+          await enqueue(TENANT_A, { senderAccountId: family.childId })
+        ).toEqual({ status: "refused", reason: "SENDER_UNAVAILABLE" });
+      }
+    });
+
+    test("L2: a sender policy cannot be deleted, so its version can never restart", async () => {
+      const account = await seedAccount(TENANT_A);
+      const user = await actor();
+
+      await inTenant(TENANT_A, (tx) =>
+        setSenderPolicy(
+          tx,
+          TENANT_A,
+          user,
+          { businessScope: null, defaultSenderAccountId: account.id },
+          senders
+        )
+      );
+
+      await assertRejected(
+        getAdminSql()`DELETE FROM awcms_whatsapp_sender_policies`,
+        "deleting a sender policy as the table owner"
+      );
+      await assertRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`DELETE FROM awcms_whatsapp_sender_policies`
+        ),
+        "deleting a sender policy as the runtime role"
+      );
+      expect(await count("awcms_whatsapp_sender_policies")).toBe(1);
+    });
+
+    test("L3: a policy change reports what it replaced, for the audit row", async () => {
+      const first = await seedAccount(TENANT_A);
+      const second = await seedAccount(TENANT_A);
+      const user = await actor();
+      const set = (id: string | null) =>
+        inTenant(TENANT_A, (tx) =>
+          setSenderPolicy(
+            tx,
+            TENANT_A,
+            user,
+            { businessScope: null, defaultSenderAccountId: id },
+            senders
+          )
+        );
+
+      expect(await set(first.id)).toMatchObject({
+        changed: true,
+        previous: null
+      });
+      expect(await set(second.id)).toMatchObject({
+        changed: true,
+        policy: { configVersion: 2 },
+        previous: { defaultSenderAccountId: first.id, configVersion: 1 }
+      });
+      expect(await set(second.id)).toMatchObject({
+        changed: false,
+        previous: { defaultSenderAccountId: second.id, configVersion: 2 }
+      });
+
+      const route = await Bun.file(
+        "src/pages/api/v1/whatsapp/sender-policy.ts"
+      ).text();
+
+      expect(route).toContain("previousDefaultSenderAccountId");
+      expect(route).toContain("previousVersion");
+    });
   });
 
   describe("one queue", () => {

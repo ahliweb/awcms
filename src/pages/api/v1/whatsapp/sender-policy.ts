@@ -143,7 +143,10 @@ export const PUT = defineTenantRoute<Prepared>({
         message: "Default WhatsApp sender changed for later messages.",
         attributes: {
           configVersion: result.policy.configVersion,
+          previousVersion: result.previous?.configVersion ?? null,
           defaultSenderAccountId: result.policy.defaultSenderAccountId,
+          previousDefaultSenderAccountId:
+            result.previous?.defaultSenderAccountId ?? null,
           businessScopeType: result.policy.businessScope?.type ?? null,
           businessScopeId: result.policy.businessScope?.id ?? null
         },

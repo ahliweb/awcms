@@ -737,9 +737,12 @@ export async function dispatchWhatsappQueue(
         continue;
       }
 
-      if (availability.usable) {
-        // Quota is spent only by a sender that can really send. A sender that
-        // is gone fails its rows terminally, which sends nothing.
+      // The cap applies to EVERY lane that is not gone at account level, whatever
+      // capability it holds: a sender approved only for `broadcast` or `reply` is
+      // `CAPABILITY_DENIED` for `dm` and must not escape its quota because of it.
+      // A sender that is gone (terminal at account level) fails its rows, which
+      // sends nothing, so it spends no quota and is not throttled.
+      if (availability.usable || !accountLevelDenial) {
         const allowance = await withTenantOrThrow(
           sql,
           tenantId,

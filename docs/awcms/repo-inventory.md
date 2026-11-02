@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 34    |
-| Migrations                          | 238   |
+| Migrations                          | 239   |
 | `awcms_*` tables                    | 233   |
 | Tables with `FORCE` RLS             | 215   |
 | RLS-free tables (global, by design) | 18    |
@@ -297,6 +297,7 @@
 | 236 | `sql/321_awcms_hr_commission_intake_cap_and_fairness.sql`          |
 | 237 | `sql/322_awcms_whatsapp_sender_routing.sql`                        |
 | 238 | `sql/323_awcms_whatsapp_sender_routing_permissions.sql`            |
+| 239 | `sql/324_awcms_whatsapp_sender_routing_hardening.sql`              |
 
 ### Tables & Row-Level Security
 

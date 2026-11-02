@@ -108,6 +108,64 @@ export function reasonForAccountStatus(
   }
 }
 
+/**
+ * The reason a connection grant cannot lend its token, or `null` when it is
+ * `active`. A grant that is `expired` (a refresh failed) or still `pending` is
+ * recoverable by the tenant re-authorising, so a send waits (a HOLD); `revoked`,
+ * `failed` and an unreadable connection are over (terminal).
+ */
+export function reasonForGrantState(
+  grantState: string
+): SenderUnavailableReason | null {
+  switch (grantState) {
+    case "active":
+      return null;
+    case "expired":
+    case "pending":
+      return "CONNECTION_EXPIRED";
+    default:
+      return "CONNECTION_NOT_ACTIVE";
+  }
+}
+
+/**
+ * A child identity (a WABA phone number) with no credential source of its own
+ * borrows its parent container's. A parent only LENDS when it really is that
+ * child's container (same provider, the kind the matrix names as its parent) and
+ * is itself `connected`: a disabled, revoked, degraded or pending container must
+ * not lend its token or its connection to anything. Returns the parent, or the
+ * reason it cannot lend.
+ */
+export async function loadLendingParent(
+  tx: Bun.SQL,
+  tenantId: string,
+  account: SenderAccountRow
+): Promise<{ parent: SenderAccountRow } | { reason: SenderUnavailableReason }> {
+  if (!account.parent_account_id) return { reason: "CREDENTIAL_UNAVAILABLE" };
+
+  const parent = await loadSenderAccount(
+    tx,
+    tenantId,
+    account.parent_account_id
+  );
+  const expectedKind = getProviderRow(account.provider)?.kinds[
+    account.account_kind
+  ]?.parentKind;
+
+  if (
+    !parent ||
+    parent.provider !== account.provider ||
+    !expectedKind ||
+    parent.account_kind !== expectedKind
+  ) {
+    return { reason: "CREDENTIAL_UNAVAILABLE" };
+  }
+
+  const statusReason = reasonForAccountStatus(parent.status);
+
+  return statusReason ? { reason: statusReason } : { parent };
+}
+
 type CapabilityRow = {
   state: CapabilityRowFacts["state"];
   evidence_kind: CapabilityEvidenceKind | null;
@@ -150,16 +208,38 @@ export function createChannelAccountPortAdapter(
 
       if (statusReason) return { usable: false, reason: statusReason };
 
+      // The EFFECTIVE connection: the account's own, else (OAuth only) the
+      // parent container's it borrows its token from. The credential adapter
+      // resolves the same one, so the two ports cannot disagree about whether
+      // the token is usable.
+      let connectionId = account.connection_id;
+
+      if (
+        account.auth_mode === "oauth2" &&
+        !connectionId &&
+        account.parent_account_id
+      ) {
+        const lender = await loadLendingParent(tx, input.tenantId, account);
+
+        if ("reason" in lender) return { usable: false, reason: lender.reason };
+
+        connectionId = lender.parent.connection_id;
+      }
+
       let connectionGrantState: string | null = null;
 
-      if (account.connection_id) {
+      if (connectionId) {
         const connection = (await tx`
           SELECT grant_state FROM awcms_channel_provider_connections
-          WHERE tenant_id = ${input.tenantId} AND id = ${account.connection_id}
+          WHERE tenant_id = ${input.tenantId} AND id = ${connectionId}
         `) as { grant_state: string }[];
 
         // A connection that cannot be read is NOT an active one.
         connectionGrantState = connection[0]?.grant_state ?? "missing";
+
+        const grantReason = reasonForGrantState(connectionGrantState);
+
+        if (grantReason) return { usable: false, reason: grantReason };
       }
 
       const capabilityRows = (await tx`

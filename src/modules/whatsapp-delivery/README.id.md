@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:df81d0fb093a7899c296478501ba76234ba84ea63f8932f0ca40693a2803714c -->
+<!-- i18n-source-hash: sha256:130d73a1f8b465160f4dd4e95765fce7466927a8d5cb8ddcc34ba6b223cf7fe6 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -115,7 +115,7 @@ Pengirim dapat dipakai hanya bila `channel_accounts` menyatakannya **saat ini**:
 | -------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | enqueue  | tidak dapat dipakai karena alasan apa pun, atau provider tak punya adapter di deployment ini (StarSender sampai #1142) | `refused: SENDER_UNAVAILABLE`, tidak ada yang diantre, **tidak pernah** pengirim, nomor, atau provider lain |
 | dispatch | tak dikenal, dicabut, dinonaktifkan, koneksi tidak aktif, kapabilitas ditarik, tanpa adapter                           | `failed` terminal dengan `sender_unavailable`; provider tidak pernah dipanggil                              |
-| dispatch | degraded, pending, token menunggu refresh, tanpa key ring, control plane mati                                          | jalur **ditahan**: baris tetap menunggu, tidak ada yang diklaim, anggaran retry tidak terpakai              |
+| dispatch | degraded, pending, grant kedaluwarsa atau token menunggu refresh, tanpa key ring, control plane mati                   | jalur **ditahan**: baris tetap menunggu, tidak ada yang diklaim, anggaran retry tidak terpakai              |
 | dispatch | provider menolak kredensial pengirim (`unauthorized`)                                                                  | baris itu gagal; sisa jalur gagal-tertutup **tanpa panggilan lagi**                                         |
 
 Tidak ada rotasi ke nomor lain untuk menghindari batas provider, rating kualitas, atau kegagalan (ADR-0148 I4, I5); pengalihan eksplisit adalah enqueue **baru**.
@@ -137,6 +137,8 @@ Persetujuan, penekanan, kedaluwarsa, kelas tujuan, kunci idempotensi, dan batas 
 
 ### Batas perubahan ini (terbuka, dinyatakan)
 
+- **Pengerasan dari audit keamanan independen (`sql/324`).** Pandangan worker atas `awcms_channel_secrets` dibatasi policy RESTRICTIVE ke tiga tujuan yang di-resolusi pengiriman (`provider_access_token`, `api_token`, `device_key`), sehingga worker yang dikompromikan tidak dapat membaca ciphertext refresh token, bot token, rahasia webhook, PKCE, atau kode otorisasi. Ia tetap dapat membaca dan mendekripsi token akses, token API, dan kunci perangkat setiap tenant (job memegang key ring): associated data AES-GCM mencegah pemberian label ulang, bukan mitigasi terhadap worker yang dikompromikan. Batas per pengirim berlaku juga bagi pengirim yang hanya `broadcast` atau `reply`. Nomor anak me-resolusi koneksi **induk**-nya dan meminjam kredensial induk hanya dari wadah `connected` dengan provider dan jenis yang benar; grant kedaluwarsa **ditahan**, grant yang dicabut atau induk yang dinonaktifkan terminal. Kebijakan pengirim tidak dapat dihapus, dan baris auditnya mencatat bawaan dan versi sebelumnya.
+- **Tindak lanjut yang diketahui (tidak dikerjakan di sini):** penugasan akun per orang tidak diterapkan oleh port; belum ada pemeriksaan `security:readiness` yang gagal bila restrictive policy hilang; pembacaan yang lebih sempit daripada tiga tujuan dispatch membutuhkan fungsi definer. Temuan M2, M4, L1, dan L4 sampai L6 audit dicatat di PR sebagai tindak lanjut.
 - **Hanya `whatsapp_cloud` yang punya adapter.** Pengirim StarSender ditolak saat enqueue dan gagal-tertutup saat dispatch sampai Issue #1142 menambahkan adapternya di balik flag sendiri dan pengakuan risiko per operator (tidak dibangun di sini).
 - **Persetujuan belum dikunci per lingkup bisnis** (per tenant dan penerima, seperti sebelumnya): opt-in satu brand berlaku bagi brand lain milik tenant. Mengunci persetujuan per lingkup adalah keputusan skema untuk tabel persetujuan, tidak diambil di sini; opt-out dan penekanan adalah arah yang aman (berlaku di seluruh tenant).
 - **Tanpa override pengirim per tujuan** dalam kebijakan (pack menyebutnya opsional) dan **tanpa override batas per pengirim** (batas berlaku seluruh deployment).

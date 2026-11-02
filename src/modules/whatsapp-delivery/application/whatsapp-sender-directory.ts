@@ -291,7 +291,16 @@ export type SetSenderPolicyInput = {
 };
 
 export type SetSenderPolicyOutcome =
-  | { outcome: "set"; policy: SenderPolicyView; changed: boolean }
+  | {
+      outcome: "set";
+      policy: SenderPolicyView;
+      changed: boolean;
+      /** What the policy was before this change (`null`: it did not exist), for the audit row. */
+      previous: {
+        defaultSenderAccountId: string | null;
+        configVersion: number;
+      } | null;
+    }
   | {
       outcome: "refused";
       code: "SENDER_UNAVAILABLE" | "CHANNEL_ACCOUNTS_UNAVAILABLE";
@@ -352,7 +361,11 @@ export async function setSenderPolicy(
       return {
         outcome: "set",
         policy: toPolicyView(existing[0]),
-        changed: false
+        changed: false,
+        previous: {
+          defaultSenderAccountId: existing[0].default_sender_account_id,
+          configVersion: Number(existing[0].config_version)
+        }
       };
     }
 
@@ -367,7 +380,15 @@ export async function setSenderPolicy(
                 updated_at
     `) as PolicyDbRow[];
 
-    return { outcome: "set", policy: toPolicyView(updated[0]!), changed: true };
+    return {
+      outcome: "set",
+      policy: toPolicyView(updated[0]!),
+      changed: true,
+      previous: {
+        defaultSenderAccountId: existing[0].default_sender_account_id,
+        configVersion: Number(existing[0].config_version)
+      }
+    };
   }
 
   const inserted = (await tx`
@@ -381,7 +402,12 @@ export async function setSenderPolicy(
               updated_at
   `) as PolicyDbRow[];
 
-  return { outcome: "set", policy: toPolicyView(inserted[0]!), changed: true };
+  return {
+    outcome: "set",
+    policy: toPolicyView(inserted[0]!),
+    changed: true,
+    previous: null
+  };
 }
 
 // ---------------------------------------------------------------------------

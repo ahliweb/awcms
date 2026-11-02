@@ -28,6 +28,7 @@ import {
 } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { createChannelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
 import { SecretStoreError } from "../src/modules/channel-accounts/application/secret-store";
+import { CHANNEL_SECRET_PURPOSES } from "../src/modules/channel-accounts/domain/channel-accounts-constants";
 import { PROVIDER_MATRIX_VERSION } from "../src/modules/channel-accounts/domain/provider-matrix";
 import {
   WHATSAPP_CIRCUIT_BREAKER_KEY,
@@ -242,6 +243,7 @@ describe("scope and capability rules", () => {
       ACCOUNT_DISABLED: "terminal",
       CAPABILITY_DENIED: "terminal",
       CONNECTION_NOT_ACTIVE: "terminal",
+      CONNECTION_EXPIRED: "hold",
       CHANNEL_ACCOUNTS_DISABLED: "hold",
       ACCOUNT_PENDING: "hold",
       ACCOUNT_DEGRADED: "hold",
@@ -513,9 +515,12 @@ function scriptedTx(tables: {
   account?: Record<string, unknown> | null;
   parent?: Record<string, unknown> | null;
   connection?: Record<string, unknown> | null;
+  /** Answers by connection id; falls back to `connection`. */
+  connections?: Record<string, Record<string, unknown> | null>;
   capability?: Record<string, unknown> | null;
-}): { tx: Bun.SQL; statements: string[] } {
+}): { tx: Bun.SQL; statements: string[]; connectionIds: unknown[] } {
   const statements: string[] = [];
+  const connectionIds: unknown[] = [];
   const tx = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?");
 
@@ -527,7 +532,15 @@ function scriptedTx(tables: {
       return [isParent ? tables.parent : tables.account].filter(Boolean);
     }
     if (text.includes("FROM awcms_channel_provider_connections")) {
-      return [tables.connection].filter(Boolean);
+      const id = values[1] as string;
+
+      connectionIds.push(id);
+
+      return [
+        tables.connections && id in tables.connections
+          ? tables.connections[id]
+          : tables.connection
+      ].filter(Boolean);
     }
     if (text.includes("FROM awcms_channel_account_capabilities")) {
       return [tables.capability].filter(Boolean);
@@ -536,7 +549,7 @@ function scriptedTx(tables: {
     return [];
   }) as unknown as Bun.SQL;
 
-  return { tx, statements };
+  return { tx, statements, connectionIds };
 }
 
 const ENABLED = {
@@ -667,8 +680,15 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
     }
   });
 
-  test("a revoked connection denies even a granted capability", async () => {
-    for (const grant_state of ["revoked", "expired", "failed", "pending"]) {
+  test("a dead connection denies even a granted capability; a recoverable one waits", async () => {
+    const reasons: Record<string, SenderUnavailableReason> = {
+      revoked: "CONNECTION_NOT_ACTIVE",
+      failed: "CONNECTION_NOT_ACTIVE",
+      expired: "CONNECTION_EXPIRED",
+      pending: "CONNECTION_EXPIRED"
+    };
+
+    for (const [grant_state, reason] of Object.entries(reasons)) {
       expect(
         await ask(
           scriptedTx({
@@ -680,7 +700,7 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
             capability: grantedRow()
           }).tx
         )
-      ).toEqual({ usable: false, reason: "CONNECTION_NOT_ACTIVE" });
+      ).toEqual({ usable: false, reason });
     }
     // A connection that cannot be read is not an active one.
     expect(
@@ -695,6 +715,124 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
         }).tx
       )
     ).toEqual({ usable: false, reason: "CONNECTION_NOT_ACTIVE" });
+  });
+
+  describe("a child number borrows its parent container's connection (audit M3)", () => {
+    const child = () =>
+      cloudAccount({
+        auth_mode: "oauth2",
+        connection_id: null,
+        secret_id: null,
+        parent_account_id: "parent-1"
+      });
+    const parent = (over: Record<string, unknown> = {}) =>
+      cloudAccount({
+        id: "parent-1",
+        account_kind: "waba",
+        auth_mode: "oauth2",
+        connection_id: "conn-parent",
+        secret_id: null,
+        ...over
+      });
+
+    test("the EFFECTIVE connection is the parent's, so the port and the credential adapter cannot disagree", async () => {
+      const fixture = scriptedTx({
+        account: child(),
+        parent: parent(),
+        connections: { "conn-parent": { grant_state: "active" } },
+        capability: grantedRow()
+      });
+
+      expect((await ask(fixture.tx)).usable).toBe(true);
+      expect(fixture.connectionIds).toEqual(["conn-parent"]);
+    });
+
+    test("an EXPIRED parent grant (a permanent refresh failure) is a HOLD for the child, not 'usable'", async () => {
+      const fixture = {
+        account: child(),
+        parent: parent(),
+        connections: {
+          "conn-parent": { grant_state: "expired", access_secret_id: "a-1" }
+        },
+        capability: grantedRow()
+      };
+      const result = await ask(scriptedTx(fixture).tx);
+
+      expect(result).toEqual({ usable: false, reason: "CONNECTION_EXPIRED" });
+      expect(classifySenderUnavailable("CONNECTION_EXPIRED")).toBe("hold");
+
+      // The credential adapter reaches the same verdict, so no queued row is
+      // failed (OTPs included) while the tenant re-authorises.
+      expect(
+        await createChannelSenderCredentialAdapter({
+          store: { resolve: async () => CANARY } as never,
+          env: ENABLED
+        }).resolveWhatsappCredential(scriptedTx(fixture).tx, {
+          tenantId: T1,
+          accountId: S1
+        })
+      ).toEqual({ ok: false, reason: "CONNECTION_EXPIRED" });
+    });
+
+    test("a REVOKED parent grant is terminal for the child", async () => {
+      const result = await ask(
+        scriptedTx({
+          account: child(),
+          parent: parent(),
+          connections: { "conn-parent": { grant_state: "revoked" } },
+          capability: grantedRow()
+        }).tx
+      );
+
+      expect(result).toEqual({
+        usable: false,
+        reason: "CONNECTION_NOT_ACTIVE"
+      });
+      expect(classifySenderUnavailable("CONNECTION_NOT_ACTIVE")).toBe(
+        "terminal"
+      );
+    });
+
+    test("a disabled or revoked parent lends nothing (terminal); a degraded or pending one waits", async () => {
+      const expected: Record<string, SenderUnavailableReason> = {
+        disabled: "ACCOUNT_DISABLED",
+        revoked: "ACCOUNT_REVOKED",
+        degraded: "ACCOUNT_DEGRADED",
+        pending: "ACCOUNT_PENDING"
+      };
+
+      for (const [status, reason] of Object.entries(expected)) {
+        expect(
+          await ask(
+            scriptedTx({
+              account: child(),
+              parent: parent({ status }),
+              connections: { "conn-parent": { grant_state: "active" } },
+              capability: grantedRow()
+            }).tx
+          )
+        ).toEqual({ usable: false, reason });
+      }
+    });
+
+    test("a parent that is not this child's container (other provider, wrong kind) lends nothing", async () => {
+      for (const over of [
+        { provider: "starsender", account_kind: "device" },
+        { account_kind: "waba_phone_number" },
+        { provider: "facebook", account_kind: "page" }
+      ]) {
+        expect(
+          await ask(
+            scriptedTx({
+              account: child(),
+              parent: parent(over),
+              connections: { "conn-parent": { grant_state: "active" } },
+              capability: grantedRow()
+            }).tx
+          )
+        ).toEqual({ usable: false, reason: "CREDENTIAL_UNAVAILABLE" });
+      }
+    });
   });
 
   test("StarSender broadcast (marketing) is restricted: it needs contract evidence, and app review is not enough", async () => {
@@ -819,19 +957,19 @@ describe("ChannelSenderCredentialPort adapter (the one place a credential is dec
       purpose: "provider_access_token"
     });
 
-    for (const connection of [
-      { ...active, grant_state: "revoked" },
-      { ...active, grant_state: "expired" },
-      null
-    ]) {
+    for (const [connection, reason] of [
+      [{ ...active, grant_state: "revoked" }, "CONNECTION_NOT_ACTIVE"],
+      [{ ...active, grant_state: "failed" }, "CONNECTION_NOT_ACTIVE"],
+      [null, "CONNECTION_NOT_ACTIVE"],
+      // Recoverable: the tenant re-authorises or the connector refreshes.
+      [{ ...active, grant_state: "expired" }, "CONNECTION_EXPIRED"],
+      [{ ...active, grant_state: "pending" }, "CONNECTION_EXPIRED"]
+    ] as const) {
       expect(
         await ask(adapter(store), scriptedTx({ account: oauth, connection }).tx)
-      ).toEqual({
-        ok: false,
-        reason: "CONNECTION_NOT_ACTIVE"
-      });
+      ).toEqual({ ok: false, reason });
     }
-    // An expired token is not refreshed here and is not used.
+    // An expired token is not refreshed here and is not used: wait for it.
     expect(
       await ask(
         adapter(store),
@@ -843,7 +981,7 @@ describe("ChannelSenderCredentialPort adapter (the one place a credential is dec
           }
         }).tx
       )
-    ).toEqual({ ok: false, reason: "CREDENTIAL_UNAVAILABLE" });
+    ).toEqual({ ok: false, reason: "CONNECTION_EXPIRED" });
   });
 
   test("a child number falls back to its parent container's credential", async () => {
@@ -865,6 +1003,42 @@ describe("ChannelSenderCredentialPort adapter (the one place a credential is dec
       credential: CANARY
     });
     expect(resolved[0]!.secretId).toBe("secret-parent");
+  });
+
+  test("a child never borrows a secret from a disabled, degraded or foreign parent (audit M3)", async () => {
+    const { store, resolved } = fakeStore({ "secret-parent": CANARY });
+    const child = cloudAccount({
+      secret_id: null,
+      parent_account_id: "parent-1"
+    });
+    const parentOf = (over: Record<string, unknown>) =>
+      cloudAccount({
+        id: "parent-1",
+        account_kind: "waba",
+        secret_id: "secret-parent",
+        ...over
+      });
+
+    for (const [over, reason] of [
+      [{ status: "disabled" }, "ACCOUNT_DISABLED"],
+      [{ status: "revoked" }, "ACCOUNT_REVOKED"],
+      [{ status: "degraded" }, "ACCOUNT_DEGRADED"],
+      [{ status: "pending" }, "ACCOUNT_PENDING"],
+      [{ account_kind: "waba_phone_number" }, "CREDENTIAL_UNAVAILABLE"],
+      [
+        { provider: "starsender", account_kind: "device" },
+        "CREDENTIAL_UNAVAILABLE"
+      ]
+    ] as const) {
+      expect(
+        await ask(
+          adapter(store),
+          scriptedTx({ account: child, parent: parentOf(over) }).tx
+        )
+      ).toEqual({ ok: false, reason });
+    }
+    // The secret store was never asked for the parent's credential.
+    expect(resolved).toHaveLength(0);
   });
 
   test("a revoked, unknown or non-WhatsApp account yields no credential and the store is never touched", async () => {
@@ -1048,6 +1222,59 @@ describe("static contracts", () => {
         .filter((grant) => !/^SELECT\s*\(/.test(grant[1]!))
         .map((grant) => grant[1])
     ).toEqual(["SELECT ON awcms_whatsapp_sender_policies"]);
+  });
+
+  test("H1: the worker's rows of awcms_channel_secrets are bounded by a RESTRICTIVE policy to the purposes a send resolves", () => {
+    const migration = read(
+      "sql/324_awcms_whatsapp_sender_routing_hardening.sql"
+    );
+    const policy =
+      /CREATE POLICY (\w+)\s+ON awcms_channel_secrets\s+AS RESTRICTIVE\s+FOR SELECT\s+TO awcms_worker\s+USING \(purpose IN \(([^)]*)\)\);/.exec(
+        migration
+      );
+
+    expect(policy).not.toBeNull();
+
+    const purposes = policy![2]!
+      .split(",")
+      .map((purpose) => purpose.trim().replaceAll("'", ""))
+      .sort();
+
+    expect(purposes).toEqual([
+      "api_token",
+      "device_key",
+      "provider_access_token"
+    ]);
+    // Real purpose names, not a typo that would hide a credential or hide too much.
+    for (const purpose of purposes) {
+      expect(CHANNEL_SECRET_PURPOSES as readonly string[]).toContain(purpose);
+    }
+    // The credential adapter asks for exactly these and nothing else.
+    const adapter = source(
+      "src/modules/channel-accounts/application/channel-sender-credential-adapter.ts"
+    );
+    const asked = [...adapter.matchAll(/"(\w+_(?:token|key))"/g)]
+      .map((match) => match[1]!)
+      .filter((name) =>
+        (CHANNEL_SECRET_PURPOSES as readonly string[]).includes(name)
+      );
+
+    expect(new Set(asked)).toEqual(new Set(purposes));
+    // The permissive policy of sql/318 is not touched, and the migration says
+    // honestly what AES-GCM associated data does not do.
+    expect(migration).not.toMatch(/DROP POLICY|ALTER POLICY/);
+    expect(migration).toContain("NOT a mitigation");
+  });
+
+  test("L2: a policy delete is blocked for every role", () => {
+    const migration = read(
+      "sql/324_awcms_whatsapp_sender_routing_hardening.sql"
+    );
+
+    expect(migration).toContain(
+      "BEFORE DELETE ON awcms_whatsapp_sender_policies"
+    );
+    expect(migration).toContain("SET search_path = public, pg_temp");
   });
 
   test("the sender-routing surface is seeded, enforced and declared", () => {

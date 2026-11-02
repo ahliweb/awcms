@@ -198,7 +198,7 @@ export function chooseSender(input: {
  *   through anything else.
  * - `hold`: the sender is not usable right now for a reason that is not about
  *   this message and may clear on its own or by an operator (a degraded
- *   account, a pending connection, an expired token awaiting refresh, a missing
+ *   account, a pending or expired connection grant, an expired token awaiting refresh, a missing
  *   key ring, a control plane switched off). The row stays WAITING and is not
  *   claimed; a security message still expires on its own clock.
  */
@@ -214,6 +214,7 @@ export function classifySenderUnavailable(
     case "CONNECTION_NOT_ACTIVE":
       return "terminal";
     case "CHANNEL_ACCOUNTS_DISABLED":
+    case "CONNECTION_EXPIRED":
     case "ACCOUNT_PENDING":
     case "ACCOUNT_DEGRADED":
     case "CREDENTIAL_UNAVAILABLE":

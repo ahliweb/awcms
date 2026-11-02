@@ -56,8 +56,10 @@ export type SenderUnavailableReason =
   | "ACCOUNT_REVOKED"
   /** `disabled`: an administrator switched it off. */
   | "ACCOUNT_DISABLED"
-  /** The connection behind the account has no active grant (revoked, expired, failed, missing). */
+  /** The connection behind the account has no active grant and never will (revoked, failed, missing). Terminal. */
   | "CONNECTION_NOT_ACTIVE"
+  /** The grant has expired (a refresh failed) or is still pending: the tenant can re-authorise, so a send WAITS rather than fails. */
+  | "CONNECTION_EXPIRED"
   /** The capability is not granted with evidence for this account, or the provider matrix does not allow it ("unapproved"). */
   | "CAPABILITY_DENIED"
   /** No credential is stored for the account, or the stored token has expired. */

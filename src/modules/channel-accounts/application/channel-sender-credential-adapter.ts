@@ -35,8 +35,10 @@ import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import type { ChannelSecretPurpose } from "../domain/channel-accounts-constants";
 import {
   isWhatsappSenderShape,
+  loadLendingParent,
   loadSenderAccount,
   reasonForAccountStatus,
+  reasonForGrantState,
   type SenderAccountRow
 } from "./channel-account-port-adapter";
 import {
@@ -79,29 +81,31 @@ async function referenceFor(
     let connectionId = account.connection_id;
 
     if (!connectionId && account.parent_account_id) {
-      const parent = await loadSenderAccount(
-        tx,
-        tenantId,
-        account.parent_account_id
-      );
+      const lender = await loadLendingParent(tx, tenantId, account);
 
-      connectionId = parent?.connection_id ?? null;
+      if ("reason" in lender) return { reason: lender.reason };
+
+      connectionId = lender.parent.connection_id;
     }
 
     if (!connectionId) return { reason: "CREDENTIAL_UNAVAILABLE" };
 
     const connection = await loadConnection(tx, tenantId, connectionId);
+    const grantReason = reasonForGrantState(
+      connection?.grant_state ?? "missing"
+    );
 
-    if (!connection || connection.grant_state !== "active") {
-      return { reason: "CONNECTION_NOT_ACTIVE" };
+    if (!connection || grantReason) {
+      return { reason: grantReason ?? "CONNECTION_NOT_ACTIVE" };
     }
 
     if (
       connection.expires_at !== null &&
       new Date(connection.expires_at).getTime() <= now.getTime()
     ) {
-      // An expired token is not refreshed here: refresh is the connector's job.
-      return { reason: "CREDENTIAL_UNAVAILABLE" };
+      // An expired token is not refreshed here and is not used: wait for the
+      // connector's refresh or the tenant's re-authorisation.
+      return { reason: "CONNECTION_EXPIRED" };
     }
 
     return connection.access_secret_id
@@ -124,13 +128,12 @@ async function referenceFor(
   let secretId = account.secret_id;
 
   if (!secretId && account.parent_account_id) {
-    const parent = await loadSenderAccount(
-      tx,
-      tenantId,
-      account.parent_account_id
-    );
+    // Only a parent that really is this child's `connected` container lends.
+    const lender = await loadLendingParent(tx, tenantId, account);
 
-    secretId = parent?.secret_id ?? null;
+    if ("reason" in lender) return { reason: lender.reason };
+
+    secretId = lender.parent.secret_id;
   }
 
   return secretId

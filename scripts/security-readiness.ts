@@ -2474,7 +2474,7 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_telegram_bindings.chat_ciphertext":
     "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
   "awcms_channel_secrets.ciphertext":
-    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk: the ciphertext is AES-256-GCM with associated data binding purpose, tenant and row, under a key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS, granted to this job alone) that is not in the database or its backups; the grant is column-only (id, tenant_id, purpose, ciphertext) and read-only"
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone; decrypts are counted per tenant. What does NOT bound it: AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's access tokens, API tokens and device keys"
 };
 
 /**
