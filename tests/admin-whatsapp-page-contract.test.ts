@@ -184,13 +184,22 @@ describe("the properties this screen exists to keep", () => {
 });
 
 describe("the admin ledger", () => {
-  test("no `whatsapp_delivery` key is left on NOT_YET_SCREENED", async () => {
+  test("no `whatsapp_delivery` key is left on NOT_YET_SCREENED, except the two sender-routing keys", async () => {
     const { NOT_YET_SCREENED } =
       await import("../scripts/admin-screen-coverage-ledger");
 
+    // Issue #1141 added `senders.read` and `sender_policy.configure` API-first:
+    // their screen rides with the connection manager (Issue #1154), where an
+    // operator picks the accounts a policy names. Every key of the ORIGINAL ten
+    // is still screened, and these two may only leave the list.
     expect(
-      NOT_YET_SCREENED.filter((key) => key.startsWith("whatsapp_delivery."))
-    ).toEqual([]);
+      NOT_YET_SCREENED.filter((key) =>
+        key.startsWith("whatsapp_delivery.")
+      ).sort()
+    ).toEqual([
+      "whatsapp_delivery.sender_policy.configure",
+      "whatsapp_delivery.senders.read"
+    ]);
     expect(EXPECTED).toHaveLength(10);
   });
 });

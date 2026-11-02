@@ -43,7 +43,7 @@ E.164-normalised or **refused, never guessed** (a national `08…` number is rea
 
 ## Providers
 
-Chosen per **deployment** from the environment, never per tenant (a tenant-supplied token would let one tenant's admin make the deployment speak as someone else). Never in the database, logs or error text.
+The **deployment sender** (`senderAccountId = null`) is chosen per **deployment** from the environment, never per request (a request-supplied token would let one tenant's admin make the deployment speak as someone else). Never in the database, logs or error text. A **tenant-owned sender** is a different path: see [Sender routing](#sender-routing-issue-1141) below.
 
 - `WHATSAPP_PROVIDER=log` — records "would have sent", calls nothing.
 - `fonnte` (`WHATSAPP_FONNTE_TOKEN`) — free text over Fonnte's HTTP API.
@@ -61,7 +61,7 @@ The purge first expires stale non-terminal rows (clearing an OTP), then deletes 
 
 ## Admin surface
 
-`/admin/whatsapp` (navigation entry gated on `whatsapp_delivery.messages.read`): delivery status, recent messages with cancel, recent attempts, the consent store, the suppression list and the registered templates. Each panel is gated on its own permission. The ten permissions are seeded by `sql/179`.
+`/admin/whatsapp` (navigation entry gated on `whatsapp_delivery.messages.read`): delivery status, recent messages with cancel, recent attempts, the consent store, the suppression list and the registered templates. Each panel is gated on its own permission. The ten permissions are seeded by `sql/179`; the two sender-routing permissions (`senders.read`, `sender_policy.configure`, API only, no screen yet) by `sql/323`.
 
 ## Security notes and known limits (audit of PR #975)
 
@@ -75,10 +75,78 @@ The purge first expires stale non-terminal rows (clearing an OTP), then deletes 
 - **Opt-out versus an in-flight message.** A withdrawal cancels `queued` and `retry_wait` rows and the dispatcher re-checks consent before every send, but a row already `sending` is in a provider call and cannot be recalled; that window is bounded by the provider timeout.
 - **Erasure is not implemented.** The `subjectData` descriptors declare `anonymize` for the four tables, but no executor path has been exercised for them yet; a data-subject erasure of a WhatsApp recipient is an open item (and clearing `recipient_hash` removes a suppression, so it must not run on suppressed numbers without a decision).
 
+## Sender routing (Issue #1141)
+
+[ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) section 4. A tenant can own several WhatsApp senders (a Meta Cloud API phone number per brand, later StarSender devices) in [`channel_accounts`](../channel-accounts/README.md), and a message can be sent through one of them. **One queue, one dispatcher, no dual write**: the sender is a **key on the existing queue**, not a second one.
+
+### What changed on the port, and who is affected
+
+`WhatsappDeliveryPort` goes from `1.0.0` to **`1.1.0`, additively** (`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`):
+
+| Added (all optional) | Meaning                                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `senderAccountId`    | The tenant-owned account that should send. Never a token, a phone number id or a device id.                |
+| `inReplyToMessageId` | Thread affinity: this message continues an earlier message to the same recipient and **keeps its sender**. |
+| `businessScope`      | `{ type, id }`: the brand or unit; the key of the default-sender policy.                                   |
+| refusals             | `SENDER_UNAVAILABLE`, `SENDER_AFFINITY_CONFLICT`, `REPLY_TARGET_UNKNOWN`.                                  |
+
+**Compatibility (stated, and tested).** No existing field, signature or refusal changed. A call that sets none of the new fields, for a tenant with no sender policy, is queued with `senderAccountId = null` (the **deployment sender**) and takes the same path, the same provider, the same credential and the same event payload as in `1.0.0`. So `booking`, and the commerce adapter behind `awcms-one`'s per-tenant `legacy`/`upstream` mode router (downstream ADR-0047; [ADR-0133](../../../docs/adr/0133-generic-delivery-capability-whatsapp-promotion.md) section 6), compile and behave **unchanged**. A tenant in `legacy` mode never reaches this port, so sender routing does not apply to it until its cutover (a tenant is in exactly one mode, so there is still no second queue and no dual write); `awcms-one` adopts the new inputs after a subtree sync as a merge commit, and the StarSender default of a derived product is a **configuration of the policy**, applied per tenant, never a code change. A consumer that switches exhaustively over the refusal reasons (none in this repository does: booking maps an unknown reason to a coarse code) must add the three members before it passes a sender. A consumer that accepts a sender id from a **user** must authorise that choice itself: the port enforces tenant authority, it performs no access check (the consumer authorises its own business action, ADR-0011).
+
+### Which sender a message gets
+
+In this order, once, at enqueue, **snapshotted on the row and immutable** (`sender_account_id`, `sender_selection`, `sender_policy_version`, the business scope; the database refuses an UPDATE of any of them, for every role):
+
+1. the thread's sender, when `inReplyToMessageId` names an earlier message to the same recipient (a different explicit sender is `SENDER_AFFINITY_CONFLICT`, an unknown, foreign or other-recipient target is `REPLY_TARGET_UNKNOWN`);
+2. else the explicit `senderAccountId`;
+3. else the **default of the business scope** (`awcms_whatsapp_sender_policies`), else the tenant-wide default;
+4. else the deployment sender (`null`).
+
+The default is a **prospective policy with a configuration version**: `PUT /api/v1/whatsapp/sender-policy` (high-risk, `whatsapp_delivery.sender_policy.configure`, `Idempotency-Key`, audited at `warning`) changes what **later** messages get; a message already queued keeps the sender and the version it was given. `defaultSenderAccountId: null` is an explicit decision to use the deployment sender for a scope. There is **no provider default in code**: a derived product that wants StarSender (or Meta) as its default configures the policy.
+
+### A sender that cannot send never sends through another
+
+A sender is usable only when `channel_accounts` says so **right now**: an account of **this tenant** (another tenant's id and an unknown id are one answer), a WhatsApp sending identity, `connected`, its connection grant active, and the capability (`dm`, `reply`, or `broadcast` for marketing) granted with evidence against the current matrix (`ChannelAccountPort`). Otherwise:
+
+| Moment   | Sender state                                                                                          | Result                                                                                      |
+| -------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| enqueue  | not usable for any reason, or the provider has no adapter on this deployment (StarSender until #1142) | `refused: SENDER_UNAVAILABLE`, nothing queued, **never** another sender, number or provider |
+| dispatch | unknown, revoked, disabled, connection not active, capability withdrawn, no adapter                   | terminal `failed` with `sender_unavailable`; the provider is never called                   |
+| dispatch | degraded, pending, expired grant or token awaiting refresh, no key ring, control plane off            | the lane is **held**: rows stay waiting, nothing is claimed, the retry budget is not spent  |
+| dispatch | the provider rejects the sender's credential (`unauthorized`)                                         | that row fails; the rest of the lane fails closed with **no further call**                  |
+
+There is no rotation to another number to evade a provider limit, a quality rating or a failure (ADR-0148 I4, I5); an explicit reroute is a **new** enqueue.
+
+### Adapter and secret: from the tenant's record, never from the request
+
+The Meta adapter is built **per lane, per pass** from the sender's own record (`external_id` is the `phone_number_id`) and its own credential, decrypted **in memory** for the claimed row's tenant by `ChannelSenderCredentialPort` (the application key ring, AES-256-GCM, associated data binding purpose, tenant and row). The port input type has no field a token could ride on, and the policy endpoint rejects a body that smuggles one. The sender-resolution adapter (`channel-account-port-adapter.ts`, used on the enqueue path) **never imports the secret store**; only `scripts/whatsapp-dispatch.ts` composes the credential adapter, which is why `CHANNEL_SECRETS_ENCRYPTION_KEYS` is granted to `whatsapp:dispatch` alone among the jobs that reach this module. A revoked sender is therefore effective on the **next claim**.
+
+### Per-sender health, quota, throttle, breaker, fair claiming
+
+- **Lanes and fair claiming.** A pass serves each sender that has due rows as its own lane, oldest-waiting first, at most `limit / lanes` rows per lane, so a stalled or throttled number cannot starve the others.
+- **Breaker.** One circuit breaker per sender (`whatsapp-delivery:sender:<account id>`); the deployment sender keeps `whatsapp-delivery`. One failing number does not stop another.
+- **Quota and throttle.** `WHATSAPP_SENDER_RATE_PER_HOUR` (default 1000) and `WHATSAPP_SENDER_RATE_PER_DAY` (default 10000), counted from what the sender really **sent** plus what is in flight. A reached cap makes the lane wait; the rows are never rerouted. These are deployment-wide ceilings, not per-sender settings.
+- **Diagnostics.** `GET /api/v1/whatsapp/senders` (`whatsapp_delivery.senders.read`): per sender, availability (a coarse reason code), the queue, the quota and whether it is throttled. No credential, secret reference, phone number or device id is ever projected; the messages list gains `senderAccountId` and `senderSelection`. The `awcms.whatsapp.message.*` events gain `senderAccountId` (absent for the deployment sender, so that payload is unchanged); "accepted" by the provider is never "delivered".
+
+### Consent and suppression: the recipient, not the sender
+
+Consent, suppression, expiry, the purpose classes, the idempotency key and the recipient rate limits are keyed by the **recipient** (and checked at enqueue and again at dispatch), never by the sender: changing the sender does not change who consented, and an opt-out or a suppressed address stops every sender of the tenant. Marketing through a sender needs the `broadcast` capability (restricted for an unofficial provider, so it needs contract evidence there).
+
+### Limits of this change (open, stated)
+
+- **Hardening from the independent security audit (`sql/324`).** The worker's view of `awcms_channel_secrets` is bounded by a RESTRICTIVE policy to the three purposes a send resolves (`provider_access_token`, `api_token`, `device_key`), so a compromised worker cannot read refresh-token, bot-token, webhook-secret, PKCE or authorisation-code ciphertext. It still reads and can decrypt every tenant's access tokens, API tokens and device keys (the job holds the key ring): AES-GCM associated data stops re-labelling, it is not a mitigation against a compromised worker. The per-sender cap applies to a `broadcast`-only or `reply`-only sender too. A child number resolves its **parent's** connection and borrows the parent's credential only from a `connected` container of the right provider and kind; an expired grant is a **hold**, a revoked grant or a disabled parent is terminal. A sender policy cannot be deleted, and its audit row records the previous default and version.
+- **Known follow-ups (not done here):** per-person account assignment is not applied by the port; no `security:readiness` check yet fails when the restrictive policy is missing; a read narrower than the three dispatch purposes would need a definer function. Findings M2, M4, L1 and L4 to L6 of the audit are recorded on the PR as follow-ups.
+- **Only `whatsapp_cloud` has an adapter.** A StarSender sender is refused at enqueue and fails closed at dispatch until Issue #1142 adds its adapter behind its own flag and the per-operator risk acknowledgement (not built here).
+- **Consent is not yet keyed by business scope** (it is by tenant and recipient, as before): one brand's opt-in covers the tenant's other brands. Keying consent by scope is a schema decision for the consent tables, not taken here; an opt-out and a suppression are the safe direction (they apply tenant-wide).
+- **No per-purpose sender override** in the policy (the pack lists it as optional) and **no per-sender cap override** (the caps are deployment-wide).
+- **Per-sender breaker and health are in-process**, like the deployment breaker: they reset when the dispatcher process restarts; the quota is counted from the queue and survives restarts. No health row is written by the dispatcher.
+- **No admin screen** for senders or the policy (the connection manager is #1154); the API is complete.
+- **Per-person account assignment** (`channel_accounts` assignments) is not applied by the port; a consumer that lets a user pick a sender must check it.
+- **A race window of one transaction:** an account revoked between the enqueue check and the INSERT is caught by the database guard, which raises inside the caller's transaction (loud, fail closed); a revocation after the INSERT is caught at dispatch.
+
 ## Not in this phase
 
-Sender selection per tenant, brand and number is **decided but not built**: [ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) §4 adds an immutable, nullable `sender_account_id` to the one queue (Issue #1141); `null` stays today's deployment sender. Inbound webhooks (delivery receipts, "stop" replies — ADR-0133 section 10, Q2), a per-tenant sender selection (Q3), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
+Inbound webhooks (delivery receipts, "stop" replies — ADR-0133 section 10, Q2), a StarSender adapter (Issue #1142), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. Per-tenant sender selection (Q3) is **built since Issue #1141**: see [Sender routing](#sender-routing-issue-1141). The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
 
 ## WhatsApp Bun runtime / planned UI status
 
-Existing `bun run whatsapp:dispatch` performs provider HTTP via one Bun queue. Future StarSender and Meta multi-sender work [#1141–#1143](https://github.com/ahliweb/awcms/issues/1141) must reuse it, not a Node.js/Socket.IO worker. Future Bun SSE/WS projects status only; provider accepted is not verified delivered. [Runtime standard](../../../docs/awcms/bun-delivery-realtime-runtime.md).
+Existing `bun run whatsapp:dispatch` performs provider HTTP via one Bun queue. Meta multi-sender routing ([#1141](https://github.com/ahliweb/awcms/issues/1141)) reuses it, and the StarSender and webhook work [#1142–#1143](https://github.com/ahliweb/awcms/issues/1142) must too, not a Node.js/Socket.IO worker. Future Bun SSE/WS projects status only; provider accepted is not verified delivered. [Runtime standard](../../../docs/awcms/bun-delivery-realtime-runtime.md).

@@ -362,6 +362,19 @@ const RULES: readonly Rule[] = [
     min: 1
   },
   { name: "WHATSAPP_DEFAULT_COUNTRY_CODE", required: false, type: "string" },
+  // Per-SENDER caps for tenant-owned senders (Issue #1141), counted at dispatch.
+  {
+    name: "WHATSAPP_SENDER_RATE_PER_HOUR",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "WHATSAPP_SENDER_RATE_PER_DAY",
+    required: false,
+    type: "int",
+    min: 1
+  },
   {
     name: "WHATSAPP_RATE_SECURITY_PER_RECIPIENT_PER_HOUR",
     required: false,

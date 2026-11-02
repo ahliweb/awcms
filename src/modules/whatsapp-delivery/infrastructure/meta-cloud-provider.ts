@@ -30,6 +30,13 @@ export type MetaCloudProviderOptions = {
   phoneNumberId: string;
   apiVersion: string;
   timeoutMs: number;
+  /**
+   * The breaker this adapter feeds. Omitted: the deployment sender's
+   * ({@link WHATSAPP_CIRCUIT_BREAKER_KEY}), byte for byte as before. A tenant-
+   * owned sender passes its own key (Issue #1141) so one failing number cannot
+   * trip another sender's breaker.
+   */
+  breakerKey?: string;
   http?: WhatsappHttpClient;
   now?: () => Date;
 };
@@ -65,7 +72,9 @@ export function createMetaCloudWhatsappProvider(
 ): WhatsappProvider {
   const http = options.http ?? defaultWhatsappHttpClient;
   const now = options.now ?? (() => new Date());
-  const breaker = getProviderCircuitBreaker(WHATSAPP_CIRCUIT_BREAKER_KEY);
+  const breaker = getProviderCircuitBreaker(
+    options.breakerKey ?? WHATSAPP_CIRCUIT_BREAKER_KEY
+  );
   const url = `https://graph.facebook.com/${options.apiVersion}/${options.phoneNumberId}/messages`;
 
   return {

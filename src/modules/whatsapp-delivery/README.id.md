@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:34ff58c8ddcaf43e31fc949b3606e9bcd811c1fe9f13cfd3f73e829b6d7cd5f6 -->
+<!-- i18n-source-hash: sha256:130d73a1f8b465160f4dd4e95765fce7466927a8d5cb8ddcc34ba6b223cf7fe6 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -47,7 +47,7 @@ Dinormalisasi ke E.164 atau **ditolak, tidak pernah ditebak** (nomor nasional `0
 
 ## Provider
 
-Dipilih per **deployment** dari environment, tidak pernah per tenant (token dari tenant akan membuat admin satu tenant bisa membuat deployment berbicara sebagai pihak lain). Tidak pernah di database, log, atau teks galat.
+**Pengirim deployment** (`senderAccountId = null`) dipilih per **deployment** dari environment, tidak pernah per permintaan (token yang dikirim dalam permintaan akan membuat admin satu tenant bisa membuat deployment berbicara sebagai pihak lain). Tidak pernah di database, log, atau teks galat. **Pengirim milik tenant** adalah jalur yang berbeda: lihat [Perutean pengirim](#perutean-pengirim-issue-1141) di bawah.
 
 - `WHATSAPP_PROVIDER=log` — mencatat "akan dikirim", tidak memanggil apa pun.
 - `fonnte` (`WHATSAPP_FONNTE_TOKEN`) — teks bebas lewat API HTTP Fonnte.
@@ -65,7 +65,7 @@ Purge lebih dulu mengedaluwarsakan baris non-terminal yang basi (mengosongkan OT
 
 ## Permukaan admin
 
-`/admin/whatsapp` (entri navigasi dikunci pada `whatsapp_delivery.messages.read`): status pengiriman, pesan terbaru beserta pembatalan, percobaan terbaru, penyimpanan persetujuan, daftar penekanan, dan templat terdaftar. Setiap panel dikunci pada izinnya sendiri. Kesepuluh izin di-seed oleh `sql/179`.
+`/admin/whatsapp` (entri navigasi dikunci pada `whatsapp_delivery.messages.read`): status pengiriman, pesan terbaru beserta pembatalan, percobaan terbaru, penyimpanan persetujuan, daftar penekanan, dan templat terdaftar. Setiap panel dikunci pada izinnya sendiri. Kesepuluh izin di-seed oleh `sql/179`; dua izin perutean pengirim (`senders.read`, `sender_policy.configure`, hanya API, belum ada layar) oleh `sql/323`.
 
 ## Catatan keamanan dan batas yang diketahui (audit PR #975)
 
@@ -79,10 +79,78 @@ Purge lebih dulu mengedaluwarsakan baris non-terminal yang basi (mengosongkan OT
 - **Opt-out versus pesan yang sedang berjalan.** Pencabutan membatalkan baris `queued` dan `retry_wait` dan dispatcher memeriksa ulang persetujuan sebelum setiap pengiriman, tetapi baris yang sudah `sending` sedang dalam panggilan provider dan tidak dapat ditarik; jendela itu dibatasi oleh batas waktu provider.
 - **Erasure belum diimplementasikan.** Deskriptor `subjectData` menyatakan `anonymize` untuk keempat tabel, tetapi belum ada jalur eksekutor yang diuji untuknya; erasure subjek data untuk penerima WhatsApp adalah item terbuka (dan mengosongkan `recipient_hash` menghapus penekanan, sehingga tidak boleh dijalankan pada nomor yang ditekan tanpa keputusan).
 
+## Perutean pengirim (Issue #1141)
+
+[ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) bagian 4. Satu tenant dapat memiliki beberapa pengirim WhatsApp (satu nomor Meta Cloud API per brand, kelak perangkat StarSender) di [`channel_accounts`](../channel-accounts/README.id.md), dan sebuah pesan dapat dikirim lewat salah satunya. **Satu antrean, satu dispatcher, tanpa dual write**: pengirim adalah **kunci pada antrean yang sudah ada**, bukan antrean kedua.
+
+### Apa yang berubah pada port, dan siapa yang terdampak
+
+`WhatsappDeliveryPort` naik dari `1.0.0` ke **`1.1.0`, secara aditif** (`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`):
+
+| Ditambahkan (semuanya opsional) | Arti                                                                                                            |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `senderAccountId`               | Akun milik tenant yang seharusnya mengirim. Bukan token, bukan id nomor telepon, bukan id perangkat.            |
+| `inReplyToMessageId`            | Afinitas utas: pesan ini melanjutkan pesan sebelumnya ke penerima yang sama dan **memakai pengirim yang sama**. |
+| `businessScope`                 | `{ type, id }`: brand atau unit; kunci kebijakan pengirim bawaan.                                               |
+| penolakan                       | `SENDER_UNAVAILABLE`, `SENDER_AFFINITY_CONFLICT`, `REPLY_TARGET_UNKNOWN`.                                       |
+
+**Kompatibilitas (dinyatakan, dan diuji).** Tidak ada field, tanda tangan, atau penolakan yang sudah ada yang berubah. Panggilan yang tidak mengisi field baru apa pun, untuk tenant tanpa kebijakan pengirim, diantre dengan `senderAccountId = null` (**pengirim deployment**) dan menempuh jalur yang sama, provider yang sama, kredensial yang sama, dan payload event yang sama seperti di `1.0.0`. Karena itu `booking`, dan adapter commerce di balik router mode `legacy`/`upstream` per tenant milik `awcms-one` (ADR-0047 hilir; [ADR-0133](../../../docs/adr/0133-generic-delivery-capability-whatsapp-promotion.id.md) bagian 6), dapat dikompilasi dan berperilaku **tanpa perubahan**. Tenant dalam mode `legacy` tidak pernah mencapai port ini, sehingga perutean pengirim tidak berlaku baginya sampai cutover (tenant berada tepat di satu mode, jadi tetap tidak ada antrean kedua dan tidak ada dual write); `awcms-one` mengadopsi input baru setelah subtree sync sebagai merge commit, dan default StarSender sebuah produk turunan adalah **konfigurasi kebijakan**, diterapkan per tenant, tidak pernah perubahan kode. Konsumen yang melakukan `switch` lengkap atas alasan penolakan (tidak ada di repositori ini: booking memetakan alasan yang tak dikenal ke kode kasar) harus menambah ketiga anggota itu sebelum meneruskan pengirim. Konsumen yang menerima id pengirim dari **pengguna** harus memberi otorisasi atas pilihan itu sendiri: port menegakkan otoritas tenant, ia tidak melakukan pemeriksaan akses (konsumen mengotorisasi aksi bisnisnya sendiri, ADR-0011).
+
+### Pengirim mana yang didapat sebuah pesan
+
+Berurutan, sekali, saat enqueue, **di-snapshot pada baris dan tak dapat diubah** (`sender_account_id`, `sender_selection`, `sender_policy_version`, lingkup bisnis; database menolak UPDATE atas salah satunya, untuk setiap peran):
+
+1. pengirim utas, bila `inReplyToMessageId` menyebut pesan sebelumnya ke penerima yang sama (pengirim eksplisit yang berbeda adalah `SENDER_AFFINITY_CONFLICT`; target yang tak dikenal, milik tenant lain, atau untuk penerima lain adalah `REPLY_TARGET_UNKNOWN`);
+2. jika tidak, `senderAccountId` eksplisit;
+3. jika tidak, **bawaan lingkup bisnis** (`awcms_whatsapp_sender_policies`), lalu bawaan seluruh tenant;
+4. jika tidak, pengirim deployment (`null`).
+
+Bawaan itu adalah **kebijakan prospektif dengan versi konfigurasi**: `PUT /api/v1/whatsapp/sender-policy` (berisiko tinggi, `whatsapp_delivery.sender_policy.configure`, `Idempotency-Key`, diaudit pada `warning`) mengubah apa yang didapat pesan **berikutnya**; pesan yang sudah diantre tetap memegang pengirim dan versi yang diberikan kepadanya. `defaultSenderAccountId: null` adalah keputusan eksplisit memakai pengirim deployment untuk suatu lingkup. **Tidak ada default provider di kode**: produk turunan yang ingin StarSender (atau Meta) sebagai bawaannya mengonfigurasi kebijakan.
+
+### Pengirim yang tidak bisa mengirim tidak pernah mengirim lewat yang lain
+
+Pengirim dapat dipakai hanya bila `channel_accounts` menyatakannya **saat ini**: akun milik **tenant ini** (id tenant lain dan id tak dikenal adalah satu jawaban yang sama), identitas pengirim WhatsApp, `connected`, grant koneksinya aktif, dan kapabilitas (`dm`, `reply`, atau `broadcast` untuk pemasaran) diberikan beserta bukti terhadap matriks saat ini (`ChannelAccountPort`). Selain itu:
+
+| Saat     | Keadaan pengirim                                                                                                       | Hasil                                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| enqueue  | tidak dapat dipakai karena alasan apa pun, atau provider tak punya adapter di deployment ini (StarSender sampai #1142) | `refused: SENDER_UNAVAILABLE`, tidak ada yang diantre, **tidak pernah** pengirim, nomor, atau provider lain |
+| dispatch | tak dikenal, dicabut, dinonaktifkan, koneksi tidak aktif, kapabilitas ditarik, tanpa adapter                           | `failed` terminal dengan `sender_unavailable`; provider tidak pernah dipanggil                              |
+| dispatch | degraded, pending, grant kedaluwarsa atau token menunggu refresh, tanpa key ring, control plane mati                   | jalur **ditahan**: baris tetap menunggu, tidak ada yang diklaim, anggaran retry tidak terpakai              |
+| dispatch | provider menolak kredensial pengirim (`unauthorized`)                                                                  | baris itu gagal; sisa jalur gagal-tertutup **tanpa panggilan lagi**                                         |
+
+Tidak ada rotasi ke nomor lain untuk menghindari batas provider, rating kualitas, atau kegagalan (ADR-0148 I4, I5); pengalihan eksplisit adalah enqueue **baru**.
+
+### Adapter dan rahasia: dari rekaman tenant, tidak pernah dari permintaan
+
+Adapter Meta dibangun **per jalur, per pass** dari rekaman pengirim itu sendiri (`external_id` adalah `phone_number_id`) dan kredensialnya sendiri, didekripsi **di memori** untuk tenant dari baris yang diklaim oleh `ChannelSenderCredentialPort` (key ring aplikasi, AES-256-GCM, associated data yang mengikat tujuan, tenant, dan baris). Tipe input port tidak punya field tempat token bisa menumpang, dan endpoint kebijakan menolak body yang menyelundupkannya. Adapter resolusi pengirim (`channel-account-port-adapter.ts`, dipakai di jalur enqueue) **tidak pernah mengimpor secret store**; hanya `scripts/whatsapp-dispatch.ts` yang menyusun adapter kredensial, itulah sebabnya `CHANNEL_SECRETS_ENCRYPTION_KEYS` diberikan kepada `whatsapp:dispatch` saja di antara job yang menjangkau modul ini. Pengirim yang dicabut karena itu berlaku pada **klaim berikutnya**.
+
+### Kesehatan, kuota, throttle, breaker, dan klaim adil per pengirim
+
+- **Jalur dan klaim adil.** Satu pass melayani setiap pengirim yang punya baris jatuh tempo sebagai jalurnya sendiri, yang paling lama menunggu lebih dulu, paling banyak `limit / jalur` baris per jalur, sehingga satu nomor yang macet atau ter-throttle tidak dapat membuat yang lain kelaparan.
+- **Breaker.** Satu circuit breaker per pengirim (`whatsapp-delivery:sender:<id akun>`); pengirim deployment tetap `whatsapp-delivery`. Satu nomor yang gagal tidak menghentikan nomor lain.
+- **Kuota dan throttle.** `WHATSAPP_SENDER_RATE_PER_HOUR` (default 1000) dan `WHATSAPP_SENDER_RATE_PER_DAY` (default 10000), dihitung dari apa yang benar-benar **dikirim** pengirim ditambah yang sedang berjalan. Batas yang tercapai membuat jalur menunggu; baris tidak pernah dialihkan. Ini batas atas seluruh deployment, bukan pengaturan per pengirim.
+- **Diagnostik.** `GET /api/v1/whatsapp/senders` (`whatsapp_delivery.senders.read`): per pengirim, ketersediaan (kode alasan kasar), antrean, kuota, dan apakah ter-throttle. Tidak ada kredensial, referensi rahasia, nomor telepon, atau id perangkat yang pernah diproyeksikan; daftar pesan mendapat `senderAccountId` dan `senderSelection`. Event `awcms.whatsapp.message.*` mendapat `senderAccountId` (tidak ada untuk pengirim deployment, sehingga payload itu tidak berubah); "diterima" provider tidak pernah berarti "terkirim".
+
+### Persetujuan dan penekanan: penerima, bukan pengirim
+
+Persetujuan, penekanan, kedaluwarsa, kelas tujuan, kunci idempotensi, dan batas laju penerima dikunci pada **penerima** (dan diperiksa saat enqueue serta sekali lagi saat dispatch), tidak pernah pada pengirim: mengganti pengirim tidak mengubah siapa yang sudah setuju, dan opt-out atau alamat yang ditekan menghentikan setiap pengirim milik tenant. Pemasaran lewat pengirim membutuhkan kapabilitas `broadcast` (terbatas untuk provider tak resmi, sehingga di sana membutuhkan bukti kontrak).
+
+### Batas perubahan ini (terbuka, dinyatakan)
+
+- **Pengerasan dari audit keamanan independen (`sql/324`).** Pandangan worker atas `awcms_channel_secrets` dibatasi policy RESTRICTIVE ke tiga tujuan yang di-resolusi pengiriman (`provider_access_token`, `api_token`, `device_key`), sehingga worker yang dikompromikan tidak dapat membaca ciphertext refresh token, bot token, rahasia webhook, PKCE, atau kode otorisasi. Ia tetap dapat membaca dan mendekripsi token akses, token API, dan kunci perangkat setiap tenant (job memegang key ring): associated data AES-GCM mencegah pemberian label ulang, bukan mitigasi terhadap worker yang dikompromikan. Batas per pengirim berlaku juga bagi pengirim yang hanya `broadcast` atau `reply`. Nomor anak me-resolusi koneksi **induk**-nya dan meminjam kredensial induk hanya dari wadah `connected` dengan provider dan jenis yang benar; grant kedaluwarsa **ditahan**, grant yang dicabut atau induk yang dinonaktifkan terminal. Kebijakan pengirim tidak dapat dihapus, dan baris auditnya mencatat bawaan dan versi sebelumnya.
+- **Tindak lanjut yang diketahui (tidak dikerjakan di sini):** penugasan akun per orang tidak diterapkan oleh port; belum ada pemeriksaan `security:readiness` yang gagal bila restrictive policy hilang; pembacaan yang lebih sempit daripada tiga tujuan dispatch membutuhkan fungsi definer. Temuan M2, M4, L1, dan L4 sampai L6 audit dicatat di PR sebagai tindak lanjut.
+- **Hanya `whatsapp_cloud` yang punya adapter.** Pengirim StarSender ditolak saat enqueue dan gagal-tertutup saat dispatch sampai Issue #1142 menambahkan adapternya di balik flag sendiri dan pengakuan risiko per operator (tidak dibangun di sini).
+- **Persetujuan belum dikunci per lingkup bisnis** (per tenant dan penerima, seperti sebelumnya): opt-in satu brand berlaku bagi brand lain milik tenant. Mengunci persetujuan per lingkup adalah keputusan skema untuk tabel persetujuan, tidak diambil di sini; opt-out dan penekanan adalah arah yang aman (berlaku di seluruh tenant).
+- **Tanpa override pengirim per tujuan** dalam kebijakan (pack menyebutnya opsional) dan **tanpa override batas per pengirim** (batas berlaku seluruh deployment).
+- **Breaker dan kesehatan per pengirim ada di dalam proses**, seperti breaker deployment: ia direset saat proses dispatcher dimulai ulang; kuota dihitung dari antrean dan bertahan melewati restart. Dispatcher tidak menulis baris kesehatan.
+- **Tidak ada layar admin** untuk pengirim atau kebijakan (pengelola koneksi adalah #1154); API-nya lengkap.
+- **Penugasan akun per orang** (assignment `channel_accounts`) tidak diterapkan oleh port; konsumen yang membiarkan pengguna memilih pengirim harus memeriksanya.
+- **Jendela balapan satu transaksi:** akun yang dicabut di antara pemeriksaan enqueue dan INSERT ditangkap oleh guard database, yang melempar di dalam transaksi pemanggil (nyaring, gagal-tertutup); pencabutan setelah INSERT ditangkap saat dispatch.
+
 ## Bukan bagian fase ini
 
-Pemilihan pengirim per tenant, brand, dan nomor **sudah diputuskan tetapi belum dibangun**: [ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) §4 menambahkan `sender_account_id` yang tak dapat diubah dan nullable pada satu antrean (Issue #1141); `null` tetap pengirim deployment hari ini. Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q2), pemilihan pengirim per tenant (Q3), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
+Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q2), adapter StarSender (Issue #1142), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Pemilihan pengirim per tenant (Q3) **sudah dibangun sejak Issue #1141**: lihat [Perutean pengirim](#perutean-pengirim-issue-1141). Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
 
 ## Runtime Bun WhatsApp / status UI terencana
 
-`bun run whatsapp:dispatch` sudah mengirim melalui API provider dari antrean Bun tunggal. StarSender dan Meta multi-nomor mendatang [#1141–#1143](https://github.com/ahliweb/awcms/issues/1141) wajib memakainya tanpa worker Node.js/Socket.IO. SSE/WS Bun nanti hanya menampilkan status; diterima provider bukan delivered. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).
+`bun run whatsapp:dispatch` sudah mengirim melalui API provider dari antrean Bun tunggal. Perutean Meta multi-pengirim ([#1141](https://github.com/ahliweb/awcms/issues/1141)) memakainya, dan pekerjaan StarSender serta webhook [#1142–#1143](https://github.com/ahliweb/awcms/issues/1142) wajib memakainya juga, tanpa worker Node.js/Socket.IO. SSE/WS Bun nanti hanya menampilkan status; diterima provider bukan delivered. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).

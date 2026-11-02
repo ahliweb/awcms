@@ -962,26 +962,32 @@ describe("module descriptor", () => {
         .map((d) => d.tableName)
         .sort()
     ).toEqual([...tables].sort());
+    // Issue #1141 added the default-sender policy table: one configuration row
+    // per scope, answered by a subjectData descriptor (the admin stamp) and a
+    // BOUNDED_BY_DESIGN entry in `data-lifecycle:table-coverage:check`, not by a
+    // delegated purge (an age-based purge would reset a brand's default sender).
     expect(
       (whatsappDeliveryModule.subjectData ?? []).map((d) => d.tableName).sort()
-    ).toEqual([...tables].sort());
+    ).toEqual([...tables, "awcms_whatsapp_sender_policies"].sort());
   });
 
-  test("the ten permissions mirror the sql/179 seed exactly", () => {
-    const seed = readFileSync(
-      "sql/179_awcms_whatsapp_delivery_permissions.sql",
-      "utf8"
-    );
+  test("the twelve permissions mirror the sql/179 and sql/323 seeds exactly", () => {
     const seeded = [
-      ...seed.matchAll(/\('whatsapp_delivery', '(\w+)', '(\w+)'/g)
+      "sql/179_awcms_whatsapp_delivery_permissions.sql",
+      "sql/323_awcms_whatsapp_sender_routing_permissions.sql"
     ]
+      .flatMap((file) => [
+        ...readFileSync(file, "utf8").matchAll(
+          /\('whatsapp_delivery', '(\w+)', '(\w+)'/g
+        )
+      ])
       .map((m) => `${m[1]}.${m[2]}`)
       .sort();
     const declared = (whatsappDeliveryModule.permissions ?? [])
       .map((p) => `${p.activityCode}.${p.action}`)
       .sort();
 
-    expect(declared).toHaveLength(10);
+    expect(declared).toHaveLength(12);
     expect(declared).toEqual(seeded);
   });
 

@@ -187,6 +187,18 @@ contracts:
     # adds checkIn, checkOut, markNoShow, get, getOffering, listOfferings and the
     # anonymous availability read, additively. First entry in this registry.
     booking: "1.1.0"
+    # whatsapp_delivery is owned (provided) by the base `whatsapp_delivery` module
+    # (ADR-0133), port `_shared/ports/whatsapp-delivery-port.ts`. 1.0.0 was the
+    # port of #963; 1.1.0 (#1141, ADR-0148 section 4) adds the optional
+    # senderAccountId, inReplyToMessageId and businessScope inputs and three
+    # refusal reasons, additively: every existing consumer is unchanged. First
+    # entry in this registry.
+    whatsapp_delivery: "1.1.0"
+    # channel_account is owned (provided) by the base `channel_accounts` module
+    # (#1141, ADR-0148 capability C1): the port a channel module asks whether a
+    # tenant-owned account may send now. Consumed (optional) by
+    # `whatsapp_delivery`. First assigned number.
+    channel_account: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

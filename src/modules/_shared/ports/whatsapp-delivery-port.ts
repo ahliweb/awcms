@@ -25,6 +25,32 @@
  * - A consumer registers its templates (module-prefixed keys) through
  *   `registerWhatsappTemplate`; it never adds its own WhatsApp table,
  *   dispatcher or provider call (ADR-0133 section 3: one queue per channel).
+ *
+ * ## Port version 1.1.0 — sender-aware routing (Issue #1141, ADR-0148 section 4)
+ *
+ * `1.0.0` was the shape of Issue #963. `1.1.0` is ADDITIVE: three OPTIONAL
+ * input fields (`senderAccountId`, `inReplyToMessageId`, `businessScope`) and
+ * three new refusal reasons. No existing signature or field changed, so every
+ * existing consumer (booking, the commerce adapter behind `awcms-one`'s
+ * `legacy`/`upstream` mode router, ADR-0047) compiles and behaves exactly as
+ * before: a call that sets none of the new fields and a tenant with no sender
+ * policy is queued with `senderAccountId = null`, which IS the deployment
+ * sender, and takes the same path, the same provider and the same credential as
+ * `1.0.0`. A consumer that does an exhaustive `switch` over the refusal reasons
+ * (none in this repository does; booking maps an unknown reason to a coarse
+ * code) must add the three new members before it passes a sender.
+ *
+ * - The sender is `senderAccountId`, else the prospective default of the
+ *   message's business scope, else the deployment sender, and is SNAPSHOTTED on
+ *   the queue row. It is never a token, a phone number id or a device id: the
+ *   adapter and the credential are resolved from the tenant's own account
+ *   record, never from the caller.
+ * - A sender that is not usable gives `refused: SENDER_UNAVAILABLE`. There is
+ *   NO fallback to the default, to the deployment sender, to another number or
+ *   to another provider (ADR-0148 I5); an explicit reroute is a NEW enqueue.
+ * - A caller that accepts a sender id from a USER must authorise that choice
+ *   itself (the port performs no access check): tenant authority is enforced
+ *   here, per-person assignment is not.
  */
 export type WhatsappTenantTx = Bun.TransactionSQL;
 
@@ -47,6 +73,29 @@ export type EnqueueWhatsappInput = {
   expiresAt?: Date;
   /** The acting tenant user, when there is one, for the row's `created_by`. */
   createdBy?: string;
+  /**
+   * Port 1.1.0. The tenant-owned `channel_accounts` row that should send this
+   * message. Omitted: the default sender of `businessScope`, else the
+   * deployment sender. Pinned on the row at enqueue. A foreign, unknown,
+   * revoked, disabled, disconnected or unapproved account is
+   * `refused: SENDER_UNAVAILABLE`.
+   */
+  senderAccountId?: string;
+  /**
+   * Port 1.1.0. Thread affinity: this message continues the thread of an
+   * earlier message of the SAME tenant and recipient, and so keeps that
+   * message's sender (the provider's customer-service window is per sender and
+   * recipient). A `senderAccountId` that names a different sender is
+   * `refused: SENDER_AFFINITY_CONFLICT`; an unknown or foreign target, or one
+   * addressed to someone else, is `refused: REPLY_TARGET_UNKNOWN`.
+   */
+  inReplyToMessageId?: string;
+  /**
+   * Port 1.1.0. The business scope (a brand or unit) this message belongs to,
+   * the key of the default-sender policy. A scoped sender account may only
+   * send for its own scope; a tenant-wide account may send for any.
+   */
+  businessScope?: { type: string; id: string };
 };
 
 export type EnqueueWhatsappRefusalReason =
@@ -58,7 +107,13 @@ export type EnqueueWhatsappRefusalReason =
   | "RECIPIENT_UNRESOLVED"
   | "EXPIRY_REQUIRED"
   /** The deployment has no usable recipient-hash key ring; nothing is queued (fail closed). */
-  | "MISCONFIGURED";
+  | "MISCONFIGURED"
+  /** Port 1.1.0. The chosen sender may not send (foreign, unknown, revoked, disabled, disconnected, unapproved, no adapter). Never falls to another sender. */
+  | "SENDER_UNAVAILABLE"
+  /** Port 1.1.0. `senderAccountId` names a different sender than the thread's. A reroute is a separate, authorised request. */
+  | "SENDER_AFFINITY_CONFLICT"
+  /** Port 1.1.0. `inReplyToMessageId` is unknown, foreign, or addressed to another recipient. */
+  | "REPLY_TARGET_UNKNOWN";
 
 export type EnqueueWhatsappResult =
   | { status: "queued"; messageId: string }

@@ -1444,6 +1444,11 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_whatsapp_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
   awcms_whatsapp_consents: ["SELECT"],
   awcms_whatsapp_suppressions: ["INSERT", "SELECT"],
+  // Issue #1141 (sql/322) - read-only. A worker that ENQUEUES through the port
+  // (`booking:reminders:dispatch`) reads the default sender of the message's
+  // scope; a worker that could write it could change which number and provider
+  // speak for a tenant.
+  awcms_whatsapp_sender_policies: ["SELECT"],
   // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
   // attempts, and ends (revokes/suspends) a binding whose principal is gone or
   // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
@@ -1970,6 +1975,53 @@ export const WORKER_COLUMN_GRANTS: Record<
       "created_at"
     ]
   },
+  // sql/322 (Issue #1141, ADR-0148 section 4): `whatsapp:dispatch` resolves a
+  // tenant-owned sender through the `channel_accounts` capability ports, READ
+  // ONLY and in the claimed row's tenant. Exactly the columns that resolution
+  // reads; no display name, no actor stamp, no refresh-token, OAuth-state,
+  // authorisation-code or webhook reference, and no write of any kind.
+  awcms_channel_accounts: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "business_scope_type",
+      "business_scope_id",
+      "provider",
+      "account_kind",
+      "external_id",
+      "auth_mode",
+      "connection_id",
+      "parent_account_id",
+      "secret_id",
+      "status",
+      "deleted_at"
+    ]
+  },
+  awcms_channel_account_capabilities: {
+    SELECT: [
+      "tenant_id",
+      "account_id",
+      "capability",
+      "state",
+      "evidence_kind",
+      "evidence_ref",
+      "matrix_version"
+    ]
+  },
+  awcms_channel_provider_connections: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "provider",
+      "auth_mode",
+      "grant_state",
+      "access_secret_id",
+      "expires_at"
+    ]
+  },
+  awcms_channel_secrets: {
+    SELECT: ["id", "tenant_id", "purpose", "ciphertext"]
+  },
   awcms_telegram_bindings: {
     // sql/216 + sql/288: the dispatcher and purge only END a binding.
     UPDATE: [
@@ -2394,10 +2446,12 @@ export const CREDENTIAL_COLUMNS: readonly string[] = [
   // oracle for a low-entropy identifier, so treated as credential material.
   "awcms_profile_identifiers.value_hash",
   "awcms_procurement_supplier_identifiers.value_hash",
-  // Channel accounts control plane (sql/318, ADR-0148): envelope-encrypted
-  // provider secrets, per-account webhook callback token hashes and in-flight
-  // OAuth state hashes.
-  "awcms_channel_secrets.ciphertext",
+  // Channel accounts control plane (sql/318, ADR-0148): per-account webhook
+  // callback token hashes and in-flight OAuth state hashes. The envelope-
+  // encrypted provider secret (`awcms_channel_secrets.ciphertext`) is a
+  // documented worker exception since sql/322 (Issue #1141): see
+  // WORKER_CREDENTIAL_COLUMN_EXCEPTIONS. It stays a credential for every OTHER
+  // role (the setup role checks exceptions as ordinary credential columns).
   "awcms_channel_webhook_subscriptions.callback_token_hash",
   "awcms_channel_oauth_states.state_hash"
 ];
@@ -2418,7 +2472,9 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_omes_repository_progress_config.secret_ref":
     "omes:repository-progress:poll resolves this REFERENCE (the name of a secret held outside the database) (sql/166)",
   "awcms_telegram_bindings.chat_ciphertext":
-    "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)"
+    "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
+  "awcms_channel_secrets.ciphertext":
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone; decrypts are counted per tenant. What does NOT bound it: AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's access tokens, API tokens and device keys"
 };
 
 /**

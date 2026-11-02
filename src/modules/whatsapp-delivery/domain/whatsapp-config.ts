@@ -3,12 +3,18 @@
  * Pure: no `process.env` read at module scope, every resolver takes the `env`
  * it is given (the split `push-delivery/domain/push-config.ts` uses).
  *
- * ## Credentials are per-DEPLOYMENT, never per-tenant
+ * ## Credentials of the DEPLOYMENT sender are per-deployment
  *
- * A WhatsApp token authenticates the deployment's sender, not a tenant. A
- * tenant-supplied token would let one tenant's admin make the deployment speak
- * as someone else (ADR-0074 section 5), so there is no per-tenant override and
- * no column that could hold one. Values arrive from the environment only.
+ * A WhatsApp token in this file's environment authenticates the deployment's
+ * own sender (`senderAccountId = null`), not a tenant. A request-supplied token
+ * would let one tenant's admin make the deployment speak as someone else
+ * (ADR-0074 section 5), so there is no per-request override and no input that
+ * could carry one. Values arrive from the environment only.
+ *
+ * A TENANT-OWNED sender (Issue #1141, ADR-0148 section 5) is a different thing:
+ * its adapter and credential are resolved from that tenant's own
+ * `channel_accounts` record, in the dispatcher, never from the environment and
+ * never from a request. Nothing in this file selects a provider for it.
  */
 
 /**
@@ -37,7 +43,20 @@ export function isKnownWhatsappProvider(
  */
 export const WHATSAPP_CIRCUIT_BREAKER_KEY = "whatsapp-delivery";
 
+/**
+ * The breaker of ONE tenant-owned sender. Each sender has its own, so a failing
+ * number cannot stop another sender (or the deployment sender, which keeps
+ * {@link WHATSAPP_CIRCUIT_BREAKER_KEY}). Keyed by the account id (a uuid), never
+ * by a number or a token, so the key is safe in a log line and a metric label.
+ */
+export function whatsappSenderBreakerKey(senderAccountId: string): string {
+  return `${WHATSAPP_CIRCUIT_BREAKER_KEY}:sender:${senderAccountId}`;
+}
+
 export const DEFAULT_WHATSAPP_SEND_MAX_RETRIES = 3;
+/** Per-sender caps, counted from what the sender really sent (trailing hour and day). Provider limits are lower for some numbers and unofficial devices; these are the deployment-wide ceiling, not a promise. */
+export const DEFAULT_WHATSAPP_SENDER_RATE_PER_HOUR = 1000;
+export const DEFAULT_WHATSAPP_SENDER_RATE_PER_DAY = 10_000;
 export const DEFAULT_WHATSAPP_SEND_TIMEOUT_MS = 10_000;
 export const DEFAULT_WHATSAPP_RATE_PER_RECIPIENT_PER_HOUR = 10;
 export const DEFAULT_WHATSAPP_RATE_PER_TENANT_PER_HOUR = 2000;
@@ -111,6 +130,30 @@ export function resolveWhatsappRateSecurityPerRecipientPerHour(
     positiveNumber(
       env.WHATSAPP_RATE_SECURITY_PER_RECIPIENT_PER_HOUR,
       DEFAULT_WHATSAPP_RATE_SECURITY_PER_RECIPIENT_PER_HOUR
+    )
+  );
+}
+
+/** Messages one SENDER may have sent in the trailing hour before the dispatcher stops claiming its rows (they wait; nothing is rerouted). */
+export function resolveWhatsappSenderRatePerHour(
+  env: NodeJS.ProcessEnv = process.env
+): number {
+  return Math.floor(
+    positiveNumber(
+      env.WHATSAPP_SENDER_RATE_PER_HOUR,
+      DEFAULT_WHATSAPP_SENDER_RATE_PER_HOUR
+    )
+  );
+}
+
+/** The same, for the trailing day. */
+export function resolveWhatsappSenderRatePerDay(
+  env: NodeJS.ProcessEnv = process.env
+): number {
+  return Math.floor(
+    positiveNumber(
+      env.WHATSAPP_SENDER_RATE_PER_DAY,
+      DEFAULT_WHATSAPP_SENDER_RATE_PER_DAY
     )
   );
 }
