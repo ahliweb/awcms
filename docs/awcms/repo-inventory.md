@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 35    |
-| Migrations                          | 239   |
-| `awcms_*` tables                    | 235   |
-| Tables with `FORCE` RLS             | 217   |
+| Migrations                          | 242   |
+| `awcms_*` tables                    | 236   |
+| Tables with `FORCE` RLS             | 218   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 771   |
-| Route files                         | 602   |
+| Test files                          | 776   |
+| Route files                         | 604   |
 | ADR                                 | 314   |
 
 ### Modules
@@ -296,9 +296,12 @@
 | 234 | `sql/319_awcms_channel_accounts_permissions.sql`                   |
 | 235 | `sql/320_awcms_channel_accounts_integrity_guards.sql`              |
 | 236 | `sql/321_awcms_hr_commission_intake_cap_and_fairness.sql`          |
-| 237 | `sql/325_awcms_website_engagement_schema.sql`                      |
-| 238 | `sql/326_awcms_website_engagement_permissions.sql`                 |
-| 239 | `sql/327_awcms_website_engagement_integrity_guards.sql`            |
+| 237 | `sql/322_awcms_whatsapp_sender_routing.sql`                        |
+| 238 | `sql/323_awcms_whatsapp_sender_routing_permissions.sql`            |
+| 239 | `sql/324_awcms_whatsapp_sender_routing_hardening.sql`              |
+| 240 | `sql/325_awcms_website_engagement_schema.sql`                      |
+| 241 | `sql/326_awcms_website_engagement_permissions.sql`                 |
+| 242 | `sql/327_awcms_website_engagement_integrity_guards.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -531,6 +534,7 @@
 | `awcms_whatsapp_consents`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_delivery_attempts`             | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_messages`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_sender_policies`               | `sql/322_awcms_whatsapp_sender_routing.sql`                | yes | yes   |
 | `awcms_whatsapp_suppressions`                  | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_workflow_decisions`                     | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_definitions`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
@@ -544,16 +548,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 583        |
+| `(root)`      | 586        |
 | `e2e`         | 29         |
-| `integration` | 158        |
+| `integration` | 160        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 490   |
+| `/api/v1/**`    | 492   |
 | `/admin/**`     | 81    |
 | publik / anonim | 31    |
 

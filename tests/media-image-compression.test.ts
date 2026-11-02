@@ -84,8 +84,50 @@ function fakePorts(options: {
   };
 }
 
+const MAGIC: Record<string, number[]> = {
+  "image/jpeg": [0xff, 0xd8, 0xff, 0xe0],
+  "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  "image/webp": [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]
+};
+
+/** `size` is the CLAIMED size; the blob holds only the magic bytes of `type`. */
 function input(type: string, size: number, name = "photo.jpg") {
-  return { name, type, size, blob: new Blob([], { type }) };
+  return {
+    name,
+    type,
+    size,
+    blob: new Blob([new Uint8Array(MAGIC[type] ?? [])], { type })
+  };
+}
+
+const ascii = (text: string): number[] => [...text].map((c) => c.charCodeAt(0));
+const be32 = (n: number): number[] => [
+  (n >>> 24) & 255,
+  (n >>> 16) & 255,
+  (n >>> 8) & 255,
+  n & 255
+];
+
+/** A PNG header only (signature + IHDR), enough for the pre-decode checks. */
+function pngBlob(width: number, height: number, extra: number[] = []): Blob {
+  const ihdr = [...be32(width), ...be32(height), 8, 6, 0, 0, 0];
+  return new Blob([
+    new Uint8Array([
+      ...MAGIC["image/png"]!,
+      ...be32(13),
+      ...ascii("IHDR"),
+      ...ihdr,
+      0,
+      0,
+      0,
+      0,
+      ...extra
+    ])
+  ]);
+}
+
+function withBlob(type: string, size: number, blob: Blob) {
+  return { name: "x", type, size, blob };
 }
 
 const never = () => {
@@ -154,6 +196,261 @@ describe("passthrough and refusal never touch the browser", () => {
   test("an SVG over the cap is refused as not compressible", async () => {
     const result = await compressImageForUpload(
       input("image/svg+xml", CAP + 1, "logo.svg"),
+      CAP,
+      { loadPorts: never as never }
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "type_not_compressible"
+    });
+  });
+});
+
+describe("header checks that run before decode (#1221 review)", () => {
+  test("an animated APNG over the cap is refused, never flattened, before any decode", async () => {
+    const actl = [
+      ...be32(8),
+      ...ascii("acTL"),
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ];
+    // acTL must precede IDAT: here it follows IHDR directly, with no IDAT.
+    const animated = new Blob([
+      new Uint8Array([
+        ...MAGIC["image/png"]!,
+        ...be32(13),
+        ...ascii("IHDR"),
+        ...be32(100),
+        ...be32(100),
+        8,
+        6,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ...actl
+      ])
+    ]);
+    const refused = await compressImageForUpload(
+      withBlob("image/png", 5 * MIB, animated),
+      CAP,
+      { loadPorts: never as never }
+    );
+
+    expect(refused).toEqual({
+      ok: false,
+      reason: "animated_over_cap",
+      maxBytes: CAP,
+      originalByteSize: 5 * MIB
+    });
+  });
+
+  test("an animated WebP over the cap is refused; a still WebP is compressed", async () => {
+    const vp8x = (flags: number) =>
+      new Blob([
+        new Uint8Array([
+          ...ascii("RIFF"),
+          30,
+          0,
+          0,
+          0,
+          ...ascii("WEBP"),
+          ...ascii("VP8X"),
+          10,
+          0,
+          0,
+          0,
+          flags,
+          0,
+          0,
+          0,
+          9,
+          0,
+          0,
+          9,
+          0,
+          0
+        ])
+      ]);
+
+    const animated = await compressImageForUpload(
+      withBlob("image/webp", 5 * MIB, vp8x(0x02)),
+      CAP,
+      { loadPorts: never as never }
+    );
+    expect(animated).toMatchObject({ ok: false, reason: "animated_over_cap" });
+
+    const fake = fakePorts({ width: 10, height: 10, size: () => MIB });
+    const still = await compressImageForUpload(
+      withBlob("image/webp", 5 * MIB, vp8x(0)),
+      CAP,
+      { loadPorts: async () => fake.ports }
+    );
+    expect(still).toMatchObject({ ok: true, changed: true });
+  });
+
+  test("an animated file UNDER the cap still passes through untouched", async () => {
+    const animated = new Blob([
+      new Uint8Array([
+        ...ascii("RIFF"),
+        30,
+        0,
+        0,
+        0,
+        ...ascii("WEBP"),
+        ...ascii("VP8X"),
+        10,
+        0,
+        0,
+        0,
+        0x02,
+        0,
+        0,
+        0,
+        9,
+        0,
+        0,
+        9,
+        0,
+        0
+      ])
+    ]);
+    const result = await compressImageForUpload(
+      withBlob("image/webp", 1000, animated),
+      CAP,
+      { loadPorts: never as never }
+    );
+    expect(result).toMatchObject({ ok: true, changed: false });
+  });
+
+  test("a header over 100 MP is refused BEFORE decode (no bitmap is allocated)", async () => {
+    const fake = fakePorts({ width: 10, height: 10, size: () => MIB });
+    let compressing = false;
+
+    const result = await compressImageForUpload(
+      withBlob("image/png", 5 * MIB, pngBlob(12_000, 9_000)),
+      CAP,
+      {
+        loadPorts: async () => fake.ports,
+        onCompressing: () => {
+          compressing = true;
+        }
+      }
+    );
+
+    expect(result).toMatchObject({ ok: false, reason: "source_too_large" });
+    expect(fake.state.decoded).toBe(0);
+    expect(compressing).toBe(false);
+  });
+
+  test("a header at exactly the limit is decoded; an unparsable header falls through to decode", async () => {
+    const fake = fakePorts({ width: 10_000, height: 10_000, size: () => MIB });
+    const atLimit = await compressImageForUpload(
+      withBlob("image/png", 5 * MIB, pngBlob(10_000, 10_000)),
+      CAP,
+      { loadPorts: async () => fake.ports }
+    );
+    expect(fake.state.decoded).toBe(1);
+    expect(atLimit).toMatchObject({ ok: true, changed: true });
+
+    const unparsable = fakePorts({ width: 10, height: 10, size: () => MIB });
+    const result = await compressImageForUpload(
+      input("image/png", 5 * MIB),
+      CAP,
+      { loadPorts: async () => unparsable.ports }
+    );
+    expect(unparsable.state.decoded).toBe(1);
+    expect(result).toMatchObject({ ok: true, changed: true });
+  });
+
+  test("the post-decode check stays as a backstop when the header lied or was unreadable", async () => {
+    const fake = fakePorts({ width: 12_000, height: 9_000, size: () => MIB });
+
+    const result = await compressImageForUpload(
+      input("image/png", 5 * MIB),
+      CAP,
+      { loadPorts: async () => fake.ports }
+    );
+
+    expect(fake.state.decoded).toBe(1);
+    expect(result).toMatchObject({ ok: false, reason: "source_too_large" });
+    expect(fake.state.disposed).toBe(1);
+  });
+});
+
+describe("magic bytes decide, not the claimed type (#1221 review)", () => {
+  test("a PNG claiming image/jpeg is alpha-scanned and kept transparent as WebP", async () => {
+    const fake = fakePorts({
+      width: 100,
+      height: 100,
+      hasAlpha: true,
+      size: () => MIB
+    });
+
+    const result = await compressImageForUpload(
+      withBlob(
+        "image/jpeg",
+        5 * MIB,
+        new Blob([new Uint8Array(MAGIC["image/png"]!)])
+      ),
+      CAP,
+      { loadPorts: async () => fake.ports }
+    );
+
+    expect(fake.state.alphaChecked).toBe(1);
+    expect(new Set(fake.encodes.map((e) => e.mimeType))).toEqual(
+      new Set(["image/webp"])
+    );
+    expect(result).toMatchObject({ ok: true, mimeType: "image/webp" });
+  });
+
+  test("a real JPEG still skips the alpha scan", async () => {
+    const fake = fakePorts({ width: 100, height: 100, size: () => MIB });
+
+    await compressImageForUpload(input("image/jpeg", 5 * MIB), CAP, {
+      loadPorts: async () => fake.ports
+    });
+
+    expect(fake.state.alphaChecked).toBe(0);
+  });
+
+  test("a JPEG claiming image/png is treated as a JPEG (no alpha scan)", async () => {
+    const fake = fakePorts({ width: 100, height: 100, size: () => MIB });
+
+    await compressImageForUpload(
+      withBlob(
+        "image/png",
+        5 * MIB,
+        new Blob([new Uint8Array(MAGIC["image/jpeg"]!)])
+      ),
+      CAP,
+      { loadPorts: async () => fake.ports }
+    );
+
+    expect(fake.state.alphaChecked).toBe(0);
+  });
+
+  test("bytes that are none of JPEG/PNG/WebP are refused as not compressible, before ports load", async () => {
+    const result = await compressImageForUpload(
+      withBlob(
+        "image/jpeg",
+        5 * MIB,
+        new Blob([new Uint8Array(ascii("GIF89a"))])
+      ),
       CAP,
       { loadPorts: never as never }
     );

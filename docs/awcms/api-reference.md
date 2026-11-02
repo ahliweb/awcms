@@ -13989,6 +13989,48 @@ Only `queued` and `retry_wait` are cancellable. A row in `sending` has been clai
 | 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
 | 409    | Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" - distinguishing them would hand a narrow grant an existence oracle over the queue. | [`ApiError`](#standard-error-envelope) |
 
+### `PUT /api/v1/whatsapp/sender-policy` — Set the default sender of a business scope (prospective).
+
+- **operationId**: `setWhatsappSenderPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Sets which of the tenant's own accounts sends WhatsApp messages when the caller names none, for one business scope or tenant-wide (`businessScope: null`). `defaultSenderAccountId: null` is an explicit decision to use the deployment sender for that scope (it overrides a tenant-wide default). PROSPECTIVE: it applies to messages enqueued after the change; a message already queued keeps the sender and the `configVersion` it was given. Both keys are required. The sender must be an account of THIS tenant that may send a business-initiated message now and that has an adapter on this deployment; anything else, including another tenant's account, is the same `422 SENDER_UNAVAILABLE` (no existence oracle). A change to the same default is a no-op that bumps nothing (`changed: false`). High-risk: audited at `warning`. `Idempotency-Key` required. The body is validated after authorization. Requires `whatsapp_delivery.sender_policy.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`WhatsappSenderPolicyRequest`](#schema-whatsappsenderpolicyrequest)
+
+**Responses**
+
+| Status | Description                                                                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The policy as now configured.                                                                                            | object                                 |
+| 400    | Validation error.                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`: the key was already used with a different request.                                               | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 422    | `SENDER_UNAVAILABLE` (the account is not usable as a WhatsApp sender for this tenant) or `CHANNEL_ACCOUNTS_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/senders` — The tenant's WhatsApp senders with per-sender diagnostics, and the default-sender policy.
+
+- **operationId**: `listWhatsappSenders`
+- **Security**: bearerAuth + tenantHeader
+
+One entry per sender that has any queue row in the last 35 days, plus the deployment sender (`senderAccountId: null`), from ONE transaction. Per sender: whether it may send a business-initiated message right now (a coarse reason code when it may not), the queue (waiting, in flight, failed in the last day, oldest waiting, last failure code) and the quota (what it really sent in the trailing hour and day against the per-sender caps, and whether it is `throttled`). A throttled or unavailable sender's rows WAIT or fail terminally; they are never rerouted to another sender, number or provider. Bounded to 200 senders. Nothing here is a credential, a secret reference, a phone number or a device id: a sender is its account id. Requires `whatsapp_delivery.senders.read`.
+
+**Responses**
+
+| Status | Description                                         | Schema                                 |
+| ------ | --------------------------------------------------- | -------------------------------------- |
+| 200    | Sender diagnostics and the default-sender policies. | object                                 |
+| 401    | Missing or invalid session.                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                         | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/whatsapp/suppressions` — List the suppression list.
 
 - **operationId**: `listWhatsappSuppressions`
@@ -19642,6 +19684,24 @@ Contract v1, a CLOSED field set: an unknown key is a `400`, never stored and nev
 }
 ```
 
+### Schema: WhatsappBusinessScope
+
+A brand or unit (the generic business-scope pair). Null is tenant-wide.
+
+| Field  | Type          | Required | Nullable | Description |
+| ------ | ------------- | -------- | -------- | ----------- |
+| `type` | string        | yes      | no       |             |
+| `id`   | string (uuid) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "type": "string",
+  "id": "00000000-0000-0000-0000-000000000000"
+}
+```
+
 ### Schema: WhatsappConsentGrantRequest
 
 | Field                | Type    | Required | Nullable | Description                                                                                    |
@@ -19680,6 +19740,25 @@ Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`, `
 
 ```json
 "queued"
+```
+
+### Schema: WhatsappSenderPolicyRequest
+
+| Field                    | Type                                                     | Required | Nullable | Description                                                                                                                     |
+| ------------------------ | -------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `businessScope`          | [`WhatsappBusinessScope`](#schema-whatsappbusinessscope) | yes      | no       |                                                                                                                                 |
+| `defaultSenderAccountId` | string (uuid)                                            | yes      | yes      | An account of this tenant, or null for the deployment sender. Never a token, a phone number id, a device id or a provider name. |
+
+**Example**
+
+```json
+{
+  "businessScope": {
+    "type": "string",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "defaultSenderAccountId": "00000000-0000-0000-0000-000000000000"
+}
 ```
 
 ### Schema: WhatsappSuppressionCreateRequest
@@ -19813,9 +19892,9 @@ consumer/subscriber contract in this file).
 - `awcms.whatsapp.consent.withdrawn` — A recipient's WhatsApp marketing consent was withdrawn; their waiting marketing messages were cancelled in the same transaction (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-consent- directory.ts`'s `withdrawMarketingConsent`. Same payload shape as `consent.granted`.
 - `awcms.whatsapp.dispatch.failed` — A WhatsApp dispatcher pass failed as a whole — job level, not one message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`'s `recordWhatsappDispatchFailure`, called by `scripts/whatsapp- dispatch.ts`. Payload: `failureCode`, optional `batchSize`, `occurredAt`.
 - `awcms.whatsapp.message.expired` — A WhatsApp message passed its expiry before it was sent and was not retried late (ADR-0133, Issue #963) — an OTP that arrives after its validity is worse than none. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` expired.
-- `awcms.whatsapp.message.failed` — A WhatsApp message reached a terminal failure (ADR-0133, Issue #963): a non- retryable provider rejection, exhausted retries, or a template that is no longer registered. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` failed and a coarse `failureCode`.
-- `awcms.whatsapp.message.queued` — A message was accepted into the WhatsApp outbox (ADR-0133, Issue #963), in the SAME transaction as the caller's fact: a rolled-back booking emits nothing. Producer: `whatsapp-delivery/application/whatsapp-enqueue.ts`'s `enqueueWhatsappMessage`. Payload: `messageId`, `templateKey`, `purpose` (transactional | security | marketing), `recipientMasked`, `status` (queued). Never a phone number, message body or template variable; the caller's own record is joined through the envelope `correlationId`.
-- `awcms.whatsapp.message.sent` — The provider accepted the WhatsApp message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-dispatch.ts`, in the finalise transaction after the provider call returned. Same payload shape as `message.queued` with `status` sent.
+- `awcms.whatsapp.message.failed` — A WhatsApp message reached a terminal failure (ADR-0133, Issue #963): a non- retryable provider rejection, exhausted retries, or a template that is no longer registered. Producer: `whatsapp-delivery/application/whatsapp- dispatch.ts`. Same payload shape as `message.queued` with `status` failed and a coarse `failureCode` (including `senderAccountId` for a tenant-owned sender). Since Issue #1141 `failureCode` may be `sender_unavailable`: the row's sender was revoked, disabled, disconnected, unapproved or has no adapter, and the message was NOT sent through any other sender, number or provider.
+- `awcms.whatsapp.message.queued` — A message was accepted into the WhatsApp outbox (ADR-0133, Issue #963), in the SAME transaction as the caller's fact: a rolled-back booking emits nothing. Producer: `whatsapp-delivery/application/whatsapp-enqueue.ts`'s `enqueueWhatsappMessage`. Payload: `messageId`, `templateKey`, `purpose` (transactional | security | marketing), `recipientMasked`, `status` (queued), and, since Issue #1141 (ADR-0148 section 4), `senderAccountId` (the tenant-owned sender account snapshotted on the row, a uuid; the key is ABSENT for the deployment sender, so the payload of a message that names no sender is byte for byte what it was). Never a phone number, message body, template variable, token or device id; the caller's own record is joined through the envelope `correlationId`. The addition is optional and the event version stays 1.0: a consumer that ignores unknown keys is unaffected.
+- `awcms.whatsapp.message.sent` — The provider accepted the WhatsApp message (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-dispatch.ts`, in the finalise transaction after the provider call returned. Same payload shape as `message.queued` with `status` sent (including `senderAccountId` for a tenant-owned sender). "Accepted" by the provider is never "delivered".
 - `awcms.workflow.delegation.created` — A workflow delegation/substitute assignment was created. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `createWorkflowDelegation`.
 - `awcms.workflow.delegation.revoked` — A workflow delegation/substitute assignment was revoked. Producer: `workflow-approval/application/workflow-delegation-directory.ts`'s `revokeWorkflowDelegation`.
 - `awcms.workflow.instance.advanced` — A workflow instance's active task was decided (or force-decided) and the instance advanced to its next node(s), without yet reaching a terminal outcome. Producer: `workflow-approval/application/workflow-instance-decision.ts`'s `completeApprovalTaskAndAdvance`.

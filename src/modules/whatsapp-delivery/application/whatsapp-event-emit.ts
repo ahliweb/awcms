@@ -24,6 +24,8 @@ export type WhatsappMessageEventInput = {
   recipientMasked: string;
   status: "queued" | "sent" | "failed" | "expired";
   failureCode?: string | null;
+  /** Issue #1141. The tenant-owned sender, or `null`/absent for the deployment sender (the payload is then byte for byte what it was). An id, never a number or a credential. */
+  senderAccountId?: string | null;
   correlationId?: string | null;
   actorTenantUserId?: string | null;
 };
@@ -48,7 +50,10 @@ export async function emitWhatsappMessageEvent(
       purpose: input.purpose,
       recipientMasked: input.recipientMasked,
       status: input.status,
-      ...(input.failureCode ? { failureCode: input.failureCode } : {})
+      ...(input.failureCode ? { failureCode: input.failureCode } : {}),
+      ...(input.senderAccountId
+        ? { senderAccountId: input.senderAccountId }
+        : {})
     }
   });
 }

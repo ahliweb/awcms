@@ -43,6 +43,9 @@ export type WhatsappMessageView = {
   failureCode: string | null;
   lastError: string | null;
   providerName: string | null;
+  /** Issue #1141. The tenant-owned sender account, or `null` for the deployment sender. An id, never a number or a credential. */
+  senderAccountId: string | null;
+  senderSelection: "deployment" | "explicit" | "policy" | "reply";
   notBefore: string | null;
   expiresAt: string | null;
   createdAt: string;
@@ -126,6 +129,8 @@ type MessageRow = {
   failure_code: string | null;
   last_error: string | null;
   provider_name: string | null;
+  sender_account_id: string | null;
+  sender_selection: WhatsappMessageView["senderSelection"];
   not_before: Date | string | null;
   expires_at: Date | string | null;
   created_at: Date | string;
@@ -141,7 +146,8 @@ export async function listRecentWhatsappMessages(
   const status = options.status ?? null;
   const rows = (await tx`
     SELECT id, template_key, purpose, status, recipient_masked, correlation_id,
-           retry_count, failure_code, last_error, provider_name, not_before,
+           retry_count, failure_code, last_error, provider_name,
+           sender_account_id, sender_selection, not_before,
            expires_at, created_at, updated_at, sent_at
     FROM awcms_whatsapp_messages
     WHERE tenant_id = ${tenantId}
@@ -162,6 +168,8 @@ export async function listRecentWhatsappMessages(
       failureCode: row.failure_code,
       lastError: row.last_error,
       providerName: row.provider_name,
+      senderAccountId: row.sender_account_id,
+      senderSelection: row.sender_selection,
       notBefore: isoOrNull(row.not_before),
       expiresAt: isoOrNull(row.expires_at),
       createdAt: iso(row.created_at),

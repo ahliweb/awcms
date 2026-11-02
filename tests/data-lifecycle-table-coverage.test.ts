@@ -557,14 +557,21 @@ describe("the real repository", () => {
       // worker touch. The recorded follow-up, when a connector adds a worker, is
       // a delegated descriptor for that table with its count function.
       //
-      // **29 since `website_engagement` (Issue #1153, ADR-0155).** Two more, both
+      // **28 since the WhatsApp sender policy (Issue #1141, ADR-0148 section 4).**
+      // `awcms_whatsapp_sender_policies` holds at most ONE row per business scope
+      // per tenant (two partial unique indexes) plus one tenant-wide row, and a
+      // change UPDATES it in place and bumps `config_version`: the ceiling is the
+      // number of brands an administrator configures, written by no request path
+      // and no job. A generic age purge would silently reset a brand's default
+      // sender to the deployment sender.
+      // **30 since the WhatsApp sender policy (Issue #1141) AND `website_engagement` (Issue #1153, ADR-0155).** Two more, both
       // bounded by AUTHORSHIP: `awcms_engagement_sources` (an administrator
       // registers a website/form channel; the public intake never inserts one) and
       // `awcms_engagement_source_domains` (a link the same administrator writes,
       // capped at 20 per source). The table that DOES grow with traffic, the
       // visitor's submissions, has a real `dataLifecycle` descriptor with a
       // retention window and a legal-hold-aware purge, not an exemption.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(29);
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(30);
     });
 
     test("every entry names a table that really exists in sql/", () => {

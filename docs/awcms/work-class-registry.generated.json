@@ -2142,6 +2142,16 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/whatsapp/sender-policy.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/whatsapp/senders.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/whatsapp/suppressions/[id].ts",
       "workClass": "interactive",
       "source": "factory"

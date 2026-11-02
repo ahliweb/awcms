@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:2831a2faf61318b26a20f967db7506cd17e94612d75d5bb9aece84c922e23284 -->
+<!-- i18n-source-hash: sha256:3ca2baa073d0f230214c7b38b6d88a3ad94d05411a8e1e6b721f9295fe5a77f8 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -426,6 +426,29 @@ Idempotency key unik per `(tenant_id, idempotency_key)`; replay mengembalikan
 seperti kata ADR-0133 §8; ADR implementasi menetapkannya. Nomor telepon, isi
 pesan, atau variabel template tidak pernah muncul di event, baris audit, atau log;
 pemanggil hanya tahu id dan penerima yang dimasking.
+
+**Versi 1.1.0 (Issue #1141, ADR-0148 bagian 4) bersifat aditif.** Input mendapat
+tiga field OPSIONAL, `senderAccountId?: string`, `inReplyToMessageId?: string` dan
+`businessScope?: { type: string; id: string }`, dan alasan penolakan bertambah
+`SENDER_UNAVAILABLE`, `SENDER_AFFINITY_CONFLICT` dan `REPLY_TARGET_UNKNOWN`.
+Pengirim adalah id akun milik tenant pemanggil sendiri (bukan token, bukan id
+nomor telepon, bukan id perangkat), dipilih sebagai pengirim utas, jika tidak
+yang eksplisit, jika tidak bawaan prospektif lingkup bisnis, jika tidak pengirim
+deployment (`senderAccountId = null`, perilaku hari ini), dan di-snapshot tak
+dapat diubah pada baris antrean. Pengirim yang tidak bisa mengirim adalah
+penolakan, tidak pernah fallback ke pengirim, nomor, atau provider lain.
+**Kompatibilitas:** tidak ada field, signature, atau penolakan yang sudah ada
+yang berubah; panggilan yang tidak mengisi field baru untuk tenant tanpa
+kebijakan pengirim berperilaku persis seperti `1.0.0`, sehingga `booking` dan
+adapter commerce di balik router mode `legacy`/`upstream` per tenant milik
+`awcms-one` (ADR-0047 hilir; ADR-0133 bagian 6) dapat dikompilasi dan berperilaku
+tanpa perubahan. Konsumen yang melakukan `switch` lengkap atas alasan penolakan
+harus menambah ketiga anggota baru sebelum meneruskan pengirim, dan konsumen yang
+mengambil id pengirim dari pengguna harus mengotorisasi pilihan itu sendiri
+(port tidak melakukan pemeriksaan akses). Kapabilitas `whatsapp_delivery`
+didaftarkan pada `1.1.0` dan kapabilitas baru `channel_account`
+(`ChannelAccountPort`, disediakan oleh `channel_accounts`) pada `1.0.0`
+(`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`).
 
 ### 5.1 Port pengiriman Telegram (live, #965)
 

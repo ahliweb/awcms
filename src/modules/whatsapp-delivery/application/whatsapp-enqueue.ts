@@ -14,13 +14,26 @@
  * ## Order of the checks, and why
  *
  * 1. disabled flag, 2. template, 3. expiry rule, 4. recipient, 5. idempotent
- *    replay, 6. suppression/consent, 7. rate limits, 8. INSERT.
+ *    replay, 6. sender (Issue #1141), 7. suppression/consent, 8. rate limits,
+ *    9. INSERT.
  *
  * The replay check precedes eligibility on purpose: a retried enqueue whose
  * original already queued must answer `duplicate`, not "now suppressed". A
  * message that exists is never contradicted by state that changed afterwards.
+ * It also precedes the sender check, so a replay stays `duplicate` even if its
+ * sender has since been revoked: the message exists with the sender it was given.
+ *
+ * ## The sender (Issue #1141, ADR-0148 section 4)
+ *
+ * Chosen by `resolveEnqueueSender` and SNAPSHOTTED on the row; `null` is the
+ * deployment sender and takes today's path with no extra query beyond one read
+ * of the (usually empty) policy table. A sender that cannot send is
+ * `refused: SENDER_UNAVAILABLE` and nothing is queued: never another sender,
+ * never the other provider. Consent, suppression and the rate limits are keyed
+ * by the RECIPIENT, never the sender, so they run unchanged for every sender.
  */
 import { log } from "../../../lib/logging/logger";
+import type { ChannelAccountPort } from "../../_shared/ports/channel-account-port";
 import type {
   EnqueueWhatsappInput,
   EnqueueWhatsappResult,
@@ -49,14 +62,25 @@ import {
   getWhatsappTemplate,
   renderWhatsappTemplate
 } from "../domain/whatsapp-templates";
+import { loadChannelAccountPort } from "../infrastructure/channel-account-port-loader";
 import { readEligibilityFacts } from "./whatsapp-consent-directory";
 import { emitWhatsappMessageEvent } from "./whatsapp-event-emit";
+import {
+  logSenderRefusal,
+  resolveEnqueueSender
+} from "./whatsapp-sender-directory";
 
 const MODULE_KEY = "whatsapp_delivery";
 
 export type EnqueueWhatsappOptions = {
   env?: NodeJS.ProcessEnv;
   now?: Date;
+  /**
+   * How a tenant-owned sender is resolved (Issue #1141). Omitted: the
+   * `channel_accounts` adapter, loaded lazily and only when a sender is in play.
+   * A test seam and the composition roots' override; never a request input.
+   */
+  senders?: ChannelAccountPort;
 };
 
 type ResolvedRecipient =
@@ -219,6 +243,20 @@ export async function enqueueWhatsappMessage(
   const hashes = buildRecipientHashes(input.tenantId, recipient.e164, ring);
   const recipientMasked = maskRecipient(recipient.e164);
 
+  const sender = await resolveEnqueueSender(tx, {
+    tenantId: input.tenantId,
+    input,
+    purpose: template.purpose,
+    hashes,
+    senders: async () => options.senders ?? (await loadChannelAccountPort())
+  });
+
+  if (!sender.ok) {
+    logSenderRefusal(input.tenantId, sender.detail, input.correlationId);
+
+    return { status: "refused", reason: sender.reason };
+  }
+
   const decision = decideEligibility(
     template.purpose,
     await readEligibilityFacts(tx, input.tenantId, hashes)
@@ -242,14 +280,18 @@ export async function enqueueWhatsappMessage(
       (tenant_id, idempotency_key, correlation_id, template_key,
        template_version, purpose, recipient, recipient_hash, recipient_masked,
        profile_id, variables, body, contains_secret, status, not_before,
-       expires_at, next_attempt_at, created_by)
+       expires_at, next_attempt_at, created_by, sender_account_id,
+       sender_selection, sender_policy_version, business_scope_type,
+       business_scope_id)
     VALUES (
       ${input.tenantId}, ${input.idempotencyKey}, ${input.correlationId ?? null},
       ${template.key}, ${template.version}, ${template.purpose},
       ${recipient.e164}, ${hashes.primary}, ${recipientMasked},
       ${recipient.profileId}, ${rendered.variables}::jsonb, ${rendered.body},
       ${rendered.containsSecret}, 'queued', ${input.notBefore ?? null},
-      ${input.expiresAt ?? null}, ${dueAt}, ${input.createdBy ?? null}
+      ${input.expiresAt ?? null}, ${dueAt}, ${input.createdBy ?? null},
+      ${sender.senderAccountId}, ${sender.selection}, ${sender.policyVersion},
+      ${sender.businessScope?.type ?? null}, ${sender.businessScope?.id ?? null}
     )
     ON CONFLICT ON CONSTRAINT awcms_whatsapp_messages_idempotency_unique
     DO NOTHING
@@ -284,6 +326,7 @@ export async function enqueueWhatsappMessage(
       purpose: template.purpose,
       recipientMasked,
       status: "queued",
+      senderAccountId: sender.senderAccountId,
       correlationId: input.correlationId ?? null,
       actorTenantUserId: input.createdBy ?? null
     }
@@ -296,6 +339,12 @@ export async function enqueueWhatsappMessage(
     templateKey: template.key,
     purpose: template.purpose,
     recipient: recipientMasked,
+    ...(sender.senderAccountId
+      ? {
+          senderAccountId: sender.senderAccountId,
+          senderSelection: sender.selection
+        }
+      : {}),
     droppedVariableCount: rendered.droppedVariables.length
   });
 

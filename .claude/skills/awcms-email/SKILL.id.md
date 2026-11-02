@@ -5,7 +5,7 @@ description: Kirim email transaksional (password reset, announcement, workflow n
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:e967ae39ade5623fa095614a55fe0927536669b9e10702db839555dc93149052 -->
+<!-- i18n-source-hash: sha256:fba87512eff162d76d5ce72f02a94738c077efff0706acf6a5d03189b6b15d71 -->
 
 # AWCMS — Email Module
 
@@ -107,6 +107,7 @@ Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapt
 - Kirim dengan `EMAIL_PROVIDER=log` dulu (tanpa kredensial Mailketing) —
   lihat log `email.log_provider.send` (alamat ter-mask) untuk konfirmasi
   alur end-to-end sebelum menyalakan Mailketing nyata.
+- Mailketing v2 (Issue #1159) bersifat opt-in lewat `EMAIL_MAILKETING_API_VERSION=v2` (bawaan v1, fail-closed untuk nilai tak dikenal; host tetap, token hanya di header, 402 ditahan, 429 menghormati `Retry-After`; API live BELUM diverifikasi). Jangan menambah jalur kirim baru; pakai adapter v2 di balik `EmailProvider`.
 - `bun run email:provider:health` — cek konektivitas Mailketing nyata
   (live network call, jalankan manual/smoke-test, bukan bagian CI).
 - `bun test tests/integration/email-*.integration.test.ts` terhadap

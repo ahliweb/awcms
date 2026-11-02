@@ -30521,6 +30521,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/whatsapp/sender-policy:
+    put:
+      operationId: setWhatsappSenderPolicy
+      tags:
+        - WhatsApp Delivery
+      summary: Set the default sender of a business scope (prospective).
+      description: "Sets which of the tenant's own accounts sends WhatsApp messages when the caller names none, for one business scope or tenant-wide (`businessScope: null`). `defaultSenderAccountId: null` is an explicit decision to use the deployment sender for that scope (it overrides a tenant-wide default). PROSPECTIVE: it applies to messages enqueued after the change; a message already queued keeps the sender and the `configVersion` it was given. Both keys are required. The sender must be an account of THIS tenant that may send a business-initiated message now and that has an adapter on this deployment; anything else, including another tenant's account, is the same `422 SENDER_UNAVAILABLE` (no existence oracle). A change to the same default is a no-op that bumps nothing (`changed: false`). High-risk: audited at `warning`. `Idempotency-Key` required. The body is validated after authorization. Requires `whatsapp_delivery.sender_policy.configure`."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappSenderPolicyRequest"
+      responses:
+        "200":
+          description: The policy as now configured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/WhatsappSenderPolicy"
+                      - type: object
+                        properties:
+                          changed:
+                            type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`: the key was already used with a different request."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Request body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`SENDER_UNAVAILABLE` (the account is not usable as a WhatsApp sender for this tenant) or `CHANNEL_ACCOUNTS_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/whatsapp/senders:
+    get:
+      operationId: listWhatsappSenders
+      tags:
+        - WhatsApp Delivery
+      summary: The tenant's WhatsApp senders with per-sender diagnostics, and the default-sender policy.
+      description: "One entry per sender that has any queue row in the last 35 days, plus the deployment sender (`senderAccountId: null`), from ONE transaction. Per sender: whether it may send a business-initiated message right now (a coarse reason code when it may not), the queue (waiting, in flight, failed in the last day, oldest waiting, last failure code) and the quota (what it really sent in the trailing hour and day against the per-sender caps, and whether it is `throttled`). A throttled or unavailable sender's rows WAIT or fail terminally; they are never rerouted to another sender, number or provider. Bounded to 200 senders. Nothing here is a credential, a secret reference, a phone number or a device id: a sender is its account id. Requires `whatsapp_delivery.senders.read`."
+      responses:
+        "200":
+          description: Sender diagnostics and the default-sender policies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/WhatsappSenderDiagnostics"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/whatsapp/suppressions:
     get:
       operationId: listWhatsappSuppressions
@@ -43670,6 +43757,21 @@ components:
           items:
             type: string
             format: uuid
+    WhatsappBusinessScope:
+      type: object
+      nullable: true
+      description: A brand or unit (the generic business-scope pair). Null is tenant-wide.
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          maxLength: 64
+        id:
+          type: string
+          format: uuid
     WhatsappConsent:
       type: object
       properties:
@@ -43817,6 +43919,19 @@ components:
         providerName:
           type: string
           nullable: true
+        senderAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The tenant-owned sender account snapshotted at enqueue (immutable), or null for the deployment sender. An id, never a number or a credential.
+        senderSelection:
+          type: string
+          enum:
+            - deployment
+            - explicit
+            - policy
+            - reply
+          description: How the sender was chosen. `reply` is thread affinity.
         notBefore:
           type: string
           format: date-time
@@ -43868,6 +43983,112 @@ components:
           type: integer
         grantedConsents:
           type: integer
+    WhatsappSenderDiagnostics:
+      type: object
+      properties:
+        senders:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappSenderStatus"
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappSenderPolicy"
+    WhatsappSenderPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessScope:
+          $ref: "#/components/schemas/WhatsappBusinessScope"
+        defaultSenderAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null is an explicit decision to use the deployment sender.
+        configVersion:
+          type: integer
+          minimum: 1
+          description: Snapshotted on each message the policy selects (`sender_policy_version`).
+        effectiveFrom:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WhatsappSenderPolicyRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - businessScope
+        - defaultSenderAccountId
+      properties:
+        businessScope:
+          $ref: "#/components/schemas/WhatsappBusinessScope"
+        defaultSenderAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: An account of this tenant, or null for the deployment sender. Never a token, a phone number id, a device id or a provider name.
+    WhatsappSenderStatus:
+      type: object
+      properties:
+        senderAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null is the deployment sender.
+        availability:
+          nullable: true
+          description: Null for the deployment sender, which has no account record.
+          oneOf:
+            - type: object
+              properties:
+                usable:
+                  type: boolean
+                  enum:
+                    - true
+            - type: object
+              properties:
+                usable:
+                  type: boolean
+                  enum:
+                    - false
+                reason:
+                  type: string
+                  description: A coarse reason code (for example `ACCOUNT_REVOKED`, `CAPABILITY_DENIED`).
+        queue:
+          type: object
+          properties:
+            waiting:
+              type: integer
+            sending:
+              type: integer
+            failed:
+              type: integer
+              description: Failed in the last day.
+            oldestPendingAt:
+              type: string
+              format: date-time
+              nullable: true
+            lastFailureCode:
+              type: string
+              nullable: true
+        quota:
+          type: object
+          properties:
+            sentLastHour:
+              type: integer
+            sentLastDay:
+              type: integer
+            hourlyLimit:
+              type: integer
+            dailyLimit:
+              type: integer
+            throttled:
+              type: boolean
+              description: A cap is reached; the dispatcher stops claiming this sender's rows until the window moves. Always false for the deployment sender.
     WhatsappSuppression:
       type: object
       properties:

@@ -38,7 +38,14 @@ import { log } from "../../../lib/logging/logger";
 import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
 import { resolveEmailSendMaxRetries } from "../domain/email-config";
 import { redactEmailAddressesInText } from "../domain/email-log-redaction";
-import { evaluateEmailRetry } from "../domain/email-retry";
+import {
+  EMAIL_CREDIT_HOLD_BUDGET_MS,
+  evaluateEmailRetry
+} from "../domain/email-retry";
+import {
+  MAILKETING_V2_UNVERIFIED_WARNING,
+  isMailketingV2Verified
+} from "../domain/mailketing-v2-contract";
 import { fetchSuppressedRecipientHashes } from "./suppression-directory";
 import {
   renderEmailTemplate,
@@ -55,6 +62,10 @@ const CIRCUIT_BREAKER_KEY = "email-mailketing";
 export const EMAIL_DISPATCH_DEFAULT_LIMIT = 25;
 export const EMAIL_DISPATCH_LEASE_MINUTES = 2;
 const MAX_RESPONSE_SNIPPET_LENGTH = 500;
+const RECLAIMED_PREFIX =
+  "[uncertain: re-claimed after an expired lease; a previous attempt may have been accepted]";
+const UNCERTAIN_REDELIVERY_NOTE =
+  "Uncertain delivery: re-sent after an expired claim lease; a previous attempt may have been accepted by the provider (possible duplicate).";
 
 type ClaimedRow = {
   id: string;
@@ -66,6 +77,10 @@ type ClaimedRow = {
   subject: string;
   variables: Record<string, unknown> | null;
   retry_count: string | number;
+  /** True when this claim took over a `sending` row whose lease had expired (Issue #1159). */
+  reclaimed: boolean;
+  /** Anchors the credit-hold budget; absent only in fakes. */
+  created_at?: Date | string;
 };
 
 export type DispatchEmailQueueOptions = {
@@ -91,6 +106,23 @@ export type DispatchEmailQueueResult = {
    * separately from `failed`/`retried` precisely because it is neither.
    */
   deferred: number;
+  /**
+   * Issue #1159 — messages sent on a re-claim of an expired lease: a previous
+   * worker may have died AFTER the provider accepted the message and BEFORE
+   * finalize, so this send may be a duplicate. Counted (and the sent row
+   * annotated) rather than hidden; no provider-side dedupe exists (ADR-0151).
+   * These rows are ALSO counted in `sent`/`retried`/`failed`. Counted only
+   * for rows actually sent to the provider (a deferred row was never re-sent),
+   * plus a provider answer that left the delivery state unknown (a malformed
+   * 200). The note is written to `last_error` for every outcome of such a row.
+   */
+  uncertain: number;
+  /**
+   * Issue #1159 — claimed messages deferred because the email configuration is
+   * wrong (a subset of `deferred`). They stay `queued` and send once the
+   * configuration is fixed; a configuration error never fails a message.
+   */
+  misconfigured: number;
   breakerOpen: boolean;
 };
 
@@ -147,7 +179,7 @@ async function claimEligibleEntries(
       // (Issue #1007). The CTE computes the locked, limited id set once.
       const rows = await tx`
         WITH due AS MATERIALIZED (
-          SELECT id FROM awcms_email_messages
+          SELECT id, (status = 'sending') AS reclaimed FROM awcms_email_messages
           WHERE tenant_id = ${tenantId}
             AND (
               (status IN ('queued', 'retry_wait')
@@ -166,7 +198,7 @@ async function claimEligibleEntries(
         WHERE t.id = due.id
         RETURNING t.id, t.correlation_id, t.category, t.template_key,
                   t.to_address, t.to_address_hash, t.subject, t.variables,
-                  t.retry_count
+                  t.retry_count, t.created_at, due.reclaimed
       `;
 
       return rows as unknown as ClaimedRow[];
@@ -230,7 +262,8 @@ async function finalizeSent(
   tenantId: string,
   id: string,
   providerName: string,
-  providerMessageId: string | undefined
+  providerMessageId: string | undefined,
+  uncertainNote: string | null
 ): Promise<void> {
   await withTenantOrThrow(
     sql,
@@ -238,7 +271,8 @@ async function finalizeSent(
     (tx) => tx`
       UPDATE awcms_email_messages
       SET status = 'sent', sent_at = now(), next_attempt_at = null,
-          provider_name = ${providerName}, provider_message_id = ${providerMessageId ?? null}
+          provider_name = ${providerName}, provider_message_id = ${providerMessageId ?? null},
+          last_error = COALESCE(${uncertainNote}, last_error)
       WHERE tenant_id = ${tenantId} AND id = ${id} AND status = 'sending'
     `,
     { workClass: "background_sync" }
@@ -296,14 +330,15 @@ async function finalizeDeferred(
   sql: Bun.SQL,
   tenantId: string,
   id: string,
-  reason: string
+  reason: string,
+  holdUntil: Date | null = null
 ): Promise<void> {
   await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
       UPDATE awcms_email_messages
-      SET status = 'queued', next_attempt_at = null,
+      SET status = 'queued', next_attempt_at = ${holdUntil},
           last_error = ${`Deferred (no attempt made): ${reason}`}
       WHERE tenant_id = ${tenantId} AND id = ${id} AND status = 'sending'
     `,
@@ -319,10 +354,11 @@ async function finalizeFailure(
   maxRetries: number,
   retryable: boolean,
   now: Date,
-  errorMessage: string
+  errorMessage: string,
+  retryAfterMs?: number
 ): Promise<{ eligible: boolean }> {
   const evaluation = retryable
-    ? evaluateEmailRetry(currentRetryCount, maxRetries, now)
+    ? evaluateEmailRetry(currentRetryCount, maxRetries, now, retryAfterMs)
     : { eligible: false as const };
 
   if (evaluation.eligible) {
@@ -420,6 +456,8 @@ export async function dispatchEmailQueue(
     failed: 0,
     suppressed: 0,
     deferred: 0,
+    uncertain: 0,
+    misconfigured: 0,
     breakerOpen
   };
 
@@ -449,6 +487,19 @@ export async function dispatchEmailQueue(
     moduleKey: MODULE_KEY,
     count: claimed.length
   });
+
+  if (
+    env.EMAIL_PROVIDER === "mailketing" &&
+    env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
+    !isMailketingV2Verified(env)
+  ) {
+    log("warning", "email.dispatch.mailketing_v2_unverified", {
+      correlationId,
+      tenantId,
+      moduleKey: MODULE_KEY,
+      warning: MAILKETING_V2_UNVERIFIED_WARNING
+    });
+  }
 
   const provider = (options.resolveProvider ?? resolveEmailProvider)(env);
   const fromAddress = options.fromAddress ?? env.EMAIL_FROM_ADDRESS ?? "";
@@ -530,6 +581,29 @@ export async function dispatchEmailQueue(
       correlationId: messageCorrelationId
     });
 
+    // Issue #1159 uncertain-delivery classification. A row re-claimed from an
+    // expired lease may already have been accepted by the provider; a provider
+    // answer can also leave the state unknown. Counted only when the provider
+    // was actually asked (a deferred row was not re-sent), but the note is
+    // written for EVERY outcome of such a row.
+    const providerAsked = deliveryResult.ok || !deliveryResult.skipped;
+    const providerUncertain = !deliveryResult.ok && !!deliveryResult.uncertain;
+
+    if ((entry.reclaimed && providerAsked) || providerUncertain) {
+      result.uncertain += 1;
+      log("warning", "email.dispatch.uncertain_redelivery", {
+        correlationId: messageCorrelationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        category: entry.category,
+        reclaimed: entry.reclaimed,
+        providerUncertain
+      });
+    }
+
+    const annotate = (message: string): string =>
+      entry.reclaimed ? `${RECLAIMED_PREFIX} ${message}` : message;
+
     if (deliveryResult.ok) {
       await recordDeliveryAttempt(
         sql,
@@ -553,7 +627,8 @@ export async function dispatchEmailQueue(
         tenantId,
         entry.id,
         env.EMAIL_PROVIDER ?? "unknown",
-        deliveryResult.providerMessageId
+        deliveryResult.providerMessageId,
+        entry.reclaimed ? UNCERTAIN_REDELIVERY_NOTE : null
       );
       log("info", "email.dispatch.sent", {
         correlationId: messageCorrelationId,
@@ -569,20 +644,85 @@ export async function dispatchEmailQueue(
       deliveryResult.error.slice(0, MAX_RESPONSE_SNIPPET_LENGTH)
     );
 
+    if (
+      deliveryResult.skipped &&
+      deliveryResult.creditHold &&
+      entry.created_at !== undefined &&
+      now.getTime() - new Date(entry.created_at).getTime() >=
+        EMAIL_CREDIT_HOLD_BUDGET_MS
+    ) {
+      // L1: the credit-hold budget is spent. Deliver an OTP / reset mail hours
+      // late? No: fail with a named reason an operator can act on.
+      const budgetError =
+        "CREDIT_HOLD_BUDGET_EXCEEDED: the provider reported insufficient credit for longer than the hold budget; the message was not sent.";
+
+      await recordDeliveryAttempt(
+        sql,
+        tenantId,
+        entry.id,
+        attemptNo,
+        "failure",
+        env.EMAIL_PROVIDER ?? "unknown",
+        budgetError,
+        annotate(budgetError)
+      );
+      await finalizeFailure(
+        sql,
+        tenantId,
+        entry.id,
+        retryCount,
+        maxRetries,
+        false,
+        now,
+        annotate(budgetError)
+      );
+      log("error", "email.dispatch.failed", {
+        correlationId: messageCorrelationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        category: entry.category,
+        retryCount: retryCount + 1,
+        error: budgetError
+      });
+      result.failed += 1;
+      continue;
+    }
+
     if (deliveryResult.skipped) {
       // Nothing reached the provider. Undo the claim and move on — the loop
       // deliberately does NOT break, because every remaining claimed row also
       // needs releasing; breaking would leave them in `sending` until their
       // lease expires. `provider.send` returns immediately once the breaker is
       // open, so finishing the batch costs nothing outbound.
-      await finalizeDeferred(sql, tenantId, entry.id, safeError);
-      log("warning", "email.dispatch.deferred", {
-        correlationId: messageCorrelationId,
+      await finalizeDeferred(
+        sql,
         tenantId,
-        moduleKey: MODULE_KEY,
-        category: entry.category,
-        error: safeError
-      });
+        entry.id,
+        annotate(safeError),
+        deliveryResult.holdMs
+          ? new Date(now.getTime() + deliveryResult.holdMs)
+          : null
+      );
+
+      if (deliveryResult.configError) {
+        log("error", "email.dispatch.misconfigured", {
+          correlationId: messageCorrelationId,
+          tenantId,
+          moduleKey: MODULE_KEY,
+          category: entry.category,
+          error: safeError
+        });
+        result.misconfigured += 1;
+      } else {
+        log("warning", "email.dispatch.deferred", {
+          correlationId: messageCorrelationId,
+          tenantId,
+          moduleKey: MODULE_KEY,
+          category: entry.category,
+          error: safeError
+        });
+      }
+
       result.deferred += 1;
       continue;
     }
@@ -595,7 +735,7 @@ export async function dispatchEmailQueue(
       "failure",
       env.EMAIL_PROVIDER ?? "unknown",
       safeError,
-      safeError
+      annotate(safeError)
     );
 
     const finalized = await finalizeFailure(
@@ -606,7 +746,8 @@ export async function dispatchEmailQueue(
       maxRetries,
       deliveryResult.retryable,
       now,
-      safeError
+      annotate(safeError),
+      deliveryResult.retryAfterMs
     );
 
     if (finalized.eligible) {

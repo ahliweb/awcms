@@ -251,6 +251,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "channel_accounts.assignments.assign",
   "channel_accounts.capabilities.configure",
   "channel_accounts.credentials.manage",
+  // whatsapp_delivery sender routing (2) — Issue #1141, ADR-0148 section 4.
+  // API-first: the sender and default-sender-policy surface (`GET /senders`,
+  // `PUT /sender-policy`) is complete, and its screen rides with the connection
+  // manager (Issue #1154), which is where an operator picks the accounts a
+  // policy names. `/admin/whatsapp` stays gated on `messages.read` meanwhile.
+  "whatsapp_delivery.senders.read",
+  "whatsapp_delivery.sender_policy.configure",
   // website_engagement (5) — ADR-0155 / Issue #1153. API-first and
   // `experimental`: the operator screen (sources and their hosts, a one-time
   // token display, the masked submission list with its consent provenance, the
