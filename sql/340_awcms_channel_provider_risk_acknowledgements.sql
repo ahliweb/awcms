@@ -93,7 +93,8 @@ CREATE POLICY awcms_channel_provider_risk_acks_tenant_isolation
 GRANT SELECT (id, tenant_id, provider, text_version, revoked_at)
   ON awcms_channel_provider_risk_acknowledgements TO awcms_worker;
 
--- Append-only apart from the revocation stamp; never deleted.
+-- Append-only apart from the revocation stamp; never deleted; the database stamps
+-- the times.
 CREATE OR REPLACE FUNCTION awcms_channel_provider_risk_acks_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -103,6 +104,21 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'a provider risk acknowledgement is never deleted: it is revoked'
       USING ERRCODE = '23514';
+  END IF;
+
+  -- The database, not the caller, decides WHEN an acknowledgement happened: a
+  -- supplied (back-dated) timestamp is overwritten, and a record is never born
+  -- already revoked.
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by IS NOT NULL THEN
+      RAISE EXCEPTION 'a provider risk acknowledgement is recorded active and revoked later'
+        USING ERRCODE = '23514';
+    END IF;
+
+    NEW.acknowledged_at := now();
+    NEW.created_at := now();
+
+    RETURN NEW;
   END IF;
 
   IF NEW.id IS DISTINCT FROM OLD.id
@@ -124,12 +140,16 @@ BEGIN
       USING ERRCODE = '23514';
   END IF;
 
+  IF OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL THEN
+    NEW.revoked_at := now();
+  END IF;
+
   RETURN NEW;
 END;
 $function$;
 
 CREATE TRIGGER awcms_channel_provider_risk_acks_guard
-  BEFORE UPDATE OR DELETE ON awcms_channel_provider_risk_acknowledgements
+  BEFORE INSERT OR UPDATE OR DELETE ON awcms_channel_provider_risk_acknowledgements
   FOR EACH ROW
   EXECUTE FUNCTION awcms_channel_provider_risk_acks_guard();
 
@@ -175,3 +195,21 @@ CREATE TRIGGER awcms_channel_accounts_risk_ack_guard
   BEFORE INSERT OR UPDATE OF status ON awcms_channel_accounts
   FOR EACH ROW
   EXECUTE FUNCTION awcms_channel_accounts_risk_ack_guard();
+
+-- The acknowledgement a device was ATTESTED under (audit L1). Revoking THAT
+-- acknowledgement degrades the device even while the tenant still holds another
+-- person's: a device is trusted on the strength of the person who said it was
+-- paired, not of "somebody in the tenant". NULL for a device that was never
+-- attested (and after its credential is replaced). Composite tenant FK; the
+-- acknowledgement is never deleted, so the reference cannot dangle.
+ALTER TABLE awcms_channel_accounts
+  ADD COLUMN IF NOT EXISTS attested_acknowledgement_id uuid;
+
+ALTER TABLE awcms_channel_accounts
+  ADD CONSTRAINT awcms_channel_accounts_attested_ack_fk
+    FOREIGN KEY (tenant_id, attested_acknowledgement_id)
+    REFERENCES awcms_channel_provider_risk_acknowledgements (tenant_id, id);
+
+CREATE INDEX IF NOT EXISTS awcms_channel_accounts_attested_ack_idx
+  ON awcms_channel_accounts (tenant_id, attested_acknowledgement_id)
+  WHERE attested_acknowledgement_id IS NOT NULL;

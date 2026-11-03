@@ -11,11 +11,12 @@
  *     allowed origin before every call; no redirect is followed (`maxRedirects:
  *     0`), so the device key (an `Authorization` header) is never forwarded.
  *   * BOUNDED timeout: the shared outbound seam's total wall-clock budget.
- *   * SAFE retry classification: a failure that proves the request did not leave
- *     (DNS) or that StarSender refused it (429, 5xx, a disconnected device) may be
- *     retried; a timeout or reset after the request may have been processed is an
- *     UNKNOWN outcome and is not retried, because StarSender documents no
- *     idempotency key and a retry could message the recipient twice.
+ *   * SAFE retry classification: only a failure that proves the message was NOT
+ *     handed on may be retried: DNS (the request never left), HTTP 429 and a
+ *     reported rate limit or disconnected device (StarSender said no). A timeout,
+ *     a reset or ANY 5xx (a failing gateway may already have forwarded the
+ *     message) is an UNKNOWN outcome and is not retried, because StarSender
+ *     documents no idempotency key and a retry could message the recipient twice.
  *   * HTTP 200 is not success: the body's `success` decides, and a body in an
  *     unknown shape is `malformed_response`, never acceptance.
  *   * A success is "accepted by StarSender", never "delivered" or "read", and

@@ -5,6 +5,7 @@ import {
   commonRefusal,
   readIdempotencyKey,
   readValidatedBody,
+  requireConditionalStepUp,
   runIdempotent
 } from "../../../../../modules/channel-accounts/application/channel-accounts-route-support";
 import {
@@ -64,7 +65,9 @@ type Prepared = { idempotencyKey: string; input: AcknowledgeRiskInput };
  * While the business owner has not approved the text, nothing can be recorded
  * (`409 RISK_TEXT_NOT_APPROVED`), so no StarSender device can be connected: the
  * wording is a human decision, not a default. A signed-in person only (a machine
- * credential is refused); `Idempotency-Key` required; audited at `warning`.
+ * credential is refused); a person who has an MFA factor needs a fresh step-up
+ * (conditional, like `PUT .../credential`); `Idempotency-Key` required; audited
+ * at `warning`.
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -85,6 +88,11 @@ export const POST = defineTenantRoute<Prepared>({
 
     const { tx, tenantId, auth, prepared } = context;
     const actor = auth.context.tenantUserId;
+
+    // A person with an MFA factor must present a fresh step-up (audit M4).
+    const stepUp = await requireConditionalStepUp(context);
+
+    if (stepUp) return stepUp;
 
     return runIdempotent(
       tx,

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:55d7e8d5221ca4dafc6051560ba82a65ba92a4f331c4befca85dd6c1f1e8e6d3 -->
+<!-- i18n-source-hash: sha256:f56d018dde8f6a161ab2f77aedd430d5be7cf77c735a9c6d4c8a9c9b0002307d -->
 
 # `channel_accounts`
 
@@ -74,6 +74,9 @@ Refresh dijaga **lease** (`acquireRefreshLease`, compare-and-set pada baris kone
 - **Seseorang menyatakan untuk dirinya sendiri.** Badan menyebut penyedia dan versi teks yang ditampilkan dan tidak punya field untuk menyebut orang lain; versi usang adalah `409 RISK_TEXT_VERSION_STALE`. Kredensial mesin ditolak.
 - **Database adalah jaring di bawah aplikasi.** Akun `starsender` tidak dapat disisipkan sebagai, atau dipindah ke, `connected` selama tenant tidak punya pernyataan aktif (`awcms_channel_accounts_risk_ack_guard`). Aplikasi juga memeriksa **versi terkini yang disetujui** di `ChannelAccountPort` (sebelum status akun, sehingga pencabutan bersifat terminal, bukan ditahan) dan lagi di `ChannelSenderCredentialPort` sebelum mendekripsi key perangkat.
 - **Pencabutan** menstempel baris; mencabut pernyataan aktif **terakhir** milik tenant mendegradasi perangkat `connected` penyedia itu dalam transaksi yang sama (`RISK_ACK_REVOKED`), dan perangkat terdegradasi tidak dapat kembali tanpa pernyataan baru.
+- **Perangkat terikat pada pernyataan tempat ia diatestasi** (`attested_acknowledgement_id`, `sql/340`): mencabut pernyataan ITU mendegradasinya meski tenant masih memegang yang lain, dan mencabut yang terakhir milik tenant mendegradasi setiap perangkat penyedia itu. "Apakah ini yang terakhir?" adalah pertanyaan tentang sebuah himpunan, jadi pencabutan lebih dulu mengunci setiap pernyataan aktif (tenant, penyedia) `FOR UPDATE` berurutan id, dan atestasi membaca yang diandalkannya `FOR SHARE` sebelum mengunci akun: dua pencabutan bersamaan, atau atestasi yang berbalapan dengan pencabutan, tidak lagi dapat meninggalkan perangkat `connected` tanpa pernyataan aktif (dibuktikan dengan transaksi berselang-seling di `tests/integration/starsender-adapter.integration.test.ts`).
+- **Mengganti key perangkat menurunkan perangkat** (`PUT .../credential` pada akun penyedia tidak resmi yang `connected` atau `degraded` memindahkannya ke `pending`, `CREDENTIAL_REPLACED`, dalam transaksi yang sama): status teratestasi adalah klaim tentang key itu.
+- **Menyatakan dan mengatestasi butuh step-up segar dari orang yang punya faktor MFA** (bersyarat, aturan yang sama dengan rute kredensial, ADR-0141); orang tanpa faktor tidak terkunci dan tidak ada pendaftaran yang dipaksakan.
 - **Atestasi, bukan verifikasi.** Kesehatan akun dilaporkan konektor dan tidak pernah ditegaskan seseorang, dengan SATU pengecualian tercatat: StarSender tidak mendokumentasikan panggilan status tanpa efek samping, jadi `POST accounts/{id}/attest-device` memungkinkan operator yang memegang pernyataan aktifnya **sendiri** mengatestasi bahwa perangkat sudah terpasang (kredensial tersimpan, akun `pending` atau `degraded`, `WHATSAPP_STARSENDER_ENABLED=true`). Kesehatan berbunyi `OPERATOR_ATTESTED`; respons berkata `basis: operator_attested`. Bila StarSender membuktikan panggilan status, konektor menggantikannya.
 - Worker (`awcms_worker`) hanya memegang `SELECT` per kolom pada `(id, tenant_id, provider, text_version, revoked_at)` dan tidak ada lagi dari tabel ini.
 

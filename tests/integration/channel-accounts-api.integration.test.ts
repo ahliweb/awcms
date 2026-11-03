@@ -2480,6 +2480,60 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       ]);
     });
 
+    test("audit M4: a person who HAS an MFA factor needs a fresh step-up to acknowledge and to attest; one with no factor is not locked out", async () => {
+      if (!handlerReady) return;
+
+      approve();
+      process.env.WHATSAPP_STARSENDER_ENABLED = "true";
+
+      const permissions = [
+        "channel_accounts.risk_acknowledgements.create",
+        "channel_accounts.accounts.create"
+      ];
+      const stale = await seedUser(env.tenantId, "stale", permissions, {
+        enrolled: true,
+        steppedUp: false
+      });
+      const fresh = await seedUser(env.tenantId, "fresh", permissions, {
+        enrolled: true,
+        steppedUp: true
+      });
+      const noFactor = await seedUser(env.tenantId, "nofactor", permissions);
+      const device = (await register("stepup-dev")).body.data!;
+      const attest = (token: string) =>
+        call(attestDeviceRoute, {
+          method: "POST",
+          path: `${BASE}/accounts/${device.id}/attest-device`,
+          params: { id: device.id },
+          token
+        });
+
+      const refusedAck = await ack(stale.token);
+
+      expect(refusedAck.status).toBe(403);
+      expect(refusedAck.body.error?.code).toBe("STEP_UP_REQUIRED");
+
+      const refusedAttest = await attest(stale.token);
+
+      expect(refusedAttest.status).toBe(403);
+      expect(refusedAttest.body.error?.code).toBe("STEP_UP_REQUIRED");
+
+      const rows = (await admin()`
+        SELECT count(*)::int AS n FROM awcms_channel_provider_risk_acknowledgements
+      `) as { n: number }[];
+
+      expect(rows[0]!.n).toBe(0);
+      expect((await ack(fresh.token)).status).toBe(201);
+      expect((await ack(noFactor.token)).status).toBe(201);
+
+      // The step-up gate is passed (the attestation then stops at "no credential",
+      // which is its own, later refusal).
+      const afterStepUp = await attest(fresh.token);
+
+      expect(afterStepUp.status).toBe(422);
+      expect(afterStepUp.body.error?.code).toBe("CREDENTIAL_REQUIRED");
+    });
+
     test("revoke is audited at warning; an unknown id is a 404; the list shows the stamp and who revoked", async () => {
       if (!handlerReady) return;
 

@@ -51,6 +51,7 @@ import {
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { createChannelAccountPortAdapter } from "../../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { createChannelSenderCredentialAdapter } from "../../src/modules/channel-accounts/application/channel-sender-credential-adapter";
+import { writeAccountCredential } from "../../src/modules/channel-accounts/application/account-directory";
 import {
   attestDevice,
   acknowledgeRisk,
@@ -106,7 +107,13 @@ const CA_ENV = {
 process.env.WHATSAPP_RECIPIENT_HASH_KEYS = `k1:${HASH_KEY}`;
 
 const senders = createChannelAccountPortAdapter({ env: CA_ENV });
+// The credential adapter checks the adapter flag BEFORE it reads a secret (audit
+// L2), so the "on" adapter is built with the flag and the "off" one without.
 const credentials = createChannelSenderCredentialAdapter({
+  store,
+  env: { ...CA_ENV, WHATSAPP_STARSENDER_ENABLED: "true" } as NodeJS.ProcessEnv
+});
+const credentialsFlagOff = createChannelSenderCredentialAdapter({
   store,
   env: CA_ENV
 });
@@ -863,6 +870,338 @@ suite("StarSender adapter against PostgreSQL (Issue #1142)", () => {
     );
   });
 
+  describe("audit M1: revocation races (two real transactions, interleaved on purpose)", () => {
+    /** A promise a test releases by hand, so two transactions can be held open in a chosen order. */
+    function gate(): { wait: Promise<void>; release: () => void } {
+      let release!: () => void;
+      const wait = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      return { wait, release };
+    }
+    const pause = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+
+    test("two concurrent revocations of the last two acknowledgements still degrade the device (neither saw the other's uncommitted stamp)", async () => {
+      const u1 = await makeUser(TENANT_A);
+      const u2 = await makeUser(TENANT_A);
+      const a1 = (await acknowledge(TENANT_A, u1)) as {
+        acknowledgement: { id: string };
+      };
+      const a2 = (await acknowledge(TENANT_A, u2)) as {
+        acknowledgement: { id: string };
+      };
+      // Connected by a path that records no attester, so ONLY the "last
+      // acknowledgement" rule (not the per-attester rule of audit L1) can degrade
+      // it: this test is about the lock, not about L1.
+      const device = await seedDevice(TENANT_A);
+
+      await getAdminSql()`UPDATE awcms_channel_accounts SET status = 'connected' WHERE id = ${device.id}`;
+
+      const hold = gate();
+      const firstRevoked = gate();
+      const first = inTenant(TENANT_A, async (tx) => {
+        const result = await revokeRiskAcknowledgement(
+          tx,
+          TENANT_A,
+          u1,
+          a1.acknowledgement.id
+        );
+
+        firstRevoked.release();
+        await hold.wait;
+
+        return result;
+      });
+
+      await firstRevoked.wait;
+
+      // Started while the first transaction is still open and uncommitted.
+      const second = inTenant(TENANT_A, (tx) =>
+        revokeRiskAcknowledgement(tx, TENANT_A, u2, a2.acknowledgement.id)
+      );
+
+      await pause(400);
+      hold.release();
+      await Promise.all([first, second]);
+
+      const active = (await getAdminSql()`
+        SELECT count(*)::int AS n FROM awcms_channel_provider_risk_acknowledgements
+        WHERE tenant_id = ${TENANT_A} AND revoked_at IS NULL
+      `) as { n: number }[];
+
+      expect(active[0]!.n).toBe(0);
+      // The invariant: a device is never connected with no active acknowledgement.
+      expect(await statusOf(device.id)).toBe("degraded");
+    });
+
+    test("an attestation concurrent with the revocation of the acknowledgement it relies on cannot leave a connected device", async () => {
+      const owner = await makeUser(TENANT_A);
+      const ack = (await acknowledge(TENANT_A, owner)) as {
+        acknowledgement: { id: string };
+      };
+      const device = await seedDevice(TENANT_A);
+      const hold = gate();
+      const attested = gate();
+      const attesting = inTenant(TENANT_A, async (tx) => {
+        const result = await attestDevice(tx, TENANT_A, owner, device.id);
+
+        attested.release();
+        await hold.wait;
+
+        return result;
+      });
+
+      await attested.wait;
+
+      const revoking = inTenant(TENANT_A, (tx) =>
+        revokeRiskAcknowledgement(tx, TENANT_A, owner, ack.acknowledgement.id)
+      );
+
+      await pause(400);
+      hold.release();
+      await Promise.all([attesting, revoking]);
+
+      expect(await statusOf(device.id)).toBe("degraded");
+    });
+  });
+
+  describe("audit M1 (other order): an attestation that starts while the revocation is still uncommitted", () => {
+    test("waits for the revocation, then finds no acknowledgement to rely on: the device stays pending", async () => {
+      const owner = await makeUser(TENANT_A);
+      const ack = (await acknowledge(TENANT_A, owner)) as {
+        acknowledgement: { id: string };
+      };
+      const device = await seedDevice(TENANT_A);
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let revoked!: () => void;
+      const revokedSignal = new Promise<void>((resolve) => {
+        revoked = resolve;
+      });
+      const revoking = inTenant(TENANT_A, async (tx) => {
+        const result = await revokeRiskAcknowledgement(
+          tx,
+          TENANT_A,
+          owner,
+          ack.acknowledgement.id
+        );
+
+        revoked();
+        await hold;
+
+        return result;
+      });
+
+      await revokedSignal;
+
+      const attesting = inTenant(TENANT_A, (tx) =>
+        attestDevice(tx, TENANT_A, owner, device.id)
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      release();
+
+      const [, attested] = await Promise.all([revoking, attesting]);
+
+      expect(attested).toEqual({
+        outcome: "refused",
+        code: "RISK_ACKNOWLEDGEMENT_REQUIRED"
+      });
+      expect(await statusOf(device.id)).toBe("pending");
+    });
+  });
+
+  describe("audit L1: a device is bound to the acknowledgement it was attested under", () => {
+    test("revoking THAT acknowledgement degrades the device even while the tenant holds another; the other operator's device stays", async () => {
+      const u1 = await makeUser(TENANT_A);
+      const u2 = await makeUser(TENANT_A);
+      const a1 = (await acknowledge(TENANT_A, u1)) as {
+        acknowledgement: { id: string };
+      };
+      const a2 = (await acknowledge(TENANT_A, u2)) as {
+        acknowledgement: { id: string };
+      };
+      const d1 = await seedDevice(TENANT_A);
+      const d2 = await seedDevice(TENANT_A);
+
+      await inTenant(TENANT_A, (tx) => attestDevice(tx, TENANT_A, u1, d1.id));
+      await inTenant(TENANT_A, (tx) => attestDevice(tx, TENANT_A, u2, d2.id));
+
+      const bound = (await getAdminSql()`
+        SELECT id, attested_acknowledgement_id FROM awcms_channel_accounts
+        WHERE id IN (${d1.id}, ${d2.id})
+      `) as { id: string; attested_acknowledgement_id: string }[];
+
+      expect(
+        bound.find((r) => r.id === d1.id)!.attested_acknowledgement_id
+      ).toBe(a1.acknowledgement.id);
+      expect(
+        bound.find((r) => r.id === d2.id)!.attested_acknowledgement_id
+      ).toBe(a2.acknowledgement.id);
+
+      const result = await inTenant(TENANT_A, (tx) =>
+        revokeRiskAcknowledgement(tx, TENANT_A, u1, a1.acknowledgement.id)
+      );
+
+      expect(result).toMatchObject({ outcome: "revoked", degradedAccounts: 1 });
+      expect(await statusOf(d1.id)).toBe("degraded");
+      expect(await statusOf(d2.id)).toBe("connected");
+    });
+  });
+
+  describe("audit M2: replacing a device key demotes the device", () => {
+    test("an unofficial-provider device goes back to pending (CREDENTIAL_REPLACED) and cannot send until it is attested again; an official sender is untouched", async () => {
+      const owner = await makeUser(TENANT_A);
+
+      await acknowledge(TENANT_A, owner);
+
+      const device = await seedDevice(TENANT_A);
+
+      await inTenant(TENANT_A, (tx) =>
+        attestDevice(tx, TENANT_A, owner, device.id)
+      );
+      expect(await statusOf(device.id)).toBe("connected");
+
+      const written = await inTenant(TENANT_A, (tx) =>
+        writeAccountCredential(
+          tx,
+          store,
+          TENANT_A,
+          owner,
+          device.id,
+          "REPLACEMENT-KEY-0123456789"
+        )
+      );
+
+      expect(written).toMatchObject({
+        outcome: "written",
+        replaced: true,
+        demoted: true
+      });
+
+      const after = (await getAdminSql()`
+        SELECT status, status_reason, attested_acknowledgement_id, connected_at
+        FROM awcms_channel_accounts WHERE id = ${device.id}
+      `) as {
+        status: string;
+        status_reason: string | null;
+        attested_acknowledgement_id: string | null;
+        connected_at: Date | null;
+      }[];
+
+      expect(after[0]).toMatchObject({
+        status: "pending",
+        status_reason: "CREDENTIAL_REPLACED",
+        attested_acknowledgement_id: null,
+        connected_at: null
+      });
+      expect(
+        await senders
+          .resolveWhatsappSender(runtime() as never, {
+            tenantId: TENANT_A,
+            accountId: device.id,
+            capability: "dm"
+          })
+          .catch(() => null)
+      ).not.toMatchObject({ usable: true });
+      expect(await enqueue(TENANT_A, device.id)).toEqual({
+        status: "refused",
+        reason: "SENDER_UNAVAILABLE"
+      });
+
+      // Re-attesting restores it.
+      await inTenant(TENANT_A, (tx) =>
+        attestDevice(tx, TENANT_A, owner, device.id)
+      );
+      expect(await statusOf(device.id)).toBe("connected");
+
+      // A degraded device is demoted too.
+      await getAdminSql()`UPDATE awcms_channel_accounts SET status = 'degraded' WHERE id = ${device.id}`;
+      await inTenant(TENANT_A, (tx) =>
+        writeAccountCredential(
+          tx,
+          store,
+          TENANT_A,
+          owner,
+          device.id,
+          "ANOTHER-KEY-0123456789"
+        )
+      );
+      expect(await statusOf(device.id)).toBe("pending");
+
+      // An official sender keeps its status when its token is rotated.
+      const admin = getAdminSql();
+      const official = (await admin`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name, auth_mode, status)
+        VALUES (${TENANT_A}, 'facebook', 'page', 'fb-1', 'x', 'oauth2', 'connected')
+        RETURNING id
+      `) as { id: string }[];
+      const oauth = await inTenant(TENANT_A, (tx) =>
+        writeAccountCredential(
+          tx,
+          store,
+          TENANT_A,
+          owner,
+          official[0]!.id,
+          "irrelevant-0123456789"
+        )
+      );
+
+      expect(oauth).toMatchObject({ outcome: "refused" });
+      expect(await statusOf(official[0]!.id)).toBe("connected");
+    });
+  });
+
+  describe("audit L3: the database, not the caller, decides when an acknowledgement happened", () => {
+    test("a back-dated INSERT is stamped now(); a back-dated revocation is stamped now(); a pre-revoked insert is refused", async () => {
+      const admin = getAdminSql();
+      const user = await makeUser(TENANT_A);
+      const inserted = (await admin`
+        INSERT INTO awcms_channel_provider_risk_acknowledgements
+          (tenant_id, provider, tenant_user_id, text_version, text_sha256,
+           acknowledged_at, created_at)
+        VALUES (${TENANT_A}, 'starsender', ${user}, 'v-l3', ${"1".repeat(64)},
+                now() - interval '9 days', now() - interval '9 days')
+        RETURNING id, acknowledged_at, created_at
+      `) as { id: string; acknowledged_at: Date; created_at: Date }[];
+
+      expect(Date.now() - inserted[0]!.acknowledged_at.getTime()).toBeLessThan(
+        60_000
+      );
+      expect(Date.now() - inserted[0]!.created_at.getTime()).toBeLessThan(
+        60_000
+      );
+
+      const revoked = (await admin`
+        UPDATE awcms_channel_provider_risk_acknowledgements
+        SET revoked_at = now() - interval '9 days', revoked_by = ${user}
+        WHERE id = ${inserted[0]!.id}
+        RETURNING revoked_at
+      `) as { revoked_at: Date }[];
+
+      expect(Date.now() - revoked[0]!.revoked_at.getTime()).toBeLessThan(
+        60_000
+      );
+
+      await pgRejected(
+        admin`
+          INSERT INTO awcms_channel_provider_risk_acknowledgements
+            (tenant_id, provider, tenant_user_id, text_version, text_sha256,
+             revoked_at, revoked_by)
+          VALUES (${TENANT_A}, 'starsender', ${user}, 'v-l3b', ${"2".repeat(64)},
+                  now(), ${user})
+        `,
+        "inserting an already-revoked record",
+        "23514"
+      );
+    });
+  });
+
   describe("through the real dispatcher with the real adapter", () => {
     async function connectedDevice(
       tenantId: string,
@@ -1065,7 +1404,7 @@ suite("StarSender adapter against PostgreSQL (Issue #1142)", () => {
         await dispatchWhatsappQueue(getWorkerRoleSql(), TENANT_A, {
           env: flagOff,
           senders,
-          credentials,
+          credentials: credentialsFlagOff,
           now: new Date(Date.now() + 1000),
           buildSenderProvider: (input) =>
             buildWhatsappSenderProvider({ ...input, http })

@@ -20,6 +20,8 @@ import {
   readJsonBody
 } from "../../../lib/security/request-body-limit";
 import { authorizeInTransaction } from "../../identity-access/application/access-guard";
+import { getMfaStatus } from "../../identity-access/application/mfa";
+import { requireStepUp } from "../../identity-access/application/mfa-session-assurance";
 import { holdsTenantWidePermissionKey } from "../../identity-access/application/auth-context";
 import {
   createAuthorizationReadCache,
@@ -169,6 +171,38 @@ export async function auditChannelAccounts(
       ? { correlationId: context.locals.correlationId }
       : {})
   });
+}
+
+/**
+ * Conditional step-up (ADR-0141 section 4), the same rule as the credential
+ * route: a person who HAS an MFA factor must present a fresh step-up; a person
+ * with none is not locked out (no enrolment is imposed by this check). Used by
+ * the acts that put an unofficial provider into service: acknowledging its risk
+ * and attesting a device (Issue #1142, audit M4). Returns the refusal to send, or
+ * `null` to go on.
+ */
+export async function requireConditionalStepUp(
+  context: Pick<
+    TenantRouteHandlerContext<unknown>,
+    "tx" | "tenantId" | "tokenHash" | "auth" | "now"
+  >
+): Promise<Response | null> {
+  const mfa = await getMfaStatus(
+    context.tx,
+    context.tenantId,
+    context.auth.context.identityId
+  );
+
+  if (!mfa.enabled) return null;
+
+  const stepUp = await requireStepUp(
+    context.tx,
+    context.tenantId,
+    context.tokenHash,
+    context.now
+  );
+
+  return stepUp.ok ? null : stepUp.denied;
 }
 
 export function asUuid(value: string | undefined | null): string | null {

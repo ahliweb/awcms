@@ -72,17 +72,17 @@ export const FIXTURES: readonly Fixture[] = [
     expect: { ok: false, failureCode: "rate_limited", retryable: true }
   },
   {
-    name: "transient 5xx: HTTP 503",
+    name: "5xx is an unknown outcome, NOT a refusal: HTTP 503 is not retried",
     answer: { status: 503, body: "<html>Service Unavailable</html>" },
-    expect: { ok: false, failureCode: "provider_error", retryable: true }
+    expect: { ok: false, failureCode: "outcome_unknown", retryable: false }
   },
   {
-    name: "transient 5xx: HTTP 500 with a JSON error",
+    name: "5xx is an unknown outcome: HTTP 500 with a JSON error is not retried",
     answer: {
       status: 500,
       body: '{"success":false,"message":"Internal error"}'
     },
-    expect: { ok: false, failureCode: "provider_error", retryable: true }
+    expect: { ok: false, failureCode: "outcome_unknown", retryable: false }
   },
   {
     name: "timeout: the request may have been processed, so NOT retried",
@@ -143,6 +143,14 @@ export const FIXTURES: readonly Fixture[] = [
     name: "credential mismatch: HTTP 403",
     answer: { status: 403, body: "" },
     expect: { ok: false, failureCode: "unauthorized", retryable: false }
+  },
+  {
+    name: "5xx wins over a disconnected-device message: a failing gateway proves nothing",
+    answer: {
+      status: 502,
+      body: '{"success":false,"message":"Device is not connected"}'
+    },
+    expect: { ok: false, failureCode: "outcome_unknown", retryable: false }
   },
   {
     name: "disconnected device: HTTP 200 success:false (English)",

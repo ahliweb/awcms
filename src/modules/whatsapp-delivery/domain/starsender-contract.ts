@@ -1,5 +1,5 @@
 /**
- * StarSender wire contract (Issue #1142, ADR-0148 section 4 and 7). Pure: no I/O,
+ * StarSender wire contract (Issue #1142, ADR-0148 section 4 and 7; the points that go beyond ADR-0148 are the Proposed ADR-0158). Pure: no I/O,
  * so every verdict below is a table a test can walk without a network.
  *
  * ## What is evidenced, and what is not
@@ -20,6 +20,9 @@
  *   * classifies failures from the HTTP status first and from `message` text only
  *     for reversible verdicts (hold the lane, retry later), never to create a
  *     permanent verdict against a recipient (the Fonnte audit F7 lesson);
+ *   * treats ANY 5xx, like a timeout, as an UNKNOWN outcome and never as a
+ *     refusal: a failing gateway may already have forwarded the message, and with
+ *     no idempotency key a retry could message the recipient twice;
  *   * returns NO provider message id (the field is unevidenced); a success is
  *     "accepted by StarSender", never "delivered" or "read";
  *   * never copies provider text into an error: each failure carries a FIXED
@@ -43,7 +46,6 @@ export const STARSENDER_FAILURE_CODES = [
   "unexpected_redirect",
   "outcome_unknown",
   "rate_limited",
-  "provider_error",
   "unauthorized",
   "device_disconnected",
   "rejected",
@@ -63,7 +65,6 @@ const FIXED_ERROR: Readonly<Record<StarsenderFailureCode, string>> = {
   outcome_unknown:
     "The request may have reached StarSender and its outcome is unknown; it was not retried, to avoid a duplicate message.",
   rate_limited: "StarSender limited the request rate.",
-  provider_error: "StarSender answered with a server error.",
   unauthorized: "StarSender rejected the configured device key.",
   device_disconnected: "StarSender reported that the device is not connected.",
   rejected: "StarSender rejected the message.",
@@ -77,7 +78,6 @@ const FIXED_ERROR: Readonly<Record<StarsenderFailureCode, string>> = {
 const RETRYABLE: ReadonlySet<StarsenderFailureCode> = new Set([
   "network_error",
   "rate_limited",
-  "provider_error",
   "device_disconnected"
 ]);
 
@@ -96,7 +96,6 @@ export function starsenderFailureFeedsBreaker(code: string): boolean {
     case "network_error":
     case "outcome_unknown":
     case "rate_limited":
-    case "provider_error":
     case "device_disconnected":
     case "malformed_response":
     case "unexpected_redirect":
@@ -224,6 +223,15 @@ export function classifyStarsenderResponse(
 
   if (status === 429) return starsenderFailure("rate_limited");
 
+  // A 5xx is NOT proof that the message was refused: a gateway that crashes,
+  // times out upstream or sits behind a failing proxy may already have handed the
+  // message to WhatsApp (audit M3, Issue #1142). StarSender documents no
+  // idempotency key, so a retry could message the recipient twice: the outcome
+  // is unknown and is NOT retried, exactly like a timeout. It still counts
+  // against the device's breaker. Decided before any message text, because text
+  // from a failing gateway proves even less.
+  if (status >= 500) return starsenderFailure("outcome_unknown");
+
   const message = body.shape === "valid" ? body.message : "";
 
   if (DEVICE_DISCONNECTED.test(message)) {
@@ -231,8 +239,6 @@ export function classifyStarsenderResponse(
   }
 
   if (RATE_LIMITED.test(message)) return starsenderFailure("rate_limited");
-
-  if (status >= 500) return starsenderFailure("provider_error");
 
   return starsenderFailure("rejected");
 }

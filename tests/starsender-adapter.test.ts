@@ -600,12 +600,51 @@ describe("the sender decision for a StarSender device (scripted transaction)", (
     ).toEqual({ usable: false, reason: "CAPABILITY_DENIED" });
   });
 
+  test("audit L2: with the adapter flag OFF the device key is not decrypted at all, whatever else holds", async () => {
+    approvedCatalogue();
+
+    let resolved = 0;
+    const store = {
+      async resolve() {
+        resolved += 1;
+
+        return DEVICE_KEY_A;
+      }
+    } as never;
+    const off = createChannelSenderCredentialAdapter({ env: ENABLED, store });
+    const on = createChannelSenderCredentialAdapter({
+      env: {
+        ...ENABLED,
+        WHATSAPP_STARSENDER_ENABLED: "true"
+      } as unknown as NodeJS.ProcessEnv,
+      store
+    });
+
+    expect(
+      await off.resolveWhatsappCredential(tx({ acknowledged: true }).sql, {
+        tenantId: T1,
+        accountId: D1
+      })
+    ).toEqual({ ok: false, reason: "PROVIDER_ADAPTER_DISABLED" });
+    expect(resolved).toBe(0);
+    expect(
+      await on.resolveWhatsappCredential(tx({ acknowledged: true }).sql, {
+        tenantId: T1,
+        accountId: D1
+      })
+    ).toEqual({ ok: true, credential: DEVICE_KEY_A });
+    expect(resolved).toBe(1);
+  });
+
   test("the credential adapter does not decrypt a device key for an unacknowledged tenant (defence in depth)", async () => {
     approvedCatalogue();
 
     let resolved = 0;
     const adapter = createChannelSenderCredentialAdapter({
-      env: ENABLED,
+      env: {
+        ...ENABLED,
+        WHATSAPP_STARSENDER_ENABLED: "true"
+      } as unknown as NodeJS.ProcessEnv,
       store: {
         async resolve() {
           resolved += 1;
@@ -638,6 +677,22 @@ describe("structural facts", () => {
 
     return found;
   }
+
+  test("the dispatcher HOLDS a device's lane on `device_disconnected` as well as on `unauthorized` (guard that goes red if the clause is removed; the DB-backed proof is in the integration suite)", () => {
+    const source = readFileSync(
+      "src/modules/whatsapp-delivery/application/whatsapp-dispatch.ts",
+      "utf8"
+    );
+    const at = source.indexOf("lane.credentialRejected = true");
+    const around = source.slice(Math.max(0, at - 700), at);
+
+    expect(at).toBeGreaterThan(0);
+    expect(around).toContain('sendResult.failureCode === "unauthorized"');
+    expect(around).toContain(
+      'sendResult.failureCode === "device_disconnected"'
+    );
+    expect(around).toContain("lane.senderAccountId");
+  });
 
   test("there is NO StarSender webhook route, and the matrix keeps its inbound cell unverified: untrusted status or contacts cannot enter (ADR-0148 I9)", () => {
     const routes = walk("src/pages").filter((file) => /starsender/i.test(file));

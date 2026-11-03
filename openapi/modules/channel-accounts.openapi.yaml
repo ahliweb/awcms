@@ -417,7 +417,12 @@ paths:
         idempotency response nor any log carries the value. An OAuth account has
         no credential of its own (`409 CREDENTIAL_NOT_APPLICABLE`); a `revoked` or
         `disabled` account is not re-armed by writing one
-        (`409 ACCOUNT_STATE_INVALID`).
+        (`409 ACCOUNT_STATE_INVALID`). For an account of an UNOFFICIAL provider
+        (StarSender) that is `connected` or `degraded`, writing a credential
+        moves it back to `pending` with `statusReason` `CREDENTIAL_REPLACED` in
+        the same transaction (the audit row says `accountDemoted: true`): its
+        `connected` state was an operator's attestation about the previous key,
+        and it must be attested again (`attest-device`).
 
 
         HIGH-RISK: the permission is separately grantable and declares
@@ -584,7 +589,11 @@ paths:
         `WHATSAPP_STARSENDER_ENABLED=true` (off by default). High-risk, audited at
         `warning`. `Idempotency-Key` required. Requires
         `channel_accounts.accounts.create` and at least the `operator` assignment
-        on the account.
+        on the account. A person who has an MFA factor must also present a fresh
+        step-up (`403 STEP_UP_REQUIRED` otherwise; conditional, ADR-0141 section
+        4, so a person with no factor is not locked out). The device is bound to
+        the acknowledgement it was attested under: revoking that acknowledgement
+        degrades it.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -707,7 +716,9 @@ paths:
         the person, the time, the version and the SHA-256 of the exact words. A
         second acknowledgement of the same version by the same person answers
         the existing record with `200`. A signed-in person only (a machine
-        credential is `403 INTERACTIVE_SESSION_REQUIRED`). Audited at `warning`.
+        credential is `403 INTERACTIVE_SESSION_REQUIRED`). A person who has an
+        MFA factor must also present a fresh step-up (`403 STEP_UP_REQUIRED`
+        otherwise; conditional, ADR-0141 section 4). Audited at `warning`.
         `Idempotency-Key` required. Requires
         `channel_accounts.risk_acknowledgements.create`.
       parameters:
@@ -794,10 +805,13 @@ paths:
       summary: Revoke a provider risk acknowledgement.
       description: >-
         A stamp, not a deletion: the record of who accepted what, and when it was
-        withdrawn, stays. When it removes the tenant's LAST active acknowledgement
-        of the provider, the tenant's `connected` accounts of that provider become
-        `degraded` in the same transaction (`degradedAccounts` counts them), and
-        the next send decision denies them regardless. Revoking one that is
+        withdrawn, stays. The tenant's `connected` accounts of that provider that
+        were attested under THIS acknowledgement become `degraded` in the same
+        transaction, and so does every `connected` account of the provider when
+        it was the tenant's LAST active acknowledgement (`degradedAccounts`
+        counts them). Revocations are serialised, so two concurrent ones cannot
+        leave a connected device with no active acknowledgement. The next send
+        decision denies them regardless. Revoking one that is
         already revoked answers `200` with `degradedAccounts: 0`. High-risk,
         audited at `warning`. `Idempotency-Key` required. Requires
         `channel_accounts.risk_acknowledgements.revoke`. An unknown id and

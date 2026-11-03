@@ -255,6 +255,7 @@ describe("scope and capability rules", () => {
       ACCOUNT_DISABLED: "terminal",
       CAPABILITY_DENIED: "terminal",
       RISK_ACKNOWLEDGEMENT_REQUIRED: "terminal",
+      PROVIDER_ADAPTER_DISABLED: "terminal",
       CONNECTION_NOT_ACTIVE: "terminal",
       CONNECTION_EXPIRED: "hold",
       CHANNEL_ACCOUNTS_DISABLED: "hold",

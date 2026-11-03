@@ -157,20 +157,38 @@ export type RevokeOutcome =
   | {
       outcome: "revoked";
       acknowledgement: RiskAcknowledgementView;
-      /** Accounts moved `connected -> degraded` because this was the tenant's last active acknowledgement. */
+      /** Accounts moved `connected -> degraded`: those attested under THIS acknowledgement, and every one of the provider when it was the tenant's last. */
       degradedAccounts: number;
     }
   | { outcome: "already_revoked"; acknowledgement: RiskAcknowledgementView }
   | { outcome: "not_found" };
 
 /**
- * Stamps the revocation. When it removes the tenant's LAST active acknowledgement
- * of the provider, the tenant's `connected` accounts of that provider are moved to
- * `degraded` (reason {@link RISK_ACK_REVOKED_STATUS_REASON}) in the same
- * transaction: a degraded account is not usable, and cannot be connected again
- * without a new acknowledgement (the `sql/340` guard). Independently, the send
- * decision re-reads the acknowledgement on every call, so a revocation is
- * effective on the next claim even for an account row this never touched.
+ * Stamps the revocation and degrades what depended on it, in ONE transaction:
+ *
+ *   * the tenant's `connected` devices of the provider that were attested under
+ *     THIS acknowledgement (audit L1: a device is trusted on the strength of the
+ *     person who said it was paired, not of "somebody in the tenant"), and
+ *   * every `connected` device of the provider when this was the tenant's LAST
+ *     active acknowledgement (including one connected by a path that recorded no
+ *     attester).
+ *
+ * A degraded device is not usable and cannot be connected again without a new
+ * acknowledgement and attestation (the `sql/340` guard). Independently, the send
+ * decision re-reads the acknowledgement on every call.
+ *
+ * ## Why every active acknowledgement of the provider is locked first (audit M1)
+ *
+ * "Is this the last one?" is a question about a SET. Two concurrent revocations
+ * of the last two acknowledgements each saw the other's row still active (its
+ * stamp was uncommitted), each concluded "not the last", and both committed: a
+ * `connected` device with no active acknowledgement. So the whole active set of
+ * (tenant, provider) is locked `FOR UPDATE` in id order (a fixed order, so two
+ * revokers cannot deadlock each other) BEFORE the decision, which serialises
+ * revocations; the second one re-evaluates after the first commits and sees the
+ * truth. {@link attestDevice} takes a `FOR SHARE` lock on the row it relies on,
+ * so a revocation also waits for an attestation in flight and then sees the
+ * device it just connected.
  */
 export async function revokeRiskAcknowledgement(
   tx: Bun.SQL,
@@ -178,24 +196,38 @@ export async function revokeRiskAcknowledgement(
   actorTenantUserId: string,
   acknowledgementId: string
 ): Promise<RevokeOutcome> {
-  const rows = (await tx`
+  const probe = (await tx`
+    SELECT provider
+    FROM awcms_channel_provider_risk_acknowledgements
+    WHERE tenant_id = ${tenantId} AND id = ${acknowledgementId}
+  `) as { provider: RiskAcknowledgementProvider }[];
+
+  if (!probe[0]) return { outcome: "not_found" };
+
+  const provider = probe[0].provider;
+  const currentVersion = resolveRiskAcknowledgement(provider).entry.textVersion;
+  const active = (await tx`
     SELECT id, provider, tenant_user_id, text_version, acknowledged_at,
            revoked_at, revoked_by
     FROM awcms_channel_provider_risk_acknowledgements
-    WHERE tenant_id = ${tenantId} AND id = ${acknowledgementId}
+    WHERE tenant_id = ${tenantId} AND provider = ${provider}
+      AND revoked_at IS NULL
+    ORDER BY id
     FOR UPDATE
   `) as AckRow[];
-  const row = rows[0];
+  const target = active.find((row) => row.id === acknowledgementId);
 
-  if (!row) return { outcome: "not_found" };
+  if (!target) {
+    const done = (await tx`
+      SELECT id, provider, tenant_user_id, text_version, acknowledged_at,
+             revoked_at, revoked_by
+      FROM awcms_channel_provider_risk_acknowledgements
+      WHERE tenant_id = ${tenantId} AND id = ${acknowledgementId}
+    `) as AckRow[];
 
-  const currentVersion = resolveRiskAcknowledgement(row.provider).entry
-    .textVersion;
-
-  if (row.revoked_at) {
     return {
       outcome: "already_revoked",
-      acknowledgement: toView(row, currentVersion)
+      acknowledgement: toView(done[0]!, currentVersion)
     };
   }
 
@@ -207,35 +239,23 @@ export async function revokeRiskAcknowledgement(
     RETURNING id, provider, tenant_user_id, text_version, acknowledged_at,
               revoked_at, revoked_by
   `) as AckRow[];
-
-  const remaining = (await tx`
-    SELECT 1 AS present
-    FROM awcms_channel_provider_risk_acknowledgements
-    WHERE tenant_id = ${tenantId} AND provider = ${row.provider}
-      AND revoked_at IS NULL
-    LIMIT 1
+  const wasLast = active.length === 1;
+  const degraded = (await tx`
+    UPDATE awcms_channel_accounts
+    SET status = 'degraded', status_reason = ${RISK_ACK_REVOKED_STATUS_REASON},
+        updated_by = ${actorTenantUserId}, updated_at = now(),
+        version = version + 1
+    WHERE tenant_id = ${tenantId} AND provider = ${provider}
+      AND status = 'connected' AND deleted_at IS NULL
+      AND (attested_acknowledgement_id = ${acknowledgementId}
+           OR ${wasLast}::boolean)
+    RETURNING id
   `) as unknown[];
-
-  let degradedAccounts = 0;
-
-  if (remaining.length === 0) {
-    const degraded = (await tx`
-      UPDATE awcms_channel_accounts
-      SET status = 'degraded', status_reason = ${RISK_ACK_REVOKED_STATUS_REASON},
-          updated_by = ${actorTenantUserId}, updated_at = now(),
-          version = version + 1
-      WHERE tenant_id = ${tenantId} AND provider = ${row.provider}
-        AND status = 'connected' AND deleted_at IS NULL
-      RETURNING id
-    `) as unknown[];
-
-    degradedAccounts = degraded.length;
-  }
 
   return {
     outcome: "revoked",
     acknowledgement: toView(revoked[0]!, currentVersion),
-    degradedAccounts
+    degradedAccounts: degraded.length
   };
 }
 
@@ -252,13 +272,56 @@ export type AttestDeviceOutcome =
         | "RISK_ACKNOWLEDGEMENT_REQUIRED";
     };
 
+type DeviceCheck = { ok: true } | { ok: false; result: AttestDeviceOutcome };
+
+function checkDevice(
+  account: Awaited<ReturnType<typeof fetchAccountRecord>>
+): DeviceCheck {
+  if (!account) return { ok: false, result: { outcome: "not_found" } };
+
+  if (account.provider !== "starsender" || account.accountKind !== "device") {
+    return {
+      ok: false,
+      result: { outcome: "refused", code: "NOT_AN_UNOFFICIAL_DEVICE" }
+    };
+  }
+
+  if (account.status === "connected") {
+    return { ok: false, result: { outcome: "already_connected" } };
+  }
+
+  if (account.status !== "pending" && account.status !== "degraded") {
+    return {
+      ok: false,
+      result: { outcome: "refused", code: "ACCOUNT_STATE_INVALID" }
+    };
+  }
+
+  if (!account.secretId) {
+    return {
+      ok: false,
+      result: { outcome: "refused", code: "CREDENTIAL_REQUIRED" }
+    };
+  }
+
+  return { ok: true };
+}
+
 /**
  * An explicit, audited attestation that a StarSender device is paired (see the
  * module header for why this is not a vendor verification). Needs: a device of an
  * unofficial provider, a stored credential, a `pending` or `degraded` account, and
  * the ACTING person's own active acknowledgement of the current approved text. It
  * moves the account to `connected` through the control plane's single health path
- * ({@link recordAccountHealth}) with the fixed reason `OPERATOR_ATTESTED`.
+ * ({@link recordAccountHealth}) with the fixed reason `OPERATOR_ATTESTED`, and
+ * records WHICH acknowledgement it relied on (`attested_acknowledgement_id`), so
+ * revoking that one takes the device down.
+ *
+ * The acknowledgement row is read `FOR SHARE` and `revoked_at IS NULL` BEFORE the
+ * account is locked (audit M1): a concurrent revocation of it waits for this
+ * transaction and then sees the device it connected; and the lock order (acks,
+ * then the account) is the one `revokeRiskAcknowledgement` uses, so the two
+ * cannot deadlock.
  */
 export async function attestDevice(
   tx: Bun.SQL,
@@ -266,47 +329,45 @@ export async function attestDevice(
   actorTenantUserId: string,
   accountId: string
 ): Promise<AttestDeviceOutcome> {
-  const account = await fetchAccountRecord(tx, tenantId, accountId, {
-    lock: true
-  });
+  // Cheap refusals first, without a lock.
+  const first = checkDevice(await fetchAccountRecord(tx, tenantId, accountId));
 
-  if (!account) return { outcome: "not_found" };
-
-  if (account.provider !== "starsender" || account.accountKind !== "device") {
-    return { outcome: "refused", code: "NOT_AN_UNOFFICIAL_DEVICE" };
-  }
-
-  if (account.status === "connected") return { outcome: "already_connected" };
-
-  if (account.status !== "pending" && account.status !== "degraded") {
-    return { outcome: "refused", code: "ACCOUNT_STATE_INVALID" };
-  }
-
-  if (!account.secretId) {
-    return { outcome: "refused", code: "CREDENTIAL_REQUIRED" };
-  }
+  if (!first.ok) return first.result;
 
   const resolved = resolveRiskAcknowledgement("starsender");
   const own = resolved.approved
     ? ((await tx`
-        SELECT 1 AS present
+        SELECT id
         FROM awcms_channel_provider_risk_acknowledgements
         WHERE tenant_id = ${tenantId} AND provider = 'starsender'
           AND tenant_user_id = ${actorTenantUserId}
           AND text_version = ${resolved.entry.textVersion}
           AND revoked_at IS NULL
         LIMIT 1
-      `) as unknown[])
+        FOR SHARE
+      `) as { id: string }[])
     : [];
 
-  if (own.length === 0) {
+  if (!own[0]) {
     return { outcome: "refused", code: "RISK_ACKNOWLEDGEMENT_REQUIRED" };
   }
+
+  // Now the account, and the checks again: it may have changed while we waited.
+  const second = checkDevice(
+    await fetchAccountRecord(tx, tenantId, accountId, { lock: true })
+  );
+
+  if (!second.ok) return second.result;
 
   await recordAccountHealth(tx, tenantId, accountId, {
     state: "ok",
     reasonCode: OPERATOR_ATTESTED_REASON
   });
+  await tx`
+    UPDATE awcms_channel_accounts
+    SET attested_acknowledgement_id = ${own[0].id}
+    WHERE tenant_id = ${tenantId} AND id = ${accountId}
+  `;
 
   return { outcome: "attested", status: "connected" };
 }

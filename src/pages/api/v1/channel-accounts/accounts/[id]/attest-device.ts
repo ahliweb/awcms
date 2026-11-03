@@ -9,6 +9,7 @@ import {
   commonRefusal,
   loadAuthorizedAccount,
   readIdempotencyKey,
+  requireConditionalStepUp,
   runIdempotent
 } from "../../../../../../modules/channel-accounts/application/channel-accounts-route-support";
 import { attestDevice } from "../../../../../../modules/channel-accounts/application/risk-acknowledgement-directory";
@@ -26,8 +27,9 @@ type Prepared = { id: string; idempotencyKey: string };
  * acknowledgement of the current approved risk text, a stored credential, and a
  * `pending` or `degraded` account, and it still grants no capability: every send
  * re-checks the account, the acknowledgement and the capability evidence.
- * `accounts.create` plus operator assignment on the account; `Idempotency-Key`
- * required; audited at `warning`.
+ * `accounts.create` plus operator assignment on the account; a person who has an
+ * MFA factor needs a fresh step-up (conditional, like `PUT .../credential`);
+ * `Idempotency-Key` required; audited at `warning`.
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -69,6 +71,11 @@ export const POST = defineTenantRoute<Prepared>({
     );
 
     if ("denied" in loaded) return loaded.denied;
+
+    // A person with an MFA factor must present a fresh step-up (audit M4).
+    const stepUp = await requireConditionalStepUp(context);
+
+    if (stepUp) return stepUp;
 
     return runIdempotent(
       tx,
