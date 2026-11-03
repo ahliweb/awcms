@@ -85,7 +85,6 @@ import {
   resolveSenderScreen,
   type SenderScreen
 } from "../../../modules/whatsapp-delivery/application/whatsapp-sender-screen";
-import { permissionKey } from "../../../modules/identity-access/domain/access-control";
 
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
@@ -173,13 +172,6 @@ const screen = await loadAdminScreen({
     // Every decision (visibility, the two account authorities, the connection)
     // is the tested application function; this page only renders its answer.
     const access = await resolveAccountDetailAccess(context, accountId, can, {
-      holdsCredentialKey: ssr.permissions.has(
-        permissionKey(
-          CREDENTIALS_GUARD.moduleKey,
-          CREDENTIALS_GUARD.activityCode,
-          CREDENTIALS_GUARD.action
-        )
-      ),
       guards: {
         read: READ_GUARD,
         disconnect: DISCONNECT_GUARD,

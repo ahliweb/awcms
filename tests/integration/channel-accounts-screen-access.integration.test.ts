@@ -318,14 +318,9 @@ async function screenFor<T>(
   return outcome.state === "allowed" ? outcome.data : outcome.state;
 }
 
-function detailFor(
-  token: string,
-  accountId: string,
-  holdsCredentialKey = false,
-  tenantId = env.tenantId
-) {
+function detailFor(token: string, accountId: string, tenantId = env.tenantId) {
   return screenFor<AccountDetailAccess>(token, tenantId, ({ context, can }) =>
-    resolveAccountDetailAccess(context, accountId, can, { holdsCredentialKey })
+    resolveAccountDetailAccess(context, accountId, can, {})
   );
 }
 
@@ -395,7 +390,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
     const colleague = await seedUser(env.tenantId, "colleague", [READ]);
 
     const unknown = await detailFor(env.ownerToken, crypto.randomUUID());
-    const crossTenant = await detailFor(foreign.token, id, false, tenant2);
+    const crossTenant = await detailFor(foreign.token, id, tenant2);
 
     expect(unknown).toEqual({ visible: false });
     expect(crossTenant).toEqual(unknown);
@@ -429,7 +424,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       REVOKE
     ]);
 
-    expect(await detailFor(credentialOnly.token, id, true)).toMatchObject({
+    expect(await detailFor(credentialOnly.token, id)).toMatchObject({
       visible: true,
       canReplaceCredential: true,
       canDisconnect: false,
@@ -451,13 +446,15 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       CREDENTIAL
     ]);
 
-    expect(await detailFor(unenrolled.token, id, true)).toMatchObject({
+    expect(await detailFor(unenrolled.token, id)).toMatchObject({
       visible: true,
       canReplaceCredential: false,
       credentialFormWithheld: true
     });
     // Without the key there is nothing to explain.
-    expect(await detailFor(unenrolled.token, id, false)).toMatchObject({
+    const keyless = await seedUser(env.tenantId, "keyless", [READ]);
+
+    expect(await detailFor(keyless.token, id)).toMatchObject({
       credentialFormWithheld: false
     });
   });
@@ -473,7 +470,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       { enrolled: true }
     );
 
-    expect(await detailFor(enrolled.token, revoked, true)).toMatchObject({
+    expect(await detailFor(enrolled.token, revoked)).toMatchObject({
       canReplaceCredential: false,
       canDisconnect: false
     });
@@ -492,7 +489,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
 
     await assign(id, person.tenantUserId, "viewer");
 
-    expect(await detailFor(person.token, id, true)).toMatchObject({
+    expect(await detailFor(person.token, id)).toMatchObject({
       visible: true,
       canDisconnect: false,
       canReplaceCredential: false
@@ -503,7 +500,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       WHERE tenant_id = ${env.tenantId} AND account_id = ${id}
     `;
 
-    expect(await detailFor(person.token, id, true)).toMatchObject({
+    expect(await detailFor(person.token, id)).toMatchObject({
       visible: true,
       canDisconnect: true,
       canReplaceCredential: true

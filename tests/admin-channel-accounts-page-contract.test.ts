@@ -149,12 +149,13 @@ describe("the screens gate on keys that really exist", () => {
     expect(access).toContain("await can(asRequest(G.manageCredentials))");
     expect(senderScreen).toContain("await can(guards.policy)");
     expect(senderScreen).toContain("await can(guards.read)");
-    // Not `ssr.permissions.has` as a DECISION: that is raw RBAC and skips ABAC
-    // and module state. The one use is the "your form is withheld" hint, which
-    // only ever ADDS an explanation and never a control.
+    // Neither screen decides from raw RBAC (`ssr.permissions.has`): that skips
+    // ABAC and module state, and `access:chokepoint:check` forbids it.
     expect(list).not.toContain("ssr.permissions.has");
-    expect(detail.match(/ssr\.permissions\.has/g)?.length ?? 0).toBe(1);
-    expect(detail).toContain("holdsCredentialKey: ssr.permissions.has(");
+    expect(detail).not.toContain("ssr.permissions.has");
+    // The "your form is withheld" explanation reads the grants inside the
+    // application function and only ever ADDS a sentence.
+    expect(access).toContain("holdsTenantWidePermissionKey(");
   });
 
   test("both screens use the routes' own visibility rules, not a copy", () => {

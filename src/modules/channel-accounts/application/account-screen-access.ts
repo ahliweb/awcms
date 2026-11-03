@@ -15,6 +15,7 @@
  * authority; this only decides what to show.
  */
 import type { TenantRouteHandlerContext } from "../../_shared/tenant-route";
+import { holdsTenantWidePermissionKey } from "../../identity-access/application/auth-context";
 import type { AccessRequest } from "../../identity-access/domain/access-control";
 import {
   listConnectionAccountBindings,
@@ -65,7 +66,6 @@ export async function resolveAccountDetailAccess(
   accountId: string,
   can: ScreenCan,
   options: {
-    holdsCredentialKey: boolean;
     /** The guards the screen asserts (spelled out in the page so the coverage gate sees them); a test holds them equal to `CHANNEL_ACCOUNTS_GUARDS`. */
     guards?: Pick<
       typeof CHANNEL_ACCOUNTS_GUARDS,
@@ -149,6 +149,15 @@ export async function resolveAccountDetailAccess(
     }
   }
 
+  // Only to EXPLAIN a withheld form (it never grants anything): does the role
+  // hold the key at all? Asked of the grants themselves, because `can` answers
+  // false for "not granted" and for "granted but MFA not enrolled" alike.
+  const holdsCredentialKey = await holdsTenantWidePermissionKey(
+    context.tx,
+    context.tenantId,
+    context.auth.context.tenantUserId,
+    `${G.manageCredentials.moduleKey}.${G.manageCredentials.activityCode}.${G.manageCredentials.action}`
+  );
   const credentialStatusOk =
     account.status === "pending" ||
     account.status === "connected" ||
@@ -163,7 +172,7 @@ export async function resolveAccountDetailAccess(
     canDisconnect: ownsDisconnect && account.status !== "revoked",
     canReplaceCredential,
     credentialFormWithheld:
-      options.holdsCredentialKey &&
+      holdsCredentialKey &&
       credentialApplies &&
       !canReplaceCredential &&
       !mayWriteCredential,

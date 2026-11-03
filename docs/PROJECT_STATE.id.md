@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:c97758b51468da5c066be32086c48ac895747a99e2251520c244524ea6b7f405 -->
+<!-- i18n-source-hash: sha256:b530da9481bcee4e111de7b71e7f6b77b2785c11db9377787ebb4faba998a715 -->
 
 # AWCMS — Project State & Continuation
 
@@ -139,7 +139,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **244** (`sql/001`–`329`)                                                                                    | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0156** (`0000` = template; status ADR tertinggi: **Accepted**)                                    | `ls docs/adr/`                                                                          |
 | Layar admin                        | **82** berkas `.astro` di `src/pages/admin/`; **1 dari 35** modul tanpa `navigation:` (`website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **104** (61.029 baris) — soal typecheck lihat §6                                                             | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **104** (61.077 baris) — soal typecheck lihat §6                                                             | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **69** di rantai `bun run check`                                                                             | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                    | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
