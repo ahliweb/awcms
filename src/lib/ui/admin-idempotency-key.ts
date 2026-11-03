@@ -38,7 +38,7 @@
  * `crypto.randomUUID` exists only in a secure context, and the offline-LAN
  * profile serves plain http, where it is absent: draw 128 random bits instead.
  */
-function newKey(): string {
+export function newKey(): string {
   if (typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }

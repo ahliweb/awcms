@@ -6,9 +6,15 @@ The **account and credential control plane** of the omnichannel foundation (Issu
 
 It holds a tenant's **connected external accounts** (a WhatsApp WABA phone number or StarSender device, a Facebook Page, an Instagram or Threads profile, a YouTube channel, a Telegram bot, a Mailketing ESP login and its sender identities), the **provider connections** behind them (OAuth 2.0 grants, API tokens, bot tokens, device keys), **per-account capability evidence**, **secret references**, webhook subscription metadata, health, and who may operate each account.
 
-**It sends nothing and calls no provider.** There is no queue, no dispatcher, no provider HTTP call and no admin screen here. Provider adapters, the OAuth token exchange, sender routing in `whatsapp_delivery` (#1141), publishing (#1145) and the connection manager screen (#1154) are later issues that conform to this account model. A website's social links are not connected accounts.
+**It sends nothing and calls no provider.** There is no queue, no dispatcher and no provider HTTP call here. Provider adapters, the OAuth token exchange and publishing (#1145) are later issues; sender routing in `whatsapp_delivery` (#1141) has landed. The operator screen is `/admin/channel-accounts` (#1154, see below) that conform to this account model. A website's social links are not connected accounts.
 
-Status: `experimental` and **off by default** (`CHANNEL_ACCOUNTS_ENABLED`), with no navigation entry until the screen lands (a nav entry without a page is a permanent 404).
+Status: `active` and **off by default** (`CHANNEL_ACCOUNTS_ENABLED`; the screen then says it is switched off).
+
+## Admin screen (#1154, ADR-0148 UP-08)
+
+`/admin/channel-accounts` (list: filter, search, sort, keyset pager over at most 200 loaded accounts; provider connections; the provider matrix with why a provider has no Connect action) and `/admin/channel-accounts/{id}` (status, health and "last synced", provider authorisation, nine capability rows with their evidence state, unsupported ones shown disabled). Actions on the detail: replace credential (write-only password field, MFA and step-up, no "show"), disconnect and revoke authorisation (typed confirmation, queue impact for a sender) and make default WhatsApp sender. Every mutation goes through the existing API with an `Idempotency-Key`. Reads reuse the routes' own visibility rules (assignment gate, business scope). Claims `accounts.read`, `accounts.revoke`, `credentials.manage` and the two `whatsapp_delivery` sender keys.
+
+**Not on the screen (recorded remainder of #1154):** the connect wizard (no provider connector exists, so `POST connections/oauth/start` answers `PROVIDER_ADAPTER_UNAVAILABLE` and a Connect button would mislead), registering or enabling an account (`accounts.create`), recording a capability grant (`capabilities.configure`), assigning operators (`assignments.assign`), and per-account health/capability summaries in the list (they would be an N+1; they are on the detail). A holder of `credentials.manage` who has not enrolled MFA sees no credential form and no explanation.
 
 ## Invariants (ADR-0148 section 2) and where each is enforced
 

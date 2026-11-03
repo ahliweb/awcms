@@ -8953,3 +8953,494 @@ msgstr "Hapus filter: {label}"
 msgid "{count} user matches your search and filters"
 msgid_plural "{count} users match your search and filters"
 msgstr[0] "{count} pengguna cocok dengan pencarian dan filter Anda"
+
+msgid "Connected"
+msgstr "Terhubung"
+
+msgid "Disconnected"
+msgstr "Terputus"
+
+msgid "Awaiting authorisation"
+msgstr "Menunggu otorisasi"
+
+msgid "OAuth authorisation"
+msgstr "Otorisasi OAuth"
+
+msgid "API token"
+msgstr "Token API"
+
+msgid "Bot token"
+msgstr "Token bot"
+
+msgid "Device key"
+msgstr "Kunci perangkat"
+
+msgid "Healthy"
+msgstr "Sehat"
+
+msgid "Failing"
+msgstr "Gagal"
+
+msgid "Publish posts"
+msgstr "Publikasikan kiriman"
+
+msgid "Reply to messages"
+msgstr "Balas pesan"
+
+msgid "Send direct messages"
+msgstr "Kirim pesan langsung"
+
+msgid "Receive inbound events"
+msgstr "Terima peristiwa masuk"
+
+msgid "Manage comments"
+msgstr "Kelola komentar"
+
+msgid "Read analytics"
+msgstr "Baca analitik"
+
+msgid "Capture leads"
+msgstr "Tangkap prospek"
+
+msgid "Advertising"
+msgstr "Iklan"
+
+msgid "Broadcast to a list"
+msgstr "Siarkan ke daftar"
+
+msgid "Granted"
+msgstr "Diberikan"
+
+msgid "Not offered"
+msgstr "Tidak ditawarkan"
+
+msgid "Not available (unverified)"
+msgstr "Tidak tersedia (belum terverifikasi)"
+
+msgid "No grant recorded"
+msgstr "Belum ada pemberian tercatat"
+
+msgid "Granted scope list"
+msgstr "Daftar cakupan yang diberikan"
+
+msgid "App review reference"
+msgstr "Referensi tinjauan aplikasi"
+
+msgid "Contract reference"
+msgstr "Referensi kontrak"
+
+msgid "Written authorisation"
+msgstr "Otorisasi tertulis"
+
+msgid "The provider is not recognised."
+msgstr "Penyedia tidak dikenali."
+
+msgid "This account only groups other accounts and does not act itself."
+msgstr "Akun ini hanya mengelompokkan akun lain dan tidak bertindak sendiri."
+
+msgid "The provider does not offer this."
+msgstr "Penyedia tidak menawarkan ini."
+
+msgid "This is not permitted by policy."
+msgstr "Ini tidak diizinkan oleh kebijakan."
+
+msgid "The provider's support for this is not verified."
+msgstr "Dukungan penyedia untuk ini belum terverifikasi."
+
+msgid "This needs a contract or written authorisation as evidence."
+msgstr "Ini memerlukan kontrak atau otorisasi tertulis sebagai bukti."
+
+msgid "No grant has been recorded."
+msgstr "Belum ada pemberian yang tercatat."
+
+msgid "The grant is not in the granted state."
+msgstr "Pemberian tidak berada dalam status diberikan."
+
+msgid "The grant has no evidence."
+msgstr "Pemberian tidak memiliki bukti."
+
+msgid "The grant predates the current provider matrix."
+msgstr "Pemberian ini lebih lama dari matriks penyedia saat ini."
+
+msgid "The account is not connected."
+msgstr "Akun tidak terhubung."
+
+msgid "The provider authorisation is not active."
+msgstr "Otorisasi penyedia tidak aktif."
+
+msgid "WhatsApp Cloud API"
+msgstr "WhatsApp Cloud API"
+
+msgid "StarSender (unofficial)"
+msgstr "StarSender (tidak resmi)"
+
+msgid "Facebook Page"
+msgstr "Halaman Facebook"
+
+msgid "Instagram"
+msgstr "Instagram"
+
+msgid "Threads"
+msgstr "Threads"
+
+msgid "TikTok"
+msgstr "TikTok"
+
+msgid "YouTube"
+msgstr "YouTube"
+
+msgid "LinkedIn Page"
+msgstr "Halaman LinkedIn"
+
+msgid "LinkedIn member data"
+msgstr "Data anggota LinkedIn"
+
+msgid "Telegram"
+msgstr "Telegram"
+
+msgid "Website forms"
+msgstr "Formulir situs web"
+
+msgid "Mailketing email"
+msgstr "Email Mailketing"
+
+msgid "WhatsApp Business account"
+msgstr "Akun WhatsApp Business"
+
+msgid "WhatsApp phone number"
+msgstr "Nomor WhatsApp"
+
+msgid "Professional account"
+msgstr "Akun profesional"
+
+msgid "Creator account"
+msgstr "Akun kreator"
+
+msgid "Channel"
+msgstr "Kanal"
+
+msgid "Organisation page"
+msgstr "Halaman organisasi"
+
+msgid "Bot"
+msgstr "Bot"
+
+msgid "Email service account"
+msgstr "Akun layanan email"
+
+msgid "Sender identity"
+msgstr "Identitas pengirim"
+
+msgid "Not connectable: a policy boundary, not an account"
+msgstr "Tidak dapat dihubungkan: batas kebijakan, bukan akun"
+
+msgid "Connector installed"
+msgstr "Konektor terpasang"
+
+msgid "Unsupported on this deployment: no connector installed, requires approval"
+msgstr "Tidak didukung pada deployment ini: tidak ada konektor terpasang, memerlukan persetujuan"
+
+msgid "Provider: {value}"
+msgstr "Penyedia: {value}"
+
+msgid "Provider authorisation"
+msgstr "Otorisasi penyedia"
+
+msgid "Stored (write-only)"
+msgstr "Tersimpan (hanya tulis)"
+
+msgid "None stored"
+msgstr "Tidak ada yang tersimpan"
+
+msgid "Whole tenant"
+msgstr "Seluruh tenant"
+
+msgid "Scope: {type}"
+msgstr "Cakupan: {type}"
+
+msgid "Channel accounts"
+msgstr "Akun kanal"
+
+msgid "External accounts this tenant has connected (messaging numbers, pages, bots, email logins) and the provider authorisations behind them. Credentials are never shown."
+msgstr "Akun eksternal yang telah dihubungkan tenant ini (nomor pesan, halaman, bot, login email) dan otorisasi penyedia di baliknya. Kredensial tidak pernah ditampilkan."
+
+msgid "You do not have permission to view channel accounts."
+msgstr "Anda tidak memiliki izin untuk melihat akun kanal."
+
+msgid "Channel accounts could not be loaded right now. Please try again later."
+msgstr "Akun kanal tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Channel accounts are switched off on this deployment, so nothing can be connected or listed."
+msgstr "Akun kanal dimatikan pada deployment ini, sehingga tidak ada yang dapat dihubungkan atau ditampilkan."
+
+msgid "Accounts"
+msgstr "Akun"
+
+
+msgid "Search channel accounts"
+msgstr "Cari akun kanal"
+
+msgid "All providers"
+msgstr "Semua penyedia"
+
+msgid "Account"
+msgstr "Akun"
+
+msgid "Credential"
+msgstr "Kredensial"
+
+msgid "Bound to"
+msgstr "Terikat ke"
+
+msgid "No channel accounts yet"
+msgstr "Belum ada akun kanal"
+
+msgid "Connected accounts will appear here once a provider connector is installed and an account is registered."
+msgstr "Akun yang terhubung akan muncul di sini setelah konektor penyedia dipasang dan akun didaftarkan."
+
+msgid "Provider connections"
+msgstr "Koneksi penyedia"
+
+msgid "An authorisation the tenant granted a provider. Tokens, authorisation codes and their references are never shown."
+msgstr "Otorisasi yang diberikan tenant kepada penyedia. Token, kode otorisasi, dan referensinya tidak pernah ditampilkan."
+
+msgid "Method"
+msgstr "Metode"
+
+msgid "Granted scopes"
+msgstr "Cakupan yang diberikan"
+
+msgid "No provider connections yet."
+msgstr "Belum ada koneksi penyedia."
+
+msgid "Waiting for the connector to finish"
+msgstr "Menunggu konektor menyelesaikan"
+
+msgid "What can be connected"
+msgstr "Yang dapat dihubungkan"
+
+msgid "Provider matrix v{version}. A provider without a connector on this deployment cannot be connected from here; connecting it needs the provider's approval and a connector, so there is no Connect button."
+msgstr "Matriks penyedia v{version}. Penyedia tanpa konektor pada deployment ini tidak dapat dihubungkan dari sini; menghubungkannya memerlukan persetujuan penyedia dan sebuah konektor, sehingga tidak ada tombol Hubungkan."
+
+msgid "Providers and how they connect"
+msgstr "Penyedia dan cara terhubung"
+
+msgid "Availability"
+msgstr "Ketersediaan"
+
+msgid "The credential was replaced. The previous one is gone and cannot be shown."
+msgstr "Kredensial telah diganti. Kredensial sebelumnya sudah hilang dan tidak dapat ditampilkan."
+
+msgid "This account is now the default sender. It applies to messages queued from now on."
+msgstr "Akun ini sekarang menjadi pengirim default. Berlaku untuk pesan yang diantrekan mulai sekarang."
+
+msgid "The account was disconnected and its stored credential was erased."
+msgstr "Akun diputuskan dan kredensial tersimpannya dihapus."
+
+msgid "The provider authorisation was revoked and its credentials were erased."
+msgstr "Otorisasi penyedia dicabut dan kredensialnya dihapus."
+
+msgid "{remaining} remaining"
+msgstr "Sisa {remaining}"
+
+msgid "{remaining} of {limit} remaining"
+msgstr "Sisa {remaining} dari {limit}"
+
+msgid "Channel account"
+msgstr "Akun kanal"
+
+msgid "Status, health and what this account is allowed to do, with the evidence for each. Credentials are never shown."
+msgstr "Status, kesehatan, dan apa yang boleh dilakukan akun ini, beserta buktinya. Kredensial tidak pernah ditampilkan."
+
+msgid "All channel accounts"
+msgstr "Semua akun kanal"
+
+msgid "This channel account could not be loaded right now. Please try again later."
+msgstr "Akun kanal ini tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "This channel account does not exist, or you cannot see it."
+msgstr "Akun kanal ini tidak ada, atau Anda tidak dapat melihatnya."
+
+msgid "Held by the provider authorisation"
+msgstr "Dipegang oleh otorisasi penyedia"
+
+msgid "Stored (write-only, never shown)"
+msgstr "Tersimpan (hanya tulis, tidak pernah ditampilkan)"
+
+msgid "No health report yet. Health is reported by a provider connector and is never set by a person, so this account is not shown as healthy until one reports."
+msgstr "Belum ada laporan kesehatan. Kesehatan dilaporkan oleh konektor penyedia dan tidak pernah ditetapkan oleh manusia, sehingga akun ini tidak ditampilkan sehat sampai ada laporan."
+
+msgid "Last synced"
+msgstr "Terakhir disinkronkan"
+
+msgid "Token expires"
+msgstr "Token kedaluwarsa"
+
+msgid "Quota"
+msgstr "Kuota"
+
+msgid "None recorded"
+msgstr "Tidak ada yang tercatat"
+
+msgid "Issued"
+msgstr "Diterbitkan"
+
+msgid "Capabilities and evidence"
+msgstr "Kapabilitas dan bukti"
+
+msgid "What this account may do is decided per capability: the provider must offer it, a grant must be recorded with evidence, and the account and its authorisation must be active. A capability the provider does not offer is listed but disabled. Recording or withdrawing a grant is done through the API."
+msgstr "Apa yang boleh dilakukan akun ini ditentukan per kapabilitas: penyedia harus menawarkannya, pemberian harus tercatat dengan bukti, dan akun serta otorisasinya harus aktif. Kapabilitas yang tidak ditawarkan penyedia tetap ditampilkan tetapi dinonaktifkan. Mencatat atau menarik pemberian dilakukan melalui API."
+
+msgid "Evidence state"
+msgstr "Status bukti"
+
+msgid "Usable now"
+msgstr "Dapat dipakai sekarang"
+
+msgid "Default sender"
+msgstr "Pengirim default"
+
+msgid "This account is the default WhatsApp sender for its scope."
+msgstr "Akun ini adalah pengirim WhatsApp default untuk cakupannya."
+
+msgid "This account is not the default WhatsApp sender for its scope."
+msgstr "Akun ini bukan pengirim WhatsApp default untuk cakupannya."
+
+msgid "This deployment has no sending adapter for this provider, so it cannot be the default sender."
+msgstr "Deployment ini tidak memiliki adaptor pengiriman untuk penyedia ini, sehingga tidak dapat menjadi pengirim default."
+
+msgid "Making this account the default changes which number sends when no sender is named. It applies to messages queued from now on; messages already queued keep the sender they were given."
+msgstr "Menjadikan akun ini default mengubah nomor mana yang mengirim bila tidak ada pengirim yang disebut. Berlaku untuk pesan yang diantrekan mulai sekarang; pesan yang sudah diantrekan tetap memakai pengirim yang diberikan kepadanya."
+
+msgid "Make default sender"
+msgstr "Jadikan pengirim default"
+
+msgid "Replace credential"
+msgstr "Ganti kredensial"
+
+msgid "Writing a new credential overwrites the stored one. The old value cannot be shown and the new value is never displayed again. Writing a credential needs two-factor authentication and may ask for a fresh code."
+msgstr "Menulis kredensial baru menimpa yang tersimpan. Nilai lama tidak dapat ditampilkan dan nilai baru tidak pernah ditampilkan lagi. Menulis kredensial memerlukan autentikasi dua faktor dan dapat meminta kode baru."
+
+msgid "New credential"
+msgstr "Kredensial baru"
+
+msgid "No spaces. Between 8 and 4096 characters."
+msgstr "Tanpa spasi. Antara 8 dan 4096 karakter."
+
+msgid "Disconnect account"
+msgstr "Putuskan akun"
+
+msgid "Disconnecting is permanent. Nothing will send or publish as this account again, its stored credential is erased and its webhook subscriptions are revoked. The provider is not told: revoke it there as well."
+msgstr "Pemutusan bersifat permanen. Tidak akan ada lagi yang mengirim atau memublikasikan sebagai akun ini, kredensial tersimpannya dihapus, dan langganan webhook-nya dicabut. Penyedia tidak diberi tahu: cabut juga di sana."
+
+msgid "{waiting} waiting and {sending} in flight for this sender. They are not rerouted to another sender: they will fail."
+msgstr "{waiting} menunggu dan {sending} sedang dikirim untuk pengirim ini. Pesan itu tidak dialihkan ke pengirim lain: pesan itu akan gagal."
+
+msgid "Type the account name to confirm: {name}"
+msgstr "Ketik nama akun untuk mengonfirmasi: {name}"
+
+msgid "Revoke provider authorisation"
+msgstr "Cabut otorisasi penyedia"
+
+msgid "Type the provider name to confirm: {name}"
+msgstr "Ketik nama penyedia untuk mengonfirmasi: {name}"
+
+msgid "Revoke authorisation"
+msgstr "Cabut otorisasi"
+
+msgid "What you typed does not match. Nothing was changed."
+msgstr "Yang Anda ketik tidak cocok. Tidak ada yang diubah."
+
+msgid "Could not replace the credential. Please try again."
+msgstr "Kredensial tidak dapat diganti. Silakan coba lagi."
+
+msgid "Writing a credential needs two-factor authentication. Turn it on under your account first."
+msgstr "Menulis kredensial memerlukan autentikasi dua faktor. Aktifkan terlebih dahulu di akun Anda."
+
+msgid "Confirmation cancelled. Nothing changed."
+msgstr "Konfirmasi dibatalkan. Tidak ada yang berubah."
+
+msgid "Credentials cannot be stored on this deployment right now."
+msgstr "Kredensial tidak dapat disimpan pada deployment ini saat ini."
+
+msgid "This account has no credential of its own."
+msgstr "Akun ini tidak memiliki kredensial sendiri."
+
+msgid "The account's state does not allow this."
+msgstr "Status akun tidak mengizinkan ini."
+
+msgid "That account or authorisation no longer exists, or you cannot act on it."
+msgstr "Akun atau otorisasi itu sudah tidak ada, atau Anda tidak dapat bertindak atasnya."
+
+msgid "That was already done, or the request conflicts with an earlier one. Reload the page."
+msgstr "Itu sudah dilakukan, atau permintaan bertentangan dengan yang sebelumnya. Muat ulang halaman."
+
+msgid "Could not disconnect the account. Please try again."
+msgstr "Akun tidak dapat diputuskan. Silakan coba lagi."
+
+msgid "Could not revoke the authorisation. Please try again."
+msgstr "Otorisasi tidak dapat dicabut. Silakan coba lagi."
+
+msgid "Could not change the default sender. Please try again."
+msgstr "Pengirim default tidak dapat diubah. Silakan coba lagi."
+
+msgid "That account cannot be the default sender: it must be connected, may send business messages and have a sending adapter."
+msgstr "Akun itu tidak dapat menjadi pengirim default: harus terhubung, boleh mengirim pesan bisnis, dan memiliki adaptor pengiriman."
+
+msgid "Too many attempts. Try again later."
+msgstr "Terlalu banyak percobaan. Coba lagi nanti."
+
+msgid "{count} account matches your search and filters"
+msgid_plural "{count} accounts match your search and filters"
+msgstr[0] "{count} akun cocok dengan pencarian dan filter Anda"
+
+msgid "{count} account"
+msgid_plural "{count} accounts"
+msgstr[0] "{count} akun"
+
+msgid "{count} connection"
+msgid_plural "{count} connections"
+msgstr[0] "{count} koneksi"
+
+msgid "{count} scope"
+msgid_plural "{count} scopes"
+msgstr[0] "{count} cakupan"
+
+msgid "{count} capability"
+msgid_plural "{count} capabilities"
+msgstr[0] "{count} kapabilitas"
+
+
+msgid "Identity"
+msgstr "Identitas"
+
+msgid "Authenticator code"
+msgstr "Kode autentikator"
+
+msgid "Enter the current six-digit code, then replace the credential again."
+msgstr "Masukkan kode enam digit saat ini, lalu ganti kredensial sekali lagi."
+
+msgid "This tenant has more accounts than this screen loads. Showing the newest {count}. The provider and status filters cover every account; search covers only these. The API lists the rest."
+msgstr "Tenant ini memiliki lebih banyak akun daripada yang dimuat layar ini. Menampilkan {count} terbaru. Filter penyedia dan status mencakup semua akun; pencarian hanya mencakup yang ditampilkan. API menampilkan sisanya."
+
+msgid "Your role may write credentials, but the form is withheld: writing one needs two-factor authentication enrolled on your account, or a policy denies it."
+msgstr "Peran Anda boleh menulis kredensial, tetapi formulirnya ditahan: menulis kredensial memerlukan autentikasi dua faktor yang terdaftar pada akun Anda, atau sebuah kebijakan menolaknya."
+
+msgid "That code is not right. Check it and try again; your new credential is still in the form."
+msgstr "Kode itu tidak benar. Periksa lalu coba lagi; kredensial baru Anda masih ada di formulir."
+
+msgid "Too many wrong codes. The factor is locked for a while; your new credential is still in the form."
+msgstr "Terlalu banyak kode salah. Faktor terkunci untuk sementara; kredensial baru Anda masih ada di formulir."
+
+msgid "The credential must be at least 8 characters."
+msgstr "Kredensial minimal 8 karakter."
+
+msgid "The credential cannot contain spaces. Remove them and try again."
+msgstr "Kredensial tidak boleh berisi spasi. Hapus spasinya lalu coba lagi."
+
+msgid "Revoking is permanent. The authorisation's credentials are erased and up to {count} account bound to it is disconnected."
+msgid_plural "Revoking is permanent. The authorisation's credentials are erased and up to {count} accounts bound to it are disconnected."
+msgstr[0] "Pencabutan bersifat permanen. Kredensial otorisasi dihapus dan hingga {count} akun yang terikat padanya diputuskan."
+
+msgid "Only a connected account can be the default sender. This one is not connected yet."
+msgstr "Hanya akun yang terhubung yang dapat menjadi pengirim default. Akun ini belum terhubung."

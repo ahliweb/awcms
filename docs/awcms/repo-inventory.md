@@ -12,8 +12,8 @@
 | `awcms_*` tables                    | 242   |
 | Tables with `FORCE` RLS             | 224   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 783   |
-| Route files                         | 617   |
+| Test files                          | 788   |
+| Route files                         | 619   |
 | ADR                                 | 318   |
 
 ### Modules
@@ -53,7 +53,7 @@
 | `booking`              | 0.3.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 | `hr_commission`        | 0.5.0   | active       | domain | no   | `tenant_admin`, `hr_workforce`, `domain_event_runtime`                                                                         |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
-| `channel_accounts`     | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
+| `channel_accounts`     | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
 | `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 
@@ -561,9 +561,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 589        |
-| `e2e`         | 29         |
-| `integration` | 164        |
+| `(root)`      | 592        |
+| `e2e`         | 30         |
+| `integration` | 165        |
 | `unit`        | 1          |
 
 ### Routes
@@ -571,7 +571,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 505   |
-| `/admin/**`     | 81    |
+| `/admin/**`     | 83    |
 | publik / anonim | 31    |
 
 <!-- END GENERATED: repo-inventory -->
