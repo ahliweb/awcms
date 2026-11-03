@@ -34,7 +34,6 @@ import {
 import { randomBytes } from "node:crypto";
 
 import {
-  createCookieJar,
   ensureHandlerDatabaseReady,
   getHandlerAdminSql,
   getHandlerDatabaseClient,
@@ -58,12 +57,14 @@ import {
   type SenderScreen
 } from "../../src/modules/whatsapp-delivery/application/whatsapp-sender-screen";
 import { POST as setupInitialize } from "../../src/pages/api/v1/setup/initialize";
-import { POST as authLogin } from "../../src/pages/api/v1/auth/login";
 
 const OWNER_PASSWORD = randomBytes(12).toString("hex") + "-Aa1!";
 const RING = `k1:${Buffer.from(
   Array.from({ length: 32 }, (_, i) => (i * 11 + 9) % 251)
 ).toString("base64")}`;
+
+/** Stored where a login credential would be: not a hash anything verifies, so the fixture person can never log in. */
+const UNUSABLE_LOGIN_MARKER = "fixture-no-login";
 
 const READ = "channel_accounts.accounts.read";
 const REVOKE = "channel_accounts.accounts.revoke";
@@ -71,7 +72,11 @@ const CREDENTIAL = "channel_accounts.credentials.manage";
 const POLICY = "whatsapp_delivery.sender_policy.configure";
 const SENDERS = "whatsapp_delivery.senders.read";
 
-type Env = { tenantId: string; ownerToken: string; ownerTenantUserId: string };
+type Env = {
+  tenantId: string;
+  ownerSessionHash: string;
+  ownerTenantUserId: string;
+};
 
 let env: Env;
 let userCounter = 0;
@@ -100,28 +105,41 @@ async function bootstrap(): Promise<Env> {
   expect(setup.status).toBe(200);
 
   const tenantId = setup.body.data.tenantId;
-  const login = await invoke<{ data: { token: string } }>(authLogin, {
-    method: "POST",
-    path: "/api/v1/auth/login",
-    headers: {
-      "content-type": "application/json",
-      "x-awcms-tenant-id": tenantId
-    },
-    body: { loginIdentifier, password: OWNER_PASSWORD },
-    cookies: createCookieJar()
-  });
-
-  expect(login.status).toBe(200);
-
   const owner = (await admin()`
-    SELECT id FROM awcms_tenant_users WHERE tenant_id = ${tenantId} LIMIT 1
-  `) as { id: string }[];
+    SELECT tu.id, tu.identity_id
+    FROM awcms_tenant_users tu
+    WHERE tu.tenant_id = ${tenantId} LIMIT 1
+  `) as { id: string; identity_id: string }[];
 
   return {
     tenantId,
-    ownerToken: login.body.data.token,
+    ownerSessionHash: await insertSession(tenantId, owner[0]!.identity_id),
     ownerTenantUserId: owner[0]!.id
   };
+}
+
+/**
+ * Opens a live session for an identity and returns ONLY its stored hash, which
+ * is all the screen under test needs (`ssr.tokenHash`). The opaque value that
+ * hashes to it is generated, used and dropped in here: it is never returned, so
+ * nothing a fixture hands back can flow into the hash function.
+ */
+async function insertSession(
+  tenantId: string,
+  identityId: string
+): Promise<string> {
+  const opaque = `sess-${randomBytes(18).toString("hex")}`;
+  const stored = hashSessionToken(opaque);
+
+  await admin()`
+    INSERT INTO awcms_sessions
+      (tenant_id, identity_id, token_hash, expires_at, assurance_level,
+       last_authenticated_at)
+    VALUES (${tenantId}, ${identityId}, ${stored},
+            now() + interval '8 hours', 'aal1', now())
+  `;
+
+  return stored;
 }
 
 /** A person with exactly `permissionKeys` and, optionally, an enrolled TOTP factor. */
@@ -130,7 +148,7 @@ async function seedUser(
   label: string,
   permissionKeys: readonly string[],
   options: { enrolled?: boolean } = {}
-): Promise<{ token: string; tenantUserId: string }> {
+): Promise<{ sessionHash: string; tenantUserId: string }> {
   userCounter += 1;
   const sql = admin();
   const tag = `${label}-${userCounter}`;
@@ -141,7 +159,7 @@ async function seedUser(
   `) as { id: string }[];
   const identity = (await sql`
     INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
-    VALUES (${tenantId}, ${profile[0]!.id}, ${`${tag}@example.com`}, 'x')
+    VALUES (${tenantId}, ${profile[0]!.id}, ${`${tag}@example.com`}, ${UNUSABLE_LOGIN_MARKER})
     RETURNING id
   `) as { id: string }[];
   const tenantUser = (await sql`
@@ -149,7 +167,6 @@ async function seedUser(
     VALUES (${tenantId}, ${identity[0]!.id})
     RETURNING id
   `) as { id: string }[];
-  const token = `scr-${tag}-${Math.random().toString(36).slice(2)}`;
 
   if (options.enrolled) {
     const principalId = await linkIdentityToPrincipal(
@@ -166,13 +183,7 @@ async function seedUser(
     `;
   }
 
-  await sql`
-    INSERT INTO awcms_sessions
-      (tenant_id, identity_id, token_hash, expires_at, assurance_level,
-       last_authenticated_at)
-    VALUES (${tenantId}, ${identity[0]!.id}, ${hashSessionToken(token)},
-            now() + interval '8 hours', 'aal1', now())
-  `;
+  const sessionHash = await insertSession(tenantId, identity[0]!.id);
 
   const role = (await sql`
     INSERT INTO awcms_roles (tenant_id, role_code, role_name)
@@ -206,7 +217,7 @@ async function seedUser(
     })
   );
 
-  return { token, tenantUserId: tenantUser[0]!.id };
+  return { sessionHash, tenantUserId: tenantUser[0]!.id };
 }
 
 async function seedOffice(code: string): Promise<string> {
@@ -280,7 +291,7 @@ async function assign(accountId: string, tenantUserId: string, kind: string) {
 
 /** Runs ONE screen the way `[id].astro` does: the real chokepoint, one transaction. */
 async function screenFor<T>(
-  token: string,
+  sessionHash: string,
   tenantId: string,
   decide: (input: {
     context: Parameters<typeof resolveAccountDetailAccess>[0];
@@ -290,7 +301,7 @@ async function screenFor<T>(
   const outcome = await loadAdminScreen({
     ssr: {
       tenantId,
-      tokenHash: hashSessionToken(token)
+      tokenHash: sessionHash
     } as unknown as SsrContext,
     sql: getHandlerDatabaseClient(),
     workClass: "interactive",
@@ -304,7 +315,7 @@ async function screenFor<T>(
         context: {
           tx,
           tenantId,
-          tokenHash: hashSessionToken(token),
+          tokenHash: sessionHash,
           auth,
           now: new Date(),
           request: new Request("http://localhost/admin/channel-accounts"),
@@ -318,15 +329,22 @@ async function screenFor<T>(
   return outcome.state === "allowed" ? outcome.data : outcome.state;
 }
 
-function detailFor(token: string, accountId: string, tenantId = env.tenantId) {
-  return screenFor<AccountDetailAccess>(token, tenantId, ({ context, can }) =>
-    resolveAccountDetailAccess(context, accountId, can, {})
+function detailFor(
+  sessionHash: string,
+  accountId: string,
+  tenantId = env.tenantId
+) {
+  return screenFor<AccountDetailAccess>(
+    sessionHash,
+    tenantId,
+    ({ context, can }) =>
+      resolveAccountDetailAccess(context, accountId, can, {})
   );
 }
 
-function senderFor(token: string, accountId: string, status: string) {
+function senderFor(sessionHash: string, accountId: string, status: string) {
   return screenFor<SenderScreen>(
-    token,
+    sessionHash,
     env.tenantId,
     async ({ context, can }) =>
       resolveSenderScreen(
@@ -389,22 +407,22 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
     const foreign = await seedUser(tenant2, "foreign", [READ, REVOKE]);
     const colleague = await seedUser(env.tenantId, "colleague", [READ]);
 
-    const unknown = await detailFor(env.ownerToken, crypto.randomUUID());
-    const crossTenant = await detailFor(foreign.token, id, tenant2);
+    const unknown = await detailFor(env.ownerSessionHash, crypto.randomUUID());
+    const crossTenant = await detailFor(foreign.sessionHash, id, tenant2);
 
     expect(unknown).toEqual({ visible: false });
     expect(crossTenant).toEqual(unknown);
 
     // Tenant-wide until the first assignment: a reader sees it...
-    expect(await detailFor(colleague.token, id)).toMatchObject({
+    expect(await detailFor(colleague.sessionHash, id)).toMatchObject({
       visible: true
     });
 
     // ...then only its assignee, and the tenant administrator, do.
     await assign(id, env.ownerTenantUserId, "owner");
 
-    expect(await detailFor(colleague.token, id)).toEqual(unknown);
-    expect(await detailFor(env.ownerToken, id)).toMatchObject({
+    expect(await detailFor(colleague.sessionHash, id)).toEqual(unknown);
+    expect(await detailFor(env.ownerSessionHash, id)).toMatchObject({
       visible: true
     });
   });
@@ -424,13 +442,13 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       REVOKE
     ]);
 
-    expect(await detailFor(credentialOnly.token, id)).toMatchObject({
+    expect(await detailFor(credentialOnly.sessionHash, id)).toMatchObject({
       visible: true,
       canReplaceCredential: true,
       canDisconnect: false,
       credentialFormWithheld: false
     });
-    expect(await detailFor(revokeOnly.token, id)).toMatchObject({
+    expect(await detailFor(revokeOnly.sessionHash, id)).toMatchObject({
       visible: true,
       canReplaceCredential: false,
       canDisconnect: true
@@ -446,7 +464,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       CREDENTIAL
     ]);
 
-    expect(await detailFor(unenrolled.token, id)).toMatchObject({
+    expect(await detailFor(unenrolled.sessionHash, id)).toMatchObject({
       visible: true,
       canReplaceCredential: false,
       credentialFormWithheld: true
@@ -454,7 +472,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
     // Without the key there is nothing to explain.
     const keyless = await seedUser(env.tenantId, "keyless", [READ]);
 
-    expect(await detailFor(keyless.token, id)).toMatchObject({
+    expect(await detailFor(keyless.sessionHash, id)).toMatchObject({
       credentialFormWithheld: false
     });
   });
@@ -470,7 +488,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       { enrolled: true }
     );
 
-    expect(await detailFor(enrolled.token, revoked)).toMatchObject({
+    expect(await detailFor(enrolled.sessionHash, revoked)).toMatchObject({
       canReplaceCredential: false,
       canDisconnect: false
     });
@@ -489,7 +507,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
 
     await assign(id, person.tenantUserId, "viewer");
 
-    expect(await detailFor(person.token, id)).toMatchObject({
+    expect(await detailFor(person.sessionHash, id)).toMatchObject({
       visible: true,
       canDisconnect: false,
       canReplaceCredential: false
@@ -500,7 +518,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
       WHERE tenant_id = ${env.tenantId} AND account_id = ${id}
     `;
 
-    expect(await detailFor(person.token, id)).toMatchObject({
+    expect(await detailFor(person.sessionHash, id)).toMatchObject({
       visible: true,
       canDisconnect: true,
       canReplaceCredential: true
@@ -517,11 +535,13 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
 
     await holdScope(person.tenantUserId, mine);
 
-    expect(await detailFor(person.token, scoped)).toEqual({ visible: false });
+    expect(await detailFor(person.sessionHash, scoped)).toEqual({
+      visible: false
+    });
 
     await holdScope(person.tenantUserId, theirs);
 
-    expect(await detailFor(person.token, scoped)).toMatchObject({
+    expect(await detailFor(person.sessionHash, scoped)).toMatchObject({
       visible: true
     });
   });
@@ -534,14 +554,14 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
     const configurer = await seedUser(env.tenantId, "policy", [READ, POLICY]);
     const reader = await seedUser(env.tenantId, "senders", [READ, SENDERS]);
 
-    expect(await senderFor(configurer.token, pending, "pending")).toMatchObject(
-      {
-        canMakeDefault: false
-      }
-    );
+    expect(
+      await senderFor(configurer.sessionHash, pending, "pending")
+    ).toMatchObject({
+      canMakeDefault: false
+    });
 
     const asConfigurer = await senderFor(
-      configurer.token,
+      configurer.sessionHash,
       connected,
       "connected"
     );
@@ -555,14 +575,14 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
 
     // Reading diagnostics gives real counts (zero here, because it is known),
     // and no action.
-    expect(await senderFor(reader.token, connected, "connected")).toMatchObject(
-      {
-        canMakeDefault: false,
-        isDefault: false,
-        waiting: 0,
-        sending: 0
-      }
-    );
+    expect(
+      await senderFor(reader.sessionHash, connected, "connected")
+    ).toMatchObject({
+      canMakeDefault: false,
+      isDefault: false,
+      waiting: 0,
+      sending: 0
+    });
   });
 
   test("a caller confined to business scopes cannot make a tenant-wide account the default, nor learn it is one", async () => {
@@ -579,7 +599,7 @@ suite("channel-account screen access decisions (Issue #1154)", () => {
     await holdScope(confined.tenantUserId, office);
 
     expect(
-      await senderFor(confined.token, connected, "connected")
+      await senderFor(confined.sessionHash, connected, "connected")
     ).toMatchObject({ canMakeDefault: false, isDefault: null });
   });
 });
