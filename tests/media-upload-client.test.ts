@@ -715,6 +715,39 @@ describe("compression messages", () => {
     expect(text).toContain("GIF");
   });
 
+  test("a GIF just over the cap never reads as a contradiction (#1238)", () => {
+    const justOver = {
+      ...failure("gif_over_cap"),
+      originalByteSize: CAP + 1024
+    };
+
+    expect(describeCompressionFailure(justOver, undefined, "en")).toContain(
+      "This GIF is 2,049 KiB, over the 2,048 KiB limit."
+    );
+    // Same finer unit in Indonesian, with that locale's grouping separator.
+    expect(describeCompressionFailure(justOver, undefined, "id")).toContain(
+      "2.049 KiB"
+    );
+    expect(describeCompressionFailure(justOver, undefined, "id")).toContain(
+      "2.048 KiB"
+    );
+
+    // A file that differs from the cap by under 1 KiB falls back to bytes.
+    const sliver = { ...failure("gif_over_cap"), originalByteSize: CAP + 1 };
+    expect(describeCompressionFailure(sliver, undefined, "en")).toContain(
+      "This GIF is 2,097,153 B, over the 2,097,152 B limit."
+    );
+  });
+
+  test("the floor message also avoids an equal-looking size and cap (#1238)", () => {
+    const text = describeCompressionFailure(
+      failure("floor_reached", CAP + 2048),
+      undefined,
+      "en"
+    );
+    expect(text).toContain("still 2,050 KiB, over the 2,048 KiB limit");
+  });
+
   test("the floor message shows the smallest size reached", () => {
     const text = describeCompressionFailure(
       failure("floor_reached", Math.round(2.6 * MIB)),
