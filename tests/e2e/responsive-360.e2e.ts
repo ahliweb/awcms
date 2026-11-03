@@ -120,6 +120,10 @@
 import { test, expect, type Page } from "./support/e2e-read-wave";
 
 import { discoverAdminRoutes, ADMIN_PAGES_ROOT } from "./support/admin-routes";
+import {
+  SEEDED_ACCESS_POLICY_CODE,
+  seedInertAccessPolicy
+} from "./support/e2e-access-policy";
 
 // Each viewport gets its own `test()` below via `page.setViewportSize`, rather
 // than a file-level `test.use({ viewport })`, because that API can only
@@ -152,8 +156,13 @@ const MAX_REPORTED_OFFENDERS = 5;
 const tenantId = process.env.E2E_TENANT_ID;
 const loginIdentifier = process.env.E2E_LOGIN_IDENTIFIER;
 const password = process.env.E2E_PASSWORD;
+const databaseUrl = process.env.DATABASE_URL;
 
-const seeded = Boolean(tenantId && loginIdentifier && password);
+// `DATABASE_URL` is part of "seeded" because the sweep writes its own fixture
+// row (see the `beforeAll` below): without it the screens that only render a
+// table once a row exists would be walked empty, and the sweep would pass for
+// the wrong reason — which is how #1237 stayed hidden.
+const seeded = Boolean(tenantId && loginIdentifier && password && databaseUrl);
 
 const routes = discoverAdminRoutes(ADMIN_PAGES_ROOT).filter(
   (route) => !route.dynamic
@@ -208,8 +217,28 @@ async function findOverflowOffenders(
 test.describe("every static admin screen fits its target viewport", () => {
   test.skip(
     !seeded,
-    "requires a seeded tenant — CI e2e-smoke provisions one via POST /api/v1/setup/initialize"
+    "requires a seeded tenant and DATABASE_URL — CI e2e-smoke provides both"
   );
+
+  // A table that renders only once a row exists cannot overflow on the empty
+  // fresh database CI bootstraps. `/admin/access-policies` is the case that
+  // stayed hidden that way (Issue #1237: `scrollWidth` 654px at 360px with one
+  // stored policy). The row is inert — see `support/e2e-access-policy.ts` for
+  // why it cannot change another spec's expectations — and is written straight
+  // to the database because a read-wave spec may not mutate through the app.
+  test.beforeAll(async () => {
+    await seedInertAccessPolicy(databaseUrl!, tenantId!);
+  });
+
+  test("the seeded policy row is on the screen the sweep is about to measure", async ({
+    page
+  }) => {
+    await page.goto("/admin/access-policies");
+
+    await expect(page.locator("#access-policies-table")).toContainText(
+      SEEDED_ACCESS_POLICY_CODE
+    );
+  });
 
   test("the route walk found the screens", () => {
     // Same guard as the render sweep: if the walk stops matching, every check

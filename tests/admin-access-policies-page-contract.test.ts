@@ -141,3 +141,30 @@ describe("/admin/access-policies gates on keys that exist", () => {
     ).toMatch(/editor/i);
   });
 });
+
+describe("/admin/access-policies keeps its table inside a scroll wrapper (#1237)", () => {
+  // The browser measurement is `tests/e2e/responsive-360.e2e.ts`; it only
+  // renders this table when a policy row exists, and runs only where a
+  // database does. This is the part of the property that needs neither: the
+  // `<table>` must sit directly inside the same `.data-table-scroll` region
+  // `roles.astro` uses, because without it the table's own minimum width drags
+  // the whole document sideways (scrollWidth 654px at 360px, 657px at 640px).
+  test("the table is the direct child of a focusable, named .data-table-scroll region", async () => {
+    const source = await readFile(PAGE, "utf8");
+
+    const wrapper = source.match(
+      /<div\s+class="data-table-scroll[^"]*"\s+role="region"\s+tabindex="0"\s+aria-label=\{t\("[^"]+"\)\}\s*>\s*<table\s+class="admin-table"\s+id="access-policies-table"/
+    );
+
+    expect(wrapper).not.toBeNull();
+  });
+
+  test("the table is not left unwrapped anywhere", async () => {
+    const source = await readFile(PAGE, "utf8");
+    const tables = source.match(/<table\b/g) ?? [];
+    const wrappers = source.match(/class="data-table-scroll\b/g) ?? [];
+
+    expect(tables.length).toBeGreaterThan(0);
+    expect(wrappers.length).toBe(tables.length);
+  });
+});
