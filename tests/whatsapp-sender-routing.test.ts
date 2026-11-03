@@ -31,6 +31,10 @@ import { SecretStoreError } from "../src/modules/channel-accounts/application/se
 import { CHANNEL_SECRET_PURPOSES } from "../src/modules/channel-accounts/domain/channel-accounts-constants";
 import { PROVIDER_MATRIX_VERSION } from "../src/modules/channel-accounts/domain/provider-matrix";
 import {
+  overrideRiskAcknowledgementCatalogueForTests,
+  resolveRiskAcknowledgement
+} from "../src/modules/channel-accounts/domain/risk-acknowledgements";
+import {
   WHATSAPP_CIRCUIT_BREAKER_KEY,
   resolveWhatsappSenderRatePerDay,
   resolveWhatsappSenderRatePerHour,
@@ -250,6 +254,8 @@ describe("scope and capability rules", () => {
       ACCOUNT_REVOKED: "terminal",
       ACCOUNT_DISABLED: "terminal",
       CAPABILITY_DENIED: "terminal",
+      RISK_ACKNOWLEDGEMENT_REQUIRED: "terminal",
+      PROVIDER_ADAPTER_DISABLED: "terminal",
       CONNECTION_NOT_ACTIVE: "terminal",
       CONNECTION_EXPIRED: "hold",
       CHANNEL_ACCOUNTS_DISABLED: "hold",
@@ -504,9 +510,11 @@ describe("the tenant-owned sender's provider adapter", () => {
     parameters: ["Sari"]
   };
 
-  test("only whatsapp_cloud has an adapter; a StarSender sender has none until #1142", () => {
+  test("whatsapp_cloud always has an adapter; a StarSender sender has one only when its flag is on (#1142, off by default)", () => {
     expect(hasWhatsappSenderAdapter("whatsapp_cloud")).toBe(true);
-    expect(hasWhatsappSenderAdapter("starsender")).toBe(false);
+    expect(
+      hasWhatsappSenderAdapter("starsender", {} as NodeJS.ProcessEnv)
+    ).toBe(false);
     expect(
       buildWhatsappSenderProvider({
         sender: { accountId: S1, provider: "starsender", externalId: "dev-1" },
@@ -674,6 +682,8 @@ function scriptedTx(tables: {
   /** Answers by connection id; falls back to `connection`. */
   connections?: Record<string, Record<string, unknown> | null>;
   capability?: Record<string, unknown> | null;
+  /** Issue #1142: an active acknowledgement of an unofficial provider's current text exists. */
+  acknowledged?: boolean;
 }): { tx: Bun.SQL; statements: string[]; connectionIds: unknown[] } {
   const statements: string[] = [];
   const connectionIds: unknown[] = [];
@@ -700,6 +710,9 @@ function scriptedTx(tables: {
     }
     if (text.includes("FROM awcms_channel_account_capabilities")) {
       return [tables.capability].filter(Boolean);
+    }
+    if (text.includes("awcms_channel_provider_risk_acknowledgements")) {
+      return tables.acknowledged ? [{ present: 1 }] : [];
     }
 
     return [];
@@ -992,6 +1005,19 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
   });
 
   test("StarSender broadcast (marketing) is restricted: it needs contract evidence, and app review is not enough", async () => {
+    // The risk text is approved and acknowledged here so the decision under test
+    // is the CAPABILITY one (Issue #1142 adds the acknowledgement gate before it).
+    overrideRiskAcknowledgementCatalogueForTests({
+      starsender: {
+        ...resolveRiskAcknowledgement("starsender").entry,
+        approval: {
+          approvedBy: "owner",
+          approvedOn: "2026-11-10",
+          reference: "ref"
+        }
+      }
+    });
+
     const device = {
       provider: "starsender",
       account_kind: "device",
@@ -1001,8 +1027,11 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
 
     expect(
       await ask(
-        scriptedTx({ account: cloudAccount(device), capability: grantedRow() })
-          .tx,
+        scriptedTx({
+          account: cloudAccount(device),
+          capability: grantedRow(),
+          acknowledged: true
+        }).tx,
         "broadcast"
       )
     ).toEqual({ usable: false, reason: "CAPABILITY_DENIED" });
@@ -1011,12 +1040,15 @@ describe("ChannelAccountPort adapter (fail closed, no secret)", () => {
         await ask(
           scriptedTx({
             account: cloudAccount(device),
-            capability: grantedRow({ evidence_kind: "contract_reference" })
+            capability: grantedRow({ evidence_kind: "contract_reference" }),
+            acknowledged: true
           }).tx,
           "broadcast"
         )
       ).usable
     ).toBe(true);
+
+    overrideRiskAcknowledgementCatalogueForTests(null);
   });
 
   test("every query is scoped by the tenant and names columns (no SELECT *)", async () => {

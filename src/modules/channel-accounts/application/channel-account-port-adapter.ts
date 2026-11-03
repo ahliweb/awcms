@@ -30,6 +30,11 @@ import type {
 } from "../../_shared/ports/channel-account-port";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import {
+  isRiskAcknowledgementProvider,
+  type RiskAcknowledgementProvider
+} from "../domain/risk-acknowledgements";
+import { hasActiveRiskAcknowledgement } from "./risk-acknowledgement-check";
+import {
   evaluateCapability,
   getProviderRow,
   type CapabilityEvidenceKind,
@@ -202,6 +207,25 @@ export function createChannelAccountPortAdapter(
         !isWhatsappSenderShape(account.provider, account.account_kind)
       ) {
         return { usable: false, reason: "NOT_A_WHATSAPP_SENDER" };
+      }
+
+      // An UNOFFICIAL provider is usable only while the tenant's acknowledgement
+      // of its current, approved risk text is in force. Re-read on every call, so
+      // a revocation is effective at the next enqueue and the next claim
+      // (Issue #1142, ADR-0148 section 7). Fail closed: no row, no use. It is
+      // asked BEFORE the account's status on purpose: a revocation also degrades
+      // the tenant's accounts, and a degraded account is only HELD, which would
+      // leave non-expiring messages waiting forever on a decision that was made;
+      // the unacknowledged provider is terminal.
+      if (
+        isRiskAcknowledgementProvider(account.provider) &&
+        !(await hasActiveRiskAcknowledgement(
+          tx,
+          input.tenantId,
+          account.provider as RiskAcknowledgementProvider
+        ))
+      ) {
+        return { usable: false, reason: "RISK_ACKNOWLEDGEMENT_REQUIRED" };
       }
 
       const statusReason = reasonForAccountStatus(account.status);

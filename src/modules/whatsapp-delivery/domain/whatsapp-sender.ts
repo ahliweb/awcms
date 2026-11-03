@@ -214,6 +214,8 @@ export function classifySenderUnavailable(
     case "ACCOUNT_REVOKED":
     case "ACCOUNT_DISABLED":
     case "CAPABILITY_DENIED":
+    case "RISK_ACKNOWLEDGEMENT_REQUIRED":
+    case "PROVIDER_ADAPTER_DISABLED":
     case "CONNECTION_NOT_ACTIVE":
       return "terminal";
     case "CHANNEL_ACCOUNTS_DISABLED":

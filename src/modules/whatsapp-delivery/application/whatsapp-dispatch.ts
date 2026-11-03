@@ -1485,10 +1485,15 @@ export async function dispatchWhatsappQueue(
       safeError
     );
 
-    if (sendResult.failureCode === "unauthorized" && lane.senderAccountId) {
-      // The provider rejected THIS sender's credential. The rest of the lane
-      // fails closed without another call; the credential is the tenant's to
-      // fix, and no other sender or credential is tried.
+    if (
+      (sendResult.failureCode === "unauthorized" ||
+        sendResult.failureCode === "device_disconnected") &&
+      lane.senderAccountId
+    ) {
+      // The provider rejected THIS sender's credential, or (StarSender, Issue
+      // #1142) reported THIS device as disconnected. The rest of the lane is held
+      // without another call; the credential or the pairing is the tenant's to
+      // fix, and no other sender, device or credential is tried.
       lane.credentialRejected = true;
     }
 

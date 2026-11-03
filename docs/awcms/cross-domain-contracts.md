@@ -432,7 +432,7 @@ switches exhaustively over the refusal reasons must add the three new members
 before it passes a sender, and a consumer that takes a sender id from a user must
 authorise that choice itself (the port performs no access check). The capability
 `whatsapp_delivery` is registered at `1.1.0` and the new `channel_account`
-capability (`ChannelAccountPort`, provided by `channel_accounts`) at `1.0.0`
+capability (`ChannelAccountPort`, provided by `channel_accounts`) at `1.1.0`
 (`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`).
 
 ### 5.1 Telegram delivery port (live, #965)

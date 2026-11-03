@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:3ca2baa073d0f230214c7b38b6d88a3ad94d05411a8e1e6b721f9295fe5a77f8 -->
+<!-- i18n-source-hash: sha256:f6bcfca78a0a844fa1b1906571af4c207cfb6cf513f4662ef2a51dfa79a6abb6 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -447,7 +447,7 @@ harus menambah ketiga anggota baru sebelum meneruskan pengirim, dan konsumen yan
 mengambil id pengirim dari pengguna harus mengotorisasi pilihan itu sendiri
 (port tidak melakukan pemeriksaan akses). Kapabilitas `whatsapp_delivery`
 didaftarkan pada `1.1.0` dan kapabilitas baru `channel_account`
-(`ChannelAccountPort`, disediakan oleh `channel_accounts`) pada `1.0.0`
+(`ChannelAccountPort`, disediakan oleh `channel_accounts`) pada `1.1.0`
 (`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`).
 
 ### 5.1 Port pengiriman Telegram (live, #965)

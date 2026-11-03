@@ -15,6 +15,13 @@ export type WhatsappHttpRequest = {
   headers: Record<string, string>;
   body: string;
   timeoutMs: number;
+  /**
+   * Redirects followed. Omitted: the guard's default. A provider whose request
+   * carries a credential header sets `0`: a redirect is refused rather than
+   * followed, so the credential is never forwarded to another host (the guard
+   * re-sends the request headers on every hop). Issue #1142.
+   */
+  maxRedirects?: number;
 };
 
 export type WhatsappHttpResult =
@@ -37,7 +44,10 @@ export const defaultWhatsappHttpClient: WhatsappHttpClient = async (
     headers: request.headers,
     body: request.body,
     timeoutMs: request.timeoutMs,
-    maxResponseBytes: MAX_RESPONSE_BYTES
+    maxResponseBytes: MAX_RESPONSE_BYTES,
+    ...(request.maxRedirects !== undefined
+      ? { maxRedirects: request.maxRedirects }
+      : {})
   });
 
   if (!result.ok) {

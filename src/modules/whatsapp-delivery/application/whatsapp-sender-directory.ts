@@ -200,6 +200,8 @@ export async function resolveEnqueueSender(
     purpose: WhatsappPurpose;
     hashes: RecipientHashes;
     senders: (() => Promise<ChannelAccountPort | null>) | null;
+    /** Deployment switches (an unofficial adapter exists only when enabled). Defaults to the process environment. */
+    env?: NodeJS.ProcessEnv;
   }
 ): Promise<EnqueueSenderDecision> {
   const { tenantId, input, purpose } = context;
@@ -298,7 +300,12 @@ export async function resolveEnqueueSender(
     return refuse("SENDER_UNAVAILABLE", `denied_${verdict.reason}`);
   }
 
-  if (!hasWhatsappSenderAdapter(verdict.sender.provider)) {
+  if (
+    !hasWhatsappSenderAdapter(
+      verdict.sender.provider,
+      context.env ?? process.env
+    )
+  ) {
     return refuse("SENDER_UNAVAILABLE", "provider_has_no_adapter");
   }
 
@@ -353,7 +360,8 @@ export async function setSenderPolicy(
   tenantId: string,
   actorTenantUserId: string,
   input: SetSenderPolicyInput,
-  senders: ChannelAccountPort | null
+  senders: ChannelAccountPort | null,
+  env: NodeJS.ProcessEnv = process.env
 ): Promise<SetSenderPolicyOutcome> {
   if (input.defaultSenderAccountId !== null) {
     if (!senders) {
@@ -368,7 +376,7 @@ export async function setSenderPolicy(
 
     if (
       !verdict.usable ||
-      !hasWhatsappSenderAdapter(verdict.sender.provider) ||
+      !hasWhatsappSenderAdapter(verdict.sender.provider, env) ||
       !senderScopeAllows(verdict.sender.businessScope, input.businessScope)
     ) {
       return { outcome: "refused", code: "SENDER_UNAVAILABLE" };

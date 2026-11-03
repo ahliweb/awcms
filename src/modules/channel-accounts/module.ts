@@ -16,7 +16,8 @@ import {
   ASSIGNMENTS_ACTIVITY_CODE,
   CAPABILITIES_ACTIVITY_CODE,
   CHANNEL_ACCOUNTS_MODULE_KEY,
-  CREDENTIALS_ACTIVITY_CODE
+  CREDENTIALS_ACTIVITY_CODE,
+  RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE
 } from "./domain/channel-accounts-constants";
 
 /** Tenant-user stamps only: the table says nothing ABOUT a person, so anonymising the identity makes each stamp resolve to nobody (ADR-0094). */
@@ -99,6 +100,24 @@ export const channelAccountsModule = defineModule({
       activityCode: ASSIGNMENTS_ACTIVITY_CODE,
       action: "assign",
       description: "Assign or unassign who may operate one channel account"
+    },
+    {
+      activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+      action: "read",
+      description:
+        "Read the current risk text of an unofficial channel provider and who has acknowledged it"
+    },
+    {
+      activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+      action: "create",
+      description:
+        "Record your own acknowledgement of the current risk text of an unofficial channel provider (needed before a device of that provider can be connected)"
+    },
+    {
+      activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+      action: "revoke",
+      description:
+        "Revoke a risk acknowledgement of an unofficial channel provider; degrades the tenant's accounts of that provider when it was the last one (high-risk, audited at warning)"
     }
   ],
   jobs: [
@@ -153,6 +172,13 @@ export const channelAccountsModule = defineModule({
       columns: ["created_by"],
       rationale:
         "Envelope-encrypted provider credentials. They are the tenant's credentials with a provider, not data about a person; the only person-shaped column is the stamp of the administrator who first stored one. The ciphertext is never exported."
+    }),
+    stamps({
+      key: "risk_acknowledgements",
+      tableName: "awcms_channel_provider_risk_acknowledgements",
+      columns: ["tenant_user_id", "revoked_by"],
+      rationale:
+        "The record that a person accepted the risk of an UNOFFICIAL provider (which provider, which text version and its hash, when) and who withdrew it. It is an accountability record the tenant must keep, so the row survives erasure of the person: the identity is anonymised and each stamp resolves to nobody. It holds no credential and no message content."
     }),
     stamps({
       key: "oauth_states",

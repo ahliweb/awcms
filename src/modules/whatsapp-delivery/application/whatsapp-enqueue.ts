@@ -248,7 +248,8 @@ export async function enqueueWhatsappMessage(
     input,
     purpose: template.purpose,
     hashes,
-    senders: async () => options.senders ?? (await loadChannelAccountPort())
+    senders: async () => options.senders ?? (await loadChannelAccountPort()),
+    env
   });
 
   if (!sender.ok) {
