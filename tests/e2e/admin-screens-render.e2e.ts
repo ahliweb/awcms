@@ -91,6 +91,8 @@
  * (`support/admin-screen-authorize.ts`), and the resulting set is asserted so a
  * third one appearing is a decision rather than a surprise.
  */
+import { readFileSync } from "node:fs";
+
 import { test, expect, type Page } from "./support/e2e-read-wave";
 
 import { discoverAdminRoutes, ADMIN_PAGES_ROOT } from "./support/admin-routes";
@@ -113,6 +115,33 @@ type Expectation = "contents" | "either";
 const routes = discoverAdminRoutes(ADMIN_PAGES_ROOT);
 const staticRoutes = routes.filter((route) => !route.dynamic);
 const dynamicRoutes = routes.filter((route) => route.dynamic);
+
+/**
+ * Dynamic routes whose rows exist ONLY under an opt-in module, and the spec that
+ * covers them instead. This is a written exception, not a silent skip:
+ *
+ * - The CI `e2e-smoke` seed has `channel_accounts` OFF (it is off unless
+ *   `CHANNEL_ACCOUNTS_ENABLED=true`) and registers no account, so the listing has
+ *   no link to derive an id from. A fabricated id would 404 and prove nothing.
+ * - The route is skipped here ONLY while `optInEnv` is not `1`. When it is set
+ *   the strict behaviour below applies unchanged: no link means FAIL.
+ * - Strict means the tenant must already hold an account when opt-in is on (the
+ *   read wave runs before the write-wave spec that creates them): seed one first
+ *   or run against a database the opt-in spec has used. Fixing that by seeding
+ *   inside this sweep would make a read-wave spec write.
+ * - `coveredBy` must exist and must request the route, asserted by a test that
+ *   always runs, so the exception cannot rot into an unrequested screen.
+ */
+const OPT_IN_DYNAMIC: Readonly<
+  Record<string, { optInEnv: string; coveredBy: string; reason: string }>
+> = {
+  "/admin/channel-accounts/[id]": {
+    optInEnv: "E2E_CHANNEL_ACCOUNTS",
+    coveredBy: "tests/e2e/admin-channel-accounts.e2e.ts",
+    reason:
+      "channel_accounts is off by default and the CI seed registers no account (Issue #1154)"
+  }
+};
 
 /**
  * Load one admin URL and assert the owner got what that screen owes them,
@@ -230,8 +259,32 @@ test.describe("every admin screen renders", () => {
     }
   });
 
+  test("every opt-in dynamic exception names a spec that really covers it", () => {
+    for (const [url, entry] of Object.entries(OPT_IN_DYNAMIC)) {
+      expect(
+        dynamicRoutes.some((route) => route.url === url),
+        `${url} is listed as an opt-in exception but is not a dynamic admin route`
+      ).toBe(true);
+
+      const spec = readFileSync(entry.coveredBy, "utf8");
+
+      expect(spec, `${entry.coveredBy} must request ${url}`).toContain(
+        "/admin/channel-accounts/${"
+      );
+      expect(spec).toContain("axe");
+    }
+  });
+
   for (const route of dynamicRoutes) {
+    const optIn = OPT_IN_DYNAMIC[route.url];
+
     test(`${route.url} renders with a real id`, async ({ page }) => {
+      test.skip(
+        optIn !== undefined && process.env[optIn.optInEnv] !== "1",
+        optIn
+          ? `${optIn.reason}; covered by ${optIn.coveredBy} when ${optIn.optInEnv}=1`
+          : ""
+      );
       // Already authenticated as the owner: the `setup` project logged in once
       // and this project reuses that session. See `tests/e2e/auth.setup.ts`.
 
