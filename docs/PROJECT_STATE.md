@@ -137,7 +137,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **246** (`sql/001`–`341`)                                                                                     | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0158** (`0000` = template; highest ADR status: **Proposed**)                                       | `ls docs/adr/`                                                                          |
 | Admin screens                     | **82** `.astro` files in `src/pages/admin/`; **1 of 35** modules without `navigation:` (`website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **104** (61.077 lines) — on typechecking see §6                                                               | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **104** (61.084 lines) — on typechecking see §6                                                               | `find src -name '*.astro'`                                                              |
 | Gates                             | **69** in the `bun run check` chain                                                                           | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                    | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
