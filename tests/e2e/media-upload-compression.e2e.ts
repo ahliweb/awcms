@@ -17,6 +17,11 @@
  *
  * ## Storage and the API are mocked, deliberately
  *
+ * The mocked JSON answers MUST carry the real envelope's `success: true`:
+ * `sendJsonRequest` treats a 2xx without it as a failure, so a mock that
+ * returned only `{ data }` made the page report "Could not start the upload"
+ * and never reach the `PUT` (found when this spec was first run for real).
+ *
  * What is under test is what the BROWSER sends: the size and type claimed at
  * session creation and the bytes `PUT` to storage. Both are captured by
  * `page.route`. The presigned URL handed back is same-origin
@@ -55,6 +60,7 @@ async function mockUploadFlow(page: Page): Promise<Captured> {
       status: 201,
       contentType: "application/json",
       body: JSON.stringify({
+        success: true,
         data: {
           objectId: "00000000-0000-4000-8000-000000000e2e",
           objectKey: "news-media/e2e/photo.webp",
@@ -78,7 +84,7 @@ async function mockUploadFlow(page: Page): Promise<Captured> {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ data: { objectId: "e2e" } })
+      body: JSON.stringify({ success: true, data: { objectId: "e2e" } })
     });
   });
 
@@ -86,7 +92,7 @@ async function mockUploadFlow(page: Page): Promise<Captured> {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: "{}"
+      body: JSON.stringify({ success: true, data: {} })
     });
   });
 
