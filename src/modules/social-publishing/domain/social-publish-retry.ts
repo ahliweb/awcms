@@ -71,6 +71,7 @@ export function deriveAggregateStatus(
   jobStatuses: readonly string[]
 ):
   | "refused"
+  | "needs_reconciliation"
   | "pending_approval"
   | "queued"
   | "in_progress"
@@ -80,6 +81,12 @@ export function deriveAggregateStatus(
   | "cancelled" {
   if (state === "refused") return "refused";
   if (state === "pending_approval") return "pending_approval";
+
+  // A job whose outcome is unknown outranks every other fact: the publication may
+  // already be out, and a person has to look before anything else is said of it.
+  if (jobStatuses.includes("needs_reconciliation")) {
+    return "needs_reconciliation";
+  }
 
   const count = (status: string) =>
     jobStatuses.filter((s) => s === status).length;

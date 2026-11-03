@@ -1481,6 +1481,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_social_publications: ["SELECT", "INSERT"],
   awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
   awcms_social_publish_attempts: ["SELECT", "INSERT"],
+  // The #1145 audit, M4: the enqueue path and the dispatcher honour a tenant's
+  // decision to switch the module off, so they read the enablement row. Enabled
+  // flags only, tenant RLS, no credential.
+  awcms_tenant_modules: ["SELECT"],
   // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
   // attempts, and ends (revokes/suspends) a binding whose principal is gone or
   // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
@@ -2368,11 +2372,10 @@ export async function checkWorkerSetupRoleGrants(
       }
     }
 
-    // The worker sees only WhatsApp sender credentials and the tokens of
-    // publishing-capable social accounts (sql/328, Issue #1233; sql/332, Issue
-    // #1145): the grant on awcms_channel_secrets.ciphertext is column-wide, and the
-    // RESTRICTIVE row policy is what keeps every other social token and every
-    // email token out of a compromised dispatcher's reach. Pinned by name, kind, command,
+    // The worker sees only WhatsApp sender credentials (sql/328, Issue #1233):
+    // the grant on awcms_channel_secrets.ciphertext is column-wide, and the
+    // RESTRICTIVE row policy is what keeps every tenant's social and email tokens
+    // out of a compromised dispatcher's reach. Pinned by name, kind, command,
     // role and by naming the provider test, so dropping or weakening it is a
     // finding rather than a silent loss.
     if (present.includes(WORKER_ROLE)) {
@@ -2391,7 +2394,7 @@ export async function checkWorkerSetupRoleGrants(
 
       if (!policy[0]?.has_policy) {
         findings.push(
-          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials and publishing-capable social accounts) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
+          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
         );
       }
     }
@@ -2554,7 +2557,7 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_telegram_bindings.chat_ciphertext":
     "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
   "awcms_channel_secrets.ciphertext":
-    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Mailketing token, and a social token only as the next sentence says; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to the dispatch jobs alone. social-publishing:dispatch (Issue #1145, sql/332, ADR-0157 section 6) is the SECOND job that decrypts in-process: sql/332 adds, for it, only the access token of a live Facebook, Instagram, Threads, TikTok, YouTube or LinkedIn account (or of a connection such an account uses) that holds a GRANTED publish capability, so a social account nobody approved for publishing stays hidden. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts) and the access tokens of every publishing-capable social account."
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts)."
 };
 
 /**

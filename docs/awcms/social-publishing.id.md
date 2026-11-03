@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](social-publishing.md)
 
-<!-- i18n-source-hash: sha256:51822c37546ad6f7aea8f672199bbfaa1eb34cb4a3bd97c3c94eccad95d8ed1a -->
+<!-- i18n-source-hash: sha256:edcf36c081ebd9bb000741712bf4ff19860b884c2ce62844d3852142f4911ab6 -->
 
 # Penerbitan sosial (`social_publishing`)
 
-> **Status:** fondasi terimplementasi, **tanpa konektor provider**. Issue [#1145](https://github.com/ahliweb/awcms/issues/1145), [ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md) (**Diusulkan**), kapabilitas C3 dari [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) dan [`omnichannel-foundation.id.md`](omnichannel-foundation.id.md) bagian 2.3. Migrasi `sql/330` sampai `sql/332`. Modul berstatus `experimental` dan mati secara default.
+> **Status:** fondasi terimplementasi, **tanpa konektor provider**. Issue [#1145](https://github.com/ahliweb/awcms/issues/1145), [ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md) (**Diusulkan**), kapabilitas C3 dari [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) dan [`omnichannel-foundation.id.md`](omnichannel-foundation.id.md) bagian 2.3. Migrasi `sql/330` sampai `sql/331`. Modul berstatus `experimental` dan mati secara default.
 
 ## 1. Apa ini
 
@@ -47,22 +47,23 @@ Trigger database menegakkan: snapshot dan identitas tidak pernah berubah; job `p
 
 ## 4. Perilaku saat gagal
 
-| Situasi                                                                  | Hasil                                                                                                    |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Akun dicabut, dinonaktifkan, kapabilitas ditarik, koneksi dicabut        | Job `failed` (`ACCOUNT_*`), provider tidak pernah dipanggil, tidak ada yang dialihkan                    |
-| Akun terdegradasi, pending, grant kedaluwarsa, secret store tak tersedia | Job ditahan (`queued`, `hold_count + 1`, tanpa memakai percobaan); `HOLD_EXHAUSTED` setelah 12 penahanan |
-| Provider minta coba lagi, galat jaringan, adapter melempar               | `retry_wait` dengan backoff eksponensial (maksimum 4 jam); `RETRIES_EXHAUSTED` bila habis                |
-| Dibatasi laju                                                            | Sama, dan `retryAfterSeconds` provider hanya dapat memperpanjang tunggu                                  |
-| Kredensial tak lagi diterima                                             | `failed` `NEEDS_REAUTH`; tidak pernah dicoba ulang oleh backoff                                          |
-| Provider menolak konten                                                  | `failed` dengan kode tetap; tidak pernah dicoba ulang oleh backoff                                       |
-| Job lain dari publikasi yang sama gagal                                  | Tidak berpengaruh pada saudara yang sudah terbit; retry manual hanya memindahkan job yang gagal          |
-| Worker crash saat mengirim                                               | Lease habis, job diklaim lagi sebagai percobaan baru; provider diberi kunci idempotensi yang sama        |
-| Breaker terbuka untuk sebuah akun                                        | Job-nya tidak diklaim; akun lain tidak terpengaruh                                                       |
+| Situasi                                                                  | Hasil                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Akun dicabut, dinonaktifkan, kapabilitas ditarik, koneksi dicabut        | Job `failed` (`ACCOUNT_*`), provider tidak pernah dipanggil, tidak ada yang dialihkan                                                                                                                                                                                                                     |
+| Akun terdegradasi, pending, grant kedaluwarsa, secret store tak tersedia | Job ditahan (`queued`, `hold_count + 1`, tanpa memakai percobaan); `HOLD_EXHAUSTED` setelah 12 penahanan                                                                                                                                                                                                  |
+| Provider pasti tidak menerima (adapter berkata `retryable`)              | `retry_wait` dengan backoff eksponensial (maksimum 4 jam); `RETRIES_EXHAUSTED` bila habis                                                                                                                                                                                                                 |
+| Timeout, adapter yang melempar, atau `unknown` dari adapter              | **Post mungkin ada.** Provider yang men-dedupe kunci idempotensi (`supportsIdempotencyKey`): `retry_wait`, kunci sama, satu post. Selain itu: `needs_reconciliation`, tidak pernah dicoba ulang dispatcher; operator memeriksa akun dan mencoba ulang dengan `confirmPossiblyPublished`, atau membatalkan |
+| Dibatasi laju                                                            | Sama, dan `retryAfterSeconds` provider hanya dapat memperpanjang tunggu                                                                                                                                                                                                                                   |
+| Kredensial tak lagi diterima                                             | `failed` `NEEDS_REAUTH`; tidak pernah dicoba ulang oleh backoff                                                                                                                                                                                                                                           |
+| Provider menolak konten                                                  | `failed` dengan kode tetap; tidak pernah dicoba ulang oleh backoff                                                                                                                                                                                                                                        |
+| Job lain dari publikasi yang sama gagal                                  | Tidak berpengaruh pada saudara yang sudah terbit; retry manual hanya memindahkan job yang gagal                                                                                                                                                                                                           |
+| Worker crash saat mengirim                                               | Lease habis dan job diklaim lagi sebagai percobaan baru: kasus yang sama dengan jawaban yang hilang, jadi untuk provider tanpa kunci dedupe operator, bukan dispatcher, yang menjadi perlindungan                                                                                                         |
+| Breaker terbuka untuk sebuah akun                                        | Job-nya tidak diklaim; akun lain tidak terpengaruh                                                                                                                                                                                                                                                        |
 
 ## 5. Catatan keamanan
 
-- Job tidak pernah membawa kredensial. Dispatcher me-resolve-nya lewat `ChannelPublisherCredentialPort` (kapabilitas `channel_account` 1.1.0) dalam transaksi yang ditutup sebelum panggilan provider; hanya `scripts/social-publishing-dispatch.ts` yang menyusun adapter itu dan memegang `CHANNEL_SECRETS_ENCRYPTION_KEYS`.
-- `sql/332` melebarkan kebijakan baris `awcms_worker` pada `awcms_channel_secrets` dari kredensial pengirim WhatsApp menjadi juga mencakup access token akun Facebook, Instagram, Threads, TikTok, YouTube, atau LinkedIn yang hidup dan memegang kapabilitas `publish` yang **diberikan** (dan koneksi yang dipakai akun itu). Akun sosial yang tak seorang pun setujui untuk menerbitkan tetap tersembunyi. `social-publishing:dispatch` yang diretas tetap dapat mendekripsi token yang mampu menerbitkan milik setiap tenant: ini risiko residual yang diterima ADR-0148 bagian 5 untuk dispatcher, kini dinyatakan untuk job kedua.
+- Job tidak pernah membawa kredensial, dan **di irisan ini tidak ada yang dapat membaca satu pun untuk penerbitan** (temuan audit H1): job dispatch disusun dengan port kredensial yang menolak setiap permintaan (`noPublishCredentialPort`) dan tidak memegang `CHANNEL_SECRETS_ENCRYPTION_KEYS`. `ChannelPublisherCredentialPort` ada (kapabilitas `channel_account` 1.1.0) untuk konektor pertama, yang membawanya di bawah **role DB terpisah** (ADR-0157 bagian 6). Dispatcher tanpa adapter gagal tertutup (`PROVIDER_ADAPTER_UNAVAILABLE`) sebelum kredensial diminta.
+- **Mengapa role worker tidak dilebarkan.** Revisi pertama menambah migrasi yang membuat `awcms_worker` dapat membaca access token sosial. Audit independen menunjukkan bahwa `whatsapp:dispatch` berbagi role dan key ring itu, sehingga worker WhatsApp yang diretas dapat mendekripsi token sosial semua tenant sejak hari migrasi berjalan, bahkan tanpa adapter. Itu ditarik: `sql/328` tidak disentuh. Konektor pertama harus menambah role DB sendiri, dengan pembacaan khusus-kolom dan kebijakan restriktif sendiri yang mengikuti status akun dan state grant (audit M2) dan sepakat dengan adapter kredensial tentang rahasia mana yang di-resolve akun yang meminjam kredensial induknya (audit L10). Sampai saat itu tidak ada token sosial yang dapat dibaca role job mana pun.
 - Adapter menerima `request.http` (`ssrfSafeFetch`) dan tanpa `fetch` mentah; kredensial ada di memori untuk satu panggilan dan tidak pernah dicatat, disimpan, dijadikan event, diaudit, atau ditaruh di galat, dan pesan galat adapter yang dilempar tidak pernah disimpan. Kode kegagalan adalah kosakata tertutup yang dideklarasikan tiap adapter (`errorCodes`); kode di luarnya dicatat sebagai kode generik untuk hasilnya, sehingga string provider atau kredensial tidak dapat sampai ke baris lewat sebuah "kode".
 - Akses per akun: membuat publikasi, aturan, dan bertindak pada publikasi atau job mensyaratkan pemanggil dapat memakai setiap akun tujuan (aturan penugasan dan business scope `channel_accounts`); selain itu adalah `422 ACCOUNT_NOT_USABLE` atau `404` yang seragam. Pembacaan hanya digerbangi permission.
 - Setiap mutasi idempoten (`Idempotency-Key`), diaudit dengan id, kode, dan hitungan (tidak pernah caption, judul, atau URL), dan menolak kredensial mesin. Event membawa id, enum, dan hitungan.
@@ -77,18 +78,23 @@ Trigger database menegakkan: snapshot dan identitas tidak pernah berubah; job `p
 
 ## 8. Matriks akseptansi (issue #1145) dan tesnya
 
-| Akseptansi                                                    | Tes                                                                                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 2 tenant x 3+ akun, isolasi token                             | `social-publishing.integration.test.ts` "N accounts of two tenants", "ITS OWN credential"                                 |
-| Kegagalan sebagian dan replay                                 | "a rejected account does not change a published one", "a published job can never be retried..."                           |
-| Pencabutan                                                    | "revoked account", "revoked connection and a withdrawn capability", "degraded account HOLDS"                              |
-| Validasi MIME dan media                                       | `social-publishing.test.ts` kelayakan media; "unsupported content is REFUSED per account"                                 |
-| SSRF                                                          | "the adapter's HTTP client is ssrfSafeFetch"                                                                              |
-| Kuota dan retry aman                                          | "daily cap holds under concurrent dispatchers", "concurrent dispatchers send every job exactly once", "RETRIES_EXHAUSTED" |
-| Idempotensi per (artikel, trigger, akun)                      | "an article event is idempotent per (article, trigger, account)", "concurrent identical article events"                   |
-| Persetujuan, jadwal                                           | "nothing is claimable before approval", "a schedule defers dispatch"                                                      |
-| Tanpa antrean ganda, migrasi forward-only, RLS FORCE          | `social-publishing-contract.test.ts`, tes "FORCE RLS"                                                                     |
-| Port tidak pernah menggagalkan terbit, flag mati adalah no-op | "off unless the deployment enables it", "an unexpected failure inside the port never aborts..."                           |
+| Akseptansi                                                           | Tes                                                                                                                       |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 2 tenant x 3+ akun, isolasi token                                    | `social-publishing.integration.test.ts` "N accounts of two tenants", "ITS OWN credential"                                 |
+| Kegagalan sebagian dan replay                                        | "a rejected account does not change a published one", "a published job can never be retried..."                           |
+| Pencabutan                                                           | "revoked account", "revoked connection and a withdrawn capability", "degraded account HOLDS"                              |
+| Validasi MIME dan media                                              | `social-publishing.test.ts` kelayakan media; "unsupported content is REFUSED per account"                                 |
+| SSRF                                                                 | "the adapter's HTTP client is ssrfSafeFetch"                                                                              |
+| Kuota dan retry aman                                                 | "daily cap holds under concurrent dispatchers", "concurrent dispatchers send every job exactly once", "RETRIES_EXHAUSTED" |
+| Idempotensi per (artikel, trigger, akun)                             | "an article event is idempotent per (article, trigger, account)", "concurrent identical article events"                   |
+| Persetujuan, jadwal                                                  | "nothing is claimable before approval", "a schedule defers dispatch"                                                      |
+| Tanpa antrean ganda, migrasi forward-only, RLS FORCE                 | `social-publishing-contract.test.ts`, tes "FORCE RLS"                                                                     |
+| Hasil tak diketahui tidak pernah dicoba ulang secara buta (audit M1) | "M1 (the auditor's PoC)", "deduping provider is retried with the same key", "the timeout CANCELS the request"             |
+| Role worker tidak membaca token sosial (audit H1)                    | "H1: the worker role cannot see a social token"; tes kontrak pada `sql/328` dan allowlist job                             |
+| HTTP adapter tidak pernah mengikuti pengalihan (audit M3)            | `social-publishing.test.ts` "never follows a redirect"                                                                    |
+| Modul mati per tenant menghentikan enqueue dan dispatch (M4)         | "M4: a tenant that switched the module OFF"                                                                               |
+| Persetujuan ditahan di database (L2, L3)                             | "L2: the database refuses...", "L3: an approved publication cannot gain a target"                                         |
+| Port tidak pernah menggagalkan terbit, flag mati adalah no-op        | "off unless the deployment enables it", "an unexpected failure inside the port never aborts..."                           |
 
 ## 9. Keterbatasan tersisa
 
@@ -99,4 +105,6 @@ Trigger database menegakkan: snapshot dan identitas tidak pernah berubah; job `p
 - Jendela crash antara "provider menerima post" dan "job difinalisasi" hanya tertutup di mana provider menghormati kunci idempotensi yang diteruskan.
 - Pembacaan (daftar dan detail) digerbangi permission, bukan akses per akun.
 - Circuit breaker per proses: tiap proses dispatcher punya statusnya sendiri.
-- **ADR-0157 berstatus Diusulkan.** Penerimaan maintainer, dan tinjauan keamanan jalur kredensial sebelum konektor mana pun keluar dari flag, masih dibutuhkan.
+- **Residual audit dicatat, tidak diperbaiki di irisan ini** (keputusan 3 November 2026): M2 dan L10 adalah syarat desain role DB terpisah milik konektor (bagian 5); L4, L6, L8, dan L9 audit independen dicatat sebagai residual terdokumentasi (rinciannya ada di laporan audit pada PR #1240, tidak diulang di sini).
+- Saklar modul-mati per tenant dihormati enqueue dan dispatch, dan setiap rute lewat guard akses, tetapi publikasi yang sudah `published` tetap terbit (tidak ada yang menarik kembali sebuah post).
+- **ADR-0157 berstatus Diusulkan.** Penerimaan maintainer, dan tinjauan keamanan jalur kredensial beserta role DB terpisahnya sebelum konektor mana pun keluar dari flag, masih dibutuhkan.

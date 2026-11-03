@@ -18,21 +18,23 @@
  * A pass that throws for one tenant is logged for THAT tenant and does not stop
  * the other tenants.
  *
- * ## Composition root of the credential port (Issue #1145)
+ * ## It holds no key ring, on purpose (the #1145 audit, H1)
  *
- * This script is the ONLY place the publisher credential port is composed: it is
- * what lets the dispatcher decrypt a tenant-owned account's credential
- * (`CHANNEL_SECRETS_ENCRYPTION_KEYS`, granted to this job in
- * `scripts/jobs-env-allowlist.ts`). The key ring is read in memory inside the
- * dispatch call, for the claimed row's tenant, and a decrypt count is printed in
- * the summary line (telemetry only: it lives in this process).
+ * This job runs as `awcms_worker`, the role `whatsapp:dispatch` also uses with its
+ * own key ring. The role cannot read a social token (`sql/328` hides everything
+ * but a WhatsApp sender's credential) and this job is NOT granted
+ * `CHANNEL_SECRETS_ENCRYPTION_KEYS`, so it is composed with
+ * `noPublishCredentialPort`, which refuses every request. The real credential path
+ * lands with the first connector (#1146) under a separate DB role (ADR-0157
+ * section 6), and that change replaces this composition.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
-import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
-import { snapshotSecretDecryptCounts } from "../src/modules/channel-accounts/application/secret-store";
-import { dispatchSocialPublishQueue } from "../src/modules/social-publishing/application/social-publish-dispatch";
+import {
+  dispatchSocialPublishQueue,
+  noPublishCredentialPort
+} from "../src/modules/social-publishing/application/social-publish-dispatch";
 
 const MAX_PASSES_PER_TENANT = 10;
 
@@ -65,6 +67,7 @@ async function main() {
     let failed = 0;
     let held = 0;
     let superseded = 0;
+    let unknown = 0;
     let failedTenants = 0;
 
     for (const tenant of tenants) {
@@ -73,7 +76,7 @@ async function main() {
           const result = await dispatchSocialPublishQueue(sql, tenant.id, {
             correlationId,
             publishers: channelAccountPortAdapter,
-            credentials: channelSenderCredentialAdapter
+            credentials: noPublishCredentialPort
           });
 
           claimed += result.claimed;
@@ -82,6 +85,7 @@ async function main() {
           failed += result.failed;
           held += result.held;
           superseded += result.superseded;
+          unknown += result.unknown;
 
           if (result.claimed === 0) break;
         }
@@ -98,10 +102,7 @@ async function main() {
       `social-publishing:dispatch complete — correlationId=${correlationId} ` +
         `tenants=${tenants.length} claimed=${claimed} published=${published} ` +
         `retried=${retried} failed=${failed} held=${held} ` +
-        `superseded=${superseded} ` +
-        // A count per tenant and purpose, never a value: a compromised worker
-        // enumerating credentials shows up as a rate nobody scheduled.
-        `credentialDecrypts=${snapshotSecretDecryptCounts().reduce((sum, row) => sum + row.count, 0)} ` +
+        `unknown=${unknown} superseded=${superseded} ` +
         `failedTenants=${failedTenants}`
     );
   } catch (error) {

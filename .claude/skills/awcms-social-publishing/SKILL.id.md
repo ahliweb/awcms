@@ -1,11 +1,11 @@
 ---
 name: awcms-social-publishing
-description: Modul social_publishing ADA di repo ini (Issue #1145, ADR-0157; migrasi `sql/330`-`sql/332`) sebagai fondasi berbasis akun di belakang `SocialPublishingPort` yang sudah ada: satu publikasi dengan snapshot konten immutable, SATU JOB PER `channel_account` TUJUAN, persetujuan, jadwal, antarmuka `SocialPublishAdapter` dengan peta kapabilitas per provider, dan dispatcher yang memanggil provider di luar transaksi apa pun. TIDAK ada adapter provider nyata yang dikirim (konektor adalah #1146-#1151, masing-masing dengan persetujuan provider sendiri). Gunakan saat menambah atau mengubah konektor provider, status publikasi atau job, jalur enqueue atau dispatch, jalur kredensial, endpoint di bawah `/api/v1/social-publishing`, atau saat memasang composition root. Menyatakan invarian yang tidak boleh dilanggar konektor (job tidak memegang token, konten yang tak didukung ditolak bukan diturunkan, `published` bersifat final, tidak ada yang dialihkan). Epik awcms-mini (#643-#647) adalah spesifikasi ARSIP, bukan peta kode ini.
+description: Modul social_publishing ADA di repo ini (Issue #1145, ADR-0157; migrasi `sql/330`-`sql/331`) sebagai fondasi berbasis akun di belakang `SocialPublishingPort` yang sudah ada: satu publikasi dengan snapshot konten immutable, SATU JOB PER `channel_account` TUJUAN, persetujuan, jadwal, antarmuka `SocialPublishAdapter` dengan peta kapabilitas per provider, dan dispatcher yang memanggil provider di luar transaksi apa pun. TIDAK ada adapter provider nyata yang dikirim (konektor adalah #1146-#1151, masing-masing dengan persetujuan provider sendiri). Gunakan saat menambah atau mengubah konektor provider, status publikasi atau job, jalur enqueue atau dispatch, jalur kredensial, endpoint di bawah `/api/v1/social-publishing`, atau saat memasang composition root. Menyatakan invarian yang tidak boleh dilanggar konektor (job tidak memegang token, konten yang tak didukung ditolak bukan diturunkan, `published` bersifat final, tidak ada yang dialihkan). Epik awcms-mini (#643-#647) adalah spesifikasi ARSIP, bukan peta kode ini.
 ---
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:13526d19274d367d27796d40554e89133284f33322f8b3c61b132ca45f099981 -->
+<!-- i18n-source-hash: sha256:e767860ce2d17a746ef31fa20fb0e84957bb22b3cb1b15a86ea1728224515829 -->
 
 # AWCMS — Social Publishing (publikasi dan job berbasis akun)
 
@@ -35,11 +35,16 @@ description: Modul social_publishing ADA di repo ini (Issue #1145, ADR-0157; mig
 
 ## Invarian (masing-masing ditegakkan tes; jangan lemahkan satu pun)
 
-1. **Job tidak pernah membawa kredensial.** Dispatcher me-resolve-nya untuk akun
-   itu saat dispatch lewat `ChannelPublisherCredentialPort`, di memori, dalam
-   transaksi yang ditutup SEBELUM panggilan provider. Adapter kredensial
-   (`channel-sender-credential-adapter.ts`) hanya diimpor oleh composition root
-   dispatch (`tests/whatsapp-sender-routing.test.ts` mengunci daftarnya).
+1. **Job tidak pernah membawa kredensial, dan role worker tidak boleh membaca
+   satu pun.** Di irisan ini skrip dispatch disusun dengan `noPublishCredentialPort`
+   (menolak segalanya) dan tidak memegang key ring: `awcms_worker` berbagi role
+   dan key ring dengan `whatsapp:dispatch`, sehingga membiarkannya membaca token
+   sosial akan membuat worker WhatsApp yang diretas dapat mendekripsinya (audit
+   H1; `sql/328` tetap hanya WhatsApp). `ChannelPublisherCredentialPort` yang
+   nyata disusun konektor pertama di bawah role DB TERPISAH, di memori, dalam
+   transaksi yang ditutup SEBELUM panggilan provider.
+   `tests/whatsapp-sender-routing.test.ts` mengunci pengimpor adapter kredensial
+   hanya pada skrip WhatsApp.
 2. **Gagal tertutup per akun.** `ChannelPublisherPort.resolvePublisher` ditanyakan
    saat enqueue DAN saat dispatch: dicabut atau dinonaktifkan menggagalkan job,
    terdegradasi atau grant kedaluwarsa MENAHAN-nya (tanpa memakai percobaan,
@@ -77,10 +82,14 @@ description: Modul social_publishing ADA di repo ini (Issue #1145, ADR-0157; mig
 3. Daftarkan dari `scripts/social-publishing-dispatch.ts#registerSocialAdapters`
    DAN dari proses yang melayani API, agar enqueue melihat registri yang sama.
 4. Bila purpose token provider bukan `provider_access_token`, `api_token`, atau
-   `device_key`, atau kunci providernya tidak ada di `sql/332`, worker TIDAK BISA
+   `device_key`, role itu tidak bisa
    melihat rahasianya: itu butuh migrasi sendiri yang ditinjau (konektor Telegram
    membutuhkannya).
-5. Uji terhadap `tests/support/fake-social-publish-adapter.ts` untuk kontraknya dan
+5. Deklarasikan `supportsIdempotencyKey` dengan jujur dan kembalikan `unknown`
+   (bukan `retryable`) bila permintaan mungkin sudah diproses: tanpa kunci dedupe
+   job lalu menunggu operator alih-alih menerbitkan dua kali. `request.http` TIDAK
+   mengikuti pengalihan dan dibatalkan oleh `request.signal`.
+6. Uji terhadap `tests/support/fake-social-publish-adapter.ts` untuk kontraknya dan
    tambahkan tes provider itu sendiri; fake tidak pernah diimpor dari `src/`.
 
 ## Berkas
@@ -88,7 +97,7 @@ description: Modul social_publishing ADA di repo ini (Issue #1145, ADR-0157; mig
 | Perhatian                  | Di mana                                                                                                         |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Descriptor, permission     | `src/modules/social-publishing/module.ts`, `sql/331`                                                            |
-| Skema, trigger, RLS        | `sql/330`; visibilitas rahasia worker `sql/332`                                                                 |
+| Skema, trigger, RLS        | `sql/330`                                                                                                       |
 | Aturan konten dan dukungan | `src/modules/social-publishing/domain/social-publish-content.ts`                                                |
 | Enqueue                    | `src/modules/social-publishing/application/publication-enqueue.ts`                                              |
 | Dispatch                   | `src/modules/social-publishing/application/social-publish-dispatch.ts`, `scripts/social-publishing-dispatch.ts` |

@@ -24,6 +24,13 @@
  *
  * A failure is a RETURNED reason with no value and no key material; the caller
  * fails the row or holds it. There is no fallback to any other credential.
+ *
+ * ## `resolvePublishCredential` has no composer yet (Issue #1145, audit H1)
+ *
+ * The same decrypt, for an account that PUBLISHES (`social_publishing`). No
+ * script composes it: `awcms_worker` cannot read a social token (`sql/328`) and
+ * `social-publishing:dispatch` is deliberately granted no key ring. The first
+ * connector composes it under a SEPARATE DB role (ADR-0157 section 6).
  */
 import type {
   ChannelPublisherCredentialPort,

@@ -134,7 +134,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                                                                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                                                                                             | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Base modules                      | **36** (see the list in ARCHITECTURE.md)                                                                                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **247** (`sql/001`–`332`)                                                                                                                              | `ls sql/`                                                                               |
+| Migrations                        | **246** (`sql/001`–`331`)                                                                                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0157** (`0000` = template; highest ADR status: **Proposed**)                                                                                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **80** `.astro` files in `src/pages/admin/`; **3 of 36** modules without `navigation:` (`channel-accounts`, `social-publishing`, `website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | `.astro` files                    | **102** (59.180 lines) — on typechecking see §6                                                                                                        | `find src -name '*.astro'`                                                              |
@@ -406,27 +406,31 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
-- **SOCIAL PUBLISHING FOUNDATION — 3 November 2026: built, NO connector (#1145,
-  ADR-0157 Proposed; migrations `sql/330`-`sql/332`).** `social_publishing` is a
-  registered `experimental` module behind the existing `SocialPublishingPort`: one
+- **SOCIAL PUBLISHING FOUNDATION — 3 November 2026: built, NO connector, and it
+  cannot publish yet (#1145, ADR-0157 Proposed; migrations `sql/330`-`sql/331`;
+  PR #1240, independently audited).** `social_publishing` is a registered
+  `experimental` module behind the existing `SocialPublishingPort`: one
   publication with an immutable content snapshot, ONE JOB PER target
   `channel_account` (no token, no secret reference), approval (required by default,
-  a creator cannot approve their own), a schedule, per-job retry, a
-  `SocialPublishAdapter` interface whose capability map is a ceiling never a grant,
-  and `bun run social-publishing:dispatch` (claim, send outside any transaction
-  through `ssrfSafeFetch`, finalise; a published job is terminal). The composition
-  roots swap the `blog_content` no-op only when `SOCIAL_PUBLISHING_ENABLED` is on.
-  `channel_account` port 1.0.0 to 1.1.0 (two separate exported ports). **Open, in
-  order:** the maintainer's acceptance of ADR-0157; a security review of the
-  credential path (`sql/332` lets `awcms_worker` see the access tokens of
-  publishing-capable social accounts, the second job after `whatsapp:dispatch` to do
-  so); the connectors #1146-#1151, each needing its provider approval (a business
-  step), and each registers its adapter in `scripts/social-publishing-dispatch.ts`
-  AND in the process that serves the API; the admin screen (nine permissions on
-  `NOT_YET_SCREENED`); a retention sweep (three tables are parked on
-  `BOUNDED_BY_DESIGN`, cap raised 30 to 35, which the table-coverage test says is a
-  raise that does not clear its own bar and must be paid down). Map: the
-  `social_publishing` README and `docs/awcms/social-publishing.md`.
+  a creator cannot approve their own, enforced by the database), a schedule,
+  per-job retry, a `SocialPublishAdapter` interface whose capability map is a
+  ceiling never a grant, and `bun run social-publishing:dispatch` (claim, send
+  outside any transaction through an `ssrfSafeFetch` client that follows no
+  redirect and is cancelled by the timeout, finalise; a published job is terminal;
+  an unknown outcome is `needs_reconciliation` unless the adapter's provider
+  dedupes on the idempotency key). **Audit decision (H1):** the worker role's
+  secret visibility is NOT widened (`sql/328` stays WhatsApp-only) and the dispatch
+  job holds no key ring; it is composed with `noPublishCredentialPort`. **Open, in
+  order:** the maintainer's acceptance of ADR-0157; the connectors #1146-#1151,
+  each needing its provider approval (a business step), and the FIRST of them must
+  bring the credential path under a SEPARATE DB role (for example
+  `awcms_social_dispatch`) whose row policy follows the account's status and the
+  grant's state (audit M2) and agrees with the credential adapter for an account
+  that borrows its parent's credential (audit L10), stating its effect on
+  `whatsapp:dispatch`; the admin screen (nine permissions on `NOT_YET_SCREENED`);
+  a retention sweep (three tables are parked on `BOUNDED_BY_DESIGN`, cap raised 30
+  to 35 against its own bar); audit residuals L4, L6, L8, L9 (detail on PR #1240).
+  Map: the `social_publishing` README and `docs/awcms/social-publishing.md`.
 
 - **COMMISSION INTAKE QUEUE — 28 October 2026: built (#1189, ADR-0147; migrations
   `sql/316` + `sql/317`).** An event-driven consumer (`awcms_worker`) can now report

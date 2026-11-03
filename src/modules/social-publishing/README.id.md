@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:0d47b0fa917d187a325e5a386f6a89bcc11ba32b2ccbc13e1c683144b8cd78bd -->
+<!-- i18n-source-hash: sha256:5353ba176315bdd446ea94943389a2324a6d0e3c1b15430f5237afa24477bc19 -->
 
 # `social_publishing`
 
@@ -10,13 +10,13 @@ Status: `experimental`, **mati secara default** (`SOCIAL_PUBLISHING_ENABLED`), t
 
 ## Yang dimiliki
 
-| Tabel                              | Menyimpan                                                                                                                                                           |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `awcms_social_publishing_settings` | Dua saklar tenant: `auto_publish_enabled` (default `false`) dan `approval_required` (default `true`)                                                                |
-| `awcms_social_publish_rules`       | `channel_account` mana yang dituju sebuah event artikel (unik per trigger dan akun; dinonaktifkan, tidak pernah dihapus)                                            |
-| `awcms_social_publications`        | Satu publikasi dengan snapshot konten IMMUTABLE (judul, caption, tautan, snapshot media, hash konten), siklus persetujuan dan pembatalan, `not_before`              |
-| `awcms_social_publish_jobs`        | Satu job per (publikasi, akun): snapshot provider dan varian, status, percobaan, penahanan, id dan URL post dari provider. **Tanpa token, tanpa referensi rahasia** |
-| `awcms_social_publish_attempts`    | Ledger append-only: sebuah hasil, kode tetap, frasa tetap                                                                                                           |
+| Tabel                              | Menyimpan                                                                                                                                                                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `awcms_social_publishing_settings` | Dua saklar tenant: `auto_publish_enabled` (default `false`) dan `approval_required` (default `true`)                                                                                                                       |
+| `awcms_social_publish_rules`       | `channel_account` mana yang dituju sebuah event artikel (unik per trigger dan akun; dinonaktifkan, tidak pernah dihapus)                                                                                                   |
+| `awcms_social_publications`        | Satu publikasi dengan snapshot konten IMMUTABLE (judul, caption, tautan, snapshot media, hash konten), siklus persetujuan dan pembatalan, `not_before`                                                                     |
+| `awcms_social_publish_jobs`        | Satu job per (publikasi, akun): snapshot provider dan varian, status (`needs_reconciliation` bila hasilnya tidak diketahui), percobaan, penahanan, id dan URL post dari provider. **Tanpa token, tanpa referensi rahasia** |
+| `awcms_social_publish_attempts`    | Ledger append-only: sebuah hasil, kode tetap, frasa tetap                                                                                                                                                                  |
 
 Ia membaca model akun hanya lewat port `channel_account` (`ChannelPublisherPort`, `ChannelPublisherCredentialPort`, versi kapabilitas 1.1.0) dan memverifikasi media lewat `MediaLibraryPort`. Ia tidak memiliki akun, kredensial, media, atau isi artikel.
 
@@ -64,4 +64,6 @@ Setiap mutasi memerlukan `Idempotency-Key` dan menolak kredensial mesin; setiap 
 
 - Tanpa adapter provider, tanpa layar admin, tanpa template caption, tanpa sapuan retensi (lihat keterbatasan tersisa di `docs/awcms/social-publishing.id.md`).
 - Jendela crash antara "provider menerima post" dan "job difinalisasi" hanya tertutup sejauh provider menghormati kunci idempotensi yang diteruskan.
-- `sql/332` membuat role `awcms_worker` dapat melihat access token akun sosial yang mampu menerbitkan (risiko residual yang diterima ADR-0148 bagian 5 untuk dispatcher); `social-publishing:dispatch` yang diretas dapat mendekripsi token itu milik setiap tenant.
+- **Ia belum dapat menerbitkan, disengaja (temuan audit H1).** Role `awcms_worker` tidak dapat membaca token sosial (`sql/328` tidak berubah) dan job dispatch tidak memegang key ring: ia disusun dengan `noPublishCredentialPort`, yang menolak setiap permintaan. Jalur kredensial hadir bersama konektor pertama (#1146) di bawah **role DB terpisah** (misalnya `awcms_social_dispatch`), yang juga harus (M2) mengikuti status akun (`connected` atau `degraded`) dan state grant (`active` atau `expired`) dalam kebijakan barisnya, dan (L10) sepakat dengan adapter kredensial tentang rahasia yang di-resolve akun yang meminjam kredensial induknya. `whatsapp:dispatch` tidak terpengaruh.
+- Hasil yang tidak diketahui (timeout, lemparan setelah permintaan terkirim) dicoba ulang otomatis hanya untuk adapter yang mendeklarasikan `supportsIdempotencyKey`; selain itu job berstatus `needs_reconciliation` dan menunggu operator (`POST jobs/{id}/retry` dengan `confirmPossiblyPublished`, atau batal). Klien HTTP adapter tidak mengikuti pengalihan dan dibatalkan oleh signal panggilan.
+- Residual audit dicatat, tidak diperbaiki di sini: M2 dan L10 di atas; L4, L6, L8, dan L9 audit independen adalah residual terdokumentasi (rincian di PR #1240).

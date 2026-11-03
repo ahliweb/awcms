@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:48aa9ac02d6f8b90648c6b8f31515dd04d7725ea8f3c4ae3c66c2fe3240d68c6 -->
+<!-- i18n-source-hash: sha256:79732b1203eb6eca399dfc25226a712bde4c6144ed621d009a716ce33e099020 -->
 
 # AWCMS — Project State & Continuation
 
@@ -136,7 +136,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                                    | `git rev-list --count v10.11.0..HEAD`                                                   |
 | Modul base                         | **36** (lihat daftar di ARCHITECTURE.md)                                                                                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **247** (`sql/001`–`332`)                                                                                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **246** (`sql/001`–`331`)                                                                                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0157** (`0000` = template; status ADR tertinggi: **Proposed**)                                                                             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **80** berkas `.astro` di `src/pages/admin/`; **3 dari 36** modul tanpa `navigation:` (`channel-accounts`, `social-publishing`, `website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **102** (59.180 baris) — soal typecheck lihat §6                                                                                                      | `find src -name '*.astro'`                                                              |
@@ -410,26 +410,31 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
 
 ## 4. Backlog / langkah berikutnya
 
-- **FONDASI PENERBITAN SOSIAL — 3 November 2026: dibangun, TANPA konektor (#1145,
-  ADR-0157 Diusulkan; migrasi `sql/330`-`sql/332`).** `social_publishing` adalah modul
-  `experimental` terdaftar di belakang `SocialPublishingPort` yang sudah ada: satu
-  publikasi dengan snapshot konten immutable, SATU JOB PER `channel_account` tujuan
-  (tanpa token, tanpa referensi rahasia), persetujuan (wajib secara default, pembuat
-  tidak dapat menyetujui miliknya sendiri), jadwal, retry per job, antarmuka
-  `SocialPublishAdapter` yang peta kapabilitasnya adalah plafon bukan hibah, dan
-  `bun run social-publishing:dispatch` (klaim, kirim di luar transaksi lewat
-  `ssrfSafeFetch`, finalisasi; job yang sudah terbit bersifat final). Composition root
-  hanya menukar no-op `blog_content` bila `SOCIAL_PUBLISHING_ENABLED` menyala. Port
-  `channel_account` 1.0.0 ke 1.1.0 (dua port ekspor terpisah). **Terbuka, berurutan:**
-  penerimaan maintainer atas ADR-0157; tinjauan keamanan jalur kredensial (`sql/332`
-  membuat `awcms_worker` dapat melihat access token akun sosial yang mampu
-  menerbitkan, job kedua setelah `whatsapp:dispatch` yang melakukannya); konektor
-  #1146-#1151, masing-masing butuh persetujuan providernya (langkah bisnis), dan
-  masing-masing mendaftarkan adapter di `scripts/social-publishing-dispatch.ts` DAN di
-  proses yang melayani API; layar admin (sembilan permission di `NOT_YET_SCREENED`);
-  sapuan retensi (tiga tabel diparkir di `BOUNDED_BY_DESIGN`, batas dinaikkan 30 ke
-  35, kenaikan yang menurut tes cakupan tabel tidak memenuhi syaratnya sendiri dan
-  harus dilunasi). Peta: README `social_publishing` dan `docs/awcms/social-publishing.id.md`.
+- **FONDASI PENERBITAN SOSIAL — 3 November 2026: dibangun, TANPA konektor, dan
+  belum dapat menerbitkan (#1145, ADR-0157 Diusulkan; migrasi `sql/330`-`sql/331`;
+  PR #1240, diaudit independen).** `social_publishing` adalah modul `experimental`
+  terdaftar di belakang `SocialPublishingPort` yang sudah ada: satu publikasi dengan
+  snapshot konten immutable, SATU JOB PER `channel_account` tujuan (tanpa token,
+  tanpa referensi rahasia), persetujuan (wajib secara default, pembuat tidak dapat
+  menyetujui miliknya sendiri, ditegakkan database), jadwal, retry per job,
+  antarmuka `SocialPublishAdapter` yang peta kapabilitasnya adalah plafon bukan
+  hibah, dan `bun run social-publishing:dispatch` (klaim, kirim di luar transaksi
+  lewat klien `ssrfSafeFetch` yang tidak mengikuti pengalihan dan dibatalkan oleh
+  timeout, finalisasi; job yang sudah terbit bersifat final; hasil tak diketahui
+  menjadi `needs_reconciliation` kecuali provider adapter men-dedupe kunci
+  idempotensi). **Keputusan audit (H1):** visibilitas rahasia role worker TIDAK
+  dilebarkan (`sql/328` tetap hanya WhatsApp) dan job dispatch tidak memegang key
+  ring; ia disusun dengan `noPublishCredentialPort`. **Terbuka, berurutan:**
+  penerimaan maintainer atas ADR-0157; konektor #1146-#1151, masing-masing butuh
+  persetujuan providernya (langkah bisnis), dan YANG PERTAMA harus membawa jalur
+  kredensial di bawah role DB TERPISAH (misalnya `awcms_social_dispatch`) yang
+  kebijakan barisnya mengikuti status akun dan state grant (audit M2) dan sepakat
+  dengan adapter kredensial untuk akun yang meminjam kredensial induknya (audit
+  L10), menyatakan dampaknya pada `whatsapp:dispatch`; layar admin (sembilan
+  permission di `NOT_YET_SCREENED`); sapuan retensi (tiga tabel diparkir di
+  `BOUNDED_BY_DESIGN`, batas dinaikkan 30 ke 35 melawan syaratnya sendiri); residual
+  audit L4, L6, L8, L9 (rincian di PR #1240). Peta: README `social_publishing` dan
+  `docs/awcms/social-publishing.id.md`.
 
 - **ANTREAN INTAKE KOMISI — 28 Oktober 2026: dibangun (#1189, ADR-0147; migrasi
   `sql/316` + `sql/317`).** Consumer berbasis event (`awcms_worker`) kini dapat

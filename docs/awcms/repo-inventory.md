@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 36    |
-| Migrations                          | 247   |
+| Migrations                          | 246   |
 | `awcms_*` tables                    | 241   |
 | Tables with `FORCE` RLS             | 223   |
 | RLS-free tables (global, by design) | 18    |
@@ -307,7 +307,6 @@
 | 244 | `sql/329_awcms_whatsapp_sender_guard_shape.sql`                    |
 | 245 | `sql/330_awcms_social_publishing_schema.sql`                       |
 | 246 | `sql/331_awcms_social_publishing_permissions.sql`                  |
-| 247 | `sql/332_awcms_social_publishing_secret_visibility.sql`            |
 
 ### Tables & Row-Level Security
 

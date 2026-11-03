@@ -263,6 +263,37 @@ export function validateCancel(
     : { valid: true, value: { reason } };
 }
 
+export function validateRetry(
+  raw: unknown
+): Validated<{ confirmPossiblyPublished: boolean }> {
+  if (raw === undefined || raw === null) {
+    return { valid: true, value: { confirmPossiblyPublished: false } };
+  }
+
+  if (!isRecord(raw)) return { valid: false, errors: NOT_AN_OBJECT };
+
+  const errors = unknownFields(raw, ["confirmPossiblyPublished"]);
+
+  if (
+    raw.confirmPossiblyPublished !== undefined &&
+    typeof raw.confirmPossiblyPublished !== "boolean"
+  ) {
+    errors.push({
+      field: "confirmPossiblyPublished",
+      message: "Must be a boolean."
+    });
+  }
+
+  return errors.length > 0
+    ? { valid: false, errors }
+    : {
+        valid: true,
+        value: {
+          confirmPossiblyPublished: raw.confirmPossiblyPublished === true
+        }
+      };
+}
+
 export type CreateRuleInput = {
   trigger: SocialPublishTrigger;
   accountId: string;

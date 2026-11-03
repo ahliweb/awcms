@@ -890,6 +890,75 @@ suite("social_publishing HTTP surface (Issue #1145)", () => {
     expect(second.body.data.alreadyCancelled).toBe(true);
   });
 
+  test("an unknown outcome is retried only with an explicit confirmation, and the body is strict (M1 of the audit)", async () => {
+    const account = await seedAccount(env.tenantId, "facebook");
+
+    await call(patchSettings, {
+      method: "PATCH",
+      path: `${BASE}/settings`,
+      body: { approvalRequired: false }
+    });
+
+    const created = await publish([account.id]);
+    const jobId = created.body.data.jobs[0].id as string;
+    const publicationId = created.body.data.publication.id as string;
+
+    await admin()`UPDATE awcms_social_publish_jobs SET status = 'publishing', attempt_count = 1 WHERE id = ${jobId}`;
+    await admin()`
+      UPDATE awcms_social_publish_jobs
+      SET status = 'needs_reconciliation', failure_code = 'PROVIDER_TIMEOUT'
+      WHERE id = ${jobId}
+    `;
+
+    const detail = await call(getPublication, {
+      path: `${BASE}/publications/${publicationId}`,
+      params: { id: publicationId }
+    });
+
+    expect(detail.body.data.publication.status).toBe("needs_reconciliation");
+
+    const retry = (body?: unknown) =>
+      call(retryJob, {
+        method: "POST",
+        path: `${BASE}/jobs/${jobId}/retry`,
+        params: { id: jobId },
+        body
+      });
+
+    const refused = await retry();
+
+    expect(refused.status).toBe(409);
+    expect(refused.body.error?.code).toBe(
+      "RECONCILIATION_CONFIRMATION_REQUIRED"
+    );
+    expect((await retry({ confirmPossiblyPublished: "yes" })).status).toBe(400);
+    expect((await retry({ unexpected: true })).status).toBe(400);
+
+    const confirmed = await retry({ confirmPossiblyPublished: true });
+
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.body.data.status).toBe("queued");
+  });
+
+  test("a tenant that switched the module off is refused by every route (the guard) and by the dispatcher", async () => {
+    await admin()`
+      INSERT INTO awcms_modules (module_key, module_name)
+      VALUES ('social_publishing', 'Social Publishing')
+      ON CONFLICT (module_key) DO NOTHING
+    `;
+    await admin()`
+      INSERT INTO awcms_tenant_modules (tenant_id, module_key, enabled)
+      VALUES (${env.tenantId}, 'social_publishing', false)
+    `;
+
+    const list = await call(listPublications, {
+      path: `${BASE}/publications`
+    });
+
+    expect(list.status).toBe(403);
+    expect((await dispatchAsApp(env.tenantId)).claimed).toBe(0);
+  });
+
   test("rules and settings round trip; a rule needs a usable account; a disabled rule is listed, not deleted", async () => {
     const account = await seedAccount(env.tenantId, "facebook");
     const defaults = await call(getSettings, { path: `${BASE}/settings` });

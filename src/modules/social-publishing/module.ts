@@ -161,7 +161,7 @@ export const socialPublishingModule = defineModule({
         "Drain the due social publish queue (claim lease, per-account fair share and daily cap, account re-check, provider call outside any transaction, retry/backoff, per-account circuit breaker) for every active tenant.",
       recommendedSchedule: "Every 2 minutes via cron/systemd timer.",
       environmentNotes:
-        'No-op when SOCIAL_PUBLISHING_ENABLED is not "true" and publishes nothing until a provider adapter is registered. Holds CHANNEL_SECRETS_ENCRYPTION_KEYS (job-scoped) to decrypt a tenant-owned account credential in memory for the call. Requires outbound HTTPS to the providers; on an offline/LAN deployment it stays a no-op.',
+        'No-op when SOCIAL_PUBLISHING_ENABLED is not "true" and publishes nothing until a provider adapter is registered. Holds NO key ring and is composed with a credential port that refuses every request until the first connector brings the credential path under a separate DB role (ADR-0157 section 6). Requires outbound HTTPS to the providers; on an offline/LAN deployment it stays a no-op.',
       safeInOfflineLan: true
     }
   ],

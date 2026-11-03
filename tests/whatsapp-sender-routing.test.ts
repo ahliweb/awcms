@@ -1310,12 +1310,10 @@ describe("static contracts", () => {
       }
     }
 
-    // The one other composition root is `social-publishing:dispatch` (Issue
-    // #1145, ADR-0157): a job that only ENQUEUES never reaches the secret store.
-    expect(importers.sort()).toEqual([
-      "scripts/social-publishing-dispatch.ts",
-      "scripts/whatsapp-dispatch.ts"
-    ]);
+    // Still ONE (the #1145 audit, H1): `social-publishing:dispatch` shares the
+    // `awcms_worker` role and must NOT be handed the key ring, or a compromised
+    // WhatsApp worker could decrypt social tokens through it.
+    expect(importers).toEqual(["scripts/whatsapp-dispatch.ts"]);
   });
 
   test("one queue, no dual write: the migration creates no queue table and the module owns exactly one message table", () => {

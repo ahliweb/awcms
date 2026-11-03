@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { buildAdapterHttp } from "../src/modules/social-publishing/application/social-publish-dispatch";
 import { isPublisherShape } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import {
   buildContentSnapshot,
@@ -31,6 +32,7 @@ import {
   validateCreatePublication,
   validateCreateRule,
   validateListPublicationsQuery,
+  validateRetry,
   validateRulePatch,
   validateSchedule,
   validateSettingsPatch
@@ -350,6 +352,16 @@ describe("retry, hold and the aggregate status", () => {
       "partially_published"
     );
     expect(status("ready", ["failed", "queued"])).toBe("queued");
+    // An unknown outcome outranks everything but a refused or waiting publication.
+    expect(status("ready", ["published", "needs_reconciliation"])).toBe(
+      "needs_reconciliation"
+    );
+    expect(status("ready", ["needs_reconciliation", "failed"])).toBe(
+      "needs_reconciliation"
+    );
+    expect(status("pending_approval", ["needs_reconciliation"])).toBe(
+      "pending_approval"
+    );
   });
 });
 
@@ -478,6 +490,95 @@ describe("request validation is strict", () => {
     expect(
       validateListPublicationsQuery(new URLSearchParams("state=bogus"))
     ).toMatchObject({ valid: false });
+  });
+});
+
+describe("the retry body", () => {
+  test("is optional, strict, and a confirmation is a boolean", () => {
+    expect(validateRetry(undefined)).toEqual({
+      valid: true,
+      value: { confirmPossiblyPublished: false }
+    });
+    expect(validateRetry(null)).toMatchObject({ valid: true });
+    expect(validateRetry({ confirmPossiblyPublished: true })).toEqual({
+      valid: true,
+      value: { confirmPossiblyPublished: true }
+    });
+    expect(validateRetry({ confirmPossiblyPublished: "yes" })).toMatchObject({
+      valid: false
+    });
+    expect(validateRetry({ token: "x" })).toMatchObject({ valid: false });
+    expect(validateRetry([])).toMatchObject({ valid: false });
+  });
+});
+
+describe("the adapter HTTP client (M3 of the #1145 audit)", () => {
+  test("never follows a redirect, so an Authorization header cannot reach another origin; and the call's signal cancels the request", async () => {
+    const seenByTarget: (string | null)[] = [];
+    const target = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch(request) {
+        seenByTarget.push(request.headers.get("authorization"));
+
+        return new Response("target");
+      }
+    });
+    const redirector = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch() {
+        return new Response(null, {
+          status: 302,
+          headers: { location: `http://127.0.0.1:${target.port}/steal` }
+        });
+      }
+    });
+    const slowServer = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch() {
+        await Bun.sleep(1500);
+
+        return new Response("late");
+      }
+    });
+    const env = {
+      AUTH_SSO_ALLOW_INSECURE_HOSTS: [target, redirector, slowServer]
+        .map((server) => `127.0.0.1:${server.port}`)
+        .join(",")
+    } as unknown as NodeJS.ProcessEnv;
+
+    try {
+      const http = buildAdapterHttp(env);
+      const followed = await http(
+        `http://127.0.0.1:${redirector.port}/publish`,
+        {
+          method: "POST",
+          headers: { Authorization: "Bearer SECRET-TOKEN" },
+          body: "{}"
+        }
+      );
+
+      expect(followed).toEqual({ ok: false, reason: "too_many_redirects" });
+      expect(seenByTarget).toEqual([]);
+
+      const controller = new AbortController();
+      const cancellable = buildAdapterHttp(env, controller.signal);
+      const startedAt = Date.now();
+      const pending = cancellable(`http://127.0.0.1:${slowServer.port}/slow`);
+
+      setTimeout(() => controller.abort(), 100);
+
+      const cancelled = await pending;
+
+      expect(cancelled).toEqual({ ok: false, reason: "request_failed" });
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+    } finally {
+      target.stop(true);
+      redirector.stop(true);
+      slowServer.stop(true);
+    }
   });
 });
 

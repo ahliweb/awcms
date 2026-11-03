@@ -460,10 +460,15 @@ paths:
       operationId: retrySocialPublishJob
       tags:
         - Social Publishing
-      summary: Retry ONE failed per-account job.
+      summary: Retry ONE failed (or unknown-outcome) per-account job.
       description: >-
-        Only that job moves, back to `queued` with a small bounded extra attempt
-        budget. A published sibling is never touched and never replayed, and a job
+        A job whose outcome is UNKNOWN (`needs_reconciliation`: a timeout or a lost
+        response, the post may already exist) is retried only with
+        `{ "confirmPossiblyPublished": true }`, by which the operator states they
+        checked the account (otherwise `409 RECONCILIATION_CONFIRMATION_REQUIRED`);
+        the dispatcher never retries it by itself. A job that has used the whole
+        attempt ceiling is `409 RETRY_BUDGET_EXHAUSTED`. Only that job moves, back
+        to `queued` with a small bounded extra attempt budget. A published sibling is never touched and never replayed, and a job
         that already PUBLISHED can never be retried (`409 JOB_ALREADY_PUBLISHED`;
         the database enforces it as well). The publication must still be `ready`
         (approved and not cancelled). The caller must be able to use the job's
@@ -478,6 +483,18 @@ paths:
             type: string
             format: uuid
         - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                confirmPossiblyPublished:
+                  type: boolean
+                  description: >-
+                    Required `true` for a job in `needs_reconciliation`.
       responses:
         "200":
           description: The job is queued again.
@@ -515,8 +532,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >-
-            `JOB_ALREADY_PUBLISHED`, `JOB_STATE_INVALID`, `PUBLICATION_STATE_INVALID`
-            or `IDEMPOTENCY_CONFLICT`.
+            `JOB_ALREADY_PUBLISHED`, `JOB_STATE_INVALID`, `PUBLICATION_STATE_INVALID`,
+            `RECONCILIATION_CONFIRMATION_REQUIRED`, `RETRY_BUDGET_EXHAUSTED` or
+            `IDEMPOTENCY_CONFLICT`.
           content:
             application/json:
               schema:
@@ -872,8 +890,12 @@ components:
       type: string
       description: >-
         DERIVED from the jobs when read, never stored, so it cannot drift from them.
+        `needs_reconciliation` outranks everything but `refused` and
+        `pending_approval`: at least one job's outcome is UNKNOWN (a timeout or a
+        lost response, the post may already exist) and a person has to look.
       enum:
         - refused
+        - needs_reconciliation
         - pending_approval
         - queued
         - in_progress
@@ -883,6 +905,12 @@ components:
         - cancelled
     SocialPublishJobStatus:
       type: string
+      description: >-
+        `needs_reconciliation`: the request was sent and the answer is lost (a
+        timeout, or an adapter that threw after sending) and the provider is not
+        known to dedupe on the idempotency key, so the post may exist. The
+        dispatcher NEVER retries it; an operator retries with an explicit
+        confirmation, or cancels.
       enum:
         - queued
         - publishing
@@ -890,6 +918,7 @@ components:
         - published
         - failed
         - cancelled
+        - needs_reconciliation
     SocialPublishVariant:
       type: string
       enum:
@@ -1068,8 +1097,8 @@ components:
             `CONNECTION_NOT_ACTIVE`, `CONNECTION_EXPIRED`, `CAPABILITY_DENIED`,
             `NOT_A_PUBLISHER`, `PROVIDER_ADAPTER_UNAVAILABLE`,
             `VARIANT_UNSUPPORTED`, `MEDIA_TYPE_UNSUPPORTED`, `MEDIA_TOO_LARGE`,
-            `CONTENT_TOO_LONG`, ...). Another tenant's account and an unknown id are
-            both `ACCOUNT_NOT_FOUND`.
+            `CONTENT_TOO_LONG`, `NEW_TARGET_NEEDS_APPROVAL`, ...). Another tenant's
+            account and an unknown id are both `ACCOUNT_NOT_FOUND`.
     SocialPublicationCreated:
       allOf:
         - $ref: "#/components/schemas/SocialPublicationDetail"

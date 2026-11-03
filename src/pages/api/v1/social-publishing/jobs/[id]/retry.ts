@@ -12,15 +12,27 @@ import {
   mutationRefusal,
   notFound,
   readIdempotencyKey,
-  runIdempotent
+  readJson,
+  runIdempotent,
+  validationFailure
 } from "../../../../../../modules/social-publishing/application/route-support";
 import { SOCIAL_PUBLISHING_GUARDS } from "../../../../../../modules/social-publishing/domain/social-publishing-constants";
+import { validateRetry } from "../../../../../../modules/social-publishing/domain/social-publishing-validation";
 
-type Prepared = { id: string; idempotencyKey: string };
+type Prepared = {
+  id: string;
+  idempotencyKey: string;
+  confirmPossiblyPublished: boolean;
+};
 
 /**
  * `POST /api/v1/social-publishing/jobs/{id}/retry` (Issue #1145) — retry ONE
- * failed per-account job. Only that job moves: a published sibling is never
+ * per-account job that `failed` or whose outcome is UNKNOWN
+ * (`needs_reconciliation`: a timeout or a lost response, the post may exist). The
+ * dispatcher never retries an unknown outcome by itself; here the operator must
+ * send `{ "confirmPossiblyPublished": true }` to say they checked, otherwise
+ * `409 RECONCILIATION_CONFIRMATION_REQUIRED`. A job that has spent the whole
+ * attempt ceiling is `409 RETRY_BUDGET_EXHAUSTED`, never a 500. Only that job moves: a published sibling is never
  * touched and never replayed, and a job that already PUBLISHED can never be
  * retried (`409 JOB_ALREADY_PUBLISHED`; the database enforces it as well).
  * The publication must still be ready (approved and not cancelled). A manual
@@ -31,16 +43,29 @@ type Prepared = { id: string; idempotencyKey: string };
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",
-  prepare: ({ request, params }) => {
+  prepare: async ({ request, params }) => {
     const id = asUuid(params.id);
 
     if (!id) return badId();
 
     const idempotencyKey = readIdempotencyKey(request);
 
-    return idempotencyKey instanceof Response
-      ? idempotencyKey
-      : { id, idempotencyKey };
+    if (idempotencyKey instanceof Response) return idempotencyKey;
+
+    // An empty body is `null`, which `validateRetry` accepts (no confirmation).
+    const body = await readJson(request);
+
+    if (body instanceof Response) return body;
+
+    const input = validateRetry(body);
+
+    return input.valid
+      ? {
+          id,
+          idempotencyKey,
+          confirmPossiblyPublished: input.value.confirmPossiblyPublished
+        }
+      : validationFailure(input.errors);
   },
   authorize: SOCIAL_PUBLISHING_GUARDS.jobsRetry,
   handler: async (context) => {
@@ -67,9 +92,14 @@ export const POST = defineTenantRoute<Prepared>({
       "social_publishing_job_retry",
       prepared.idempotencyKey,
       actor,
-      { id: prepared.id },
+      {
+        id: prepared.id,
+        confirmPossiblyPublished: prepared.confirmPossiblyPublished
+      },
       async () => {
-        const result = await retryJob(tx, tenantId, prepared.id);
+        const result = await retryJob(tx, tenantId, prepared.id, {
+          confirmPossiblyPublished: prepared.confirmPossiblyPublished
+        });
 
         if (result.outcome === "not_found") return notFound("Job");
 
@@ -79,7 +109,11 @@ export const POST = defineTenantRoute<Prepared>({
             result.code,
             result.code === "JOB_ALREADY_PUBLISHED"
               ? "The job was already published and can never be sent again."
-              : "Only a failed job of a ready publication can be retried."
+              : result.code === "RECONCILIATION_CONFIRMATION_REQUIRED"
+                ? "The outcome of this job is unknown and the post may already exist: check the account, then retry with confirmPossiblyPublished."
+                : result.code === "RETRY_BUDGET_EXHAUSTED"
+                  ? "This job has used every attempt it can be given."
+                  : "Only a failed job of a ready publication can be retried."
           );
         }
 

@@ -3,6 +3,19 @@
  * finalise, one tenant per call. Run by `bun run social-publishing:dispatch`
  * as `awcms_worker`.
  *
+ * ## It cannot publish yet, on purpose (the #1145 audit, H1)
+ *
+ * The credential comes from a `ChannelPublisherCredentialPort`, and the script
+ * that runs this (`scripts/social-publishing-dispatch.ts`) hands it
+ * {@link noPublishCredentialPort}: the `awcms_worker` role cannot read a social
+ * token (`sql/328` hides everything but a WhatsApp sender's credential, and this
+ * module does NOT widen that), and `whatsapp:dispatch` holds the same role and the
+ * same key ring, so letting this job read social tokens would let a compromised
+ * WhatsApp worker decrypt them. The real credential path lands with the first
+ * connector (#1146) under a separate DB role (ADR-0157 section 6). With no
+ * adapter registered a claimed job fails closed as `PROVIDER_ADAPTER_UNAVAILABLE`
+ * before any credential is asked for.
+ *
  * ## No network inside a transaction
  *
  * Three phases, each its own short transaction, with the provider call BETWEEN
@@ -14,8 +27,9 @@
  *    to `publishing` with a lease. Database reads and writes only.
  * 2. SEND (no transaction): decrypt the credential in a transaction of its own
  *    that closes before the call, hand it to the adapter in memory, call the
- *    provider with an `ssrfSafeFetch` client, a timeout and a per-account
- *    circuit breaker.
+ *    provider with an `ssrfSafeFetch` client bound to the call's abort signal
+ *    (a timeout CANCELS the request, it does not abandon it), no redirects, and a
+ *    per-account circuit breaker.
  * 3. FINALISE (one transaction per job): compare-and-set on the attempt number
  *    that was claimed, write the ledger, the event and the audit row.
  *
@@ -29,10 +43,17 @@
  *   lock, so concurrent dispatchers cannot overshoot.
  * - A job that reached the provider is `published` and terminal (a database
  *   trigger): a sibling's failure, a retry of another job or a replayed pass
- *   cannot send it again. The one window that remains is a crash between "the
- *   provider accepted the post" and "the job is finalised": the job's
- *   idempotency key is passed to the provider so a provider that honours one
- *   dedupes the re-claim. The window is stated, not hidden.
+ *   cannot send it again.
+ * - An UNKNOWN outcome is never retried blindly (the #1145 audit, M1). A timeout,
+ *   or an adapter that threw after the request was sent, may have published. For a
+ *   provider that dedupes on the idempotency key (`adapter.supportsIdempotencyKey`)
+ *   the job is retried automatically with the same key; for any other the job
+ *   becomes `needs_reconciliation` and only an operator, who confirms the post is
+ *   not already there, retries it. The same applies to a crash between "the
+ *   provider accepted the post" and "the job is finalised" (the lease expires and
+ *   the job is claimed again): that window, a slow provider and a lost response
+ *   are all the same case, and for a provider without a dedupe key the only
+ *   protection is the operator, not the dispatcher.
  * - The credential is in memory for one call, is never logged, stored, evented,
  *   audited or put in an error, and a thrown adapter error's MESSAGE is never
  *   kept (only a fixed code).
@@ -46,6 +67,7 @@ import { ssrfSafeFetch } from "../../../lib/auth/ssrf-guard";
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
+import { resolveModuleEnabled } from "../../identity-access/application/auth-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import type {
   SocialPublishAdapter,
@@ -110,8 +132,10 @@ export type DispatchSocialPublishOptions = {
   perAccountBatch?: number;
   accountDailyCap?: number;
   leaseMinutes?: number;
-  /** Replaces the `ssrfSafeFetch`-backed client handed to adapters. Tests only. */
-  http?: SocialPublishHttp;
+  /** How long the dispatcher waits for ONE provider call before it cancels it. */
+  providerTimeoutMs?: number;
+  /** Replaces the `ssrfSafeFetch`-backed client handed to adapters (given the call's abort signal). Tests only. */
+  http?: (signal: AbortSignal) => SocialPublishHttp;
 };
 
 export type DispatchSocialPublishResult = {
@@ -120,6 +144,8 @@ export type DispatchSocialPublishResult = {
   retried: number;
   failed: number;
   held: number;
+  /** The outcome was unknown and the adapter's provider does not dedupe: the job now waits for an operator. */
+  unknown: number;
   /** Finalise found the job no longer ours (lease expired and re-claimed): nothing was written. */
   superseded: number;
   skippedBreaker: number;
@@ -156,6 +182,7 @@ function zero(): DispatchSocialPublishResult {
     retried: 0,
     failed: 0,
     held: 0,
+    unknown: 0,
     superseded: 0,
     skippedBreaker: 0,
     skippedQuota: 0
@@ -168,6 +195,8 @@ const PHRASES: Record<string, string> = {
   PROVIDER_ADAPTER_UNAVAILABLE: "No adapter is registered for this provider.",
   ADAPTER_ERROR: "The provider adapter failed unexpectedly.",
   PROVIDER_TIMEOUT: "The provider did not answer in time.",
+  UNKNOWN_OUTCOME:
+    "The outcome is unknown: the post may already exist. An operator must check before it is sent again.",
   CIRCUIT_OPEN: "The provider was failing; the attempt was not made.",
   RETRIES_EXHAUSTED: "The retry budget is spent.",
   HOLD_EXHAUSTED: "The account stayed unavailable for too long.",
@@ -198,10 +227,23 @@ function sanitizeCode(
     : fallback;
 }
 
-export function buildAdapterHttp(env: NodeJS.ProcessEnv): SocialPublishHttp {
+/**
+ * The ONLY network primitive an adapter has. `maxRedirects: 0`: a provider API
+ * does not redirect a publish call, and the shared guard forwards request headers
+ * (an `Authorization` bearer among them) to the redirect target, so following one
+ * could hand a credential to another origin (the #1145 audit, M3). `signal`
+ * cancels the in-flight request when the dispatcher gives up.
+ */
+export function buildAdapterHttp(
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+  timeoutMs: number = PROVIDER_CALL_TIMEOUT_MS
+): SocialPublishHttp {
   return (url, init) =>
     ssrfSafeFetch(url, {
-      timeoutMs: PROVIDER_CALL_TIMEOUT_MS,
+      timeoutMs,
+      maxRedirects: 0,
+      signal,
       maxResponseBytes: 1_000_000,
       method: init?.method,
       headers: init?.headers,
@@ -449,6 +491,7 @@ type FinalOutcome =
       externalPostUrl: string | null;
     }
   | { kind: "retry"; code: string; retryAfterSeconds?: number }
+  | { kind: "unknown"; code: string }
   | {
       kind: "fail";
       code: string;
@@ -516,6 +559,53 @@ async function finalise(
         correlationId: context.correlationId
       });
       context.result.published += 1;
+
+      return;
+    }
+
+    if (outcome.kind === "unknown") {
+      const rows = (await tx`
+        UPDATE awcms_social_publish_jobs
+        SET status = 'needs_reconciliation', failure_code = ${outcome.code},
+            last_error = ${PHRASES.UNKNOWN_OUTCOME},
+            updated_at = ${now}::timestamptz
+        WHERE tenant_id = ${tenantId} AND id = ${job.id}
+          AND status = 'publishing' AND attempt_count = ${job.attemptNo}
+        RETURNING id
+      `) as { id: string }[];
+
+      if (rows.length === 0) {
+        context.result.superseded += 1;
+
+        return;
+      }
+
+      await tx`
+        INSERT INTO awcms_social_publish_attempts
+          (tenant_id, job_id, attempt_no, outcome, error_code, error_message)
+        VALUES (${tenantId}, ${job.id}, ${job.attemptNo}, 'unknown',
+                ${outcome.code}, ${PHRASES.UNKNOWN_OUTCOME})
+        ON CONFLICT (job_id, attempt_no) DO NOTHING
+      `;
+      await recordAuditEvent(tx, {
+        tenantId,
+        moduleKey: SOCIAL_PUBLISHING_MODULE_KEY,
+        action: "social_publishing.job.outcome_unknown",
+        resourceType: "social_publish_job",
+        resourceId: job.id,
+        severity: "warning",
+        message:
+          "A social publish job's outcome is unknown; it waits for an operator and will not be retried automatically.",
+        attributes: {
+          publicationId: job.publication_id,
+          accountId: job.channel_account_id,
+          provider: job.provider,
+          attemptNo: job.attemptNo,
+          code: outcome.code
+        },
+        correlationId: context.correlationId
+      });
+      context.result.unknown += 1;
 
       return;
     }
@@ -642,20 +732,38 @@ function toContent(job: Claimed): SocialPublishContent {
   };
 }
 
+type ProviderCall =
+  | { kind: "adapter"; outcome: SocialPublishOutcome }
+  /** The dispatcher's OWN verdicts (never an adapter-supplied string, so they are never rewritten by the adapter's vocabulary). */
+  | { kind: "dispatcher"; code: "PROVIDER_TIMEOUT" | "ADAPTER_ERROR" };
+
+/**
+ * One provider call, bounded in time. On the deadline the call's signal fires,
+ * which cancels the in-flight request (`request.http` is bound to it), and the
+ * result is a dispatcher-owned `PROVIDER_TIMEOUT`: the request may already have
+ * been processed, so the caller treats it as UNKNOWN, never as "not sent". A
+ * late completion of an abandoned adapter promise is ignored.
+ */
 async function callProvider(
   adapter: SocialPublishAdapter,
   job: Claimed,
   tenantId: string,
   credential: string,
-  http: SocialPublishHttp,
-  correlationId: string | undefined
-): Promise<SocialPublishOutcome> {
+  buildHttp: (signal: AbortSignal) => SocialPublishHttp,
+  correlationId: string | undefined,
+  timeoutMs: number
+): Promise<ProviderCall> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROVIDER_CALL_TIMEOUT_MS);
-
-  try {
-    return await Promise.race([
-      adapter.publish({
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<ProviderCall>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve({ kind: "dispatcher", code: "PROVIDER_TIMEOUT" });
+    }, timeoutMs);
+  });
+  const call = (async (): Promise<ProviderCall> => {
+    try {
+      const outcome = await adapter.publish({
         tenantId,
         accountId: job.channel_account_id,
         provider: job.provider,
@@ -665,19 +773,54 @@ async function callProvider(
         content: toContent(job),
         idempotencyKey: job.idempotency_key,
         correlationId,
-        http,
+        http: buildHttp(controller.signal),
         signal: controller.signal
-      }),
-      new Promise<SocialPublishOutcome>((resolve) => {
-        controller.signal.addEventListener("abort", () =>
-          resolve({ outcome: "retryable", errorCode: "PROVIDER_TIMEOUT" })
-        );
-      })
-    ]);
+      });
+
+      return { kind: "adapter", outcome };
+    } catch {
+      // The thrown message is never kept: it could carry a provider body or the
+      // credential. A fixed code is all that is recorded.
+      log("error", "social_publishing.dispatch.adapter_threw", {
+        tenantId,
+        moduleKey: SOCIAL_PUBLISHING_MODULE_KEY,
+        provider: job.provider
+      });
+
+      return { kind: "dispatcher", code: "ADAPTER_ERROR" };
+    }
+  })();
+
+  try {
+    return await Promise.race([call, timedOut]);
   } finally {
     clearTimeout(timer);
   }
 }
+
+/**
+ * What an AMBIGUOUS result (a timeout, a throw, an adapter's own `unknown`) does
+ * to a job. A provider that dedupes on the idempotency key makes a retry safe, so
+ * it is retried with the same key; any other provider may already have published,
+ * so the job waits for an operator.
+ */
+function ambiguous(adapter: SocialPublishAdapter, code: string): FinalOutcome {
+  return adapter.supportsIdempotencyKey
+    ? { kind: "retry", code }
+    : { kind: "unknown", code };
+}
+
+/**
+ * The credential port of a dispatcher that is NOT yet allowed to read a social
+ * credential (the #1145 audit, H1): every request is refused, so nothing can be
+ * published through it. The real port is composed by the first connector, under a
+ * separate DB role (ADR-0157 section 6).
+ */
+export const noPublishCredentialPort: ChannelPublisherCredentialPort = {
+  async resolvePublishCredential() {
+    return { ok: false, reason: "CREDENTIAL_UNAVAILABLE" };
+  }
+};
 
 export async function dispatchSocialPublishQueue(
   sql: Bun.SQL,
@@ -690,9 +833,21 @@ export async function dispatchSocialPublishQueue(
   // The deployment switch: nothing is claimed, nothing is read.
   if (!isSocialPublishingEnabled(env)) return result;
 
+  // A tenant that switched the module OFF stops being enqueued AND dispatched
+  // (the #1145 audit, M4). A failed read throws: it is never read as "enabled".
+  const enabled = await inTenantWork(sql, tenantId, (tx) =>
+    resolveModuleEnabled(tx, tenantId, SOCIAL_PUBLISHING_MODULE_KEY)
+  );
+
+  if (!enabled) return result;
+
   const clock = options.clock ?? (() => new Date());
   const registry = options.registry ?? socialAdapterRegistry;
-  const http = options.http ?? buildAdapterHttp(env);
+  const providerTimeoutMs =
+    options.providerTimeoutMs ?? PROVIDER_CALL_TIMEOUT_MS;
+  const buildHttp =
+    options.http ??
+    ((signal: AbortSignal) => buildAdapterHttp(env, signal, providerTimeoutMs));
   const claimed = await claim(sql, tenantId, {
     publishers: options.publishers,
     now: clock(),
@@ -776,29 +931,31 @@ export async function dispatchSocialPublishQueue(
     }
 
     const startedAt = clock();
-    let providerOutcome: SocialPublishOutcome;
+    const attempt = await callProvider(
+      adapter,
+      job,
+      tenantId,
+      credential.credential,
+      buildHttp,
+      options.correlationId,
+      providerTimeoutMs
+    );
+    const durationMs = clock().getTime() - startedAt.getTime();
 
-    try {
-      providerOutcome = await callProvider(
-        adapter,
+    if (attempt.kind === "dispatcher") {
+      breaker.recordFailure(clock(), durationMs);
+      await finalise(
+        sql,
+        tenantId,
         job,
-        tenantId,
-        credential.credential,
-        http,
-        options.correlationId
+        ambiguous(adapter, attempt.code),
+        clock(),
+        ctx
       );
-    } catch {
-      // The thrown message is never kept: it could carry a provider body or the
-      // credential. A fixed code is all that is recorded.
-      log("error", "social_publishing.dispatch.adapter_threw", {
-        tenantId,
-        moduleKey: SOCIAL_PUBLISHING_MODULE_KEY,
-        provider: job.provider
-      });
-      providerOutcome = { outcome: "retryable", errorCode: "ADAPTER_ERROR" };
+      continue;
     }
 
-    const durationMs = clock().getTime() - startedAt.getTime();
+    const providerOutcome = attempt.outcome;
 
     switch (providerOutcome.outcome) {
       case "published": {
@@ -827,6 +984,24 @@ export async function dispatchSocialPublishQueue(
         );
         break;
       }
+      case "unknown":
+        breaker.recordFailure(clock(), durationMs);
+        await finalise(
+          sql,
+          tenantId,
+          job,
+          ambiguous(
+            adapter,
+            sanitizeCode(
+              providerOutcome.errorCode,
+              "OUTCOME_UNKNOWN",
+              adapter.errorCodes
+            )
+          ),
+          clock(),
+          ctx
+        );
+        break;
       case "retryable":
         breaker.recordFailure(clock(), durationMs);
         await finalise(

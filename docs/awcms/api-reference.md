@@ -15582,12 +15582,12 @@ Requires `website_engagement.submissions.withdraw` and a signed-in person (a mac
 
 Account-scoped social publishing (social_publishing module, Issue #1145, ADR-0157, ADR-0148 capability C3) behind the existing SocialPublishingPort that blog_content calls when an article is published. One PUBLICATION (an immutable content snapshot: text, link and a media object verified for type, size and rights) fans out to ONE JOB PER TARGET channel account, idempotent per article, trigger and account; a job names the account and holds no token and no secret reference, because the dispatcher resolves the credential for that account at dispatch time. Approval (required by default; a creator cannot approve their own publication), a schedule, per-account retry and cancel. Provider adapters are plug-ins whose capability map is a CEILING and never a grant: content a provider cannot carry is REFUSED, never downgraded, and an account still needs a granted publish capability with evidence, re-checked at enqueue and at dispatch. A job that was published is terminal, so a partial failure never replays a sibling and never alters the source article. No operation accepts or returns a token, a secret reference, a provider-side id or an account label. No provider adapter ships with this module (connectors are separate issues): until one registers, enabling it publishes nothing. Ships inert behind SOCIAL_PUBLISHING_ENABLED and a per-tenant switch.
 
-### `POST /api/v1/social-publishing/jobs/{id}/retry` — Retry ONE failed per-account job.
+### `POST /api/v1/social-publishing/jobs/{id}/retry` — Retry ONE failed (or unknown-outcome) per-account job.
 
 - **operationId**: `retrySocialPublishJob`
 - **Security**: bearerAuth + tenantHeader
 
-Only that job moves, back to `queued` with a small bounded extra attempt budget. A published sibling is never touched and never replayed, and a job that already PUBLISHED can never be retried (`409 JOB_ALREADY_PUBLISHED`; the database enforces it as well). The publication must still be `ready` (approved and not cancelled). The caller must be able to use the job's account, otherwise `404`. `Idempotency-Key` required; audited. Requires `social_publishing.jobs.retry`.
+A job whose outcome is UNKNOWN (`needs_reconciliation`: a timeout or a lost response, the post may already exist) is retried only with `{ "confirmPossiblyPublished": true }`, by which the operator states they checked the account (otherwise `409 RECONCILIATION_CONFIRMATION_REQUIRED`); the dispatcher never retries it by itself. A job that has used the whole attempt ceiling is `409 RETRY_BUDGET_EXHAUSTED`. Only that job moves, back to `queued` with a small bounded extra attempt budget. A published sibling is never touched and never replayed, and a job that already PUBLISHED can never be retried (`409 JOB_ALREADY_PUBLISHED`; the database enforces it as well). The publication must still be `ready` (approved and not cancelled). The caller must be able to use the job's account, otherwise `404`. `Idempotency-Key` required; audited. Requires `social_publishing.jobs.retry`.
 
 **Parameters**
 
@@ -15596,17 +15596,19 @@ Only that job moves, back to `queued` with a small bounded extra attempt budget.
 | `id`              | path   | yes      | string (uuid) | The resource id (a UUID of this tenant).                                                                                                                                                                        |
 | `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
 
+**Request body** (optional): object
+
 **Responses**
 
-| Status | Description                                                                                          | Schema                                 |
-| ------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The job is queued again.                                                                             | object                                 |
-| 400    | Validation error.                                                                                    | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                          | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                          | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                  | [`ApiError`](#standard-error-envelope) |
-| 409    | `JOB_ALREADY_PUBLISHED`, `JOB_STATE_INVALID`, `PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
-| 503    | `SOCIAL_PUBLISHING_DISABLED`.                                                                        | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                            | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The job is queued again.                                                                                                                                               | object                                 |
+| 400    | Validation error.                                                                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | `JOB_ALREADY_PUBLISHED`, `JOB_STATE_INVALID`, `PUBLICATION_STATE_INVALID`, `RECONCILIATION_CONFIRMATION_REQUIRED`, `RETRY_BUDGET_EXHAUSTED` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/social-publishing/providers` — The providers that have a publish adapter on this deployment, and what each can carry.
 

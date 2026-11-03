@@ -131,7 +131,8 @@ const EMPTY_COUNTS = (): Record<JobStatus, number> => ({
   retry_wait: 0,
   published: 0,
   failed: 0,
-  cancelled: 0
+  cancelled: 0,
+  needs_reconciliation: 0
 });
 
 function toJobView(row: JobRow): JobView {
@@ -353,7 +354,9 @@ export type ActionOutcome<T> =
         | "SELF_APPROVAL_FORBIDDEN"
         | "ALREADY_DISPATCHED"
         | "JOB_STATE_INVALID"
-        | "JOB_ALREADY_PUBLISHED";
+        | "JOB_ALREADY_PUBLISHED"
+        | "RECONCILIATION_CONFIRMATION_REQUIRED"
+        | "RETRY_BUDGET_EXHAUSTED";
     };
 
 export async function approvePublication(
@@ -434,7 +437,7 @@ export async function cancelPublication(
     UPDATE awcms_social_publish_jobs
     SET status = 'cancelled', updated_at = now()
     WHERE tenant_id = ${tenantId} AND publication_id = ${publicationId}
-      AND status IN ('queued', 'retry_wait')
+      AND status IN ('queued', 'retry_wait', 'needs_reconciliation')
     RETURNING id
   `) as { id: string }[];
   const rest = (await tx`
@@ -493,6 +496,8 @@ export async function schedulePublication(
 
 /** A manual retry grants a fresh, BOUNDED budget on top of what the job already spent. */
 export const MANUAL_RETRY_EXTRA_ATTEMPTS = 3;
+/** The database ceiling on `max_attempts` (`awcms_social_publish_jobs_attempts_check`). */
+export const MAX_ATTEMPTS_CEILING = 50;
 
 export type RetriedJob = {
   jobId: string;
@@ -518,10 +523,20 @@ export async function lookupJobAccount(
     : null;
 }
 
+/**
+ * Retries ONE job: a `failed` one, or one whose outcome is UNKNOWN
+ * (`needs_reconciliation`), which may already be published. The latter needs
+ * `confirmPossiblyPublished`: the operator states that they checked the account
+ * and the post is not there (or that a duplicate is acceptable), because the
+ * dispatcher itself will never send it again.
+ */
 export async function retryJob(
   tx: Bun.SQL,
   tenantId: string,
-  jobId: string
+  jobId: string,
+  options: { confirmPossiblyPublished: boolean } = {
+    confirmPossiblyPublished: false
+  }
 ): Promise<ActionOutcome<RetriedJob>> {
   const rows = (await tx`
     SELECT id, publication_id, channel_account_id, status, attempt_count
@@ -543,8 +558,26 @@ export async function retryJob(
     return { outcome: "refused", code: "JOB_ALREADY_PUBLISHED" };
   }
 
-  if (job.status !== "failed") {
+  if (job.status !== "failed" && job.status !== "needs_reconciliation") {
     return { outcome: "refused", code: "JOB_STATE_INVALID" };
+  }
+
+  if (
+    job.status === "needs_reconciliation" &&
+    !options.confirmPossiblyPublished
+  ) {
+    return { outcome: "refused", code: "RECONCILIATION_CONFIRMATION_REQUIRED" };
+  }
+
+  // The new budget must fit the database ceiling; a job that has used all of it
+  // is refused here with a 409 rather than failing the UPDATE with a 500.
+  const nextMaxAttempts = Math.min(
+    MAX_ATTEMPTS_CEILING,
+    job.attempt_count + MANUAL_RETRY_EXTRA_ATTEMPTS
+  );
+
+  if (nextMaxAttempts <= job.attempt_count) {
+    return { outcome: "refused", code: "RETRY_BUDGET_EXHAUSTED" };
   }
 
   const publication = await lockPublication(tx, tenantId, job.publication_id);
@@ -556,9 +589,10 @@ export async function retryJob(
   await tx`
     UPDATE awcms_social_publish_jobs
     SET status = 'queued', next_attempt_at = now(), hold_count = 0,
-        max_attempts = ${job.attempt_count + MANUAL_RETRY_EXTRA_ATTEMPTS},
+        max_attempts = ${nextMaxAttempts},
         failure_code = NULL, last_error = NULL, updated_at = now()
-    WHERE tenant_id = ${tenantId} AND id = ${jobId} AND status = 'failed'
+    WHERE tenant_id = ${tenantId} AND id = ${jobId}
+      AND status IN ('failed', 'needs_reconciliation')
   `;
 
   return {

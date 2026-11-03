@@ -8,13 +8,13 @@ Status: `experimental`, **off by default** (`SOCIAL_PUBLISHING_ENABLED`), no nav
 
 ## What it owns
 
-| Table                              | Holds                                                                                                                                                         |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `awcms_social_publishing_settings` | Two tenant switches: `auto_publish_enabled` (default `false`) and `approval_required` (default `true`)                                                        |
-| `awcms_social_publish_rules`       | Which `channel_account`s an article event publishes to (unique per trigger and account; disabled, never deleted)                                              |
-| `awcms_social_publications`        | One publication with an IMMUTABLE content snapshot (title, caption, link, media snapshot, content hash), its approval and cancel lifecycle, `not_before`      |
-| `awcms_social_publish_jobs`        | One job per (publication, account): provider and variant snapshot, status, attempts, holds, the provider's post id and URL. **No token, no secret reference** |
-| `awcms_social_publish_attempts`    | Append-only ledger: an outcome, a fixed code, a fixed phrase                                                                                                  |
+| Table                              | Holds                                                                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `awcms_social_publishing_settings` | Two tenant switches: `auto_publish_enabled` (default `false`) and `approval_required` (default `true`)                                                                                                             |
+| `awcms_social_publish_rules`       | Which `channel_account`s an article event publishes to (unique per trigger and account; disabled, never deleted)                                                                                                   |
+| `awcms_social_publications`        | One publication with an IMMUTABLE content snapshot (title, caption, link, media snapshot, content hash), its approval and cancel lifecycle, `not_before`                                                           |
+| `awcms_social_publish_jobs`        | One job per (publication, account): provider and variant snapshot, status (`needs_reconciliation` when the outcome is unknown), attempts, holds, the provider's post id and URL. **No token, no secret reference** |
+| `awcms_social_publish_attempts`    | Append-only ledger: an outcome, a fixed code, a fixed phrase                                                                                                                                                       |
 
 It reads the account model only through the `channel_account` port (`ChannelPublisherPort`, `ChannelPublisherCredentialPort`, capability version 1.1.0) and verifies media through `MediaLibraryPort`. It owns no account, credential, media or article content.
 
@@ -62,4 +62,6 @@ Every mutation requires `Idempotency-Key` and refuses a machine credential; ever
 
 - No provider adapter, no admin screen, no caption templates, no retention sweep (see the remaining limitations in `docs/awcms/social-publishing.md`).
 - The crash window between "the provider accepted the post" and "the job was finalised" is covered only as far as the provider honours the passed idempotency key.
-- `sql/332` lets the `awcms_worker` role see the access token of a publishing-capable social account (the residual risk ADR-0148 section 5 accepts for dispatchers); a compromised `social-publishing:dispatch` could decrypt those of every tenant.
+- **It cannot publish yet, on purpose (audit finding H1).** The `awcms_worker` role cannot read a social token (`sql/328` is unchanged) and the dispatch job holds no key ring: it is composed with `noPublishCredentialPort`, which refuses every request. The credential path lands with the first connector (#1146) under a **separate DB role** (for example `awcms_social_dispatch`), which must also (M2) follow the account's status (`connected` or `degraded`) and the grant's state (`active` or `expired`) in its row policy, and (L10) agree with the credential adapter about the secret an account that borrows its parent's credential resolves to. `whatsapp:dispatch` is unaffected.
+- An unknown outcome (a timeout, a throw after the request was sent) is retried automatically only for an adapter that declares `supportsIdempotencyKey`; otherwise the job is `needs_reconciliation` and waits for an operator (`POST jobs/{id}/retry` with `confirmPossiblyPublished`, or cancel). The adapter HTTP client follows no redirects and is cancelled by the call's signal.
+- Audit residuals recorded, not fixed here: M2 and L10 above; L4, L6, L8 and L9 of the independent audit are documented residuals (detail on PR #1240).

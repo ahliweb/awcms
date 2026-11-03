@@ -54,7 +54,9 @@ export type AccountRefusalCode =
   | AdapterSupportCode
   | "PROVIDER_ADAPTER_UNAVAILABLE"
   | "PUBLISHERS_UNAVAILABLE"
-  | "PUBLICATION_CLOSED";
+  | "PUBLICATION_CLOSED"
+  /** The publication was already approved for the targets it had; a new target needs its own approval. */
+  | "NEW_TARGET_NEEDS_APPROVAL";
 
 export type EnqueueSource =
   | { kind: "article"; articleId: string; trigger: SocialPublishTrigger }
@@ -91,7 +93,11 @@ export type EnqueueResult = {
   accounts: AccountOutcome[];
 };
 
-type PublicationRow = { id: string; state: PublicationState };
+type PublicationRow = {
+  id: string;
+  state: PublicationState;
+  approval_required: boolean;
+};
 
 type Eligible = {
   accountId: string;
@@ -109,7 +115,7 @@ async function findArticlePublication(
   trigger: SocialPublishTrigger
 ): Promise<PublicationRow | null> {
   const rows = (await tx`
-    SELECT id, state FROM awcms_social_publications
+    SELECT id, state, approval_required FROM awcms_social_publications
     WHERE tenant_id = ${tenantId} AND source_kind = 'article'
       AND source_id = ${articleId} AND trigger_event = ${trigger}
   `) as PublicationRow[];
@@ -168,6 +174,17 @@ export async function enqueuePublication(
           accountId,
           outcome: "refused",
           reason: "PUBLICATION_CLOSED"
+        });
+        continue;
+      }
+
+      // Approved for the targets it HAD (the #1145 audit, L3): a rule added
+      // after the approval cannot ride on it. `sql/330` refuses the job as well.
+      if (publication.state === "ready" && publication.approval_required) {
+        accounts.push({
+          accountId,
+          outcome: "refused",
+          reason: "NEW_TARGET_NEEDS_APPROVAL"
         });
         continue;
       }
@@ -249,7 +266,7 @@ export async function enqueuePublication(
               ${input.actorTenantUserId})
       ON CONFLICT (tenant_id, source_id, trigger_event)
         WHERE source_kind = 'article' DO NOTHING
-      RETURNING id, state
+      RETURNING id, state, approval_required
     `) as PublicationRow[];
 
     if (inserted[0]) {

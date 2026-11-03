@@ -87,14 +87,33 @@ export type SocialPublishRequest = {
   idempotencyKey: string;
   correlationId?: string;
   http: SocialPublishHttp;
+  /**
+   * Fires when the dispatcher gives up waiting. `http` is already bound to it
+   * (the in-flight request is cancelled, not abandoned); an adapter that does
+   * anything else asynchronous must honour it too.
+   */
   signal: AbortSignal;
 };
 
 export type SocialPublishOutcome =
   | { outcome: "published"; externalPostId: string; externalPostUrl?: string }
   | {
-      /** Transient (network, 5xx): backoff and try again. */
+      /**
+       * The provider DEFINITELY did not accept the post (a refused connection, a
+       * 5xx the provider documents as "nothing was done"): backoff and try
+       * again. Never return this when the request may have been processed: that
+       * is `unknown`.
+       */
       outcome: "retryable";
+      errorCode: string;
+    }
+  | {
+      /**
+       * The request was sent and the answer is lost or ambiguous: the post may
+       * exist. Dedupe-capable adapters (`supportsIdempotencyKey`) are retried
+       * automatically; otherwise an operator reconciles.
+       */
+      outcome: "unknown";
       errorCode: string;
     }
   | {
@@ -126,6 +145,17 @@ export interface SocialPublishAdapter {
    * credential cannot reach one through a "code".
    */
   readonly errorCodes: readonly string[];
+  /**
+   * Whether the provider's own API dedupes on the idempotency key the adapter is
+   * handed (`SocialPublishRequest.idempotencyKey`): a second request with the
+   * same key publishes nothing new. It decides what the dispatcher may do when
+   * the outcome of a request is UNKNOWN (a timeout, or a throw after the request
+   * was sent): with a deduping provider a retry is safe and automatic; without
+   * one a retry could publish twice, so the job goes to `needs_reconciliation`
+   * and only an operator, who confirms the post is not already there, retries it.
+   * Declare `false` unless the provider documents the behaviour.
+   */
+  readonly supportsIdempotencyKey: boolean;
   /**
    * Performs the provider call. Never throws for an ordinary provider outcome
    * (those are values); throwing is reserved for a bug or an unexpected

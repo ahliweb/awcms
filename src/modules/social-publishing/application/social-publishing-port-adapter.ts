@@ -27,6 +27,7 @@ import type {
 } from "../../_shared/ports/social-publishing-port";
 import { resolveDeclaredBaseUrl } from "../../../lib/http/site-origin";
 import { log } from "../../../lib/logging/logger";
+import { resolveModuleEnabled } from "../../identity-access/application/auth-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   buildContentSnapshot,
@@ -91,6 +92,14 @@ export function createSocialPublishingPortAdapter(
     event: ArticlePublishedEventInput,
     correlationId: string | undefined
   ): Promise<ArticlePublishedPortResult> {
+    // A tenant that switched the module OFF is not enqueued for (the #1145
+    // audit, M4). A failed read throws into the savepoint: never "enabled".
+    if (
+      !(await resolveModuleEnabled(tx, tenantId, SOCIAL_PUBLISHING_MODULE_KEY))
+    ) {
+      return { jobsCreated: 0 };
+    }
+
     const settings = await fetchSettings(tx, tenantId);
 
     if (!settings.autoPublishEnabled) return { jobsCreated: 0 };

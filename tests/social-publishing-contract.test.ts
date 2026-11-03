@@ -300,35 +300,40 @@ describe("the migrations", () => {
     expect(schema).toContain("awcms_social_publish_attempts_unique_attempt");
   });
 
-  test("sql/332 replaces the restrictive policy, keeps both WhatsApp branches, adds only granted-publish social ones, grants nothing and writes nothing", () => {
-    const migration = read(
-      "sql/332_awcms_social_publishing_secret_visibility.sql"
+  test("H1 of the audit: the worker's secret visibility is NOT widened for this module, and nothing here touches the restrictive policy", () => {
+    // No migration of this module may mention the secrets table or its policy.
+    for (const file of readdirSync(path.join(ROOT, "sql"))) {
+      if (file.includes("social_publishing")) {
+        const migration = read(`sql/${file}`);
+
+        expect(migration, file).not.toContain("awcms_channel_secrets");
+        expect(migration, file).not.toContain(
+          "awcms_channel_secrets_worker_dispatch_purposes"
+        );
+        expect(migration, file).not.toMatch(/awcms_channel_secrets/i);
+      }
+    }
+
+    // And the policy that does exist is still WhatsApp-only.
+    const policy = read("sql/328_awcms_whatsapp_sender_secret_visibility.sql");
+
+    expect(policy).toContain("a.provider IN ('whatsapp_cloud', 'starsender')");
+    expect(policy).not.toMatch(/facebook|instagram|threads|linkedin|youtube/);
+
+    // The dispatch job holds no key ring: no scoped grant, and its script is
+    // handed a credential port that refuses everything.
+    expect(read("scripts/jobs-env-allowlist.ts")).not.toContain(
+      'target: "social-publishing:dispatch"'
+    );
+    expect(read("ops/awcms-jobs.env-scoped")).not.toContain(
+      "social-publishing:dispatch"
     );
 
-    expect(migration).toContain(
-      "CREATE POLICY awcms_channel_secrets_worker_dispatch_purposes"
-    );
-    expect(migration).toMatch(/AS RESTRICTIVE\s+FOR SELECT\s+TO awcms_worker/);
-    expect(migration).toContain(
-      "a.provider IN ('whatsapp_cloud', 'starsender')"
-    );
-    expect(migration).toContain("c.provider = 'whatsapp_cloud'");
-    expect(migration).toContain("k.capability = 'publish'");
-    expect(migration).toContain("k.state = 'granted'");
-    expect(migration).toContain(
-      "purpose IN ('provider_access_token', 'api_token', 'device_key')"
-    );
-    // Telegram's bot token and every refresh token stay hidden.
-    expect(migration).not.toContain("'telegram'");
-    expect(migration).not.toMatch(/\bGRANT\b[^-\n]/);
-    expect(migration).not.toMatch(/FOR (ALL|INSERT|UPDATE|DELETE)/);
+    const script = read("scripts/social-publishing-dispatch.ts");
 
-    const readiness = read("scripts/security-readiness.ts");
-
-    expect(readiness).toContain(
-      "p.polname = 'awcms_channel_secrets_worker_dispatch_purposes'"
-    );
-    expect(readiness).toContain("awcms_social_publish_jobs");
+    expect(script).toContain("noPublishCredentialPort");
+    expect(script).not.toContain("channel-sender-credential-adapter");
+    expect(script).not.toContain("secret-store");
   });
 
   test("the numbering stays inside the range this issue owns", () => {
@@ -360,9 +365,17 @@ describe("credential and secret handling", () => {
       expect(source, file).not.toContain("resolvePublishCredential");
     }
 
-    const dispatchScript = read("scripts/social-publishing-dispatch.ts");
+    // No script composes the publish credential adapter until the first
+    // connector brings its own DB role (ADR-0157 section 6).
+    for (const file of files("scripts", ".ts")) {
+      expect(read(file), file).not.toContain("resolvePublishCredential");
 
-    expect(dispatchScript).toContain("channelSenderCredentialAdapter");
+      if (!file.endsWith("whatsapp-dispatch.ts")) {
+        expect(read(file), file).not.toContain(
+          "channelSenderCredentialAdapter"
+        );
+      }
+    }
   });
 
   test("application and domain code never import channel_accounts directly (the lazy loaders are the seam)", () => {

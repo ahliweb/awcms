@@ -54,7 +54,13 @@ export const JOB_STATUSES = [
   "retry_wait",
   "published",
   "failed",
-  "cancelled"
+  "cancelled",
+  /**
+   * The request may have reached the provider and published (a timeout, or an
+   * adapter that threw, after the request was sent). The dispatcher NEVER retries
+   * it; an operator reconciles and retries with an explicit confirmation.
+   */
+  "needs_reconciliation"
 ] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
@@ -71,6 +77,7 @@ export type PublishVariant = (typeof PUBLISH_VARIANTS)[number];
 /** Derived from a publication's jobs; never stored. */
 export const AGGREGATE_STATUSES = [
   "refused",
+  "needs_reconciliation",
   "pending_approval",
   "queued",
   "in_progress",

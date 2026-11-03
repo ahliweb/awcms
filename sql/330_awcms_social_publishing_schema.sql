@@ -213,6 +213,18 @@ CREATE TABLE IF NOT EXISTS awcms_social_publications (
   -- or is still waiting, does not.
   CONSTRAINT awcms_social_publications_approval_check
     CHECK ((approved_by IS NULL) = (approved_at IS NULL)),
+  -- A publication that required approval is released by a person (L2 of the
+  -- #1145 audit): the application path is not the only writer, so the database
+  -- refuses a `ready` row of an approval-requiring publication with no approver.
+  CONSTRAINT awcms_social_publications_ready_approved_check
+    CHECK (state <> 'ready' OR NOT approval_required OR approved_by IS NOT NULL),
+  -- Maker and checker: the person who composed a manual publication is not the
+  -- one who approves it.
+  CONSTRAINT awcms_social_publications_maker_checker_check
+    CHECK (
+      source_kind <> 'manual' OR approved_by IS NULL OR created_by IS NULL
+      OR approved_by <> created_by
+    ),
   CONSTRAINT awcms_social_publications_cancel_check
     CHECK (
       (state = 'cancelled') = (cancelled_at IS NOT NULL)
@@ -310,7 +322,8 @@ CREATE TABLE IF NOT EXISTS awcms_social_publish_jobs (
     CHECK (variant IN ('text', 'image', 'video', 'short', 'story')),
   CONSTRAINT awcms_social_publish_jobs_status_check
     CHECK (status IN (
-      'queued', 'publishing', 'retry_wait', 'published', 'failed', 'cancelled'
+      'queued', 'publishing', 'retry_wait', 'published', 'failed', 'cancelled',
+      'needs_reconciliation'
     )),
   CONSTRAINT awcms_social_publish_jobs_idempotency_key_check
     CHECK (idempotency_key ~ '^[0-9a-f]{64}$'),
@@ -371,6 +384,10 @@ CREATE POLICY awcms_social_publish_jobs_tenant_isolation
 REVOKE DELETE, TRUNCATE ON awcms_social_publish_jobs FROM awcms_app;
 REVOKE ALL ON awcms_social_publish_jobs FROM awcms_worker;
 GRANT SELECT, INSERT, UPDATE ON awcms_social_publish_jobs TO awcms_worker;
+-- M4 of the #1145 audit: the enqueue path (the scheduled-publish worker) and the
+-- dispatcher honour a tenant's decision to switch the module OFF, so they read
+-- the module-enablement row. Enabled flags only, no credential, tenant RLS.
+GRANT SELECT ON awcms_tenant_modules TO awcms_worker;
 
 COMMENT ON TABLE awcms_social_publish_jobs IS
   'Issue #1145 / ADR-0157 -- one publish job per (publication, channel account). Names the account; holds no token and no secret reference. published is terminal (trigger in this file).';
@@ -391,7 +408,7 @@ CREATE TABLE IF NOT EXISTS awcms_social_publish_attempts (
   CONSTRAINT awcms_social_publish_attempts_outcome_check
     CHECK (outcome IN (
       'published', 'retryable', 'rate_limited', 'needs_reauth', 'rejected',
-      'account_unavailable'
+      'account_unavailable', 'unknown'
     )),
   CONSTRAINT awcms_social_publish_attempts_error_code_check
     CHECK (error_code IS NULL OR error_code ~ '^[A-Z][A-Z0-9_]{2,63}$'),
@@ -529,6 +546,15 @@ BEGIN
     END IF;
   END IF;
 
+  -- A job whose outcome is UNKNOWN (the request may have reached the provider
+  -- and published) is never retried by the dispatcher: it leaves this status
+  -- only by an operator's confirmed retry (back to queued) or by cancel.
+  IF OLD.status = 'needs_reconciliation'
+     AND NEW.status NOT IN ('needs_reconciliation', 'queued', 'cancelled') THEN
+    RAISE EXCEPTION 'a social publish job with an unknown outcome needs an operator'
+      USING ERRCODE = '23514';
+  END IF;
+
   IF OLD.status = 'failed' AND NEW.status NOT IN ('failed', 'queued') THEN
     RAISE EXCEPTION 'a failed social publish job can only be retried to queued'
       USING ERRCODE = '23514';
@@ -580,6 +606,18 @@ BEGIN
       AND state IN ('pending_approval', 'ready')
   ) THEN
     RAISE EXCEPTION 'a social publish job needs a live publication of its own tenant'
+      USING ERRCODE = '23514';
+  END IF;
+
+  -- A publication that was approved was approved for the targets it HAD (L3 of
+  -- the #1145 audit): a new target needs a new publication, and therefore a new
+  -- approval, not a quiet addition to an approved one.
+  IF EXISTS (
+    SELECT 1 FROM awcms_social_publications
+    WHERE tenant_id = NEW.tenant_id AND id = NEW.publication_id
+      AND approval_required AND approved_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'an approved social publication cannot gain a target'
       USING ERRCODE = '23514';
   END IF;
 

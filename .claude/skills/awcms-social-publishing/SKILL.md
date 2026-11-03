@@ -1,6 +1,6 @@
 ---
 name: awcms-social-publishing
-description: The social_publishing module EXISTS in this repo (Issue #1145, ADR-0157; migrations `sql/330`-`sql/332`) as the account-scoped foundation behind the existing `SocialPublishingPort`: one publication with an immutable content snapshot, ONE JOB PER TARGET `channel_account`, approval, schedule, a `SocialPublishAdapter` interface with a per-provider capability map, and a dispatcher that calls providers outside any transaction. NO real provider adapter ships (connectors are #1146-#1151, each with its own provider approval). Use when adding or changing a provider connector, a publication or job state, the enqueue or dispatch path, the credential path, an endpoint under `/api/v1/social-publishing`, or when wiring the composition roots. States the invariants a connector must not break (a job holds no token, unsupported content is refused not downgraded, `published` is terminal, nothing is rerouted). The awcms-mini epic (#643-#647) is an ARCHIVE specification, not a map of this code.
+description: The social_publishing module EXISTS in this repo (Issue #1145, ADR-0157; migrations `sql/330`-`sql/331`) as the account-scoped foundation behind the existing `SocialPublishingPort`: one publication with an immutable content snapshot, ONE JOB PER TARGET `channel_account`, approval, schedule, a `SocialPublishAdapter` interface with a per-provider capability map, and a dispatcher that calls providers outside any transaction. NO real provider adapter ships (connectors are #1146-#1151, each with its own provider approval). Use when adding or changing a provider connector, a publication or job state, the enqueue or dispatch path, the credential path, an endpoint under `/api/v1/social-publishing`, or when wiring the composition roots. States the invariants a connector must not break (a job holds no token, unsupported content is refused not downgraded, `published` is terminal, nothing is rerouted). The awcms-mini epic (#643-#647) is an ARCHIVE specification, not a map of this code.
 ---
 
 🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
@@ -33,11 +33,15 @@ description: The social_publishing module EXISTS in this repo (Issue #1145, ADR-
 
 ## Invariants (each is enforced by a test; do not weaken one)
 
-1. **A job never carries a credential.** The dispatcher resolves it for that
-   account at dispatch through `ChannelPublisherCredentialPort`, in memory, in a
-   transaction that closes BEFORE the provider call. The credential adapter
-   (`channel-sender-credential-adapter.ts`) is imported only by the dispatch
-   composition roots (`tests/whatsapp-sender-routing.test.ts` pins the list).
+1. **A job never carries a credential, and the worker role must not read one.**
+   In this slice the dispatch script is composed with `noPublishCredentialPort`
+   (it refuses everything) and holds no key ring: `awcms_worker` shares its role
+   and key ring with `whatsapp:dispatch`, so letting it read social tokens would
+   let a compromised WhatsApp worker decrypt them (audit H1; `sql/328` stays
+   WhatsApp-only). The real `ChannelPublisherCredentialPort` is composed by the
+   first connector under a SEPARATE DB role, in memory, in a transaction that
+   closes BEFORE the provider call. `tests/whatsapp-sender-routing.test.ts` pins
+   the importers of the credential adapter to the WhatsApp script alone.
 2. **Fail closed per account.** `ChannelPublisherPort.resolvePublisher` is asked at
    enqueue AND at dispatch: revoked or disabled fails the job, degraded or an
    expired grant HOLDS it (no attempt consumed, bounded), and nothing is ever
@@ -71,9 +75,13 @@ description: The social_publishing module EXISTS in this repo (Issue #1145, ADR-
 3. Register it from `scripts/social-publishing-dispatch.ts#registerSocialAdapters`
    AND from the process that serves the API, so enqueue sees the same registry.
 4. If the provider's token purpose is not `provider_access_token`, `api_token` or
-   `device_key`, or its provider key is not in `sql/332`, the worker CANNOT see
+   `device_key`, the role cannot see
    the secret: that needs its own reviewed migration (a Telegram connector does).
-5. Test against `tests/support/fake-social-publish-adapter.ts` for the contract
+5. Declare `supportsIdempotencyKey` truthfully and return `unknown` (never
+   `retryable`) when the request may have been processed: without a dedupe key
+   the job then waits for an operator instead of publishing twice. `request.http`
+   follows NO redirect and is cancelled by `request.signal`.
+6. Test against `tests/support/fake-social-publish-adapter.ts` for the contract
    and add the provider's own tests; the fake is never imported from `src/`.
 
 ## Files
@@ -81,7 +89,7 @@ description: The social_publishing module EXISTS in this repo (Issue #1145, ADR-
 | Concern                  | Where                                                                                                           |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | Descriptor, permissions  | `src/modules/social-publishing/module.ts`, `sql/331`                                                            |
-| Schema, triggers, RLS    | `sql/330`; worker secret visibility `sql/332`                                                                   |
+| Schema, triggers, RLS    | `sql/330`                                                                                                       |
 | Content and support rule | `src/modules/social-publishing/domain/social-publish-content.ts`                                                |
 | Enqueue                  | `src/modules/social-publishing/application/publication-enqueue.ts`                                              |
 | Dispatch                 | `src/modules/social-publishing/application/social-publish-dispatch.ts`, `scripts/social-publishing-dispatch.ts` |

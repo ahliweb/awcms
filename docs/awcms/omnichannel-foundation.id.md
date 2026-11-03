@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-foundation.md)
 
-<!-- i18n-source-hash: sha256:2a79be30baf586c6c3eddfde3c25595e1547b5748cc9ee835c81a1f9a5355678 -->
+<!-- i18n-source-hash: sha256:9158bbc175e0cb9541a15efaf38d8b0c4470143a3853dbff18719213afc3b1c2 -->
 
 # Fondasi omnichannel — paket kesiapan (v1, 24 Oktober 2026)
 
@@ -50,7 +50,7 @@ Nama adalah **nama kerja**; desain fisik (kolom, indeks, nomor migrasi) milik is
 
 Job publikasi mereferensikan `channel_account` dan baris kapabilitas, tidak pernah token. Job men-snapshot konten (teks artikel dan referensi media terverifikasi) saat enqueue, idempoten per `(artikel, pemicu, akun)`, melewati status persetujuan bila tenant mensyaratkannya, dan didispatch di luar transaksi apa pun. Penggantian adapter no-op `blog_content` berada di balik flag, default mati.
 
-**Dibangun oleh Issue #1145 (3 November 2026)** sebagai modul `social_publishing` ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md), **Diusulkan**; [`social-publishing.id.md`](social-publishing.id.md); `sql/330` sampai `sql/332`): publikasi, satu job per akun, persetujuan, jadwal, antarmuka `SocialPublishAdapter` dengan peta kapabilitas per provider, dan dispatcher. Modul ini dikirim **tanpa adapter provider**: konektornya #1146 sampai #1151 dan sampai satu terdaftar tidak ada yang diterbitkan. `sql/332` melebarkan visibilitas rahasia worker ke access token akun sosial yang mampu menerbitkan (dinyatakan di ADR-0157 bagian 6).
+**Dibangun oleh Issue #1145 (3 November 2026)** sebagai modul `social_publishing` ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md), **Diusulkan**; [`social-publishing.id.md`](social-publishing.id.md); `sql/330` sampai `sql/331`): publikasi, satu job per akun, persetujuan, jadwal, antarmuka `SocialPublishAdapter` dengan peta kapabilitas per provider, dan dispatcher. Modul ini dikirim **tanpa adapter provider**: konektornya #1146 sampai #1151 dan sampai satu terdaftar tidak ada yang diterbitkan. Visibilitas rahasia role worker TIDAK dilebarkan (`sql/328` tetap hanya WhatsApp): token sosial baru dapat dibaca hanya di bawah role DB terpisah yang dibawa konektor pertama (ADR-0157 bagian 6).
 
 ### 2.4 Event masuk dan penautan kontak (C4, Issue #1144 memutuskan sisanya)
 

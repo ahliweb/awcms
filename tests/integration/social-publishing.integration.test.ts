@@ -80,7 +80,10 @@ import {
   enqueuePublication,
   type EnqueueInput
 } from "../../src/modules/social-publishing/application/publication-enqueue";
-import { dispatchSocialPublishQueue } from "../../src/modules/social-publishing/application/social-publish-dispatch";
+import {
+  dispatchSocialPublishQueue,
+  noPublishCredentialPort
+} from "../../src/modules/social-publishing/application/social-publish-dispatch";
 import { createSocialPublishingPortAdapter } from "../../src/modules/social-publishing/application/social-publishing-port-adapter";
 import {
   upsertRule,
@@ -161,6 +164,7 @@ type Seeded = {
   externalId: string;
   token: string;
   connectionId: string;
+  secretId: string;
 };
 
 /** A tenant-owned publishing account: an OAuth connection with a real stored token, the account, its capability evidence. */
@@ -213,7 +217,8 @@ async function seedAccount(tenantId: string, seed: Seed = {}): Promise<Seeded> {
     provider,
     externalId,
     token,
-    connectionId: connection[0]!.id
+    connectionId: connection[0]!.id,
+    secretId: access.secretId
   };
 }
 
@@ -311,7 +316,11 @@ function dispatch(
   tenantId: string,
   over: Partial<Parameters<typeof dispatchSocialPublishQueue>[2]> = {}
 ) {
-  return dispatchSocialPublishQueue(worker(), tenantId, {
+  // As the runtime role, NOT `awcms_worker` (the #1145 audit, H1): the worker
+  // role cannot read a social token (see the "hardening" tests), so the dispatch
+  // that decrypts one is exercised as the role that can, standing in for the
+  // dedicated DB role the first connector brings (ADR-0157 section 6).
+  return dispatchSocialPublishQueue(runtime(), tenantId, {
     publishers,
     credentials,
     registry,
@@ -847,7 +856,7 @@ suite("social_publishing against PostgreSQL", () => {
       expect(blocked).toMatchObject({ ok: false });
     });
 
-    test("a thrown adapter error is a retryable failure and its message is never stored", async () => {
+    test("a thrown adapter error is an UNKNOWN outcome for a provider that does not dedupe, and its message is never stored", async () => {
       const account = await seedAccount(TENANT_A, { provider: "facebook" });
 
       fb.setBehavior(() => {
@@ -857,15 +866,474 @@ suite("social_publishing against PostgreSQL", () => {
       const result = await enqueue(TENANT_A, enqueueInput([account.id]));
       const run = await dispatch(TENANT_A);
 
-      expect(run.retried).toBe(1);
+      expect(run.unknown).toBe(1);
 
       const [job] = await jobs(result.publicationId!);
 
       expect(job).toMatchObject({
-        status: "retry_wait",
+        status: "needs_reconciliation",
         failure_code: "ADAPTER_ERROR"
       });
       expect(JSON.stringify(job)).not.toContain(account.token);
+    });
+  });
+
+  describe("the independent audit of #1240", () => {
+    const slow =
+      (ms: number, outcome: "published" = "published") =>
+      async () => {
+        await Bun.sleep(ms);
+
+        return {
+          outcome,
+          externalPostId: "slow-post",
+          externalPostUrl: "https://facebook.example/p/slow"
+        } as const;
+      };
+    const only = (adapter: ReturnType<typeof createFakeSocialAdapter>) =>
+      createSocialAdapterRegistry([adapter]);
+
+    test("H1: the worker role cannot see a social token, and the dispatch script's credential port refuses everything", async () => {
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const visible = await withTenantOrThrow(
+        worker(),
+        TENANT_A,
+        (tx) =>
+          tx`SELECT id FROM awcms_channel_secrets WHERE id = ${account.secretId}`
+      );
+
+      // The restrictive policy of sql/328 hides it; this module widens nothing.
+      expect(visible).toHaveLength(0);
+
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+      const run = await dispatchSocialPublishQueue(worker(), TENANT_A, {
+        publishers,
+        credentials: noPublishCredentialPort,
+        registry: createSocialAdapterRegistry([]),
+        env: ENV,
+        clock: at(0)
+      });
+      const [job] = await jobs(result.publicationId!);
+
+      // No adapter: the job fails closed before any credential is asked for.
+      expect(run.failed).toBe(1);
+      expect(job).toMatchObject({
+        status: "failed",
+        failure_code: "PROVIDER_ADAPTER_UNAVAILABLE"
+      });
+      expect(fb.calls).toHaveLength(0);
+    });
+
+    test("H1: even WITH an adapter, the worker-role dispatcher with the refusing port publishes nothing", async () => {
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+
+      await dispatchSocialPublishQueue(worker(), TENANT_A, {
+        publishers,
+        credentials: noPublishCredentialPort,
+        registry,
+        env: ENV,
+        clock: at(0)
+      });
+
+      const [job] = await jobs(result.publicationId!);
+
+      expect(job!.status).toBe("failed");
+      expect(job!.failure_code).toBe("ACCOUNT_CREDENTIAL_UNAVAILABLE");
+      expect(fb.calls).toHaveLength(0);
+    });
+
+    test("M1 (the auditor's PoC): a provider that finishes AFTER the timeout still yields exactly ONE post, and the job waits for an operator", async () => {
+      const slowFb = createFakeSocialAdapter(
+        "facebook",
+        FULL_CAPABILITIES,
+        slow(300)
+      );
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+      const options = {
+        registry: only(slowFb),
+        providerTimeoutMs: 100
+      };
+
+      const first = await dispatch(TENANT_A, options);
+
+      // The request finished AFTER the dispatcher gave up waiting.
+      await Bun.sleep(400);
+
+      const [job] = await jobs(result.publicationId!);
+
+      expect(first.unknown).toBe(1);
+      expect(job).toMatchObject({
+        status: "needs_reconciliation",
+        failure_code: "PROVIDER_TIMEOUT",
+        attempt_count: 1
+      });
+
+      // Never retried automatically, however long the dispatcher keeps running.
+      for (const minutes of [30, 600, 5000]) {
+        expect(
+          (await dispatch(TENANT_A, { ...options, clock: at(minutes) })).claimed
+        ).toBe(0);
+      }
+
+      expect(slowFb.calls).toHaveLength(1);
+      expect(slowFb.providerPosts).toHaveLength(1);
+
+      // The aggregate says so.
+      const detail = await inTenant(TENANT_A, (tx) =>
+        fetchPublication(tx, TENANT_A, result.publicationId!)
+      );
+
+      expect(detail!.publication.status).toBe("needs_reconciliation");
+
+      // An operator must confirm that the post may already exist.
+      expect(
+        await inTenant(TENANT_A, (tx) => retryJob(tx, TENANT_A, job!.id))
+      ).toEqual({
+        outcome: "refused",
+        code: "RECONCILIATION_CONFIRMATION_REQUIRED"
+      });
+      expect(
+        await inTenant(TENANT_A, (tx) =>
+          retryJob(tx, TENANT_A, job!.id, { confirmPossiblyPublished: true })
+        )
+      ).toMatchObject({ outcome: "ok" });
+
+      slowFb.setBehavior(() => ({
+        outcome: "published",
+        externalPostId: "again",
+        externalPostUrl: "https://facebook.example/p/again"
+      }));
+      await dispatch(TENANT_A, { ...options, clock: at(40) });
+
+      // Only now, by the operator's decision, is a second post possible.
+      expect(slowFb.providerPosts).toHaveLength(2);
+    });
+
+    test("M1: the timeout CANCELS the request (the call's signal fires), it does not abandon it", async () => {
+      let aborted = false;
+      const watching = createFakeSocialAdapter(
+        "facebook",
+        FULL_CAPABILITIES,
+        async (request) => {
+          await new Promise<void>((resolve) =>
+            request.signal.addEventListener("abort", () => {
+              aborted = true;
+              resolve();
+            })
+          );
+
+          return { outcome: "retryable", errorCode: "UPSTREAM_5XX" };
+        }
+      );
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+
+      await enqueue(TENANT_A, enqueueInput([account.id]));
+      await dispatch(TENANT_A, {
+        registry: only(watching),
+        providerTimeoutMs: 100
+      });
+
+      expect(aborted).toBe(true);
+    });
+
+    test("M1: a provider that DEDUPES on the idempotency key is retried automatically with the same key, and L5: the timeout stays distinguishable", async () => {
+      const dedupingFb = createFakeSocialAdapter(
+        "facebook",
+        FULL_CAPABILITIES,
+        slow(300),
+        { supportsIdempotencyKey: true }
+      );
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+      const options = { registry: only(dedupingFb), providerTimeoutMs: 100 };
+
+      const first = await dispatch(TENANT_A, options);
+
+      await Bun.sleep(400);
+
+      const [waiting] = await jobs(result.publicationId!);
+      const ledger = (await getAdminSql()`
+        SELECT outcome, error_code FROM awcms_social_publish_attempts
+        WHERE job_id = ${waiting!.id}
+      `) as { outcome: string; error_code: string }[];
+
+      expect(first.retried).toBe(1);
+      // L5: the dispatcher's own code is NOT rewritten into the generic one.
+      expect(waiting).toMatchObject({
+        status: "retry_wait",
+        failure_code: "PROVIDER_TIMEOUT"
+      });
+      expect(ledger).toEqual([
+        { outcome: "retryable", error_code: "PROVIDER_TIMEOUT" }
+      ]);
+
+      dedupingFb.setBehavior(() => ({
+        outcome: "published",
+        externalPostId: "same",
+        externalPostUrl: "https://facebook.example/p/same"
+      }));
+      await dispatch(TENANT_A, { ...options, clock: at(60) });
+
+      // Two requests, the SAME key, ONE post on the provider.
+      expect(dedupingFb.calls).toHaveLength(2);
+      expect(dedupingFb.calls[0]!.idempotencyKey).toBe(
+        dedupingFb.calls[1]!.idempotencyKey
+      );
+      expect(dedupingFb.providerPosts).toHaveLength(1);
+
+      const [done] = await jobs(result.publicationId!);
+
+      expect(done!.status).toBe("published");
+    });
+
+    test("M1: an adapter's own `unknown` outcome follows the same rule", async () => {
+      const unsure = createFakeSocialAdapter(
+        "facebook",
+        FULL_CAPABILITIES,
+        () => ({
+          outcome: "unknown",
+          errorCode: "UPSTREAM_5XX"
+        })
+      );
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+
+      await dispatch(TENANT_A, { registry: only(unsure) });
+
+      const [job] = await jobs(result.publicationId!);
+
+      expect(job).toMatchObject({
+        status: "needs_reconciliation",
+        failure_code: "UPSTREAM_5XX"
+      });
+    });
+
+    test("M1: an unknown outcome leaves only to an operator or a cancel (database trigger), and cancel stops it", async () => {
+      const unsure = createFakeSocialAdapter(
+        "facebook",
+        FULL_CAPABILITIES,
+        () => ({
+          outcome: "unknown",
+          errorCode: "UPSTREAM_5XX"
+        })
+      );
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+
+      await dispatch(TENANT_A, { registry: only(unsure) });
+
+      const [job] = await jobs(result.publicationId!);
+
+      for (const status of [
+        "publishing",
+        "published",
+        "failed",
+        "retry_wait"
+      ]) {
+        await expectDbRefusal(
+          getAdminSql().unsafe(
+            `UPDATE awcms_social_publish_jobs SET status = '${status}' ${status === "published" ? ", external_post_id = 'x', published_at = now()" : ""} WHERE id = '${job!.id}'`
+          ),
+          `an unknown job moving to ${status}`,
+          "23514"
+        );
+      }
+
+      const user = await seedTenantUser(TENANT_A, "reconciler");
+      const cancelled = await inTenant(TENANT_A, (tx) =>
+        cancelPublication(tx, TENANT_A, user, result.publicationId!, null)
+      );
+
+      expect(cancelled).toMatchObject({ outcome: "ok", jobsCancelled: 1 });
+    });
+
+    test("M4: a tenant that switched the module OFF is not enqueued for and not dispatched", async () => {
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const user = await seedTenantUser(TENANT_A, "gate");
+      const queued = await enqueue(TENANT_A, enqueueInput([account.id]));
+
+      await inTenant(TENANT_A, async (tx) => {
+        await updateSettings(tx, TENANT_A, user, {
+          autoPublishEnabled: true,
+          approvalRequired: false
+        });
+        await upsertRule(tx, TENANT_A, user, "post_published", account.id);
+      });
+      await getAdminSql()`
+        INSERT INTO awcms_modules (module_key, module_name)
+        VALUES ('social_publishing', 'Social Publishing')
+        ON CONFLICT (module_key) DO NOTHING
+      `;
+      await getAdminSql()`
+        INSERT INTO awcms_tenant_modules (tenant_id, module_key, enabled)
+        VALUES (${TENANT_A}, 'social_publishing', false)
+      `;
+
+      // Article path: nothing is enqueued.
+      const article = await inTenant(TENANT_A, (tx) =>
+        createSocialPublishingPortAdapter({
+          mediaPort: {
+            isManagedMediaEnforcementActiveForTenant: async () => false,
+            isMediaReferenceSafe: async () => true,
+            resolveMediaReferences: async () => new Map()
+          },
+          registry,
+          env: ENV,
+          loadPublishers: async () => publishers
+        }).onArticlePublished(tx, TENANT_A, {
+          articleId: crypto.randomUUID(),
+          title: "T",
+          slug: "t",
+          excerpt: null,
+          featuredMediaId: null,
+          trigger: "post_published"
+        })
+      );
+
+      expect(article).toEqual({ jobsCreated: 0 });
+
+      // Dispatch: a job queued earlier is left alone.
+      const run = await dispatch(TENANT_A);
+
+      expect(run.claimed).toBe(0);
+      expect(fb.calls).toHaveLength(0);
+
+      const counts = (await getAdminSql()`
+        SELECT count(*)::int AS n FROM awcms_social_publications
+      `) as { n: number }[];
+
+      expect(counts[0]!.n).toBe(1);
+
+      // Switched back on, the same queued job goes out.
+      await getAdminSql()`
+        UPDATE awcms_tenant_modules SET enabled = true
+        WHERE tenant_id = ${TENANT_A} AND module_key = 'social_publishing'
+      `;
+      expect((await dispatch(TENANT_A)).published).toBe(1);
+      expect(queued.publicationId).not.toBeNull();
+    });
+
+    test("L2: the database refuses an approval-requiring publication that is ready without an approver, and a self-approved manual one", async () => {
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const maker = await seedTenantUser(TENANT_A, "maker-l2");
+      const result = await enqueue(
+        TENANT_A,
+        enqueueInput([account.id], {
+          approvalRequired: true,
+          actorTenantUserId: maker
+        })
+      );
+
+      await expectDbRefusal(
+        getAdminSql()`UPDATE awcms_social_publications SET state = 'ready' WHERE id = ${result.publicationId}`,
+        "ready with no approver",
+        "23514"
+      );
+      await expectDbRefusal(
+        getAdminSql()`
+          UPDATE awcms_social_publications
+          SET state = 'ready', approved_by = ${maker}, approved_at = now()
+          WHERE id = ${result.publicationId}
+        `,
+        "a manual publication approved by its creator",
+        "23514"
+      );
+
+      const checker = await seedTenantUser(TENANT_A, "checker-l2");
+
+      await getAdminSql()`
+        UPDATE awcms_social_publications
+        SET state = 'ready', approved_by = ${checker}, approved_at = now()
+        WHERE id = ${result.publicationId}
+      `;
+    });
+
+    test("L3: an approved publication cannot gain a target, in the application and in the database", async () => {
+      const x = await seedAccount(TENANT_A, { provider: "facebook" });
+      const y = await seedAccount(TENANT_A, { provider: "linkedin" });
+      const checker = await seedTenantUser(TENANT_A, "checker-l3");
+      const articleId = crypto.randomUUID();
+      const input = (accountIds: string[]) =>
+        enqueueInput(accountIds, {
+          approvalRequired: true,
+          source: { kind: "article", articleId, trigger: "post_published" }
+        });
+      const first = await enqueue(TENANT_A, input([x.id]));
+
+      // Before approval a target may still be added (the approval will cover it).
+      expect((await enqueue(TENANT_A, input([x.id]))).jobsCreated).toBe(0);
+
+      await inTenant(TENANT_A, (tx) =>
+        approvePublication(tx, TENANT_A, checker, first.publicationId!)
+      );
+
+      const grown = await enqueue(TENANT_A, input([x.id, y.id]));
+
+      expect(grown.jobsCreated).toBe(0);
+      expect(grown.accounts).toContainEqual(
+        expect.objectContaining({
+          accountId: y.id,
+          outcome: "refused",
+          reason: "NEW_TARGET_NEEDS_APPROVAL"
+        })
+      );
+
+      await expectDbRefusal(
+        getAdminSql()`
+          INSERT INTO awcms_social_publish_jobs
+            (tenant_id, publication_id, channel_account_id, provider,
+             account_kind, variant, idempotency_key)
+          VALUES (${TENANT_A}, ${first.publicationId}, ${y.id}, 'linkedin',
+                  'organization_page', 'text', ${"d".repeat(64)})
+        `,
+        "a job added to an approved publication",
+        "23514"
+      );
+    });
+
+    test("L3: a publication that needed no approval can still gain a target", async () => {
+      const x = await seedAccount(TENANT_A, { provider: "facebook" });
+      const y = await seedAccount(TENANT_A, { provider: "linkedin" });
+      const articleId = crypto.randomUUID();
+      const input = (accountIds: string[]) =>
+        enqueueInput(accountIds, {
+          source: { kind: "article", articleId, trigger: "post_published" }
+        });
+
+      await enqueue(TENANT_A, input([x.id]));
+
+      expect((await enqueue(TENANT_A, input([x.id, y.id]))).jobsCreated).toBe(
+        1
+      );
+    });
+
+    test("L7: a manual retry never 500s on the attempt ceiling: it is clamped, then refused", async () => {
+      const account = await seedAccount(TENANT_A, { provider: "linkedin" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+      const [job] = await jobs(result.publicationId!);
+
+      await getAdminSql()`
+        UPDATE awcms_social_publish_jobs
+        SET status = 'failed', attempt_count = 49, failure_code = 'REJECTED'
+        WHERE id = ${job!.id}
+      `;
+
+      expect(
+        await inTenant(TENANT_A, (tx) => retryJob(tx, TENANT_A, job!.id))
+      ).toMatchObject({ outcome: "ok" });
+      expect((await jobs(result.publicationId!))[0]!.max_attempts).toBe(50);
+
+      await getAdminSql()`
+        UPDATE awcms_social_publish_jobs
+        SET status = 'failed', attempt_count = 50, failure_code = 'REJECTED'
+        WHERE id = ${job!.id}
+      `;
+
+      expect(
+        await inTenant(TENANT_A, (tx) => retryJob(tx, TENANT_A, job!.id))
+      ).toEqual({ outcome: "refused", code: "RETRY_BUDGET_EXHAUSTED" });
     });
   });
 

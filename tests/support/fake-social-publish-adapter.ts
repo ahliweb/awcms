@@ -47,6 +47,14 @@ export const TEXT_ONLY_CAPABILITIES: SocialPublishCapabilities = {
 
 export type FakeSocialAdapter = SocialPublishAdapter & {
   calls: FakeCall[];
+  /**
+   * The posts that REALLY exist on the fake "provider", one entry per idempotency
+   * key it actually created. Recorded when the behaviour completes, EVEN IF the
+   * dispatcher already gave up waiting: that is exactly how a slow real provider
+   * publishes behind a timeout. A provider that dedupes (`supportsIdempotencyKey`)
+   * never creates a second post for a key it has already seen.
+   */
+  providerPosts: string[];
   setBehavior(behavior: FakeBehavior): void;
 };
 
@@ -55,9 +63,12 @@ let postSequence = 0;
 export function createFakeSocialAdapter(
   provider: string,
   capabilities: SocialPublishCapabilities = FULL_CAPABILITIES,
-  initial?: FakeBehavior
+  initial?: FakeBehavior,
+  options: { supportsIdempotencyKey?: boolean } = {}
 ): FakeSocialAdapter {
   const calls: FakeCall[] = [];
+  const providerPosts: string[] = [];
+  const dedupes = options.supportsIdempotencyKey === true;
   let behavior: FakeBehavior =
     initial ??
     (() => {
@@ -79,7 +90,9 @@ export function createFakeSocialAdapter(
       "RATE_LIMITED",
       "NEEDS_REAUTH"
     ],
+    supportsIdempotencyKey: dedupes,
     calls,
+    providerPosts,
     setBehavior(next) {
       behavior = next;
     },
@@ -97,7 +110,15 @@ export function createFakeSocialAdapter(
         hasHttp: typeof request.http === "function"
       });
 
-      return behavior(request, calls.length);
+      const outcome = await behavior(request, calls.length);
+
+      if (outcome.outcome === "published") {
+        if (!(dedupes && providerPosts.includes(request.idempotencyKey))) {
+          providerPosts.push(request.idempotencyKey);
+        }
+      }
+
+      return outcome;
     }
   };
 }
