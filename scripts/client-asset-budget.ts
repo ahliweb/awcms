@@ -1153,8 +1153,22 @@ export const READER_BUDGET_BYTES = 24_000;
  * flags, pixel dimensions read from the header before any decode) and one more
  * translated refusal message. Same single screen (`/admin/media`), same single
  * copy of the code.
+ *
+ * **Raised for Issue #1154** (the channel-account connection manager):
+ * +3,583 B (358,381 -> 361,964 measured on `main` + this change; `main` sat at
+ * its budget, so the whole delta is this feature), set to 362,000 with 36 B of
+ * margin for the local/CI build difference seen on #1224. 3,200 B of it is the
+ * ONE script of the ONE screen that mutates (`/admin/channel-accounts/[id]`:
+ * write-only credential replacement with a conditional step-up retry, two typed
+ * confirmations, the default-sender action and the message lookup for them),
+ * which loads on that screen only. The rest is about 400 B of stylesheet
+ * (`.admin-subsection`). The idempotency-key generator is the shared one in
+ * `admin-idempotency-key.ts` (exported, not copied), and the list screen ships
+ * no script at all, so there is no per-screen duplication to recover. A
+ * credential form cannot be smaller by sharing a lifecycle that does not exist
+ * elsewhere: no other screen replaces a secret.
  */
-export const APP_BUDGET_BYTES = 358_400;
+export const APP_BUDGET_BYTES = 362_000;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

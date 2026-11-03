@@ -1,0 +1,1179 @@
+---
+/**
+ * One channel account — status, health, capability evidence and the three
+ * actions an operator needs (Issue #1154, ADR-0148 UP-08).
+ *
+ * ## What an operator learns here
+ *
+ * Whether the account is usable, and if not, why: its status, its provider
+ * authorisation, the latest health a connector reported ("last synced"), and the
+ * nine capability rows with their EVIDENCE state: granted, pending approval,
+ * denied or not offered. A capability the provider does not support is shown
+ * DISABLED with its reason, never hidden, so its absence reads as a fact and not
+ * as an omission. Whether a capability is usable right now is the same verdict
+ * `evaluateCapability` gives every use, with its denial code in words.
+ *
+ * ## A credential has no read path, and this screen invents none
+ *
+ * Nothing here selects a credential, its reference or its ciphertext: the
+ * account view carries `hasCredential` and no more. "Replace credential" is a
+ * write-only form (`type="password"`, no "show", cleared after the request)
+ * that overwrites; there is deliberately no way to read the old value back, and
+ * the new one is never put in a URL, a cookie, web storage or a status message.
+ *
+ * ## Authority is the endpoint's, the screen only hides what cannot work
+ *
+ * Each control is shown when the access chokepoint allows its permission (so a
+ * deny policy hides the button rather than failing when pressed) and, for the
+ * account actions, when the caller holds `owner` authority over this account,
+ * the same rule the endpoints apply. The endpoint is still the authority for
+ * every one.
+ *
+ * ## Impact first
+ *
+ * Disconnecting an account and revoking a connection are terminal and are
+ * confirmed by TYPING the account name (or the provider name): a click-through
+ * dialog is how the wrong account gets disconnected. The panel says what will
+ * happen, including, for a WhatsApp sender, how many messages are waiting.
+ * Queued messages are never rerouted to another sender: they fail.
+ *
+ * Wizard (OAuth or device connect) is not on this screen: it needs a provider
+ * connector, and none exists yet. See `/admin/channel-accounts`.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
+import {
+  capabilityDenialLabel,
+  capabilityDisplayStateLabel,
+  capabilityDisplayStateTone,
+  capabilityEvidenceKindLabel,
+  channelAccountKindLabel,
+  channelAccountStatusLabel,
+  channelAccountStatusTone,
+  channelAuthModeLabel,
+  channelCapabilityLabel,
+  channelGrantStateLabel,
+  channelGrantStateTone,
+  channelHealthStateLabel,
+  channelHealthTone,
+  channelProviderLabel
+} from "../../../lib/i18n/labels/channel-accounts";
+import {
+  capabilityRowDisplay,
+  formatUtcMinute,
+  maskExternalId
+} from "../../../lib/ui/channel-accounts-screen";
+import {
+  fetchAccountHealth,
+  listConnectionAccountBindings,
+  toPublicAccount,
+  type AccountHealthView,
+  type AccountView
+} from "../../../modules/channel-accounts/application/account-directory";
+import {
+  listAccountCapabilities,
+  type CapabilityView
+} from "../../../modules/channel-accounts/application/capability-directory";
+import {
+  asUuid,
+  canSeeAllAccounts,
+  loadAuthorizedAccount,
+  mayRevokeConnection
+} from "../../../modules/channel-accounts/application/channel-accounts-route-support";
+import { isWhatsappSenderShape } from "../../../modules/channel-accounts/application/channel-account-port-adapter";
+import {
+  fetchConnection,
+  type ConnectionView
+} from "../../../modules/channel-accounts/application/connection-directory";
+import { isChannelAccountsEnabled } from "../../../modules/channel-accounts/domain/channel-accounts-constants";
+import {
+  listSenderPolicies,
+  summarizeWhatsappSenders
+} from "../../../modules/whatsapp-delivery/application/whatsapp-sender-directory";
+import { hasWhatsappSenderAdapter } from "../../../modules/whatsapp-delivery/infrastructure/whatsapp-sender-providers";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+const LIST_PATH = "/admin/channel-accounts";
+const accountId = asUuid(Astro.params.id);
+
+/**
+ * The three guards of this screen, spelled out as literals so
+ * `admin:screen-coverage:check` (which reads source text) sees the permissions
+ * it claims; the page-contract test holds each equal to
+ * `CHANNEL_ACCOUNTS_GUARDS` and to the endpoint that enforces it.
+ */
+const READ_GUARD = {
+  moduleKey: "channel_accounts",
+  activityCode: "accounts",
+  action: "read"
+} as const;
+const DISCONNECT_GUARD = {
+  moduleKey: "channel_accounts",
+  activityCode: "accounts",
+  action: "revoke"
+} as const;
+const CREDENTIALS_GUARD = {
+  moduleKey: "channel_accounts",
+  activityCode: "credentials",
+  action: "manage"
+} as const;
+const SENDER_POLICY_GUARD = {
+  moduleKey: "whatsapp_delivery",
+  activityCode: "sender_policy",
+  action: "configure"
+} as const;
+const SENDERS_READ_GUARD = {
+  moduleKey: "whatsapp_delivery",
+  activityCode: "senders",
+  action: "read"
+} as const;
+
+/** The `?notice=` values the client sets after a successful action: an allow-list, never echoed text. */
+const NOTICES: Record<string, string> = {
+  "credential-replaced": t(
+    "The credential was replaced. The previous one is gone and cannot be shown."
+  ),
+  "default-set": t(
+    "This account is now the default sender. It applies to messages queued from now on."
+  ),
+  disconnected: t(
+    "The account was disconnected and its stored credential was erased."
+  ),
+  "connection-revoked": t(
+    "The provider authorisation was revoked and its credentials were erased."
+  )
+};
+const noticeKey = Astro.url.searchParams.get("notice") ?? "";
+const notice = Object.hasOwn(NOTICES, noticeKey) ? NOTICES[noticeKey] : null;
+
+type DetailData =
+  | { found: false; enabled: boolean }
+  | {
+      found: true;
+      enabled: true;
+      account: AccountView;
+      health: AccountHealthView | null;
+      capabilities: CapabilityView[];
+      connection: ConnectionView | null;
+      connectionAccountCount: number;
+      canDisconnect: boolean;
+      canReplaceCredential: boolean;
+      canRevokeConnection: boolean;
+      sender: {
+        eligible: boolean;
+        hasAdapter: boolean;
+        canConfigure: boolean;
+        visible: boolean;
+        isDefault: boolean;
+        waiting: number | null;
+        sending: number | null;
+      } | null;
+    };
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: async ({ tx, auth, can }): Promise<DetailData> => {
+    if (!isChannelAccountsEnabled()) return { found: false, enabled: false };
+    if (accountId === null) return { found: false, enabled: true };
+
+    const context = {
+      tx,
+      tenantId: ssr.tenantId,
+      tokenHash: ssr.tokenHash,
+      auth,
+      now: new Date(),
+      request: Astro.request,
+      clientAddress: Astro.clientAddress
+    };
+    // The routes' own visibility rule (assignment gate and business scope):
+    // an account the caller may not see is the same "not found" as an unknown id.
+    const loaded = await loadAuthorizedAccount(context, accountId, READ_GUARD);
+
+    if ("denied" in loaded) return { found: false, enabled: true };
+
+    const account = toPublicAccount(loaded.account);
+    // One awaited query at a time: `tx` is one connection.
+    const health = await fetchAccountHealth(tx, ssr.tenantId, account.id);
+    const capabilities =
+      (await listAccountCapabilities(tx, ssr.tenantId, account.id)) ?? [];
+    const connection =
+      account.connectionId === null
+        ? null
+        : await fetchConnection(tx, ssr.tenantId, account.connectionId);
+
+    const mayRevoke = await can(DISCONNECT_GUARD);
+    const mayWriteCredential = await can(CREDENTIALS_GUARD);
+    // The account actions need `owner` authority over THIS account.
+    const ownsAccount =
+      (mayRevoke || mayWriteCredential) &&
+      !(
+        "denied" in
+        (await loadAuthorizedAccount(
+          context,
+          account.id,
+          DISCONNECT_GUARD,
+          "owner"
+        ))
+      );
+
+    let connectionAccountCount = 0;
+    let canRevokeConnection = false;
+
+    if (connection !== null && mayRevoke) {
+      canRevokeConnection =
+        connection.grantState !== "revoked" &&
+        (await mayRevokeConnection(context, DISCONNECT_GUARD, connection));
+
+      if (canRevokeConnection) {
+        connectionAccountCount = (
+          await listConnectionAccountBindings(
+            tx,
+            ssr.tenantId,
+            {
+              tenantUserId: auth.context.tenantUserId,
+              bypass: await canSeeAllAccounts(context)
+            },
+            "viewer",
+            { connectionId: connection.id, provider: null }
+          )
+        ).filter((binding) => binding.assignable).length;
+      }
+    }
+
+    let sender: Extract<DetailData, { found: true }>["sender"] = null;
+
+    if (isWhatsappSenderShape(account.provider, account.accountKind)) {
+      const canConfigure = await can(SENDER_POLICY_GUARD);
+      const canReadSenders = await can(SENDERS_READ_GUARD);
+      const visible = canConfigure || canReadSenders;
+      let isDefault = false;
+      let waiting: number | null = null;
+      let sending: number | null = null;
+
+      if (visible) {
+        const scope = account.businessScope;
+
+        // Only whether THIS account is the default for ITS OWN scope: a fact
+        // the caller can already derive from being allowed to configure it.
+        isDefault = (await listSenderPolicies(tx, ssr.tenantId)).some(
+          (policy) =>
+            policy.defaultSenderAccountId === account.id &&
+            (policy.businessScope?.type ?? null) === (scope?.type ?? null) &&
+            (policy.businessScope?.id ?? null) === (scope?.id ?? null)
+        );
+      }
+
+      if (canReadSenders) {
+        const lane = (
+          await summarizeWhatsappSenders(tx, ssr.tenantId, null)
+        ).find((entry) => entry.senderAccountId === account.id);
+
+        waiting = lane?.queue.waiting ?? 0;
+        sending = lane?.queue.sending ?? 0;
+      }
+
+      sender = {
+        eligible: true,
+        hasAdapter: hasWhatsappSenderAdapter(account.provider),
+        canConfigure,
+        visible,
+        isDefault,
+        waiting,
+        sending
+      };
+    }
+
+    return {
+      found: true,
+      enabled: true,
+      account,
+      health,
+      capabilities,
+      connection,
+      connectionAccountCount,
+      canDisconnect: ownsAccount && mayRevoke && account.status !== "revoked",
+      canReplaceCredential:
+        ownsAccount &&
+        mayWriteCredential &&
+        account.authMode !== "oauth2" &&
+        (account.status === "pending" ||
+          account.status === "connected" ||
+          account.status === "degraded"),
+      canRevokeConnection,
+      sender
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/channel-accounts/[id].astro: failed to load a channel account",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const detail = data !== null && data.found ? data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const notFound = data !== null && !data.found && data.enabled;
+
+const account = detail?.account ?? null;
+const providerName = account ? channelProviderLabel(t, account.provider) : "";
+/** What an operator types to confirm a terminal action. */
+const confirmAccountText = account?.displayName ?? "";
+const confirmConnectionText = providerName;
+const sender = detail?.sender ?? null;
+const hasActions =
+  detail !== null &&
+  (detail.canDisconnect ||
+    detail.canReplaceCredential ||
+    detail.canRevokeConnection ||
+    (sender !== null && sender.eligible));
+
+function quota(health: AccountHealthView): string | null {
+  if (health.quotaRemaining === null && health.quotaLimit === null) return null;
+
+  return health.quotaLimit === null
+    ? t("{remaining} remaining", { remaining: health.quotaRemaining ?? 0 })
+    : t("{remaining} of {limit} remaining", {
+        remaining: health.quotaRemaining ?? 0,
+        limit: health.quotaLimit
+      });
+}
+---
+
+<AdminLayout
+  title={account ? account.displayName : t("Channel account")}
+  description={t(
+    "Status, health and what this account is allowed to do, with the evidence for each. Credentials are never shown."
+  )}
+>
+  <p class="page-description">
+    <a href={LIST_PATH} id="channel-account-back">
+      <span aria-hidden="true">‹</span>
+      {t("All channel accounts")}
+    </a>
+  </p>
+
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="channel-account-denied">
+      {t("You do not have permission to view channel accounts.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="channel-account-error">
+      {t(
+        "This channel account could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="channel-account-disabled">
+      {t(
+        "Channel accounts are switched off on this deployment, so nothing can be connected or listed."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && notFound && (
+    <p class="state-notice fade-in-up" id="channel-account-not-found">
+      {t("This channel account does not exist, or you cannot see it.")}
+    </p>
+  )}
+
+  {canRead && !loadError && detail && account && (
+    <>
+      {notice !== null && (
+        <p class="state-notice" id="channel-account-notice" role="status">
+          {notice}
+        </p>
+      )}
+      <p
+        id="channel-account-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      ></p>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="channel-account-summary-title"
+      >
+        <h2 class="admin-section-title" id="channel-account-summary-title">
+          {t("Account")}
+        </h2>
+        <dl class="admin-detail-list" id="channel-account-summary">
+          <dt>{t("Status")}</dt>
+          <dd data-status={account.status}>
+            <span
+              class="admin-status-pill"
+              data-tone={channelAccountStatusTone(account.status)}
+            >
+              <span class="admin-status-pill-dot" aria-hidden="true"></span>
+              {channelAccountStatusLabel(t, account.status)}
+            </span>
+            {account.statusReason !== null && (
+              <span class="cell-muted">
+                {" "}
+                <code class="cell-code">{account.statusReason}</code>
+              </span>
+            )}
+          </dd>
+          <dt>{t("Provider")}</dt>
+          <dd>{providerName}</dd>
+          <dt>{t("Type")}</dt>
+          <dd>{channelAccountKindLabel(t, account.accountKind)}</dd>
+          <dt>{t("Identity")}</dt>
+          <dd>
+            <span class="cell-code">{maskExternalId(account.externalId)}</span>
+          </dd>
+          <dt>{t("Bound to")}</dt>
+          <dd>
+            {account.businessScope === null
+              ? t("Whole tenant")
+              : t("Scope: {type}", {
+                  type: account.businessScope.type.replaceAll("_", " ")
+                })}
+          </dd>
+          <dt>{t("Method")}</dt>
+          <dd>{channelAuthModeLabel(t, account.authMode)}</dd>
+          <dt>{t("Credential")}</dt>
+          <dd id="channel-account-credential-state">
+            {account.authMode === "oauth2"
+              ? t("Held by the provider authorisation")
+              : account.hasCredential
+                ? t("Stored (write-only, never shown)")
+                : t("None stored")}
+          </dd>
+          <dt>{t("Connected")}</dt>
+          <dd>{formatUtcMinute(account.connectedAt)}</dd>
+          <dt>{t("Added")}</dt>
+          <dd>{formatUtcMinute(account.createdAt)}</dd>
+        </dl>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="channel-account-health-title"
+      >
+        <h2 class="admin-section-title" id="channel-account-health-title">
+          {t("Health")}
+        </h2>
+        {detail.health === null ? (
+          <p class="page-description" id="channel-account-health-none">
+            {t(
+              "No health report yet. Health is reported by a provider connector and is never set by a person, so this account is not shown as healthy until one reports."
+            )}
+          </p>
+        ) : (
+          <dl class="admin-detail-list" id="channel-account-health">
+            <dt>{t("State")}</dt>
+            <dd data-status={detail.health.state}>
+              <span
+                class="admin-status-pill"
+                data-tone={channelHealthTone(detail.health.state)}
+              >
+                <span class="admin-status-pill-dot" aria-hidden="true"></span>
+                {channelHealthStateLabel(t, detail.health.state)}
+              </span>
+              {detail.health.reasonCode !== null && (
+                <span class="cell-muted">
+                  {" "}
+                  <code class="cell-code">{detail.health.reasonCode}</code>
+                </span>
+              )}
+            </dd>
+            <dt>{t("Last synced")}</dt>
+            <dd>{formatUtcMinute(detail.health.checkedAt)}</dd>
+            <dt>{t("Token expires")}</dt>
+            <dd>{formatUtcMinute(detail.health.tokenExpiresAt)}</dd>
+            {quota(detail.health) !== null && (
+              <>
+                <dt>{t("Quota")}</dt>
+                <dd>{quota(detail.health)}</dd>
+              </>
+            )}
+          </dl>
+        )}
+      </section>
+
+      {detail.connection !== null && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="channel-account-connection-title"
+        >
+          <h2 class="admin-section-title" id="channel-account-connection-title">
+            {t("Provider authorisation")}
+          </h2>
+          <dl class="admin-detail-list" id="channel-account-connection">
+            <dt>{t("State")}</dt>
+            <dd data-status={detail.connection.grantState}>
+              <span
+                class="admin-status-pill"
+                data-tone={channelGrantStateTone(detail.connection.grantState)}
+              >
+                <span class="admin-status-pill-dot" aria-hidden="true"></span>
+                {channelGrantStateLabel(t, detail.connection.grantState)}
+              </span>
+              {detail.connection.awaitingExchange && (
+                <span class="cell-muted">
+                  {" "}
+                  {t("Waiting for the connector to finish")}
+                </span>
+              )}
+            </dd>
+            <dt>{t("Granted scopes")}</dt>
+            <dd>
+              {detail.connection.grantedScopes.length === 0 ? (
+                <span class="cell-muted">{t("None recorded")}</span>
+              ) : (
+                <ul class="role-chip-list" aria-label={t("Granted scopes")}>
+                  {detail.connection.grantedScopes.map((scope) => (
+                    <li>
+                      <span class="role-chip">{scope}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+            <dt>{t("Issued")}</dt>
+            <dd>{formatUtcMinute(detail.connection.issuedAt)}</dd>
+            <dt>{t("Expires")}</dt>
+            <dd>{formatUtcMinute(detail.connection.expiresAt)}</dd>
+          </dl>
+        </section>
+      )}
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="channel-account-capabilities-title"
+      >
+        <h2 class="admin-section-title" id="channel-account-capabilities-title">
+          {t("Capabilities and evidence")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "What this account may do is decided per capability: the provider must offer it, a grant must be recorded with evidence, and the account and its authorisation must be active. A capability the provider does not offer is listed but disabled. Recording or withdrawing a grant is done through the API."
+          )}
+        </p>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="channel-account-capabilities-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="channel-account-capabilities"
+          >
+            <caption id="channel-account-capabilities-caption">
+              {tn(
+                "{count} capability",
+                "{count} capabilities",
+                detail.capabilities.length,
+                { count: detail.capabilities.length }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Capability")}</th>
+                <th scope="col">{t("Evidence state")}</th>
+                <th scope="col">{t("Evidence")}</th>
+                <th scope="col">{t("Usable now")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.capabilities.map((capability) => {
+                const display = capabilityRowDisplay(capability);
+
+                return (
+                  <tr
+                    data-capability={capability.capability}
+                    data-disabled={display.disabled ? "true" : "false"}
+                    aria-disabled={display.disabled ? "true" : undefined}
+                  >
+                    <td data-label={t("Capability")}>
+                      {channelCapabilityLabel(t, capability.capability)}
+                    </td>
+                    <td
+                      data-label={t("Evidence state")}
+                      data-state={display.state}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={capabilityDisplayStateTone(display.state)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        ></span>
+                        {capabilityDisplayStateLabel(t, display.state)}
+                      </span>
+                    </td>
+                    <td data-label={t("Evidence")}>
+                      {capability.evidenceKind !== null &&
+                      capability.evidenceRef !== null ? (
+                        <>
+                          {capabilityEvidenceKindLabel(
+                            t,
+                            capability.evidenceKind
+                          )}
+                          <span class="cell-muted">
+                            {" "}
+                            <code class="cell-code">
+                              {capability.evidenceRef}
+                            </code>
+                          </span>
+                        </>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label={t("Usable now")}>
+                      {capability.effective.allowed ? (
+                        t("Yes")
+                      ) : (
+                        <>
+                          {t("No")}
+                          <span class="cell-muted">
+                            {" "}
+                            {capabilityDenialLabel(
+                              t,
+                              capability.effective.code ?? ""
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {hasActions && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="channel-account-actions-title"
+        >
+          <h2 class="admin-section-title" id="channel-account-actions-title">
+            {t("Actions")}
+          </h2>
+
+          {sender !== null && sender.eligible && (
+            <div id="channel-account-default-sender" class="admin-subsection">
+              <h3 class="admin-subsection-title">{t("Default sender")}</h3>
+              {sender.visible && (
+                <p class="page-description" id="channel-account-default-state">
+                  {sender.isDefault
+                    ? t(
+                        "This account is the default WhatsApp sender for its scope."
+                      )
+                    : t(
+                        "This account is not the default WhatsApp sender for its scope."
+                      )}
+                </p>
+              )}
+              {!sender.hasAdapter && (
+                <p
+                  class="state-notice"
+                  id="channel-account-default-unsupported"
+                >
+                  {t(
+                    "This deployment has no sending adapter for this provider, so it cannot be the default sender."
+                  )}
+                </p>
+              )}
+              {sender.canConfigure &&
+                sender.hasAdapter &&
+                !sender.isDefault && (
+                  <>
+                    <p class="page-description">
+                      {t(
+                        "Making this account the default changes which number sends when no sender is named. It applies to messages queued from now on; messages already queued keep the sender they were given."
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      class="btn btn-secondary js-channel-default-sender"
+                      data-account-id={account.id}
+                      data-scope-type={account.businessScope?.type ?? ""}
+                      data-scope-id={account.businessScope?.id ?? ""}
+                    >
+                      {t("Make default sender")}
+                    </button>
+                  </>
+                )}
+            </div>
+          )}
+
+          {detail.canReplaceCredential && (
+            <div id="channel-account-credential" class="admin-subsection">
+              <h3 class="admin-subsection-title">{t("Replace credential")}</h3>
+              <p class="page-description">
+                {t(
+                  "Writing a new credential overwrites the stored one. The old value cannot be shown and the new value is never displayed again. Writing a credential needs two-factor authentication and may ask for a fresh code."
+                )}
+              </p>
+              <form
+                id="channel-account-credential-form"
+                class="admin-form"
+                autocomplete="off"
+                novalidate
+                data-account-id={account.id}
+              >
+                <div class="admin-field">
+                  <label for="channel-account-secret">
+                    {t("New credential")}
+                  </label>
+                  <input
+                    id="channel-account-secret"
+                    name="secret"
+                    type="password"
+                    autocomplete="new-password"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    minlength="8"
+                    maxlength="4096"
+                    required
+                    aria-describedby="channel-account-secret-hint"
+                  />
+                  <p class="admin-field-hint" id="channel-account-secret-hint">
+                    {t("No spaces. Between 8 and 4096 characters.")}
+                  </p>
+                </div>
+                <div class="admin-field" id="channel-account-stepup" hidden>
+                  <label for="channel-account-stepup-code">
+                    {t("Authenticator code")}
+                  </label>
+                  <input
+                    id="channel-account-stepup-code"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    maxlength="12"
+                    spellcheck="false"
+                  />
+                  <p class="admin-field-hint">
+                    {t(
+                      "Enter the current six-digit code, then replace the credential again."
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <button type="submit" class="btn btn-primary">
+                    {t("Replace credential")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {detail.canDisconnect && (
+            <div id="channel-account-disconnect" class="admin-subsection">
+              <h3 class="admin-subsection-title">{t("Disconnect account")}</h3>
+              <p class="page-description">
+                {t(
+                  "Disconnecting is permanent. Nothing will send or publish as this account again, its stored credential is erased and its webhook subscriptions are revoked. The provider is not told: revoke it there as well."
+                )}
+              </p>
+              {sender !== null && sender.waiting !== null && (
+                <p class="state-notice" id="channel-account-queue-impact">
+                  {t(
+                    "{waiting} waiting and {sending} in flight for this sender. They are not rerouted to another sender: they will fail.",
+                    { waiting: sender.waiting, sending: sender.sending ?? 0 }
+                  )}
+                </p>
+              )}
+              <form
+                id="channel-account-disconnect-form"
+                class="admin-form"
+                autocomplete="off"
+                novalidate
+                data-account-id={account.id}
+                data-confirm-text={confirmAccountText}
+              >
+                <div class="admin-field">
+                  <label for="channel-account-disconnect-confirm">
+                    {t("Type the account name to confirm: {name}", {
+                      name: confirmAccountText
+                    })}
+                  </label>
+                  <input
+                    id="channel-account-disconnect-confirm"
+                    type="text"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    required
+                  />
+                </div>
+                <div>
+                  <button
+                    type="submit"
+                    class="btn btn-danger btn-danger--solid"
+                  >
+                    {t("Disconnect account")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {detail.canRevokeConnection && detail.connection !== null && (
+            <div
+              id="channel-account-revoke-connection"
+              class="admin-subsection"
+            >
+              <h3 class="admin-subsection-title">
+                {t("Revoke provider authorisation")}
+              </h3>
+              <p class="page-description">
+                {tn(
+                  "Revoking is permanent. The authorisation's credentials are erased and the {count} account bound to it is disconnected.",
+                  "Revoking is permanent. The authorisation's credentials are erased and the {count} accounts bound to it are disconnected.",
+                  detail.connectionAccountCount,
+                  { count: detail.connectionAccountCount }
+                )}
+              </p>
+              <form
+                id="channel-account-revoke-connection-form"
+                class="admin-form"
+                autocomplete="off"
+                novalidate
+                data-connection-id={detail.connection.id}
+                data-confirm-text={confirmConnectionText}
+              >
+                <div class="admin-field">
+                  <label for="channel-account-revoke-confirm">
+                    {t("Type the provider name to confirm: {name}", {
+                      name: confirmConnectionText
+                    })}
+                  </label>
+                  <input
+                    id="channel-account-revoke-confirm"
+                    type="text"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    required
+                  />
+                </div>
+                <div>
+                  <button
+                    type="submit"
+                    class="btn btn-danger btn-danger--solid"
+                  >
+                    {t("Revoke authorisation")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Strings the client script cannot translate itself (it cannot load the
+          catalogue): rendered here, read back from `data-*`. */}
+      <div
+        id="channel-account-i18n"
+        hidden
+        data-busy={t("Please wait…")}
+        data-mismatch={t("What you typed does not match. Nothing was changed.")}
+        data-credential-failed={t(
+          "Could not replace the credential. Please try again."
+        )}
+        data-mfa-required={t(
+          "Writing a credential needs two-factor authentication. Turn it on under your account first."
+        )}
+        data-step-up-prompt={t(
+          "Enter the current six-digit code from your authenticator app to confirm."
+        )}
+        data-step-up-cancelled={t("Confirmation cancelled. Nothing changed.")}
+        data-secret-store-unavailable={t(
+          "Credentials cannot be stored on this deployment right now."
+        )}
+        data-credential-not-applicable={t(
+          "This account has no credential of its own."
+        )}
+        data-account-state={t("The account's state does not allow this.")}
+        data-not-found={t(
+          "That account or authorisation no longer exists, or you cannot act on it."
+        )}
+        data-forbidden={t("You do not have permission to do that.")}
+        data-conflict={t(
+          "That was already done, or the request conflicts with an earlier one. Reload the page."
+        )}
+        data-disconnect-failed={t(
+          "Could not disconnect the account. Please try again."
+        )}
+        data-revoke-failed={t(
+          "Could not revoke the authorisation. Please try again."
+        )}
+        data-default-failed={t(
+          "Could not change the default sender. Please try again."
+        )}
+        data-sender-unavailable={t(
+          "That account cannot be the default sender: it must be connected, may send business messages and have a sending adapter."
+        )}
+        data-rate-limited={t("Too many attempts. Try again later.")}
+      ></div>
+    </>
+  )}
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it: an import-free script would inline and
+  // be blocked.
+  import {
+    holdForNavigation,
+    messageBox,
+    onSubmit,
+    onAction,
+    sendJson,
+    lockElement
+  } from "../../../lib/ui/admin-form-client";
+  import { newKey } from "../../../lib/ui/admin-idempotency-key";
+  import { confirmationMatches } from "../../../lib/ui/channel-accounts-screen";
+
+  const actionError = messageBox("channel-account-action-error");
+  const host = document.getElementById("channel-account-i18n");
+
+  /** A string the server rendered for us, never a fallback invented here. */
+  function say(key: string): string {
+    return host?.dataset[key] ?? "";
+  }
+
+  function messageFor(errorCode: string | null, fallbackKey: string): string {
+    switch (errorCode) {
+      case "MFA_ENROLMENT_REQUIRED":
+        return say("mfaRequired");
+      case "SECRET_STORE_UNAVAILABLE":
+        return say("secretStoreUnavailable");
+      case "CREDENTIAL_NOT_APPLICABLE":
+        return say("credentialNotApplicable");
+      case "ACCOUNT_STATE_INVALID":
+        return say("accountState");
+      case "SENDER_UNAVAILABLE":
+        return say("senderUnavailable");
+      case "RESOURCE_NOT_FOUND":
+      case "ACCOUNT_NOT_FOUND":
+        return say("notFound");
+      case "ACCESS_DENIED":
+      case "FORBIDDEN":
+        return say("forbidden");
+      case "IDEMPOTENCY_CONFLICT":
+      case "ACCOUNT_ALREADY_DISCONNECTED":
+      case "ALREADY_REVOKED":
+        return say("conflict");
+      case "RATE_LIMITED":
+        return say("rateLimited");
+      case "STEP_UP_CANCELLED":
+        return say("stepUpCancelled");
+      default:
+        return say(fallbackKey);
+    }
+  }
+
+  /** A successful action replaces the page with a fresh read and a one-line notice (an allow-listed key). */
+  function finish(notice: string): void {
+    holdForNavigation();
+    window.location.assign(`${window.location.pathname}?notice=${notice}`);
+  }
+
+  // ---- Replace credential: write-only ---------------------------------------
+  /**
+   * A fresh step-up is requested only when the endpoint asks for one
+   * (`STEP_UP_REQUIRED`). The code is asked for IN THE FORM (an inline field,
+   * not a browser dialog: ADR-0125), the secret stays in its password field for
+   * that one retry, and the retry reuses the SAME `Idempotency-Key`. Nothing is
+   * stored.
+   */
+  let pendingKey: string | null = null;
+
+  onSubmit("channel-account-credential-form", async ({ form, submit }) => {
+    actionError.clear();
+
+    const input = form.querySelector<HTMLInputElement>(
+      "#channel-account-secret"
+    );
+    const stepUpBox = document.getElementById("channel-account-stepup");
+    const stepUpInput = form.querySelector<HTMLInputElement>(
+      "#channel-account-stepup-code"
+    );
+    const accountId = form.dataset.accountId;
+
+    if (!input || !accountId) return;
+
+    const secret = input.value;
+
+    if (secret.length < 8 || /\s/.test(secret)) {
+      actionError.show(say("credentialFailed"));
+      input.focus();
+      return;
+    }
+
+    const unlock = submit ? lockElement(submit, say("busy")) : () => {};
+    const key = pendingKey ?? newKey();
+    const code =
+      stepUpBox && !stepUpBox.hidden && stepUpInput
+        ? stepUpInput.value.trim()
+        : "";
+
+    if (stepUpBox && !stepUpBox.hidden && code === "") {
+      actionError.show(say("stepUpCancelled"));
+      stepUpInput?.focus();
+      unlock();
+      return;
+    }
+
+    let result: { ok: boolean; errorCode: string | null } = {
+      ok: true,
+      errorCode: null
+    };
+
+    if (code !== "") {
+      result = await sendJson("POST", "/api/v1/auth/mfa/step-up", { code });
+      if (stepUpInput) stepUpInput.value = "";
+    }
+
+    if (result.ok) {
+      result = await sendJson(
+        "PUT",
+        `/api/v1/channel-accounts/accounts/${accountId}/credential`,
+        { secret },
+        { "Idempotency-Key": key }
+      );
+    }
+
+    if (!result.ok && result.errorCode === "STEP_UP_REQUIRED" && stepUpBox) {
+      // Keep the secret for the one retry; ask for the code in the form.
+      pendingKey = key;
+      stepUpBox.hidden = false;
+      actionError.show(say("stepUpPrompt"));
+      stepUpInput?.focus();
+      unlock();
+      return;
+    }
+
+    // The value leaves the field whatever the outcome: it is not kept for a
+    // "try again", and nothing on the page ever holds it.
+    input.value = "";
+    pendingKey = null;
+    if (stepUpBox) stepUpBox.hidden = true;
+
+    if (result.ok) {
+      finish("credential-replaced");
+      return;
+    }
+
+    actionError.show(messageFor(result.errorCode, "credentialFailed"));
+    unlock();
+  });
+
+  // ---- Typed confirmation, then a terminal action ----------------------------
+  async function confirmedPost(
+    form: HTMLFormElement,
+    submit: HTMLButtonElement | null,
+    inputId: string,
+    url: string,
+    notice: string,
+    failureKey: string
+  ): Promise<void> {
+    actionError.clear();
+
+    const input = document.getElementById(inputId);
+    const expected = form.dataset.confirmText ?? "";
+
+    if (
+      !(input instanceof HTMLInputElement) ||
+      !confirmationMatches(input.value, expected)
+    ) {
+      actionError.show(say("mismatch"));
+      if (input instanceof HTMLInputElement) input.focus();
+      return;
+    }
+
+    const unlock = submit ? lockElement(submit, say("busy")) : () => {};
+    const result = await sendJson("POST", url, undefined, {
+      "Idempotency-Key": newKey()
+    });
+
+    if (result.ok) {
+      finish(notice);
+      return;
+    }
+
+    actionError.show(messageFor(result.errorCode, failureKey));
+    unlock();
+  }
+
+  onSubmit("channel-account-disconnect-form", ({ form, submit }) =>
+    confirmedPost(
+      form,
+      submit,
+      "channel-account-disconnect-confirm",
+      `/api/v1/channel-accounts/accounts/${form.dataset.accountId}/disconnect`,
+      "disconnected",
+      "disconnectFailed"
+    )
+  );
+
+  onSubmit("channel-account-revoke-connection-form", ({ form, submit }) =>
+    confirmedPost(
+      form,
+      submit,
+      "channel-account-revoke-confirm",
+      `/api/v1/channel-accounts/connections/${form.dataset.connectionId}/revoke`,
+      "connection-revoked",
+      "revokeFailed"
+    )
+  );
+
+  // ---- Default sender (WhatsApp) ----------------------------------------------
+  onAction(".js-channel-default-sender", async (button) => {
+    actionError.clear();
+
+    const accountId = button.dataset.accountId;
+    const scopeType = button.dataset.scopeType ?? "";
+    const scopeId = button.dataset.scopeId ?? "";
+
+    if (!accountId) return;
+
+    const unlock = lockElement(button, say("busy"));
+    const result = await sendJson(
+      "PUT",
+      "/api/v1/whatsapp/sender-policy",
+      {
+        businessScope:
+          scopeType !== "" && scopeId !== ""
+            ? { type: scopeType, id: scopeId }
+            : null,
+        defaultSenderAccountId: accountId
+      },
+      { "Idempotency-Key": newKey() }
+    );
+
+    if (result.ok) {
+      finish("default-set");
+      return;
+    }
+
+    actionError.show(messageFor(result.errorCode, "defaultFailed"));
+    unlock();
+  });
+</script>

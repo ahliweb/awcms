@@ -1,0 +1,670 @@
+---
+/**
+ * Channel accounts — the operator's list of connected external accounts and
+ * provider connections (Issue #1154, ADR-0148 UP-08, ADR-0149 data page).
+ *
+ * ## What this screen is, and is not
+ *
+ * It is the READ side of `channel_accounts`: every account the caller may see,
+ * with its status, how it authenticates, who it is bound to and when it was last
+ * connected; the provider connections behind OAuth and token accounts; and the
+ * provider matrix, so an operator can see which platforms can be connected on
+ * THIS deployment and why the others cannot. One account's capabilities, health
+ * and actions are on `/admin/channel-accounts/{id}`.
+ *
+ * There is no "Connect" button, deliberately. A Connect control is a promise
+ * that a connector will verify the account, and no provider connector exists
+ * yet: `POST /connections/oauth/start` answers `PROVIDER_ADAPTER_UNAVAILABLE`
+ * for every provider, and nothing verifies a token, device or bot account. A
+ * button that leads to a permanently `pending` row would mislead. The provider
+ * table says "unsupported on this deployment, requires approval" instead. The
+ * connect wizard is the recorded follow-up of #1154.
+ *
+ * ## It shows exactly what the API shows
+ *
+ * The list runs through the SAME visibility rules as `GET /accounts` and
+ * `GET /connections`: the assignment gate (an account with assignees is listed
+ * to its assignees and to a tenant-wide holder of `assignments.assign`) and the
+ * business-scope decision per row, taken through the access chokepoint. A
+ * credential or its reference is never selected: the account view only carries
+ * `hasCredential`, and a provider identity (a number, a device id) is masked.
+ *
+ * ## Paging
+ *
+ * The loader reads at most 200 accounts (two keyset pages of the API's own
+ * query) and the screen filters, sorts and slices them in memory through the
+ * ADR-0149 contract. The totals are exact for the loaded rows; when more exist
+ * the page says so instead of showing a total it cannot stand behind.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import DataEmptyState from "../../components/admin/DataEmptyState.astro";
+import DataListToolbar from "../../components/admin/DataListToolbar.astro";
+import KeysetPager from "../../components/admin/KeysetPager.astro";
+import SortableHeader from "../../components/admin/SortableHeader.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import {
+  channelAccountKindLabel,
+  channelAccountStatusLabel,
+  channelAccountStatusTone,
+  channelAuthModeLabel,
+  channelGrantStateLabel,
+  channelGrantStateTone,
+  channelProviderLabel,
+  providerAvailabilityLabel
+} from "../../lib/i18n/labels/channel-accounts";
+import {
+  formatUtcMinute,
+  maskExternalId,
+  providerAvailability
+} from "../../lib/ui/channel-accounts-screen";
+import {
+  DATA_PAGE_SIZES,
+  DEFAULT_DATA_PAGE_SIZE,
+  buildActiveFilterChips,
+  buildClearFiltersHref,
+  buildDataPageHref,
+  buildSortHeaderState,
+  hasActiveFilters,
+  parseDataPageQuery,
+  sliceKeyset,
+  type DataPageSpec
+} from "../../lib/ui/admin-data-page";
+import {
+  listAccounts,
+  type AccountView
+} from "../../modules/channel-accounts/application/account-directory";
+import {
+  canSeeAllAccounts,
+  filterVisibleConnections,
+  scopeCoveredFor
+} from "../../modules/channel-accounts/application/channel-accounts-route-support";
+import {
+  listConnections,
+  type ConnectionView
+} from "../../modules/channel-accounts/application/connection-directory";
+import { getChannelOAuthAdapter } from "../../modules/channel-accounts/application/oauth-adapter-registry";
+import {
+  ACCOUNT_STATUSES,
+  isChannelAccountsEnabled
+} from "../../modules/channel-accounts/domain/channel-accounts-constants";
+import {
+  PROVIDER_MATRIX,
+  PROVIDER_MATRIX_VERSION
+} from "../../modules/channel-accounts/domain/provider-matrix";
+
+const ssr = Astro.locals.ssrContext!;
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
+
+/**
+ * The entry guard, spelled out as a literal so `admin:screen-coverage:check`
+ * (which reads source text) sees the permission this screen claims, and held
+ * equal to `READ_GUARD` by the page-contract test.
+ */
+const READ_GUARD = {
+  moduleKey: "channel_accounts",
+  activityCode: "accounts",
+  action: "read"
+} as const;
+
+/** Two keyset pages of the API's own query: the bound of what this screen loads. */
+const LOAD_PAGE_SIZE = 100;
+const LOAD_PAGE_LIMIT = 2;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: READ_GUARD,
+  load: async ({ tx, auth }) => {
+    // The deployment switch is checked AFTER authorization, as the API does,
+    // so an unauthorised caller learns nothing about it.
+    if (!isChannelAccountsEnabled()) {
+      return {
+        enabled: false as const,
+        accounts: [] as AccountView[],
+        moreAccounts: false,
+        connections: [] as ConnectionView[]
+      };
+    }
+
+    // The same context the routes build, so every visibility rule below is the
+    // routes' own function and not a copy that could drift.
+    const context = {
+      tx,
+      tenantId: ssr.tenantId,
+      tokenHash: ssr.tokenHash,
+      auth,
+      now: new Date(),
+      request: Astro.request,
+      clientAddress: Astro.clientAddress
+    };
+    const viewer = {
+      tenantUserId: auth.context.tenantUserId,
+      bypass: await canSeeAllAccounts(context),
+      scopeAllowed: (scope: { type: string; id: string }) =>
+        scopeCoveredFor(context, READ_GUARD, scope)
+    };
+
+    // One awaited query at a time: `tx` is one connection.
+    const accounts: AccountView[] = [];
+    let cursor: string | undefined;
+    let moreAccounts = false;
+
+    for (let page = 0; page < LOAD_PAGE_LIMIT; page += 1) {
+      const result = await listAccounts(tx, ssr.tenantId, viewer, {
+        provider: null,
+        status: null,
+        limit: LOAD_PAGE_SIZE,
+        cursor: cursor ?? null
+      });
+
+      if (!result.ok) break;
+
+      accounts.push(...result.items);
+
+      if (result.nextCursor === null) break;
+
+      cursor = result.nextCursor;
+      moreAccounts = page === LOAD_PAGE_LIMIT - 1;
+    }
+
+    const connections = await filterVisibleConnections(
+      context,
+      READ_GUARD,
+      await listConnections(tx, ssr.tenantId, null),
+      null
+    );
+
+    return { enabled: true as const, accounts, moreAccounts, connections };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/channel-accounts.astro: failed to load channel accounts",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool or circuit-breaker refusal is not "no accounts" and not a denial: an
+// empty list would be a lie about what is connected.
+const loadError = screen.state === "error";
+const data = screen.state === "allowed" ? screen.data : null;
+const deploymentEnabled = data === null ? true : data.enabled;
+const accounts: AccountView[] = data?.accounts ?? [];
+const connections: ConnectionView[] = data?.connections ?? [];
+
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const PATH = "/admin/channel-accounts";
+const SPEC: DataPageSpec = {
+  filterKeys: ["provider", "status"],
+  sortKeys: ["name", "provider", "status", "created"],
+  defaultSort: "created",
+  defaultDir: "desc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
+const filtered = hasActiveFilters(query);
+
+const providerLabel = (provider: string) => channelProviderLabel(t, provider);
+const statusLabel = (status: string) => channelAccountStatusLabel(t, status);
+
+// The search matches what the page SHOWS: the display name, the provider name
+// and the masked identity; never the raw external id.
+const needle = query.q.toLowerCase();
+const matching = accounts.filter(
+  (account) =>
+    (needle === "" ||
+      account.displayName.toLowerCase().includes(needle) ||
+      providerLabel(account.provider).toLowerCase().includes(needle) ||
+      maskExternalId(account.externalId).toLowerCase().includes(needle)) &&
+    (query.filters.provider === undefined ||
+      account.provider === query.filters.provider) &&
+    (query.filters.status === undefined ||
+      account.status === query.filters.status)
+);
+const page = sliceKeyset(matching, {
+  sortValue: (account) =>
+    query.sort === "name"
+      ? account.displayName.toLowerCase()
+      : query.sort === "provider"
+        ? providerLabel(account.provider).toLowerCase()
+        : query.sort === "status"
+          ? account.status
+          : account.createdAt,
+  id: (account) => account.id,
+  dir: query.dir,
+  limit: query.limit,
+  cursor: query.cursor
+});
+
+const href = (change: Parameters<typeof buildDataPageHref>[3]) =>
+  buildDataPageHref(PATH, SPEC, query, change);
+const sortState = (key: string) => buildSortHeaderState(PATH, SPEC, query, key);
+const clearHref = buildClearFiltersHref(PATH, SPEC, query);
+const chips = buildActiveFilterChips(PATH, SPEC, query, (key, value) =>
+  key === "q"
+    ? t("Search: {value}", { value })
+    : key === "provider"
+      ? t("Provider: {value}", { value: providerLabel(value) })
+      : t("Status: {value}", { value: statusLabel(value) })
+);
+const summary = filtered
+  ? tn(
+      "{count} account matches your search and filters",
+      "{count} accounts match your search and filters",
+      page.total,
+      { count: page.total }
+    )
+  : undefined;
+
+const registrableProviders = Object.entries(PROVIDER_MATRIX).filter(
+  ([, row]) => row.registrable
+);
+const accountCountByConnection = new Map<string, number>();
+for (const account of accounts) {
+  if (account.connectionId !== null) {
+    accountCountByConnection.set(
+      account.connectionId,
+      (accountCountByConnection.get(account.connectionId) ?? 0) + 1
+    );
+  }
+}
+
+/** How the account authenticates, in one phrase: an OAuth account has no credential of its own. */
+function credentialText(account: AccountView): string {
+  if (account.authMode === "oauth2") return t("Provider authorisation");
+
+  return account.hasCredential ? t("Stored (write-only)") : t("None stored");
+}
+
+function scopeText(scope: { type: string; id: string } | null): string {
+  return scope === null
+    ? t("Whole tenant")
+    : t("Scope: {type}", { type: scope.type.replaceAll("_", " ") });
+}
+---
+
+<AdminLayout
+  title={t("Channel accounts")}
+  description={t(
+    "External accounts this tenant has connected (messaging numbers, pages, bots, email logins) and the provider authorisations behind them. Credentials are never shown."
+  )}
+>
+  {!canRead && (
+    <p class="state-notice fade-in-up" id="channel-accounts-denied">
+      {t("You do not have permission to view channel accounts.")}
+    </p>
+  )}
+
+  {canRead && loadError && (
+    <p class="state-notice fade-in-up" id="channel-accounts-error">
+      {t(
+        "Channel accounts could not be loaded right now. Please try again later."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && !deploymentEnabled && (
+    <p class="state-notice fade-in-up" id="channel-accounts-disabled">
+      {t(
+        "Channel accounts are switched off on this deployment, so nothing can be connected or listed."
+      )}
+    </p>
+  )}
+
+  {canRead && !loadError && deploymentEnabled && data && (
+    <>
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="channel-accounts-title"
+      >
+        <h2 class="admin-section-title" id="channel-accounts-title">
+          {t("Accounts")}
+        </h2>
+
+        {data.moreAccounts && (
+          <p class="state-notice" id="channel-accounts-truncated">
+            {t(
+              "This tenant has more accounts than this screen loads. Showing the newest {count}; narrow the list with filters or use the API for the rest.",
+              { count: accounts.length }
+            )}
+          </p>
+        )}
+
+        <DataListToolbar
+          action={PATH}
+          idPrefix="channel-accounts"
+          landmarkLabel={t("Search channel accounts")}
+          searchLabel={t("Search")}
+          q={query.q}
+          filters={[
+            {
+              name: "provider",
+              label: t("Provider"),
+              value: query.filters.provider ?? "",
+              allLabel: t("All providers"),
+              options: registrableProviders.map(([provider]) => ({
+                value: provider,
+                label: providerLabel(provider)
+              }))
+            },
+            {
+              name: "status",
+              label: t("Status"),
+              value: query.filters.status ?? "",
+              allLabel: t("All statuses"),
+              options: ACCOUNT_STATUSES.filter(
+                (status) => status !== "deleted"
+              ).map((status) => ({
+                value: status,
+                label: statusLabel(status)
+              }))
+            }
+          ]}
+          sort={{
+            label: t("Sort by"),
+            value: query.sort,
+            options: [
+              { value: "name", label: t("Account") },
+              { value: "provider", label: t("Provider") },
+              { value: "status", label: t("Status") },
+              { value: "created", label: t("Added") }
+            ],
+            dirLabel: t("Sort order"),
+            dir: query.dir,
+            ascLabel: t("Ascending"),
+            descLabel: t("Descending")
+          }}
+          preserve={
+            query.limit === DEFAULT_DATA_PAGE_SIZE
+              ? {}
+              : { limit: String(query.limit) }
+          }
+          chips={chips}
+          clearHref={clearHref}
+          summary={summary}
+          submitLabel={t("Search")}
+          clearLabel={t("Clear filters")}
+          chipsLabel={t("Active filters")}
+          removeLabel={(label) => t("Remove filter: {label}", { label })}
+        />
+
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="channel-accounts-table-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="channel-accounts-table"
+          >
+            <caption id="channel-accounts-table-caption">
+              {tn("{count} account", "{count} accounts", page.total, {
+                count: page.total
+              })}
+            </caption>
+            <thead>
+              <tr>
+                <SortableHeader label={t("Account")} {...sortState("name")} />
+                <SortableHeader
+                  label={t("Provider")}
+                  {...sortState("provider")}
+                />
+                <SortableHeader label={t("Status")} {...sortState("status")} />
+                <th scope="col">{t("Credential")}</th>
+                <th scope="col">{t("Bound to")}</th>
+                <SortableHeader label={t("Added")} {...sortState("created")} />
+              </tr>
+            </thead>
+            <tbody>
+              {page.items.length === 0 ? (
+                <DataEmptyState
+                  colspan={6}
+                  filtered={filtered}
+                  query={query.q}
+                  clearHref={clearHref}
+                  title={t("No channel accounts yet")}
+                  text={t(
+                    "Connected accounts will appear here once a provider connector is installed and an account is registered."
+                  )}
+                />
+              ) : (
+                page.items.map((account) => (
+                  <tr>
+                    <td data-label={t("Account")}>
+                      <a
+                        href={`${PATH}/${account.id}`}
+                        class="channel-account-link"
+                      >
+                        {account.displayName}
+                      </a>
+                      <span class="cell-muted">
+                        {" "}
+                        {maskExternalId(account.externalId)}
+                      </span>
+                    </td>
+                    <td data-label={t("Provider")}>
+                      {providerLabel(account.provider)}
+                      <span class="cell-muted">
+                        {" "}
+                        {channelAccountKindLabel(t, account.accountKind)}
+                      </span>
+                    </td>
+                    <td data-label={t("Status")} data-status={account.status}>
+                      <span
+                        class="admin-status-pill"
+                        data-tone={channelAccountStatusTone(account.status)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {statusLabel(account.status)}
+                      </span>
+                    </td>
+                    <td data-label={t("Credential")}>
+                      {credentialText(account)}
+                    </td>
+                    <td data-label={t("Bound to")}>
+                      {scopeText(account.businessScope)}
+                    </td>
+                    <td data-label={t("Added")}>
+                      {formatUtcMinute(account.createdAt)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <KeysetPager
+          prevHref={
+            page.prevCursor === null ? null : href({ cursor: page.prevCursor })
+          }
+          nextHref={
+            page.nextCursor === null ? null : href({ cursor: page.nextCursor })
+          }
+          from={page.from}
+          to={page.to}
+          total={data.moreAccounts ? undefined : page.total}
+          limit={query.limit}
+          sizes={DATA_PAGE_SIZES.map((value) => ({
+            value,
+            href: href({ limit: value })
+          }))}
+        />
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="channel-connections-title"
+      >
+        <h2 class="admin-section-title" id="channel-connections-title">
+          {t("Provider connections")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "An authorisation the tenant granted a provider. Tokens, authorisation codes and their references are never shown."
+          )}
+        </p>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="channel-connections-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="channel-connections-table"
+          >
+            <caption id="channel-connections-caption">
+              {tn(
+                "{count} connection",
+                "{count} connections",
+                connections.length,
+                {
+                  count: connections.length
+                }
+              )}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Provider")}</th>
+                <th scope="col">{t("Method")}</th>
+                <th scope="col">{t("State")}</th>
+                <th scope="col">{t("Granted scopes")}</th>
+                <th scope="col">{t("Expires")}</th>
+                <th scope="col">{t("Accounts")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {connections.length === 0 ? (
+                <tr>
+                  <td colspan={6}>
+                    <span class="cell-muted">
+                      {t("No provider connections yet.")}
+                    </span>
+                  </td>
+                </tr>
+              ) : (
+                connections.map((connection) => (
+                  <tr>
+                    <td data-label={t("Provider")}>
+                      {providerLabel(connection.provider)}
+                      {connection.label !== null && (
+                        <span class="cell-muted"> {connection.label}</span>
+                      )}
+                    </td>
+                    <td data-label={t("Method")}>
+                      {channelAuthModeLabel(t, connection.authMode)}
+                    </td>
+                    <td
+                      data-label={t("State")}
+                      data-status={connection.grantState}
+                    >
+                      <span
+                        class="admin-status-pill"
+                        data-tone={channelGrantStateTone(connection.grantState)}
+                      >
+                        <span
+                          class="admin-status-pill-dot"
+                          aria-hidden="true"
+                        />
+                        {channelGrantStateLabel(t, connection.grantState)}
+                      </span>
+                      {connection.awaitingExchange && (
+                        <span class="cell-muted">
+                          {" "}
+                          {t("Waiting for the connector to finish")}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label={t("Granted scopes")}>
+                      {tn(
+                        "{count} scope",
+                        "{count} scopes",
+                        connection.grantedScopes.length,
+                        { count: connection.grantedScopes.length }
+                      )}
+                    </td>
+                    <td data-label={t("Expires")}>
+                      {formatUtcMinute(connection.expiresAt)}
+                    </td>
+                    <td data-label={t("Accounts")}>
+                      {accountCountByConnection.get(connection.id) ?? 0}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="channel-providers-title"
+      >
+        <h2 class="admin-section-title" id="channel-providers-title">
+          {t("What can be connected")}
+        </h2>
+        <p class="page-description">
+          {t(
+            "Provider matrix v{version}. A provider without a connector on this deployment cannot be connected from here; connecting it needs the provider's approval and a connector, so there is no Connect button.",
+            { version: PROVIDER_MATRIX_VERSION }
+          )}
+        </p>
+        <div
+          class="data-table-scroll"
+          role="region"
+          tabindex="0"
+          aria-labelledby="channel-providers-caption"
+        >
+          <table
+            class="data-table data-table--stack"
+            id="channel-providers-table"
+          >
+            <caption id="channel-providers-caption">
+              {t("Providers and how they connect")}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Provider")}</th>
+                <th scope="col">{t("Method")}</th>
+                <th scope="col">{t("Availability")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(PROVIDER_MATRIX).map(([provider, row]) => (
+                <tr data-provider={provider}>
+                  <td data-label={t("Provider")}>{providerLabel(provider)}</td>
+                  <td data-label={t("Method")}>
+                    {row.authModes.length === 0
+                      ? "—"
+                      : row.authModes
+                          .map((mode) => channelAuthModeLabel(t, mode))
+                          .join(", ")}
+                  </td>
+                  <td data-label={t("Availability")}>
+                    {providerAvailabilityLabel(
+                      t,
+                      providerAvailability({
+                        registrable: row.registrable,
+                        hasOAuthAdapter:
+                          getChannelOAuthAdapter(provider) !== null
+                      })
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  )}
+</AdminLayout>

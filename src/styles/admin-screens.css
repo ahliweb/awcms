@@ -691,3 +691,31 @@
 .media-upload-status > .form-hint:empty {
   margin: 0;
 }
+
+/* Issue #1154 — the channel-account detail screen. A subsection is one action
+   (default sender, replace credential, disconnect, revoke) under the Actions
+   heading: a rule above it and a smaller heading, nothing else, so the
+   contrast pairings stay the ones every other card already uses. A disabled
+   capability row keeps full-contrast text (state is conveyed by the "Not
+   offered" label and aria-disabled, never by fading): reduced opacity would
+   put text under the AA ratio the token gate measured. */
+.admin-subsection {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.admin-subsection-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+
+.data-table tr[data-disabled="true"] td:first-child {
+  font-style: italic;
+}
+
+.channel-account-link {
+  overflow-wrap: anywhere;
+}

@@ -8983,3 +8983,480 @@ msgid "{count} user matches your search and filters"
 msgid_plural "{count} users match your search and filters"
 msgstr[0] ""
 msgstr[1] ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "Disconnected"
+msgstr ""
+
+msgid "Awaiting authorisation"
+msgstr ""
+
+msgid "OAuth authorisation"
+msgstr ""
+
+msgid "API token"
+msgstr ""
+
+msgid "Bot token"
+msgstr ""
+
+msgid "Device key"
+msgstr ""
+
+msgid "Healthy"
+msgstr ""
+
+msgid "Failing"
+msgstr ""
+
+msgid "Publish posts"
+msgstr ""
+
+msgid "Reply to messages"
+msgstr ""
+
+msgid "Send direct messages"
+msgstr ""
+
+msgid "Receive inbound events"
+msgstr ""
+
+msgid "Manage comments"
+msgstr ""
+
+msgid "Read analytics"
+msgstr ""
+
+msgid "Capture leads"
+msgstr ""
+
+msgid "Advertising"
+msgstr ""
+
+msgid "Broadcast to a list"
+msgstr ""
+
+msgid "Granted"
+msgstr ""
+
+msgid "Not offered"
+msgstr ""
+
+msgid "Not available (unverified)"
+msgstr ""
+
+msgid "No grant recorded"
+msgstr ""
+
+msgid "Granted scope list"
+msgstr ""
+
+msgid "App review reference"
+msgstr ""
+
+msgid "Contract reference"
+msgstr ""
+
+msgid "Written authorisation"
+msgstr ""
+
+msgid "The provider is not recognised."
+msgstr ""
+
+msgid "This account only groups other accounts and does not act itself."
+msgstr ""
+
+msgid "The provider does not offer this."
+msgstr ""
+
+msgid "This is not permitted by policy."
+msgstr ""
+
+msgid "The provider's support for this is not verified."
+msgstr ""
+
+msgid "This needs a contract or written authorisation as evidence."
+msgstr ""
+
+msgid "No grant has been recorded."
+msgstr ""
+
+msgid "The grant is not in the granted state."
+msgstr ""
+
+msgid "The grant has no evidence."
+msgstr ""
+
+msgid "The grant predates the current provider matrix."
+msgstr ""
+
+msgid "The account is not connected."
+msgstr ""
+
+msgid "The provider authorisation is not active."
+msgstr ""
+
+msgid "WhatsApp Cloud API"
+msgstr ""
+
+msgid "StarSender (unofficial)"
+msgstr ""
+
+msgid "Facebook Page"
+msgstr ""
+
+msgid "Instagram"
+msgstr ""
+
+msgid "Threads"
+msgstr ""
+
+msgid "TikTok"
+msgstr ""
+
+msgid "YouTube"
+msgstr ""
+
+msgid "LinkedIn Page"
+msgstr ""
+
+msgid "LinkedIn member data"
+msgstr ""
+
+msgid "Telegram"
+msgstr ""
+
+msgid "Website forms"
+msgstr ""
+
+msgid "Mailketing email"
+msgstr ""
+
+msgid "WhatsApp Business account"
+msgstr ""
+
+msgid "WhatsApp phone number"
+msgstr ""
+
+msgid "Professional account"
+msgstr ""
+
+msgid "Creator account"
+msgstr ""
+
+msgid "Channel"
+msgstr ""
+
+msgid "Organisation page"
+msgstr ""
+
+msgid "Bot"
+msgstr ""
+
+msgid "Email service account"
+msgstr ""
+
+msgid "Sender identity"
+msgstr ""
+
+msgid "Not connectable: a policy boundary, not an account"
+msgstr ""
+
+msgid "Connector installed"
+msgstr ""
+
+msgid "Unsupported on this deployment: no connector installed, requires approval"
+msgstr ""
+
+msgid "Provider: {value}"
+msgstr ""
+
+msgid "Provider authorisation"
+msgstr ""
+
+msgid "Stored (write-only)"
+msgstr ""
+
+msgid "None stored"
+msgstr ""
+
+msgid "Whole tenant"
+msgstr ""
+
+msgid "Scope: {type}"
+msgstr ""
+
+msgid "Channel accounts"
+msgstr ""
+
+msgid "External accounts this tenant has connected (messaging numbers, pages, bots, email logins) and the provider authorisations behind them. Credentials are never shown."
+msgstr ""
+
+msgid "You do not have permission to view channel accounts."
+msgstr ""
+
+msgid "Channel accounts could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Channel accounts are switched off on this deployment, so nothing can be connected or listed."
+msgstr ""
+
+msgid "Accounts"
+msgstr ""
+
+msgid "This tenant has more accounts than this screen loads. Showing the newest {count}; narrow the list with filters or use the API for the rest."
+msgstr ""
+
+msgid "Search channel accounts"
+msgstr ""
+
+msgid "All providers"
+msgstr ""
+
+msgid "Account"
+msgstr ""
+
+msgid "Credential"
+msgstr ""
+
+msgid "Bound to"
+msgstr ""
+
+msgid "No channel accounts yet"
+msgstr ""
+
+msgid "Connected accounts will appear here once a provider connector is installed and an account is registered."
+msgstr ""
+
+msgid "Provider connections"
+msgstr ""
+
+msgid "An authorisation the tenant granted a provider. Tokens, authorisation codes and their references are never shown."
+msgstr ""
+
+msgid "Method"
+msgstr ""
+
+msgid "Granted scopes"
+msgstr ""
+
+msgid "No provider connections yet."
+msgstr ""
+
+msgid "Waiting for the connector to finish"
+msgstr ""
+
+msgid "What can be connected"
+msgstr ""
+
+msgid "Provider matrix v{version}. A provider without a connector on this deployment cannot be connected from here; connecting it needs the provider's approval and a connector, so there is no Connect button."
+msgstr ""
+
+msgid "Providers and how they connect"
+msgstr ""
+
+msgid "Availability"
+msgstr ""
+
+msgid "The credential was replaced. The previous one is gone and cannot be shown."
+msgstr ""
+
+msgid "This account is now the default sender. It applies to messages queued from now on."
+msgstr ""
+
+msgid "The account was disconnected and its stored credential was erased."
+msgstr ""
+
+msgid "The provider authorisation was revoked and its credentials were erased."
+msgstr ""
+
+msgid "{remaining} remaining"
+msgstr ""
+
+msgid "{remaining} of {limit} remaining"
+msgstr ""
+
+msgid "Channel account"
+msgstr ""
+
+msgid "Status, health and what this account is allowed to do, with the evidence for each. Credentials are never shown."
+msgstr ""
+
+msgid "All channel accounts"
+msgstr ""
+
+msgid "This channel account could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "This channel account does not exist, or you cannot see it."
+msgstr ""
+
+msgid "Held by the provider authorisation"
+msgstr ""
+
+msgid "Stored (write-only, never shown)"
+msgstr ""
+
+msgid "No health report yet. Health is reported by a provider connector and is never set by a person, so this account is not shown as healthy until one reports."
+msgstr ""
+
+msgid "Last synced"
+msgstr ""
+
+msgid "Token expires"
+msgstr ""
+
+msgid "Quota"
+msgstr ""
+
+msgid "None recorded"
+msgstr ""
+
+msgid "Issued"
+msgstr ""
+
+msgid "Capabilities and evidence"
+msgstr ""
+
+msgid "What this account may do is decided per capability: the provider must offer it, a grant must be recorded with evidence, and the account and its authorisation must be active. A capability the provider does not offer is listed but disabled. Recording or withdrawing a grant is done through the API."
+msgstr ""
+
+msgid "Evidence state"
+msgstr ""
+
+msgid "Usable now"
+msgstr ""
+
+msgid "Default sender"
+msgstr ""
+
+msgid "This account is the default WhatsApp sender for its scope."
+msgstr ""
+
+msgid "This account is not the default WhatsApp sender for its scope."
+msgstr ""
+
+msgid "This deployment has no sending adapter for this provider, so it cannot be the default sender."
+msgstr ""
+
+msgid "Making this account the default changes which number sends when no sender is named. It applies to messages queued from now on; messages already queued keep the sender they were given."
+msgstr ""
+
+msgid "Make default sender"
+msgstr ""
+
+msgid "Replace credential"
+msgstr ""
+
+msgid "Writing a new credential overwrites the stored one. The old value cannot be shown and the new value is never displayed again. Writing a credential needs two-factor authentication and may ask for a fresh code."
+msgstr ""
+
+msgid "New credential"
+msgstr ""
+
+msgid "No spaces. Between 8 and 4096 characters."
+msgstr ""
+
+msgid "Disconnect account"
+msgstr ""
+
+msgid "Disconnecting is permanent. Nothing will send or publish as this account again, its stored credential is erased and its webhook subscriptions are revoked. The provider is not told: revoke it there as well."
+msgstr ""
+
+msgid "{waiting} waiting and {sending} in flight for this sender. They are not rerouted to another sender: they will fail."
+msgstr ""
+
+msgid "Type the account name to confirm: {name}"
+msgstr ""
+
+msgid "Revoke provider authorisation"
+msgstr ""
+
+msgid "Type the provider name to confirm: {name}"
+msgstr ""
+
+msgid "Revoke authorisation"
+msgstr ""
+
+msgid "What you typed does not match. Nothing was changed."
+msgstr ""
+
+msgid "Could not replace the credential. Please try again."
+msgstr ""
+
+msgid "Writing a credential needs two-factor authentication. Turn it on under your account first."
+msgstr ""
+
+msgid "Confirmation cancelled. Nothing changed."
+msgstr ""
+
+msgid "Credentials cannot be stored on this deployment right now."
+msgstr ""
+
+msgid "This account has no credential of its own."
+msgstr ""
+
+msgid "The account's state does not allow this."
+msgstr ""
+
+msgid "That account or authorisation no longer exists, or you cannot act on it."
+msgstr ""
+
+msgid "That was already done, or the request conflicts with an earlier one. Reload the page."
+msgstr ""
+
+msgid "Could not disconnect the account. Please try again."
+msgstr ""
+
+msgid "Could not revoke the authorisation. Please try again."
+msgstr ""
+
+msgid "Could not change the default sender. Please try again."
+msgstr ""
+
+msgid "That account cannot be the default sender: it must be connected, may send business messages and have a sending adapter."
+msgstr ""
+
+msgid "Too many attempts. Try again later."
+msgstr ""
+
+msgid "{count} account matches your search and filters"
+msgid_plural "{count} accounts match your search and filters"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} account"
+msgid_plural "{count} accounts"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} connection"
+msgid_plural "{count} connections"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} scope"
+msgid_plural "{count} scopes"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} capability"
+msgid_plural "{count} capabilities"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Revoking is permanent. The authorisation's credentials are erased and the {count} account bound to it is disconnected."
+msgid_plural "Revoking is permanent. The authorisation's credentials are erased and the {count} accounts bound to it are disconnected."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Identity"
+msgstr ""
+
+msgid "Authenticator code"
+msgstr ""
+
+msgid "Enter the current six-digit code, then replace the credential again."
+msgstr ""

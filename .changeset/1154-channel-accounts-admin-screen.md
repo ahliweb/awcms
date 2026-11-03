@@ -1,0 +1,5 @@
+---
+"awcms": minor
+---
+
+Add the channel-account connection manager screens (Issue #1154, ADR-0148 UP-08): `/admin/channel-accounts` (searchable, filterable, sortable list of connected accounts, provider connections, and the provider matrix stating why a provider cannot be connected here) and `/admin/channel-accounts/{id}` (status, health and last synced, provider authorisation, nine capability rows with their evidence state, unsupported capabilities shown disabled). Actions with explicit confirmation and `Idempotency-Key`: replace credential (write-only, never shown), disconnect and revoke authorisation (typed confirmation, queue impact for a WhatsApp sender), make default WhatsApp sender. `channel_accounts` becomes `active` with a navigation entry (still off unless `CHANNEL_ACCOUNTS_ENABLED=true`). No API or schema change. The connect wizard is deferred (no provider connector exists). English and Indonesian; the client asset budget rises by 3,583 B for the one script of the detail screen.

@@ -114,6 +114,7 @@ export const READ_WAVE: readonly string[] = [
  */
 export const WRITE_WAVE: readonly string[] = [
   "admin-abac-policies.e2e.ts",
+  "admin-channel-accounts.e2e.ts",
   // Issue #942 — drives the six booking screens by keyboard and mutates
   // tenant-wide booking configuration (a policy, an offering, a resource with
   // units in a pool, schedules, a closure, a reservation placed through the

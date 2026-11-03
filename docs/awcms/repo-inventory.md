@@ -12,8 +12,8 @@
 | `awcms_*` tables                    | 236   |
 | Tables with `FORCE` RLS             | 218   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 777   |
-| Route files                         | 604   |
+| Test files                          | 780   |
+| Route files                         | 606   |
 | ADR                                 | 314   |
 
 ### Modules
@@ -53,7 +53,7 @@
 | `booking`              | 0.3.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 | `hr_commission`        | 0.5.0   | active       | domain | no   | `tenant_admin`, `hr_workforce`, `domain_event_runtime`                                                                         |
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
-| `channel_accounts`     | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
+| `channel_accounts`     | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
 
 ### Migrations
@@ -550,8 +550,8 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 586        |
-| `e2e`         | 29         |
+| `(root)`      | 588        |
+| `e2e`         | 30         |
 | `integration` | 161        |
 | `unit`        | 1          |
 
@@ -560,7 +560,7 @@
 | Surface         | Files |
 | --------------- | ----- |
 | `/api/v1/**`    | 492   |
-| `/admin/**`     | 81    |
+| `/admin/**`     | 83    |
 | publik / anonim | 31    |
 
 <!-- END GENERATED: repo-inventory -->
