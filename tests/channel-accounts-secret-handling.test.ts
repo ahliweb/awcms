@@ -4,7 +4,7 @@
  * closed without a ring, and can reach no API response, log or audit row.
  */
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { listModules } from "../src/modules";
 import {
@@ -449,9 +449,17 @@ describe("the module descriptor", () => {
     );
   });
 
-  test("it is experimental and declares no navigation until its screen exists (#1154)", () => {
-    expect(module.status).toBe("experimental");
-    expect(module.navigation ?? []).toEqual([]);
+  test("it is active and its one navigation entry opens the connection manager (#1154)", () => {
+    expect(module.status).toBe("active");
+    expect(module.navigation).toEqual([
+      expect.objectContaining({
+        path: "/admin/channel-accounts",
+        requiredPermission: "channel_accounts.accounts.read"
+      })
+    ]);
+    // The screen exists (admin-navigation-registry.test.ts proves it for every
+    // entry); this pins that no other, unscreened entry slips in beside it.
+    expect(existsSync("src/pages/admin/channel-accounts.astro")).toBe(true);
   });
 
   test("every table the migration creates has RLS enabled and FORCED", () => {

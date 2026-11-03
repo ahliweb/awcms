@@ -240,33 +240,32 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // recorded follow-up; until then both are reachable only through the API.
   "hr_workforce.attendance_evidence.read",
   "hr_workforce.geolocation_evidence.configure",
-  // channel_accounts (6) — ADR-0148 / Issue #1140. API-first and `experimental`:
-  // the connection manager (accounts, connections, capabilities with their
-  // evidence, health, assignments) is tracked separately as Issue #1154, which
-  // flips the module to `active` and adds its navigation entry in the same change
-  // (a nav entry without a page is a permanent 404).
+  // channel_accounts (3 of 6 still unscreened) — ADR-0148 / Issue #1140. The
+  // connection manager (#1154) screens `accounts.read`, `accounts.revoke` and
+  // `credentials.manage` (/admin/channel-accounts and its detail). The three
+  // below are the recorded remainder: registering/enabling an account and the
+  // OAuth/device connect wizard need a provider connector that does not exist
+  // yet (`POST /connections/oauth/start` answers PROVIDER_ADAPTER_UNAVAILABLE);
+  // recording a capability grant needs an evidence form with a review step; and
+  // assigning operators needs a person picker. Each is a screen of its own.
   "channel_accounts.accounts.create",
-  "channel_accounts.accounts.read",
-  "channel_accounts.accounts.revoke",
   "channel_accounts.assignments.assign",
   "channel_accounts.capabilities.configure",
-  "channel_accounts.credentials.manage",
   // channel_accounts risk acknowledgements (3) — Issue #1142, ADR-0148 section
   // 7. API-first: the text, the acknowledgement, its revocation and the device
-  // attestation are complete (`/risk-acknowledgements`, `/accounts/{id}/attest-device`)
-  // and their screen rides with the connection manager (Issue #1154), where an
-  // operator reads the unofficial-provider text next to the device it governs. No
-  // page exists to claim these until then.
+  // attestation are complete (`/risk-acknowledgements`, `/accounts/{id}/attest-device`).
+  // The connection manager (#1154) does NOT claim them: its detail screen shows
+  // none of the unofficial-provider text, the acknowledgement or the attestation,
+  // so they stay here until a screen of their own reads that text next to the
+  // device it governs.
   "channel_accounts.risk_acknowledgements.create",
   "channel_accounts.risk_acknowledgements.read",
   "channel_accounts.risk_acknowledgements.revoke",
   // whatsapp_delivery sender routing (2) — Issue #1141, ADR-0148 section 4.
-  // API-first: the sender and default-sender-policy surface (`GET /senders`,
-  // `PUT /sender-policy`) is complete, and its screen rides with the connection
-  // manager (Issue #1154), which is where an operator picks the accounts a
-  // policy names. `/admin/whatsapp` stays gated on `messages.read` meanwhile.
-  "whatsapp_delivery.senders.read",
-  "whatsapp_delivery.sender_policy.configure",
+  // The default-sender action is on the channel-account detail screen (#1154),
+  // which claims BOTH keys (`sender_policy.configure` for the action,
+  // `senders.read` for the "is this the default" readout and queue impact) and
+  // so they leave this ledger. `/admin/whatsapp` stays gated on `messages.read`.
   // website_engagement (5) — ADR-0155 / Issue #1153. API-first and
   // `experimental`: the operator screen (sources and their hosts, a one-time
   // token display, the masked submission list with its consent provenance, the

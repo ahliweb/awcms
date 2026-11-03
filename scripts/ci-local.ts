@@ -111,14 +111,27 @@ export const EXIT = {
   usage: 64
 } as const;
 
-/** Environment the `e2e-smoke` job's "Start server…" step sets (minus PORT / E2E_BASE_URL). */
+/**
+ * Environment the `e2e-smoke` job's "Start server…" step sets (minus PORT /
+ * E2E_BASE_URL / APP_URL, which follow the port the runner picks). The
+ * channel-account switches are Issue #1154: the screens need the module on, and
+ * the render sweep needs one seeded account (below) to derive a real id.
+ */
 export const E2E_STATIC_ENV: Readonly<Record<string, string>> = {
   HOST: "127.0.0.1",
   E2E_LOGIN_IDENTIFIER: "e2e-owner@example.com",
   E2E_PASSWORD: "e2e-password-123",
   E2E_OFFICE_CODE: "HQ-E2E",
-  E2E_CWV_LAB: "1"
+  E2E_CWV_LAB: "1",
+  CHANNEL_ACCOUNTS_ENABLED: "true",
+  E2E_CHANNEL_ACCOUNTS: "1"
 };
+
+/** The one neutral channel account the workflow seeds by `psql` (Issue #1154). */
+export const E2E_CHANNEL_SEED = {
+  externalId: "CI-SEED-DEVICE-0001",
+  displayName: "CI seed device"
+} as const;
 
 /** The workflow readiness probe: an unknown path answers the catch-all 404 once the server is up. */
 export const E2E_PROBE_PATH = "/__e2e_probe";
@@ -1179,7 +1192,13 @@ const e2eServerStep: NativeStep = {
       ...run.env,
       ...E2E_STATIC_ENV,
       PORT: String(port),
-      E2E_BASE_URL: baseUrl
+      E2E_BASE_URL: baseUrl,
+      // The OAuth callback origin follows the picked port (the workflow pins 4321).
+      APP_URL: baseUrl,
+      // Generated at run time, as in the workflow: never a committed literal.
+      CHANNEL_SECRETS_ENCRYPTION_KEYS: `k1:${Buffer.from(
+        crypto.getRandomValues(new Uint8Array(32))
+      ).toString("base64")}`
     };
     const bun = Bun.which("bun") ?? process.execPath;
 
@@ -1219,6 +1238,60 @@ const e2eServerStep: NativeStep = {
         return {
           ok: false,
           detail: "setup/initialize did not return a tenantId"
+        };
+      }
+
+      // The workflow seeds this row with `psql`. The runner registers the same
+      // account through the real endpoint instead (log in as the seeded owner,
+      // `POST /accounts`): no psql client is assumed, and a script has no business
+      // writing a module's table directly (`modules:table-writes:check`).
+      const login = await fetch(`${baseUrl}/api/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-awcms-tenant-id": tenantId
+        },
+        body: JSON.stringify({
+          loginIdentifier: E2E_STATIC_ENV.E2E_LOGIN_IDENTIFIER,
+          password: E2E_STATIC_ENV.E2E_PASSWORD
+        }),
+        signal: AbortSignal.timeout(60_000)
+      });
+      const token = (
+        (await login.json().catch(() => null)) as {
+          data?: { token?: unknown };
+        } | null
+      )?.data?.token;
+
+      if (typeof token !== "string") {
+        return { ok: false, detail: "owner login for the channel seed failed" };
+      }
+
+      const seeded = await fetch(
+        `${baseUrl}/api/v1/channel-accounts/accounts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-awcms-tenant-id": tenantId,
+            authorization: `Bearer ${token}`,
+            "idempotency-key": crypto.randomUUID()
+          },
+          body: JSON.stringify({
+            provider: "starsender",
+            accountKind: "device",
+            authMode: "device_key",
+            externalId: E2E_CHANNEL_SEED.externalId,
+            displayName: E2E_CHANNEL_SEED.displayName
+          }),
+          signal: AbortSignal.timeout(60_000)
+        }
+      );
+
+      if (seeded.status !== 201) {
+        return {
+          ok: false,
+          detail: `seeding the channel account answered ${seeded.status}`
         };
       }
 

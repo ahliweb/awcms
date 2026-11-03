@@ -46,14 +46,16 @@ export const channelAccountsModule = defineModule({
   name: "Channel Accounts",
   version: "0.1.0",
   /**
-   * `experimental`: the operator screen is tracked separately (Issue #1154) and
-   * ADR-0021 criterion 1 asks every ACTIVE module for an admin screen. This
-   * module declares no `navigation` entry until that screen lands in the same
-   * change (a nav entry without a page is a permanent 404). The API is complete.
+   * `active` since the connection manager screen landed (Issue #1154):
+   * ADR-0021 criterion 1 asks every ACTIVE module for an admin screen, and the
+   * `navigation` entry below opens a real page in this same change (a nav entry
+   * without a page is a permanent 404, `tests/admin-navigation-registry.test.ts`).
+   * The module still ships INERT: it is off unless `CHANNEL_ACCOUNTS_ENABLED`
+   * is true, and the screen says so instead of listing nothing.
    */
-  status: "experimental",
+  status: "active",
   description:
-    "Provider-neutral, tenant-scoped multi-account registry and credential control plane (Issue #1140, ADR-0148 capability C1): connected external accounts (WhatsApp WABA phone numbers and StarSender devices, Pages, profiles, channels, bots, Mailketing ESP logins and their sender identities) unique per live (provider, external id) ACROSS tenants; a brand is a business scope (no new ABAC attribute); provider connections for OAuth 2.0 (single-use state bound to tenant and person, S256 PKCE where offered, fixed server-side redirect URI, verified callback leaving a durable hand-off, server-side refresh lease with bounded backoff, revocation that erases ciphertext and revokes the bound accounts), API tokens, bot tokens and device keys; per-account capability that is FAIL-CLOSED (a missing row is denied, a granted row needs evidence, and the code mirror of the provider matrix v1, held equal to docs/awcms/omnichannel-foundation.md section 3 by a test, has the last word on every use; LinkedIn member data is barred outright); credentials only as `awcms_channel_secrets` references, AES-256-GCM through the shared field-encryption helper behind a `SecretStorePort`, written through a separately grantable, MFA-gated, step-up, idempotent, warning-audited write-only endpoint and never returned, logged, evented or audited; webhook subscription metadata (a provider with no verifiable authentication is status-class only, by CHECK); health; and per-account assignments additive to RBAC/ABAC. It SENDS NOTHING and calls no provider: adapters, the token exchange, dispatch and the admin screen are later issues (#1141-#1154). Off by default (CHANNEL_ACCOUNTS_ENABLED) and needs CHANNEL_SECRETS_ENCRYPTION_KEYS to store a credential.",
+    "Provider-neutral, tenant-scoped multi-account registry and credential control plane (Issue #1140, ADR-0148 capability C1): connected external accounts (WhatsApp WABA phone numbers and StarSender devices, Pages, profiles, channels, bots, Mailketing ESP logins and their sender identities) unique per live (provider, external id) ACROSS tenants; a brand is a business scope (no new ABAC attribute); provider connections for OAuth 2.0 (single-use state bound to tenant and person, S256 PKCE where offered, fixed server-side redirect URI, verified callback leaving a durable hand-off, server-side refresh lease with bounded backoff, revocation that erases ciphertext and revokes the bound accounts), API tokens, bot tokens and device keys; per-account capability that is FAIL-CLOSED (a missing row is denied, a granted row needs evidence, and the code mirror of the provider matrix v1, held equal to docs/awcms/omnichannel-foundation.md section 3 by a test, has the last word on every use; LinkedIn member data is barred outright); credentials only as `awcms_channel_secrets` references, AES-256-GCM through the shared field-encryption helper behind a `SecretStorePort`, written through a separately grantable, MFA-gated, step-up, idempotent, warning-audited write-only endpoint and never returned, logged, evented or audited; webhook subscription metadata (a provider with no verifiable authentication is status-class only, by CHECK); health; and per-account assignments additive to RBAC/ABAC. It SENDS NOTHING and calls no provider: adapters, the token exchange and dispatch are later issues (#1141-#1152); the operator screen (accounts, connections, capability evidence, health, disconnect, credential replacement, default sender) is /admin/channel-accounts (#1154). Off by default (CHANNEL_ACCOUNTS_ENABLED) and needs CHANNEL_SECRETS_ENCRYPTION_KEYS to store a credential.",
   dependencies: ["tenant_admin", "identity_access", "logging"],
   type: "system",
   // Issue #1141: the port a channel module asks "may this account send now?"
@@ -118,6 +120,14 @@ export const channelAccountsModule = defineModule({
       action: "revoke",
       description:
         "Revoke a risk acknowledgement of an unofficial channel provider; degrades the tenant's accounts of that provider when it was the last one (high-risk, audited at warning)"
+    }
+  ],
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_channel_accounts",
+      path: "/admin/channel-accounts",
+      order: 83,
+      requiredPermission: "channel_accounts.accounts.read"
     }
   ],
   jobs: [

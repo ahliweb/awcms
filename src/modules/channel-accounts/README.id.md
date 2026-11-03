@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:f56d018dde8f6a161ab2f77aedd430d5be7cf77c735a9c6d4c8a9c9b0002307d -->
+<!-- i18n-source-hash: sha256:8aa27744a21ff39eb333b292945f448dbdec2f263f4cbc0cd61d00e09d74ba31 -->
 
 # `channel_accounts`
 
@@ -8,9 +8,15 @@
 
 Modul ini menyimpan **akun eksternal yang terhubung** milik tenant (nomor WABA WhatsApp atau perangkat StarSender, Page Facebook, profil Instagram atau Threads, kanal YouTube, bot Telegram, login ESP Mailketing beserta identitas pengirimnya), **koneksi penyedia** di baliknya (grant OAuth 2.0, token API, token bot, kunci perangkat), **bukti kapabilitas per akun**, **referensi secret**, metadata langganan webhook, kesehatan, dan siapa yang boleh mengoperasikan tiap akun.
 
-**Modul ini tidak mengirim apa pun dan tidak memanggil penyedia.** Tidak ada antrean, dispatcher, panggilan HTTP penyedia, maupun layar admin di sini. Adapter penyedia, pertukaran token OAuth, perutean pengirim di `whatsapp_delivery` (#1141), publikasi (#1145), dan layar pengelola koneksi (#1154) adalah issue berikutnya yang mengikuti model akun ini. Tautan sosial situs web bukan akun terhubung.
+**Modul ini tidak mengirim apa pun dan tidak memanggil penyedia.** Tidak ada antrean, dispatcher, dan panggilan HTTP penyedia di sini. Adapter penyedia, pertukaran token OAuth, dan publikasi (#1145) adalah issue berikutnya; perutean pengirim di `whatsapp_delivery` (#1141) sudah mendarat. Layar operator adalah `/admin/channel-accounts` (#1154, lihat di bawah). Tautan sosial situs web bukan akun terhubung.
 
-Status: `experimental` dan **mati secara default** (`CHANNEL_ACCOUNTS_ENABLED`), tanpa entri navigasi sampai layarnya ada (entri navigasi tanpa halaman adalah 404 permanen).
+Status: `active` dan **mati secara bawaan** (`CHANNEL_ACCOUNTS_ENABLED`; layar lalu menyatakan bahwa ia dimatikan).
+
+## Layar admin (#1154, ADR-0148 UP-08)
+
+`/admin/channel-accounts` (daftar: filter, pencarian, urutan, pager keyset atas paling banyak 200 akun termuat; koneksi penyedia; matriks penyedia beserta alasan sebuah penyedia tidak punya aksi Hubungkan) dan `/admin/channel-accounts/{id}` (status, kesehatan dan "terakhir disinkronkan", otorisasi penyedia, sembilan baris kapabilitas dengan status buktinya, yang tidak didukung ditampilkan nonaktif). Aksi pada detail: ganti kredensial (kolom password hanya-tulis, MFA dan step-up, tanpa "tampilkan"), putuskan akun dan cabut otorisasi (konfirmasi dengan mengetik, dampak antrean untuk pengirim), serta jadikan pengirim WhatsApp default. Setiap mutasi memakai API yang sudah ada dengan `Idempotency-Key`. Pembacaan memakai aturan visibilitas rute itu sendiri (gerbang penugasan, business scope). Mengklaim `accounts.read`, `accounts.revoke`, `credentials.manage`, dan dua kunci pengirim `whatsapp_delivery`.
+
+**Belum ada di layar (sisa #1154):** wizard hubungkan (belum ada konektor penyedia, sehingga `POST connections/oauth/start` menjawab `PROVIDER_ADAPTER_UNAVAILABLE` dan tombol Hubungkan menyesatkan), mendaftarkan atau mengaktifkan akun (`accounts.create`), mencatat pemberian kapabilitas (`capabilities.configure`), menugaskan operator (`assignments.assign`), dan ringkasan kesehatan/kapabilitas per akun di daftar (akan menjadi N+1; ada di detail). Pemegang `credentials.manage` yang belum mendaftarkan MFA tidak melihat formulir kredensial maupun penjelasannya.
 
 ## Invarian (ADR-0148 bagian 2) dan di mana masing-masing ditegakkan
 

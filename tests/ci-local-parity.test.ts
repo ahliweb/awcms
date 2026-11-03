@@ -42,6 +42,7 @@ import {
   CI_BUN_MINIMUM,
   CI_POSTGRES_MAJOR,
   DEFAULT_BASE_REF,
+  E2E_CHANNEL_SEED,
   E2E_PROBE_PATH,
   E2E_READY_ATTEMPTS,
   E2E_SERVER_COMMAND,
@@ -397,10 +398,12 @@ describe("ci:local ↔ the e2e-smoke start/seed script it reimplements", () => {
   });
 
   test("the environment the runner sets is the workflow's, apart from the port it chooses", () => {
-    const { PORT, E2E_BASE_URL, ...rest } = stringifyEnv(step.env);
+    const { PORT, E2E_BASE_URL, APP_URL, ...rest } = stringifyEnv(step.env);
 
     expect(PORT).toBeDefined();
     expect(E2E_BASE_URL).toBeDefined();
+    // The callback origin: pinned to the workflow's port there, to the picked one here.
+    expect(APP_URL).toBe(E2E_BASE_URL);
     expect(rest).toEqual({ ...E2E_STATIC_ENV });
   });
 
@@ -414,6 +417,15 @@ describe("ci:local ↔ the e2e-smoke start/seed script it reimplements", () => {
       E2E_TEST_COMMAND.join(" ")
     );
     expect(script).toContain('export E2E_TENANT_ID="$tenant_id"');
+  });
+
+  test("it seeds the same channel account and generates its key ring at run time", () => {
+    expect(script).toContain("INSERT INTO awcms_channel_accounts");
+    expect(script).toContain(`'${E2E_CHANNEL_SEED.externalId}'`);
+    expect(script).toContain(`'${E2E_CHANNEL_SEED.displayName}'`);
+    expect(script).toContain(
+      'CHANNEL_SECRETS_ENCRYPTION_KEYS="k1:$(openssl rand'
+    );
   });
 
   test("the seed body is the JSON the workflow posts", () => {
