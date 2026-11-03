@@ -197,8 +197,12 @@ contracts:
     # channel_account is owned (provided) by the base `channel_accounts` module
     # (#1141, ADR-0148 capability C1): the port a channel module asks whether a
     # tenant-owned account may send now. Consumed (optional) by
-    # `whatsapp_delivery`. First assigned number.
-    channel_account: "1.0.0"
+    # `whatsapp_delivery`. 1.0.0 was the first assigned number; 1.1.0 (#1142,
+    # ADR-0148 section 7) adds the refusal reason RISK_ACKNOWLEDGEMENT_REQUIRED
+    # (an unofficial provider whose current risk text the tenant has not
+    # acknowledged), additively: no signature changed, and a consumer that
+    # switches exhaustively over the reasons must add the member.
+    channel_account: "1.1.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

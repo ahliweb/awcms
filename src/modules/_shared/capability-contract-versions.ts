@@ -133,6 +133,9 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     whatsapp_delivery: "1.1.0",
     // channel_account is provided by the base `channel_accounts` module (Issue
     // #1141, ADR-0148 capability C1) and consumed, optionally, by
-    // `whatsapp_delivery`. First assigned number, not a stability milestone.
-    channel_account: "1.0.0"
+    // `whatsapp_delivery`. `1.0.0` was the first assigned number; `1.1.0`
+    // (Issue #1142, ADR-0148 section 7) ADDS the refusal reason
+    // `RISK_ACKNOWLEDGEMENT_REQUIRED`. No signature changed (a MINOR bump); a
+    // consumer that switches exhaustively over the reasons must add the member.
+    channel_account: "1.1.0"
   });

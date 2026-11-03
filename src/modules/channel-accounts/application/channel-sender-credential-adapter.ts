@@ -33,6 +33,7 @@ import type {
 import { log } from "../../../lib/logging/logger";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import type { ChannelSecretPurpose } from "../domain/channel-accounts-constants";
+import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import {
   isWhatsappSenderShape,
   loadLendingParent,
@@ -41,6 +42,7 @@ import {
   reasonForGrantState,
   type SenderAccountRow
 } from "./channel-account-port-adapter";
+import { hasActiveRiskAcknowledgement } from "./risk-acknowledgement-check";
 import {
   defaultSecretStore,
   SecretStoreError,
@@ -177,6 +179,20 @@ export function createChannelSenderCredentialAdapter(
       const statusReason = reasonForAccountStatus(account.status);
 
       if (statusReason) return { ok: false, reason: statusReason };
+
+      // Defence in depth (Issue #1142): the device key of an UNOFFICIAL provider
+      // is not decrypted for a tenant whose acknowledgement is not in force, even
+      // if a caller skipped the sender decision.
+      if (
+        isRiskAcknowledgementProvider(account.provider) &&
+        !(await hasActiveRiskAcknowledgement(
+          tx,
+          input.tenantId,
+          account.provider
+        ))
+      ) {
+        return { ok: false, reason: "RISK_ACKNOWLEDGEMENT_REQUIRED" };
+      }
 
       const reference = await referenceFor(tx, input.tenantId, account, now());
 

@@ -555,6 +555,296 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/attest-device:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: attestChannelDevice
+      tags:
+        - Channel Accounts
+      summary: Attest that an unofficial-provider device is paired (operator-attested, not verified).
+      description: >-
+        The ONE place a person, not a connector, moves an account to
+        `connected`, and only for a device of an UNOFFICIAL provider (StarSender),
+        because StarSender documents no side-effect-free status call a connector
+        could verify with. The health record says `OPERATOR_ATTESTED`; the
+        response says `basis: operator_attested`; nothing may present it as a
+        vendor confirmation. Needs the CALLER's own active acknowledgement of the
+        current approved risk text, a stored credential, and a `pending` or
+        `degraded` account (`422` with `RISK_ACKNOWLEDGEMENT_REQUIRED`,
+        `CREDENTIAL_REQUIRED`, `ACCOUNT_STATE_INVALID` or
+        `NOT_AN_UNOFFICIAL_DEVICE`). It grants no capability: every send
+        re-checks the account, the acknowledgement and the capability evidence.
+        `503 PROVIDER_ADAPTER_DISABLED` unless the deployment sets
+        `WHATSAPP_STARSENDER_ENABLED=true` (off by default). High-risk, audited at
+        `warning`. `Idempotency-Key` required. Requires
+        `channel_accounts.accounts.create` and at least the `operator` assignment
+        on the account.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: "Attested, or already connected (`changed` is false)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accountId:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - connected
+                      basis:
+                        type: string
+                        enum:
+                          - operator_attested
+                      changed:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`RISK_ACKNOWLEDGEMENT_REQUIRED`, `CREDENTIAL_REQUIRED`, `ACCOUNT_STATE_INVALID` or `NOT_AN_UNOFFICIAL_DEVICE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED` or `PROVIDER_ADAPTER_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/risk-acknowledgements:
+    get:
+      operationId: listChannelRiskAcknowledgements
+      tags:
+        - Channel Accounts
+      summary: The current risk text of an unofficial provider and who has acknowledged it.
+      description: >-
+        English and Indonesian text, its version, and whether the business owner
+        has approved it (`approved: false` and `approval: null` while it is a
+        draft: nothing can be acknowledged and no device can be connected).
+        `acknowledgements` lists up to 100 records, newest first, with the
+        person's tenant-user id, the text version and timestamps: no credential
+        and no message content. Requires
+        `channel_accounts.risk_acknowledgements.read`.
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - starsender
+      responses:
+        "200":
+          description: The text and the acknowledgements.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelRiskAcknowledgementState"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: acknowledgeChannelRisk
+      tags:
+        - Channel Accounts
+      summary: Record your own acknowledgement of an unofficial provider's current risk text.
+      description: >-
+        The CALLER acknowledges for themselves: the body names the provider and
+        the text version shown, and has no field to name another person
+        (`400` for any other field). A stale version is `409
+        RISK_TEXT_VERSION_STALE`; while the business owner has not approved the
+        text it is `409 RISK_TEXT_NOT_APPROVED`. The record keeps the provider,
+        the person, the time, the version and the SHA-256 of the exact words. A
+        second acknowledgement of the same version by the same person answers
+        the existing record with `200`. A signed-in person only (a machine
+        credential is `403 INTERACTIVE_SESSION_REQUIRED`). Audited at `warning`.
+        `Idempotency-Key` required. Requires
+        `channel_accounts.risk_acknowledgements.create`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - provider
+                - textVersion
+              properties:
+                provider:
+                  type: string
+                  enum:
+                    - starsender
+                textVersion:
+                  type: string
+                  maxLength: 80
+      responses:
+        "200":
+          description: Already acknowledged by this person at this version.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelRiskAcknowledgement"
+                  meta:
+                    type: object
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ChannelRiskAcknowledgement"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`RISK_TEXT_NOT_APPROVED`, `RISK_TEXT_VERSION_STALE` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/risk-acknowledgements/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: revokeChannelRiskAcknowledgement
+      tags:
+        - Channel Accounts
+      summary: Revoke a provider risk acknowledgement.
+      description: >-
+        A stamp, not a deletion: the record of who accepted what, and when it was
+        withdrawn, stays. When it removes the tenant's LAST active acknowledgement
+        of the provider, the tenant's `connected` accounts of that provider become
+        `degraded` in the same transaction (`degradedAccounts` counts them), and
+        the next send decision denies them regardless. Revoking one that is
+        already revoked answers `200` with `degradedAccounts: 0`. High-risk,
+        audited at `warning`. `Idempotency-Key` required. Requires
+        `channel_accounts.risk_acknowledgements.revoke`. An unknown id and
+        another tenant's id are one `404`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      acknowledgement:
+                        $ref: "#/components/schemas/ChannelRiskAcknowledgement"
+                      degradedAccounts:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CHANNEL_ACCOUNTS_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/channel-accounts/accounts/{id}/health:
     parameters:
       - name: id
@@ -1312,6 +1602,68 @@ components:
         id:
           type: string
           format: uuid
+    ChannelRiskAcknowledgement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum:
+            - starsender
+        tenantUserId:
+          type: string
+          format: uuid
+        textVersion:
+          type: string
+        acknowledgedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedBy:
+          type: string
+          format: uuid
+          nullable: true
+        current:
+          type: boolean
+          description: The text version it was recorded against is the one in force now.
+    ChannelRiskAcknowledgementState:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum:
+            - starsender
+        textVersion:
+          type: string
+        text:
+          type: object
+          properties:
+            en:
+              type: string
+            id:
+              type: string
+        approved:
+          type: boolean
+          description: False while the wording is a draft the business owner has not approved; nothing can then be acknowledged.
+        approval:
+          type: object
+          nullable: true
+          properties:
+            approvedBy:
+              type: string
+            approvedOn:
+              type: string
+            reference:
+              type: string
+        acknowledgements:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChannelRiskAcknowledgement"
     ChannelAccount:
       type: object
       properties:

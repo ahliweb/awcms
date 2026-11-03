@@ -459,7 +459,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         relforcerowsecurity: boolean;
       }[];
 
-      expect(rows.length).toBe(8);
+      expect(rows.length).toBe(9);
 
       for (const row of rows) {
         expect(row.relrowsecurity, row.relname).toBe(true);

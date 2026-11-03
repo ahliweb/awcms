@@ -15028,6 +15028,32 @@ Removing the LAST assignee returns the account to tenant-wide visibility, which 
 | 409    | `IDEMPOTENCY_CONFLICT`.                                                                | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/channel-accounts/accounts/{id}/attest-device` — Attest that an unofficial-provider device is paired (operator-attested, not verified).
+
+- **operationId**: `attestChannelDevice`
+- **Security**: bearerAuth + tenantHeader
+
+The ONE place a person, not a connector, moves an account to `connected`, and only for a device of an UNOFFICIAL provider (StarSender), because StarSender documents no side-effect-free status call a connector could verify with. The health record says `OPERATOR_ATTESTED`; the response says `basis: operator_attested`; nothing may present it as a vendor confirmation. Needs the CALLER's own active acknowledgement of the current approved risk text, a stored credential, and a `pending` or `degraded` account (`422` with `RISK_ACKNOWLEDGEMENT_REQUIRED`, `CREDENTIAL_REQUIRED`, `ACCOUNT_STATE_INVALID` or `NOT_AN_UNOFFICIAL_DEVICE`). It grants no capability: every send re-checks the account, the acknowledgement and the capability evidence. `503 PROVIDER_ADAPTER_DISABLED` unless the deployment sets `WHATSAPP_STARSENDER_ENABLED=true` (off by default). High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.accounts.create` and at least the `operator` assignment on the account.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Responses**
+
+| Status | Description                                                                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Attested, or already connected (`changed` is false).                                                           | object                                 |
+| 400    | Validation error.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 422    | `RISK_ACKNOWLEDGEMENT_REQUIRED`, `CREDENTIAL_REQUIRED`, `ACCOUNT_STATE_INVALID` or `NOT_AN_UNOFFICIAL_DEVICE`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED` or `PROVIDER_ADAPTER_DISABLED`.                                                    | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/channel-accounts/accounts/{id}/capabilities` — All nine capabilities with the matrix cell and the effective verdict.
 
 - **operationId**: `listChannelAccountCapabilities`
@@ -15259,6 +15285,81 @@ Registrable providers with their account kinds and authentication modes, and the
 | 401    | Missing or invalid session.                                                            | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                            | [`ApiError`](#standard-error-envelope) |
 | 503    | `CHANNEL_ACCOUNTS_DISABLED`: CHANNEL_ACCOUNTS_ENABLED is not true for this deployment. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/channel-accounts/risk-acknowledgements` — The current risk text of an unofficial provider and who has acknowledged it.
+
+- **operationId**: `listChannelRiskAcknowledgements`
+- **Security**: bearerAuth + tenantHeader
+
+English and Indonesian text, its version, and whether the business owner has approved it (`approved: false` and `approval: null` while it is a draft: nothing can be acknowledged and no device can be connected). `acknowledgements` lists up to 100 records, newest first, with the person's tenant-user id, the text version and timestamps: no credential and no message content. Requires `channel_accounts.risk_acknowledgements.read`.
+
+**Parameters**
+
+| Name       | In    | Required | Type               | Description |
+| ---------- | ----- | -------- | ------------------ | ----------- |
+| `provider` | query | yes      | enum(`starsender`) |             |
+
+**Responses**
+
+| Status | Description                        | Schema                                 |
+| ------ | ---------------------------------- | -------------------------------------- |
+| 200    | The text and the acknowledgements. | object                                 |
+| 400    | Validation error.                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.        | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`.       | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/channel-accounts/risk-acknowledgements` — Record your own acknowledgement of an unofficial provider's current risk text.
+
+- **operationId**: `acknowledgeChannelRisk`
+- **Security**: bearerAuth + tenantHeader
+
+The CALLER acknowledges for themselves: the body names the provider and the text version shown, and has no field to name another person (`400` for any other field). A stale version is `409 RISK_TEXT_VERSION_STALE`; while the business owner has not approved the text it is `409 RISK_TEXT_NOT_APPROVED`. The record keeps the provider, the person, the time, the version and the SHA-256 of the exact words. A second acknowledgement of the same version by the same person answers the existing record with `200`. A signed-in person only (a machine credential is `403 INTERACTIVE_SESSION_REQUIRED`). Audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.risk_acknowledgements.create`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                    | Schema                                 |
+| ------ | ------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Already acknowledged by this person at this version.                           | object                                 |
+| 201    | Recorded.                                                                      | object                                 |
+| 400    | Validation error.                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | `RISK_TEXT_NOT_APPROVED`, `RISK_TEXT_VERSION_STALE` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`.                                                   | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/channel-accounts/risk-acknowledgements/{id}/revoke` — Revoke a provider risk acknowledgement.
+
+- **operationId**: `revokeChannelRiskAcknowledgement`
+- **Security**: bearerAuth + tenantHeader
+
+A stamp, not a deletion: the record of who accepted what, and when it was withdrawn, stays. When it removes the tenant's LAST active acknowledgement of the provider, the tenant's `connected` accounts of that provider become `degraded` in the same transaction (`degradedAccounts` counts them), and the next send decision denies them regardless. Revoking one that is already revoked answers `200` with `degradedAccounts: 0`. High-risk, audited at `warning`. `Idempotency-Key` required. Requires `channel_accounts.risk_acknowledgements.revoke`. An unknown id and another tenant's id are one `404`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Responses**
+
+| Status | Description                  | Schema                                 |
+| ------ | ---------------------------- | -------------------------------------- |
+| 200    | Revoked.                     | object                                 |
+| 400    | Validation error.            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.          | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.      | [`ApiError`](#standard-error-envelope) |
+| 503    | `CHANNEL_ACCOUNTS_DISABLED`. | [`ApiError`](#standard-error-envelope) |
 
 ## Website Engagement
 

@@ -2042,6 +2042,13 @@ export const WORKER_COLUMN_GRANTS: Record<
   awcms_channel_secrets: {
     SELECT: ["id", "tenant_id", "purpose", "ciphertext"]
   },
+  // sql/340 (Issue #1142, ADR-0148 section 7): the send decision asks whether the
+  // tenant's acknowledgement of an UNOFFICIAL provider's current text is still in
+  // force. Exactly those five columns: not the acting person, not the text hash,
+  // not who revoked it, and no write of any kind.
+  awcms_channel_provider_risk_acknowledgements: {
+    SELECT: ["id", "tenant_id", "provider", "text_version", "revoked_at"]
+  },
   awcms_telegram_bindings: {
     // sql/216 + sql/288: the dispatcher and purge only END a binding.
     UPDATE: [

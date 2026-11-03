@@ -1007,7 +1007,7 @@ components:
                     - false
                 reason:
                   type: string
-                  description: A coarse reason code (for example `ACCOUNT_REVOKED`, `CAPABILITY_DENIED`).
+                  description: A coarse reason code (for example `ACCOUNT_REVOKED`, `CAPABILITY_DENIED`, `RISK_ACKNOWLEDGEMENT_REQUIRED` for an unofficial provider such as StarSender whose current risk text the tenant has not acknowledged).
         queue:
           type: object
           properties:

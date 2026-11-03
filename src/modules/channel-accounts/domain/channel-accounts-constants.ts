@@ -11,6 +11,7 @@ export const ACCOUNTS_ACTIVITY_CODE = "accounts";
 export const CAPABILITIES_ACTIVITY_CODE = "capabilities";
 export const CREDENTIALS_ACTIVITY_CODE = "credentials";
 export const ASSIGNMENTS_ACTIVITY_CODE = "assignments";
+export const RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE = "risk_acknowledgements";
 
 /**
  * The guards, one per seeded permission. `AccessAction` is a CLOSED vocabulary
@@ -55,6 +56,22 @@ export const CHANNEL_ACCOUNTS_GUARDS = {
     moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
     activityCode: ASSIGNMENTS_ACTIVITY_CODE,
     action: "assign" as const
+  },
+  // Issue #1142: the risk acknowledgement of an UNOFFICIAL provider.
+  readRiskAcknowledgements: {
+    moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
+    activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+    action: "read" as const
+  },
+  acknowledgeRisk: {
+    moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
+    activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+    action: "create" as const
+  },
+  revokeRiskAcknowledgement: {
+    moduleKey: CHANNEL_ACCOUNTS_MODULE_KEY,
+    activityCode: RISK_ACKNOWLEDGEMENTS_ACTIVITY_CODE,
+    action: "revoke" as const
   }
 } as const;
 
