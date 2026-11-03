@@ -20,6 +20,7 @@ import type {
   ChannelSecretPurpose
 } from "../domain/channel-accounts-constants";
 import { checkAccountShape } from "../domain/provider-matrix";
+import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import type {
   AssignmentInput,
   CreateAccountInput,
@@ -496,7 +497,13 @@ const CREDENTIAL_PURPOSE: Partial<
 };
 
 export type WriteCredentialOutcome =
-  | { outcome: "written"; replaced: boolean; version: number }
+  | {
+      outcome: "written";
+      replaced: boolean;
+      version: number;
+      /** The account was moved back to `pending` (`CREDENTIAL_REPLACED`) and must be attested again (audit M2, Issue #1142). */
+      demoted: boolean;
+    }
   | { outcome: "not_found" }
   | {
       outcome: "refused";
@@ -510,6 +517,42 @@ export type WriteCredentialOutcome =
  * disabled account cannot be re-armed by writing one: re-enabling is a separate,
  * audited step.
  */
+export const CREDENTIAL_REPLACED_STATUS_REASON = "CREDENTIAL_REPLACED";
+
+/**
+ * For an UNOFFICIAL provider a device's `connected` state is an operator's
+ * attestation about THAT key's pairing (Issue #1142). A new key is a different
+ * claim: it could belong to another device or another number, and the attested
+ * state must not carry over to it. The account goes back to `pending` in the
+ * caller's transaction and needs a fresh attestation, which needs the attester's
+ * own acknowledgement and step-up. Official providers keep their status (their
+ * health is verified by a connector, not asserted).
+ */
+async function demoteAfterCredentialChange(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  account: AccountRecord
+): Promise<boolean> {
+  if (
+    !isRiskAcknowledgementProvider(account.provider) ||
+    (account.status !== "connected" && account.status !== "degraded")
+  ) {
+    return false;
+  }
+
+  await tx`
+    UPDATE awcms_channel_accounts
+    SET status = 'pending', status_reason = ${CREDENTIAL_REPLACED_STATUS_REASON},
+        connected_at = NULL, attested_acknowledgement_id = NULL,
+        updated_by = ${actorTenantUserId}, updated_at = now(),
+        version = version + 1
+    WHERE tenant_id = ${tenantId} AND id = ${account.id}
+  `;
+
+  return true;
+}
+
 export async function writeAccountCredential(
   tx: Bun.SQL,
   store: SecretStorePort,
@@ -550,7 +593,17 @@ export async function writeAccountCredential(
         WHERE tenant_id = ${tenantId} AND id = ${accountId}
       `;
 
-      return { outcome: "written", replaced: true, version: replaced.version };
+      return {
+        outcome: "written",
+        replaced: true,
+        version: replaced.version,
+        demoted: await demoteAfterCredentialChange(
+          tx,
+          tenantId,
+          actorTenantUserId,
+          account
+        )
+      };
     }
   }
 
@@ -568,7 +621,17 @@ export async function writeAccountCredential(
     WHERE tenant_id = ${tenantId} AND id = ${accountId}
   `;
 
-  return { outcome: "written", replaced: false, version: ref.version };
+  return {
+    outcome: "written",
+    replaced: false,
+    version: ref.version,
+    demoted: await demoteAfterCredentialChange(
+      tx,
+      tenantId,
+      actorTenantUserId,
+      account
+    )
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -846,9 +909,14 @@ export type RecordHealthInput = {
 };
 
 /**
- * Called by health jobs and dispatch failures of provider connectors (NOT by an
- * HTTP route: a person cannot assert that an account works). It records the
- * latest health and moves the account between `pending`/`connected`/`degraded`:
+ * Called by health jobs and dispatch failures of provider connectors, and by ONE
+ * route: `attest-device` (Issue #1142), for a device of an UNOFFICIAL provider
+ * with no status call a connector could verify with. That is the single
+ * recorded exception to "a person cannot assert that an account works"; it is
+ * stamped `OPERATOR_ATTESTED` and gated by the attester's own risk
+ * acknowledgement and a step-up. Every other route is read-only here. It
+ * records the latest health and moves the account between
+ * `pending`/`connected`/`degraded`:
  *
  *   ok       pending|degraded -> connected
  *   degraded connected        -> degraded

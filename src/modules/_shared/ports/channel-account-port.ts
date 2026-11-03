@@ -62,6 +62,10 @@ export type SenderUnavailableReason =
   | "CONNECTION_EXPIRED"
   /** The capability is not granted with evidence for this account, or the provider matrix does not allow it ("unapproved"). */
   | "CAPABILITY_DENIED"
+  /** The provider is UNOFFICIAL (StarSender) and the tenant holds no active acknowledgement of its CURRENT, approved risk text (Issue #1142, ADR-0148 section 7). Terminal: it is a decision of the tenant's people, and rows must not wait on it silently. */
+  | "RISK_ACKNOWLEDGEMENT_REQUIRED"
+  /** The provider's adapter is switched off on this deployment (an UNOFFICIAL provider behind its flag, Issue #1142). Asked BEFORE any secret is read, so a device key is never decrypted while the adapter is off. Terminal. */
+  | "PROVIDER_ADAPTER_DISABLED"
   /** No credential is stored for the account, or the stored token has expired. */
   | "CREDENTIAL_UNAVAILABLE"
   /** The key ring is missing or the ciphertext does not authenticate: an operator problem, not this message's. */

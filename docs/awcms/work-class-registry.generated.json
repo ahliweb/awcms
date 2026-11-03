@@ -582,6 +582,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/channel-accounts/accounts/[id]/attest-device.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/channel-accounts/accounts/[id]/capabilities/[capability].ts",
       "workClass": "interactive",
       "source": "factory"
@@ -638,6 +643,16 @@
     },
     {
       "path": "src/pages/api/v1/channel-accounts/providers.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/channel-accounts/risk-acknowledgements/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/channel-accounts/risk-acknowledgements/index.ts",
       "workClass": "interactive",
       "source": "factory"
     },

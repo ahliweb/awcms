@@ -31,8 +31,10 @@ import type {
   SenderUnavailableReason
 } from "../../_shared/ports/channel-account-port";
 import { log } from "../../../lib/logging/logger";
+import { isStarsenderAdapterEnabled } from "../../_shared/unofficial-provider-flags";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import type { ChannelSecretPurpose } from "../domain/channel-accounts-constants";
+import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import {
   isWhatsappSenderShape,
   loadLendingParent,
@@ -41,11 +43,17 @@ import {
   reasonForGrantState,
   type SenderAccountRow
 } from "./channel-account-port-adapter";
+import { hasActiveRiskAcknowledgement } from "./risk-acknowledgement-check";
 import {
   defaultSecretStore,
   SecretStoreError,
   type SecretStorePort
 } from "./secret-store";
+
+/** The providers whose adapter is an opt-in, unofficial one (today: StarSender). */
+function isUnofficialProvider(provider: string): boolean {
+  return provider === "starsender";
+}
 
 type ConnectionRow = {
   grant_state: string;
@@ -177,6 +185,30 @@ export function createChannelSenderCredentialAdapter(
       const statusReason = reasonForAccountStatus(account.status);
 
       if (statusReason) return { ok: false, reason: statusReason };
+
+      // Defence in depth (Issue #1142): the device key of an UNOFFICIAL provider
+      // is not decrypted for a tenant whose acknowledgement is not in force, even
+      // if a caller skipped the sender decision.
+      if (
+        isRiskAcknowledgementProvider(account.provider) &&
+        !(await hasActiveRiskAcknowledgement(
+          tx,
+          input.tenantId,
+          account.provider
+        ))
+      ) {
+        return { ok: false, reason: "RISK_ACKNOWLEDGEMENT_REQUIRED" };
+      }
+
+      // The adapter's switch comes before ANY secret is read (audit L2, Issue
+      // #1142): with the flag off the device key is not decrypted at all, even if
+      // a caller skipped the sender decision.
+      if (
+        isUnofficialProvider(account.provider) &&
+        !isStarsenderAdapterEnabled(options.env ?? process.env)
+      ) {
+        return { ok: false, reason: "PROVIDER_ADAPTER_DISABLED" };
+      }
 
       const reference = await referenceFor(tx, input.tenantId, account, now());
 

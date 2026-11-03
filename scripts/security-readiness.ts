@@ -2042,6 +2042,13 @@ export const WORKER_COLUMN_GRANTS: Record<
   awcms_channel_secrets: {
     SELECT: ["id", "tenant_id", "purpose", "ciphertext"]
   },
+  // sql/340 (Issue #1142, ADR-0148 section 7): the send decision asks whether the
+  // tenant's acknowledgement of an UNOFFICIAL provider's current text is still in
+  // force. Exactly those five columns: not the acting person, not the text hash,
+  // not who revoked it, and no write of any kind.
+  awcms_channel_provider_risk_acknowledgements: {
+    SELECT: ["id", "tenant_id", "provider", "text_version", "revoked_at"]
+  },
   awcms_telegram_bindings: {
     // sql/216 + sql/288: the dispatcher and purge only END a binding.
     UPDATE: [
@@ -2369,6 +2376,52 @@ export async function checkWorkerSetupRoleGrants(
           `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
         );
       }
+    }
+
+    // The two triggers that make an UNOFFICIAL provider's risk acknowledgement
+    // mean something (sql/340, Issue #1142). Checked whatever roles are
+    // provisioned: they are table integrity, not a grant. Without the first a
+    // StarSender device could be `connected` on no acknowledgement at all; without
+    // the second an acknowledgement could be edited, back-dated or deleted, and the
+    // record of who accepted what would be worthless. Pinned by relation, name,
+    // enabled state, trigger events and the function they run (and the one fact
+    // each function must still name), so dropping, disabling or hollowing one out
+    // is a finding rather than a silent loss.
+    const riskTriggers = (await sql`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM pg_trigger t
+          WHERE t.tgrelid = to_regclass('awcms_channel_accounts')
+            AND t.tgname = 'awcms_channel_accounts_risk_ack_guard'
+            AND NOT t.tgisinternal AND t.tgenabled <> 'D'
+            AND (t.tgtype & 2) = 2 AND (t.tgtype & 1) = 1
+            AND (t.tgtype & 4) = 4 AND (t.tgtype & 16) = 16
+            AND t.tgfoid = to_regproc('awcms_channel_accounts_risk_ack_guard')
+            AND pg_get_functiondef(t.tgfoid)
+                LIKE '%awcms_channel_provider_risk_acknowledgements%'
+        ) AS has_connect_guard,
+        EXISTS (
+          SELECT 1 FROM pg_trigger t
+          WHERE t.tgrelid = to_regclass('awcms_channel_provider_risk_acknowledgements')
+            AND t.tgname = 'awcms_channel_provider_risk_acks_guard'
+            AND NOT t.tgisinternal AND t.tgenabled <> 'D'
+            AND (t.tgtype & 2) = 2 AND (t.tgtype & 1) = 1
+            AND (t.tgtype & 4) = 4 AND (t.tgtype & 8) = 8
+            AND (t.tgtype & 16) = 16
+            AND t.tgfoid = to_regproc('awcms_channel_provider_risk_acks_guard')
+            AND pg_get_functiondef(t.tgfoid) LIKE '%never deleted%'
+        ) AS has_append_only_guard
+    `) as { has_connect_guard: boolean; has_append_only_guard: boolean }[];
+
+    if (!riskTriggers[0]?.has_connect_guard) {
+      findings.push(
+        `awcms_channel_accounts trigger awcms_channel_accounts_risk_ack_guard is missing, disabled or no longer reads the acknowledgement table (a StarSender device could be connected with no risk acknowledgement)`
+      );
+    }
+    if (!riskTriggers[0]?.has_append_only_guard) {
+      findings.push(
+        `awcms_channel_provider_risk_acknowledgements trigger awcms_channel_provider_risk_acks_guard is missing, disabled or hollowed out (an acknowledgement could be edited, back-dated or deleted)`
+      );
     }
 
     if (findings.length > 0) {
