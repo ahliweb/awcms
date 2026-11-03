@@ -718,6 +718,18 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // column-only grant) may purge, so a compromised web process cannot erase it.
   awcms_engagement_sources: ["SELECT", "INSERT", "UPDATE"],
   awcms_engagement_submissions: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0157 / `sql/330` (Issue #1145). NOT retired -- the social publishing
+  // settings, rules, publications, per-account jobs and attempt ledger, all
+  // actively written. Narrowed by removing exactly one verb, DELETE: a rule is
+  // disabled, a publication cancelled, a job's published state terminal and an
+  // attempt is evidence, so the runtime that serves the API cannot erase what was
+  // published under the tenant's name. (No retention sweep exists yet; see the
+  // recorded follow-up in docs/awcms/social-publishing.md.)
+  awcms_social_publishing_settings: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_rules: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publications: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_attempts: ["SELECT", "INSERT"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
@@ -1457,6 +1469,18 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // scope; a worker that could write it could change which number and provider
   // speak for a tenant.
   awcms_whatsapp_sender_policies: ["SELECT"],
+  // ADR-0157 / `sql/330` (Issue #1145). The article path enqueues from
+  // `blog:publish:scheduled` (reads the two tenant switches and the rules, inserts
+  // a publication and its jobs); `social-publishing:dispatch` claims and finalises
+  // jobs (UPDATE) and writes the attempt ledger. Neither deletes anything, neither
+  // updates a publication (its snapshot is immutable and its approval is an
+  // operator's act), and neither writes the switches or the rules: a worker that
+  // could would decide which accounts publish what.
+  awcms_social_publishing_settings: ["SELECT"],
+  awcms_social_publish_rules: ["SELECT"],
+  awcms_social_publications: ["SELECT", "INSERT"],
+  awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_attempts: ["SELECT", "INSERT"],
   // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
   // attempts, and ends (revokes/suspends) a binding whose principal is gone or
   // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
@@ -1842,6 +1866,13 @@ export const WORKER_COLUMN_GRANTS: Record<
   string,
   Partial<Record<"SELECT" | "INSERT" | "UPDATE", string[]>>
 > = {
+  // The #1145 audit, M4 and L-5: the social enqueue path and dispatcher honour a
+  // tenant's decision to switch the module off, so they read the enablement flag.
+  // Exactly the columns `resolveModuleEnabled` selects; never `disable_reason`
+  // (free text) or the actor stamps.
+  awcms_tenant_modules: {
+    SELECT: ["tenant_id", "module_key", "enabled"]
+  },
   awcms_hr_attendance_corrections: {
     SELECT: [
       "id",
@@ -2368,6 +2399,16 @@ export async function checkWorkerSetupRoleGrants(
             AND p.polqual IS NOT NULL
             AND pg_get_expr(p.polqual, p.polrelid) LIKE '%whatsapp_cloud%'
             AND pg_get_expr(p.polqual, p.polrelid) LIKE '%awcms_channel_accounts%'
+            -- L-6 of the #1145 re-audit: the policy must stay WhatsApp-only. A
+            -- widening to any social provider (the withdrawn first revision of
+            -- ADR-0157 did exactly that) lets a compromised whatsapp:dispatch
+            -- decrypt social tokens, so it is a finding, not a pass.
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%facebook%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%instagram%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%threads%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%tiktok%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%youtube%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%linkedin%'
         ) AS has_policy
       `) as { has_policy: boolean }[];
 
@@ -2602,6 +2643,8 @@ export const CREDENTIAL_LOOKING_COLUMN_PATTERN =
 export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
   "awcms_auth_providers.client_secret_env_var":
     "the NAME of an environment variable, not its value (sql/025)",
+  "awcms_social_publications.content_hash":
+    "SHA-256 over the publication's own PUBLIC content snapshot (title, caption, link, media), kept so two publications of the same content are recognisable and an edit is detectable; it is not keyed, protects nothing and unlocks nothing (sql/330)",
   "awcms_channel_oauth_states.redirect_uri_hash":
     "hash of the OAuth callback redirect URI the authorisation request was started with; not a secret (sql/318)",
   "awcms_channel_provider_connections.redirect_uri_hash":

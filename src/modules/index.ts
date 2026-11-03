@@ -34,6 +34,7 @@ import { hrCommissionModule } from "./hr-commission/module";
 import { telegramDeliveryModule } from "./telegram-delivery/module";
 import { channelAccountsModule } from "./channel-accounts/module";
 import { websiteEngagementModule } from "./website-engagement/module";
+import { socialPublishingModule } from "./social-publishing/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -252,7 +253,17 @@ const baseModules: ModuleDescriptor[] = [
   // tenant_domain/domain_event_runtime/profile_identity (all above), so the DAG
   // stays acyclic; nothing depends on it. Inert until a tenant creates a source.
   // See src/modules/website-engagement/module.ts's `description`.
-  websiteEngagementModule
+  websiteEngagementModule,
+  // Admitted by ADR-0157 (Issue #1145, ADR-0148 capability C3): account-scoped
+  // social publishing behind the existing `SocialPublishingPort`. One
+  // publication, one job per target `channel_account`, a credential that never
+  // enters a job. Ships with NO provider adapter (connectors are #1146 to #1151),
+  // `experimental` and OFF by default (SOCIAL_PUBLISHING_ENABLED). Depends on
+  // tenant_admin/identity_access/logging/domain_event_runtime (all above);
+  // `channel_accounts` and `media_library` are soft (optional capability)
+  // consumptions, and nothing depends on it. See
+  // src/modules/social-publishing/module.ts's `description`.
+  socialPublishingModule
 ];
 
 /**

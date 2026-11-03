@@ -73,6 +73,15 @@ export type SsrfFetchOptions = {
   body?: string | Uint8Array;
   env?: NodeJS.ProcessEnv;
   /**
+   * An OPTIONAL caller-owned abort. When it fires the in-flight request (every
+   * hop, and the body read) is torn down exactly like the total-budget timer,
+   * and the call returns `request_failed`. Absent, nothing changes: this exists
+   * so a caller that races the call against its own deadline (the social
+   * publishing dispatcher, Issue #1145) cancels the request instead of
+   * abandoning it, which would leave it free to complete behind the caller's back.
+   */
+  signal?: AbortSignal;
+  /**
    * ADDITIONAL header names (case-insensitive) that carry a credential and must
    * not follow a redirect to another origin — e.g. `["X-Api-Key"]`. They are
    * ADDED to {@link DEFAULT_CREDENTIAL_HEADERS}; the default list cannot be
@@ -559,6 +568,13 @@ export async function ssrfSafeFetch(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
+  const abortFromCaller = () => controller.abort();
+
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else
+      options.signal.addEventListener("abort", abortFromCaller, { once: true });
+  }
 
   try {
     for (let hop = 0; hop <= maxRedirects; hop += 1) {
@@ -661,5 +677,6 @@ export async function ssrfSafeFetch(
     return { ok: false, reason: "too_many_redirects" };
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abortFromCaller);
   }
 }

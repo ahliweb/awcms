@@ -7,14 +7,14 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 35    |
-| Migrations                          | 246   |
-| `awcms_*` tables                    | 237   |
-| Tables with `FORCE` RLS             | 219   |
+| Registered modules                  | 36    |
+| Migrations                          | 248   |
+| `awcms_*` tables                    | 242   |
+| Tables with `FORCE` RLS             | 224   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 785   |
-| Route files                         | 609   |
-| ADR                                 | 316   |
+| Test files                          | 789   |
+| Route files                         | 619   |
+| ADR                                 | 318   |
 
 ### Modules
 
@@ -55,6 +55,7 @@
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `channel_accounts`     | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
+| `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 
 ### Migrations
 
@@ -304,8 +305,10 @@
 | 242 | `sql/327_awcms_website_engagement_integrity_guards.sql`                |
 | 243 | `sql/328_awcms_whatsapp_sender_secret_visibility.sql`                  |
 | 244 | `sql/329_awcms_whatsapp_sender_guard_shape.sql`                        |
-| 245 | `sql/340_awcms_channel_provider_risk_acknowledgements.sql`             |
-| 246 | `sql/341_awcms_channel_provider_risk_acknowledgements_permissions.sql` |
+| 245 | `sql/330_awcms_social_publishing_schema.sql`                           |
+| 246 | `sql/331_awcms_social_publishing_permissions.sql`                      |
+| 247 | `sql/340_awcms_channel_provider_risk_acknowledgements.sql`             |
+| 248 | `sql/341_awcms_channel_provider_risk_acknowledgements_permissions.sql` |
 
 ### Tables & Row-Level Security
 
@@ -503,6 +506,11 @@
 | `awcms_site_search_index_runs`                 | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
 | `awcms_site_search_query_log`                  | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
 | `awcms_site_search_settings`                   | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_social_publications`                    | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publish_attempts`                | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publish_jobs`                    | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publish_rules`                   | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publishing_settings`             | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
 | `awcms_sod_conflict_evaluations`               | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
 | `awcms_sod_conflict_exceptions`                | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
 | `awcms_subject_requests`                       | `sql/125_awcms_subject_requests.sql`                       | yes | yes   |
@@ -553,16 +561,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 591        |
+| `(root)`      | 593        |
 | `e2e`         | 30         |
-| `integration` | 163        |
+| `integration` | 165        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 495   |
+| `/api/v1/**`    | 505   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

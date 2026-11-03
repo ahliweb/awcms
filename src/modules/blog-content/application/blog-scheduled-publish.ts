@@ -46,8 +46,9 @@ import type { SocialPublishingPort } from "../../_shared/ports/social-publishing
  * SAME transaction as the publish `UPDATE` above (ADR-0006 compliant — no
  * external provider call happens here); optional and defaults to a no-op
  * so a deployment that never wires a social-publishing port (the default;
- * see `social-publishing/domain/social-publishing-config.ts`) behaves
- * exactly as before this issue.
+ * the composition root enables the real adapter only when
+ * `SOCIAL_PUBLISHING_ENABLED` is on, ADR-0157) behaves exactly as before this
+ * issue.
  */
 /**
  * Per-run safety bound for the due-post selection (Issue #835 §6). The

@@ -197,12 +197,17 @@ contracts:
     # channel_account is owned (provided) by the base `channel_accounts` module
     # (#1141, ADR-0148 capability C1): the port a channel module asks whether a
     # tenant-owned account may send now. Consumed (optional) by
-    # `whatsapp_delivery`. 1.0.0 was the first assigned number; 1.1.0 (#1142,
-    # ADR-0148 section 7) adds the refusal reason RISK_ACKNOWLEDGEMENT_REQUIRED
-    # (an unofficial provider whose current risk text the tenant has not
-    # acknowledged), additively: no signature changed, and a consumer that
-    # switches exhaustively over the reasons must add the member.
+    # `whatsapp_delivery`. 1.0.0 was the first assigned number. 1.1.0 adds, both
+    # additively, the refusal reason RISK_ACKNOWLEDGEMENT_REQUIRED (#1142,
+    # ADR-0148 section 7) and the exported ChannelPublisherPort and
+    # ChannelPublisherCredentialPort for `social_publishing` (#1145, ADR-0157):
+    # no signature changed.
     channel_account: "1.1.0"
+    # social_publishing is owned (provided) by the base `social_publishing`
+    # module (#1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
+    # consumed (optional) by `blog_content`. First assigned number: the port
+    # shape is unchanged since #643.
+    social_publishing: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

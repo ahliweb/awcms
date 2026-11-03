@@ -41,7 +41,7 @@ Project-level Claude Code skills for AWCMS. Each skill encodes the standards fro
 > The family today is two repos, `awcms` + [`awcms-astro`](https://github.com/ahliweb/awcms-astro)
 > (public pages + the USER admin surface, ADR-0070). **CORRECTION:** the previous version claimed this
 > implementation was "only the Sprint 1–2 foundation" with four modules — that has **not
-> been true for a long time**. This repo has **35 registered modules** and `sql/001–sql/224`;
+> been true for a long time**. This repo has **36 registered modules** and `sql/001–sql/224`;
 > see [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) for the real list.
 > A skill whose body still marks itself "READ-ONLY" stays that way — that is
 > per-skill, not a statement about the repo as a whole.
@@ -101,7 +101,7 @@ Project-level Claude Code skills for AWCMS. Each skill encodes the standards fro
 | `awcms-jualanku-porting`                     | **PLAN** — porting Jualanku.info (ADR-0045): merchant = business scope, BFF, 5 bounded contexts. No code yet                                                                                             | docs/awcms/jualanku/                          |
 | `awcms-news-portal`                          | **HISTORICAL** — the module was merged into `blog_content` (ADR-0044/#300); pre-merge specification, use `awcms-blog-content`                                                                            | news-portal/SKILL.md                          |
 | `awcms-idn-admin-regions`                    | Work any part of the Indonesian administrative region master data epic (Issue #655-#664)                                                                                                                 | idn-admin-regions/SKILL.md                    |
-| `awcms-social-publishing`                    | Work any part of the social_publishing auto-posting outbox foundation epic (Issue #643-#647)                                                                                                             | social-publishing/SKILL.md                    |
+| `awcms-social-publishing`                    | Work any part of the social_publishing module (account-scoped publications and per-account jobs, Issue #1145, ADR-0157)                                                                                  | social-publishing/SKILL.md                    |
 | `awcms-data-lifecycle`                       | Register a high-volume table into the retention/partition/archive/legal hold/purge registry (Issue #745)                                                                                                 | data-lifecycle/README.md, data-lifecycle.md   |
 | `awcms-media-library`                        | Manage/consume the media_library module — per-tenant media object registry, presigned R2 upload/finalize, reconcile, enforcement (ADR-0036)                                                              | media-library/SKILL.md, ADR-0036              |
 | `awcms-seo-distribution`                     | Manage/consume the seo_distribution module — centralised SEO metadata, public discovery routes (robots/sitemap/feed), redirect governance + 404 telemetry (ADR-0038/0039)                                | seo-distribution/SKILL.md, ADR-0038/0039      |

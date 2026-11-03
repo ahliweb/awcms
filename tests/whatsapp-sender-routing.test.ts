@@ -1342,6 +1342,9 @@ describe("static contracts", () => {
       }
     }
 
+    // Still ONE (the #1145 audit, H1): `social-publishing:dispatch` shares the
+    // `awcms_worker` role and must NOT be handed the key ring, or a compromised
+    // WhatsApp worker could decrypt social tokens through it.
     expect(importers).toEqual(["scripts/whatsapp-dispatch.ts"]);
   });
 

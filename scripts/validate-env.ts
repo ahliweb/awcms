@@ -433,6 +433,13 @@ const RULES: readonly Rule[] = [
     secret: true
   },
 
+  // social_publishing (Issue #1145, ADR-0157). Deployment switch, OFF by default:
+  // with it unset the composition roots keep blog_content's no-op adapter, every
+  // route answers 503 after authorization and the dispatcher claims nothing. It
+  // needs CHANNEL_ACCOUNTS_ENABLED (checked below): an account registry that is
+  // off refuses every account, so nothing could publish.
+  { name: "SOCIAL_PUBLISHING_ENABLED", required: false, type: "bool" },
+
   // website_engagement (ADR-0155, Issue #1153). No deployment switch: the module
   // is inert until a tenant creates a source. The ring encrypts every submission's
   // contact details and keys every source-token and identifier hash, and is a
@@ -1066,6 +1073,18 @@ export function validateEnv(env: EnvBag): string[] {
   // plaintext fallback, so without it no credential could ever be stored. The
   // ring must not share a key with another module's encryption ring: one
   // compromised ring would then open two datasets. No value is ever echoed.
+  // social_publishing (ADR-0157): the module publishes only through accounts of
+  // the account registry, so enabling it without the registry is a configuration
+  // that can never do anything and says nothing about why.
+  if (
+    env.SOCIAL_PUBLISHING_ENABLED === "true" &&
+    env.CHANNEL_ACCOUNTS_ENABLED !== "true"
+  ) {
+    problems.push(
+      "SOCIAL_PUBLISHING_ENABLED=true memerlukan CHANNEL_ACCOUNTS_ENABLED=true (penerbitan sosial hanya berjalan lewat akun terhubung dari registri akun kanal; tanpa registri, setiap akun ditolak)."
+    );
+  }
+
   if (env.CHANNEL_ACCOUNTS_ENABLED === "true") {
     const channelRing = resolveChannelSecretsRing(env as NodeJS.ProcessEnv);
 

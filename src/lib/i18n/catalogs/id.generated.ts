@@ -2232,6 +2232,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Slug": ["Slug"],
   "Snapshot history for server {serverId}.": ["Riwayat snapshot untuk server {serverId}."],
   "Snapshots": ["Snapshot"],
+  "Social Publishing": ["Penerbitan Sosial"],
   "Social profiles": ["Profil media sosial"],
   "Soft-deleted (this page)": ["Di-soft-delete (halaman ini)"],
   "Soft-deleted rules are excluded from the list above, so restore and purge are addressed by rule id. Deleting a rule on this page sends you back here with its id filled in.": ["Aturan yang di-soft-delete dikecualikan dari daftar di atas, jadi pemulihan dan pembersihan dialamatkan lewat id aturan. Menghapus sebuah aturan di halaman ini mengembalikan Anda ke sini dengan id-nya sudah terisi."],

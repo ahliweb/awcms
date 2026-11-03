@@ -38,7 +38,7 @@
  *    A reference to an ADR nobody wrote is a citation that cannot be checked by
  *    the reader either.
  * 3. **A skill for code that does not exist must say so, in a reasoned entry.**
- *    Target-spec and historical skills are legitimate — `awcms-social-publishing`
+ *    Target-spec and historical skills are legitimate — `awcms-document-infrastructure`
  *    describes a module worth building, `awcms-news-portal` records one that was
  *    merged away. They may cite paths that do not exist, but only from
  *    `ASPIRATIONAL_SKILLS` below, where each entry states which it is and why.
@@ -105,8 +105,6 @@ const ADR_ROOT = "docs/adr";
  * in the family.
  */
 const ASPIRATIONAL_SKILLS: Readonly<Record<string, string>> = {
-  "awcms-social-publishing":
-    "target-spec: the module is not built here; `blog_content` injects a no-op adapter at its call sites and swapping in a real one is a composition-root change.",
   "awcms-document-infrastructure":
     "target-spec: not built here; the paths describe where the module would live.",
   "awcms-integration-hub":
