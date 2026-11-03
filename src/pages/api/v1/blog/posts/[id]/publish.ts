@@ -34,13 +34,18 @@ import {
 } from "../../../../../../modules/blog-content/application/content-quality-checklist-gate";
 import { mediaLibraryPortAdapter } from "../../../../../../modules/media-library/application/media-library-port-adapter";
 import { noopSocialPublishingPortAdapter } from "../../../../../../modules/blog-content/application/social-publishing-port-noop-adapter";
+import { resolveSocialPublishingPort } from "../../../../../../modules/social-publishing/application/social-publishing-port-adapter";
 
-// This route is the composition root that would wire `social_publishing`'s
-// real `SocialPublishingPort` into the manual publish action (trigger
-// `post_published`) once that module is ported. Neither `news_portal` nor
-// `social_publishing` is ported to this base yet, so both ports are the
-// no-op adapters — see their own headers for the full reasoning.
-const socialPublishingPort = noopSocialPublishingPortAdapter;
+// This route is the composition root that wires `social_publishing`'s real
+// `SocialPublishingPort` into the manual publish action (trigger
+// `post_published`) — but ONLY when the deployment enables the module
+// (`SOCIAL_PUBLISHING_ENABLED`, ADR-0157 section 7). Otherwise it is
+// `blog_content`'s own no-op, exactly as before the module existed, so a
+// deployment that configures nothing behaves byte for byte the same.
+const socialPublishingPort = resolveSocialPublishingPort(
+  noopSocialPublishingPortAdapter,
+  mediaLibraryPortAdapter
+);
 
 const PUBLISH_GUARD = {
   moduleKey: "blog_content",

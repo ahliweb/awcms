@@ -1310,7 +1310,12 @@ describe("static contracts", () => {
       }
     }
 
-    expect(importers).toEqual(["scripts/whatsapp-dispatch.ts"]);
+    // The one other composition root is `social-publishing:dispatch` (Issue
+    // #1145, ADR-0157): a job that only ENQUEUES never reaches the secret store.
+    expect(importers.sort()).toEqual([
+      "scripts/social-publishing-dispatch.ts",
+      "scripts/whatsapp-dispatch.ts"
+    ]);
   });
 
   test("one queue, no dual write: the migration creates no queue table and the module owns exactly one message table", () => {

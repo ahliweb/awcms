@@ -718,6 +718,18 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // column-only grant) may purge, so a compromised web process cannot erase it.
   awcms_engagement_sources: ["SELECT", "INSERT", "UPDATE"],
   awcms_engagement_submissions: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0157 / `sql/330` (Issue #1145). NOT retired -- the social publishing
+  // settings, rules, publications, per-account jobs and attempt ledger, all
+  // actively written. Narrowed by removing exactly one verb, DELETE: a rule is
+  // disabled, a publication cancelled, a job's published state terminal and an
+  // attempt is evidence, so the runtime that serves the API cannot erase what was
+  // published under the tenant's name. (No retention sweep exists yet; see the
+  // recorded follow-up in docs/awcms/social-publishing.md.)
+  awcms_social_publishing_settings: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_rules: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publications: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_attempts: ["SELECT", "INSERT"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
@@ -1457,6 +1469,18 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // scope; a worker that could write it could change which number and provider
   // speak for a tenant.
   awcms_whatsapp_sender_policies: ["SELECT"],
+  // ADR-0157 / `sql/330` (Issue #1145). The article path enqueues from
+  // `blog:publish:scheduled` (reads the two tenant switches and the rules, inserts
+  // a publication and its jobs); `social-publishing:dispatch` claims and finalises
+  // jobs (UPDATE) and writes the attempt ledger. Neither deletes anything, neither
+  // updates a publication (its snapshot is immutable and its approval is an
+  // operator's act), and neither writes the switches or the rules: a worker that
+  // could would decide which accounts publish what.
+  awcms_social_publishing_settings: ["SELECT"],
+  awcms_social_publish_rules: ["SELECT"],
+  awcms_social_publications: ["SELECT", "INSERT"],
+  awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_attempts: ["SELECT", "INSERT"],
   // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
   // attempts, and ends (revokes/suspends) a binding whose principal is gone or
   // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
@@ -2344,10 +2368,11 @@ export async function checkWorkerSetupRoleGrants(
       }
     }
 
-    // The worker sees only WhatsApp sender credentials (sql/328, Issue #1233):
-    // the grant on awcms_channel_secrets.ciphertext is column-wide, and the
-    // RESTRICTIVE row policy is what keeps every tenant's social and email tokens
-    // out of a compromised dispatcher's reach. Pinned by name, kind, command,
+    // The worker sees only WhatsApp sender credentials and the tokens of
+    // publishing-capable social accounts (sql/328, Issue #1233; sql/332, Issue
+    // #1145): the grant on awcms_channel_secrets.ciphertext is column-wide, and the
+    // RESTRICTIVE row policy is what keeps every other social token and every
+    // email token out of a compromised dispatcher's reach. Pinned by name, kind, command,
     // role and by naming the provider test, so dropping or weakening it is a
     // finding rather than a silent loss.
     if (present.includes(WORKER_ROLE)) {
@@ -2366,7 +2391,7 @@ export async function checkWorkerSetupRoleGrants(
 
       if (!policy[0]?.has_policy) {
         findings.push(
-          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
+          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials and publishing-capable social accounts) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
         );
       }
     }
@@ -2529,7 +2554,7 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_telegram_bindings.chat_ciphertext":
     "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
   "awcms_channel_secrets.ciphertext":
-    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts)."
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Mailketing token, and a social token only as the next sentence says; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to the dispatch jobs alone. social-publishing:dispatch (Issue #1145, sql/332, ADR-0157 section 6) is the SECOND job that decrypts in-process: sql/332 adds, for it, only the access token of a live Facebook, Instagram, Threads, TikTok, YouTube or LinkedIn account (or of a connection such an account uses) that holds a GRANTED publish capability, so a social account nobody approved for publishing stays hidden. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts) and the access tokens of every publishing-capable social account."
 };
 
 /**
@@ -2549,6 +2574,8 @@ export const CREDENTIAL_LOOKING_COLUMN_PATTERN =
 export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
   "awcms_auth_providers.client_secret_env_var":
     "the NAME of an environment variable, not its value (sql/025)",
+  "awcms_social_publications.content_hash":
+    "SHA-256 over the publication's own PUBLIC content snapshot (title, caption, link, media), kept so two publications of the same content are recognisable and an edit is detectable; it is not keyed, protects nothing and unlocks nothing (sql/330)",
   "awcms_channel_oauth_states.redirect_uri_hash":
     "hash of the OAuth callback redirect URI the authorisation request was started with; not a secret (sql/318)",
   "awcms_channel_provider_connections.redirect_uri_hash":

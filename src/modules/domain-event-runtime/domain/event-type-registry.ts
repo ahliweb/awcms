@@ -170,8 +170,48 @@ export const WEBSITE_ENGAGEMENT_SUBMISSION_RECEIVED_EVENT_TYPE =
 export const WEBSITE_ENGAGEMENT_SUBMISSION_WITHDRAWN_EVENT_TYPE =
   "awcms.website_engagement.submission.withdrawn";
 
+/**
+ * `social_publishing` (ADR-0157, Issue #1145). Declared here -- not imported
+ * from `social-publishing/domain/social-publishing-constants.ts` -- for the same
+ * reason as `website_engagement` above. The literals are kept identical by the
+ * AsyncAPI parity gate and by `tests/social-publishing-contract.test.ts`.
+ */
+export const SOCIAL_PUBLISHING_EVENT_VERSION = "1.0";
+export const SOCIAL_PUBLICATION_QUEUED_EVENT_TYPE =
+  "awcms.social_publishing.publication.queued";
+export const SOCIAL_PUBLICATION_CANCELLED_EVENT_TYPE =
+  "awcms.social_publishing.publication.cancelled";
+export const SOCIAL_JOB_PUBLISHED_EVENT_TYPE =
+  "awcms.social_publishing.job.published";
+export const SOCIAL_JOB_FAILED_EVENT_TYPE =
+  "awcms.social_publishing.job.failed";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
+    {
+      eventType: SOCIAL_PUBLICATION_QUEUED_EVENT_TYPE,
+      eventVersion: SOCIAL_PUBLISHING_EVENT_VERSION,
+      description:
+        "Social publish jobs were queued for a publication, in the transaction that queued them (one event per enqueue call that created at least one job, however many accounts it targets). Carries the publication id, its source kind and article id, the trigger, the approval state, the number of jobs and the target account ids; never a caption, a title, a link or a credential."
+    },
+    {
+      eventType: SOCIAL_PUBLICATION_CANCELLED_EVENT_TYPE,
+      eventVersion: SOCIAL_PUBLISHING_EVENT_VERSION,
+      description:
+        "A social publication was cancelled by an operator. Carries the publication id, how many unsent jobs were cancelled and how many had already been published (those are untouched); never content."
+    },
+    {
+      eventType: SOCIAL_JOB_PUBLISHED_EVENT_TYPE,
+      eventVersion: SOCIAL_PUBLISHING_EVENT_VERSION,
+      description:
+        "One per-account social publish job was accepted by its provider, in the transaction that finalised it. Carries the job, publication and account ids, the provider key and the attempt number; the provider's post id and URL are read through the API, not carried."
+    },
+    {
+      eventType: SOCIAL_JOB_FAILED_EVENT_TYPE,
+      eventVersion: SOCIAL_PUBLISHING_EVENT_VERSION,
+      description:
+        "One per-account social publish job failed terminally (retry budget spent, a rejection, a revoked or disabled account, an account that stayed unavailable). Carries the job, publication and account ids, the provider key, a fixed failure code and the attempt number; never a provider message. A failed job does not affect a published sibling."
+    },
     {
       eventType: WEBSITE_ENGAGEMENT_SUBMISSION_RECEIVED_EVENT_TYPE,
       eventVersion: WEBSITE_ENGAGEMENT_EVENT_VERSION,

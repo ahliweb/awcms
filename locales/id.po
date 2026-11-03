@@ -7817,6 +7817,9 @@ msgstr "Akun Kanal"
 msgid "Website Engagement"
 msgstr "Keterlibatan Situs Web"
 
+msgid "Social Publishing"
+msgstr "Penerbitan Sosial"
+
 msgid "Tenant suspended"
 msgstr "Tenant ditangguhkan"
 

@@ -7,14 +7,14 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 35    |
-| Migrations                          | 244   |
-| `awcms_*` tables                    | 236   |
-| Tables with `FORCE` RLS             | 218   |
+| Registered modules                  | 36    |
+| Migrations                          | 247   |
+| `awcms_*` tables                    | 241   |
+| Tables with `FORCE` RLS             | 223   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 777   |
-| Route files                         | 604   |
-| ADR                                 | 314   |
+| Test files                          | 781   |
+| Route files                         | 614   |
+| ADR                                 | 316   |
 
 ### Modules
 
@@ -55,6 +55,7 @@
 | `telegram_delivery`    | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `channel_accounts`     | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
+| `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 
 ### Migrations
 
@@ -304,6 +305,9 @@
 | 242 | `sql/327_awcms_website_engagement_integrity_guards.sql`            |
 | 243 | `sql/328_awcms_whatsapp_sender_secret_visibility.sql`              |
 | 244 | `sql/329_awcms_whatsapp_sender_guard_shape.sql`                    |
+| 245 | `sql/330_awcms_social_publishing_schema.sql`                       |
+| 246 | `sql/331_awcms_social_publishing_permissions.sql`                  |
+| 247 | `sql/332_awcms_social_publishing_secret_visibility.sql`            |
 
 ### Tables & Row-Level Security
 
@@ -500,6 +504,11 @@
 | `awcms_site_search_index_runs`                 | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
 | `awcms_site_search_query_log`                  | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
 | `awcms_site_search_settings`                   | `sql/064_awcms_site_search_schema.sql`                     | yes | yes   |
+| `awcms_social_publications`                    | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publish_attempts`                | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publish_jobs`                    | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publish_rules`                   | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
+| `awcms_social_publishing_settings`             | `sql/330_awcms_social_publishing_schema.sql`               | yes | yes   |
 | `awcms_sod_conflict_evaluations`               | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
 | `awcms_sod_conflict_exceptions`                | `sql/029_awcms_sod_schema.sql`                             | yes | yes   |
 | `awcms_subject_requests`                       | `sql/125_awcms_subject_requests.sql`                       | yes | yes   |
@@ -550,16 +559,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 586        |
+| `(root)`      | 588        |
 | `e2e`         | 29         |
-| `integration` | 161        |
+| `integration` | 163        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 492   |
+| `/api/v1/**`    | 502   |
 | `/admin/**`     | 81    |
 | publik / anonim | 31    |
 

@@ -1,0 +1,102 @@
+🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](social-publishing.md)
+
+<!-- i18n-source-hash: sha256:51822c37546ad6f7aea8f672199bbfaa1eb34cb4a3bd97c3c94eccad95d8ed1a -->
+
+# Penerbitan sosial (`social_publishing`)
+
+> **Status:** fondasi terimplementasi, **tanpa konektor provider**. Issue [#1145](https://github.com/ahliweb/awcms/issues/1145), [ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md) (**Diusulkan**), kapabilitas C3 dari [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) dan [`omnichannel-foundation.id.md`](omnichannel-foundation.id.md) bagian 2.3. Migrasi `sql/330` sampai `sql/332`. Modul berstatus `experimental` dan mati secara default.
+
+## 1. Apa ini
+
+Modul yang mengubah "sebuah artikel diterbitkan" (atau "operator ingin ini disampaikan") menjadi **satu publikasi** dengan snapshot konten immutable dan **satu job per `channel_account` tujuan**, lalu mengantarkan tiap job lewat adapter provider, di luar transaksi apa pun, dicoba ulang dengan aman dan tidak pernah diputar ulang.
+
+Ia adalah tuan rumah plug-in. Ia mengirim antarmuka, registri, antrean, dispatcher, aturan persetujuan dan jadwal, serta API. Ia **tidak mengirim adapter provider** dan tidak melakukan panggilan provider: konektor Facebook, Instagram, Threads, TikTok, YouTube, dan LinkedIn adalah issue terpisah (#1146 sampai #1151), yang masing-masing juga membutuhkan persetujuan aplikasi provider atau bukti audit (langkah bisnis, bukan langkah kode). Sampai satu terdaftar, mengaktifkan modul tidak menerbitkan apa pun.
+
+## 2. Data
+
+| Tabel                              | Fakta kunci                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `awcms_social_publishing_settings` | Satu baris per tenant. `auto_publish_enabled` default `false`; `approval_required` default `true`                                                                                                                                                                                                                    |
+| `awcms_social_publish_rules`       | `(tenant, trigger, akun)` unik. `enabled`. Penunjuk ke akun, bukan hibah. Paling banyak 200 per tenant                                                                                                                                                                                                               |
+| `awcms_social_publications`        | Intent. `source_kind` (`article`, `manual`), `source_id`, trigger, `state`, snapshot immutable (`title`, `caption`, `link_url`, `media_snapshot`, `content_hash`), `not_before`, stempel persetujuan dan pembatalan. Unik per (artikel, trigger)                                                                     |
+| `awcms_social_publish_jobs`        | Satu per (publikasi, akun). `provider`, `account_kind`, `variant`, `idempotency_key` (unik per tenant), `status`, `attempt_count`, `max_attempts`, `hold_count`, `next_attempt_at` (juga lease klaim), id dan URL post dari provider, kegagalan berkode dan frasa tetap. **Tanpa token dan tanpa referensi rahasia** |
+| `awcms_social_publish_attempts`    | Ledger append-only, unik per (job, nomor percobaan): hasil, kode tetap, frasa tetap                                                                                                                                                                                                                                  |
+
+Status agregat sebuah publikasi (`pending_approval`, `queued`, `in_progress`, `partially_published`, `published`, `failed`, `cancelled`, `refused`) **diturunkan** dari job-nya saat dibaca.
+
+Mesin status:
+
+```text
+publication.state:  pending_approval -> ready -> cancelled        refused (final, nol job)
+                    pending_approval -> cancelled
+job.status:         queued -> publishing -> published (final)
+                                         -> retry_wait -> publishing ...
+                                         -> failed -> queued (hanya retry manual)
+                    queued | retry_wait -> cancelled (final)
+```
+
+Trigger database menegakkan: snapshot dan identitas tidak pernah berubah; job `published` dan `cancelled` tidak pernah berubah; job gagal hanya bisa kembali ke `queued`; penghitung percobaan tidak pernah turun; job hanya dibuat untuk publikasi yang hidup dan akun `connected` milik tenant yang sama.
+
+## 3. Alurnya
+
+1. **Event artikel.** `blog_content` memanggil `SocialPublishingPort.onArticlePublished` di dalam transaksi terbitnya. Dengan flag deployment mati, saklar tenant mati, atau tanpa aturan untuk trigger itu, ia menjawab `{ jobsCreated: 0 }` dan tidak berbuat apa-apa. Selain itu ia membangun snapshot (excerpt atau judul sebagai caption, `https://{origin APP_URL}/blog/{tenantCode}/{slug}` sebagai tautan, gambar unggulan di-resolve lewat `MediaLibraryPort`), lalu enqueue untuk setiap akun aturan yang aktif. Ia berjalan dalam savepoint: kegagalan apa pun hanya membatalkan tulisan modul ini dan artikel tetap terbit.
+2. **Publikasi manual.** `POST /api/v1/social-publishing/publications` menerima judul, caption, tautan opsional, objek media opsional, dan id akun. Pemanggil harus dapat memakai setiap akun.
+3. **Aturan enqueue, per akun, berurutan.** Akun boleh menerbitkan sekarang (port `channel_accounts`: terhubung, koneksi aktif, kapabilitas `publish` diberikan beserta bukti pada matriks saat ini); provider punya adapter; peta kapabilitas adapter dapat membawa konten (varian, panjang caption termasuk tautan, tipe dan ukuran gambar). Kegagalan apa pun adalah kode yang dikembalikan untuk akun itu. Akun dievaluasi sebelum apa pun ditulis, sehingga permintaan yang semua akunnya ditolak tidak mencatat apa pun.
+4. **Persetujuan dan jadwal.** Bila persetujuan diwajibkan, publikasi menunggu; dispatcher tidak mengklaim apa pun sebelum `approve`. Publikasi manual tidak dapat disetujui pembuatnya. `not_before` menunda dispatch; `schedule` memindahkannya selama belum ada yang di-dispatch.
+5. **Dispatch.** `bun run social-publishing:dispatch`, tiga fase: klaim (lease, advisory lock per akun, bagian adil dan batas harian, pemeriksaan ulang akun), kirim (kredensial didekripsi hanya untuk panggilan ini, adapter dipanggil dengan klien `ssrfSafeFetch`, timeout, dan circuit breaker per akun), finalisasi (compare-and-set pada percobaan yang diklaim, ledger, event, audit).
+
+## 4. Perilaku saat gagal
+
+| Situasi                                                                  | Hasil                                                                                                    |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Akun dicabut, dinonaktifkan, kapabilitas ditarik, koneksi dicabut        | Job `failed` (`ACCOUNT_*`), provider tidak pernah dipanggil, tidak ada yang dialihkan                    |
+| Akun terdegradasi, pending, grant kedaluwarsa, secret store tak tersedia | Job ditahan (`queued`, `hold_count + 1`, tanpa memakai percobaan); `HOLD_EXHAUSTED` setelah 12 penahanan |
+| Provider minta coba lagi, galat jaringan, adapter melempar               | `retry_wait` dengan backoff eksponensial (maksimum 4 jam); `RETRIES_EXHAUSTED` bila habis                |
+| Dibatasi laju                                                            | Sama, dan `retryAfterSeconds` provider hanya dapat memperpanjang tunggu                                  |
+| Kredensial tak lagi diterima                                             | `failed` `NEEDS_REAUTH`; tidak pernah dicoba ulang oleh backoff                                          |
+| Provider menolak konten                                                  | `failed` dengan kode tetap; tidak pernah dicoba ulang oleh backoff                                       |
+| Job lain dari publikasi yang sama gagal                                  | Tidak berpengaruh pada saudara yang sudah terbit; retry manual hanya memindahkan job yang gagal          |
+| Worker crash saat mengirim                                               | Lease habis, job diklaim lagi sebagai percobaan baru; provider diberi kunci idempotensi yang sama        |
+| Breaker terbuka untuk sebuah akun                                        | Job-nya tidak diklaim; akun lain tidak terpengaruh                                                       |
+
+## 5. Catatan keamanan
+
+- Job tidak pernah membawa kredensial. Dispatcher me-resolve-nya lewat `ChannelPublisherCredentialPort` (kapabilitas `channel_account` 1.1.0) dalam transaksi yang ditutup sebelum panggilan provider; hanya `scripts/social-publishing-dispatch.ts` yang menyusun adapter itu dan memegang `CHANNEL_SECRETS_ENCRYPTION_KEYS`.
+- `sql/332` melebarkan kebijakan baris `awcms_worker` pada `awcms_channel_secrets` dari kredensial pengirim WhatsApp menjadi juga mencakup access token akun Facebook, Instagram, Threads, TikTok, YouTube, atau LinkedIn yang hidup dan memegang kapabilitas `publish` yang **diberikan** (dan koneksi yang dipakai akun itu). Akun sosial yang tak seorang pun setujui untuk menerbitkan tetap tersembunyi. `social-publishing:dispatch` yang diretas tetap dapat mendekripsi token yang mampu menerbitkan milik setiap tenant: ini risiko residual yang diterima ADR-0148 bagian 5 untuk dispatcher, kini dinyatakan untuk job kedua.
+- Adapter menerima `request.http` (`ssrfSafeFetch`) dan tanpa `fetch` mentah; kredensial ada di memori untuk satu panggilan dan tidak pernah dicatat, disimpan, dijadikan event, diaudit, atau ditaruh di galat, dan pesan galat adapter yang dilempar tidak pernah disimpan. Kode kegagalan adalah kosakata tertutup yang dideklarasikan tiap adapter (`errorCodes`); kode di luarnya dicatat sebagai kode generik untuk hasilnya, sehingga string provider atau kredensial tidak dapat sampai ke baris lewat sebuah "kode".
+- Akses per akun: membuat publikasi, aturan, dan bertindak pada publikasi atau job mensyaratkan pemanggil dapat memakai setiap akun tujuan (aturan penugasan dan business scope `channel_accounts`); selain itu adalah `422 ACCOUNT_NOT_USABLE` atau `404` yang seragam. Pembacaan hanya digerbangi permission.
+- Setiap mutasi idempoten (`Idempotency-Key`), diaudit dengan id, kode, dan hitungan (tidak pernah caption, judul, atau URL), dan menolak kredensial mesin. Event membawa id, enum, dan hitungan.
+
+## 6. Permission
+
+`publications.read`, `publications.publish`, `publications.schedule`, `publications.approve`, `publications.cancel`, `jobs.retry`, `rules.read`, `rules.configure`, `settings.configure` (modul `social_publishing`, di-seed `sql/331`). Semuanya ada di ledger `NOT_YET_SCREENED` sampai layar hadir. Tenant yang dibuat sebelum migrasi ini membutuhkan `bun run identity-access:permissions:backfill`.
+
+## 7. Konfigurasi
+
+`SOCIAL_PUBLISHING_ENABLED` (mati secara default). Ia membutuhkan `CHANNEL_ACCOUNTS_ENABLED=true` (`config:validate` menolak kombinasi lain) dan `CHANNEL_SECRETS_ENCRYPTION_KEYS` untuk dispatcher. `APP_URL` harus `https` agar event artikel membawa tautan; bila tidak, event dicatat sebagai publikasi yang ditolak (`LINK_INVALID`).
+
+## 8. Matriks akseptansi (issue #1145) dan tesnya
+
+| Akseptansi                                                    | Tes                                                                                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 2 tenant x 3+ akun, isolasi token                             | `social-publishing.integration.test.ts` "N accounts of two tenants", "ITS OWN credential"                                 |
+| Kegagalan sebagian dan replay                                 | "a rejected account does not change a published one", "a published job can never be retried..."                           |
+| Pencabutan                                                    | "revoked account", "revoked connection and a withdrawn capability", "degraded account HOLDS"                              |
+| Validasi MIME dan media                                       | `social-publishing.test.ts` kelayakan media; "unsupported content is REFUSED per account"                                 |
+| SSRF                                                          | "the adapter's HTTP client is ssrfSafeFetch"                                                                              |
+| Kuota dan retry aman                                          | "daily cap holds under concurrent dispatchers", "concurrent dispatchers send every job exactly once", "RETRIES_EXHAUSTED" |
+| Idempotensi per (artikel, trigger, akun)                      | "an article event is idempotent per (article, trigger, account)", "concurrent identical article events"                   |
+| Persetujuan, jadwal                                           | "nothing is claimable before approval", "a schedule defers dispatch"                                                      |
+| Tanpa antrean ganda, migrasi forward-only, RLS FORCE          | `social-publishing-contract.test.ts`, tes "FORCE RLS"                                                                     |
+| Port tidak pernah menggagalkan terbit, flag mati adalah no-op | "off unless the deployment enables it", "an unexpected failure inside the port never aborts..."                           |
+
+## 9. Keterbatasan tersisa
+
+- **Tanpa adapter provider** (#1146 sampai #1151): belum ada yang terbit. Persetujuan aplikasi provider adalah langkah bisnis di luar repositori ini.
+- **Tanpa layar admin.** Layar admin SISTEM dibangun di sini ([ADR-0051](../adr/0051-admin-screens-consolidated-in-awcms.id.md)); kontrak layarnya adalah UP-08 sampai UP-16 di [`omnichannel-ui-ux-screen-contracts.id.md`](omnichannel-ui-ux-screen-contracts.id.md).
+- **Tanpa sapuan retensi** untuk publikasi, job, dan percobaan (diparkir di daftar `BOUNDED_BY_DESIGN` dengan alasan tercatat). Ia membutuhkan keputusan pemilik tentang berapa lama bukti apa yang diterbitkan atas nama tenant disimpan.
+- **Tanpa template caption**, tanpa pemformatan per provider selain menolak konten yang melebihi plafon panjang, tipe, atau ukuran, tanpa varian video, short, atau story (kosakatanya tertutup dan dicadangkan).
+- Jendela crash antara "provider menerima post" dan "job difinalisasi" hanya tertutup di mana provider menghormati kunci idempotensi yang diteruskan.
+- Pembacaan (daftar dan detail) digerbangi permission, bukan akses per akun.
+- Circuit breaker per proses: tiap proses dispatcher punya statusnya sendiri.
+- **ADR-0157 berstatus Diusulkan.** Penerimaan maintainer, dan tinjauan keamanan jalur kredensial sebelum konektor mana pun keluar dari flag, masih dibutuhkan.

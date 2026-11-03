@@ -1,5 +1,5 @@
 {
-  "moduleCount": 35,
+  "moduleCount": 36,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -499,6 +499,38 @@
       "capabilitiesConsumed": [],
       "permissionCount": 6,
       "navigationCount": 1,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "social_publishing",
+      "name": "Social Publishing",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "system",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "domain_event_runtime"
+      ],
+      "capabilitiesProvided": ["social_publishing"],
+      "capabilitiesConsumed": [
+        {
+          "capability": "channel_account",
+          "providedBy": "channel_accounts",
+          "optional": true
+        },
+        {
+          "capability": "media_library",
+          "providedBy": "media_library",
+          "optional": true
+        }
+      ],
+      "permissionCount": 9,
+      "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

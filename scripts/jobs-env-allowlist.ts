@@ -436,6 +436,11 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "whatsapp:dispatch",
         reason:
           "decrypts a tenant-owned WhatsApp sender's credential in memory, per lane, for the claimed row's tenant (#1141, the residual risk ADR-0148 section 5 accepts). The job that only ENQUEUES (booking:reminders:dispatch) never reaches the secret store"
+      },
+      {
+        target: "social-publishing:dispatch",
+        reason:
+          "decrypts a tenant-owned PUBLISHING account's access token in memory, for the claimed job's tenant, to make the one provider call (#1145, ADR-0157 section 6, the same residual risk ADR-0148 section 5 accepts; sql/332 limits what the worker role can see to accounts holding a granted publish capability). The jobs that only ENQUEUE (blog:publish:scheduled, and every request path) never reach the secret store"
       }
     ]
   },

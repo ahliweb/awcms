@@ -197,8 +197,15 @@ contracts:
     # channel_account is owned (provided) by the base `channel_accounts` module
     # (#1141, ADR-0148 capability C1): the port a channel module asks whether a
     # tenant-owned account may send now. Consumed (optional) by
-    # `whatsapp_delivery`. First assigned number.
-    channel_account: "1.0.0"
+    # `whatsapp_delivery`. 1.1.0 (#1145, ADR-0157) adds the exported
+    # ChannelPublisherPort and ChannelPublisherCredentialPort for
+    # `social_publishing`, as separate types, so nothing existing changed.
+    channel_account: "1.1.0"
+    # social_publishing is owned (provided) by the base `social_publishing`
+    # module (#1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
+    # consumed (optional) by `blog_content`. First assigned number: the port
+    # shape is unchanged since #643.
+    social_publishing: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

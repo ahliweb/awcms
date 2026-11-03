@@ -24,6 +24,8 @@
  */
 import type {
   ChannelAccountPort,
+  ChannelPublisherPort,
+  ResolvePublisherResult,
   ResolveWhatsappSenderResult,
   SenderUnavailableReason,
   WhatsappSenderProvider
@@ -33,7 +35,8 @@ import {
   evaluateCapability,
   getProviderRow,
   type CapabilityEvidenceKind,
-  type CapabilityRowFacts
+  type CapabilityRowFacts,
+  type ChannelCapability
 } from "../domain/provider-matrix";
 
 /** The (provider, kind) pairs that are a WhatsApp SENDING identity. A container (a WABA) holds no capability of its own; its numbers do. */
@@ -177,111 +180,211 @@ export type ChannelAccountPortOptions = {
   env?: NodeJS.ProcessEnv;
 };
 
+type AccountEvaluation =
+  | { usable: true; account: SenderAccountRow }
+  | { usable: false; reason: SenderUnavailableReason | "NOT_A_PUBLISHER" };
+
+/**
+ * The ONE evaluation of "may this account use `capability` right now", shared
+ * by every channel module (WhatsApp senders, publishers). The caller supplies
+ * only what differs: which (provider, kind) pairs count as the right KIND of
+ * identity, and the reason to give for any other.
+ */
+async function evaluateAccountForCapability(
+  tx: Bun.SQL,
+  env: NodeJS.ProcessEnv,
+  input: { tenantId: string; accountId: string },
+  capability: ChannelCapability,
+  shape: {
+    isRightKind: (account: SenderAccountRow) => boolean;
+    wrongKindReason: "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER";
+  }
+): Promise<AccountEvaluation> {
+  if (!isChannelAccountsEnabled(env)) {
+    return { usable: false, reason: "CHANNEL_ACCOUNTS_DISABLED" };
+  }
+
+  const account = await loadSenderAccount(tx, input.tenantId, input.accountId);
+
+  if (!account) return { usable: false, reason: "ACCOUNT_NOT_FOUND" };
+
+  if (!getProviderRow(account.provider) || !shape.isRightKind(account)) {
+    return { usable: false, reason: shape.wrongKindReason };
+  }
+
+  const statusReason = reasonForAccountStatus(account.status);
+
+  if (statusReason) return { usable: false, reason: statusReason };
+
+  // The EFFECTIVE connection: the account's own, else (OAuth only) the
+  // parent container's it borrows its token from. The credential adapter
+  // resolves the same one, so the two ports cannot disagree about whether
+  // the token is usable.
+  let connectionId = account.connection_id;
+
+  if (
+    account.auth_mode === "oauth2" &&
+    !connectionId &&
+    account.parent_account_id
+  ) {
+    const lender = await loadLendingParent(tx, input.tenantId, account);
+
+    if ("reason" in lender) return { usable: false, reason: lender.reason };
+
+    connectionId = lender.parent.connection_id;
+  }
+
+  let connectionGrantState: string | null = null;
+
+  if (connectionId) {
+    const connection = (await tx`
+      SELECT grant_state FROM awcms_channel_provider_connections
+      WHERE tenant_id = ${input.tenantId} AND id = ${connectionId}
+    `) as { grant_state: string }[];
+
+    // A connection that cannot be read is NOT an active one.
+    connectionGrantState = connection[0]?.grant_state ?? "missing";
+
+    const grantReason = reasonForGrantState(connectionGrantState);
+
+    if (grantReason) return { usable: false, reason: grantReason };
+  }
+
+  const capabilityRows = (await tx`
+    SELECT state, evidence_kind, evidence_ref, matrix_version
+    FROM awcms_channel_account_capabilities
+    WHERE tenant_id = ${input.tenantId} AND account_id = ${account.id}
+      AND capability = ${capability}
+  `) as CapabilityRow[];
+  const row = capabilityRows[0];
+  const verdict = evaluateCapability({
+    account: {
+      provider: account.provider,
+      accountKind: account.account_kind,
+      status: account.status,
+      connectionGrantState
+    },
+    capability,
+    row: row
+      ? {
+          state: row.state,
+          evidenceKind: row.evidence_kind,
+          evidenceRef: row.evidence_ref,
+          matrixVersion: row.matrix_version
+        }
+      : null
+  });
+
+  if (!verdict.allowed) {
+    return {
+      usable: false,
+      reason:
+        verdict.code === "CONNECTION_NOT_ACTIVE"
+          ? "CONNECTION_NOT_ACTIVE"
+          : verdict.code === "ACCOUNT_NOT_USABLE"
+            ? "ACCOUNT_DEGRADED"
+            : "CAPABILITY_DENIED"
+    };
+  }
+
+  return { usable: true, account };
+}
+
+/**
+ * Whether the provider matrix can EVER let this (provider, kind) publish: a
+ * container (a WABA) holds no capability of its own, and a provider whose
+ * `publish` cell is not offered, not applicable or barred never can. A pure
+ * pre-filter; the capability row and evidence still decide.
+ */
+export function isPublisherShape(
+  provider: string,
+  accountKind: string
+): boolean {
+  const row = getProviderRow(provider);
+
+  if (!row || !row.registrable) return false;
+
+  const kind = Object.hasOwn(row.kinds, accountKind)
+    ? row.kinds[accountKind]
+    : undefined;
+
+  if (!kind || kind.container === true) return false;
+
+  const cell = row.cells.publish;
+
+  return cell === "candidate" || cell === "restricted" || cell === "unverified";
+}
+
 export function createChannelAccountPortAdapter(
   options: ChannelAccountPortOptions = {}
-): ChannelAccountPort {
+): ChannelAccountPort & ChannelPublisherPort {
+  const envOf = () => options.env ?? process.env;
+
   return {
     async resolveWhatsappSender(
       tx,
       input
     ): Promise<ResolveWhatsappSenderResult> {
-      if (!isChannelAccountsEnabled(options.env ?? process.env)) {
-        return { usable: false, reason: "CHANNEL_ACCOUNTS_DISABLED" };
-      }
-
-      const account = await loadSenderAccount(
+      const evaluation = await evaluateAccountForCapability(
         tx,
-        input.tenantId,
-        input.accountId
+        envOf(),
+        input,
+        input.capability,
+        {
+          isRightKind: (account) =>
+            isWhatsappSenderShape(account.provider, account.account_kind),
+          wrongKindReason: "NOT_A_WHATSAPP_SENDER"
+        }
       );
 
-      if (!account) return { usable: false, reason: "ACCOUNT_NOT_FOUND" };
-
-      if (
-        !getProviderRow(account.provider) ||
-        !isWhatsappSenderShape(account.provider, account.account_kind)
-      ) {
-        return { usable: false, reason: "NOT_A_WHATSAPP_SENDER" };
-      }
-
-      const statusReason = reasonForAccountStatus(account.status);
-
-      if (statusReason) return { usable: false, reason: statusReason };
-
-      // The EFFECTIVE connection: the account's own, else (OAuth only) the
-      // parent container's it borrows its token from. The credential adapter
-      // resolves the same one, so the two ports cannot disagree about whether
-      // the token is usable.
-      let connectionId = account.connection_id;
-
-      if (
-        account.auth_mode === "oauth2" &&
-        !connectionId &&
-        account.parent_account_id
-      ) {
-        const lender = await loadLendingParent(tx, input.tenantId, account);
-
-        if ("reason" in lender) return { usable: false, reason: lender.reason };
-
-        connectionId = lender.parent.connection_id;
-      }
-
-      let connectionGrantState: string | null = null;
-
-      if (connectionId) {
-        const connection = (await tx`
-          SELECT grant_state FROM awcms_channel_provider_connections
-          WHERE tenant_id = ${input.tenantId} AND id = ${connectionId}
-        `) as { grant_state: string }[];
-
-        // A connection that cannot be read is NOT an active one.
-        connectionGrantState = connection[0]?.grant_state ?? "missing";
-
-        const grantReason = reasonForGrantState(connectionGrantState);
-
-        if (grantReason) return { usable: false, reason: grantReason };
-      }
-
-      const capabilityRows = (await tx`
-        SELECT state, evidence_kind, evidence_ref, matrix_version
-        FROM awcms_channel_account_capabilities
-        WHERE tenant_id = ${input.tenantId} AND account_id = ${account.id}
-          AND capability = ${input.capability}
-      `) as CapabilityRow[];
-      const row = capabilityRows[0];
-      const verdict = evaluateCapability({
-        account: {
-          provider: account.provider,
-          accountKind: account.account_kind,
-          status: account.status,
-          connectionGrantState
-        },
-        capability: input.capability,
-        row: row
-          ? {
-              state: row.state,
-              evidenceKind: row.evidence_kind,
-              evidenceRef: row.evidence_ref,
-              matrixVersion: row.matrix_version
-            }
-          : null
-      });
-
-      if (!verdict.allowed) {
+      if (!evaluation.usable) {
         return {
           usable: false,
-          reason:
-            verdict.code === "CONNECTION_NOT_ACTIVE"
-              ? "CONNECTION_NOT_ACTIVE"
-              : verdict.code === "ACCOUNT_NOT_USABLE"
-                ? "ACCOUNT_DEGRADED"
-                : "CAPABILITY_DENIED"
+          reason: evaluation.reason as SenderUnavailableReason
         };
       }
+
+      const account = evaluation.account;
 
       return {
         usable: true,
         sender: {
+          accountId: account.id,
+          provider: account.provider as WhatsappSenderProvider,
+          accountKind: account.account_kind,
+          externalId: account.external_id,
+          businessScope:
+            account.business_scope_type && account.business_scope_id
+              ? {
+                  type: account.business_scope_type,
+                  id: account.business_scope_id
+                }
+              : null
+        }
+      };
+    },
+
+    async resolvePublisher(tx, input): Promise<ResolvePublisherResult> {
+      const evaluation = await evaluateAccountForCapability(
+        tx,
+        envOf(),
+        input,
+        "publish",
+        {
+          isRightKind: (account) =>
+            isPublisherShape(account.provider, account.account_kind),
+          wrongKindReason: "NOT_A_PUBLISHER"
+        }
+      );
+
+      if (!evaluation.usable)
+        return { usable: false, reason: evaluation.reason };
+
+      const account = evaluation.account;
+
+      return {
+        usable: true,
+        publisher: {
           accountId: account.id,
           provider: account.provider,
           accountKind: account.account_kind,
@@ -300,5 +403,5 @@ export function createChannelAccountPortAdapter(
 }
 
 /** The adapter the composition roots hand to `whatsapp_delivery`. Reads `CHANNEL_ACCOUNTS_ENABLED` on every call. */
-export const channelAccountPortAdapter: ChannelAccountPort =
-  createChannelAccountPortAdapter();
+export const channelAccountPortAdapter: ChannelAccountPort &
+  ChannelPublisherPort = createChannelAccountPortAdapter();

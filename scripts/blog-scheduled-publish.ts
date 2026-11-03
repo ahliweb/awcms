@@ -27,12 +27,13 @@
  * This script is the composition root (ADR-0011) that wires the
  * `MediaLibraryPort` and `SocialPublishingPort` implementations into
  * `blog_content`'s scheduled-publish job. `media_library` IS ported
- * (ADR-0036), so this injects its real `mediaLibraryPortAdapter`;
- * `social_publishing` is NOT ported to this base yet, so this still injects
+ * (ADR-0036), so this injects its real `mediaLibraryPortAdapter`. For
+ * `social_publishing` (ADR-0157) it injects the REAL adapter only when the
+ * deployment enables the module (`SOCIAL_PUBLISHING_ENABLED`), otherwise
  * `blog_content`'s own `noopSocialPublishingPortAdapter` — see that adapter's
- * header. `blog-scheduled-publish.ts` (the application-layer file) itself never
- * imports either adapter directly, only the port TYPES — this script is the
- * only place that changes once `social_publishing` is ported too.
+ * header — so a deployment that configures nothing is unchanged.
+ * `blog-scheduled-publish.ts` (the application-layer file) itself never
+ * imports either adapter directly, only the port TYPES.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import {
@@ -51,10 +52,15 @@ import {
 } from "../src/modules/blog-content/application/blog-scheduled-publish";
 import { mediaLibraryPortAdapter } from "../src/modules/media-library/application/media-library-port-adapter";
 import { noopSocialPublishingPortAdapter } from "../src/modules/blog-content/application/social-publishing-port-noop-adapter";
+import { resolveSocialPublishingPort } from "../src/modules/social-publishing/application/social-publishing-port-adapter";
 
 async function main() {
   const sql = getWorkerDatabaseClient();
   const cliOptions = parseJobCliArgs(process.argv.slice(2));
+  const socialPublishingPort = resolveSocialPublishingPort(
+    noopSocialPublishingPortAdapter,
+    mediaLibraryPortAdapter
+  );
 
   try {
     const result = await runJob(
@@ -94,7 +100,7 @@ async function main() {
               tenant.id,
               mediaLibraryPortAdapter,
               { now: new Date(), correlationId: ctx.correlationId },
-              noopSocialPublishingPortAdapter
+              socialPublishingPort
             );
 
             totalPublished += tenantResult.publishedCount;

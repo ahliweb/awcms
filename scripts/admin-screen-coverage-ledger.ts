@@ -270,5 +270,23 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "website_engagement.sources.read",
   "website_engagement.submissions.read",
   "website_engagement.submissions.reveal",
-  "website_engagement.submissions.withdraw"
+  "website_engagement.submissions.withdraw",
+  // social_publishing (9) — ADR-0157 / Issue #1145. API-first and
+  // `experimental`: the operator screen (the publication list with its derived
+  // status, the per-account job table where a partial failure is read, the
+  // approval and caption/alt/media review, the schedule, per-job retry, the
+  // rules and the two tenant switches; the omnichannel screen contract UP-08..16)
+  // is the recorded follow-up that flips the module to `active` and adds its
+  // navigation entry in the same change (a nav entry without a page is a
+  // permanent 404). Admin screens for this family belong to `ahliweb/awcms-astro`
+  // only for the USER surface; this is SYSTEM admin and is built here.
+  "social_publishing.jobs.retry",
+  "social_publishing.publications.approve",
+  "social_publishing.publications.cancel",
+  "social_publishing.publications.publish",
+  "social_publishing.publications.read",
+  "social_publishing.publications.schedule",
+  "social_publishing.rules.configure",
+  "social_publishing.rules.read",
+  "social_publishing.settings.configure"
 ];

@@ -789,6 +789,64 @@ channels:
       `WebsiteEngagementSubmissionWithdrawn`. Downstream consumers MUST honour
       it. Idempotent: withdrawing an already withdrawn submission publishes
       nothing.
+  awcms.social_publishing.publication.queued:
+    address: awcms.social_publishing.publication.queued
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Social publish jobs were queued for a publication, in the transaction that
+      queued them (ADR-0157, Issue #1145). Producer:
+      `social-publishing/application/publication-enqueue.ts`'s
+      `enqueuePublication`, called from the article path
+      (`SocialPublishingPort.onArticlePublished`, inside `blog_content`'s publish
+      transaction) and from `POST /api/v1/social-publishing/publications`. ONE
+      event per enqueue call that created at least one job, however many accounts
+      it targets (the single domain event over the fan-out). The envelope
+      `payload` is `SocialPublicationQueued` : the
+      `publicationId`, the `sourceKind` and the article `sourceId`, the `trigger`,
+      the approval `state`, the `jobCount` and the target `accountIds`. Never a
+      caption, a title, a link or a credential. A repeated call that creates no
+      job publishes nothing.
+  awcms.social_publishing.publication.cancelled:
+    address: awcms.social_publishing.publication.cancelled
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A social publication was cancelled by an operator (ADR-0157, Issue #1145).
+      Producer: `POST /api/v1/social-publishing/publications/{id}/cancel`. The
+      envelope `payload` is `SocialPublicationCancelled`: how many unsent jobs were
+      cancelled and how many had already been published (those are untouched).
+      Idempotent: cancelling an already cancelled publication publishes nothing.
+  awcms.social_publishing.job.published:
+    address: awcms.social_publishing.job.published
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      One per-account social publish job was accepted by its provider, in the
+      transaction that finalised it (ADR-0157, Issue #1145). Producer:
+      `social-publishing/application/social-publish-dispatch.ts`'s finalise step
+      (`bun run social-publishing:dispatch`). The envelope `payload` is
+      `SocialJobPublished`: the job, publication and account ids, the provider key
+      and the attempt number. The provider's post id and URL are read through
+      `GET /api/v1/social-publishing/publications/{id}`, not carried. A superseded
+      finalise (the lease was re-claimed) publishes nothing.
+  awcms.social_publishing.job.failed:
+    address: awcms.social_publishing.job.failed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      One per-account social publish job failed terminally (ADR-0157, Issue
+      #1145): the retry budget is spent, the provider rejected the content or
+      asked for re-authorisation, the account was revoked or disabled or lost its
+      publish capability, or a degraded account stayed unavailable too long.
+      Producer: the same dispatcher. The envelope `payload` is `SocialJobFailed`:
+      the job, publication and account ids, the provider key, a fixed
+      `failureCode` and the attempt number (0 when no attempt was made). Never a
+      provider message. A failed job does not affect a published sibling.
 operations:
   publishDomainEventRuntimeSampleRecorded:
     action: send
@@ -1216,6 +1274,30 @@ operations:
       $ref: "#/channels/awcms.website_engagement.submission.withdrawn"
     messages:
       - $ref: "#/channels/awcms.website_engagement.submission.withdrawn/messages/DomainEvent"
+  publishSocialPublicationQueued:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.social_publishing.publication.queued"
+    messages:
+      - $ref: "#/channels/awcms.social_publishing.publication.queued/messages/DomainEvent"
+  publishSocialPublicationCancelled:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.social_publishing.publication.cancelled"
+    messages:
+      - $ref: "#/channels/awcms.social_publishing.publication.cancelled/messages/DomainEvent"
+  publishSocialJobPublished:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.social_publishing.job.published"
+    messages:
+      - $ref: "#/channels/awcms.social_publishing.job.published/messages/DomainEvent"
+  publishSocialJobFailed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.social_publishing.job.failed"
+    messages:
+      - $ref: "#/channels/awcms.social_publishing.job.failed/messages/DomainEvent"
 components:
   messages:
     DomainEvent:
@@ -1369,3 +1451,61 @@ components:
           }
         withdrawnAt: { type: string, format: date-time }
         privacyClass: { type: string, enum: [personal, anonymous] }
+    SocialPublicationQueued:
+      type: object
+      description: >-
+        The `payload` of `awcms.social_publishing.publication.queued`, eventVersion
+        1.0. Ids, enums and counts; never content.
+      required:
+        - publicationId
+        - sourceKind
+        - trigger
+        - state
+        - jobCount
+        - accountIds
+      properties:
+        publicationId: { type: string, format: uuid }
+        sourceKind: { type: string, enum: [article, manual] }
+        sourceId: { type: string, format: uuid }
+        trigger:
+          type: string
+          enum: [post_published, scheduled_published, manual_editor_action]
+        state: { type: string, enum: [pending_approval, ready] }
+        jobCount: { type: integer, minimum: 1 }
+        accountIds:
+          type: array
+          items: { type: string, format: uuid }
+    SocialPublicationCancelled:
+      type: object
+      description: >-
+        The `payload` of `awcms.social_publishing.publication.cancelled`,
+        eventVersion 1.0.
+      required: [publicationId, jobsCancelled, jobsAlreadyPublished]
+      properties:
+        publicationId: { type: string, format: uuid }
+        jobsCancelled: { type: integer, minimum: 0 }
+        jobsAlreadyPublished: { type: integer, minimum: 0 }
+    SocialJobPublished:
+      type: object
+      description: >-
+        The `payload` of `awcms.social_publishing.job.published`, eventVersion 1.0.
+      required: [jobId, publicationId, accountId, provider, attemptNo]
+      properties:
+        jobId: { type: string, format: uuid }
+        publicationId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        provider: { type: string }
+        attemptNo: { type: integer, minimum: 1 }
+    SocialJobFailed:
+      type: object
+      description: >-
+        The `payload` of `awcms.social_publishing.job.failed`, eventVersion 1.0.
+      required:
+        [jobId, publicationId, accountId, provider, failureCode, attemptNo]
+      properties:
+        jobId: { type: string, format: uuid }
+        publicationId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        provider: { type: string }
+        failureCode: { type: string }
+        attemptNo: { type: integer, minimum: 0 }

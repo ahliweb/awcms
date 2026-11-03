@@ -48,6 +48,8 @@ Names are **working names**; the physical design (columns, indexes, migration nu
 
 Publishing jobs reference a `channel_account` and a capability row, never a token. A job snapshots the content (the article's text and a verified media reference) at enqueue, is idempotent per `(article, trigger, account)`, goes through an approval state when the tenant requires one, and is dispatched outside any transaction. Replacing the `blog_content` no-op adapter is behind a flag, default off.
 
+**Built by Issue #1145 (3 November 2026)** as the `social_publishing` module ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.md), **Proposed**; [`social-publishing.md`](social-publishing.md); `sql/330` to `sql/332`): the publication, one job per account, approval, schedule, the `SocialPublishAdapter` interface with a per-provider capability map and the dispatcher. It ships with **no provider adapter**: the connectors are #1146 to #1151 and until one registers nothing is published. `sql/332` widens the worker's secret visibility to the access tokens of publishing-capable social accounts (stated in ADR-0157 section 6).
+
 ### 2.4 Inbound events and contact linkage (C4, Issue #1144 decides the rest)
 
 The event envelope is: `tenant_id`, `channel_account_id`, `provider_event_id`, `provider_conversation_id`, sender and recipient (platform-scoped ids), `privacy_class`, `occurred_at`, authenticated provenance, `correlation_id`. Idempotency key is `(channel_account_id, provider_event_id)`.

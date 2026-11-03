@@ -115,6 +115,12 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // yet (the operator screen is a follow-up): this map must cover every
   // registered module so its first screen lands in `engagement`.
   website_engagement: "engagement",
+  // ADR-0157 (Issue #1145). Audience engagement: it puts the tenant's content in
+  // front of an audience on social platforms. Placed even though the module
+  // declares NO navigation yet (the operator screen is a follow-up): this map
+  // must cover every registered module so its first screen lands in
+  // `engagement`.
+  social_publishing: "engagement",
   // ADR-0127. Placed even though the module declares NO navigation yet (the
   // rule-authoring screens are a recorded follow-up): this map must cover every
   // registered module, so its first screen lands in `commerce` rather than

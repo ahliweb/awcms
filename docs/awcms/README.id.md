@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:90801e6f3c5d25c8157434d9831783c411c0f8f9ee52666ca799da963465eea7 -->
+<!-- i18n-source-hash: sha256:b43dcad2dc1cee26726f46db7a8b883a66a2a7d9bd7a33117c9c4b26fd635521 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -8,7 +8,7 @@ Folder ini berisi paket dokumen teknis standar AWCMS — **template lini ERP/bac
 
 ## Status
 
-Repo ini sudah melewati tahap fondasi ulang (lihat [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **35 modul** fondasi + website/konten sudah live (termasuk `theming`, `blog-content` — yang sejak [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) juga memiliki seluruh bekas `news-portal`; auth lanjutan MFA/OIDC/SSO/business-scope/SoD; lihat [`../ARCHITECTURE.md`](../ARCHITECTURE.md) sebagai sumber kebenaran state kode). Sebagian dokumen di folder ini masih **rencana/target** untuk kapabilitas yang belum ada di sini (lihat [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md), yang dibaca sebagai daftar kebutuhan), bukan seluruhnya kondisi kode saat ini. Klaim "sudah live/tersedia/terverifikasi" dari dokumen sumber awcms-mini/awcms-micro dibaca sebagai **spesifikasi referensi**, bukan sebagai target yang mengikat: kapabilitas yang belum ada **dibangun di sini** lewat ADR admission-nya sendiri ([ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) §1), bukan di-port dari repo arsip.
+Repo ini sudah melewati tahap fondasi ulang (lihat [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **36 modul** fondasi + website/konten sudah live (termasuk `theming`, `blog-content` — yang sejak [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) juga memiliki seluruh bekas `news-portal`; auth lanjutan MFA/OIDC/SSO/business-scope/SoD; lihat [`../ARCHITECTURE.md`](../ARCHITECTURE.md) sebagai sumber kebenaran state kode). Sebagian dokumen di folder ini masih **rencana/target** untuk kapabilitas yang belum ada di sini (lihat [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md), yang dibaca sebagai daftar kebutuhan), bukan seluruhnya kondisi kode saat ini. Klaim "sudah live/tersedia/terverifikasi" dari dokumen sumber awcms-mini/awcms-micro dibaca sebagai **spesifikasi referensi**, bukan sebagai target yang mengikat: kapabilitas yang belum ada **dibangun di sini** lewat ADR admission-nya sendiri ([ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) §1), bukan di-port dari repo arsip.
 
 Paket ini sekarang mengadaptasi **seluruh** dokumen teknis dari repo acuan awcms-mini agar AWCMS siap dikembangkan dengan tooling agent yang sama (lihat juga [`.claude/skills/`](../../.claude/skills/README.md)). Dokumen yang berasal dari klaster website/e-commerce (news portal, social publishing, visitor analytics, comments, newsletter, SEO, dst.) kini dibaca sebagai **spesifikasi referensi** untuk kapabilitas yang sepadan ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), peta di [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)) — yang sudah mendarat hidup di `src/modules/` template ini, dan yang belum dibangun di sini lewat ADR admission-nya sendiri (ADR-0055 §1).
 
@@ -135,6 +135,10 @@ Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, da
 ## Fondasi omnichannel (desain, Diterima)
 
 [**Paket kesiapan fondasi omnichannel v1**](omnichannel-foundation.id.md) menyertai [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (Issue [#1139](https://github.com/ahliweb/awcms/issues/1139)): pembagian lima kapabilitas, kamus data logis, matriks kapabilitas provider (fail-closed per akun), semantik multi-pengirim, model ancaman, pembacaan kepatuhan, garis besar kontrak, rollout, dan matriks tes. **Hanya desain**: belum ada modul, tabel, rute, atau konektor.
+
+## Penerbitan sosial (fondasi terimplementasi, tanpa konektor)
+
+[**Penerbitan sosial**](social-publishing.id.md) mendokumentasikan modul `social_publishing` ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.id.md), Issue [#1145](https://github.com/ahliweb/awcms/issues/1145)): satu publikasi dengan snapshot konten immutable dan satu job per akun terhubung di belakang `SocialPublishingPort` yang sudah ada, dengan persetujuan, jadwal, antarmuka adapter provider yang peta kapabilitasnya adalah plafon dan tidak pernah hibah, dan dispatcher yang memanggil provider di luar transaksi apa pun. Tidak ada adapter provider yang dikirim (konektor adalah #1146 sampai #1151), belum ada layar admin.
 
 ## Website engagement (terimplementasi)
 

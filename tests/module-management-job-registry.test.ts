@@ -125,6 +125,7 @@ describe("fetchModuleJobs", () => {
         "bun run reporting:exports:dispatch",
         "bun run reporting:projections:refresh",
         "bun run site-search:reconcile",
+        "bun run social-publishing:dispatch",
         "bun run sync:objects:dispatch",
         "bun run sync:objects:purge",
         "bun run telegram:chat:rekey",

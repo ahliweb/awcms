@@ -178,6 +178,12 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # authoritative backbone.
 */15 * * * * /usr/bin/flock -n $AWCMS_LOCK/site-search-reconcile.lock $AWCMS_RUN_JOB site-search:reconcile >> $AWCMS_JOB_LOG/site-search-reconcile.log 2>&1
 
+# social_publishing — Drain the due social publish queue (claim lease,
+# per-account fair share and daily cap, account re-check, provider call
+# outside any transaction, retry/backoff, per-account circuit breaker) for
+# every active tenant.
+*/2 * * * * /usr/bin/flock -n $AWCMS_LOCK/social-publishing-dispatch.lock $AWCMS_RUN_JOB social-publishing:dispatch >> $AWCMS_JOB_LOG/social-publishing-dispatch.log 2>&1
+
 # sync_storage — Drain the due object sync upload queue (claim-lease,
 # retry/backoff, circuit breaker) for every active tenant.
 */2 * * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-dispatch.lock $AWCMS_RUN_JOB sync:objects:dispatch >> $AWCMS_JOB_LOG/sync-objects-dispatch.log 2>&1

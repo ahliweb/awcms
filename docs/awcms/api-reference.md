@@ -6463,7 +6463,7 @@ Read-only preview of which tags would be automatically linked in this post's ren
 - **operationId**: `blogPublishPost`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing outbox hook (a documented no-op in this base — social_publishing is not ported).
+Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing hook (`SocialPublishingPort`), which is a no-op unless the deployment enables the `social_publishing` module (`SOCIAL_PUBLISHING_ENABLED`, ADR-0157) and the tenant has opted in; it never fails the publication.
 
 **Parameters**
 
@@ -15578,6 +15578,329 @@ Requires `website_engagement.submissions.withdraw` and a signed-in person (a mac
 | 404    | Resource not found.                                                | [`ApiError`](#standard-error-envelope) |
 | 409    | `IDEMPOTENCY_CONFLICT`: the key was used with a different request. | [`ApiError`](#standard-error-envelope) |
 
+## Social Publishing
+
+Account-scoped social publishing (social_publishing module, Issue #1145, ADR-0157, ADR-0148 capability C3) behind the existing SocialPublishingPort that blog_content calls when an article is published. One PUBLICATION (an immutable content snapshot: text, link and a media object verified for type, size and rights) fans out to ONE JOB PER TARGET channel account, idempotent per article, trigger and account; a job names the account and holds no token and no secret reference, because the dispatcher resolves the credential for that account at dispatch time. Approval (required by default; a creator cannot approve their own publication), a schedule, per-account retry and cancel. Provider adapters are plug-ins whose capability map is a CEILING and never a grant: content a provider cannot carry is REFUSED, never downgraded, and an account still needs a granted publish capability with evidence, re-checked at enqueue and at dispatch. A job that was published is terminal, so a partial failure never replays a sibling and never alters the source article. No operation accepts or returns a token, a secret reference, a provider-side id or an account label. No provider adapter ships with this module (connectors are separate issues): until one registers, enabling it publishes nothing. Ships inert behind SOCIAL_PUBLISHING_ENABLED and a per-tenant switch.
+
+### `POST /api/v1/social-publishing/jobs/{id}/retry` — Retry ONE failed per-account job.
+
+- **operationId**: `retrySocialPublishJob`
+- **Security**: bearerAuth + tenantHeader
+
+Only that job moves, back to `queued` with a small bounded extra attempt budget. A published sibling is never touched and never replayed, and a job that already PUBLISHED can never be retried (`409 JOB_ALREADY_PUBLISHED`; the database enforces it as well). The publication must still be `ready` (approved and not cancelled). The caller must be able to use the job's account, otherwise `404`. `Idempotency-Key` required; audited. Requires `social_publishing.jobs.retry`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) | The resource id (a UUID of this tenant).                                                                                                                                                                        |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Responses**
+
+| Status | Description                                                                                          | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The job is queued again.                                                                             | object                                 |
+| 400    | Validation error.                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | `JOB_ALREADY_PUBLISHED`, `JOB_STATE_INVALID`, `PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                                                                        | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/social-publishing/providers` — The providers that have a publish adapter on this deployment, and what each can carry.
+
+- **operationId**: `listSocialPublishProviders`
+- **Security**: bearerAuth + tenantHeader
+
+The adapter's capability map: content variants, caption ceiling, image types and size. The map is a CEILING and not a grant: an account still needs a granted `publish` capability row with evidence (see `channel_accounts`). EMPTY until a provider connector registers an adapter, which is the fail-closed state: a provider with no adapter cannot publish. Not tenant data and never a credential. Requires `social_publishing.publications.read`.
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | The registered providers.     | object                                 |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/social-publishing/publications` — The tenant's social publications, newest first.
+
+- **operationId**: `listSocialPublications`
+- **Security**: bearerAuth + tenantHeader
+
+Keyset-paginated (`cursor` from the previous page, `limit` 1-100, default 25). Each item carries the immutable content snapshot, the approval and cancel lifecycle (`state`), the AGGREGATE `status` derived from its jobs (never stored) and per-status job counts. An invalid cursor is `400`. Never a credential, a token reference or an account label. Requires `social_publishing.publications.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                                       | Description                                                       |
+| -------- | ----- | -------- | ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| `state`  | query | no       | [`SocialPublicationState`](#schema-socialpublicationstate) | Narrow to one lifecycle state.                                    |
+| `limit`  | query | no       | integer                                                    | 1-100, default 25. Out-of-range values are REJECTED, not clamped. |
+| `cursor` | query | no       | string                                                     | Opaque cursor from `nextCursor`.                                  |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | A page of publications.       | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/social-publishing/publications` — Publish one piece of content to N connected accounts, now or later.
+
+- **operationId**: `createSocialPublication`
+- **Security**: bearerAuth + tenantHeader
+
+Creates ONE publication with an immutable content snapshot and ONE JOB PER ACCOUNT, in one transaction, with plain database writes only (no provider call). The request names accounts BY ID and carries no provider, token, page id or phone number (an unknown field is `400`). The caller must be able to use every named account (assignment rule and business scope of `channel_accounts`); any account they cannot use, another tenant's and an unknown id are ONE answer, `422 ACCOUNT_NOT_USABLE`, for the whole request, before anything is created.
+
+The content is snapshotted now. `mediaObjectId` must be a verified object of this tenant that `media_library` reports as an allowed image (JPEG, PNG or WebP) within 10 MB with a KNOWN rights status; otherwise `422 MEDIA_NOT_ELIGIBLE`. `linkUrl` must be a plain `https` URL on a named host (`422 LINK_INVALID`).
+
+Per account the request is accepted or REFUSED with a code: the account may not publish now (revoked, disabled, degraded, no granted `publish` capability with evidence, ...), the provider has no adapter on this deployment (`PROVIDER_ADAPTER_UNAVAILABLE`), or the provider's capability map cannot carry the content (`VARIANT_UNSUPPORTED`, `MEDIA_TYPE_UNSUPPORTED`, `MEDIA_TOO_LARGE`, `CONTENT_TOO_LONG`). Nothing is downgraded (an image is never posted as text), truncated or sent to another account. If EVERY account is refused the answer is `422 NO_ELIGIBLE_ACCOUNT` with the per-account codes in `error.details`, and nothing is recorded. When the tenant requires approval (the default) the publication starts `pending_approval` and its creator cannot approve it. `notBefore` defers dispatch. High-risk: `Idempotency-Key` required (a replay returns the stored response), audited at `warning`. Requires `social_publishing.publications.publish`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`SocialPublicationCreateRequest`](#schema-socialpublicationcreaterequest)
+
+**Responses**
+
+| Status | Description                                                                                                              | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 201    | The publication, its jobs, and the per-account outcome.                                                                  | object                                 |
+| 400    | Validation error.                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`: the key was already used with a different request.                                               | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body too large.                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 422    | `ACCOUNT_NOT_USABLE`, `MEDIA_NOT_ELIGIBLE`, `LINK_INVALID`, `TITLE_INVALID`, `CAPTION_INVALID` or `NO_ELIGIBLE_ACCOUNT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                                                                                            | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/social-publishing/publications/{id}` — One publication with ONE entry per target account.
+
+- **operationId**: `getSocialPublication`
+- **Security**: bearerAuth + tenantHeader
+
+The immutable content snapshot, the derived aggregate `status` and the per-account jobs, each with its own status, attempts, holds, coded failure and, once published, the provider's post id and URL. That list is how a partial failure is read: a failed account does not change a published one. Never a credential, a token reference or an account label. Requires `social_publishing.publications.read`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description                              |
+| ---- | ---- | -------- | ------------- | ---------------------------------------- |
+| `id` | path | yes      | string (uuid) | The resource id (a UUID of this tenant). |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | The publication and its jobs. | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/social-publishing/publications/{id}/approve` — Release a publication that is waiting for approval.
+
+- **operationId**: `approveSocialPublication`
+- **Security**: bearerAuth + tenantHeader
+
+Nothing is claimable by the dispatcher before this. Maker and checker: the person who created a manual publication cannot approve it (`403 SELF_APPROVAL_FORBIDDEN`). The caller must be able to use every targeted account, otherwise `404` exactly as for an unknown id. Idempotent: approving what is already approved is a `200` that changes nothing (`alreadyApproved: true`). A publication that is cancelled or refused is `409 PUBLICATION_STATE_INVALID`. High-risk: `Idempotency-Key` required, audited at `warning`. Requires `social_publishing.publications.approve`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) | The resource id (a UUID of this tenant).                                                                                                                                                                        |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Responses**
+
+| Status | Description                                            | Schema                                 |
+| ------ | ------------------------------------------------------ | -------------------------------------- |
+| 200    | The publication after approval.                        | object                                 |
+| 400    | Validation error.                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | `PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                          | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/social-publishing/publications/{id}/cancel` — Stop a publication; unsent jobs are cancelled, published ones are untouched.
+
+- **operationId**: `cancelSocialPublication`
+- **Security**: bearerAuth + tenantHeader
+
+The publication becomes `cancelled` and every job that has NOT been sent is cancelled with it. It never recalls or alters what already went out: a published job is terminal (the database refuses to change it) and is counted in `jobsAlreadyPublished`, and a job being sent right now is left to finish and counted in `jobsInFlight`. Cancelling a waiting publication is also how an approval is declined. The body is optional (`reason`, at most 300 characters). Idempotent. A refused publication is `409 PUBLICATION_STATE_INVALID`. The caller must be able to use every targeted account, otherwise `404`. High-risk: `Idempotency-Key` required, audited at `warning`. Requires `social_publishing.publications.cancel`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) | The resource id (a UUID of this tenant).                                                                                                                                                                        |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                          | Schema                                 |
+| ------ | -------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The publication after cancellation and what was and was not stopped. | object                                 |
+| 400    | Validation error.                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | `PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`.               | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                                        | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/social-publishing/publications/{id}/schedule` — Set or clear when a publication may start going out.
+
+- **operationId**: `scheduleSocialPublication`
+- **Security**: bearerAuth + tenantHeader
+
+`notBefore` is an ISO-8601 timestamp with a UTC offset, in the future and within a year, or `null` to clear. The dispatcher claims nothing of the publication before that instant and nothing before it is approved. Only while no job has left the queue: once any account has been tried the publication has started (`409 ALREADY_DISPATCHED`). The caller must be able to use every targeted account, otherwise `404`. High-risk: `Idempotency-Key` required, audited. Requires `social_publishing.publications.schedule`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) | The resource id (a UUID of this tenant).                                                                                                                                                                        |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                  | Schema                                 |
+| ------ | ---------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The publication with its new schedule.                                       | object                                 |
+| 400    | Validation error.                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | `ALREADY_DISPATCHED`, `PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                                                | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/social-publishing/rules` — Which connected accounts each article event publishes to.
+
+- **operationId**: `listSocialPublishRules`
+- **Security**: bearerAuth + tenantHeader
+
+A rule is a pointer, never a grant: the account's own `publish` capability decides, at enqueue and again at dispatch. Complete (bounded to 200), not paginated. Requires `social_publishing.rules.read`.
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | The rules.                    | object                                 |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/social-publishing/rules` — Publish an article event to one more account, or re-enable a rule.
+
+- **operationId**: `createSocialPublishRule`
+- **Security**: bearerAuth + tenantHeader
+
+The caller must be able to use the account (another tenant's account and an unknown id are one `422 ACCOUNT_NOT_USABLE`), and the account must be of a provider that can publish at all. Whether it MAY publish now is not asked here (a rule can be set up before an approval lands): that is decided at enqueue and at dispatch. `201` when created, `200` when a disabled rule was re-enabled. At most 200 rules per tenant (`422 RULE_LIMIT_REACHED`). High-risk: `Idempotency-Key` required, audited at `warning`. Requires `social_publishing.rules.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`SocialPublishRuleCreateRequest`](#schema-socialpublishrulecreaterequest)
+
+**Responses**
+
+| Status | Description                                   | Schema                                 |
+| ------ | --------------------------------------------- | -------------------------------------- |
+| 200    | A disabled rule was enabled again.            | object                                 |
+| 201    | The rule was added.                           | object                                 |
+| 400    | Validation error.                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                   | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.                       | [`ApiError`](#standard-error-envelope) |
+| 422    | `ACCOUNT_NOT_USABLE` or `RULE_LIMIT_REACHED`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.                 | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/social-publishing/rules/{id}` — Enable or disable a rule.
+
+- **operationId**: `updateSocialPublishRule`
+- **Security**: bearerAuth + tenantHeader
+
+A rule is never deleted (disabled, so history stays readable). A disabled rule stops FUTURE article events from queueing for that account and does not touch a publication already queued (cancel that). The caller must be able to use the rule's account, otherwise `404`. High-risk: `Idempotency-Key` required, audited at `warning`. Requires `social_publishing.rules.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) | The resource id (a UUID of this tenant).                                                                                                                                                                        |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | The rule.                     | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.       | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/social-publishing/settings` — This tenant's two switches.
+
+- **operationId**: `getSocialPublishingSettings`
+- **Security**: bearerAuth + tenantHeader
+
+A tenant that never set them is the safe default: nothing is published automatically (`autoPublishEnabled: false`) and approval is required (`approvalRequired: true`). Requires `social_publishing.rules.read`.
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | The settings.                 | object                                 |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/social-publishing/settings` — Switch automatic publishing and the approval requirement.
+
+- **operationId**: `updateSocialPublishingSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Prospective: a publication keeps the approval requirement it was created with, so turning approval OFF does not release anything already waiting. At least one field. High-risk: `Idempotency-Key` required, audited at `warning` with the previous and the new values. Requires `social_publishing.settings.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | The settings after the change. | object                                 |
+| 400    | Validation error.              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.    | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.        | [`ApiError`](#standard-error-envelope) |
+| 503    | `SOCIAL_PUBLISHING_DISABLED`.  | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -18639,6 +18962,68 @@ Every field is optional — an omitted field keeps its current value.
 }
 ```
 
+### Schema: SocialPublicationCreateRequest
+
+| Field           | Type                   | Required | Nullable | Description                                                                                           |
+| --------------- | ---------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `title`         | string                 | yes      | no       |                                                                                                       |
+| `caption`       | string                 | yes      | no       |                                                                                                       |
+| `linkUrl`       | string                 | no       | yes      | A plain `https` URL on a named host.                                                                  |
+| `mediaObjectId` | string (uuid)          | no       | yes      | A verified media object of this tenant: JPEG, PNG or WebP, at most 10 MB, with a known rights status. |
+| `accountIds`    | array of string (uuid) | yes      | no       |                                                                                                       |
+| `notBefore`     | string (date-time)     | no       | yes      | ISO-8601 with a UTC offset, in the future, within a year.                                             |
+
+**Example**
+
+```json
+{
+  "title": "string",
+  "caption": "string",
+  "linkUrl": "https://example.com/resource",
+  "mediaObjectId": "00000000-0000-0000-0000-000000000000",
+  "accountIds": ["00000000-0000-0000-0000-000000000000"],
+  "notBefore": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: SocialPublicationState
+
+The approval and cancel lifecycle only. `refused` is an article event whose CONTENT could not be published (an unsafe link, media that is not eligible): zero jobs, nothing sent. The publish status is `status`.
+
+Enum values: `pending_approval`, `ready`, `cancelled`, `refused`.
+
+**Example**
+
+```json
+"pending_approval"
+```
+
+### Schema: SocialPublishRuleCreateRequest
+
+| Field       | Type                                                   | Required | Nullable | Description |
+| ----------- | ------------------------------------------------------ | -------- | -------- | ----------- |
+| `trigger`   | [`SocialPublishTrigger`](#schema-socialpublishtrigger) | yes      | no       |             |
+| `accountId` | string (uuid)                                          | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "trigger": "post_published",
+  "accountId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: SocialPublishTrigger
+
+Enum values: `post_published`, `scheduled_published`, `manual_editor_action`.
+
+**Example**
+
+```json
+"post_published"
+```
+
 ### Schema: SoftDeleteMediaObjectRequest
 
 | Field    | Type   | Required | Nullable | Description                                                                                                                                                                                          |
@@ -19831,7 +20216,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (70)
+### Channels (74)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -19883,6 +20268,10 @@ consumer/subscriber contract in this file).
 - `awcms.inventory.stock.low` — A stock balance crossed to or below its low-stock threshold (ADR-0126, Issue #887) — by a movement or by a threshold change. Producer: `inventory/application/inventory-ledger.ts`'s `recordLowStockTransition`. Published ONCE per downward crossing, not on every movement while the balance stays low, and never for the recovery (that is recorded in the signals table the reporting projection reads). Payload: `locationId`, `itemType`, `itemRef`, `onHand`, `threshold`, `movementId` (null when a threshold change caused it).
 - `awcms.procurement.document.finalised` — A procurement document (receive, supplier_return, requisition or transfer) was finalised and its inventory movements posted through the ledger's port (ADR-0128, Issue #888), in one transaction. Producer: `procurement/application/procurement-posting.ts`'s `finaliseDocument`. Published once per document — a replayed finalise posts and publishes nothing. Payload: `documentId`, `documentNo`, `mode`, `supplierId`, `locationId`, `sourceLocationId`, `currencyCode`, `totalCost` (decimal string), `lineCount`, `movementCount`. Never a supplier name, an identifier, a note or a reason.
 - `awcms.procurement.document.reversed` — A finalised procurement document was reversed: compensating inventory movements were posted and the document marked reversed (ADR-0128, Issue #888), in one transaction. Producer: `procurement/application/procurement-posting.ts`'s `reverseDocument`. Same payload shape as `document.finalised`.
+- `awcms.social_publishing.job.failed` — One per-account social publish job failed terminally (ADR-0157, Issue #1145): the retry budget is spent, the provider rejected the content or asked for re-authorisation, the account was revoked or disabled or lost its publish capability, or a degraded account stayed unavailable too long. Producer: the same dispatcher. The envelope `payload` is `SocialJobFailed`: the job, publication and account ids, the provider key, a fixed `failureCode` and the attempt number (0 when no attempt was made). Never a provider message. A failed job does not affect a published sibling.
+- `awcms.social_publishing.job.published` — One per-account social publish job was accepted by its provider, in the transaction that finalised it (ADR-0157, Issue #1145). Producer: `social-publishing/application/social-publish-dispatch.ts`'s finalise step (`bun run social-publishing:dispatch`). The envelope `payload` is `SocialJobPublished`: the job, publication and account ids, the provider key and the attempt number. The provider's post id and URL are read through `GET /api/v1/social-publishing/publications/{id}`, not carried. A superseded finalise (the lease was re-claimed) publishes nothing.
+- `awcms.social_publishing.publication.cancelled` — A social publication was cancelled by an operator (ADR-0157, Issue #1145). Producer: `POST /api/v1/social-publishing/publications/{id}/cancel`. The envelope `payload` is `SocialPublicationCancelled`: how many unsent jobs were cancelled and how many had already been published (those are untouched). Idempotent: cancelling an already cancelled publication publishes nothing.
+- `awcms.social_publishing.publication.queued` — Social publish jobs were queued for a publication, in the transaction that queued them (ADR-0157, Issue #1145). Producer: `social-publishing/application/publication-enqueue.ts`'s `enqueuePublication`, called from the article path (`SocialPublishingPort.onArticlePublished`, inside `blog_content`'s publish transaction) and from `POST /api/v1/social-publishing/publications`. ONE event per enqueue call that created at least one job, however many accounts it targets (the single domain event over the fan-out). The envelope `payload` is `SocialPublicationQueued` : the `publicationId`, the `sourceKind` and the article `sourceId`, the `trigger`, the approval `state`, the `jobCount` and the target `accountIds`. Never a caption, a title, a link or a credential. A repeated call that creates no job publishes nothing.
 - `awcms.tax.rule_version.published` — A tax rule version was published and became the rule in force from its effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishRuleVersionPublishedEvent`, called by `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The payload carries identifiers, codes and dates only — `ruleVersionId`, `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and `closedVersionId` (the predecessor whose window this ended, or null).
 - `awcms.tax.snapshot.finalised` — A document's tax was finalised into an immutable snapshot (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written — an idempotent replay publishes nothing. The payload carries the opaque document reference, the rule version used, the tax date and decimal-string totals; no customer data of any kind.
 - `awcms.tax.snapshot.reversed` — A finalised document's tax was reversed from its original snapshot (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is written. Same payload shape as `snapshot.finalised`; the totals are negative decimal strings and `originalSnapshotId` is set.

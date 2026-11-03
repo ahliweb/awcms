@@ -26,7 +26,9 @@
  * fails the row or holds it. There is no fallback to any other credential.
  */
 import type {
+  ChannelPublisherCredentialPort,
   ChannelSenderCredentialPort,
+  ResolvePublishCredentialResult,
   ResolveSenderCredentialResult,
   SenderUnavailableReason
 } from "../../_shared/ports/channel-account-port";
@@ -34,6 +36,7 @@ import { log } from "../../../lib/logging/logger";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import type { ChannelSecretPurpose } from "../domain/channel-accounts-constants";
 import {
+  isPublisherShape,
   isWhatsappSenderShape,
   loadLendingParent,
   loadSenderAccount,
@@ -149,81 +152,117 @@ export type ChannelSenderCredentialOptions = {
 
 export function createChannelSenderCredentialAdapter(
   options: ChannelSenderCredentialOptions = {}
-): ChannelSenderCredentialPort {
+): ChannelSenderCredentialPort & ChannelPublisherCredentialPort {
   const store = options.store ?? defaultSecretStore;
   const now = options.now ?? (() => new Date());
+
+  /** The shared tail: status, reference, decrypt. Identical for every channel. */
+  async function resolveFor(
+    tx: Bun.SQL,
+    input: { tenantId: string; accountId: string },
+    isRightKind: (account: SenderAccountRow) => boolean,
+    wrongKindReason: "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER"
+  ): Promise<
+    | { ok: true; credential: string }
+    | { ok: false; reason: SenderUnavailableReason | "NOT_A_PUBLISHER" }
+  > {
+    if (!isChannelAccountsEnabled(options.env ?? process.env)) {
+      return { ok: false, reason: "CHANNEL_ACCOUNTS_DISABLED" };
+    }
+
+    const account = await loadSenderAccount(
+      tx,
+      input.tenantId,
+      input.accountId
+    );
+
+    if (!account) return { ok: false, reason: "ACCOUNT_NOT_FOUND" };
+
+    if (!isRightKind(account)) {
+      return { ok: false, reason: wrongKindReason };
+    }
+
+    const statusReason = reasonForAccountStatus(account.status);
+
+    if (statusReason) return { ok: false, reason: statusReason };
+
+    const reference = await referenceFor(tx, input.tenantId, account, now());
+
+    if ("reason" in reference) return { ok: false, reason: reference.reason };
+
+    try {
+      const credential = await store.resolve(tx, {
+        tenantId: input.tenantId,
+        secretId: reference.secretId,
+        purpose: reference.purpose
+      });
+
+      return { ok: true, credential };
+    } catch (error) {
+      // tx-swallow-ok: a SecretStoreError is raised before any statement (no
+      // key ring) or after a SUCCESSFUL select (not found, does not
+      // authenticate), so the transaction is not aborted; any other error, a
+      // database one, is rethrown below.
+      if (error instanceof SecretStoreError) {
+        // Only a secret-store REFUSAL is answered here. It is raised before any
+        // statement (no key ring) or after a successful SELECT (not found, does
+        // not authenticate), so it leaves the transaction usable. Only the code
+        // is logged: the error carries a fixed message, never the value or key
+        // material, and neither does this line.
+        log("error", "channel_accounts.sender_credential.unavailable", {
+          tenantId: input.tenantId,
+          moduleKey: "channel_accounts",
+          code: error.code
+        });
+
+        return {
+          ok: false,
+          reason:
+            error.code === "SECRET_NOT_FOUND"
+              ? "CREDENTIAL_UNAVAILABLE"
+              : "SECRET_STORE_UNAVAILABLE"
+        };
+      }
+
+      // Anything else is a database error, which WOULD have aborted the
+      // transaction: never swallowed.
+      throw error;
+    }
+  }
 
   return {
     async resolveWhatsappCredential(
       tx,
       input
     ): Promise<ResolveSenderCredentialResult> {
-      if (!isChannelAccountsEnabled(options.env ?? process.env)) {
-        return { ok: false, reason: "CHANNEL_ACCOUNTS_DISABLED" };
-      }
-
-      const account = await loadSenderAccount(
+      const result = await resolveFor(
         tx,
-        input.tenantId,
-        input.accountId
+        input,
+        (account) =>
+          isWhatsappSenderShape(account.provider, account.account_kind),
+        "NOT_A_WHATSAPP_SENDER"
       );
 
-      if (!account) return { ok: false, reason: "ACCOUNT_NOT_FOUND" };
+      return result.ok
+        ? result
+        : { ok: false, reason: result.reason as SenderUnavailableReason };
+    },
 
-      if (!isWhatsappSenderShape(account.provider, account.account_kind)) {
-        return { ok: false, reason: "NOT_A_WHATSAPP_SENDER" };
-      }
-
-      const statusReason = reasonForAccountStatus(account.status);
-
-      if (statusReason) return { ok: false, reason: statusReason };
-
-      const reference = await referenceFor(tx, input.tenantId, account, now());
-
-      if ("reason" in reference) return { ok: false, reason: reference.reason };
-
-      try {
-        const credential = await store.resolve(tx, {
-          tenantId: input.tenantId,
-          secretId: reference.secretId,
-          purpose: reference.purpose
-        });
-
-        return { ok: true, credential };
-      } catch (error) {
-        // tx-swallow-ok: a SecretStoreError is raised before any statement (no
-        // key ring) or after a SUCCESSFUL select (not found, does not
-        // authenticate), so the transaction is not aborted; any other error, a
-        // database one, is rethrown below.
-        if (error instanceof SecretStoreError) {
-          // Only a secret-store REFUSAL is answered here. It is raised before any
-          // statement (no key ring) or after a successful SELECT (not found, does
-          // not authenticate), so it leaves the transaction usable. Only the code
-          // is logged: the error carries a fixed message, never the value or key
-          // material, and neither does this line.
-          log("error", "channel_accounts.sender_credential.unavailable", {
-            tenantId: input.tenantId,
-            moduleKey: "channel_accounts",
-            code: error.code
-          });
-
-          return {
-            ok: false,
-            reason:
-              error.code === "SECRET_NOT_FOUND"
-                ? "CREDENTIAL_UNAVAILABLE"
-                : "SECRET_STORE_UNAVAILABLE"
-          };
-        }
-
-        // Anything else is a database error, which WOULD have aborted the
-        // transaction: never swallowed.
-        throw error;
-      }
+    /** Issue #1145: the same decrypt, for an account that publishes. */
+    async resolvePublishCredential(
+      tx,
+      input
+    ): Promise<ResolvePublishCredentialResult> {
+      return resolveFor(
+        tx,
+        input,
+        (account) => isPublisherShape(account.provider, account.account_kind),
+        "NOT_A_PUBLISHER"
+      );
     }
   };
 }
 
 /** The adapter the dispatcher's composition root hands to `whatsapp_delivery`. */
-export const channelSenderCredentialAdapter: ChannelSenderCredentialPort =
-  createChannelSenderCredentialAdapter();
+export const channelSenderCredentialAdapter: ChannelSenderCredentialPort &
+  ChannelPublisherCredentialPort = createChannelSenderCredentialAdapter();

@@ -118,3 +118,71 @@ export interface ChannelSenderCredentialPort {
     input: { tenantId: string; accountId: string }
   ): Promise<ResolveSenderCredentialResult>;
 }
+
+// ---------------------------------------------------------------------------
+// Publishing (Issue #1145, ADR-0157; capability `channel_account` 1.1.0)
+// ---------------------------------------------------------------------------
+//
+// `social_publishing` asks the same two questions of an account that
+// `whatsapp_delivery` does, for the `publish` capability instead of a WhatsApp
+// one, and under the same rules: every refusal is a returned value, a database
+// error is the only thing that throws, another tenant's account and an unknown
+// id are one answer, and there is no fallback to another account or provider.
+//
+// These are SEPARATE types from {@link ChannelAccountPort} and
+// {@link ChannelSenderCredentialPort} (not new methods on them) so that an
+// existing implementer or fake of the 1.0.0 ports keeps compiling: the bump is
+// a MINOR one, additive by construction.
+
+/** The publishing reasons are the sender reasons plus one: the account has no publishing identity. */
+export type PublisherUnavailableReason =
+  | SenderUnavailableReason
+  /** The provider matrix has no `publish` cell for this (provider, kind): a container, or a provider that cannot publish. */
+  | "NOT_A_PUBLISHER";
+
+export type ResolvedPublisher = {
+  accountId: string;
+  provider: string;
+  accountKind: string;
+  /** The provider-stable identity (page id, channel id, profile id), read from the account and never from a caller. */
+  externalId: string;
+  /** `null` is tenant-wide. */
+  businessScope: { type: string; id: string } | null;
+};
+
+export type ResolvePublisherInput = { tenantId: string; accountId: string };
+
+export type ResolvePublisherResult =
+  | { usable: true; publisher: ResolvedPublisher }
+  | { usable: false; reason: PublisherUnavailableReason };
+
+export interface ChannelPublisherPort {
+  /**
+   * Whether `accountId` of `tenantId` may publish right now: the account is
+   * `connected`, its connection grant `active`, and its `publish` capability is
+   * `granted` with evidence under the current provider matrix. Re-evaluated on
+   * every call. Never returns a credential.
+   */
+  resolvePublisher(
+    tx: Bun.SQL,
+    input: ResolvePublisherInput
+  ): Promise<ResolvePublisherResult>;
+}
+
+export type ResolvePublishCredentialResult =
+  | { ok: true; credential: string }
+  | { ok: false; reason: PublisherUnavailableReason };
+
+export interface ChannelPublisherCredentialPort {
+  /**
+   * DISPATCHER AND PROVIDER ADAPTERS ONLY. Decrypts the credential of an
+   * account the caller has ALREADY resolved as a usable publisher, for the
+   * transaction's tenant, in memory. The value must not be logged, stored,
+   * evented, audited or put in a job payload (ADR-0148 I3). Counted per tenant
+   * and purpose like every other decrypt.
+   */
+  resolvePublishCredential(
+    tx: Bun.SQL,
+    input: ResolvePublisherInput
+  ): Promise<ResolvePublishCredentialResult>;
+}

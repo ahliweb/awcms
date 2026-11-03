@@ -320,7 +320,7 @@ paths:
         - Blog Content
       operationId: blogPublishPost
       summary: Publish a blog post
-      description: Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing outbox hook (a documented no-op in this base — social_publishing is not ported).
+      description: Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing hook (`SocialPublishingPort`), which is a no-op unless the deployment enables the `social_publishing` module (`SOCIAL_PUBLISHING_ENABLED`, ADR-0157) and the tenant has opted in; it never fails the publication.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CorrelationId"

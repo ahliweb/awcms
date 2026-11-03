@@ -136,6 +136,10 @@ See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every tas
 
 [**Omnichannel foundation readiness pack v1**](omnichannel-foundation.md) accompanies [ADR-0148](../adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (Issue [#1139](https://github.com/ahliweb/awcms/issues/1139)): the five-capability split, the logical data dictionary, the provider capability matrix (fail-closed per account), multi-sender semantics, the threat model, the compliance reading, the contracts outline, the rollout and the test matrix. **Design only**: no module, table, route or connector exists yet.
 
+## Social publishing (implemented foundation, no connector)
+
+[**Social publishing**](social-publishing.md) documents the `social_publishing` module ([ADR-0157](../adr/0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.md), Issue [#1145](https://github.com/ahliweb/awcms/issues/1145)): one publication with an immutable content snapshot and one job per connected account behind the existing `SocialPublishingPort`, with approval, a schedule, a provider-adapter interface whose capability map is a ceiling and never a grant, and a dispatcher that calls providers outside any transaction. No provider adapter ships (connectors are #1146 to #1151), no admin screen yet.
+
 ## Website engagement (implemented)
 
 [**Website engagement**](website-engagement.md) documents the `website_engagement` module ([ADR-0155](../adr/0155-website-engagement-is-an-intake-only-system-module-with-token-and-origin-provenance.md), Issue [#1153](https://github.com/ahliweb/awcms/issues/1153)): tenant-scoped website lead and contact capture, intake only, authenticated by a per-source token and the verified Origin host, with explicit consent provenance and an outbox event contract for a downstream CRM adapter.

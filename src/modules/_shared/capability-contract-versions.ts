@@ -69,10 +69,9 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // to `news_media` must fail loudly rather than silently bind to a port that no
     // longer asks the question it asked.
     //
-    // The other content capabilities `public_content`/`social_publishing`
-    // (blog_content provides public_content; social_publishing is not ported)
-    // remain unlisted — out of scope for this change and, for social_publishing,
-    // not owned by any base module yet.
+    // The other content capability `public_content` (blog_content provides it)
+    // remains unlisted — out of scope for this change. `social_publishing` is
+    // listed at the end of this map since Issue #1145 gave it a provider.
     media_library: "1.0.0",
     // seo_facts provides (ADR-0038 seo_distribution admission — the DISCOVERY
     // scope, adapting awcms-micro ADR-0028). Owned (provided) by `blog_content`
@@ -134,5 +133,15 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // channel_account is provided by the base `channel_accounts` module (Issue
     // #1141, ADR-0148 capability C1) and consumed, optionally, by
     // `whatsapp_delivery`. First assigned number, not a stability milestone.
-    channel_account: "1.0.0"
+    // `1.1.0` (Issue #1145, ADR-0157) ADDS two exported ports,
+    // `ChannelPublisherPort` and `ChannelPublisherCredentialPort`, for
+    // `social_publishing`. They are separate types, so no existing signature
+    // changed (a MINOR bump) and a 1.0.0 implementer or fake still compiles.
+    channel_account: "1.1.0",
+    // social_publishing is provided by the base `social_publishing` module
+    // (Issue #1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
+    // which `blog_content` already consumed (optional) while the provider was a
+    // no-op. First assigned number: the port is unchanged from the day it was
+    // declared (#643), what changed is that a base module now provides it.
+    social_publishing: "1.0.0"
   });

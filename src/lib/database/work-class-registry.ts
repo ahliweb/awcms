@@ -130,6 +130,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Outbox dispatcher (whatsapp:dispatch, ADR-0133), recommended every 1-2 minutes — the same profile as push/email dispatch, and every withTenantOrThrow call inside whatsapp-dispatch.ts already passes workClass: "background_sync" explicitly.'
   },
+  "scripts/social-publishing-dispatch.ts": {
+    workClass: "background_sync",
+    rationale:
+      'Outbox dispatcher (social-publishing:dispatch, ADR-0157), recommended every 2 minutes — the same profile as push/email/whatsapp dispatch, and every transaction inside social-publish-dispatch.ts goes through inTenantWork, which passes workClass: "background_sync" explicitly.'
+  },
   "scripts/whatsapp-queue-purge.ts": {
     workClass: "maintenance",
     rationale:

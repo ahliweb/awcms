@@ -1,0 +1,1194 @@
+# Source fragment for the "social_publishing" module (Issue #1145, ADR-0157,
+# ADR-0148 capability C3).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations. Schemas
+# shared by 2+ modules (or referenced by none) live in the root fragment
+# (openapi/awcms-public-api.src.yaml) instead.
+#
+# NOT independently valid OpenAPI: $ref targets pointing at shared components
+# (securitySchemes/parameters/responses) only resolve after
+# `bun run openapi:bundle` merges this file with the root fragment and every
+# sibling module fragment into openapi/awcms-public-api.openapi.yaml. Edit this
+# file (or the root fragment for shared components), never the generated bundle.
+#
+# ## What is deliberately NOT here
+#
+# No operation accepts, stores or returns a token, a secret reference, a
+# provider, a page id, a phone number or an account label: a publication names
+# its accounts BY ID, and the provider, kind and external id are read from each
+# account's record. There is no "publish now to provider X with token Y": a
+# connector is a plug-in behind the dispatcher (#1146 to #1151), not an endpoint.
+# There is no delete: a rule is disabled, a publication is cancelled, a job that
+# was published is terminal.
+#
+# Every operation answers `503 SOCIAL_PUBLISHING_DISABLED` (after authorization)
+# unless the deployment enables the module; every mutation refuses a machine
+# credential (`403 INTERACTIVE_SESSION_REQUIRED`).
+paths:
+  /api/v1/social-publishing/publications:
+    get:
+      operationId: listSocialPublications
+      tags:
+        - Social Publishing
+      summary: The tenant's social publications, newest first.
+      description: >-
+        Keyset-paginated (`cursor` from the previous page, `limit` 1-100, default
+        25). Each item carries the immutable content snapshot, the approval and
+        cancel lifecycle (`state`), the AGGREGATE `status` derived from its jobs
+        (never stored) and per-status job counts. An invalid cursor is `400`.
+        Never a credential, a token reference or an account label. Requires
+        `social_publishing.publications.read`.
+      parameters:
+        - name: state
+          in: query
+          required: false
+          description: Narrow to one lifecycle state.
+          schema:
+            $ref: "#/components/schemas/SocialPublicationState"
+        - name: limit
+          in: query
+          required: false
+          description: 1-100, default 25. Out-of-range values are REJECTED, not clamped.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor from `nextCursor`.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of publications.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SocialPublication"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createSocialPublication
+      tags:
+        - Social Publishing
+      summary: Publish one piece of content to N connected accounts, now or later.
+      description: >-
+        Creates ONE publication with an immutable content snapshot and ONE JOB PER
+        ACCOUNT, in one transaction, with plain database writes only (no provider
+        call). The request names accounts BY ID and carries no provider, token,
+        page id or phone number (an unknown field is `400`). The caller must be
+        able to use every named account (assignment rule and business scope of
+        `channel_accounts`); any account they cannot use, another tenant's and an
+        unknown id are ONE answer, `422 ACCOUNT_NOT_USABLE`, for the whole request,
+        before anything is created.
+
+
+        The content is snapshotted now. `mediaObjectId` must be a verified object
+        of this tenant that `media_library` reports as an allowed image (JPEG, PNG
+        or WebP) within 10 MB with a KNOWN rights status; otherwise
+        `422 MEDIA_NOT_ELIGIBLE`. `linkUrl` must be a plain `https` URL on a named
+        host (`422 LINK_INVALID`).
+
+
+        Per account the request is accepted or REFUSED with a code: the account may
+        not publish now (revoked, disabled, degraded, no granted `publish`
+        capability with evidence, ...), the provider has no adapter on this
+        deployment (`PROVIDER_ADAPTER_UNAVAILABLE`), or the provider's capability
+        map cannot carry the content (`VARIANT_UNSUPPORTED`,
+        `MEDIA_TYPE_UNSUPPORTED`, `MEDIA_TOO_LARGE`, `CONTENT_TOO_LONG`). Nothing is
+        downgraded (an image is never posted as text), truncated or sent to another
+        account. If EVERY account is refused the answer is
+        `422 NO_ELIGIBLE_ACCOUNT` with the per-account codes in `error.details`, and
+        nothing is recorded. When the tenant requires approval (the default) the
+        publication starts `pending_approval` and its creator cannot approve it.
+        `notBefore` defers dispatch. High-risk: `Idempotency-Key` required (a replay
+        returns the stored response), audited at `warning`. Requires
+        `social_publishing.publications.publish`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SocialPublicationCreateRequest"
+      responses:
+        "201":
+          description: The publication, its jobs, and the per-account outcome.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublicationCreated"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`: the key was already used with a different request."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Request body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: >-
+            `ACCOUNT_NOT_USABLE`, `MEDIA_NOT_ELIGIBLE`, `LINK_INVALID`,
+            `TITLE_INVALID`, `CAPTION_INVALID` or `NO_ELIGIBLE_ACCOUNT`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/publications/{id}:
+    get:
+      operationId: getSocialPublication
+      tags:
+        - Social Publishing
+      summary: One publication with ONE entry per target account.
+      description: >-
+        The immutable content snapshot, the derived aggregate `status` and the
+        per-account jobs, each with its own status, attempts, holds, coded failure
+        and, once published, the provider's post id and URL. That list is how a
+        partial failure is read: a failed account does not change a published one.
+        Never a credential, a token reference or an account label. Requires
+        `social_publishing.publications.read`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The resource id (a UUID of this tenant).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The publication and its jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublicationDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/publications/{id}/approve:
+    post:
+      operationId: approveSocialPublication
+      tags:
+        - Social Publishing
+      summary: Release a publication that is waiting for approval.
+      description: >-
+        Nothing is claimable by the dispatcher before this. Maker and checker: the
+        person who created a manual publication cannot approve it
+        (`403 SELF_APPROVAL_FORBIDDEN`). The caller must be able to use every
+        targeted account, otherwise `404` exactly as for an unknown id. Idempotent:
+        approving what is already approved is a `200` that changes nothing
+        (`alreadyApproved: true`). A publication that is cancelled or refused is
+        `409 PUBLICATION_STATE_INVALID`. High-risk: `Idempotency-Key` required,
+        audited at `warning`. Requires `social_publishing.publications.approve`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The resource id (a UUID of this tenant).
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: The publication after approval.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      publication:
+                        $ref: "#/components/schemas/SocialPublication"
+                      alreadyApproved:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/publications/{id}/cancel:
+    post:
+      operationId: cancelSocialPublication
+      tags:
+        - Social Publishing
+      summary: Stop a publication; unsent jobs are cancelled, published ones are untouched.
+      description: >-
+        The publication becomes `cancelled` and every job that has NOT been sent is
+        cancelled with it. It never recalls or alters what already went out: a
+        published job is terminal (the database refuses to change it) and is
+        counted in `jobsAlreadyPublished`, and a job being sent right now is left
+        to finish and counted in `jobsInFlight`. Cancelling a waiting publication
+        is also how an approval is declined. The body is optional (`reason`, at
+        most 300 characters). Idempotent. A refused publication is
+        `409 PUBLICATION_STATE_INVALID`. The caller must be able to use every
+        targeted account, otherwise `404`. High-risk: `Idempotency-Key` required,
+        audited at `warning`. Requires `social_publishing.publications.cancel`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The resource id (a UUID of this tenant).
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  maxLength: 300
+      responses:
+        "200":
+          description: The publication after cancellation and what was and was not stopped.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublicationCancelled"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/publications/{id}/schedule:
+    post:
+      operationId: scheduleSocialPublication
+      tags:
+        - Social Publishing
+      summary: Set or clear when a publication may start going out.
+      description: >-
+        `notBefore` is an ISO-8601 timestamp with a UTC offset, in the future and
+        within a year, or `null` to clear. The dispatcher claims nothing of the
+        publication before that instant and nothing before it is approved. Only
+        while no job has left the queue: once any account has been tried the
+        publication has started (`409 ALREADY_DISPATCHED`). The caller must be able
+        to use every targeted account, otherwise `404`. High-risk:
+        `Idempotency-Key` required, audited. Requires
+        `social_publishing.publications.schedule`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The resource id (a UUID of this tenant).
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - notBefore
+              properties:
+                notBefore:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        "200":
+          description: The publication with its new schedule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      publication:
+                        $ref: "#/components/schemas/SocialPublication"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`ALREADY_DISPATCHED`, `PUBLICATION_STATE_INVALID` or `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/jobs/{id}/retry:
+    post:
+      operationId: retrySocialPublishJob
+      tags:
+        - Social Publishing
+      summary: Retry ONE failed per-account job.
+      description: >-
+        Only that job moves, back to `queued` with a small bounded extra attempt
+        budget. A published sibling is never touched and never replayed, and a job
+        that already PUBLISHED can never be retried (`409 JOB_ALREADY_PUBLISHED`;
+        the database enforces it as well). The publication must still be `ready`
+        (approved and not cancelled). The caller must be able to use the job's
+        account, otherwise `404`. `Idempotency-Key` required; audited. Requires
+        `social_publishing.jobs.retry`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The resource id (a UUID of this tenant).
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: The job is queued again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      jobId:
+                        type: string
+                        format: uuid
+                      publicationId:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - queued
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            `JOB_ALREADY_PUBLISHED`, `JOB_STATE_INVALID`, `PUBLICATION_STATE_INVALID`
+            or `IDEMPOTENCY_CONFLICT`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/rules:
+    get:
+      operationId: listSocialPublishRules
+      tags:
+        - Social Publishing
+      summary: Which connected accounts each article event publishes to.
+      description: >-
+        A rule is a pointer, never a grant: the account's own `publish` capability
+        decides, at enqueue and again at dispatch. Complete (bounded to 200), not
+        paginated. Requires `social_publishing.rules.read`.
+      responses:
+        "200":
+          description: The rules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SocialPublishRule"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createSocialPublishRule
+      tags:
+        - Social Publishing
+      summary: Publish an article event to one more account, or re-enable a rule.
+      description: >-
+        The caller must be able to use the account (another tenant's account and an
+        unknown id are one `422 ACCOUNT_NOT_USABLE`), and the account must be of a
+        provider that can publish at all. Whether it MAY publish now is not asked
+        here (a rule can be set up before an approval lands): that is decided at
+        enqueue and at dispatch. `201` when created, `200` when a disabled rule was
+        re-enabled. At most 200 rules per tenant (`422 RULE_LIMIT_REACHED`).
+        High-risk: `Idempotency-Key` required, audited at `warning`. Requires
+        `social_publishing.rules.configure`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SocialPublishRuleCreateRequest"
+      responses:
+        "200":
+          description: A disabled rule was enabled again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublishRule"
+                  meta:
+                    type: object
+        "201":
+          description: The rule was added.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublishRule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`ACCOUNT_NOT_USABLE` or `RULE_LIMIT_REACHED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/rules/{id}:
+    patch:
+      operationId: updateSocialPublishRule
+      tags:
+        - Social Publishing
+      summary: Enable or disable a rule.
+      description: >-
+        A rule is never deleted (disabled, so history stays readable). A disabled
+        rule stops FUTURE article events from queueing for that account and does
+        not touch a publication already queued (cancel that). The caller must be
+        able to use the rule's account, otherwise `404`. High-risk:
+        `Idempotency-Key` required, audited at `warning`. Requires
+        `social_publishing.rules.configure`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The resource id (a UUID of this tenant).
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: The rule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublishRule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/settings:
+    get:
+      operationId: getSocialPublishingSettings
+      tags:
+        - Social Publishing
+      summary: This tenant's two switches.
+      description: >-
+        A tenant that never set them is the safe default: nothing is published
+        automatically (`autoPublishEnabled: false`) and approval is required
+        (`approvalRequired: true`). Requires `social_publishing.rules.read`.
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublishingSettings"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateSocialPublishingSettings
+      tags:
+        - Social Publishing
+      summary: Switch automatic publishing and the approval requirement.
+      description: >-
+        Prospective: a publication keeps the approval requirement it was created
+        with, so turning approval OFF does not release anything already waiting.
+        At least one field. High-risk: `Idempotency-Key` required, audited at
+        `warning` with the previous and the new values. Requires
+        `social_publishing.settings.configure`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                autoPublishEnabled:
+                  type: boolean
+                approvalRequired:
+                  type: boolean
+      responses:
+        "200":
+          description: The settings after the change.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SocialPublishingSettings"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/social-publishing/providers:
+    get:
+      operationId: listSocialPublishProviders
+      tags:
+        - Social Publishing
+      summary: The providers that have a publish adapter on this deployment, and what each can carry.
+      description: >-
+        The adapter's capability map: content variants, caption ceiling, image
+        types and size. The map is a CEILING and not a grant: an account still
+        needs a granted `publish` capability row with evidence (see
+        `channel_accounts`). EMPTY until a provider connector registers an adapter,
+        which is the fail-closed state: a provider with no adapter cannot publish.
+        Not tenant data and never a credential. Requires
+        `social_publishing.publications.read`.
+      responses:
+        "200":
+          description: The registered providers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SocialPublishProvider"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`SOCIAL_PUBLISHING_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    SocialPublicationState:
+      type: string
+      description: >-
+        The approval and cancel lifecycle only. `refused` is an article event whose
+        CONTENT could not be published (an unsafe link, media that is not
+        eligible): zero jobs, nothing sent. The publish status is `status`.
+      enum:
+        - pending_approval
+        - ready
+        - cancelled
+        - refused
+    SocialPublicationStatus:
+      type: string
+      description: >-
+        DERIVED from the jobs when read, never stored, so it cannot drift from them.
+      enum:
+        - refused
+        - pending_approval
+        - queued
+        - in_progress
+        - partially_published
+        - published
+        - failed
+        - cancelled
+    SocialPublishJobStatus:
+      type: string
+      enum:
+        - queued
+        - publishing
+        - retry_wait
+        - published
+        - failed
+        - cancelled
+    SocialPublishVariant:
+      type: string
+      enum:
+        - text
+        - image
+        - video
+        - short
+        - story
+    SocialPublishTrigger:
+      type: string
+      enum:
+        - post_published
+        - scheduled_published
+        - manual_editor_action
+    SocialPublicationMedia:
+      type: object
+      description: >-
+        The media snapshot taken at enqueue: the verified public URL, type, size,
+        alt text and credit line exactly as `media_library` reported them.
+      properties:
+        publicUrl:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        altText:
+          type: string
+          nullable: true
+        creditLine:
+          type: string
+          nullable: true
+    SocialPublication:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sourceKind:
+          type: string
+          enum:
+            - article
+            - manual
+        sourceId:
+          type: string
+          format: uuid
+          nullable: true
+        trigger:
+          $ref: "#/components/schemas/SocialPublishTrigger"
+        state:
+          $ref: "#/components/schemas/SocialPublicationState"
+        status:
+          $ref: "#/components/schemas/SocialPublicationStatus"
+        refusalCode:
+          type: string
+          nullable: true
+        title:
+          type: string
+        caption:
+          type: string
+        linkUrl:
+          type: string
+          nullable: true
+        media:
+          allOf:
+            - $ref: "#/components/schemas/SocialPublicationMedia"
+          nullable: true
+        contentHash:
+          type: string
+        notBefore:
+          type: string
+          format: date-time
+          nullable: true
+        approvalRequired:
+          type: boolean
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+        approvedBy:
+          type: string
+          format: uuid
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelReason:
+          type: string
+          nullable: true
+        jobCounts:
+          type: object
+          additionalProperties:
+            type: integer
+        createdAt:
+          type: string
+          format: date-time
+    SocialPublishJob:
+      type: object
+      description: >-
+        One per target account. Names the account by id and the provider key; holds
+        no token, no secret reference and no account label.
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        variant:
+          $ref: "#/components/schemas/SocialPublishVariant"
+        status:
+          $ref: "#/components/schemas/SocialPublishJobStatus"
+        attemptCount:
+          type: integer
+        maxAttempts:
+          type: integer
+        holdCount:
+          type: integer
+        nextAttemptAt:
+          type: string
+          format: date-time
+        failureCode:
+          type: string
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+          description: A fixed, code-defined phrase; never a provider body.
+        externalPostId:
+          type: string
+          nullable: true
+        externalPostUrl:
+          type: string
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SocialPublicationDetail:
+      type: object
+      properties:
+        publication:
+          $ref: "#/components/schemas/SocialPublication"
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/SocialPublishJob"
+    SocialPublicationAccountOutcome:
+      type: object
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        outcome:
+          type: string
+          enum:
+            - queued
+            - existing
+            - refused
+        jobId:
+          type: string
+          format: uuid
+          description: Present for `queued` and `existing`.
+        reason:
+          type: string
+          description: >-
+            Present for `refused`: a fixed code (`ACCOUNT_NOT_FOUND`,
+            `ACCOUNT_REVOKED`, `ACCOUNT_DISABLED`, `ACCOUNT_DEGRADED`,
+            `CONNECTION_NOT_ACTIVE`, `CONNECTION_EXPIRED`, `CAPABILITY_DENIED`,
+            `NOT_A_PUBLISHER`, `PROVIDER_ADAPTER_UNAVAILABLE`,
+            `VARIANT_UNSUPPORTED`, `MEDIA_TYPE_UNSUPPORTED`, `MEDIA_TOO_LARGE`,
+            `CONTENT_TOO_LONG`, ...). Another tenant's account and an unknown id are
+            both `ACCOUNT_NOT_FOUND`.
+    SocialPublicationCreated:
+      allOf:
+        - $ref: "#/components/schemas/SocialPublicationDetail"
+        - type: object
+          properties:
+            accounts:
+              type: array
+              items:
+                $ref: "#/components/schemas/SocialPublicationAccountOutcome"
+    SocialPublicationCancelled:
+      allOf:
+        - $ref: "#/components/schemas/SocialPublicationDetail"
+        - type: object
+          properties:
+            alreadyCancelled:
+              type: boolean
+            jobsCancelled:
+              type: integer
+            jobsAlreadyPublished:
+              type: integer
+            jobsInFlight:
+              type: integer
+    SocialPublicationCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - title
+        - caption
+        - accountIds
+      properties:
+        title:
+          type: string
+          maxLength: 300
+        caption:
+          type: string
+          maxLength: 2000
+        linkUrl:
+          type: string
+          nullable: true
+          maxLength: 2048
+          description: A plain `https` URL on a named host.
+        mediaObjectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            A verified media object of this tenant: JPEG, PNG or WebP, at most
+            10 MB, with a known rights status.
+        accountIds:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+        notBefore:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO-8601 with a UTC offset, in the future, within a year.
+    SocialPublishRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trigger:
+          $ref: "#/components/schemas/SocialPublishTrigger"
+        accountId:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SocialPublishRuleCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - trigger
+        - accountId
+      properties:
+        trigger:
+          $ref: "#/components/schemas/SocialPublishTrigger"
+        accountId:
+          type: string
+          format: uuid
+    SocialPublishingSettings:
+      type: object
+      properties:
+        autoPublishEnabled:
+          type: boolean
+        approvalRequired:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SocialPublishProvider:
+      type: object
+      properties:
+        provider:
+          type: string
+        capabilities:
+          type: object
+          properties:
+            variants:
+              type: array
+              items:
+                $ref: "#/components/schemas/SocialPublishVariant"
+            maxCaptionLength:
+              type: integer
+            imageMimeTypes:
+              type: array
+              items:
+                type: string
+            maxImageBytes:
+              type: integer
