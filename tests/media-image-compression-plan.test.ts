@@ -14,6 +14,7 @@ import {
   decideCompression,
   fillMessage,
   formatByteSize,
+  formatByteSizeAgainstCap,
   planCompressionAttempts,
   renameForOutputType
 } from "../src/lib/ui/media-image-compression-plan";
@@ -416,6 +417,40 @@ describe("formatByteSize", () => {
   test("garbage input is zero rather than NaN on screen", () => {
     expect(formatByteSize(Number.NaN, "en")).toBe("0 B");
     expect(formatByteSize(-5, "en")).toBe("0 B");
+  });
+});
+
+describe("formatByteSizeAgainstCap (#1238)", () => {
+  test("far from the cap the normal rounding is kept", () => {
+    expect(formatByteSizeAgainstCap(Math.round(3.4 * MIB), CAP, "en")).toEqual({
+      size: "3.4 MiB",
+      cap: "2 MiB"
+    });
+  });
+
+  test("a size that rounds to the cap's label is shown in KiB", () => {
+    expect(formatByteSizeAgainstCap(CAP + 1024, CAP, "en")).toEqual({
+      size: "2,049 KiB",
+      cap: "2,048 KiB"
+    });
+    expect(formatByteSizeAgainstCap(CAP + 1024, CAP, "id")).toEqual({
+      size: "2.049 KiB",
+      cap: "2.048 KiB"
+    });
+  });
+
+  test("under 1 KiB over the cap, bytes are the only honest unit", () => {
+    expect(formatByteSizeAgainstCap(CAP + 1, CAP, "en")).toEqual({
+      size: "2,097,153 B",
+      cap: "2,097,152 B"
+    });
+  });
+
+  test("a size that equals the cap is left alone", () => {
+    expect(formatByteSizeAgainstCap(CAP, CAP, "en")).toEqual({
+      size: "2 MiB",
+      cap: "2 MiB"
+    });
   });
 });
 

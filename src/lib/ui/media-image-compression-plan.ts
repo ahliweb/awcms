@@ -352,6 +352,37 @@ export function formatByteSize(bytes: number, locale?: string): string {
 }
 
 /**
+ * A size and the cap it is compared with, as two labels that never read as a
+ * contradiction (Issue #1238). `formatByteSize` rounds, so a file 1 KiB over a
+ * 2 MiB cap would be reported as "2 MiB, over the 2 MiB limit". When the two
+ * labels come out equal although the numbers differ, both are re-rendered in the
+ * next finer unit (KiB), and in bytes if even that rounds equal (a file under
+ * 1 KiB over the cap). A size far from the cap keeps `formatByteSize` as is.
+ */
+export function formatByteSizeAgainstCap(
+  bytes: number,
+  capBytes: number,
+  locale?: string
+): { size: string; cap: string } {
+  const n = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  const unit = (divisor: number, symbol: string) => ({
+    size: `${n.format(bytes / divisor)} ${symbol}`,
+    cap: `${n.format(capBytes / divisor)} ${symbol}`
+  });
+  const auto = {
+    size: formatByteSize(bytes, locale),
+    cap: formatByteSize(capBytes, locale)
+  };
+
+  // The first rendering whose two labels differ; a size equal to the cap has
+  // none, and keeps the automatic one.
+  return (
+    [auto, unit(1024, "KiB"), unit(1, "B")].find((p) => p.size !== p.cap) ??
+    auto
+  );
+}
+
+/**
  * Fills `{name}` placeholders. A placeholder with no value is left verbatim,
  * the same rule as the server-side `t()`, which is what lets the server render
  * a message with some values filled (`{cap}`) and hand the rest (`{original}`,

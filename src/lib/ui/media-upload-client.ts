@@ -64,7 +64,11 @@ import {
   type CompressionFailureReason,
   type ImageCompressionPorts
 } from "./media-image-compression";
-import { fillMessage, formatByteSize } from "./media-image-compression-plan";
+import {
+  fillMessage,
+  formatByteSize,
+  formatByteSizeAgainstCap
+} from "./media-image-compression-plan";
 
 export type UploadSessionData = {
   objectId: string;
@@ -452,14 +456,23 @@ export function describeCompressionFailure(
   locale?: string
 ): string {
   const template = messages[FAILURE_MESSAGE_KEY[failure.reason]];
+  const smallestBytes = failure.smallestByteSize ?? failure.originalByteSize;
+  // The floor message compares the smallest size reached with the cap; every
+  // other message compares the original. That pair is the one that must not
+  // round to the same label (Issue #1238).
+  const floor = failure.reason === "floor_reached";
+  const compared = formatByteSizeAgainstCap(
+    floor ? smallestBytes : failure.originalByteSize,
+    failure.maxBytes,
+    locale
+  );
 
   return fillMessage(template, {
-    cap: formatByteSize(failure.maxBytes, locale),
-    original: formatByteSize(failure.originalByteSize, locale),
-    smallest: formatByteSize(
-      failure.smallestByteSize ?? failure.originalByteSize,
-      locale
-    )
+    cap: compared.cap,
+    original: floor
+      ? formatByteSize(failure.originalByteSize, locale)
+      : compared.size,
+    smallest: floor ? compared.size : formatByteSize(smallestBytes, locale)
   });
 }
 
