@@ -154,6 +154,8 @@ export type DispatchSocialPublishResult = {
 
 type Candidate = {
   id: string;
+  /** `publishing` here means the LEASE EXPIRED (a due `publishing` row): an unknown outcome. */
+  status: "queued" | "retry_wait" | "publishing";
   publication_id: string;
   channel_account_id: string;
   provider: string;
@@ -262,6 +264,7 @@ async function claim(
     >
   > & {
     publishers: ChannelPublisherPort;
+    registry: SocialAdapterRegistry;
     now: Date;
     correlationId: string | undefined;
     result: DispatchSocialPublishResult;
@@ -273,7 +276,7 @@ async function claim(
 
   return inTenantWork(sql, tenantId, async (tx) => {
     const candidates = (await tx`
-      SELECT j.id, j.publication_id, j.channel_account_id, j.provider,
+      SELECT j.id, j.status, j.publication_id, j.channel_account_id, j.provider,
              j.account_kind, j.variant, j.attempt_count, j.max_attempts,
              j.hold_count, j.idempotency_key, p.title, p.caption, p.link_url,
              p.media_snapshot
@@ -346,6 +349,23 @@ async function claim(
       );
 
       for (const row of rows.slice(0, take)) {
+        const dedupes =
+          options.registry.get(row.provider)?.supportsIdempotencyKey === true;
+
+        // A `publishing` row whose lease expired is a request whose answer was
+        // lost (a crash, an OOM, a redeploy after the provider accepted it): the
+        // post may already be public (M-1 of the #1145 re-audit). Only a provider
+        // that dedupes on the idempotency key can be sent it again; for every
+        // other the job waits for an operator. `sql/330` refuses the re-claim of a
+        // non-deduping job as well.
+        if (row.status === "publishing" && !dedupes) {
+          await reconcileExpiredLease(tx, tenantId, row, now, {
+            correlationId: options.correlationId,
+            result
+          });
+          continue;
+        }
+
         const resolved = await options.publishers.resolvePublisher(tx, {
           tenantId,
           accountId
@@ -364,6 +384,7 @@ async function claim(
         await tx`
           UPDATE awcms_social_publish_jobs
           SET status = 'publishing', attempt_count = ${attemptNo},
+              dedupe_key_supported = ${dedupes},
               next_attempt_at = ${lease}::timestamptz, failure_code = NULL,
               last_error = NULL, updated_at = ${now}::timestamptz
           WHERE tenant_id = ${tenantId} AND id = ${row.id}
@@ -378,6 +399,66 @@ async function claim(
 
     return claimed;
   });
+}
+
+/**
+ * A due `publishing` job of a provider that does not dedupe: the lease expired,
+ * so the outcome of the claimed attempt is UNKNOWN. It is never sent again by the
+ * dispatcher; an operator reconciles it.
+ */
+async function reconcileExpiredLease(
+  tx: Bun.SQL,
+  tenantId: string,
+  row: Pick<
+    Candidate,
+    | "id"
+    | "publication_id"
+    | "channel_account_id"
+    | "provider"
+    | "attempt_count"
+  >,
+  now: Date,
+  context: {
+    correlationId: string | undefined;
+    result: DispatchSocialPublishResult;
+  }
+): Promise<void> {
+  const rows = (await tx`
+    UPDATE awcms_social_publish_jobs
+    SET status = 'needs_reconciliation', failure_code = 'LEASE_EXPIRED_UNKNOWN',
+        last_error = ${PHRASES.UNKNOWN_OUTCOME}, updated_at = ${now}::timestamptz
+    WHERE tenant_id = ${tenantId} AND id = ${row.id} AND status = 'publishing'
+    RETURNING id
+  `) as { id: string }[];
+
+  if (rows.length === 0) return;
+
+  await tx`
+    INSERT INTO awcms_social_publish_attempts
+      (tenant_id, job_id, attempt_no, outcome, error_code, error_message)
+    VALUES (${tenantId}, ${row.id}, ${row.attempt_count}, 'unknown',
+            'LEASE_EXPIRED_UNKNOWN', ${PHRASES.UNKNOWN_OUTCOME})
+    ON CONFLICT (job_id, attempt_no) DO NOTHING
+  `;
+  await recordAuditEvent(tx, {
+    tenantId,
+    moduleKey: SOCIAL_PUBLISHING_MODULE_KEY,
+    action: "social_publishing.job.outcome_unknown",
+    resourceType: "social_publish_job",
+    resourceId: row.id,
+    severity: "warning",
+    message:
+      "A social publish job lost its lease while in flight; its outcome is unknown and it waits for an operator.",
+    attributes: {
+      publicationId: row.publication_id,
+      accountId: row.channel_account_id,
+      provider: row.provider,
+      attemptNo: row.attempt_count,
+      code: "LEASE_EXPIRED_UNKNOWN"
+    },
+    correlationId: context.correlationId
+  });
+  context.result.unknown += 1;
 }
 
 /** An account that cannot publish: hold a recoverable problem, fail a terminal one. No attempt is consumed. */
@@ -732,8 +813,26 @@ function toContent(job: Claimed): SocialPublishContent {
   };
 }
 
+/**
+ * `ssrfSafeFetch` collapses "could not connect" and "the request was sent and the
+ * answer was lost" into `request_failed`. Of its results these mean the provider
+ * MAY have processed the request (L-7 of the #1145 re-audit); the others
+ * (`invalid_url`, `scheme_not_allowed`, `credentials_in_url`,
+ * `dns_resolution_failed`, `blocked_address`) mean nothing was ever sent.
+ */
+const AMBIGUOUS_HTTP_REASONS: ReadonlySet<string> = new Set([
+  "request_failed",
+  "response_too_large",
+  "too_many_redirects"
+]);
+
 type ProviderCall =
-  | { kind: "adapter"; outcome: SocialPublishOutcome }
+  | {
+      kind: "adapter";
+      outcome: SocialPublishOutcome;
+      /** Some `request.http` call ended ambiguously: an adapter's `retryable` is then not believed. */
+      ambiguousHttp: boolean;
+    }
   /** The dispatcher's OWN verdicts (never an adapter-supplied string, so they are never rewritten by the adapter's vocabulary). */
   | { kind: "dispatcher"; code: "PROVIDER_TIMEOUT" | "ADAPTER_ERROR" };
 
@@ -754,7 +853,21 @@ async function callProvider(
   timeoutMs: number
 ): Promise<ProviderCall> {
   const controller = new AbortController();
+  let ambiguousHttp = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const trackedHttp = (signal: AbortSignal): SocialPublishHttp => {
+    const inner = buildHttp(signal);
+
+    return async (url, init) => {
+      const result = await inner(url, init);
+
+      if (!result.ok && AMBIGUOUS_HTTP_REASONS.has(result.reason)) {
+        ambiguousHttp = true;
+      }
+
+      return result;
+    };
+  };
   const timedOut = new Promise<ProviderCall>((resolve) => {
     timer = setTimeout(() => {
       controller.abort();
@@ -773,11 +886,11 @@ async function callProvider(
         content: toContent(job),
         idempotencyKey: job.idempotency_key,
         correlationId,
-        http: buildHttp(controller.signal),
+        http: trackedHttp(controller.signal),
         signal: controller.signal
       });
 
-      return { kind: "adapter", outcome };
+      return { kind: "adapter", outcome, ambiguousHttp };
     } catch {
       // The thrown message is never kept: it could carry a provider body or the
       // credential. A fixed code is all that is recorded.
@@ -848,15 +961,29 @@ export async function dispatchSocialPublishQueue(
   const buildHttp =
     options.http ??
     ((signal: AbortSignal) => buildAdapterHttp(env, signal, providerTimeoutMs));
+  const leaseMinutes = options.leaseMinutes ?? DISPATCH_LEASE_MINUTES;
+  const limit = options.limit ?? DISPATCH_DEFAULT_LIMIT;
+
+  // The jobs of one pass are sent one after another, each for at most
+  // `providerTimeoutMs`. If the whole pass could outlast the lease, a job still
+  // waiting its turn would have an EXPIRED lease while this very pass is about to
+  // send it, and the next pass would treat it as lost (M-1 of the re-audit).
+  if (limit * providerTimeoutMs >= leaseMinutes * 60_000) {
+    throw new Error(
+      "social-publishing dispatch: limit x providerTimeoutMs must be below the lease; lower the limit or the timeout, or lengthen the lease."
+    );
+  }
+
   const claimed = await claim(sql, tenantId, {
     publishers: options.publishers,
+    registry,
     now: clock(),
     correlationId: options.correlationId,
     result,
-    limit: options.limit ?? DISPATCH_DEFAULT_LIMIT,
+    limit,
     perAccountBatch: options.perAccountBatch ?? DISPATCH_PER_ACCOUNT_BATCH,
     accountDailyCap: options.accountDailyCap ?? DEFAULT_ACCOUNT_DAILY_CAP,
-    leaseMinutes: options.leaseMinutes ?? DISPATCH_LEASE_MINUTES
+    leaseMinutes
   });
 
   result.claimed = claimed.length;
@@ -955,7 +1082,13 @@ export async function dispatchSocialPublishQueue(
       continue;
     }
 
-    const providerOutcome = attempt.outcome;
+    // A `retryable` after an ambiguous request is not believed: the provider
+    // may have processed it (the adapter must say `unknown`; this is the
+    // backstop, and an admission condition for every connector).
+    const providerOutcome: SocialPublishOutcome =
+      attempt.outcome.outcome === "retryable" && attempt.ambiguousHttp
+        ? { outcome: "unknown", errorCode: attempt.outcome.errorCode }
+        : attempt.outcome;
 
     switch (providerOutcome.outcome) {
       case "published": {

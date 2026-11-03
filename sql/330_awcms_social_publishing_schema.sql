@@ -292,6 +292,11 @@ CREATE TABLE IF NOT EXISTS awcms_social_publish_jobs (
   -- A job waiting for a recoverable account problem (degraded, expired grant)
   -- is HELD: it does not consume an attempt, but it does not wait forever.
   hold_count integer NOT NULL DEFAULT 0,
+  -- Whether the adapter's provider dedupes on the idempotency key, as the
+  -- dispatcher saw it WHEN IT CLAIMED the job (M-1 of the #1145 re-audit). It
+  -- is what lets the database refuse to re-send a job whose lease expired:
+  -- without a dedupe key a lost answer may already be a public post.
+  dedupe_key_supported boolean NOT NULL DEFAULT false,
   -- While queued: when the job becomes due. While retry_wait: the backoff. While
   -- publishing: the CLAIM LEASE EXPIRY.
   next_attempt_at timestamptz NOT NULL DEFAULT now(),
@@ -387,7 +392,10 @@ GRANT SELECT, INSERT, UPDATE ON awcms_social_publish_jobs TO awcms_worker;
 -- M4 of the #1145 audit: the enqueue path (the scheduled-publish worker) and the
 -- dispatcher honour a tenant's decision to switch the module OFF, so they read
 -- the module-enablement row. Enabled flags only, no credential, tenant RLS.
-GRANT SELECT ON awcms_tenant_modules TO awcms_worker;
+-- COLUMN-ONLY (L-5 of the re-audit): `disable_reason` is free text and the
+-- stamps name principals, neither of which this module needs.
+GRANT SELECT (tenant_id, module_key, enabled)
+  ON awcms_tenant_modules TO awcms_worker;
 
 COMMENT ON TABLE awcms_social_publish_jobs IS
   'Issue #1145 / ADR-0157 -- one publish job per (publication, channel account). Names the account; holds no token and no secret reference. published is terminal (trigger in this file).';
@@ -451,6 +459,18 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $function$
 BEGIN
+  -- Serialise a state or approval change against a concurrent insert of a job
+  -- for this publication (L-1 of the #1145 re-audit): the job insert guard
+  -- takes the SAME advisory lock, so "approved, then a target was added"
+  -- cannot interleave. No privilege is needed to take one (the worker role
+  -- has no UPDATE on this table, so a row lock would not be available to it).
+  IF NEW.state IS DISTINCT FROM OLD.state
+     OR NEW.approved_at IS DISTINCT FROM OLD.approved_at THEN
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('social_publication:' || OLD.tenant_id::text || ':' || OLD.id::text, 0)
+    );
+  END IF;
+
   IF NEW.id IS DISTINCT FROM OLD.id
      OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
      OR NEW.source_kind IS DISTINCT FROM OLD.source_kind
@@ -555,6 +575,29 @@ BEGIN
       USING ERRCODE = '23514';
   END IF;
 
+  -- A job whose lease expired while it was `publishing` is NOT sent again
+  -- unless the provider dedupes on the idempotency key (M-1 of the re-audit):
+  -- the request may already have been processed. The dispatcher moves such a
+  -- job to `needs_reconciliation`; the database refuses the re-claim and the
+  -- hold-back-to-queued that would resend it.
+  IF OLD.status = 'publishing' AND NOT OLD.dedupe_key_supported
+     AND (
+       NEW.status = 'queued'
+       OR (NEW.status = 'publishing' AND NEW.attempt_count > OLD.attempt_count)
+     ) THEN
+    RAISE EXCEPTION 'a social publish job in flight is not re-sent without a provider dedupe key'
+      USING ERRCODE = '23514';
+  END IF;
+
+  -- Only an operator, never the dispatcher's role, sends a failed job or one
+  -- with an unknown outcome again (L-3 of the re-audit).
+  IF current_user = 'awcms_worker'
+     AND OLD.status IN ('failed', 'needs_reconciliation')
+     AND NEW.status = 'queued' THEN
+    RAISE EXCEPTION 'the worker role does not retry a failed or unknown social publish job'
+      USING ERRCODE = '23514';
+  END IF;
+
   IF OLD.status = 'failed' AND NEW.status NOT IN ('failed', 'queued') THEN
     RAISE EXCEPTION 'a failed social publish job can only be retried to queued'
       USING ERRCODE = '23514';
@@ -608,6 +651,13 @@ BEGIN
     RAISE EXCEPTION 'a social publish job needs a live publication of its own tenant'
       USING ERRCODE = '23514';
   END IF;
+
+  -- Serialise against a concurrent approval of the publication (L-1 of the
+  -- re-audit): the approval takes the same advisory lock, so either this job
+  -- lands BEFORE the approval commits, or the check below sees the approval.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('social_publication:' || NEW.tenant_id::text || ':' || NEW.publication_id::text, 0)
+  );
 
   -- A publication that was approved was approved for the targets it HAD (L3 of
   -- the #1145 audit): a new target needs a new publication, and therefore a new

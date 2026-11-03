@@ -1481,10 +1481,6 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_social_publications: ["SELECT", "INSERT"],
   awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
   awcms_social_publish_attempts: ["SELECT", "INSERT"],
-  // The #1145 audit, M4: the enqueue path and the dispatcher honour a tenant's
-  // decision to switch the module off, so they read the enablement row. Enabled
-  // flags only, tenant RLS, no credential.
-  awcms_tenant_modules: ["SELECT"],
   // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
   // attempts, and ends (revokes/suspends) a binding whose principal is gone or
   // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
@@ -1870,6 +1866,13 @@ export const WORKER_COLUMN_GRANTS: Record<
   string,
   Partial<Record<"SELECT" | "INSERT" | "UPDATE", string[]>>
 > = {
+  // The #1145 audit, M4 and L-5: the social enqueue path and dispatcher honour a
+  // tenant's decision to switch the module off, so they read the enablement flag.
+  // Exactly the columns `resolveModuleEnabled` selects; never `disable_reason`
+  // (free text) or the actor stamps.
+  awcms_tenant_modules: {
+    SELECT: ["tenant_id", "module_key", "enabled"]
+  },
   awcms_hr_attendance_corrections: {
     SELECT: [
       "id",
@@ -2389,6 +2392,16 @@ export async function checkWorkerSetupRoleGrants(
             AND p.polqual IS NOT NULL
             AND pg_get_expr(p.polqual, p.polrelid) LIKE '%whatsapp_cloud%'
             AND pg_get_expr(p.polqual, p.polrelid) LIKE '%awcms_channel_accounts%'
+            -- L-6 of the #1145 re-audit: the policy must stay WhatsApp-only. A
+            -- widening to any social provider (the withdrawn first revision of
+            -- ADR-0157 did exactly that) lets a compromised whatsapp:dispatch
+            -- decrypt social tokens, so it is a finding, not a pass.
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%facebook%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%instagram%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%threads%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%tiktok%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%youtube%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%linkedin%'
         ) AS has_policy
       `) as { has_policy: boolean }[];
 

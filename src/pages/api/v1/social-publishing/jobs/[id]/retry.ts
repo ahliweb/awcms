@@ -121,11 +121,23 @@ export const POST = defineTenantRoute<Prepared>({
           action: "social_publishing.job.retry",
           resourceType: "social_publish_job",
           resourceId: prepared.id,
-          severity: "info",
-          message: "A failed social publish job was queued for another try.",
+          // An override of a reconciliation (the outcome was UNKNOWN and the post
+          // may exist) is not the same act as retrying a failure, and is audited
+          // as the riskier one (L-4 of the #1145 re-audit).
+          severity:
+            result.previousStatus === "needs_reconciliation"
+              ? "warning"
+              : "info",
+          message:
+            result.previousStatus === "needs_reconciliation"
+              ? "A social publish job with an unknown outcome was sent again on an operator's confirmation."
+              : "A failed social publish job was queued for another try.",
           attributes: {
             publicationId: result.publicationId,
-            accountId: result.accountId
+            accountId: result.accountId,
+            previousStatus: result.previousStatus,
+            previousFailureCode: result.previousFailureCode,
+            confirmPossiblyPublished: prepared.confirmPossiblyPublished
           }
         });
 

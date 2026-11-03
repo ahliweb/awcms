@@ -938,6 +938,29 @@ suite("social_publishing HTTP surface (Issue #1145)", () => {
 
     expect(confirmed.status).toBe(200);
     expect(confirmed.body.data.status).toBe("queued");
+
+    // L-4 of the re-audit: the override of a reconciliation is audited as such,
+    // at `warning`, with what the job was before the retry cleared it.
+    const audit = (await admin()`
+      SELECT severity, attributes FROM awcms_audit_events
+      WHERE module_key = 'social_publishing' AND action = 'social_publishing.job.retry'
+        AND resource_id = ${jobId}
+    `) as {
+      severity: string;
+      attributes: {
+        previousStatus: string;
+        previousFailureCode: string;
+        confirmPossiblyPublished: boolean;
+      };
+    }[];
+
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.severity).toBe("warning");
+    expect(audit[0]!.attributes).toMatchObject({
+      previousStatus: "needs_reconciliation",
+      previousFailureCode: "PROVIDER_TIMEOUT",
+      confirmPossiblyPublished: true
+    });
   });
 
   test("a tenant that switched the module off is refused by every route (the guard) and by the dispatcher", async () => {

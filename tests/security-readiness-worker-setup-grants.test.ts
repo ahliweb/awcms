@@ -18,6 +18,7 @@
  * never touched, so this test is safe to run against a shared cluster.
  */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   SETUP_COLUMN_GRANTS,
@@ -189,6 +190,92 @@ describeOrSkip(
 
         expect(noPolicy.status).toBe("fail");
         expect(noPolicy.evidence).toContain("awcms_identities_setup_link_once");
+        expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+      } finally {
+        await admin.close({ timeout: 1 });
+      }
+    });
+
+    test("L-6 of the #1145 re-audit: widening the worker's secret policy to a SOCIAL provider FAILS the check, and restoring it passes", async () => {
+      if (!(await awcmsWorkerExists())) {
+        return;
+      }
+
+      const original = readFileSync(
+        "sql/328_awcms_whatsapp_sender_secret_visibility.sql",
+        "utf8"
+      );
+      const create = original.slice(
+        original.indexOf(
+          "CREATE POLICY awcms_channel_secrets_worker_dispatch_purposes"
+        )
+      );
+
+      expect(create).toContain(
+        "a.provider IN ('whatsapp_cloud', 'starsender')"
+      );
+
+      const widened = create.replace(
+        "a.provider IN ('whatsapp_cloud', 'starsender')",
+        "a.provider IN ('whatsapp_cloud', 'starsender', 'facebook')"
+      );
+      const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+
+      try {
+        await admin.unsafe(
+          "DROP POLICY awcms_channel_secrets_worker_dispatch_purposes ON awcms_channel_secrets"
+        );
+        await admin.unsafe(widened);
+
+        let result;
+
+        try {
+          result = await checkWorkerSetupRoleGrants();
+        } finally {
+          await admin.unsafe(
+            "DROP POLICY awcms_channel_secrets_worker_dispatch_purposes ON awcms_channel_secrets"
+          );
+          await admin.unsafe(create);
+        }
+
+        expect(result.status).toBe("fail");
+        expect(result.evidence).toContain(
+          "awcms_channel_secrets_worker_dispatch_purposes"
+        );
+        expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+      } finally {
+        await admin.close({ timeout: 1 });
+      }
+    });
+
+    test("L-5 of the #1145 re-audit: the worker's read of the module-enablement row is exactly (tenant_id, module_key, enabled); one more column FAILS", async () => {
+      if (!(await awcmsWorkerExists())) {
+        return;
+      }
+
+      expect(WORKER_COLUMN_GRANTS.awcms_tenant_modules).toEqual({
+        SELECT: ["tenant_id", "module_key", "enabled"]
+      });
+
+      const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+
+      try {
+        await admin.unsafe(
+          "GRANT SELECT (disable_reason) ON awcms_tenant_modules TO awcms_worker"
+        );
+
+        let result;
+
+        try {
+          result = await checkWorkerSetupRoleGrants();
+        } finally {
+          await admin.unsafe(
+            "REVOKE SELECT (disable_reason) ON awcms_tenant_modules FROM awcms_worker"
+          );
+        }
+
+        expect(result.status).toBe("fail");
+        expect(result.evidence).toContain("awcms_tenant_modules");
         expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
       } finally {
         await admin.close({ timeout: 1 });

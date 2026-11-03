@@ -429,7 +429,12 @@ pioneered directly here after the ADR-0047 freeze.)
   that borrows its parent's credential (audit L10), stating its effect on
   `whatsapp:dispatch`; the admin screen (nine permissions on `NOT_YET_SCREENED`);
   a retention sweep (three tables are parked on `BOUNDED_BY_DESIGN`, cap raised 30
-  to 35 against its own bar); audit residuals L4, L6, L8, L9 (detail on PR #1240).
+  to 35 against its own bar); audit residuals L4 (reads not scoped per account), L6 (free-text
+  `externalPostId`), L8 (media rights not re-checked at dispatch), L9 (`prepare`
+  before `authorize`), full text in ADR-0157 section 6; the second audit's M-1
+  (an expired lease of a provider without a dedupe key is `needs_reconciliation`,
+  never re-sent) and L-7 (a connector answers `unknown`, not `retryable`, after an
+  ambiguous request) are conditions for every connector.
   Map: the `social_publishing` README and `docs/awcms/social-publishing.md`.
 
 - **COMMISSION INTAKE QUEUE — 28 October 2026: built (#1189, ADR-0147; migrations

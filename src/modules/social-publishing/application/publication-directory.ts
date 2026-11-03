@@ -11,7 +11,9 @@
  *
  * ## Actions are row-locked, one-way and idempotent where they can be
  *
- * Every action takes `FOR UPDATE` on the publication (or the job), so two
+ * Every action takes a row lock on the publication (`FOR NO KEY UPDATE`: it
+ * must not conflict with the key-share lock a job insert's foreign key takes) or
+ * on the job, so two
  * operators cannot interleave an approve and a cancel. `published` is terminal
  * (the database refuses any change to it); cancel stops only jobs that have not
  * been sent and reports how many were already out, so a partial failure is
@@ -338,7 +340,7 @@ async function lockPublication(
     SELECT id, state, source_kind, created_by
     FROM awcms_social_publications
     WHERE tenant_id = ${tenantId} AND id = ${publicationId}
-    FOR UPDATE
+    FOR NO KEY UPDATE
   `) as LockedPublication[];
 
   return rows[0] ?? null;
@@ -503,6 +505,9 @@ export type RetriedJob = {
   jobId: string;
   publicationId: string;
   accountId: string;
+  /** What the job was before the retry cleared it (L-4 of the re-audit): the audit row records it. */
+  previousStatus: JobStatus;
+  previousFailureCode: string | null;
 };
 
 export async function lookupJobAccount(
@@ -539,7 +544,8 @@ export async function retryJob(
   }
 ): Promise<ActionOutcome<RetriedJob>> {
   const rows = (await tx`
-    SELECT id, publication_id, channel_account_id, status, attempt_count
+    SELECT id, publication_id, channel_account_id, status, attempt_count,
+           failure_code
     FROM awcms_social_publish_jobs
     WHERE tenant_id = ${tenantId} AND id = ${jobId}
     FOR UPDATE
@@ -549,6 +555,7 @@ export async function retryJob(
     channel_account_id: string;
     status: JobStatus;
     attempt_count: number;
+    failure_code: string | null;
   }[];
   const job = rows[0];
 
@@ -599,6 +606,8 @@ export async function retryJob(
     outcome: "ok",
     jobId,
     publicationId: job.publication_id,
-    accountId: job.channel_account_id
+    accountId: job.channel_account_id,
+    previousStatus: job.status,
+    previousFailureCode: job.failure_code
   };
 }

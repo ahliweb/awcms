@@ -114,13 +114,29 @@ async function findArticlePublication(
   articleId: string,
   trigger: SocialPublishTrigger
 ): Promise<PublicationRow | null> {
-  const rows = (await tx`
-    SELECT id, state, approval_required FROM awcms_social_publications
-    WHERE tenant_id = ${tenantId} AND source_kind = 'article'
-      AND source_id = ${articleId} AND trigger_event = ${trigger}
-  `) as PublicationRow[];
+  const read = async () =>
+    (
+      (await tx`
+        SELECT id, state, approval_required FROM awcms_social_publications
+        WHERE tenant_id = ${tenantId} AND source_kind = 'article'
+          AND source_id = ${articleId} AND trigger_event = ${trigger}
+      `) as PublicationRow[]
+    )[0] ?? null;
+  const found = await read();
 
-  return rows[0] ?? null;
+  if (!found) return null;
+
+  // The same advisory lock the approval and the job insert guard of `sql/330`
+  // take (L-1 of the #1145 re-audit): once held, the state read below cannot be
+  // changed by a concurrent approval until this transaction ends, so the
+  // decision made on it is the decision the database will enforce.
+  await tx`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${`social_publication:${tenantId}:${found.id}`}, 0)
+    )
+  `;
+
+  return read();
 }
 
 async function jobIdFor(
@@ -180,7 +196,14 @@ export async function enqueuePublication(
 
       // Approved for the targets it HAD (the #1145 audit, L3): a rule added
       // after the approval cannot ride on it. `sql/330` refuses the job as well.
-      if (publication.state === "ready" && publication.approval_required) {
+      // The rule uses the setting that holds NOW as well as the one the
+      // publication was born with (L-2 of the re-audit): a tenant that has since
+      // turned approval ON does not get to add targets to an old `ready`
+      // publication without one.
+      if (
+        publication.state === "ready" &&
+        (publication.approval_required || input.approvalRequired)
+      ) {
         accounts.push({
           accountId,
           outcome: "refused",

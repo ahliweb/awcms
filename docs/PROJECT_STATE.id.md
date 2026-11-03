@@ -433,7 +433,12 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   L10), menyatakan dampaknya pada `whatsapp:dispatch`; layar admin (sembilan
   permission di `NOT_YET_SCREENED`); sapuan retensi (tiga tabel diparkir di
   `BOUNDED_BY_DESIGN`, batas dinaikkan 30 ke 35 melawan syaratnya sendiri); residual
-  audit L4, L6, L8, L9 (rincian di PR #1240). Peta: README `social_publishing` dan
+  audit L4 (bacaan tidak dibatasi per akun), L6 (`externalPostId` teks bebas), L8
+  (hak media tidak diperiksa ulang saat dispatch), L9 (`prepare` sebelum
+  `authorize`), teks lengkap di ADR-0157 bagian 6; M-1 audit kedua (lease
+  kedaluwarsa provider tanpa kunci dedupe menjadi `needs_reconciliation`, tidak
+  pernah dikirim ulang) dan L-7 (konektor menjawab `unknown`, bukan `retryable`,
+  setelah permintaan ambigu) adalah syarat setiap konektor. Peta: README `social_publishing` dan
   `docs/awcms/social-publishing.id.md`.
 
 - **ANTREAN INTAKE KOMISI — 28 Oktober 2026: dibangun (#1189, ADR-0147; migrasi

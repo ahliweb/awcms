@@ -466,7 +466,10 @@ paths:
         response, the post may already exist) is retried only with
         `{ "confirmPossiblyPublished": true }`, by which the operator states they
         checked the account (otherwise `409 RECONCILIATION_CONFIRMATION_REQUIRED`);
-        the dispatcher never retries it by itself. A job that has used the whole
+        the dispatcher never retries it by itself, and that includes a job whose
+        lease expired while it was in flight for a provider without an idempotency
+        key (`LEASE_EXPIRED_UNKNOWN`). The override is audited at `warning` with the
+        previous status and failure code. A job that has used the whole
         attempt ceiling is `409 RETRY_BUDGET_EXHAUSTED`. Only that job moves, back
         to `queued` with a small bounded extra attempt budget. A published sibling is never touched and never replayed, and a job
         that already PUBLISHED can never be retried (`409 JOB_ALREADY_PUBLISHED`;
@@ -776,7 +779,9 @@ paths:
       summary: Switch automatic publishing and the approval requirement.
       description: >-
         Prospective: a publication keeps the approval requirement it was created
-        with, so turning approval OFF does not release anything already waiting.
+        with, so turning approval OFF does not release anything already waiting. A NEW
+        target added to an already approved publication needs a fresh approval
+        when the setting that holds NOW requires approval (`NEW_TARGET_NEEDS_APPROVAL`).
         At least one field. High-risk: `Idempotency-Key` required, audited at
         `warning` with the previous and the new values. Requires
         `social_publishing.settings.configure`.
