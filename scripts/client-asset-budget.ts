@@ -1169,8 +1169,16 @@ export const READER_BUDGET_BYTES = 24_000;
  * at all, so there is no per-screen duplication to recover. What remains is
  * this screen's own behaviour: no other screen replaces a secret or confirms a
  * terminal action by typing.
+ *
+ * **Raised for Issue #1238** (the over-cap refusal said "2 MiB over the 2 MiB
+ * limit"): +320 B (362,560 -> 362,880), of which 316 B measured locally (362,533
+ * on `main`, 362,849 with this change; `main` sat 27 B under its budget) and 4 B
+ * of margin for the local/CI build difference. It is one small pure function,
+ * `formatByteSizeAgainstCap` in `media-image-compression-plan.ts`, and the two
+ * lines in `describeCompressionFailure` that call it; both ship only in
+ * `/admin/media`'s script, which already carried the formatter they refine.
  */
-export const APP_BUDGET_BYTES = 362_560;
+export const APP_BUDGET_BYTES = 362_880;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

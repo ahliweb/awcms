@@ -126,39 +126,46 @@ const scopeOf = (policy: AbacPolicyRecord): string =>
   )}
 
   {canRead && !loadError && policies.length > 0 && (
-    <table class="admin-table fade-in-up" id="access-policies-table">
-      <thead>
-        <tr>
-          <th scope="col">{t("Policy code")}</th>
-          <th scope="col">{t("Effect")}</th>
-          <th scope="col">{t("Applies to")}</th>
-          <th scope="col">{t("Priority")}</th>
-          <th scope="col">{t("In force")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {policies.map((policy) => (
-          <tr data-policy-id={policy.id}>
-            <td>
-              {policy.policyCode}
-              {policy.description && (
-                <span class="cell-secondary">{policy.description}</span>
-              )}
-            </td>
-            <td>{policy.effect === "allow" ? t("Allow") : t("Deny")}</td>
-            <td>{scopeOf(policy)}</td>
-            <td>{policy.priority}</td>
-            <td>
-              {inForce(policy)
-                ? t("Yes")
-                : policy.isDslManaged
-                  ? t("No — disabled")
-                  : t("No — not evaluated")}
-            </td>
+    <div
+      class="data-table-scroll fade-in-up"
+      role="region"
+      tabindex="0"
+      aria-label={t("Access policies")}
+    >
+      <table class="admin-table" id="access-policies-table">
+        <thead>
+          <tr>
+            <th scope="col">{t("Policy code")}</th>
+            <th scope="col">{t("Effect")}</th>
+            <th scope="col">{t("Applies to")}</th>
+            <th scope="col">{t("Priority")}</th>
+            <th scope="col">{t("In force")}</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {policies.map((policy) => (
+            <tr data-policy-id={policy.id}>
+              <td>
+                {policy.policyCode}
+                {policy.description && (
+                  <span class="cell-secondary">{policy.description}</span>
+                )}
+              </td>
+              <td>{policy.effect === "allow" ? t("Allow") : t("Deny")}</td>
+              <td>{scopeOf(policy)}</td>
+              <td>{policy.priority}</td>
+              <td>
+                {inForce(policy)
+                  ? t("Yes")
+                  : policy.isDslManaged
+                    ? t("No — disabled")
+                    : t("No — not evaluated")}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )}
 
   {canRead && canAnalyze && (
