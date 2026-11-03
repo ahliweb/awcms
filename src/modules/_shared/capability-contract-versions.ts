@@ -132,11 +132,13 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     whatsapp_delivery: "1.1.0",
     // channel_account is provided by the base `channel_accounts` module (Issue
     // #1141, ADR-0148 capability C1) and consumed, optionally, by
-    // `whatsapp_delivery`. First assigned number, not a stability milestone.
-    // `1.1.0` (Issue #1145, ADR-0157) ADDS two exported ports,
-    // `ChannelPublisherPort` and `ChannelPublisherCredentialPort`, for
-    // `social_publishing`. They are separate types, so no existing signature
-    // changed (a MINOR bump) and a 1.0.0 implementer or fake still compiles.
+    // `whatsapp_delivery`. `1.0.0` was the first assigned number. `1.1.0` ADDS
+    // (Issue #1142, ADR-0148 section 7) the refusal reason
+    // `RISK_ACKNOWLEDGEMENT_REQUIRED`, and (Issue #1145, ADR-0157) two exported
+    // ports, `ChannelPublisherPort` and `ChannelPublisherCredentialPort`, for
+    // `social_publishing`. All are additive: no signature changed (a MINOR bump),
+    // a 1.0.0 implementer or fake still compiles, and a consumer that switches
+    // exhaustively over the reasons must add the member.
     channel_account: "1.1.0",
     // social_publishing is provided by the base `social_publishing` module
     // (Issue #1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,

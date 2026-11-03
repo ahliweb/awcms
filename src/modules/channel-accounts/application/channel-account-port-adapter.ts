@@ -32,6 +32,11 @@ import type {
 } from "../../_shared/ports/channel-account-port";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import {
+  isRiskAcknowledgementProvider,
+  type RiskAcknowledgementProvider
+} from "../domain/risk-acknowledgements";
+import { hasActiveRiskAcknowledgement } from "./risk-acknowledgement-check";
+import {
   evaluateCapability,
   getProviderRow,
   type CapabilityEvidenceKind,
@@ -198,6 +203,14 @@ async function evaluateAccountForCapability(
   shape: {
     isRightKind: (account: SenderAccountRow) => boolean;
     wrongKindReason: "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER";
+    /**
+     * A refusal that must be decided BEFORE the account's status (the provider
+     * risk acknowledgement of a WhatsApp sender, Issue #1142); `null` lets the
+     * evaluation go on.
+     */
+    gate?: (
+      account: SenderAccountRow
+    ) => Promise<SenderUnavailableReason | null>;
   }
 ): Promise<AccountEvaluation> {
   if (!isChannelAccountsEnabled(env)) {
@@ -211,6 +224,15 @@ async function evaluateAccountForCapability(
   if (!getProviderRow(account.provider) || !shape.isRightKind(account)) {
     return { usable: false, reason: shape.wrongKindReason };
   }
+
+  // Asked BEFORE the account's status on purpose (Issue #1142, ADR-0148 section
+  // 7): a revocation of an acknowledgement also degrades the tenant's accounts,
+  // and a degraded account is only HELD, which would leave non-expiring messages
+  // waiting forever on a decision that was made; the unacknowledged provider is
+  // terminal.
+  const gated = shape.gate ? await shape.gate(account) : null;
+
+  if (gated) return { usable: false, reason: gated };
 
   const statusReason = reasonForAccountStatus(account.status);
 
@@ -333,7 +355,20 @@ export function createChannelAccountPortAdapter(
         {
           isRightKind: (account) =>
             isWhatsappSenderShape(account.provider, account.account_kind),
-          wrongKindReason: "NOT_A_WHATSAPP_SENDER"
+          wrongKindReason: "NOT_A_WHATSAPP_SENDER",
+          // An UNOFFICIAL provider is usable only while the tenant's
+          // acknowledgement of its current, approved risk text is in force.
+          // Re-read on every call, so a revocation is effective at the next
+          // enqueue and the next claim. Fail closed: no row, no use.
+          gate: async (account) =>
+            isRiskAcknowledgementProvider(account.provider) &&
+            !(await hasActiveRiskAcknowledgement(
+              tx,
+              input.tenantId,
+              account.provider as RiskAcknowledgementProvider
+            ))
+              ? "RISK_ACKNOWLEDGEMENT_REQUIRED"
+              : null
         }
       );
 

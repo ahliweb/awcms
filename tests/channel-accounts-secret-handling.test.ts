@@ -402,7 +402,7 @@ describe("no API surface can leak a decrypted value", () => {
 describe("the module descriptor", () => {
   const module = listModules().find((item) => item.key === "channel_accounts")!;
 
-  test("declares the six seeded permissions and nothing else", () => {
+  test("declares the nine seeded permissions and nothing else", () => {
     expect(
       module.permissions?.map((p) => `${p.activityCode}.${p.action}`).sort()
     ).toEqual([
@@ -411,7 +411,11 @@ describe("the module descriptor", () => {
       "accounts.revoke",
       "assignments.assign",
       "capabilities.configure",
-      "credentials.manage"
+      "credentials.manage",
+      // Issue #1142 (sql/341)
+      "risk_acknowledgements.create",
+      "risk_acknowledgements.read",
+      "risk_acknowledgements.revoke"
     ]);
   });
 
@@ -424,10 +428,14 @@ describe("the module descriptor", () => {
   });
 
   test("the migration seeds exactly the declared permissions", () => {
-    const sql = readFileSync(
+    // `sql/319` seeded the first six; `sql/341` (Issue #1142) the three of the
+    // risk acknowledgement surface. Together they are the declared nine.
+    const sql = [
       "sql/319_awcms_channel_accounts_permissions.sql",
-      "utf8"
-    );
+      "sql/341_awcms_channel_provider_risk_acknowledgements_permissions.sql"
+    ]
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
     const seeded = [
       ...sql.matchAll(/\('channel_accounts', '([a-z_]+)', '([a-z_]+)',/g)
     ]

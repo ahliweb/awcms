@@ -99,6 +99,11 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0148 / Issue #1140. Every row is AUTHORED by an administrator registering an external account the tenant really operates (a page, a number, a bot), never accumulated by traffic: the ceiling is the number of accounts a business connects, and an account is soft-deleted (terminal) when it is retired. Nothing in a request path or a job inserts one."
   },
   {
+    table: "awcms_channel_provider_risk_acknowledgements",
+    reason:
+      "ADR-0148 section 7 / Issue #1142. An accountability record, not traffic: one row per act of a person accepting (or withdrawing) the risk of an UNOFFICIAL provider, written only by that person through `risk_acknowledgements.create` and stamped revoked by a holder of `risk_acknowledgements.revoke`. A unique index over ACTIVE rows allows one live acknowledgement per person, provider and text version, so the ceiling is people times text versions times deliberate revoke-and-redo cycles, a handful per tenant. It is append-only by trigger and must NOT be purged by age: deleting it would erase who accepted what and when. The person identity is anonymised on erasure, the row stays (subject-data descriptor, severed_with_subject_row)."
+  },
+  {
     table: "awcms_engagement_sources",
     reason:
       "ADR-0155 / Issue #1153. Every row is AUTHORED by an administrator registering a website or form channel the tenant really operates, never accumulated by traffic: the ceiling is the number of sites a business runs, a source is soft-deleted (terminal) when retired, and nothing in the public intake path inserts one. The visitor's own data lives in awcms_engagement_submissions, which has its own retention descriptor."

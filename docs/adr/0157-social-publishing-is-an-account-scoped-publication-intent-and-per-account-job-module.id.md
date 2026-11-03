@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.md)
 
-<!-- i18n-source-hash: sha256:4b504b7acdbd3bcb3eb95fd9283e14a9d850508f5d917e0dac56e62e335b6828 -->
+<!-- i18n-source-hash: sha256:177d8564fddef510cb411b16ca255e205dc21a6b6b0b3b641cd66d79181ec3f0 -->
 
 # ADR-0157 — `social_publishing` adalah modul intent-publikasi berbasis akun dan job per akun; provider adalah plug-in yang tidak dapat melebarkan apa yang boleh dilakukan sebuah akun
 

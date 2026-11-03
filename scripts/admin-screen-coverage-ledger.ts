@@ -251,6 +251,15 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "channel_accounts.assignments.assign",
   "channel_accounts.capabilities.configure",
   "channel_accounts.credentials.manage",
+  // channel_accounts risk acknowledgements (3) — Issue #1142, ADR-0148 section
+  // 7. API-first: the text, the acknowledgement, its revocation and the device
+  // attestation are complete (`/risk-acknowledgements`, `/accounts/{id}/attest-device`)
+  // and their screen rides with the connection manager (Issue #1154), where an
+  // operator reads the unofficial-provider text next to the device it governs. No
+  // page exists to claim these until then.
+  "channel_accounts.risk_acknowledgements.create",
+  "channel_accounts.risk_acknowledgements.read",
+  "channel_accounts.risk_acknowledgements.revoke",
   // whatsapp_delivery sender routing (2) — Issue #1141, ADR-0148 section 4.
   // API-first: the sender and default-sender-policy surface (`GET /senders`,
   // `PUT /sender-policy`) is complete, and its screen rides with the connection

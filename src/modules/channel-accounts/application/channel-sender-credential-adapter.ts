@@ -40,8 +40,10 @@ import type {
   SenderUnavailableReason
 } from "../../_shared/ports/channel-account-port";
 import { log } from "../../../lib/logging/logger";
+import { isStarsenderAdapterEnabled } from "../../_shared/unofficial-provider-flags";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import type { ChannelSecretPurpose } from "../domain/channel-accounts-constants";
+import { isRiskAcknowledgementProvider } from "../domain/risk-acknowledgements";
 import {
   isPublisherShape,
   isWhatsappSenderShape,
@@ -51,11 +53,17 @@ import {
   reasonForGrantState,
   type SenderAccountRow
 } from "./channel-account-port-adapter";
+import { hasActiveRiskAcknowledgement } from "./risk-acknowledgement-check";
 import {
   defaultSecretStore,
   SecretStoreError,
   type SecretStorePort
 } from "./secret-store";
+
+/** The providers whose adapter is an opt-in, unofficial one (today: StarSender). */
+function isUnofficialProvider(provider: string): boolean {
+  return provider === "starsender";
+}
 
 type ConnectionRow = {
   grant_state: string;
@@ -168,7 +176,14 @@ export function createChannelSenderCredentialAdapter(
     tx: Bun.SQL,
     input: { tenantId: string; accountId: string },
     isRightKind: (account: SenderAccountRow) => boolean,
-    wrongKindReason: "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER"
+    wrongKindReason: "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER",
+    /**
+     * Refusals decided after the status and BEFORE any secret is read (the
+     * WhatsApp provider gates of Issue #1142); `null` lets the call go on.
+     */
+    gate?: (
+      account: SenderAccountRow
+    ) => Promise<SenderUnavailableReason | null>
   ): Promise<
     | { ok: true; credential: string }
     | { ok: false; reason: SenderUnavailableReason | "NOT_A_PUBLISHER" }
@@ -192,6 +207,10 @@ export function createChannelSenderCredentialAdapter(
     const statusReason = reasonForAccountStatus(account.status);
 
     if (statusReason) return { ok: false, reason: statusReason };
+
+    const gated = gate ? await gate(account) : null;
+
+    if (gated) return { ok: false, reason: gated };
 
     const reference = await referenceFor(tx, input.tenantId, account, now());
 
@@ -247,7 +266,34 @@ export function createChannelSenderCredentialAdapter(
         input,
         (account) =>
           isWhatsappSenderShape(account.provider, account.account_kind),
-        "NOT_A_WHATSAPP_SENDER"
+        "NOT_A_WHATSAPP_SENDER",
+        async (account) => {
+          // Defence in depth (Issue #1142): the device key of an UNOFFICIAL
+          // provider is not decrypted for a tenant whose acknowledgement is not
+          // in force, even if a caller skipped the sender decision.
+          if (
+            isRiskAcknowledgementProvider(account.provider) &&
+            !(await hasActiveRiskAcknowledgement(
+              tx,
+              input.tenantId,
+              account.provider
+            ))
+          ) {
+            return "RISK_ACKNOWLEDGEMENT_REQUIRED";
+          }
+
+          // The adapter's switch comes before ANY secret is read (audit L2,
+          // Issue #1142): with the flag off the device key is not decrypted at
+          // all, even if a caller skipped the sender decision.
+          if (
+            isUnofficialProvider(account.provider) &&
+            !isStarsenderAdapterEnabled(options.env ?? process.env)
+          ) {
+            return "PROVIDER_ADAPTER_DISABLED";
+          }
+
+          return null;
+        }
       );
 
       return result.ok

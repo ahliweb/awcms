@@ -76,7 +76,7 @@
       "dependencies": ["tenant_admin", "identity_access", "logging"],
       "capabilitiesProvided": ["channel_account"],
       "capabilitiesConsumed": [],
-      "permissionCount": 6,
+      "permissionCount": 9,
       "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,

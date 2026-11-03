@@ -282,6 +282,62 @@ describeOrSkip(
       }
     });
 
+    test("sql/340 (Issue #1142): disabling OR dropping either risk-acknowledgement trigger FAILS, and putting it back passes", async () => {
+      const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+      try {
+        for (const [table, trigger, message] of [
+          [
+            "awcms_channel_accounts",
+            "awcms_channel_accounts_risk_ack_guard",
+            "awcms_channel_accounts_risk_ack_guard is missing"
+          ],
+          [
+            "awcms_channel_provider_risk_acknowledgements",
+            "awcms_channel_provider_risk_acks_guard",
+            "awcms_channel_provider_risk_acks_guard is missing"
+          ]
+        ] as const) {
+          expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+
+          // Disabled.
+          await admin.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`);
+          let disabled;
+          try {
+            disabled = await checkWorkerSetupRoleGrants();
+          } finally {
+            await admin.unsafe(
+              `ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`
+            );
+          }
+
+          expect(disabled.status).toBe("fail");
+          expect(disabled.evidence).toContain(message);
+
+          // Dropped (recreated from its own definition afterwards).
+          const definition = (await admin`
+            SELECT pg_get_triggerdef(t.oid) AS def FROM pg_trigger t
+            WHERE t.tgname = ${trigger} AND NOT t.tgisinternal
+          `) as { def: string }[];
+
+          expect(definition).toHaveLength(1);
+          await admin.unsafe(`DROP TRIGGER ${trigger} ON ${table}`);
+
+          let dropped;
+          try {
+            dropped = await checkWorkerSetupRoleGrants();
+          } finally {
+            await admin.unsafe(definition[0]!.def);
+          }
+
+          expect(dropped.status).toBe("fail");
+          expect(dropped.evidence).toContain(message);
+          expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+        }
+      } finally {
+        await admin.close({ timeout: 1 });
+      }
+    });
+
     test("a pinned COLUMN the role does not hold FAILS", async () => {
       if (!(await awcmsWorkerExists())) {
         return;

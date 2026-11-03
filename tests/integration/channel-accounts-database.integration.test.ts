@@ -459,7 +459,7 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         relforcerowsecurity: boolean;
       }[];
 
-      expect(rows.length).toBe(8);
+      expect(rows.length).toBe(9);
 
       for (const row of rows) {
         expect(row.relrowsecurity, row.relname).toBe(true);
@@ -594,7 +594,8 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
       expect(result).toEqual({
         outcome: "written",
         replaced: false,
-        version: 1
+        version: 1,
+        demoted: false
       });
 
       const rows = (await getAdminSql()`
@@ -755,7 +756,12 @@ suite("channel_accounts database behaviour (Issue #1140)", () => {
         await inTenant(T1, (tx) =>
           writeAccountCredential(tx, store, T1, U1, id, `${CANARY}-2`)
         )
-      ).toEqual({ outcome: "written", replaced: true, version: 2 });
+      ).toEqual({
+        outcome: "written",
+        replaced: true,
+        version: 2,
+        demoted: false
+      });
       expect(await secretCount(T1)).toBe(1);
 
       registerFakeAdapter();

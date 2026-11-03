@@ -415,6 +415,12 @@ const RULES: readonly Rule[] = [
   { name: "WHATSAPP_META_ACCESS_TOKEN", required: false, type: "string" },
   { name: "WHATSAPP_META_PHONE_NUMBER_ID", required: false, type: "string" },
   { name: "WHATSAPP_META_API_VERSION", required: false, type: "string" },
+  // StarSender (UNOFFICIAL WhatsApp gateway, Issue #1142, ADR-0148 section 7).
+  // Off by default; only the exact value `true` enables the adapter. Enabling it
+  // is necessary and not sufficient to send: a device must be attested, the
+  // tenant must hold an active risk acknowledgement of the current approved text,
+  // and the capability needs evidence.
+  { name: "WHATSAPP_STARSENDER_ENABLED", required: false, type: "bool" },
 
   // channel_accounts (ADR-0148, Issue #1140). Off by default; off means every
   // route answers 503 after authorization. The ring encrypts every tenant's

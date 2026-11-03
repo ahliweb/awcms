@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](social-publishing.md)
 
-<!-- i18n-source-hash: sha256:edcf36c081ebd9bb000741712bf4ff19860b884c2ce62844d3852142f4911ab6 -->
+<!-- i18n-source-hash: sha256:e9af79db517f57f4b50851deeb9ad09383393878cb642dd4931b1aa224a54e84 -->
 
 # Penerbitan sosial (`social_publishing`)
 
@@ -57,7 +57,7 @@ Trigger database menegakkan: snapshot dan identitas tidak pernah berubah; job `p
 | Kredensial tak lagi diterima                                             | `failed` `NEEDS_REAUTH`; tidak pernah dicoba ulang oleh backoff                                                                                                                                                                                                                                           |
 | Provider menolak konten                                                  | `failed` dengan kode tetap; tidak pernah dicoba ulang oleh backoff                                                                                                                                                                                                                                        |
 | Job lain dari publikasi yang sama gagal                                  | Tidak berpengaruh pada saudara yang sudah terbit; retry manual hanya memindahkan job yang gagal                                                                                                                                                                                                           |
-| Worker crash saat mengirim                                               | Lease habis: jawaban yang hilang. Provider yang men-dedupe mendapat kunci yang sama lagi sebagai percobaan baru; job provider lain menjadi `needs_reconciliation` (`LEASE_EXPIRED_UNKNOWN`) dan tidak pernah dikirim ulang dispatcher (database juga menolak klaim ulangnya)                                                                                                         |
+| Worker crash saat mengirim                                               | Lease habis: jawaban yang hilang. Provider yang men-dedupe mendapat kunci yang sama lagi sebagai percobaan baru; job provider lain menjadi `needs_reconciliation` (`LEASE_EXPIRED_UNKNOWN`) dan tidak pernah dikirim ulang dispatcher (database juga menolak klaim ulangnya)                              |
 | Breaker terbuka untuk sebuah akun                                        | Job-nya tidak diklaim; akun lain tidak terpengaruh                                                                                                                                                                                                                                                        |
 
 ## 5. Catatan keamanan

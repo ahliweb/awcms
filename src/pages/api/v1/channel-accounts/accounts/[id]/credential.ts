@@ -125,7 +125,10 @@ export const PUT = defineTenantRoute<Prepared>({
           message: "Channel account credential written (value not recorded).",
           attributes: {
             replaced: result.replaced,
-            cipherVersion: result.version
+            cipherVersion: result.version,
+            // An unofficial-provider device goes back to `pending` and must be
+            // attested again (Issue #1142, audit M2).
+            accountDemoted: result.demoted
           }
         });
 

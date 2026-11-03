@@ -572,7 +572,20 @@ describe("the real repository", () => {
       // visitor's submissions, has a real `dataLifecycle` descriptor with a
       // retention window and a legal-hold-aware purge, not an exemption.
       //
-      // **35 since `social_publishing` (Issue #1145, ADR-0157), and this raise does
+      // **31 since the provider risk acknowledgement (Issue #1142, ADR-0148
+      // section 7)**, an honest raise, written out because the bar above is "a
+      // net shrink, not an argument" and this one brings neither. It is the one
+      // entry that is an ACCOUNTABILITY RECORD rather than configuration: a row is
+      // one person's recorded acceptance of an unofficial provider's risk, so
+      // deleting it by age would erase who accepted what and when, which is the
+      // point of the table. Its growth is bounded by people (a partial unique
+      // index allows one active row per person, provider and text version) and by
+      // deliberate revoke-and-redo cycles, never by traffic, and an append-only
+      // trigger forbids both UPDATE of the record and DELETE. The alternative
+      // (`dataLifecycle`, generic, age-only) would delete live acknowledgements
+      // and silently disconnect a tenant's devices.
+      //
+      // **36 since `social_publishing` (Issue #1145, ADR-0157), and this raise does
       // NOT clear the bar above ("a net shrink, not an argument"). Said plainly,
       // as the hr_commission raise (18) said it.** Five tables arrive, in two
       // different classes:
@@ -594,7 +607,7 @@ describe("the real repository", () => {
       //   follow-up is a delegated, legal-hold-aware purge of terminal jobs and
       //   attempts (docs/awcms/social-publishing.md, remaining limitations), which
       //   replaces three of these five entries with a real descriptor.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(35);
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(36);
     });
 
     test("every entry names a table that really exists in sql/", () => {

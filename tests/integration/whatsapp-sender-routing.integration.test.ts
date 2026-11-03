@@ -195,6 +195,39 @@ type AccountSeed = {
   capabilities?: ("dm" | "reply" | "broadcast")[] | null;
 };
 
+/** One active acknowledgement of the StarSender risk for the tenant, by a throwaway person (Issue #1142 fixture). */
+async function ensureRiskAcknowledgement(tenantId: string): Promise<void> {
+  const admin = getAdminSql();
+  const present = (await admin`
+    SELECT 1 FROM awcms_channel_provider_risk_acknowledgements
+    WHERE tenant_id = ${tenantId} AND provider = 'starsender'
+      AND revoked_at IS NULL LIMIT 1
+  `) as unknown[];
+
+  if (present.length > 0) return;
+
+  const profile = (await admin`
+    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+    VALUES (${tenantId}, 'person', 'ack-fixture') RETURNING id
+  `) as { id: string }[];
+  const identity = (await admin`
+    INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
+    VALUES (${tenantId}, ${profile[0]!.id}, ${`ack-${crypto.randomUUID()}@example.test`}, 'x')
+    RETURNING id
+  `) as { id: string }[];
+  const user = (await admin`
+    INSERT INTO awcms_tenant_users (tenant_id, identity_id)
+    VALUES (${tenantId}, ${identity[0]!.id}) RETURNING id
+  `) as { id: string }[];
+
+  await admin`
+    INSERT INTO awcms_channel_provider_risk_acknowledgements
+      (tenant_id, provider, tenant_user_id, text_version, text_sha256)
+    VALUES (${tenantId}, 'starsender', ${user[0]!.id},
+            'fixture-v1', ${"0".repeat(64)})
+  `;
+}
+
 /** A tenant-owned account, its capability evidence and (optionally) its credential, through the real secret store. */
 async function seedAccount(
   tenantId: string,
@@ -207,6 +240,16 @@ async function seedAccount(
   const authMode =
     seed.authMode ?? (provider === "starsender" ? "device_key" : "api_token");
   const externalId = seed.externalId ?? nextPhoneId();
+
+  if (
+    provider === "starsender" &&
+    (seed.status ?? "connected") === "connected"
+  ) {
+    // sql/340: a StarSender device cannot be connected without an active
+    // acknowledgement of the provider's risk, so the fixture records one.
+    await ensureRiskAcknowledgement(tenantId);
+  }
+
   const rows = (await admin`
     INSERT INTO awcms_channel_accounts
       (tenant_id, business_scope_type, business_scope_id, provider,
@@ -772,7 +815,7 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       });
     });
 
-    test("a StarSender device has no adapter yet: refused, not queued to wait forever", async () => {
+    test("a StarSender device with its adapter flag off (the default) is refused, not queued to wait forever", async () => {
       const device = await seedAccount(TENANT_A, { provider: "starsender" });
 
       expect(await enqueue(TENANT_A, { senderAccountId: device.id })).toEqual({
