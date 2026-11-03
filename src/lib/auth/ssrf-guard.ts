@@ -38,6 +38,9 @@
  *      blocked exactly like a direct one.
  *   5. Bounded timeout (via `AbortController`) and a hard response-size cap —
  *      a hostile endpoint cannot hang the caller or exhaust memory.
+ *   6. Credential headers (`Authorization`, `Cookie`, `Proxy-Authorization`,
+ *      plus any the caller names in `credentialHeaders`) are NOT re-sent to a
+ *      different origin on a redirect (Issue #1242) — see `ssrfSafeFetch`.
  */
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -69,9 +72,58 @@ export type SsrfFetchOptions = {
    */
   body?: string | Uint8Array;
   env?: NodeJS.ProcessEnv;
+  /**
+   * ADDITIONAL header names (case-insensitive) that carry a credential and must
+   * not follow a redirect to another origin — e.g. `["X-Api-Key"]`. They are
+   * ADDED to {@link DEFAULT_CREDENTIAL_HEADERS}; the default list cannot be
+   * shortened. Omitted: the defaults only. Issue #1242.
+   */
+  credentialHeaders?: string[];
 };
 
 const DEFAULT_MAX_REDIRECTS = 3;
+
+/**
+ * Headers the guard never forwards once a redirect leaves the original
+ * request's origin (the fetch standard's rule for a cross-origin redirect,
+ * which a `redirect: "manual"` loop does not get for free). Lower-case.
+ */
+export const DEFAULT_CREDENTIAL_HEADERS: readonly string[] = [
+  "authorization",
+  "cookie",
+  "proxy-authorization"
+];
+
+/** Lower-cased, trimmed, de-duplicated union of the defaults and the caller's own. */
+function credentialHeaderSet(extra: string[] | undefined): Set<string> {
+  const names = new Set<string>(DEFAULT_CREDENTIAL_HEADERS);
+
+  for (const name of extra ?? []) {
+    const normalized = name.trim().toLowerCase();
+
+    if (normalized.length > 0) {
+      names.add(normalized);
+    }
+  }
+
+  return names;
+}
+
+/** A copy of `headers` without any name in `credentials` (matched case-insensitively). */
+function withoutCredentialHeaders(
+  headers: Record<string, string> | undefined,
+  credentials: Set<string>
+): Record<string, string> | undefined {
+  if (!headers) {
+    return headers;
+  }
+
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([name]) => !credentials.has(name.trim().toLowerCase())
+    )
+  );
+}
 
 /**
  * Parses `AUTH_SSO_ALLOW_INSECURE_HOSTS` (comma-separated `host` or `host:port`
@@ -406,6 +458,18 @@ async function defaultResolver(host: string): Promise<string[]> {
   return records.map((record) => record.address);
 }
 
+/** `scheme://host:port` of a URL (default ports normalised), or `null` when it does not parse. */
+function originOf(rawUrl: string): string | null {
+  try {
+    const { origin } = new URL(rawUrl);
+
+    // An opaque origin serialises as the string "null": never "equal" to anything.
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
+}
+
 async function readCappedResponse(
   response: Response,
   maxBytes: number
@@ -466,6 +530,16 @@ async function readCappedResponse(
  * hostile IdP cannot slow-drip a body that stays under the size cap past the
  * deadline — the abort tears down the in-flight fetch/stream and the read
  * rejects, surfacing as `request_failed`.
+ *
+ * Credential headers and redirects (Issue #1242): `Authorization`, `Cookie`,
+ * `Proxy-Authorization` and any header named in `options.credentialHeaders` are
+ * sent only while the request stays on the ORIGINAL request's origin (scheme +
+ * host + port). The first hop that leaves it drops them, and they STAY dropped
+ * for every later hop — a chain that wanders off and returns (A -> B -> A) does
+ * not get them back, because by then an untrusted origin has been in the path
+ * and nothing says the return is not attacker-chosen. Non-credential headers
+ * (Accept, User-Agent, Content-Type, ...) are forwarded on every hop. The
+ * caller's `headers` object is never mutated.
  */
 export async function ssrfSafeFetch(
   rawUrl: string,
@@ -476,6 +550,12 @@ export async function ssrfSafeFetch(
   let currentUrl = rawUrl;
   let currentMethod = options.method ?? "GET";
   let currentBody = options.body;
+  // Header set for the CURRENT hop. Starts as the caller's headers and, once a
+  // hop leaves the original origin, is replaced by a credential-free copy that
+  // is never widened again (Issue #1242).
+  let currentHeaders = options.headers;
+  const originalOrigin = originOf(rawUrl);
+  const credentials = credentialHeaderSet(options.credentialHeaders);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
@@ -493,7 +573,7 @@ export async function ssrfSafeFetch(
       try {
         response = await fetch(currentUrl, {
           method: currentMethod,
-          headers: options.headers,
+          headers: currentHeaders,
           // `fetch` accepts a `Uint8Array` at runtime; the ambient `BodyInit`
           // in this TypeScript lib does not list `ArrayBufferView`, so the cast
           // is a gap in the type, not a widening of what is sent.
@@ -542,6 +622,15 @@ export async function ssrfSafeFetch(
 
         if (hop === maxRedirects) {
           return { ok: false, reason: "too_many_redirects" };
+        }
+
+        // A hop to another origin must not carry credentials, and neither may
+        // any later hop. An unparseable origin on either side fails closed.
+        if (originalOrigin === null || originOf(nextUrl) !== originalOrigin) {
+          currentHeaders = withoutCredentialHeaders(
+            currentHeaders,
+            credentials
+          );
         }
 
         currentUrl = nextUrl;

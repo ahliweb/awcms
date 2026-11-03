@@ -121,6 +121,59 @@ comes back to the table on the same date as the three ADR-0068 divergences.
 | A09 | Logging & Monitoring Failures  | **Met** | High-risk audit + decision log + automatic correlation ID across all of `/api/*`; `bun run logging:lint:check` rejects leaking log patterns; audit retention/purge; `setLogSink`/`setAuditExportHook` extension points for SIEM                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | A10 | SSRF                           | **Met** | [`src/lib/auth/ssrf-guard.ts`](../../src/lib/auth/ssrf-guard.ts) — blocks private/metadata IPs, hop limit, an `AbortController` spanning the fetch **and** the body read, plus a response size cap. Provider URLs come from trusted env, not from user input                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
+### A10 detail: credential headers and redirects in `ssrfSafeFetch` (Issue #1242)
+
+`ssrfSafeFetch` follows redirects by hand and re-validates every hop's URL, but
+until Issue #1242 it also re-sent the caller's `headers` unchanged on every hop,
+so a `302`/`307` to another origin (a public address, hence allowed) received
+the `Authorization` or `Cookie` the caller had meant for the first origin. The
+fetch standard's cross-origin rule does not run under `redirect: "manual"`; the
+guard now applies it itself.
+
+- **Rule.** `Authorization`, `Cookie`, `Proxy-Authorization` and any header the
+  caller names in the new optional `credentialHeaders` (case-insensitive, added
+  to the defaults, never replacing them) are sent only while the request stays
+  on the **original** request's origin (scheme + host + port; default ports
+  normalised). The first hop that leaves it drops them.
+- **Once dropped, stay dropped.** A chain `A -> B -> A` does not get them back:
+  an origin the caller did not choose has been in the path, and nothing proves
+  the return is not attacker-chosen. Stricter than the standard's per-hop view
+  in outcome only for that return path.
+- **Everything else is unchanged.** Non-credential headers (`Accept`,
+  `User-Agent`, `Content-Type`, ...) go on every hop; `301`/`302`/`303`/`307`/`308`
+  still become a body-less `GET`; per-hop SSRF validation, the hop cap, the
+  total timeout and the size cap are untouched; the caller's `headers` object is
+  never mutated; a caller that never meets a redirect sees no difference.
+- **Evidence.** `tests/ssrf-redirect-credentials.test.ts` (two-origin fixture, no
+  network).
+- **Caller audit (every caller of `ssrfSafeFetch`).** None relied on a
+  forwarded credential header; callers that carry a credential and have no need
+  to follow a redirect should still pass `maxRedirects: 0` (defence in depth).
+
+| Caller                                                            | Credential header sent          | Can be redirected                                          | Relied on forwarding                                                                           |
+| ----------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `generic-oidc-client.ts` discovery and JWKS                       | none                            | yes (default 3)                                            | no                                                                                             |
+| `generic-oidc-client.ts` token exchange                           | none (secret in body)           | no (`maxRedirects: 0`)                                     | no                                                                                             |
+| `omes-control` `repository-progress-poller.ts` (`api.github.com`) | `Authorization: Bearer`         | yes (default 3); GitHub redirects stay on `api.github.com` | no (same-origin hops keep it)                                                                  |
+| `push-delivery` FCM send                                          | `Authorization: Bearer`         | yes (default 3)                                            | no                                                                                             |
+| `push-delivery` Google token                                      | none (assertion in body)        | yes (default 3)                                            | no                                                                                             |
+| `push-delivery` Web Push (subscriber-supplied endpoint)           | `Authorization` (VAPID)         | yes (default 3)                                            | no (the VAPID token is bound to the endpoint origin, so another origin would reject it anyway) |
+| `whatsapp-delivery` Fonnte                                        | `Authorization`                 | yes (default 3)                                            | no                                                                                             |
+| `whatsapp-delivery` Meta Cloud                                    | `Authorization: Bearer`         | yes (default 3)                                            | no                                                                                             |
+| `whatsapp-delivery` StarSender                                    | `Authorization`                 | no (`maxRedirects: 0`)                                     | no                                                                                             |
+| `email` Mailketing v2                                             | `Authorization: Bearer`         | no (`maxRedirects: 0`)                                     | no                                                                                             |
+| `telegram-delivery`                                               | none (token is in the URL path) | no (`maxRedirects: 0`)                                     | no                                                                                             |
+
+`seo-distribution/domain/edge-redirect-probe.ts` mentions the guard but does not
+call it (it sends no credentials). No script calls `ssrfSafeFetch`.
+
+**Residual risk.** A credential in the URL path or query (the Telegram bot token)
+is not a header and is not covered by the header rule; that caller refuses every
+redirect instead. A header with a custom credential name must be declared in
+`credentialHeaders`; an undeclared one is treated as benign. A cross-origin hop
+to a same-site host is still a different origin and loses the credentials. A
+`Set-Cookie` returned by a hop is not stored or replayed by the guard.
+
 ## 4. OWASP API Security Top 10 (2023)
 
 This category **does not apply** in `awcms-astro` (that repo serves no API). It
