@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](standar-performa-dan-keamanan.md)
 
-<!-- i18n-source-hash: sha256:59e5f689fe59a4a6968f4eaafabf10dc2fe704ad89184af1c19c3be0c72cb54f -->
+<!-- i18n-source-hash: sha256:27a6dc4a1be5730951b797c9d6d27c0e129702768909e6574f77508d86952d10 -->
 
 # awcms — Standar Performa dan Keamanan
 
@@ -124,6 +124,61 @@ kembali ke meja pada tanggal yang sama dengan tiga divergence ADR-0068.
 | A08 | Software & Data Integrity      | **Terpenuhi** | Checksum migration (`validateAppliedChecksums`); audit append-only; rilis ber-SBOM ×2 + sign/attest lewat `.github/workflows/release.yml` dengan approval gate environment; HMAC v2 terikat tenant+node untuk kanal sync                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | A09 | Logging & Monitoring Failures  | **Terpenuhi** | Audit high-risk + decision log + correlation ID otomatis di seluruh `/api/*`; `bun run logging:lint:check` menolak pola log yang membocorkan; retensi/purge audit; extension point `setLogSink`/`setAuditExportHook` untuk SIEM                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | A10 | SSRF                           | **Terpenuhi** | [`src/lib/auth/ssrf-guard.ts`](../../src/lib/auth/ssrf-guard.ts) — blokir IP privat/metadata, batas hop, `AbortController` yang membentang fetch **dan** pembacaan body, plus cap ukuran respons. URL provider dari env tepercaya, bukan input pengguna                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+### Detail A10: header kredensial dan redirect di `ssrfSafeFetch` (Issue #1242)
+
+`ssrfSafeFetch` mengikuti redirect secara manual dan memvalidasi ulang URL tiap
+hop, tetapi sampai Issue #1242 ia juga mengirim ulang `headers` pemanggil tanpa
+perubahan di setiap hop, sehingga `302`/`307` ke origin lain (alamat publik,
+jadi diizinkan) menerima `Authorization` atau `Cookie` yang dimaksudkan untuk
+origin pertama. Aturan lintas-origin dari standar fetch tidak berjalan di bawah
+`redirect: "manual"`; guard kini menerapkannya sendiri.
+
+- **Aturan.** `Authorization`, `Cookie`, `Proxy-Authorization` dan header apa pun
+  yang disebut pemanggil di opsi baru `credentialHeaders` (tak peka huruf besar,
+  ditambahkan ke bawaan, tidak pernah menggantikannya) hanya dikirim selama
+  request tetap berada di origin **request awal** (skema + host + port; port
+  bawaan dinormalkan). Hop pertama yang keluar dari origin itu membuangnya.
+- **Sekali dibuang, tetap terbuang.** Rantai `A -> B -> A` tidak mendapatkannya
+  kembali: origin yang tidak dipilih pemanggil sudah ada di jalur, dan tak ada
+  bukti bahwa kembalinya bukan pilihan penyerang. Hasilnya lebih ketat daripada
+  pandangan per-hop standar, hanya untuk jalur kembali itu.
+- **Selebihnya tidak berubah.** Header non-kredensial (`Accept`, `User-Agent`,
+  `Content-Type`, ...) dikirim di setiap hop; `301`/`302`/`303`/`307`/`308`
+  tetap menjadi `GET` tanpa body; validasi SSRF per hop, batas hop, timeout
+  total, dan batas ukuran tidak disentuh; objek `headers` pemanggil tidak pernah
+  dimutasi; pemanggil yang tidak pernah bertemu redirect tidak melihat beda.
+- **Bukti.** `tests/ssrf-redirect-credentials.test.ts` (fixture dua origin,
+  tanpa jaringan).
+- **Audit pemanggil (setiap pemanggil `ssrfSafeFetch`).** Tak satu pun bergantung
+  pada header kredensial yang diteruskan; pemanggil yang membawa kredensial dan
+  tidak perlu mengikuti redirect tetap sebaiknya memakai `maxRedirects: 0`
+  (pertahanan berlapis).
+
+| Pemanggil                                                         | Header kredensial                 | Dapat di-redirect                                        | Bergantung pada penerusan                                                   |
+| ----------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `generic-oidc-client.ts` discovery dan JWKS                       | tidak ada                         | ya (bawaan 3)                                            | tidak                                                                       |
+| `generic-oidc-client.ts` tukar token                              | tidak ada (secret di body)        | tidak (`maxRedirects: 0`)                                | tidak                                                                       |
+| `omes-control` `repository-progress-poller.ts` (`api.github.com`) | `Authorization: Bearer`           | ya (bawaan 3); redirect GitHub tetap di `api.github.com` | tidak (hop satu origin mempertahankannya)                                   |
+| `push-delivery` kirim FCM                                         | `Authorization: Bearer`           | ya (bawaan 3)                                            | tidak                                                                       |
+| `push-delivery` token Google                                      | tidak ada (assertion di body)     | ya (bawaan 3)                                            | tidak                                                                       |
+| `push-delivery` Web Push (endpoint dari pelanggan)                | `Authorization` (VAPID)           | ya (bawaan 3)                                            | tidak (token VAPID terikat ke origin endpoint, jadi origin lain menolaknya) |
+| `whatsapp-delivery` Fonnte                                        | `Authorization`                   | ya (bawaan 3)                                            | tidak                                                                       |
+| `whatsapp-delivery` Meta Cloud                                    | `Authorization: Bearer`           | ya (bawaan 3)                                            | tidak                                                                       |
+| `whatsapp-delivery` StarSender                                    | `Authorization`                   | tidak (`maxRedirects: 0`)                                | tidak                                                                       |
+| `email` Mailketing v2                                             | `Authorization: Bearer`           | tidak (`maxRedirects: 0`)                                | tidak                                                                       |
+| `telegram-delivery`                                               | tidak ada (token ada di path URL) | tidak (`maxRedirects: 0`)                                | tidak                                                                       |
+
+`seo-distribution/domain/edge-redirect-probe.ts` menyebut guard tetapi tidak
+memanggilnya (ia tidak mengirim kredensial). Tidak ada skrip yang memanggil
+`ssrfSafeFetch`.
+
+**Risiko sisa.** Kredensial di path atau query URL (token bot Telegram) bukan
+header dan tidak tercakup aturan header; pemanggil itu menolak setiap redirect.
+Header dengan nama kredensial khusus harus dideklarasikan di
+`credentialHeaders`; yang tidak dideklarasikan dianggap biasa. Hop lintas-origin
+ke host se-situs tetap origin berbeda dan kehilangan kredensial. `Set-Cookie`
+yang dikembalikan sebuah hop tidak disimpan maupun diputar ulang oleh guard.
 
 ## 4. OWASP API Security Top 10 (2023)
 
