@@ -68,32 +68,24 @@ import {
 } from "../../../lib/ui/channel-accounts-screen";
 import {
   fetchAccountHealth,
-  listConnectionAccountBindings,
-  toPublicAccount,
-  type AccountHealthView,
-  type AccountView
+  type AccountHealthView
 } from "../../../modules/channel-accounts/application/account-directory";
+import {
+  resolveAccountDetailAccess,
+  type AccountDetailAccess
+} from "../../../modules/channel-accounts/application/account-screen-access";
 import {
   listAccountCapabilities,
   type CapabilityView
 } from "../../../modules/channel-accounts/application/capability-directory";
-import {
-  asUuid,
-  canSeeAllAccounts,
-  loadAuthorizedAccount,
-  mayRevokeConnection
-} from "../../../modules/channel-accounts/application/channel-accounts-route-support";
+import { asUuid } from "../../../modules/channel-accounts/application/channel-accounts-route-support";
 import { isWhatsappSenderShape } from "../../../modules/channel-accounts/application/channel-account-port-adapter";
-import {
-  fetchConnection,
-  type ConnectionView
-} from "../../../modules/channel-accounts/application/connection-directory";
 import { isChannelAccountsEnabled } from "../../../modules/channel-accounts/domain/channel-accounts-constants";
 import {
-  listSenderPolicies,
-  summarizeWhatsappSenders
-} from "../../../modules/whatsapp-delivery/application/whatsapp-sender-directory";
-import { hasWhatsappSenderAdapter } from "../../../modules/whatsapp-delivery/infrastructure/whatsapp-sender-providers";
+  resolveSenderScreen,
+  type SenderScreen
+} from "../../../modules/whatsapp-delivery/application/whatsapp-sender-screen";
+import { permissionKey } from "../../../modules/identity-access/domain/access-control";
 
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
@@ -155,23 +147,10 @@ type DetailData =
   | {
       found: true;
       enabled: true;
-      account: AccountView;
+      access: Extract<AccountDetailAccess, { visible: true }>;
       health: AccountHealthView | null;
       capabilities: CapabilityView[];
-      connection: ConnectionView | null;
-      connectionAccountCount: number;
-      canDisconnect: boolean;
-      canReplaceCredential: boolean;
-      canRevokeConnection: boolean;
-      sender: {
-        eligible: boolean;
-        hasAdapter: boolean;
-        canConfigure: boolean;
-        visible: boolean;
-        isDefault: boolean;
-        waiting: number | null;
-        sending: number | null;
-      } | null;
+      sender: SenderScreen | null;
     };
 
 const screen = await loadAdminScreen({
@@ -191,123 +170,42 @@ const screen = await loadAdminScreen({
       request: Astro.request,
       clientAddress: Astro.clientAddress
     };
-    // The routes' own visibility rule (assignment gate and business scope):
-    // an account the caller may not see is the same "not found" as an unknown id.
-    const loaded = await loadAuthorizedAccount(context, accountId, READ_GUARD);
+    // Every decision (visibility, the two account authorities, the connection)
+    // is the tested application function; this page only renders its answer.
+    const access = await resolveAccountDetailAccess(context, accountId, can, {
+      holdsCredentialKey: ssr.permissions.has(
+        permissionKey(
+          CREDENTIALS_GUARD.moduleKey,
+          CREDENTIALS_GUARD.activityCode,
+          CREDENTIALS_GUARD.action
+        )
+      ),
+      guards: {
+        read: READ_GUARD,
+        disconnect: DISCONNECT_GUARD,
+        manageCredentials: CREDENTIALS_GUARD
+      }
+    });
 
-    if ("denied" in loaded) return { found: false, enabled: true };
+    if (!access.visible) return { found: false, enabled: true };
 
-    const account = toPublicAccount(loaded.account);
+    const account = access.account;
     // One awaited query at a time: `tx` is one connection.
     const health = await fetchAccountHealth(tx, ssr.tenantId, account.id);
     const capabilities =
       (await listAccountCapabilities(tx, ssr.tenantId, account.id)) ?? [];
-    const connection =
-      account.connectionId === null
-        ? null
-        : await fetchConnection(tx, ssr.tenantId, account.connectionId);
-
-    const mayRevoke = await can(DISCONNECT_GUARD);
-    const mayWriteCredential = await can(CREDENTIALS_GUARD);
-    // The account actions need `owner` authority over THIS account.
-    const ownsAccount =
-      (mayRevoke || mayWriteCredential) &&
-      !(
-        "denied" in
-        (await loadAuthorizedAccount(
-          context,
-          account.id,
-          DISCONNECT_GUARD,
-          "owner"
-        ))
-      );
-
-    let connectionAccountCount = 0;
-    let canRevokeConnection = false;
-
-    if (connection !== null && mayRevoke) {
-      canRevokeConnection =
-        connection.grantState !== "revoked" &&
-        (await mayRevokeConnection(context, DISCONNECT_GUARD, connection));
-
-      if (canRevokeConnection) {
-        connectionAccountCount = (
-          await listConnectionAccountBindings(
-            tx,
-            ssr.tenantId,
-            {
-              tenantUserId: auth.context.tenantUserId,
-              bypass: await canSeeAllAccounts(context)
-            },
-            "viewer",
-            { connectionId: connection.id, provider: null }
-          )
-        ).filter((binding) => binding.assignable).length;
-      }
-    }
-
-    let sender: Extract<DetailData, { found: true }>["sender"] = null;
+    let sender: SenderScreen | null = null;
 
     if (isWhatsappSenderShape(account.provider, account.accountKind)) {
-      const canConfigure = await can(SENDER_POLICY_GUARD);
-      const canReadSenders = await can(SENDERS_READ_GUARD);
-      const visible = canConfigure || canReadSenders;
-      let isDefault = false;
-      let waiting: number | null = null;
-      let sending: number | null = null;
-
-      if (visible) {
-        const scope = account.businessScope;
-
-        // Only whether THIS account is the default for ITS OWN scope: a fact
-        // the caller can already derive from being allowed to configure it.
-        isDefault = (await listSenderPolicies(tx, ssr.tenantId)).some(
-          (policy) =>
-            policy.defaultSenderAccountId === account.id &&
-            (policy.businessScope?.type ?? null) === (scope?.type ?? null) &&
-            (policy.businessScope?.id ?? null) === (scope?.id ?? null)
-        );
-      }
-
-      if (canReadSenders) {
-        const lane = (
-          await summarizeWhatsappSenders(tx, ssr.tenantId, null)
-        ).find((entry) => entry.senderAccountId === account.id);
-
-        waiting = lane?.queue.waiting ?? 0;
-        sending = lane?.queue.sending ?? 0;
-      }
-
-      sender = {
-        eligible: true,
-        hasAdapter: hasWhatsappSenderAdapter(account.provider),
-        canConfigure,
-        visible,
-        isDefault,
-        waiting,
-        sending
-      };
+      sender = await resolveSenderScreen(
+        context,
+        account,
+        (guard) => can({ ...guard }),
+        { policy: SENDER_POLICY_GUARD, read: SENDERS_READ_GUARD }
+      );
     }
 
-    return {
-      found: true,
-      enabled: true,
-      account,
-      health,
-      capabilities,
-      connection,
-      connectionAccountCount,
-      canDisconnect: ownsAccount && mayRevoke && account.status !== "revoked",
-      canReplaceCredential:
-        ownsAccount &&
-        mayWriteCredential &&
-        account.authMode !== "oauth2" &&
-        (account.status === "pending" ||
-          account.status === "connected" ||
-          account.status === "degraded"),
-      canRevokeConnection,
-      sender
-    };
+    return { found: true, enabled: true, access, health, capabilities, sender };
   },
   onError: (error) => {
     logAdminPageError(
@@ -321,7 +219,7 @@ const screen = await loadAdminScreen({
 const canRead = screen.state !== "denied";
 const loadError = screen.state === "error";
 const data = screen.state === "allowed" ? screen.data : null;
-const detail = data !== null && data.found ? data : null;
+const detail = data !== null && data.found ? { ...data, ...data.access } : null;
 const deploymentEnabled = data === null ? true : data.enabled;
 const notFound = data !== null && !data.found && data.enabled;
 
@@ -336,7 +234,8 @@ const hasActions =
   (detail.canDisconnect ||
     detail.canReplaceCredential ||
     detail.canRevokeConnection ||
-    (sender !== null && sender.eligible));
+    detail.credentialFormWithheld ||
+    sender !== null);
 
 function quota(health: AccountHealthView): string | null {
   if (health.quotaRemaining === null && health.quotaLimit === null) return null;
@@ -394,17 +293,15 @@ function quota(health: AccountHealthView): string | null {
   {canRead && !loadError && detail && account && (
     <>
       {notice !== null && (
-        <p class="state-notice" id="channel-account-notice" role="status">
+        <p
+          class="state-notice"
+          id="channel-account-notice"
+          role="status"
+          tabindex="-1"
+        >
           {notice}
         </p>
       )}
-      <p
-        id="channel-account-action-error"
-        class="admin-create-error"
-        role="alert"
-        hidden
-      ></p>
-
       <section
         class="admin-section fade-in-up"
         aria-labelledby="channel-account-summary-title"
@@ -672,10 +569,10 @@ function quota(health: AccountHealthView): string | null {
             {t("Actions")}
           </h2>
 
-          {sender !== null && sender.eligible && (
+          {sender !== null && (
             <div id="channel-account-default-sender" class="admin-subsection">
               <h3 class="admin-subsection-title">{t("Default sender")}</h3>
-              {sender.visible && (
+              {sender.isDefault !== null && (
                 <p class="page-description" id="channel-account-default-state">
                   {sender.isDefault
                     ? t(
@@ -684,6 +581,16 @@ function quota(health: AccountHealthView): string | null {
                     : t(
                         "This account is not the default WhatsApp sender for its scope."
                       )}
+                </p>
+              )}
+              {sender.hasAdapter && account.status !== "connected" && (
+                <p
+                  class="state-notice"
+                  id="channel-account-default-not-connected"
+                >
+                  {t(
+                    "Only a connected account can be the default sender. This one is not connected yet."
+                  )}
                 </p>
               )}
               {!sender.hasAdapter && (
@@ -696,26 +603,45 @@ function quota(health: AccountHealthView): string | null {
                   )}
                 </p>
               )}
-              {sender.canConfigure &&
-                sender.hasAdapter &&
-                !sender.isDefault && (
-                  <>
-                    <p class="page-description">
-                      {t(
-                        "Making this account the default changes which number sends when no sender is named. It applies to messages queued from now on; messages already queued keep the sender they were given."
-                      )}
-                    </p>
-                    <button
-                      type="button"
-                      class="btn btn-secondary js-channel-default-sender"
-                      data-account-id={account.id}
-                      data-scope-type={account.businessScope?.type ?? ""}
-                      data-scope-id={account.businessScope?.id ?? ""}
-                    >
-                      {t("Make default sender")}
-                    </button>
-                  </>
+              {sender.canMakeDefault && sender.isDefault !== true && (
+                <>
+                  <p class="page-description">
+                    {t(
+                      "Making this account the default changes which number sends when no sender is named. It applies to messages queued from now on; messages already queued keep the sender they were given."
+                    )}
+                  </p>
+                  <p
+                    id="channel-account-error-default"
+                    class="admin-create-error"
+                    role="alert"
+                    tabindex="-1"
+                    hidden
+                  ></p>
+                  <button
+                    type="button"
+                    class="btn btn-secondary js-channel-default-sender"
+                    data-account-id={account.id}
+                    data-scope-type={account.businessScope?.type ?? ""}
+                    data-scope-id={account.businessScope?.id ?? ""}
+                  >
+                    {t("Make default sender")}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {detail.credentialFormWithheld && (
+            <div
+              id="channel-account-credential-withheld"
+              class="admin-subsection"
+            >
+              <h3 class="admin-subsection-title">{t("Replace credential")}</h3>
+              <p class="page-description">
+                {t(
+                  "Your role may write credentials, but the form is withheld: writing one needs two-factor authentication enrolled on your account, or a policy denies it."
                 )}
+              </p>
             </div>
           )}
 
@@ -727,6 +653,13 @@ function quota(health: AccountHealthView): string | null {
                   "Writing a new credential overwrites the stored one. The old value cannot be shown and the new value is never displayed again. Writing a credential needs two-factor authentication and may ask for a fresh code."
                 )}
               </p>
+              <p
+                id="channel-account-error-credential"
+                class="admin-create-error"
+                role="alert"
+                tabindex="-1"
+                hidden
+              ></p>
               <form
                 id="channel-account-credential-form"
                 class="admin-form"
@@ -765,8 +698,9 @@ function quota(health: AccountHealthView): string | null {
                     autocomplete="one-time-code"
                     maxlength="12"
                     spellcheck="false"
+                    aria-describedby="channel-account-stepup-hint"
                   />
-                  <p class="admin-field-hint">
+                  <p class="admin-field-hint" id="channel-account-stepup-hint">
                     {t(
                       "Enter the current six-digit code, then replace the credential again."
                     )}
@@ -797,6 +731,13 @@ function quota(health: AccountHealthView): string | null {
                   )}
                 </p>
               )}
+              <p
+                id="channel-account-error-disconnect"
+                class="admin-create-error"
+                role="alert"
+                tabindex="-1"
+                hidden
+              ></p>
               <form
                 id="channel-account-disconnect-form"
                 class="admin-form"
@@ -842,12 +783,19 @@ function quota(health: AccountHealthView): string | null {
               </h3>
               <p class="page-description">
                 {tn(
-                  "Revoking is permanent. The authorisation's credentials are erased and the {count} account bound to it is disconnected.",
-                  "Revoking is permanent. The authorisation's credentials are erased and the {count} accounts bound to it are disconnected.",
+                  "Revoking is permanent. The authorisation's credentials are erased and up to {count} account bound to it is disconnected.",
+                  "Revoking is permanent. The authorisation's credentials are erased and up to {count} accounts bound to it are disconnected.",
                   detail.connectionAccountCount,
                   { count: detail.connectionAccountCount }
                 )}
               </p>
+              <p
+                id="channel-account-error-revoke"
+                class="admin-create-error"
+                role="alert"
+                tabindex="-1"
+                hidden
+              ></p>
               <form
                 id="channel-account-revoke-connection-form"
                 class="admin-form"
@@ -929,6 +877,16 @@ function quota(health: AccountHealthView): string | null {
           "That account cannot be the default sender: it must be connected, may send business messages and have a sending adapter."
         )}
         data-rate-limited={t("Too many attempts. Try again later.")}
+        data-mfa-invalid={t(
+          "That code is not right. Check it and try again; your new credential is still in the form."
+        )}
+        data-mfa-locked={t(
+          "Too many wrong codes. The factor is locked for a while; your new credential is still in the form."
+        )}
+        data-secret-short={t("The credential must be at least 8 characters.")}
+        data-secret-spaces={t(
+          "The credential cannot contain spaces. Remove them and try again."
+        )}
       ></div>
     </>
   )}
@@ -947,10 +905,12 @@ function quota(health: AccountHealthView): string | null {
     sendJson,
     lockElement
   } from "../../../lib/ui/admin-form-client";
-  import { newKey } from "../../../lib/ui/admin-idempotency-key";
+  import {
+    createIdempotencyKeySource,
+    newKey
+  } from "../../../lib/ui/admin-idempotency-key";
   import { confirmationMatches } from "../../../lib/ui/channel-accounts-screen";
 
-  const actionError = messageBox("channel-account-action-error");
   const host = document.getElementById("channel-account-i18n");
 
   /** A string the server rendered for us, never a fallback invented here. */
@@ -958,10 +918,54 @@ function quota(health: AccountHealthView): string | null {
     return host?.dataset[key] ?? "";
   }
 
+  /**
+   * One error box per action, inside that action's own subsection: the actions
+   * are far below the top of the page, so a single box at the top would put the
+   * message off-screen on a phone. Showing it also brings it into view and
+   * moves focus to it (it is `role="alert"`, `tabindex="-1"`).
+   */
+  function errorBox(name: string) {
+    const id = `channel-account-error-${name}`;
+    const box = messageBox(id);
+
+    return {
+      clear: box.clear,
+      show(message: string): void {
+        box.show(message);
+        const element = document.getElementById(id);
+
+        element?.scrollIntoView({ block: "nearest" });
+        element?.focus();
+      }
+    };
+  }
+
+  const credentialError = errorBox("credential");
+  const disconnectError = errorBox("disconnect");
+  const revokeError = errorBox("revoke");
+  const defaultError = errorBox("default");
+
+  /** After a load that carries a notice, move focus to it so it is announced and not just painted. */
+  document.getElementById("channel-account-notice")?.focus();
+
+  /** One key per distinct (method, url, body) for the actions with no secret in the body: a retry replays. */
+  const keyFor = createIdempotencyKeySource();
+
+  /**
+   * Every code below is one the endpoints this screen calls really emit
+   * (`tests/admin-channel-accounts-page-contract.test.ts` holds each case to
+   * a route's source): `credential`, `disconnect`, `connections/{id}/revoke`,
+   * `whatsapp/sender-policy` and `auth/mfa/step-up`.
+   */
   function messageFor(errorCode: string | null, fallbackKey: string): string {
     switch (errorCode) {
       case "MFA_ENROLMENT_REQUIRED":
+      case "MFA_NOT_ACTIVE":
         return say("mfaRequired");
+      case "MFA_INVALID_CODE":
+        return say("mfaInvalid");
+      case "MFA_LOCKED":
+        return say("mfaLocked");
       case "SECRET_STORE_UNAVAILABLE":
         return say("secretStoreUnavailable");
       case "CREDENTIAL_NOT_APPLICABLE":
@@ -971,14 +975,11 @@ function quota(health: AccountHealthView): string | null {
       case "SENDER_UNAVAILABLE":
         return say("senderUnavailable");
       case "RESOURCE_NOT_FOUND":
-      case "ACCOUNT_NOT_FOUND":
         return say("notFound");
       case "ACCESS_DENIED":
-      case "FORBIDDEN":
         return say("forbidden");
       case "IDEMPOTENCY_CONFLICT":
-      case "ACCOUNT_ALREADY_DISCONNECTED":
-      case "ALREADY_REVOKED":
+      case "GRANT_STATE_INVALID":
         return say("conflict");
       case "RATE_LIMITED":
         return say("rateLimited");
@@ -1000,13 +1001,13 @@ function quota(health: AccountHealthView): string | null {
    * A fresh step-up is requested only when the endpoint asks for one
    * (`STEP_UP_REQUIRED`). The code is asked for IN THE FORM (an inline field,
    * not a browser dialog: ADR-0125), the secret stays in its password field for
-   * that one retry, and the retry reuses the SAME `Idempotency-Key`. Nothing is
-   * stored.
+   * the retry, and the retry reuses the SAME `Idempotency-Key`. A wrong or
+   * locked code keeps the form (the secret is not lost); nothing is stored.
    */
   let pendingKey: string | null = null;
 
   onSubmit("channel-account-credential-form", async ({ form, submit }) => {
-    actionError.clear();
+    credentialError.clear();
 
     const input = form.querySelector<HTMLInputElement>(
       "#channel-account-secret"
@@ -1019,23 +1020,29 @@ function quota(health: AccountHealthView): string | null {
 
     if (!input || !accountId) return;
 
-    const secret = input.value;
+    // Whitespace around a pasted value is not part of a credential; whitespace
+    // INSIDE one is refused by the endpoint, so say so before sending.
+    const secret = input.value.trim();
 
-    if (secret.length < 8 || /\s/.test(secret)) {
-      actionError.show(say("credentialFailed"));
+    if (secret.length < 8) {
+      credentialError.show(say("secretShort"));
+      input.focus();
+      return;
+    }
+
+    if (/\s/.test(secret)) {
+      credentialError.show(say("secretSpaces"));
       input.focus();
       return;
     }
 
     const unlock = submit ? lockElement(submit, say("busy")) : () => {};
     const key = pendingKey ?? newKey();
-    const code =
-      stepUpBox && !stepUpBox.hidden && stepUpInput
-        ? stepUpInput.value.trim()
-        : "";
+    const asking = stepUpBox !== null && !stepUpBox.hidden;
+    const code = asking && stepUpInput ? stepUpInput.value.trim() : "";
 
-    if (stepUpBox && !stepUpBox.hidden && code === "") {
-      actionError.show(say("stepUpCancelled"));
+    if (asking && code === "") {
+      credentialError.show(say("stepUpCancelled"));
       stepUpInput?.focus();
       unlock();
       return;
@@ -1060,11 +1067,20 @@ function quota(health: AccountHealthView): string | null {
       );
     }
 
-    if (!result.ok && result.errorCode === "STEP_UP_REQUIRED" && stepUpBox) {
-      // Keep the secret for the one retry; ask for the code in the form.
+    const keepForm =
+      result.errorCode === "STEP_UP_REQUIRED" ||
+      result.errorCode === "MFA_INVALID_CODE" ||
+      result.errorCode === "MFA_LOCKED";
+
+    if (!result.ok && keepForm && stepUpBox) {
+      // Keep the secret for the retry; (re)ask for the code in the form.
       pendingKey = key;
       stepUpBox.hidden = false;
-      actionError.show(say("stepUpPrompt"));
+      credentialError.show(
+        result.errorCode === "STEP_UP_REQUIRED"
+          ? say("stepUpPrompt")
+          : messageFor(result.errorCode, "credentialFailed")
+      );
       stepUpInput?.focus();
       unlock();
       return;
@@ -1081,7 +1097,7 @@ function quota(health: AccountHealthView): string | null {
       return;
     }
 
-    actionError.show(messageFor(result.errorCode, "credentialFailed"));
+    credentialError.show(messageFor(result.errorCode, "credentialFailed"));
     unlock();
   });
 
@@ -1089,12 +1105,13 @@ function quota(health: AccountHealthView): string | null {
   async function confirmedPost(
     form: HTMLFormElement,
     submit: HTMLButtonElement | null,
+    errors: { clear(): void; show(message: string): void },
     inputId: string,
     url: string,
     notice: string,
     failureKey: string
   ): Promise<void> {
-    actionError.clear();
+    errors.clear();
 
     const input = document.getElementById(inputId);
     const expected = form.dataset.confirmText ?? "";
@@ -1103,14 +1120,14 @@ function quota(health: AccountHealthView): string | null {
       !(input instanceof HTMLInputElement) ||
       !confirmationMatches(input.value, expected)
     ) {
-      actionError.show(say("mismatch"));
+      errors.show(say("mismatch"));
       if (input instanceof HTMLInputElement) input.focus();
       return;
     }
 
     const unlock = submit ? lockElement(submit, say("busy")) : () => {};
     const result = await sendJson("POST", url, undefined, {
-      "Idempotency-Key": newKey()
+      "Idempotency-Key": keyFor({ method: "POST", url })
     });
 
     if (result.ok) {
@@ -1118,7 +1135,7 @@ function quota(health: AccountHealthView): string | null {
       return;
     }
 
-    actionError.show(messageFor(result.errorCode, failureKey));
+    errors.show(messageFor(result.errorCode, failureKey));
     unlock();
   }
 
@@ -1126,6 +1143,7 @@ function quota(health: AccountHealthView): string | null {
     confirmedPost(
       form,
       submit,
+      disconnectError,
       "channel-account-disconnect-confirm",
       `/api/v1/channel-accounts/accounts/${form.dataset.accountId}/disconnect`,
       "disconnected",
@@ -1137,6 +1155,7 @@ function quota(health: AccountHealthView): string | null {
     confirmedPost(
       form,
       submit,
+      revokeError,
       "channel-account-revoke-confirm",
       `/api/v1/channel-accounts/connections/${form.dataset.connectionId}/revoke`,
       "connection-revoked",
@@ -1146,7 +1165,7 @@ function quota(health: AccountHealthView): string | null {
 
   // ---- Default sender (WhatsApp) ----------------------------------------------
   onAction(".js-channel-default-sender", async (button) => {
-    actionError.clear();
+    defaultError.clear();
 
     const accountId = button.dataset.accountId;
     const scopeType = button.dataset.scopeType ?? "";
@@ -1154,26 +1173,25 @@ function quota(health: AccountHealthView): string | null {
 
     if (!accountId) return;
 
+    const body = {
+      businessScope:
+        scopeType !== "" && scopeId !== ""
+          ? { type: scopeType, id: scopeId }
+          : null,
+      defaultSenderAccountId: accountId
+    };
+    const url = "/api/v1/whatsapp/sender-policy";
     const unlock = lockElement(button, say("busy"));
-    const result = await sendJson(
-      "PUT",
-      "/api/v1/whatsapp/sender-policy",
-      {
-        businessScope:
-          scopeType !== "" && scopeId !== ""
-            ? { type: scopeType, id: scopeId }
-            : null,
-        defaultSenderAccountId: accountId
-      },
-      { "Idempotency-Key": newKey() }
-    );
+    const result = await sendJson("PUT", url, body, {
+      "Idempotency-Key": keyFor({ method: "PUT", url, body })
+    });
 
     if (result.ok) {
       finish("default-set");
       return;
     }
 
-    actionError.show(messageFor(result.errorCode, "defaultFailed"));
+    defaultError.show(messageFor(result.errorCode, "defaultFailed"));
     unlock();
   });
 </script>

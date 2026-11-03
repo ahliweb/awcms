@@ -9173,8 +9173,6 @@ msgstr "Akun kanal dimatikan pada deployment ini, sehingga tidak ada yang dapat 
 msgid "Accounts"
 msgstr "Akun"
 
-msgid "This tenant has more accounts than this screen loads. Showing the newest {count}; narrow the list with filters or use the API for the rest."
-msgstr "Tenant ini memiliki lebih banyak akun daripada yang dimuat layar ini. Menampilkan {count} terbaru; persempit daftar dengan filter atau gunakan API untuk sisanya."
 
 msgid "Search channel accounts"
 msgstr "Cari akun kanal"
@@ -9409,9 +9407,6 @@ msgid "{count} capability"
 msgid_plural "{count} capabilities"
 msgstr[0] "{count} kapabilitas"
 
-msgid "Revoking is permanent. The authorisation's credentials are erased and the {count} account bound to it is disconnected."
-msgid_plural "Revoking is permanent. The authorisation's credentials are erased and the {count} accounts bound to it are disconnected."
-msgstr[0] "Pencabutan bersifat permanen. Kredensial otorisasi dihapus dan {count} akun yang terikat padanya diputuskan."
 
 msgid "Identity"
 msgstr "Identitas"
@@ -9421,3 +9416,28 @@ msgstr "Kode autentikator"
 
 msgid "Enter the current six-digit code, then replace the credential again."
 msgstr "Masukkan kode enam digit saat ini, lalu ganti kredensial sekali lagi."
+
+msgid "This tenant has more accounts than this screen loads. Showing the newest {count}. The provider and status filters cover every account; search covers only these. The API lists the rest."
+msgstr "Tenant ini memiliki lebih banyak akun daripada yang dimuat layar ini. Menampilkan {count} terbaru. Filter penyedia dan status mencakup semua akun; pencarian hanya mencakup yang ditampilkan. API menampilkan sisanya."
+
+msgid "Your role may write credentials, but the form is withheld: writing one needs two-factor authentication enrolled on your account, or a policy denies it."
+msgstr "Peran Anda boleh menulis kredensial, tetapi formulirnya ditahan: menulis kredensial memerlukan autentikasi dua faktor yang terdaftar pada akun Anda, atau sebuah kebijakan menolaknya."
+
+msgid "That code is not right. Check it and try again; your new credential is still in the form."
+msgstr "Kode itu tidak benar. Periksa lalu coba lagi; kredensial baru Anda masih ada di formulir."
+
+msgid "Too many wrong codes. The factor is locked for a while; your new credential is still in the form."
+msgstr "Terlalu banyak kode salah. Faktor terkunci untuk sementara; kredensial baru Anda masih ada di formulir."
+
+msgid "The credential must be at least 8 characters."
+msgstr "Kredensial minimal 8 karakter."
+
+msgid "The credential cannot contain spaces. Remove them and try again."
+msgstr "Kredensial tidak boleh berisi spasi. Hapus spasinya lalu coba lagi."
+
+msgid "Revoking is permanent. The authorisation's credentials are erased and up to {count} account bound to it is disconnected."
+msgid_plural "Revoking is permanent. The authorisation's credentials are erased and up to {count} accounts bound to it are disconnected."
+msgstr[0] "Pencabutan bersifat permanen. Kredensial otorisasi dihapus dan hingga {count} akun yang terikat padanya diputuskan."
+
+msgid "Only a connected account can be the default sender. This one is not connected yet."
+msgstr "Hanya akun yang terhubung yang dapat menjadi pengirim default. Akun ini belum terhubung."

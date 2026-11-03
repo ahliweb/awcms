@@ -35,7 +35,12 @@ const DETAIL_PAGE = "src/pages/admin/channel-accounts/[id].astro";
 const read = (path: string) => stripComments(readFileSync(path, "utf8"));
 const list = read(LIST_PAGE);
 const detail = read(DETAIL_PAGE);
-const both = `${list}\n${detail}`;
+const access = read(
+  "src/modules/channel-accounts/application/account-screen-access.ts"
+);
+const senderScreen = read(
+  "src/modules/whatsapp-delivery/application/whatsapp-sender-screen.ts"
+);
 
 /** The literal guard object a page spells out, so the coverage gate (which reads source text) sees it. */
 function literalGuard(source: string, name: string) {
@@ -137,21 +142,50 @@ describe("the screens gate on keys that really exist", () => {
   });
 
   test("a control is shown only when the chokepoint allows its permission", () => {
-    // `can(...)` runs the full chokepoint, so a deny policy hides the button.
-    expect(detail).toContain("await can(DISCONNECT_GUARD)");
-    expect(detail).toContain("await can(CREDENTIALS_GUARD)");
-    expect(detail).toContain("await can(SENDER_POLICY_GUARD)");
-    expect(detail).toContain("await can(SENDERS_READ_GUARD)");
-    // Not `ssr.permissions.has`: that is raw RBAC and skips ABAC and module state.
-    expect(both).not.toContain("ssr.permissions.has");
+    // The decision is the tested application function, which asks `can(...)`
+    // (the full chokepoint, so a deny policy hides the button) for each key.
+    expect(detail).toContain("resolveAccountDetailAccess(");
+    expect(access).toContain("await can(asRequest(G.disconnect))");
+    expect(access).toContain("await can(asRequest(G.manageCredentials))");
+    expect(senderScreen).toContain("await can(guards.policy)");
+    expect(senderScreen).toContain("await can(guards.read)");
+    // Not `ssr.permissions.has` as a DECISION: that is raw RBAC and skips ABAC
+    // and module state. The one use is the "your form is withheld" hint, which
+    // only ever ADDS an explanation and never a control.
+    expect(list).not.toContain("ssr.permissions.has");
+    expect(detail.match(/ssr\.permissions\.has/g)?.length ?? 0).toBe(1);
+    expect(detail).toContain("holdsCredentialKey: ssr.permissions.has(");
   });
 
   test("both screens use the routes' own visibility rules, not a copy", () => {
     expect(list).toContain("canSeeAllAccounts");
     expect(list).toContain("scopeCoveredFor");
     expect(list).toContain("filterVisibleConnections");
-    expect(detail).toContain("loadAuthorizedAccount");
-    expect(detail).toContain("mayRevokeConnection");
+    expect(access).toContain("loadAuthorizedAccount");
+    expect(access).toContain("mayRevokeConnection");
+    // Parity with `GET /connections`: the detail's connection is filtered too.
+    expect(access).toContain("filterVisibleConnections(");
+  });
+
+  test("the two account actions are decided by their OWN authority", () => {
+    // credentials.manage without accounts.revoke keeps the credential form:
+    // each action's `owner` check runs under its own guard.
+    expect(access).toMatch(
+      /ownsCredential =[\s\S]*?loadAuthorizedAccount\([\s\S]*?G\.manageCredentials[\s\S]*?"owner"/
+    );
+    expect(access).toMatch(
+      /ownsDisconnect =[\s\S]*?loadAuthorizedAccount\(context, account\.id, G\.disconnect, "owner"\)/
+    );
+    expect(access).not.toContain("ownsAccount");
+  });
+
+  test("the list pushes its filters to SQL, so a truncated list is still filterable", () => {
+    expect(list).toContain("provider: sqlProvider");
+    expect(list).toContain("status: sqlStatus");
+    // The query is parsed BEFORE the load that needs it.
+    expect(list.indexOf("parseDataPageQuery(")).toBeLessThan(
+      list.indexOf("await loadAdminScreen(")
+    );
   });
 });
 
@@ -168,7 +202,7 @@ describe("no credential is rendered, fetched or kept", () => {
   });
 
   test("the account shown is the PUBLIC view (no secret reference)", () => {
-    expect(detail).toContain("toPublicAccount(loaded.account)");
+    expect(access).toContain("toPublicAccount(loaded.account)");
     // The list uses the directory's view type, which has `hasCredential` only.
     expect(list).toContain("type AccountView");
   });
@@ -238,9 +272,7 @@ describe("mutations: idempotent, and the terminal ones are typed", () => {
     const sends = [...script.matchAll(/sendJson\(\s*"(?:PUT|POST|DELETE)"/g)];
     // credential, step-up (a login-style call that takes no key), disconnect /
     // revoke (through `confirmedPost`), default sender.
-    const withKey = [
-      ...script.matchAll(/"Idempotency-Key":\s*(?:key|newKey\(\))/g)
-    ];
+    const withKey = [...script.matchAll(/"Idempotency-Key":/g)];
 
     expect(sends.length).toBeGreaterThanOrEqual(4);
     // Every send except the step-up carries one.
@@ -269,6 +301,79 @@ describe("mutations: idempotent, and the terminal ones are typed", () => {
 
   test("the disconnect panel states the queue impact for a sender", () => {
     expect(detail).toContain("channel-account-queue-impact");
-    expect(detail).toContain("summarizeWhatsappSenders(");
+    // One bounded COUNT for this account, not the tenant-wide 35-day aggregate.
+    expect(senderScreen).toContain("sender_account_id = ${account.id}");
+    expect(senderScreen).not.toContain("summarizeWhatsappSenders");
+    expect(detail).not.toContain("summarizeWhatsappSenders");
+  });
+});
+
+describe("every error code the script maps is one a route really emits", () => {
+  // `STEP_UP_CANCELLED` is raised by the script itself (an empty code), not by a route.
+  const CLIENT_SIDE = new Set(["STEP_UP_CANCELLED"]);
+  const emitters = [
+    "src/pages/api/v1/channel-accounts/accounts/[id]/credential.ts",
+    "src/pages/api/v1/channel-accounts/accounts/[id]/disconnect.ts",
+    "src/pages/api/v1/channel-accounts/connections/[id]/revoke.ts",
+    "src/pages/api/v1/whatsapp/sender-policy.ts",
+    "src/pages/api/v1/auth/mfa/step-up.ts",
+    "src/modules/channel-accounts/application/channel-accounts-route-support.ts",
+    "src/modules/channel-accounts/application/account-directory.ts",
+    "src/modules/channel-accounts/application/connection-directory.ts",
+    "src/modules/identity-access/domain/mfa-enrolment-refusal.ts",
+    "src/modules/identity-access/application/mfa.ts",
+    "src/modules/identity-access/application/access-guard.ts",
+    "src/modules/_shared/tenant-route.ts"
+  ]
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
+  const script = detail.slice(detail.indexOf("<script>"));
+  const mapper = script.slice(
+    script.indexOf("function messageFor"),
+    script.indexOf("function finish")
+  );
+  const codes = [...mapper.matchAll(/case "([A-Z_]+)":/g)].map(
+    (match) => match[1]!
+  );
+
+  test("the mapper was found and maps the codes this screen can meet", () => {
+    expect(codes.length).toBeGreaterThanOrEqual(10);
+    // The one the reviewer found missing: revoking an already revoked connection.
+    expect(codes).toContain("GRANT_STATE_INVALID");
+  });
+
+  test("no case is a phantom: each appears as a code in an endpoint's source", () => {
+    const phantoms = codes.filter(
+      (code) => !CLIENT_SIDE.has(code) && !emitters.includes(`"${code}"`)
+    );
+
+    expect(phantoms).toEqual([]);
+  });
+
+  test("the codes the routes answer for a repeated or refused action are all mapped", () => {
+    for (const code of [
+      "ACCOUNT_STATE_INVALID",
+      "GRANT_STATE_INVALID",
+      "RESOURCE_NOT_FOUND",
+      "IDEMPOTENCY_CONFLICT",
+      "SENDER_UNAVAILABLE",
+      "MFA_INVALID_CODE",
+      "MFA_LOCKED"
+    ]) {
+      expect(codes).toContain(code);
+    }
+  });
+});
+
+describe("each action shows its error next to itself", () => {
+  test("one alert box per action subsection, and none at the top of the page", () => {
+    for (const name of ["default", "credential", "disconnect", "revoke"]) {
+      expect(detail).toContain(`id="channel-account-error-${name}"`);
+    }
+
+    expect(detail).not.toContain('id="channel-account-action-error"');
+    // Showing a message brings it into view and moves focus to it.
+    expect(detail).toContain("element?.scrollIntoView");
+    expect(detail).toContain("element?.focus()");
   });
 });

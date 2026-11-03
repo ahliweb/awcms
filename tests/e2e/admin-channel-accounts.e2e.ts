@@ -299,21 +299,18 @@ test.describe("channel accounts connection manager", () => {
     await expect(page.locator("#channel-account-not-found")).toBeVisible();
   });
 
-  test("detail: the default-sender action reports a refusal in words", async ({
+  test("detail: a pending account is not offered as the default sender, and says why", async ({
     page
   }) => {
     await page.goto(`/admin/channel-accounts/${phoneId}`);
 
-    const action = page.locator(".js-channel-default-sender");
-
-    await expect(action).toBeVisible();
-    await action.focus();
-    await page.keyboard.press("Enter");
-
-    // The account is `pending`, so the server answers SENDER_UNAVAILABLE.
-    await expect(page.locator("#channel-account-action-error")).toContainText(
-      "cannot be the default sender"
-    );
+    // The action is withheld rather than offered and refused: only a connected
+    // account can be the default sender.
+    await expect(page.locator("#channel-account-default-sender")).toBeVisible();
+    await expect(page.locator(".js-channel-default-sender")).toHaveCount(0);
+    await expect(
+      page.locator("#channel-account-default-not-connected")
+    ).toContainText("connected");
   });
 
   test("detail: disconnect needs the typed name, then erases and says so", async ({
@@ -334,9 +331,9 @@ test.describe("channel accounts connection manager", () => {
     // Wrong name: nothing is sent.
     await input.fill("some other account");
     await submit.click();
-    await expect(page.locator("#channel-account-action-error")).toContainText(
-      "does not match"
-    );
+    await expect(
+      page.locator("#channel-account-error-disconnect")
+    ).toContainText("does not match");
     expect(sent).toBe(0);
 
     // Right name, by keyboard.

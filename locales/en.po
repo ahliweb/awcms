@@ -9206,8 +9206,6 @@ msgstr ""
 msgid "Accounts"
 msgstr ""
 
-msgid "This tenant has more accounts than this screen loads. Showing the newest {count}; narrow the list with filters or use the API for the rest."
-msgstr ""
 
 msgid "Search channel accounts"
 msgstr ""
@@ -9447,10 +9445,6 @@ msgid_plural "{count} capabilities"
 msgstr[0] ""
 msgstr[1] ""
 
-msgid "Revoking is permanent. The authorisation's credentials are erased and the {count} account bound to it is disconnected."
-msgid_plural "Revoking is permanent. The authorisation's credentials are erased and the {count} accounts bound to it are disconnected."
-msgstr[0] ""
-msgstr[1] ""
 
 msgid "Identity"
 msgstr ""
@@ -9459,4 +9453,30 @@ msgid "Authenticator code"
 msgstr ""
 
 msgid "Enter the current six-digit code, then replace the credential again."
+msgstr ""
+
+msgid "This tenant has more accounts than this screen loads. Showing the newest {count}. The provider and status filters cover every account; search covers only these. The API lists the rest."
+msgstr ""
+
+msgid "Your role may write credentials, but the form is withheld: writing one needs two-factor authentication enrolled on your account, or a policy denies it."
+msgstr ""
+
+msgid "That code is not right. Check it and try again; your new credential is still in the form."
+msgstr ""
+
+msgid "Too many wrong codes. The factor is locked for a while; your new credential is still in the form."
+msgstr ""
+
+msgid "The credential must be at least 8 characters."
+msgstr ""
+
+msgid "The credential cannot contain spaces. Remove them and try again."
+msgstr ""
+
+msgid "Revoking is permanent. The authorisation's credentials are erased and up to {count} account bound to it is disconnected."
+msgid_plural "Revoking is permanent. The authorisation's credentials are erased and up to {count} accounts bound to it are disconnected."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Only a connected account can be the default sender. This one is not connected yet."
 msgstr ""

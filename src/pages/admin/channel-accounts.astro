@@ -74,6 +74,7 @@ import {
 } from "../../lib/ui/admin-data-page";
 import {
   listAccounts,
+  listConnectionAccountBindings,
   type AccountView
 } from "../../modules/channel-accounts/application/account-directory";
 import {
@@ -109,6 +110,30 @@ const READ_GUARD = {
   action: "read"
 } as const;
 
+// ---- Data-page state (ADR-0149) ------------------------------------------
+const PATH = "/admin/channel-accounts";
+const SPEC: DataPageSpec = {
+  filterKeys: ["provider", "status"],
+  sortKeys: ["name", "provider", "status", "created"],
+  defaultSort: "created",
+  defaultDir: "desc"
+};
+const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
+const filtered = hasActiveFilters(query);
+
+// Only values the matrix / the status list know are pushed to SQL; anything
+// else is treated as "no filter in SQL" and then matches nothing in memory.
+const sqlProvider =
+  query.filters.provider !== undefined &&
+  Object.hasOwn(PROVIDER_MATRIX, query.filters.provider)
+    ? query.filters.provider
+    : null;
+const sqlStatus =
+  query.filters.status !== undefined &&
+  (ACCOUNT_STATUSES as readonly string[]).includes(query.filters.status)
+    ? query.filters.status
+    : null;
+
 /** Two keyset pages of the API's own query: the bound of what this screen loads. */
 const LOAD_PAGE_SIZE = 100;
 const LOAD_PAGE_LIMIT = 2;
@@ -125,7 +150,8 @@ const screen = await loadAdminScreen({
         enabled: false as const,
         accounts: [] as AccountView[],
         moreAccounts: false,
-        connections: [] as ConnectionView[]
+        connections: [] as ConnectionView[],
+        accountsPerConnection: {} as Record<string, number>
       };
     }
 
@@ -154,8 +180,8 @@ const screen = await loadAdminScreen({
 
     for (let page = 0; page < LOAD_PAGE_LIMIT; page += 1) {
       const result = await listAccounts(tx, ssr.tenantId, viewer, {
-        provider: null,
-        status: null,
+        provider: sqlProvider,
+        status: sqlStatus,
         limit: LOAD_PAGE_SIZE,
         cursor: cursor ?? null
       });
@@ -177,7 +203,39 @@ const screen = await loadAdminScreen({
       null
     );
 
-    return { enabled: true as const, accounts, moreAccounts, connections };
+    // How many accounts each connection holds, from ONE statement over the
+    // tenant's own bindings, narrowed to what this caller may see (assignment
+    // gate here, business scope below): not derived from the loaded page, which
+    // the filters above narrow.
+    const accountsPerConnection: Record<string, number> = {};
+    const bindings = await listConnectionAccountBindings(
+      tx,
+      ssr.tenantId,
+      { tenantUserId: viewer.tenantUserId, bypass: viewer.bypass },
+      "viewer",
+      { connectionId: null, provider: null }
+    );
+
+    for (const binding of bindings) {
+      if (
+        !binding.assignable ||
+        (binding.businessScope !== null &&
+          !(await viewer.scopeAllowed(binding.businessScope)))
+      ) {
+        continue;
+      }
+
+      accountsPerConnection[binding.connectionId] =
+        (accountsPerConnection[binding.connectionId] ?? 0) + 1;
+    }
+
+    return {
+      enabled: true as const,
+      accounts,
+      moreAccounts,
+      connections,
+      accountsPerConnection
+    };
   },
   onError: (error) => {
     logAdminPageError(
@@ -197,17 +255,6 @@ const deploymentEnabled = data === null ? true : data.enabled;
 const accounts: AccountView[] = data?.accounts ?? [];
 const connections: ConnectionView[] = data?.connections ?? [];
 
-// ---- Data-page state (ADR-0149) ------------------------------------------
-const PATH = "/admin/channel-accounts";
-const SPEC: DataPageSpec = {
-  filterKeys: ["provider", "status"],
-  sortKeys: ["name", "provider", "status", "created"],
-  defaultSort: "created",
-  defaultDir: "desc"
-};
-const query = parseDataPageQuery(Astro.url.searchParams, SPEC);
-const filtered = hasActiveFilters(query);
-
 const providerLabel = (provider: string) => channelProviderLabel(t, provider);
 const statusLabel = (status: string) => channelAccountStatusLabel(t, status);
 
@@ -220,6 +267,7 @@ const matching = accounts.filter(
       account.displayName.toLowerCase().includes(needle) ||
       providerLabel(account.provider).toLowerCase().includes(needle) ||
       maskExternalId(account.externalId).toLowerCase().includes(needle)) &&
+    // A filter value SQL did not understand matches nothing, as before.
     (query.filters.provider === undefined ||
       account.provider === query.filters.provider) &&
     (query.filters.status === undefined ||
@@ -263,16 +311,6 @@ const summary = filtered
 const registrableProviders = Object.entries(PROVIDER_MATRIX).filter(
   ([, row]) => row.registrable
 );
-const accountCountByConnection = new Map<string, number>();
-for (const account of accounts) {
-  if (account.connectionId !== null) {
-    accountCountByConnection.set(
-      account.connectionId,
-      (accountCountByConnection.get(account.connectionId) ?? 0) + 1
-    );
-  }
-}
-
 /** How the account authenticates, in one phrase: an OAuth account has no credential of its own. */
 function credentialText(account: AccountView): string {
   if (account.authMode === "oauth2") return t("Provider authorisation");
@@ -328,7 +366,7 @@ function scopeText(scope: { type: string; id: string } | null): string {
         {data.moreAccounts && (
           <p class="state-notice" id="channel-accounts-truncated">
             {t(
-              "This tenant has more accounts than this screen loads. Showing the newest {count}; narrow the list with filters or use the API for the rest.",
+              "This tenant has more accounts than this screen loads. Showing the newest {count}. The provider and status filters cover every account; search covers only these. The API lists the rest.",
               { count: accounts.length }
             )}
           </p>
@@ -595,7 +633,7 @@ function scopeText(scope: { type: string; id: string } | null): string {
                       {formatUtcMinute(connection.expiresAt)}
                     </td>
                     <td data-label={t("Accounts")}>
-                      {accountCountByConnection.get(connection.id) ?? 0}
+                      {data.accountsPerConnection[connection.id] ?? 0}
                     </td>
                   </tr>
                 ))

@@ -177,7 +177,18 @@ jobs:
           # ini — angka LAB satu mesin (detektor regresi), bukan p75 lapangan.
           # Tanpa env ini spec-nya mencetak pernyataan skip, tidak diam.
           E2E_CWV_LAB: "1"
+          # Issue #1154: the channel-account screens are only meaningful with the
+          # module on. It is off by default, so turn it on here (APP_URL is the
+          # only source of the OAuth callback origin and is required when the
+          # module is enabled), tell the specs it is on, and seed ONE neutral
+          # account below so the dynamic-route sweep has a real id to derive.
+          # The key ring is generated at run time (never a committed literal).
+          CHANNEL_ACCOUNTS_ENABLED: "true"
+          APP_URL: http://127.0.0.1:4321
+          E2E_CHANNEL_ACCOUNTS: "1"
         run: |
+          CHANNEL_SECRETS_ENCRYPTION_KEYS="k1:$(openssl rand -base64 32)"
+          export CHANNEL_SECRETS_ENCRYPTION_KEYS
           bun ./dist/standalone-entry.mjs &
           APP_PID=$!
           cleanup() { kill "$APP_PID" 2>/dev/null || true; }
@@ -202,6 +213,20 @@ jobs:
           tenant_id=$(echo "$seed" | jq -r '.data.tenantId // empty')
           if [ -z "$tenant_id" ]; then echo "::error::setup/initialize did not return a tenantId"; exit 1; fi
           export E2E_TENANT_ID="$tenant_id"
+
+          # One neutral channel account (a pending device, no credential), so
+          # `/admin/channel-accounts/[id]` is requested by the render sweep with
+          # a real id instead of being skipped. Connected as the job's own
+          # superuser, like the app (see the Postgres service comment above).
+          PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 127.0.0.1 \
+            -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 \
+            -v tenant="$tenant_id" <<'SQL'
+          INSERT INTO awcms_channel_accounts
+            (tenant_id, provider, account_kind, external_id, display_name,
+             auth_mode, status)
+          VALUES (:'tenant', 'starsender', 'device', 'CI-SEED-DEVICE-0001',
+                  'CI seed device', 'device_key', 'pending');
+          SQL
 
           bun run test:e2e
 
