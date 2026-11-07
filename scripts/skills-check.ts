@@ -76,7 +76,7 @@
  * Same shape as rule 1, three differences that keep it honest rather than noisy:
  *
  * - **Sibling-repo citations are scoped, not banned.** `awcms-mini:tests/…` (and
- *   `awcms-micro:`, `personal-coding:`) name a file in another repo; this repo
+ *   `awcms-micro:`) name a file in another repo; this repo
  *   cannot check it and should not pretend to. The prefix is this repo's existing
  *   convention, so the rule enforces it: an unprefixed `tests/…` is a claim ABOUT
  *   THIS REPO.

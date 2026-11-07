@@ -232,7 +232,7 @@ bukan job cron), ambil lewat `agent-cred get <service> <field>` (isi dulu
 dengan `agent-cred set <service>` bila belum ada) — jangan `read -s` ad-hoc
 atau credential inline baru, termasuk untuk `ALTER ROLE ... PASSWORD` di
 atas: generate & simpan dulu via `agent-cred set postgres`. TTL cache 3 jam.
-Detail: repo `personal-coding:docs/sop-agent-cred-credential-cache.md`.
+Detail: SOP internal pemilik untuk cache credential `agent-cred`.
 Job cron/systemd tetap pakai env var/secret file seperti biasa.
 
 ## Rollback
