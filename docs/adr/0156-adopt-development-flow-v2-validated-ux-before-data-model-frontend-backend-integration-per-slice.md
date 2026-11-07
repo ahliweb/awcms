@@ -6,7 +6,7 @@
 - **Date:** 2026-10-30
 - **Decision maker:** ahliweb (owner), decided 2026-10-30
 - **Amends:** the step order of [`docs/awcms/alur-pengembangan.md`](../awcms/alur-pengembangan.md) (the canonical flow written on 13 August 2026). It does not amend any earlier ADR.
-- **Related:** [ADR-0083](0083-this-template-deploys-to-one-environment.md) (steps 13–14 stay NOT APPLICABLE), [ADR-0146](0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md) (the new-surface questions keep their gate), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md). Upstream decision: **DL-033** in the `ahliweb/personal-coding` decision log, whose `docs/alur-pengembangan-produk.md` v2.0.0 is the generic flow this repo adopts.
+- **Related:** [ADR-0083](0083-this-template-deploys-to-one-environment.md) (steps 13–14 stay NOT APPLICABLE), [ADR-0146](0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md) (the new-surface questions keep their gate), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md). Upstream decision: **DL-033** in the owner's internal cross-portfolio decision log, whose development flow v2.0.0 is the generic flow this repo adopts.
 
 **Docs and governance only.** This ADR adds no module, migration, route, OpenAPI path, AsyncAPI channel, dependency or tooling. It changes the _order_ in which existing documents are produced and names the gaps that the new order exposes.
 
@@ -20,7 +20,7 @@ That order has a structural cost, and it is the cost this repo has already paid 
 - **Nothing in v1 tested the design with a user before code existed.** Step 8 answered "its shape on screen"; it did not require a prototype that a representative user had tried. The first contact between a user and the product was a built screen.
 - **Step 11 was one undivided block.** "Implementation" let a frontend and a backend be built against each other's guesses and joined at the end. That is big-bang integration, and the integration cost lands in the last week.
 
-The generic flow in `ahliweb/personal-coding` was revised to v2.0.0 on 2026-10-30 (DL-033) to fix this. Its normative authority for `awcms` stays here: that document says explicitly that its v2.0.0 does not automatically apply to a product repo and needs an ADR in that repo. This is that ADR.
+The generic flow in the owner's internal cross-portfolio standard was revised to v2.0.0 on 2026-10-30 (DL-033) to fix this. Its normative authority for `awcms` stays here: that document says explicitly that its v2.0.0 does not automatically apply to a product repo and needs an ADR in that repo. This is that ADR.
 
 ## Decision
 
@@ -97,6 +97,6 @@ Steps 13 and 14 remain **NOT APPLICABLE** under ADR-0083. v2 does not turn stagi
 
 ## References
 
-- `ahliweb/personal-coding`: `docs/alur-pengembangan-produk.md` v2.0.0 (§Pernyataan Pokok, §3, §5 steps 4 and 11, §6) and decision log DL-033.
+- The owner's internal cross-portfolio standard: development flow v2.0.0 (§Pernyataan Pokok, §3, §5 steps 4 and 11, §6) and decision log DL-033.
 - [`docs/awcms/alur-pengembangan.md`](../awcms/alur-pengembangan.md)
 - [ADR-0083](0083-this-template-deploys-to-one-environment.md), [ADR-0146](0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.md)

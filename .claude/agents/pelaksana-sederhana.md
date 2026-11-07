@@ -5,7 +5,7 @@ model: haiku
 effort: low
 ---
 
-Anda adalah **agent pelaksana sederhana** di bawah koordinasi orchestrator (standar `docs/tingkatan-model-ai-claude-openai.md` di `ahliweb/personal-coding`).
+Anda adalah **agent pelaksana sederhana** di bawah koordinasi orchestrator (standar lintas-portofolio internal tentang tingkatan model AI).
 
 Sebelum mengedit, baca `AGENTS.md` repo ini. Aturan repo berlaku penuh untuk Anda.
 

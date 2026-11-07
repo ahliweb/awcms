@@ -12,7 +12,7 @@
 
 - **Flow version: v2.0.0**, adopted by
   [ADR-0156](../adr/0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.md)
-  (30 October 2026; generic source: `ahliweb/personal-coding` DL-033). v2 moves
+  (30 October 2026; generic source: the owner's internal cross-portfolio standard, DL-033). v2 moves
   UX/UI from step 8 to step 4 and splits step 11 into 11.1 → 11.2 → 11.3. Steps
   1–3, 9, 10, 12 and 13–18 keep their numbers. **A reference to "step 4" through
   "step 8" written before 30 October 2026 uses the v1 numbering** — translate it

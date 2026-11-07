@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:b7f13524bc7db23171a78dc29e72d5562e5c644ff84da4c5b6e6dbdbe8c4dfe1 -->
+<!-- i18n-source-hash: sha256:d5e04f482b0233b978b54cc527a105816df8133bafb0ceb577d48939d92d8907 -->
 
 # Alur pengembangan AWCMS
 
@@ -13,7 +13,7 @@
 
 - **Versi alur: v2.0.0**, diadopsi oleh
   [ADR-0156](../adr/0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.id.md)
-  (30 Oktober 2026; sumber generik: `ahliweb/personal-coding` DL-033). v2
+  (30 Oktober 2026; sumber generik: standar lintas-portofolio internal pemilik, DL-033). v2
   memindahkan UX/UI dari langkah 8 ke langkah 4 dan memecah langkah 11 menjadi
   11.1 → 11.2 → 11.3. Langkah 1–3, 9, 10, 12, dan 13–18 mempertahankan nomornya.
   **Rujukan ke "langkah 4" sampai "langkah 8" yang ditulis sebelum 30 Oktober

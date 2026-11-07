@@ -586,7 +586,7 @@ describe("skills:check rule 6 — cited repo paths", () => {
       )
     ).toEqual([]);
     expect(
-      extractCitedRepoPaths("repo `personal-coding:docs/sop-agent-cred.md`")
+      extractCitedRepoPaths("repo `awcms-one:docs/sop-agent-cred.md`")
     ).toEqual([]);
   });
 

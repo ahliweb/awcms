@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.md)
 
-<!-- i18n-source-hash: sha256:4224ac4bff8a2cdc8dc8b02edd0022568e061686ca15e7dcc5face884eac7c99 -->
+<!-- i18n-source-hash: sha256:f73ab81a7175414620076a933a01d44129802b05b1ca4b1305d7ba0434eb6806 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -10,7 +10,7 @@
 - **Tanggal:** 2026-10-30
 - **Pengambil keputusan:** ahliweb (pemilik), diputuskan 2026-10-30
 - **Mengamendemen:** urutan langkah di [`docs/awcms/alur-pengembangan.md`](../awcms/alur-pengembangan.id.md) (alur kanonik yang ditulis pada 13 Agustus 2026). Ia tidak mengamendemen ADR terdahulu mana pun.
-- **Terkait:** [ADR-0083](0083-this-template-deploys-to-one-environment.id.md) (langkah 13–14 tetap TIDAK BERLAKU), [ADR-0146](0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md) (pertanyaan permukaan baru tetap punya gerbangnya), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.id.md). Keputusan hulu: **DL-033** di decision log `ahliweb/personal-coding`, yang `docs/alur-pengembangan-produk.md` v2.0.0-nya adalah alur generik yang diadopsi repo ini.
+- **Terkait:** [ADR-0083](0083-this-template-deploys-to-one-environment.id.md) (langkah 13–14 tetap TIDAK BERLAKU), [ADR-0146](0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md) (pertanyaan permukaan baru tetap punya gerbangnya), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.id.md). Keputusan hulu: **DL-033** di decision log lintas-portofolio internal pemilik, yang alur pengembangan v2.0.0-nya adalah alur generik yang diadopsi repo ini.
 
 **Hanya dokumen dan tata kelola.** ADR ini tidak menambah modul, migrasi, rute, path OpenAPI, kanal AsyncAPI, dependensi, maupun perkakas. Ia mengubah _urutan_ dokumen yang sudah ada dihasilkan dan menamai celah yang ditampakkan urutan baru itu.
 
@@ -24,7 +24,7 @@ Urutan itu punya biaya struktural, dan repo ini sudah membayarnya lebih dari sek
 - **Tidak ada di v1 yang menguji desain dengan pengguna sebelum kode ada.** Langkah 8 menjawab "bentuknya di layar"; ia tidak mewajibkan prototipe yang sudah dicoba pengguna representatif. Kontak pertama antara pengguna dan produk adalah layar yang sudah dibangun.
 - **Langkah 11 adalah satu blok tak terbagi.** "Implementasi" membiarkan frontend dan backend dibangun berdasarkan tebakan satu sama lain dan disambung di akhir. Itu integrasi big-bang, dan biaya integrasinya jatuh di minggu terakhir.
 
-Alur generik di `ahliweb/personal-coding` direvisi ke v2.0.0 pada 2026-10-30 (DL-033) untuk memperbaiki ini. Otoritas normatifnya untuk `awcms` tetap di sini: dokumen itu menyatakan eksplisit bahwa v2.0.0-nya tidak otomatis berlaku di repo produk dan memerlukan ADR di repo itu. Ini ADR tersebut.
+Alur generik di standar lintas-portofolio internal pemilik direvisi ke v2.0.0 pada 2026-10-30 (DL-033) untuk memperbaiki ini. Otoritas normatifnya untuk `awcms` tetap di sini: dokumen itu menyatakan eksplisit bahwa v2.0.0-nya tidak otomatis berlaku di repo produk dan memerlukan ADR di repo itu. Ini ADR tersebut.
 
 ## Keputusan
 
@@ -101,6 +101,6 @@ Langkah 13 dan 14 tetap **TIDAK BERLAKU** di bawah ADR-0083. v2 tidak menyalakan
 
 ## Referensi
 
-- `ahliweb/personal-coding`: `docs/alur-pengembangan-produk.md` v2.0.0 (§Pernyataan Pokok, §3, §5 langkah 4 dan 11, §6) dan decision log DL-033.
+- Standar lintas-portofolio internal pemilik: alur pengembangan v2.0.0 (§Pernyataan Pokok, §3, §5 langkah 4 dan 11, §6) dan decision log DL-033.
 - [`docs/awcms/alur-pengembangan.md`](../awcms/alur-pengembangan.id.md)
 - [ADR-0083](0083-this-template-deploys-to-one-environment.id.md), [ADR-0146](0146-persona-apps-prefer-lynx-in-consumer-repos-astro-keeps-admin-and-public-web.id.md)
