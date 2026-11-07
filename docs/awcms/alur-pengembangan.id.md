@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](alur-pengembangan.md)
 
-<!-- i18n-source-hash: sha256:b7f13524bc7db23171a78dc29e72d5562e5c644ff84da4c5b6e6dbdbe8c4dfe1 -->
+<!-- i18n-source-hash: sha256:d5e04f482b0233b978b54cc527a105816df8133bafb0ceb577d48939d92d8907 -->
 
 # Alur pengembangan AWCMS
 

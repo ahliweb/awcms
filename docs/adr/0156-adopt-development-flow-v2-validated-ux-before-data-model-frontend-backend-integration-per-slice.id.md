@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0156-adopt-development-flow-v2-validated-ux-before-data-model-frontend-backend-integration-per-slice.md)
 
-<!-- i18n-source-hash: sha256:4224ac4bff8a2cdc8dc8b02edd0022568e061686ca15e7dcc5face884eac7c99 -->
+<!-- i18n-source-hash: sha256:f73ab81a7175414620076a933a01d44129802b05b1ca4b1305d7ba0434eb6806 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
