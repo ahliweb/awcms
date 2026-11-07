@@ -238,16 +238,16 @@ stack:
       declared: "1.3.0"
       source: .github/workflows/ci.yml minimum-supported job setup-bun (== engines floor)
   astro:
-    declared: "^7.4.4"
+    declared: "^7.4.7"
     source: package.json dependencies.astro
   astroNode:
-    declared: "^11.1.9"
+    declared: "^11.1.11"
     source: package.json dependencies["@astrojs/node"]
   typescript:
     declared: "^7.0.2"
     source: package.json devDependencies.typescript
   postgres:
-    declared: "18.4"
+    declared: "18.6"
     source: .github/workflows/ci.yml services.postgres image
 
 # Intentional divergences from a contract this repo must bind against — today

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deployment-profiles.md)
 
-<!-- i18n-source-hash: sha256:a7c6a103c4af87d0b8161c9d184d382206478536d9d2ea49caba0dc6cf21ebe5 -->
+<!-- i18n-source-hash: sha256:18fa867180177e34871e340f6d613d218f905e5a778303413e8227f193e5461c -->
 
 # Deployment Profiles
 
@@ -67,7 +67,7 @@ Sama seperti di atas, minus langkah nginx — klien LAN mengakses aplikasi langs
 
 ### production / offline-LAN — container (docker-compose.yml)
 
-`docker-compose.yml` di root repo (direncanakan) akan menjalankan stack LAN-first default: `app` (image `oven/bun:1.3.14` pinned, bukan `node`, sesuai standar Bun-only) dan `db` (`postgres:18.4`). PgBouncer tersedia sebagai service opsional `pgbouncer`, digerbangi Compose `profiles` sehingga tidak pernah otomatis aktif:
+`docker-compose.yml` di root repo (direncanakan) akan menjalankan stack LAN-first default: `app` (image `oven/bun:1.3.14` pinned, bukan `node`, sesuai standar Bun-only) dan `db` (`postgres:18.6`). PgBouncer tersedia sebagai service opsional `pgbouncer`, digerbangi Compose `profiles` sehingga tidak pernah otomatis aktif:
 
 ```bash
 cp .env.example .env

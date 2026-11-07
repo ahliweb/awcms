@@ -9,7 +9,7 @@
 # keep whatever it prints when it fails.
 #
 # This workflow does exactly that and nothing else: it loops the soak test
-# `iterations` times against `postgres:18.4` and uploads, as an artifact, the
+# `iterations` times against `postgres:18.6` and uploads, as an artifact, the
 # log of every failing iteration (the test already dumps the offending pairs
 # with ids, ranges, xmin/xmax, txid snapshot and server version) plus a summary.
 # It is deliberately NOT triggered by push / pull_request / schedule: it is a
@@ -45,7 +45,7 @@ jobs:
       SOAK_ITERATIONS: ${{ inputs.iterations }}
     services:
       postgres:
-        image: postgres:18.4
+        image: postgres:18.6
         env:
           POSTGRES_USER: awcms
           POSTGRES_PASSWORD: awcms_ci_password

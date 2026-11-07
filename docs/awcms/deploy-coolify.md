@@ -260,7 +260,7 @@ docker run --rm --network container:<container-db> \
   -v /opt/awcms/deploy/backup:/scripts:ro \
   -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
   -e BACKUP_DIR=/backup \
-  postgres:18.4 bash /scripts/backup-postgres.sh
+  postgres:18.6 bash /scripts/backup-postgres.sh
 
 # 2. prove the dump really can be restored — a verify-only drill:
 #    restore into a throwaway database, inspect it, then DROP it.
@@ -269,7 +269,7 @@ docker run --rm --network container:<container-db> \
   -v /var/backups/awcms:/backup \
   -v /opt/awcms/deploy/backup:/scripts:ro \
   -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
-  postgres:18.4 bash /scripts/restore-postgres.sh /backup/awcms_<db>_<timestamp>.dump
+  postgres:18.6 bash /scripts/restore-postgres.sh /backup/awcms_<db>_<timestamp>.dump
 ```
 
 Step 2 is not optional: `backup-postgres.sh` only proves **the file** is readable, `restore-postgres.sh` is what proves **its contents** become a database again — including that tables with `FORCE ROW LEVEL SECURITY` survive the round-trip. Tenant isolation lost during a restore is a silent failure: everything looks healthy, and not one tenant is separated. The role in `DATABASE_URL` is the same **owner/privileged** role that runs migrations (the drill creates and drops its own scratch database), not `awcms_app`. Record the dump file name, its `sha256`, and the drill time in the deploy notes. Full procedure with its migration context: [`database-migrations.md`](database-migrations.md) §Step 0.

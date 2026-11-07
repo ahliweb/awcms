@@ -69,7 +69,7 @@
  * ------------------------------------------------------------------------
  * `ci.yml`'s `quality` job runs `bun test` with NO Postgres service and no
  * `DATABASE_URL`, so `integrationEnabled` is false there and every suite
- * skips cleanly. Two pipelines DO provide a `postgres:18.4` service, set
+ * skips cleanly. Two pipelines DO provide a `postgres:18.6` service, set
  * `DATABASE_URL`, and migrate before executing this suite for real:
  * `ci.yml`'s dedicated `integration-tests` job (`bun test tests/integration/`
  * — scoped to exactly these 4 harness-based files, added alongside this
@@ -529,7 +529,7 @@ export async function setupIntegrationDatabase(): Promise<void> {
 /**
  * `afterAll` entry point for WORLD-1 files. The last to release drops the
  * database and the owner role — a single-use database cleaned up after itself,
- * exactly as the `postgres:18.4` CI service is thrown away after the job.
+ * exactly as the `postgres:18.6` CI service is thrown away after the job.
  */
 export async function teardownIntegrationDatabase(): Promise<void> {
   if (!integrationEnabled) {

@@ -46,17 +46,17 @@ Every version the manifest declares is checked by the gate against the real sour
 
 A manifest `declared` value MUST equal the real value at the `source` it points to (the compatibility-matrix assertion). Matrix intent: exercise the **current** and **minimum-supported** versions.
 
-| Component        | Current   | Minimum-supported | Source                                                         |
-| ---------------- | --------- | ----------------- | -------------------------------------------------------------- |
-| Bun (pin)        | `1.4.4`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
-| Bun (CI current) | `1.4.4`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
-| Bun (CI minimum) | —         | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
-| Astro            | `^7.4.4`  | `^7.4.4`          | `package.json` `dependencies.astro`                            |
-| `@astrojs/node`  | `^11.1.9` | `^11.1.9`         | `package.json` `dependencies`                                  |
-| TypeScript       | `^7.0.2`  | `^7.0.2`          | `package.json` `devDependencies`                               |
-| PostgreSQL       | `18.4`    | `18.4`            | `.github/workflows/ci.yml` `services.postgres`                 |
+| Component        | Current    | Minimum-supported | Source                                                         |
+| ---------------- | ---------- | ----------------- | -------------------------------------------------------------- |
+| Bun (pin)        | `1.4.4`    | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
+| Bun (CI current) | `1.4.4`    | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
+| Bun (CI minimum) | —          | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
+| Astro            | `^7.4.7`   | `^7.4.7`          | `package.json` `dependencies.astro`                            |
+| `@astrojs/node`  | `^11.1.11` | `^11.1.11`        | `package.json` `dependencies`                                  |
+| TypeScript       | `^7.0.2`   | `^7.0.2`          | `package.json` `devDependencies`                               |
+| PostgreSQL       | `18.6`     | `18.6`            | `.github/workflows/ci.yml` `services.postgres`                 |
 
-Minimum-supported is **actually run**, not merely declared: the `minimum-supported` job sets up Bun `1.3.0` (== the `engines.bun` floor) then runs `bun install --frozen-lockfile` + `typecheck` + `build` (Astro SSR) + `family:conformance:check`. The gate asserts the set of CI Bun versions is EXACTLY {current, minimum} AND that `ciMinimum` == the `engines` floor — so deleting the minimum job or shifting the floor turns the gate RED. The Astro/@astrojs/node/TypeScript "minimum" == their current caret ranges, so no separate cell is needed; PostgreSQL declares only 18.4 (no separate floor). The Astro SSR runtime on Bun (the `@astrojs/node` adapter) is exercised for real by `bun run build` (in `check` AND the minimum cell) and the `e2e-smoke` job that STARTS the server (`bun ./dist/standalone-entry.mjs`) → login → SSR render; the existence of `e2e-smoke` is asserted by `tests/family-conformance-ci-parity.test.ts` (there is no standalone in-suite SSR test — a duplicate build+start+probe would just re-run e2e-smoke).
+Minimum-supported is **actually run**, not merely declared: the `minimum-supported` job sets up Bun `1.3.0` (== the `engines.bun` floor) then runs `bun install --frozen-lockfile` + `typecheck` + `build` (Astro SSR) + `family:conformance:check`. The gate asserts the set of CI Bun versions is EXACTLY {current, minimum} AND that `ciMinimum` == the `engines` floor — so deleting the minimum job or shifting the floor turns the gate RED. The Astro/@astrojs/node/TypeScript "minimum" == their current caret ranges, so no separate cell is needed; PostgreSQL declares only 18.6 (no separate floor). The Astro SSR runtime on Bun (the `@astrojs/node` adapter) is exercised for real by `bun run build` (in `check` AND the minimum cell) and the `e2e-smoke` job that STARTS the server (`bun ./dist/standalone-entry.mjs`) → login → SSR render; the existence of `e2e-smoke` is asserted by `tests/family-conformance-ci-parity.test.ts` (there is no standalone in-suite SSR test — a duplicate build+start+probe would just re-run e2e-smoke).
 
 ## 5. Intentional-divergence registry
 

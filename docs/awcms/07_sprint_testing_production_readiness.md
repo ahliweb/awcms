@@ -226,7 +226,7 @@ playwright test`, Bun-only), separate from `bun test`
 > authenticated flow (login → session cookie → `/admin` guard → rendering the table
 > on every screen, including the masked login identifier on the users screen). It runs in
 > CI through the `e2e-smoke` job (`.github/workflows/ci.yml`), which brings up
-> `postgres:18.4`, runs `db:migrate`, then seeds one tenant+owner through
+> `postgres:18.6`, runs `db:migrate`, then seeds one tenant+owner through
 > `POST /api/v1/setup/initialize` (a real bootstrap) and hands
 > its credentials to the spec via env.
 

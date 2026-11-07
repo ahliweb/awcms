@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](production-preflight-runbook.md)
 
-<!-- i18n-source-hash: sha256:38cc1ebaf0ace00893246b5dcc1fb53dd054170411ea4d9cb4862dfc33f7f4bd -->
+<!-- i18n-source-hash: sha256:af4536e4b8ec906ee4c801ff5ee2fc111905cd19e52778b65b485e73715fc514 -->
 
 # Preflight Produksi — Runbook Gladi, Apply, dan Rollback
 
@@ -235,7 +235,7 @@ APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight \
 uuid di dalam exclusion constraint anti double-booking,
 [`booking.md`](booking.id.md) §8.2). Ia adalah **ekstensi tepercaya**
 (PostgreSQL 13+), sehingga peran migrasi yang memiliki database dan memegang
-`CREATE` padanya bisa membuatnya tanpa superuser, dan `postgres:18.4` sudah
+`CREATE` padanya bisa membuatnya tanpa superuser, dan `postgres:18.6` sudah
 menyertakannya. Database **terkelola** yang peran migrasinya tidak bisa membuat
 ekstensi tepercaya akan menggagalkan migrasi sebelum tabel booking mana pun ada,
 jadi periksa di target SEBELUM Tahap 4:

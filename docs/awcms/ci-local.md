@@ -91,7 +91,7 @@ So `bun run ci:local && git push` refuses to push after a skip, on purpose.
   The role must be a superuser (CI's is): the migrations run
   `ALTER ROLE ... SET` on a customised setting and the integration harness
   creates roles.
-- **PostgreSQL version.** CI uses `postgres:18.4`. **16 and newer are accepted**
+- **PostgreSQL version.** CI uses `postgres:18.6`. **16 and newer are accepted**
   (the version the migrations and RLS behaviour were verified on, and what local
   containers use); the summary notes when it is not 18. **Older than 16 is
   refused** (the job is skipped with the reason). Either way the GitHub job is

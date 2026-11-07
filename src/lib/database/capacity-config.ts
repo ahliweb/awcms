@@ -69,7 +69,7 @@
  *   below, not from `app`/`worker`/`setup`'s steady-state pool budgets — see
  *   `reservedAdminHeadroom`'s own doc comment.
  * - **Test/CI processes** (`bun test`, the CI workflow's ephemeral
- *   `postgres:18.4` service) — run against an isolated test/CI database
+ *   `postgres:18.6` service) — run against an isolated test/CI database
  *   with its own independent `max_connections`, never sharing budget with
  *   any real deployment this model validates.
  */

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](deploy-coolify.md)
 
-<!-- i18n-source-hash: sha256:2a5d3d45659fb936556a53724cfcdb26dba62a0c602b80ef4680919b29453fdf -->
+<!-- i18n-source-hash: sha256:047dd7f94694ab5a397f9130f6bf6e7e564047a3a2439dee973e4f67efaccd76 -->
 
 # Deploy Coolify
 
@@ -263,7 +263,7 @@ docker run --rm --network container:<container-db> \
   -v /opt/awcms/deploy/backup:/scripts:ro \
   -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
   -e BACKUP_DIR=/backup \
-  postgres:18.4 bash /scripts/backup-postgres.sh
+  postgres:18.6 bash /scripts/backup-postgres.sh
 
 # 2. buktikan dump itu benar-benar bisa di-restore — drill verify-only:
 #    restore ke database sekali pakai, diperiksa, lalu di-DROP.
@@ -272,7 +272,7 @@ docker run --rm --network container:<container-db> \
   -v /var/backups/awcms:/backup \
   -v /opt/awcms/deploy/backup:/scripts:ro \
   -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
-  postgres:18.4 bash /scripts/restore-postgres.sh /backup/awcms_<db>_<timestamp>.dump
+  postgres:18.6 bash /scripts/restore-postgres.sh /backup/awcms_<db>_<timestamp>.dump
 ```
 
 Langkah 2 tidak opsional: `backup-postgres.sh` hanya membuktikan **berkasnya** terbaca, `restore-postgres.sh` yang membuktikan **isinya** kembali menjadi database — termasuk bahwa tabel ber-`FORCE ROW LEVEL SECURITY` selamat melewati round-trip. Isolasi tenant yang hilang saat restore adalah kegagalan senyap: semuanya tampak sehat, tak ada satu pun tenant yang terpisah. Role di `DATABASE_URL` adalah role **owner/privileged** yang sama dengan yang menjalankan migrasi (drill membuat dan men-drop database scratch-nya sendiri), bukan `awcms_app`. Catat nama berkas dump, `sha256`-nya, dan waktu drill di catatan deploy. Prosedur lengkap beserta konteks migrasinya: [`database-migrations.md`](database-migrations.md) §Langkah 0.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](family-compatibility.md)
 
-<!-- i18n-source-hash: sha256:8e96055e2ac0fa1524523cfcdeb5de768fc7744c4fcc9e88dbb5ef000ae5f79d -->
+<!-- i18n-source-hash: sha256:7b5ae3b1d7acee86e8246139078b39061af84e2ecfc9964623abac4eeb0fcb14 -->
 
 # Manifes kontrak keluarga AWCMS
 
@@ -48,17 +48,17 @@ Setiap versi yang dideklarasikan manifest dicek gate terhadap sumber nyata (mism
 
 Nilai `declared` di manifest WAJIB sama dengan nilai nyata di sumber yang ditunjuk (assertion compatibility matrix). Intent matrix: menguji versi **current** dan **minimum-supported**.
 
-| Komponen         | Current   | Minimum-supported | Sumber                                                         |
-| ---------------- | --------- | ----------------- | -------------------------------------------------------------- |
-| Bun (pin)        | `1.4.4`   | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
-| Bun (CI current) | `1.4.4`   | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
-| Bun (CI minimum) | —         | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
-| Astro            | `^7.4.4`  | `^7.4.4`          | `package.json` `dependencies.astro`                            |
-| `@astrojs/node`  | `^11.1.9` | `^11.1.9`         | `package.json` `dependencies`                                  |
-| TypeScript       | `^7.0.2`  | `^7.0.2`          | `package.json` `devDependencies`                               |
-| PostgreSQL       | `18.4`    | `18.4`            | `.github/workflows/ci.yml` `services.postgres`                 |
+| Komponen         | Current    | Minimum-supported | Sumber                                                         |
+| ---------------- | ---------- | ----------------- | -------------------------------------------------------------- |
+| Bun (pin)        | `1.4.4`    | `>=1.3.0`         | `package.json` `packageManager` / `engines.bun`                |
+| Bun (CI current) | `1.4.4`    | —                 | `.github/workflows/ci.yml` job `quality` `setup-bun`           |
+| Bun (CI minimum) | —          | `1.3.0`           | `.github/workflows/ci.yml` job `minimum-supported` `setup-bun` |
+| Astro            | `^7.4.7`   | `^7.4.7`          | `package.json` `dependencies.astro`                            |
+| `@astrojs/node`  | `^11.1.11` | `^11.1.11`        | `package.json` `dependencies`                                  |
+| TypeScript       | `^7.0.2`   | `^7.0.2`          | `package.json` `devDependencies`                               |
+| PostgreSQL       | `18.6`     | `18.6`            | `.github/workflows/ci.yml` `services.postgres`                 |
 
-Minimum-supported **dijalankan nyata**, bukan sekadar dideklarasikan: job `minimum-supported` men-setup Bun `1.3.0` (== floor `engines.bun`) lalu menjalankan `bun install --frozen-lockfile` + `typecheck` + `build` (Astro SSR) + `family:conformance:check`. Gate meng-assert himpunan versi Bun di CI = TEPAT {current, minimum} DAN `ciMinimum` == floor `engines` — jadi menghapus job minimum atau menggeser floor memerahkan gate. Astro/@astrojs/node/TypeScript "minimum" == range caret current-nya, jadi tak butuh cell terpisah; PostgreSQL hanya 18.4 (tanpa floor terpisah). Runtime Astro SSR di atas Bun (adapter `@astrojs/node`) dieksekusi nyata oleh `bun run build` (di `check` DAN cell minimum) dan job `e2e-smoke` yang men-start server (`bun ./dist/standalone-entry.mjs`) → login → SSR render; keberadaan `e2e-smoke` di-assert `tests/family-conformance-ci-parity.test.ts` (tak ada test SSR standalone — build+start+probe duplikat hanya menjalankan ulang e2e-smoke).
+Minimum-supported **dijalankan nyata**, bukan sekadar dideklarasikan: job `minimum-supported` men-setup Bun `1.3.0` (== floor `engines.bun`) lalu menjalankan `bun install --frozen-lockfile` + `typecheck` + `build` (Astro SSR) + `family:conformance:check`. Gate meng-assert himpunan versi Bun di CI = TEPAT {current, minimum} DAN `ciMinimum` == floor `engines` — jadi menghapus job minimum atau menggeser floor memerahkan gate. Astro/@astrojs/node/TypeScript "minimum" == range caret current-nya, jadi tak butuh cell terpisah; PostgreSQL hanya 18.6 (tanpa floor terpisah). Runtime Astro SSR di atas Bun (adapter `@astrojs/node`) dieksekusi nyata oleh `bun run build` (di `check` DAN cell minimum) dan job `e2e-smoke` yang men-start server (`bun ./dist/standalone-entry.mjs`) → login → SSR render; keberadaan `e2e-smoke` di-assert `tests/family-conformance-ci-parity.test.ts` (tak ada test SSR standalone — build+start+probe duplikat hanya menjalankan ulang e2e-smoke).
 
 ## 5. Registry intentional divergence
 

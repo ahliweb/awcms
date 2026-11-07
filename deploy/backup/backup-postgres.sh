@@ -30,7 +30,7 @@
 #     -v /opt/awcms/deploy/backup:/scripts:ro \
 #     -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
 #     -e BACKUP_DIR=/backup \
-#     postgres:18.4 \
+#     postgres:18.6 \
 #     bash /scripts/backup-postgres.sh
 #
 # `docker exec <app-container> ...` is NOT an option: the app image is runtime
@@ -108,7 +108,7 @@ info() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 ||
-    die "'$1' not found in PATH. Run this inside an image that ships the PostgreSQL client binaries (e.g. postgres:18.4), version-matched to the server."
+    die "'$1' not found in PATH. Run this inside an image that ships the PostgreSQL client binaries (e.g. postgres:18.6), version-matched to the server."
 }
 
 # Fail closed on partial encryption/manifest configuration (ADR-0123): an
