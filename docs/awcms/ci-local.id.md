@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](ci-local.md)
 
-<!-- i18n-source-hash: sha256:cd32404d89dce16477d0c171eb0f6f93d1bfacfe9fbba4cf7a36814b20f25579 -->
+<!-- i18n-source-hash: sha256:8627299c6d7be35c9dfbb2140ca491592221cfbb3367d35640a7a2cca63b6121 -->
 
 # Menjalankan setiap job CI secara lokal (`bun run ci:local`)
 
@@ -94,7 +94,7 @@ Jadi `bun run ci:local && git push` menolak push setelah sebuah skip, dengan sen
   berikutnya). Password tidak pernah dicetak. Role itu harus superuser (milik CI
   begitu): migrasi menjalankan `ALTER ROLE ... SET` pada setting kustom dan
   harness integrasi membuat role.
-- **Versi PostgreSQL.** CI memakai `postgres:18.4`. **16 ke atas diterima** (versi
+- **Versi PostgreSQL.** CI memakai `postgres:18.6`. **16 ke atas diterima** (versi
   tempat migrasi dan perilaku RLS diverifikasi, dan yang dipakai container lokal);
   ringkasan mencatat bila bukan 18. **Lebih lama dari 16 ditolak** (job di-skip
   beserta alasannya). Apa pun versinya, job GitHub yang menjadi otoritas untuk

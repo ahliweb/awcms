@@ -6,7 +6,7 @@ readable and runnable. See
 for why encryption is `age`, why the manifest is HMAC-SHA256, and what was
 rejected. Every script is plain Bash (AGENTS.md rule 11 exempts OS-level
 `pg_dump`/`pg_restore` wrappers — see each script's own header comment) and
-runs inside a `postgres:18.4`-based image, version-matched to the server.
+runs inside a `postgres:18.6`-based image, version-matched to the server.
 
 | Script                | Job                                                                                                                                                                                          |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

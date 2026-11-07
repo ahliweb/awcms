@@ -224,7 +224,7 @@ APP_ENV=production DATABASE_URL=<production-url> bun run production:preflight \
 inside the double-booking exclusion constraints,
 [`booking.md`](booking.md) §8.2). It is a **trusted extension** (PostgreSQL 13+),
 so a migration role that owns the database and holds `CREATE` on it can create
-it without superuser, and `postgres:18.4` ships it. A **managed** database
+it without superuser, and `postgres:18.6` ships it. A **managed** database
 whose migration role cannot create trusted extensions fails the migration
 before any booking table exists, so check it on the target BEFORE Stage 4:
 

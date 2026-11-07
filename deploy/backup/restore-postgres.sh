@@ -28,7 +28,7 @@
 #     -v /var/backups/awcms:/backup \
 #     -v /opt/awcms/deploy/backup:/scripts:ro \
 #     -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
-#     postgres:18.4 \
+#     postgres:18.6 \
 #     bash /scripts/restore-postgres.sh /backup/awcms_<db>_<timestamp>.dump
 #
 # The role in DATABASE_URL needs CREATEDB (the drill creates and drops its own
@@ -111,7 +111,7 @@ USAGE
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 ||
-    die "'$1' not found in PATH. Run this inside an image that ships the PostgreSQL client binaries (e.g. postgres:18.4), version-matched to the server."
+    die "'$1' not found in PATH. Run this inside an image that ships the PostgreSQL client binaries (e.g. postgres:18.6), version-matched to the server."
 }
 
 urldecode() {

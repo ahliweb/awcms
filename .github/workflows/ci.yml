@@ -15,7 +15,7 @@
 # `integration-tests` di bawah yang menyalakan Postgres-nya sendiri.
 # Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun):
 # 404 + login render tidak butuh DB, tapi alur admin ter-autentikasi butuh,
-# jadi job-nya menyalakan service `postgres:18.4`, `db:migrate`, lalu men-seed
+# jadi job-nya menyalakan service `postgres:18.6`, `db:migrate`, lalu men-seed
 # satu tenant+owner lewat `POST /api/v1/setup/initialize` (bootstrap
 # sungguhan, bukan seed SQL ad-hoc) dan mengoperkan kredensialnya ke spec via
 # env.
@@ -116,7 +116,7 @@ jobs:
     # run under a non-superuser role there).
     services:
       postgres:
-        image: postgres:18.4
+        image: postgres:18.6
         env:
           POSTGRES_USER: awcms
           POSTGRES_PASSWORD: awcms_ci_password
@@ -247,7 +247,7 @@ jobs:
     # pre-migrated here for the DB-gated suites this job exists to run.
     services:
       postgres:
-        image: postgres:18.4
+        image: postgres:18.6
         env:
           POSTGRES_USER: awcms
           POSTGRES_PASSWORD: awcms_ci_password

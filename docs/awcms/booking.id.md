@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](booking.md)
 
-<!-- i18n-source-hash: sha256:30981d953f5582b4911a7e2b3d2d7df848fe91c469f598ccd57ca941a4edaeb0 -->
+<!-- i18n-source-hash: sha256:a6723d2127f0577435455681817b30a9d1dc86153e5d71289b5bdef387c399a6 -->
 
 <!-- i18n-source-hash: sha256:pending -->
 
@@ -885,11 +885,11 @@ terhadap repo ini: tak ada migrasi yang membuat `btree_gist` hari ini; `sql/001`
 (`pgcrypto`) dan `sql/064` (`pg_trgm`) sudah menjalankan `CREATE EXTENSION IF NOT
 EXISTS`; ketiganya **ekstensi trusted** di PostgreSQL 13+ (pemilik database
 dengan `CREATE` pada database bisa membuatnya tanpa superuser); profil
-deployment mem-pin `postgres:18.4`. Biaya: satu `CREATE EXTENSION IF NOT EXISTS
+deployment mem-pin `postgres:18.6`. Biaya: satu `CREATE EXTENSION IF NOT EXISTS
 btree_gist;` di migrasi booking, satu baris pra-pemeriksaan operator di runbook
 deploy, dan satu mode kegagalan yang diketahui — database terkelola yang peran
 migrasinya tak bisa membuat ekstensi trusted menggagalkan migrasi sebelum tabel
-apa pun ada. Profil offline/LAN (`postgres:18.4`) tak terpengaruh. ADR-0127 §4
+apa pun ada. Profil offline/LAN (`postgres:18.6`) tak terpengaruh. ADR-0127 §4
 menolak ekstensi untuk jendela pajak; alasannya (hak istimewa) tidak berlaku untuk
 ekstensi trusted, dan kalimat basi di `sql/171` adalah komentar historis di
 migrasi terapan, yang immutable dan dibiarkan. (Bila deployment target benar-benar

@@ -907,7 +907,7 @@ const ASSEMBLE_DATABASE_URL_STEP: NativeStep = {
   kind: "native",
   step: "Assemble DATABASE_URL for this job's Postgres",
   adapted:
-    "CI starts a postgres:18.4 service container and exports DATABASE_URL through $GITHUB_ENV; locally the runner creates a uniquely named throwaway database on the admin server, points DATABASE_URL (and the setup/worker URLs) at it, and drops it when the job ends",
+    "CI starts a postgres:18.6 service container and exports DATABASE_URL through $GITHUB_ENV; locally the runner creates a uniquely named throwaway database on the admin server, points DATABASE_URL (and the setup/worker URLs) at it, and drops it when the job ends",
   async run(run) {
     const adminUrl = run.facts.adminUrl;
     if (!adminUrl)

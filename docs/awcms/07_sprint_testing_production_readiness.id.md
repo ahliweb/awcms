@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](07_sprint_testing_production_readiness.md)
 
-<!-- i18n-source-hash: sha256:715bb699f6eececac6bc52984da0aa00a829764dcff56f2421dcf69d9e6f73d7 -->
+<!-- i18n-source-hash: sha256:b7355cc5e060f409709b28a7ca219c8432db2e736dc3aee3afac68daf08777b5 -->
 
 # Bagian 7 — Sprint Plan, Testing Checklist, dan Production Readiness
 
@@ -229,7 +229,7 @@ playwright test`, Bun-only), terpisah dari `bun test`
 > ter-autentikasi penuh (login → cookie sesi → guard `/admin` → render tabel
 > tiap layar, termasuk login identifier ter-mask di layar users). Dijalankan di
 > CI oleh job `e2e-smoke` (`.github/workflows/ci.yml`), yang menyalakan
-> `postgres:18.4`, `db:migrate`, lalu men-seed satu tenant+owner lewat
+> `postgres:18.6`, `db:migrate`, lalu men-seed satu tenant+owner lewat
 > `POST /api/v1/setup/initialize` (bootstrap sungguhan) dan mengoperkan
 > kredensialnya ke spec via env.
 

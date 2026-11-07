@@ -856,11 +856,11 @@ against this repo: no migration creates `btree_gist` today; `sql/001`
 (`pgcrypto`) and `sql/064` (`pg_trgm`) already run `CREATE EXTENSION IF NOT
 EXISTS`; all three are **trusted extensions** in PostgreSQL 13+ (a database owner
 with `CREATE` on the database can create them without superuser); the deployment
-profile pins `postgres:18.4`. Cost: one `CREATE EXTENSION IF NOT EXISTS
+profile pins `postgres:18.6`. Cost: one `CREATE EXTENSION IF NOT EXISTS
 btree_gist;` in the booking migration, an operator pre-flight line in the deploy
 runbook, and a known failure mode — a managed database whose migration role
 cannot create trusted extensions fails the migration before any table exists. The
-offline/LAN profile (`postgres:18.4`) is unaffected. ADR-0127 §4 declined the
+offline/LAN profile (`postgres:18.6`) is unaffected. ADR-0127 §4 declined the
 extension for tax windows; the reason (privilege) does not hold for a trusted
 extension, and the stale sentence in `sql/171` is a historical comment in an
 applied migration, which is immutable and is left alone. (If a target

@@ -65,7 +65,7 @@ The same as above, minus the nginx step — LAN clients reach the application di
 
 ### production / offline-LAN — container (docker-compose.yml)
 
-The `docker-compose.yml` at the repo root (planned) will run the default LAN-first stack: `app` (image `oven/bun:1.3.14` pinned, not `node`, per the Bun-only standard) and `db` (`postgres:18.4`). PgBouncer is available as an optional `pgbouncer` service, gated by Compose `profiles` so it is never automatically active:
+The `docker-compose.yml` at the repo root (planned) will run the default LAN-first stack: `app` (image `oven/bun:1.3.14` pinned, not `node`, per the Bun-only standard) and `db` (`postgres:18.6`). PgBouncer is available as an optional `pgbouncer` service, gated by Compose `profiles` so it is never automatically active:
 
 ```bash
 cp .env.example .env
