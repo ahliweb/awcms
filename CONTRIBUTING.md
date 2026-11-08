@@ -45,6 +45,17 @@ flowchart LR
 5. **Tambahkan changeset** bila perubahan mempengaruhi perilaku: `bun run changeset`. Perubahan docs-only/chore boleh tanpa changeset.
 6. **Buka Pull Request** dengan mengisi template PR. Kaitkan issue terkait (`Closes #NNN`).
 
+## Issue, label, dan roadmap
+
+Issue dibuat dari form di tab Issues (`.github/ISSUE_TEMPLATE/`) dan mengikuti standar roadmap dan issue lintas-portofolio internal (DL-041):
+
+- **Judul** `[Fase/SEQ] jenis: ringkasan`, mis. `[F1/03A] feat: skema tabel sesi`. Pekerjaan di luar fase memakai `F0`. Issue lama yang berjudul conventional-commit tidak diganti namanya.
+- **Label**: tepat satu `jenis:` (`feat`, `fix`, `docs`, `test`, `ci`, `chore`, `refactor`, `riset`), tepat satu `prioritas:` (`P0` sampai `P3`), dan tepat satu `ukuran:` (`S` atau `M`); `area:` nol atau lebih. Triase memasang label akhir. Label lama (`type:*`, `priority:*`, `bug`, `enhancement`) tidak dihapus.
+- **Ukuran L tidak ada.** Pekerjaan L dipecah menjadi epik dengan sub-issue S atau M (form Epik; fitur sub-issue GitHub).
+- **Badan issue** berisi Context, Goal, Scope (In dan Out), Steps, Acceptance Criteria, Definition of Done, Dependensi, References, dan Size. Issue di repo publik tidak memuat rahasia, data pribadi, atau nama repo privat.
+- **Roadmap** ada di [`docs/roadmap.md`](docs/roadmap.md): fase, kriteria keluar, dan status. Ia bukan janji tanggal, dan statusnya berlaku setelah dikonfirmasi pemilik.
+- PR menutup issue lewat `Closes #NNN` (sudah ada di template PR).
+
 ## Setup pengembangan
 
 ```bash

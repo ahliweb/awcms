@@ -1,0 +1,76 @@
+# Templat issue: riset berbatas waktu.
+# Standar lintas-portofolio internal: roadmap dan issue GitHub (DL-041).
+name: Riset
+description: Penelusuran berbatas waktu yang menghasilkan laporan dan keputusan, bukan kode produk.
+title: "[Fase/SEQ] riset: pertanyaan"
+labels: ["jenis:riset"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issue riset ditutup dengan **laporan**, bukan dengan PR kode. Spike kode boleh, tetapi tidak masuk jalur rilis.
+        **Repo ini publik.** Jangan menulis rahasia, data pribadi, atau nama repo privat.
+  - type: textarea
+    id: question
+    attributes:
+      label: Pertanyaan riset
+      description: Satu pertanyaan yang bisa dijawab "ya", "tidak", atau dengan pilihan.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Keputusan atau pekerjaan apa yang menunggu jawaban ini.
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Batas waktu (timebox)
+      description: Mis. "4 jam kerja". Bila habis tanpa jawaban, laporkan yang ada dan putuskan lanjut atau berhenti.
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Metode dan sumber
+      description: Sumber primer lebih dulu (dokumentasi resmi, kode, pengukuran). Tandai kekuatan bukti di laporan.
+  - type: textarea
+    id: scope-out
+    attributes:
+      label: Scope - Out
+  - type: textarea
+    id: output
+    attributes:
+      label: Keluaran
+      description: Bentuk laporan dan tempatnya (komentar penutup, dokumen, ADR atau decision log).
+      value: |
+        - [ ] Jawaban atas pertanyaan, dengan bukti dan kekuatan buktinya
+        - [ ] Opsi, trade-off, dan rekomendasi
+        - [ ] Issue lanjutan dibuat untuk tindak lanjut yang disetujui
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependensi
+      value: Tidak ada
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioritas yang diusulkan
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Pemeriksaan keamanan isi
+      options:
+        - label: Issue ini tidak memuat rahasia, data pribadi, atau nama repo privat
+          required: true

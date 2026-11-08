@@ -264,6 +264,7 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 - [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md) — **catatan sejarah**: kontrak alur "uji di awcms-mini dulu, lalu port", dicabut oleh [ADR-0055](docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md) dan digantikan dokumen di atas.
 - [`docs/awcms/sejarah-repo.md`](docs/awcms/sejarah-repo.md) — **catatan sejarah** repo: kenapa dibangun ulang, dan basis teknologi sebelum/sesudah. Dipindahkan keluar dari README.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — apa yang **sudah ada di kode** saat ini vs gap yang tersisa.
+- [`docs/roadmap.md`](docs/roadmap.md) — **roadmap** per fase (tujuan, kriteria keluar, status); draf, status menunggu konfirmasi pemilik. Aturan issue, label, dan judul: [`CONTRIBUTING.md`](CONTRIBUTING.md#issue-label-dan-roadmap).
 - [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) — **state proyek & titik-lanjut** (baca lebih dulu saat melanjutkan pekerjaan besar): model tata kelola, inventori ringkas, backlog, jebakan penting.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — proses kontribusi & Definition of Done.
 - [`SECURITY.md`](SECURITY.md) — kebijakan keamanan & pelaporan kerentanan.
