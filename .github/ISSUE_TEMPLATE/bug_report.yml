@@ -1,24 +1,26 @@
+# Bug report. Mengikuti standar roadmap dan issue lintas-portofolio internal (DL-041).
 name: Bug report
 description: Laporkan perilaku yang salah atau tidak sesuai dokumentasi.
-title: "[bug] "
-labels:
-  - bug
+title: "[Fase/SEQ] fix: ringkasan"
+labels: ["jenis:fix"]
 body:
   - type: markdown
     attributes:
       value: |
-        Terima kasih atas laporannya. **Jangan** menyertakan secret, kredensial, dump database, atau data pengguna asli. Untuk kerentanan keamanan, gunakan alur privat di `SECURITY.md`.
+        Terima kasih atas laporannya. **Repo ini publik.** Jangan menyertakan secret, kredensial, dump database, log yang memuatnya, atau data pengguna asli; samarkan dulu.
+        Untuk kerentanan keamanan, gunakan alur privat di `SECURITY.md`, bukan issue ini.
+        Pekerjaan di luar roadmap memakai fase `F0` pada judul.
   - type: textarea
-    id: summary
+    id: context
     attributes:
-      label: Ringkasan
-      description: Jelaskan bug secara singkat dan jelas.
+      label: Context
+      description: Di mana bug terlihat, versi atau commit, dan dampaknya.
     validations:
       required: true
   - type: textarea
-    id: steps
+    id: repro
     attributes:
-      label: Langkah reproduksi
+      label: Langkah mereproduksi
       placeholder: |
         1. ...
         2. ...
@@ -28,21 +30,21 @@ body:
   - type: textarea
     id: expected
     attributes:
-      label: Perilaku yang diharapkan
+      label: Hasil yang diharapkan
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: Perilaku aktual
-      description: Sertakan pesan error / log relevan (tanpa data sensitif).
+      label: Hasil yang terjadi
+      description: Sertakan pesan error atau log relevan (tanpa data sensitif).
     validations:
       required: true
   - type: textarea
     id: environment
     attributes:
       label: Lingkungan
-      description: Versi Bun, OS, versi/commit repo, PostgreSQL (bila relevan).
+      description: Versi Bun, OS, versi atau commit repo, PostgreSQL (bila relevan).
       placeholder: |
         - Bun:
         - OS:
@@ -51,9 +53,51 @@ body:
     validations:
       required: false
   - type: textarea
-    id: context
+    id: acceptance
     attributes:
-      label: Konteks tambahan
-      description: Dokumen/issue terkait, dugaan penyebab, dsb.
+      label: Acceptance Criteria
+      description: Termasuk uji regresi yang membuktikan bug tidak kembali.
+      value: |
+        - [ ] Bug tidak lagi bisa direproduksi
+        - [ ] Ada uji yang gagal sebelum perbaikan dan lolos sesudahnya
     validations:
-      required: false
+      required: true
+  - type: textarea
+    id: scope-out
+    attributes:
+      label: Scope - Out
+      description: Temuan lain di sekitar bug ini dicatat sebagai issue terpisah.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Path berkas, dokumen, ADR, atau issue terkait.
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Ukuran L tidak diterima. Pecah menjadi sub-issue S atau M.
+      options:
+        - S
+        - M
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioritas yang diusulkan
+      description: Triase menetapkan label akhir.
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Pemeriksaan keamanan isi
+      options:
+        - label: Issue ini tidak memuat rahasia, data pribadi, atau nama repo privat
+          required: true

@@ -1,0 +1,92 @@
+# Templat issue: epik (induk sub-issue).
+# Standar lintas-portofolio internal: roadmap dan issue GitHub (DL-041).
+name: Epik
+description: Induk dari beberapa sub-issue S atau M. Epik tidak dikerjakan langsung.
+title: "[Fase/SEQ] epik: ringkasan"
+labels: ["epik"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Epik hanya mengikat dan melacak. Setiap sub-issue harus mandiri (Context dan Acceptance Criteria sendiri).
+        Tambahkan sub-issue lewat fitur sub-issue GitHub; daftar tugas di bawah adalah cadangan dan penanda rencana awal.
+        **Repo ini publik.** Jangan menulis rahasia, data pribadi, atau nama repo privat.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+    validations:
+      required: true
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: Satu kalimat hasil akhir epik.
+    validations:
+      required: true
+  - type: input
+    id: phase
+    attributes:
+      label: Fase atau milestone
+      description: Nama fase di roadmap repo, mis. "F2".
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope - In dan Out
+      value: |
+        In:
+        - ...
+
+        Out:
+        - ...
+    validations:
+      required: true
+  - type: textarea
+    id: subissues
+    attributes:
+      label: Rencana sub-issue
+      description: Satu baris per sub-issue. Ganti dengan `#nomor` setelah dibuat. Urutan memuat dependensi.
+      value: |
+        - [ ] [Fase/SEQ-A] jenis: ...
+        - [ ] [Fase/SEQ-B] jenis: ...
+    validations:
+      required: true
+  - type: textarea
+    id: exit
+    attributes:
+      label: Kriteria selesai epik
+      description: Dapat diverifikasi di tingkat epik, di luar penutupan semua sub-issue.
+      value: |
+        - [ ] Semua sub-issue ditutup
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependensi
+      value: Tidak ada
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioritas yang diusulkan
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Pemeriksaan keamanan isi
+      options:
+        - label: Issue ini tidak memuat rahasia, data pribadi, atau nama repo privat
+          required: true

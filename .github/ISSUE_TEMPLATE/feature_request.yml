@@ -1,38 +1,48 @@
+# Fitur atau tugas atomik (ukuran S atau M). Mengikuti standar roadmap dan issue lintas-portofolio internal (DL-041).
 name: Feature request
-description: Usulkan kemampuan baru atau peningkatan pada platform ERP AWCMS.
-title: "[feat] "
-labels:
-  - enhancement
+description: Satu unit kerja atomik berukuran S atau M, bisa dikerjakan tanpa membaca epik penuh.
+title: "[Fase/SEQ] jenis: ringkasan"
 body:
   - type: markdown
     attributes:
       value: |
-        AWCMS adalah platform ERP & integrasi solusi bisnis milik AhliWeb (lihat [ADR-0001](../../docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — modul domain ERP (finance, inventory, procurement, manufacturing, HR/payroll) dan integrasi bisnis eksternal masuk langsung ke `src/modules/` repo ini, bukan repo terpisah.
+        Satu issue, satu tujuan, satu PR. Pekerjaan berukuran L dipecah lebih dulu lewat form **Epik**. Pekerjaan di luar roadmap memakai fase `F0` pada judul.
+        **Repo ini publik.** Jangan menulis rahasia, token, data pribadi, atau nama repo privat di issue ini.
 
-        Bila usulan ini adalah **modul baru** (bukan perubahan modul yang sudah ada), baca dulu kebijakan admission modul: `docs/awcms/21_module_admission_governance.md` (kategori, pohon keputusan, kriteria) dan isi `docs/awcms/templates/module-proposal-template.md` sebagai lampiran/komentar issue ini sebelum scaffold dimulai.
-  - type: textarea
-    id: problem
+        AWCMS adalah platform ERP dan integrasi solusi bisnis milik AhliWeb (lihat [ADR-0001](../../docs/adr/0001-rebuild-on-awcms-foundation-erp-scope.md)). Modul domain ERP dan integrasi bisnis eksternal masuk langsung ke `src/modules/` repo ini, bukan repo terpisah.
+
+        Bila usulan ini adalah **modul baru** (bukan perubahan modul yang sudah ada), baca dulu kebijakan admission modul: `docs/awcms/21_module_admission_governance.md` (kategori, pohon keputusan, kriteria), dan isi `docs/awcms/templates/module-proposal-template.md` sebagai lampiran atau komentar issue ini sebelum scaffold dimulai.
+  - type: dropdown
+    id: kind
     attributes:
-      label: Masalah / kebutuhan
-      description: Masalah apa yang ingin diselesaikan? Untuk siapa?
+      label: Jenis yang diusulkan
+      description: Triase memasang label `jenis:` akhir. Bug memakai form Bug report.
+      options:
+        - feat
+        - refactor
+        - test
+        - ci
+        - chore
     validations:
       required: true
   - type: textarea
-    id: proposal
+    id: context
     attributes:
-      label: Usulan solusi
+      label: Context
+      description: Satu sampai tiga kalimat, mengapa issue ini ada. Sebut dokumen atau keputusan asalnya.
     validations:
       required: true
-  - type: textarea
-    id: alternatives
+  - type: input
+    id: goal
     attributes:
-      label: Alternatif yang dipertimbangkan
+      label: Goal
+      description: Satu kalimat hasil akhir.
     validations:
-      required: false
+      required: true
   - type: dropdown
     id: scope
     attributes:
-      label: Kategori modul (doc 21 §2 — bila usulan ini modul baru)
+      label: Kategori modul (doc 21 §2, bila usulan ini modul baru)
       options:
         - "Core / System (fondasi lintas-modul)"
         - "ERP Domain Module (finance/inventory/procurement/manufacturing/HR)"
@@ -42,9 +52,85 @@ body:
     validations:
       required: true
   - type: textarea
-    id: docs
+    id: scope-in
     attributes:
-      label: Dampak dokumentasi / standar
-      description: Doc/ADR/kontrak mana yang perlu berubah bila fitur ini diterima?
+      label: Scope - In
+      description: Yang dikerjakan di issue ini.
+      placeholder: "- ..."
     validations:
-      required: false
+      required: true
+  - type: textarea
+    id: scope-out
+    attributes:
+      label: Scope - Out
+      description: Yang sengaja tidak dikerjakan. Temuan di luar scope menjadi issue lain.
+      placeholder: "- ..."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: Langkah berurutan.
+      placeholder: |
+        1. ...
+        2. ...
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Dapat diverifikasi dan tidak ambigu. Selesai berarti semuanya tercentang.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: Definition of Done
+      options:
+        - label: Semua acceptance criteria terpenuhi
+        - label: Uji dan check wajib repo berstatus SUCCESS
+        - label: Dokumentasi yang terdampak diperbarui di PR yang sama
+        - label: PR memuat `Closes #<nomor issue ini>`
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependensi
+      description: Issue atau PR yang harus selesai lebih dulu (`#nomor`), atau tulis "tidak ada".
+      value: Tidak ada
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Path berkas, dokumen, ADR, dan ID kebutuhan induk bila ada. Sebut doc, ADR, atau kontrak yang perlu berubah bila fitur ini diterima.
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Ukuran L tidak diterima. Pecah menjadi sub-issue S atau M.
+      options:
+        - S
+        - M
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioritas yang diusulkan
+      description: Triase menetapkan label akhir.
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Pemeriksaan keamanan isi
+      options:
+        - label: Issue ini tidak memuat rahasia, data pribadi, atau nama repo privat
+          required: true

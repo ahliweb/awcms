@@ -1,32 +1,76 @@
+# Dokumentasi (jalur ringkas). Mengikuti standar roadmap dan issue lintas-portofolio internal (DL-041).
 name: Documentation
-description: Laporkan kesalahan, kekurangan, atau usulan perbaikan dokumentasi/standar.
-title: "[docs] "
-labels:
-  - documentation
+description: Laporkan kesalahan, kekurangan, atau usulan perbaikan dokumentasi atau standar.
+title: "[Fase/SEQ] docs: ringkasan"
+labels: ["jenis:docs"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Bentuk ringkas: Context, Goal, Acceptance Criteria, Size. **Repo ini publik.** Jangan menulis rahasia, data pribadi, atau nama repo privat.
+        Pekerjaan di luar roadmap memakai fase `F0` pada judul.
   - type: input
     id: location
     attributes:
       label: Lokasi dokumen
-      description: Path file + bagian/heading (mis. `docs/awcms/16_...md` §RLS context).
+      description: Path berkas dan bagian atau heading (mis. `docs/awcms/16_...md` §RLS context).
     validations:
       required: true
   - type: textarea
-    id: problem
+    id: context
     attributes:
-      label: Apa yang salah/kurang
+      label: Context
+      description: Apa yang salah atau kurang, dan mengapa itu penting.
+    validations:
+      required: true
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: Satu kalimat hasil akhir.
     validations:
       required: true
   - type: textarea
-    id: suggestion
+    id: acceptance
     attributes:
-      label: Usulan perbaikan
+      label: Acceptance Criteria
+      description: Dapat diverifikasi dan tidak ambigu.
+      value: |
+        - [ ]
     validations:
-      required: false
+      required: true
   - type: checkboxes
     id: consistency
     attributes:
       label: Konsistensi
       options:
-        - label: Perubahan ini perlu diselaraskan lintas dokumen (doc + skill + kode)
+        - label: Perubahan ini perlu diselaraskan lintas dokumen (doc, skill, kode)
         - label: Perubahan ini menyentuh keputusan arsitektural (mungkin butuh ADR)
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options:
+        - S
+        - M
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioritas yang diusulkan
+      description: Triase menetapkan label akhir.
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Pemeriksaan keamanan isi
+      options:
+        - label: Issue ini tidak memuat rahasia, data pribadi, atau nama repo privat
+          required: true
