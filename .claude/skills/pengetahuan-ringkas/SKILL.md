@@ -3,17 +3,15 @@ name: pengetahuan-ringkas
 description: "Gunakan SEBELUM membaca banyak berkas untuk menjawab pertanyaan arsitektur, hubungan antarberkas, alur data, 'di mana X didefinisikan', 'apa yang memanggil Y', atau 'apa dampak mengubah Z'. Membaca peta knowledge graph graphify di graphify-out/ lebih dulu agar hemat token, lalu memverifikasi ke berkas sumber."
 ---
 
-🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
-
 <!-- pengetahuan-ringkas:v1 -->
 
 # Pengetahuan Ringkas (graphify + Obsidian)
 
 ## Metadata
 
-- Version: `v1.1.0`
+- Version: `v1.2.0`
 - Last updated: `2026-11-09`
-- Changeset: `Menambahkan mode graf lokal-saja: graf melebihi batas ukuran tidak di-commit, dibangun lokal.`
+- Changeset: `Menambahkan aturan retensi lokal: maksimal dua keadaan graf (terakhir dan proses update), tanpa salinan atau cadangan lain.`
 
 Repo ini punya knowledge graph di `graphify-out/`. Tujuannya satu: menjawab pertanyaan struktur dengan membaca peta kecil, bukan puluhan berkas, sehingga token AI lebih hemat.
 
@@ -54,16 +52,28 @@ Repo ini punya knowledge graph di `graphify-out/`. Tujuannya satu: menjawab pert
 - Jangan memasang `graphify hook install`: hook mengubah `graph.json` setelah commit sehingga working tree kotor, dan hanya menyegarkan kode.
 - Jangan memasukkan rahasia, token, atau data pribadi ke berkas yang masuk graf; graphify melewatkan berkas sensitif, tetapi tetap periksa.
 
+## Retensi lokal
+
+Di mesin lokal, graf sebuah repo hanya boleh ada dalam **dua keadaan**: graf terakhir yang sudah selesai (`graphify-out/` yang dilacak Git) dan proses update yang sedang berjalan. Selesai berarti keadaan baru menggantikan yang terakhir; gagal berarti proses dibuang.
+
+- Jangan menyimpan salinan atau cadangan lain dari `graphify-out/` (mis. `graphify-out.bak`, `graph.json.old`, salinan per tanggal, klon cadangan per run).
+- Bila update gagal atau hasilnya buruk, kembalikan dari Git (`git restore graphify-out/` atau `git checkout -- graphify-out/`), jangan menyimpan salinan manual.
+- Hapus sisa proses yang tertinggal sebelum memulai update baru.
+
+## Repo yang diarsipkan
+
+Jangan membangun atau memperbarui graf, dan jangan membuat vault Obsidian, di repo yang sudah diarsipkan (read-only di GitHub), termasuk di salinan lokalnya. Graf yang sudah ada di repo arsip dibiarkan apa adanya dan tidak diperbarui.
+
 ## Artefak: dilacak Git vs tidak
 
-| Berkas                                                                                | Dilacak | Catatan                                                                    |
-| ------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------- |
-| `graphify-out/graph.json`                                                             | Ya      | Dibaca `graphify query` dan agent lain tanpa membangun ulang; path relatif |
-| `graphify-out/GRAPH_REPORT.md`                                                        | Ya      | Ringkasan god node dan komunitas                                           |
-| `graphify-out/STATUS.md`                                                              | Ya      | Penanda graf kode saja; dihapus setelah ekstraksi dokumen                  |
-| `graphify-out/.graphify_labels.json{,.sig}`                                           | Ya      | Nama komunitas hasil kurasi                                                |
-| `graphify-out/cache/`, `manifest.json`, `cost.json`, `graph.html`, `.graphify_*` lain | Tidak   | Berisi mtime/hash lokal atau dibuat ulang                                  |
-| `graphify-out/obsidian/`                                                              | Tidak   | Vault lokal                                                                |
+| Berkas | Dilacak | Catatan |
+| --- | --- | --- |
+| `graphify-out/graph.json` | Ya | Dibaca `graphify query` dan agent lain tanpa membangun ulang; path relatif |
+| `graphify-out/GRAPH_REPORT.md` | Ya | Ringkasan god node dan komunitas |
+| `graphify-out/STATUS.md` | Ya | Penanda graf kode saja; dihapus setelah ekstraksi dokumen |
+| `graphify-out/.graphify_labels.json{,.sig}` | Ya | Nama komunitas hasil kurasi |
+| `graphify-out/cache/`, `manifest.json`, `cost.json`, `graph.html`, `.graphify_*` lain | Tidak | Berisi mtime/hash lokal atau dibuat ulang |
+| `graphify-out/obsidian/` | Tidak | Vault lokal |
 
 `.graphifyignore` mengatur cakupan graf (sintaks gitignore). Tambahkan baris di sana bila ada folder besar yang bukan objek pertanyaan; jangan mengecualikan kode milik repo.
 
@@ -77,6 +87,11 @@ Repo ini punya knowledge graph di `graphify-out/`. Tujuannya satu: menjawab pert
 Pasang paket `graphifyy`: `uv tool install graphifyy` atau `pipx install graphifyy`. Graf kode tidak memerlukan API key. Skill agent `graphify` bisa dipasang dengan `graphify install`.
 
 ## Changelog
+
+### 2026-11-09 - v1.2.0
+
+- Menambahkan §Retensi lokal: maksimal dua keadaan graf per repo, tanpa salinan atau cadangan lain.
+- Menambahkan §Repo yang diarsipkan: tanpa graf baru, pembaruan graf, atau vault Obsidian.
 
 ### 2026-11-09 - v1.1.0
 
