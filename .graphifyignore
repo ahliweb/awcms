@@ -82,3 +82,50 @@ knowledge/generated/
 # corpus. Same directory name, opposite shape — excluding it here would buy
 # nothing and lose release rationale that does connect. PR #400 settled this;
 # re-measure before revisiting it.
+
+# Baseline cakupan graphify (pengetahuan-ringkas). Sintaks gitignore.
+node_modules/
+vendor/
+bower_components/
+dist/
+build/
+out/
+target/
+coverage/
+.next/
+.nuxt/
+.astro/
+.svelte-kit/
+.turbo/
+.cache/
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+*.min.js
+*.min.css
+*.map
+*.bundle.js
+*.generated.*
+*.snap
+__snapshots__/
+fixtures/
+__fixtures__/
+package-lock.json
+npm-shrinkwrap.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+bun.lockb
+composer.lock
+Cargo.lock
+Gemfile.lock
+poetry.lock
+uv.lock
+go.sum
+.vscode/
+.idea/
+.opencode/
+.agents/
+.claude/skills/pengetahuan-ringkas/
+graphify-out/
