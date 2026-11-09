@@ -3,6 +3,8 @@ name: pengetahuan-ringkas
 description: "Gunakan SEBELUM membaca banyak berkas untuk menjawab pertanyaan arsitektur, hubungan antarberkas, alur data, 'di mana X didefinisikan', 'apa yang memanggil Y', atau 'apa dampak mengubah Z'. Membaca peta knowledge graph graphify di graphify-out/ lebih dulu agar hemat token, lalu memverifikasi ke berkas sumber."
 ---
 
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
+
 <!-- pengetahuan-ringkas:v1 -->
 
 # Pengetahuan Ringkas (graphify + Obsidian)
