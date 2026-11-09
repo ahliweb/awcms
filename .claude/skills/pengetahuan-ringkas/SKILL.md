@@ -3,6 +3,8 @@ name: pengetahuan-ringkas
 description: "Gunakan SEBELUM membaca banyak berkas untuk menjawab pertanyaan arsitektur, hubungan antarberkas, alur data, 'di mana X didefinisikan', 'apa yang memanggil Y', atau 'apa dampak mengubah Z'. Membaca peta knowledge graph graphify di graphify-out/ lebih dulu agar hemat token, lalu memverifikasi ke berkas sumber."
 ---
 
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
+
 <!-- pengetahuan-ringkas:v1 -->
 
 # Pengetahuan Ringkas (graphify + Obsidian)
@@ -54,14 +56,14 @@ Repo ini punya knowledge graph di `graphify-out/`. Tujuannya satu: menjawab pert
 
 ## Artefak: dilacak Git vs tidak
 
-| Berkas | Dilacak | Catatan |
-| --- | --- | --- |
-| `graphify-out/graph.json` | Ya | Dibaca `graphify query` dan agent lain tanpa membangun ulang; path relatif |
-| `graphify-out/GRAPH_REPORT.md` | Ya | Ringkasan god node dan komunitas |
-| `graphify-out/STATUS.md` | Ya | Penanda graf kode saja; dihapus setelah ekstraksi dokumen |
-| `graphify-out/.graphify_labels.json{,.sig}` | Ya | Nama komunitas hasil kurasi |
-| `graphify-out/cache/`, `manifest.json`, `cost.json`, `graph.html`, `.graphify_*` lain | Tidak | Berisi mtime/hash lokal atau dibuat ulang |
-| `graphify-out/obsidian/` | Tidak | Vault lokal |
+| Berkas                                                                                | Dilacak | Catatan                                                                    |
+| ------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------- |
+| `graphify-out/graph.json`                                                             | Ya      | Dibaca `graphify query` dan agent lain tanpa membangun ulang; path relatif |
+| `graphify-out/GRAPH_REPORT.md`                                                        | Ya      | Ringkasan god node dan komunitas                                           |
+| `graphify-out/STATUS.md`                                                              | Ya      | Penanda graf kode saja; dihapus setelah ekstraksi dokumen                  |
+| `graphify-out/.graphify_labels.json{,.sig}`                                           | Ya      | Nama komunitas hasil kurasi                                                |
+| `graphify-out/cache/`, `manifest.json`, `cost.json`, `graph.html`, `.graphify_*` lain | Tidak   | Berisi mtime/hash lokal atau dibuat ulang                                  |
+| `graphify-out/obsidian/`                                                              | Tidak   | Vault lokal                                                                |
 
 `.graphifyignore` mengatur cakupan graf (sintaks gitignore). Tambahkan baris di sana bila ada folder besar yang bukan objek pertanyaan; jangan mengecualikan kode milik repo.
 
