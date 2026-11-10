@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8cf68e9e6ac9f9074a740fc0e580197fba5541da534043a45ef9878be3d78caf -->
+<!-- i18n-source-hash: sha256:79b80865264de4be10c339e6de7369372f437dd8637266e239858e139596716a -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
@@ -203,3 +203,7 @@ Riwayat perubahan lengkap ada di [`CHANGELOG.md`](CHANGELOG.md); status issue/PR
 ## Lisensi
 
 Dilisensikan di bawah lisensi **MIT** — lihat [`LICENSE`](LICENSE). Audit standar pengembangan terakhir: [`docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`](docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md).
+
+## Referensi arsitektur percakapan CarikBot (riset saja)
+
+[Kajian konsep CarikBot](docs/carikbot-conversation-reference.id.md) dan [English source](docs/carikbot-conversation-reference.md) menjelaskan desain flow/menu/form, batas fitur yang sudah ada dengan usulan, keamanan, pengujian, dan kepemilikan. Belum ada engine chatbot atau API produksi baru yang diimplementasikan.
