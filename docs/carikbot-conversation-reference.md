@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](carikbot-conversation-reference.id.md)
+
 # CarikBot Concept Reference — Conversation, Services and Authority
 
 **Version:** v1.0.0 | **Updated:** 2026-11-10 | **Status:** F0 research/proposal, not released functionality.
