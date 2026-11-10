@@ -201,3 +201,7 @@ Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR statu
 ## License
 
 Licensed under the **MIT** license — see [`LICENSE`](LICENSE). Latest development-standard audit: [`docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`](docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md).
+
+## CarikBot conversation architecture reference (research only)
+
+[CarikBot concept evaluation](docs/carikbot-conversation-reference.md) and [Bahasa Indonesia](docs/carikbot-conversation-reference.id.md) document flow/menu/form ideas, current-versus-proposed status, provider boundaries, privacy risks, tests and cross-repository ownership. No chatbot engine or production API is added by this documentation.
