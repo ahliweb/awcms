@@ -4,7 +4,7 @@
 
 # `crm_follow_up`
 
-**Tugas tindak lanjut untuk staf** berbasis aturan berversi, dipicu event `crm_leads` (Issue #1165, [ADR-0159](../../../docs/adr/0159-crm-follow-up-is-a-rule-versioned-staff-task-cadence-that-stops-on-lead-signals-and-notifies-only-through-the-existing-email-port.id.md), **Diusulkan**, memperluas [ADR-0153](../../../docs/adr/0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.id.md) N5). Modul ini mengubah event lead menjadi daftar kerja, mengeskalasi yang terlambat, memberi tahu staf lewat e-mail, dan menghentikan semuanya begitu lead berkonversi, hilang, digabung, membalas, menarik consent, atau memblokir pengirim.
+**Tugas tindak lanjut untuk staf** berbasis aturan berversi, dipicu event `crm_leads` (Issue #1165, [ADR-0159](../../../docs/adr/0159-crm-follow-up-is-a-rule-versioned-staff-task-cadence-that-stops-on-lead-signals-and-notifies-only-through-the-existing-email-port.id.md), **Diterima** 2026-11-11, memperluas [ADR-0153](../../../docs/adr/0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.id.md) N5). Modul ini mengubah event lead menjadi daftar kerja, mengeskalasi yang terlambat, memberi tahu staf lewat e-mail, dan menghentikan semuanya begitu lead berkonversi, hilang, digabung, membalas, menarik consent, atau memblokir pengirim.
 
 Ia **tidak pernah mengirim apa pun ke lead**, **tidak menyimpan salinan lead** (tugas hanya membawa id lead yang opak), **bukan engine workflow kedua** (tanpa graf, persetujuan, atau bahasa ekspresi), dan **tidak punya facade lintas kanal** (ADR-0139): notifikasi staf hanya lewat `WorkflowNotificationPort` yang sudah ada (adapter `email`).
 
@@ -34,7 +34,7 @@ Ia **tidak pernah mengirim apa pun ke lead**, **tidak menyimpan salinan lead** (
 
 ## Keputusan terbuka (pemilik)
 
-- ADR-0159 masih **Diusulkan**: O1 (pesan keluar otomatis ke lead), O2 (port sinyal berhenti untuk #1144/#1164 dan consent kanal), O3 (apakah pembalikan mencabut sinyal berhenti), O4 (retensi tugas tertutup dan notifikasi selesai), O5 (mempersempit `tasks.read` ke tugas sendiri).
+- ADR-0159 **Diterima** (2026-11-11); pertanyaan terbukanya tetap terbuka: O1 (pesan keluar otomatis ke lead), O2 (port sinyal berhenti untuk #1144/#1164 dan consent kanal), O3 (apakah pembalikan mencabut sinyal berhenti), O4 (retensi tugas tertutup dan notifikasi selesai), O5 (mempersempit `tasks.read` ke tugas sendiri).
 - Event PEMICU untuk tenant yang modulnya tidak aktif diabaikan dan **tidak diputar ulang** saat diaktifkan (gagal-tertutup: tidak ada lonjakan tugas basi). Event BERHENTI (`converted`, `lost`, `merged`) dicatat selama saklar deployment menyala, bahkan saat Module Management atau saklar tenant mati, sehingga sinyal berhenti tetap menang setelah modul dinyalakan kembali.
 - `tasks.update` tidak dibatasi kepemilikan: pemegangnya dapat menyelesaikan atau membatalkan tugas mana pun di tenant (O5 mencakup penyempitannya bersama `tasks.read`).
 - Notifikasi yang dibatalkan sebagai `recipient_changed` tidak dijadwalkan ulang bila lead kemudian dikembalikan ke orang yang sama (kunci `(task, kind, recipient)` sudah ada); tugasnya tetap ada di daftar kerja orang itu.

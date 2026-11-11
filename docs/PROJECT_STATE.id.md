@@ -410,6 +410,16 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
 
 ## 4. Backlog / langkah berikutnya
 
+- **ADR-0159 DITERIMA — 11 November 2026 (#1165, PR #1266).** Pemilik
+  (ahliweb) menerima ADR-0159: `crm_follow_up` (tugas tindak lanjut staf
+  berbasis aturan berversi yang dipicu event `crm_leads`, sinyal berhenti yang
+  menang atas setiap balapan, notifikasi staf hanya lewat `WorkflowNotificationPort`
+  e-mail yang sudah ada) diadmisi. Modul tetap `experimental` dan MATI di ketiga
+  tingkat; pertanyaan terbuka O1-O6 tetap terbuka. Juga keputusan pemilik pada
+  hari yang sama: #1267 tetap menolak template berstatus FLAGGED dan pembatasan
+  WABA hanya dicabut oleh operator; `email:senders:verify` akan dijadwalkan (PR
+  lanjutan); #1152 ditutup dengan Reddit `unverified`.
+
 - **KEPUTUSAN PEMILIK OMNICHANNEL — 11 November 2026.** Empat keputusan yang
   tertunda dijawab pemilik (ahliweb): (1) **ADR-0157 Diterima** — desain
   `social_publishing` diakui; modul tetap `experimental` dan mati, dan konektor per

@@ -406,6 +406,16 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **ADR-0159 ACCEPTED — 11 November 2026 (#1165, PR #1266).** The owner
+  (ahliweb) accepted ADR-0159: `crm_follow_up` (rule-versioned staff follow-up
+  tasks keyed by `crm_leads` events, stop signals that win every race, staff
+  notices only through the existing e-mail `WorkflowNotificationPort`) is
+  admitted. The module stays `experimental` and OFF at all three levels; its
+  open questions O1-O6 stay open. Also owner decisions of the same day: #1267
+  keeps FLAGGED templates refused and WABA restrictions cleared only by an
+  operator; `email:senders:verify` is to be scheduled (follow-up PR); #1152
+  closed with Reddit `unverified`.
+
 - **OMNICHANNEL OWNER DECISIONS — 11 November 2026.** Four pending decisions were
   answered by the owner (ahliweb): (1) **ADR-0157 Accepted** — the
   `social_publishing` design is admitted; the module stays `experimental` and off,

@@ -4,10 +4,10 @@
 
 # ADR-0159 — `crm_follow_up` adalah kadens tugas STAF berbasis aturan berversi yang dipicu event lead; berhenti pada sinyal lead, tidak mengirim apa pun ke lead, dan memberi notifikasi staf hanya lewat port e-mail yang sudah ada
 
-- **Status:** Diusulkan
+- **Status:** Diterima
 - **Tanggal:** 2026-11-11
-- **Pengambil keputusan:** ahliweb (pemilik). **Belum diputuskan.** Implementasi Issue #1165 dikirim bersama ADR ini, mati secara bawaan di setiap tingkat, agar pemilik meninjau desain yang konkret, bukan sketsa; merge kode tidak berarti ADR diterima.
-- **Menyelesaikan (bila diterima):** Issue #1165 (tugas tindak lanjut yang dapat dikonfigurasi, aturan berhenti kadens, dan pemicu notifikasi)
+- **Pengambil keputusan:** ahliweb (pemilik), **diterima 2026-11-11**. Implementasi Issue #1165 dikirim bersama ADR ini untuk ditinjau dan tetap `experimental` serta mati secara bawaan di setiap tingkat; pertanyaan terbuka di bawah tetap terbuka.
+- **Menyelesaikan:** Issue #1165 (tugas tindak lanjut yang dapat dikonfigurasi, aturan berhenti kadens, dan pemicu notifikasi)
 - **Memperluas:** [ADR-0153](0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.id.md) (N5 dan baris #1165 di tabel hilirnya: "berlangganan event lead sebagai sinyal berhenti; kunci tugas dengan id lead; jangan menyimpan salinan lead; jangan mengirim tanpa memeriksa ulang consent saat dispatch; jangan membangun engine persetujuan kedua"), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (tanpa facade, tanpa fallback), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (I1 sampai I13), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md)
 - **Terkait:** Issue #1163, #1166 (`crm_leads`), #1144 (batas inbound), #1164 (proyeksi percakapan), hilir `ahliweb/awcms-one` #462
 

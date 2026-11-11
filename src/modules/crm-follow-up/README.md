@@ -2,7 +2,7 @@
 
 # `crm_follow_up`
 
-Rule-versioned **follow-up tasks for staff**, keyed by `crm_leads` events (Issue #1165, [ADR-0159](../../../docs/adr/0159-crm-follow-up-is-a-rule-versioned-staff-task-cadence-that-stops-on-lead-signals-and-notifies-only-through-the-existing-email-port.md), **Proposed**, extending [ADR-0153](../../../docs/adr/0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.md) N5). It turns lead events into a worklist, escalates what is overdue, notifies staff by e-mail, and stops all of it the moment a lead converts, is lost, is merged away, replies, withdraws consent or blocks the sender.
+Rule-versioned **follow-up tasks for staff**, keyed by `crm_leads` events (Issue #1165, [ADR-0159](../../../docs/adr/0159-crm-follow-up-is-a-rule-versioned-staff-task-cadence-that-stops-on-lead-signals-and-notifies-only-through-the-existing-email-port.md), **Accepted** 2026-11-11, extending [ADR-0153](../../../docs/adr/0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.md) N5). It turns lead events into a worklist, escalates what is overdue, notifies staff by e-mail, and stops all of it the moment a lead converts, is lost, is merged away, replies, withdraws consent or blocks the sender.
 
 It **never sends anything to the lead**, stores **no lead copy** (a task carries the opaque lead id and nothing else), is **not a second workflow engine** (no graph, no approval, no expression language) and has **no cross-channel facade** (ADR-0139): staff notices go through the existing `WorkflowNotificationPort` (the `email` adapter) only.
 
@@ -32,7 +32,7 @@ It **never sends anything to the lead**, stores **no lead copy** (a task carries
 
 ## Open decisions (owner)
 
-- ADR-0159 is **Proposed**: O1 (automated outbound to the lead), O2 (the stop-signal port for #1144/#1164 and channel consent), O3 (does a reversal lift a stop), O4 (retention of closed tasks and settled notices), O5 (narrow `tasks.read` to own tasks).
+- ADR-0159 is **Accepted** (2026-11-11); its open questions stay open: O1 (automated outbound to the lead), O2 (the stop-signal port for #1144/#1164 and channel consent), O3 (does a reversal lift a stop), O4 (retention of closed tasks and settled notices), O5 (narrow `tasks.read` to own tasks).
 - TRIGGER events for a tenant where the module is not active are ignored and **not replayed** when it is switched on (fail closed: no burst of stale tasks). STOP events (`converted`, `lost`, `merged`) are recorded whenever the deployment switch is on, even while Module Management or the tenant switch is off, so a stop still wins after the module is switched back on.
 - `tasks.update` has no ownership bound: any holder may complete or cancel any task of the tenant (O5 covers narrowing it with `tasks.read`).
 - A notice cancelled as `recipient_changed` is not re-scheduled if the lead is later handed back to the same person (the `(task, kind, recipient)` key already exists); the task stays in that person's worklist.

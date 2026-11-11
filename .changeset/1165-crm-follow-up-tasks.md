@@ -2,7 +2,7 @@
 "awcms": minor
 ---
 
-feat(crm_follow_up): configurable follow-up tasks for staff, cadence stop rules and staff notification triggers (Issue #1165, ADR-0159 **Proposed**, extending ADR-0153 N5). **Nothing changes for a deployment that does not set `CRM_FOLLOW_UP_ENABLED=true`**, and a tenant is untouched until Module Management and the module's own switch are on.
+feat(crm_follow_up): configurable follow-up tasks for staff, cadence stop rules and staff notification triggers (Issue #1165, ADR-0159, accepted by the owner 2026-11-11, extending ADR-0153 N5). **Nothing changes for a deployment that does not set `CRM_FOLLOW_UP_ENABLED=true`**, and a tenant is untouched until Module Management and the module's own switch are on.
 
 **Rules** (`sql/369`): a tenant rule with IMMUTABLE revisions (trigger and no UPDATE grant): a closed trigger (`lead_created`, `stage_entered`, `lead_assigned`) with optional pipeline, stage-category and stage-key filters, a due offset and an optional escalation offset in working minutes over the revision's own calendar (IANA zone, working weekdays, daily window, holidays), an assignee mode (`lead_owner` or `fixed_user`), staff notices and a per-lead cap. No expression language. `POST /api/v1/crm-follow-up/rules/simulate` dry-runs a draft revision and writes nothing.
 

@@ -2,10 +2,10 @@
 
 # ADR-0159 — `crm_follow_up` is a rule-versioned STAFF task cadence keyed by lead events; it stops on lead signals, sends nothing to the lead, and notifies staff only through the existing e-mail port
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-11
-- **Decision maker:** ahliweb (owner). **Not yet decided.** The implementation of Issue #1165 ships with this ADR, off by default at every level, so that the owner reviews a concrete design rather than a sketch; merging the code does not accept the ADR.
-- **Resolves (when accepted):** Issue #1165 (configurable follow-up tasks, cadence stop rules and notification triggers)
+- **Decision maker:** ahliweb (owner), **accepted 2026-11-11**. The implementation of Issue #1165 shipped with this ADR for review and stays `experimental` and off by default at every level; the open questions below remain open.
+- **Resolves:** Issue #1165 (configurable follow-up tasks, cadence stop rules and notification triggers)
 - **Extends:** [ADR-0153](0153-reusable-lead-prospect-pipeline-is-a-pre-customer-context-that-never-owns-the-customer.md) (N5 and the #1165 row of its downstream table: "subscribe to the lead events as stop signals; key tasks by lead id; do not store a lead copy; do not send without re-checking consent at dispatch; do not build a second approval engine"), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md) (descriptor-declared consumers), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md) (ports), [ADR-0139](0139-cross-channel-notification-orchestration-not-admitted.md) (no facade, no fallback), [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (I1 to I13), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md)
 - **Related:** Issues #1163, #1166 (`crm_leads`), #1144 (inbound boundary), #1164 (conversation projection), downstream `ahliweb/awcms-one` #462
 

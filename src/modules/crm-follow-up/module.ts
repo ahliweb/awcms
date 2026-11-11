@@ -34,7 +34,7 @@ const NO_LEAD_DATA =
 
 /**
  * `crm_follow_up` — rule-versioned STAFF follow-up tasks keyed by lead events
- * (Issue #1165, ADR-0159 Proposed, extending ADR-0153 N5).
+ * (Issue #1165, ADR-0159 Accepted 2026-11-11, extending ADR-0153 N5).
  *
  * ## Status
  *
