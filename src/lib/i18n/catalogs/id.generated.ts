@@ -342,6 +342,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "By rule version": ["Menurut versi aturan"],
   "By time": ["Per waktu"],
   "By treatment": ["Menurut perlakuan"],
+  "CRM Leads": ["Prospek CRM"],
   "Cancel": ["Batal"],
   "Cancel document": ["Batalkan dokumen"],
   "Cancel instance": ["Batalkan instance"],

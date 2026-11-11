@@ -130,18 +130,18 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 <!-- Dihasilkan `bun run project-state:inventory:generate`. JANGAN diedit tangan; gerbangnya `bun run project-state:inventory:check`. -->
 
-| Aspek                              | Nilai (ter-generate)                                                                                                              | Sumber kebenaran                                                                        |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi                              | **10.11.0**                                                                                                                       | `package.json`                                                                          |
-| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                | `git rev-list --count v10.11.0..HEAD`                                                   |
-| Modul base                         | **36** (lihat daftar di ARCHITECTURE.md)                                                                                          | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **248** (`sql/001`–`341`)                                                                                                         | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0158** (`0000` = template; status ADR tertinggi: **Proposed**)                                                         | `ls docs/adr/`                                                                          |
-| Layar admin                        | **82** berkas `.astro` di `src/pages/admin/`; **2 dari 36** modul tanpa `navigation:` (`social-publishing`, `website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **104** (61.084 baris) — soal typecheck lihat §6                                                                                  | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **69** di rantai `bun run check`                                                                                                  | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                                         | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Aspek                              | Nilai (ter-generate)                                                                                                                           | Sumber kebenaran                                                                        |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Versi                              | **10.11.0**                                                                                                                                    | `package.json`                                                                          |
+| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                                                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
+| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                                                                             | `git rev-list --count v10.11.0..HEAD`                                                   |
+| Modul base                         | **37** (lihat daftar di ARCHITECTURE.md)                                                                                                       | `src/modules/index.ts`                                                                  |
+| Migrasi                            | **251** (`sql/001`–`344`)                                                                                                                      | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0158** (`0000` = template; status ADR tertinggi: **Proposed**)                                                                      | `ls docs/adr/`                                                                          |
+| Layar admin                        | **82** berkas `.astro` di `src/pages/admin/`; **3 dari 37** modul tanpa `navigation:` (`crm-leads`, `social-publishing`, `website-engagement`) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **104** (61.084 baris) — soal typecheck lihat §6                                                                                               | `find src -name '*.astro'`                                                              |
+| Gerbang                            | **69** di rantai `bun run check`                                                                                                               | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.6.0**                                                                      | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -218,7 +218,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **36 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
+- **37 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection

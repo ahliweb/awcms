@@ -7832,6 +7832,9 @@ msgstr ""
 msgid "Social Publishing"
 msgstr ""
 
+msgid "CRM Leads"
+msgstr ""
+
 msgid "Tenant suspended"
 msgstr ""
 

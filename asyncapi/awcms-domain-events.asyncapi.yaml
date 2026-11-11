@@ -847,6 +847,91 @@ channels:
       the job, publication and account ids, the provider key, a fixed
       `failureCode` and the attempt number (0 when no attempt was made). Never a
       provider message. A failed job does not affect a published sibling.
+  awcms.crm_leads.lead.created:
+    address: awcms.crm_leads.lead.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A lead was created through an intake path, in the transaction that
+      stored it (ADR-0153, Issue #1166). Producer:
+      `crm-leads/application/lead-directory.ts`'s `createLead`. The envelope
+      `payload` is `CrmLeadCreated`: opaque lead, pipeline, revision and
+      first-touch ids, the initial stage key and closed category, the source
+      kind with opaque channel-account and campaign references, the KINDS of
+      contact point held (never their values) and the effective and recorded
+      times. A replayed intake publishes nothing. Never a name, an address,
+      a phone number or a note.
+  awcms.crm_leads.lead.stage_changed:
+    address: awcms.crm_leads.lead.stage_changed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A lead's stage changed: a move, a stage migration on a new revision, a
+      conversion, a conversion reversal, a merge or its rollback
+      (`transitionKind`), in the transaction that appended the transition
+      row. Producer: `crm-leads/application/lead-events.ts`'s
+      `appendLeadTransition`. Payload `CrmLeadStageChanged`; never a reason
+      or a note.
+  awcms.crm_leads.lead.assigned:
+    address: awcms.crm_leads.lead.assigned
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A lead's owner changed. Producer: `lead-directory.ts`'s `assignLead`.
+      Payload `CrmLeadAssigned`: the lead id and the previous and new owner
+      tenant-user ids only.
+  awcms.crm_leads.lead.merged:
+    address: awcms.crm_leads.lead.merged
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      Two leads of one pipeline were merged after human review. Producer:
+      `lead-lifecycle.ts`'s `mergeLeads`. Payload `CrmLeadMerged`: the
+      merge, survivor and absorbed lead ids and the undo deadline; never the
+      reviewer's note.
+  awcms.crm_leads.lead.merge_reverted:
+    address: awcms.crm_leads.lead.merge_reverted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A lead merge was rolled back within its undo window. Producer:
+      `lead-lifecycle.ts`'s `revertMerge`. Payload `CrmLeadMergeReverted`.
+  awcms.crm_leads.lead.converted:
+    address: awcms.crm_leads.lead.converted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A conversion was recorded: confirmed by the customer authority (with
+      its opaque `externalCustomerRef`) or a flagged manual conversion
+      (`authority_unconfirmed`). Producer: `lead-lifecycle.ts`'s
+      `recordConversion`. Payload `CrmLeadConverted`; never a note. A
+      replayed confirmation publishes nothing. The lead module never creates
+      the customer.
+  awcms.crm_leads.lead.conversion_reversed:
+    address: awcms.crm_leads.lead.conversion_reversed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      The customer authority reversed a conversion (a refund, a
+      cancellation): a correction by event, never an edit of history.
+      Producer: `lead-lifecycle.ts`'s `reverseConversion`. Payload
+      `CrmLeadConversionReversed`.
+  awcms.crm_leads.lead.lost:
+    address: awcms.crm_leads.lead.lost
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A lead ENTERED a lost or disqualified stage. Producer:
+      `lead-events.ts`'s `appendLeadTransition`. Payload `CrmLeadLost`; a
+      stop signal for follow-up cadences (#1165).
 operations:
   publishDomainEventRuntimeSampleRecorded:
     action: send
@@ -1298,6 +1383,54 @@ operations:
       $ref: "#/channels/awcms.social_publishing.job.failed"
     messages:
       - $ref: "#/channels/awcms.social_publishing.job.failed/messages/DomainEvent"
+  publishCrmLeadCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.created"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.created/messages/DomainEvent"
+  publishCrmLeadStageChanged:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.stage_changed"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.stage_changed/messages/DomainEvent"
+  publishCrmLeadAssigned:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.assigned"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.assigned/messages/DomainEvent"
+  publishCrmLeadMerged:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.merged"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.merged/messages/DomainEvent"
+  publishCrmLeadMergeReverted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.merge_reverted"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.merge_reverted/messages/DomainEvent"
+  publishCrmLeadConverted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.converted"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.converted/messages/DomainEvent"
+  publishCrmLeadConversionReversed:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.conversion_reversed"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.conversion_reversed/messages/DomainEvent"
+  publishCrmLeadLost:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.crm_leads.lead.lost"
+    messages:
+      - $ref: "#/channels/awcms.crm_leads.lead.lost/messages/DomainEvent"
 components:
   messages:
     DomainEvent:
@@ -1509,3 +1642,233 @@ components:
         provider: { type: string }
         failureCode: { type: string }
         attemptNo: { type: integer, minimum: 0 }
+    CrmLeadCreated:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.created`, eventVersion 1.0. Opaque
+        ids and attribution references only.
+      required:
+        [
+          contractVersion,
+          leadId,
+          pipelineId,
+          revisionId,
+          stageKey,
+          stageCategory,
+          source,
+          contactPointKinds,
+          occurredAt,
+          recordedAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        leadId: { type: string, format: uuid }
+        pipelineId: { type: string, format: uuid }
+        revisionId: { type: string, format: uuid }
+        stageKey: { type: string }
+        stageCategory:
+          {
+            type: string,
+            enum: [new, working, qualified, converted, lost, disqualified]
+          }
+        source:
+          type: object
+          properties:
+            touchId: { type: string, format: uuid }
+            kind:
+              {
+                type: string,
+                enum: [website_form, inbound_message, import, manual, api]
+              }
+            channelAccountId: { type: string, format: uuid, nullable: true }
+            campaignRef: { type: string, nullable: true }
+        contactPointKinds:
+          type: array
+          items: { type: string, enum: [email, phone, platform_id] }
+        occurredAt: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+    CrmLeadStageChanged:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.stage_changed`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          leadId,
+          pipelineId,
+          revisionId,
+          transitionId,
+          transitionKind,
+          toStageKey,
+          toCategory,
+          occurredAt,
+          recordedAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        leadId: { type: string, format: uuid }
+        pipelineId: { type: string, format: uuid }
+        revisionId: { type: string, format: uuid }
+        transitionId: { type: string, format: uuid }
+        transitionKind:
+          {
+            type: string,
+            enum:
+              [
+                moved,
+                stage_migrated,
+                converted,
+                conversion_reversed,
+                merged_away,
+                merge_reverted
+              ]
+          }
+        fromStageKey: { type: string, nullable: true }
+        toStageKey: { type: string }
+        fromCategory:
+          {
+            type: string,
+            nullable: true,
+            enum: [new, working, qualified, converted, lost, disqualified]
+          }
+        toCategory:
+          {
+            type: string,
+            enum: [new, working, qualified, converted, lost, disqualified]
+          }
+        occurredAt: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+    CrmLeadAssigned:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.assigned`, eventVersion 1.0.
+      required: [contractVersion, leadId, assignedAt, privacyClass]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        leadId: { type: string, format: uuid }
+        fromOwnerTenantUserId: { type: string, format: uuid, nullable: true }
+        toOwnerTenantUserId: { type: string, format: uuid, nullable: true }
+        assignedAt: { type: string, format: date-time }
+    CrmLeadMerged:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.merged`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          mergeId,
+          survivorLeadId,
+          absorbedLeadId,
+          mergedAt,
+          undoUntil,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        mergeId: { type: string, format: uuid }
+        survivorLeadId: { type: string, format: uuid }
+        absorbedLeadId: { type: string, format: uuid }
+        mergedAt: { type: string, format: date-time }
+        undoUntil: { type: string, format: date-time }
+    CrmLeadMergeReverted:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.merge_reverted`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          mergeId,
+          survivorLeadId,
+          absorbedLeadId,
+          revertedAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        mergeId: { type: string, format: uuid }
+        survivorLeadId: { type: string, format: uuid }
+        absorbedLeadId: { type: string, format: uuid }
+        revertedAt: { type: string, format: date-time }
+    CrmLeadConverted:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.converted`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          leadId,
+          conversionId,
+          mode,
+          evidenceRef,
+          toStageKey,
+          occurredAt,
+          recordedAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        leadId: { type: string, format: uuid }
+        conversionId: { type: string, format: uuid }
+        mode:
+          { type: string, enum: [authority_confirmed, authority_unconfirmed] }
+        externalCustomerRef: { type: string, nullable: true }
+        evidenceRef: { type: string }
+        toStageKey: { type: string }
+        occurredAt: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+    CrmLeadConversionReversed:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.conversion_reversed`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          leadId,
+          conversionId,
+          reversalEvidenceRef,
+          toStageKey,
+          occurredAt,
+          recordedAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        leadId: { type: string, format: uuid }
+        conversionId: { type: string, format: uuid }
+        reversalEvidenceRef: { type: string }
+        toStageKey: { type: string }
+        occurredAt: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+    CrmLeadLost:
+      type: object
+      description: >-
+        The `payload` of `awcms.crm_leads.lead.lost`, eventVersion 1.0.
+      required:
+        [
+          contractVersion,
+          leadId,
+          pipelineId,
+          transitionId,
+          toStageKey,
+          toCategory,
+          occurredAt,
+          privacyClass
+        ]
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        privacyClass: { type: string, enum: [pseudonymous] }
+        leadId: { type: string, format: uuid }
+        pipelineId: { type: string, format: uuid }
+        transitionId: { type: string, format: uuid }
+        toStageKey: { type: string }
+        toCategory: { type: string, enum: [lost, disqualified] }
+        occurredAt: { type: string, format: date-time }

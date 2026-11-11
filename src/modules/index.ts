@@ -35,6 +35,7 @@ import { telegramDeliveryModule } from "./telegram-delivery/module";
 import { channelAccountsModule } from "./channel-accounts/module";
 import { websiteEngagementModule } from "./website-engagement/module";
 import { socialPublishingModule } from "./social-publishing/module";
+import { crmLeadsModule } from "./crm-leads/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -263,7 +264,15 @@ const baseModules: ModuleDescriptor[] = [
   // `channel_accounts` and `media_library` are soft (optional capability)
   // consumptions, and nothing depends on it. See
   // src/modules/social-publishing/module.ts's `description`.
-  socialPublishingModule
+  socialPublishingModule,
+  // Admitted by ADR-0153 (Issue #1166): the reusable lead/prospect pipeline, a
+  // PRE-CUSTOMER context that never owns the customer, the identity or the
+  // consent. `experimental` and OFF at three levels (CRM_LEADS_ENABLED, Module
+  // Management, its own tenant switch). Depends on
+  // tenant_admin/identity_access/logging/module_management/domain_event_runtime/
+  // profile_identity (all above); nothing depends on it. See
+  // src/modules/crm-leads/module.ts's `description`.
+  crmLeadsModule
 ];
 
 /**

@@ -164,6 +164,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // yet (API-first; admin screens are a recorded follow-up): this map must cover
   // every registered module so its first screen lands in the commerce section.
   procurement: "commerce",
+  // ADR-0153 (Issue #1166). The pre-customer pipeline sits beside the other
+  // commercial modules. Placed even though the module declares NO navigation yet
+  // (the operator screen is a recorded follow-up): this map must cover every
+  // registered module so its first screen lands in the commerce section.
+  crm_leads: "commerce",
   // ADR-0132 (Issue #945). Placed even though the module declares NO navigation
   // yet (`experimental`, no admin screen): this map must cover every registered
   // module so its first screen lands with the people/identity screens rather

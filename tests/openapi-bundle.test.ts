@@ -456,6 +456,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // schedules, schedule exceptions and the availability read. Nothing here
       // is anonymous.
       "Booking",
+      // "CRM Leads" (crm_leads, ADR-0153, Issue #1166) — genuinely new surface:
+      // versioned pipelines, lead intake, moves, merges with undo, conversions
+      // and erasure. Nothing here is anonymous. (Code-unit order: "CR" < "Ch".)
+      "CRM Leads",
       "Channel Accounts",
       "Comments",
       "Data Lifecycle",

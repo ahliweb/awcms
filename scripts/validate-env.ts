@@ -26,6 +26,7 @@ import {
   resolveMailketingV2BaseUrl
 } from "../src/modules/email/domain/mailketing-v2-contract";
 import { resolveWebsiteEngagementRing } from "../src/modules/website-engagement/domain/engagement-config";
+import { resolveCrmLeadsRing } from "../src/modules/crm-leads/domain/crm-leads-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -439,6 +440,19 @@ const RULES: readonly Rule[] = [
   // needs CHANNEL_ACCOUNTS_ENABLED (checked below): an account registry that is
   // off refuses every account, so nothing could publish.
   { name: "SOCIAL_PUBLISHING_ENABLED", required: false, type: "bool" },
+
+  // crm_leads (ADR-0153, Issue #1166). Deployment switch, OFF by default: every
+  // route answers 503 after authorization. The ring encrypts every lead contact
+  // point and keys every per-tenant contact-point hash, and is a secret, never
+  // echoed. Absent means intake with contact points and lookup fail closed;
+  // present it is validated below.
+  { name: "CRM_LEADS_ENABLED", required: false, type: "bool" },
+  {
+    name: "CRM_LEADS_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
 
   // website_engagement (ADR-0155, Issue #1153). No deployment switch: the module
   // is inert until a tenant creates a source. The ring encrypts every submission's
@@ -1181,6 +1195,50 @@ export function validateEnv(env: EnvBag): string[] {
         if (sharesKey) {
           problems.push(
             `WEBSITE_ENGAGEMENT_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
+          );
+        }
+      }
+    }
+  }
+
+  // crm_leads (ADR-0153): the same rule for the lead contact-point ring. Optional
+  // (the module ships off), but a PRESENT ring must parse and must share no key
+  // with any other module's ring. No value is echoed.
+  if ((env.CRM_LEADS_KEYS ?? "").trim() !== "") {
+    const crmRing = resolveCrmLeadsRing(env as NodeJS.ProcessEnv);
+
+    if (!crmRing.ok) {
+      problems.push(
+        `${crmRing.reason} Cincin kunci crm_leads tidak valid (tanpa kunci yang sah, titik kontak lead tidak dapat disimpan; tidak ada fallback plaintext).`
+      );
+    } else {
+      for (const other of [
+        "WEBSITE_ENGAGEMENT_KEYS",
+        "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_HASH_KEYS",
+        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+        "WHATSAPP_RECIPIENT_HASH_KEYS"
+      ]) {
+        const sharesKey = (env[other] ?? "").split(",").some((entry) => {
+          const separator = entry.indexOf(":");
+
+          if (separator < 1) return false;
+
+          const decoded = Buffer.from(
+            entry.slice(separator + 1).trim(),
+            "base64"
+          );
+
+          return (
+            decoded.length > 0 &&
+            crmRing.keys.some((key) => key.key.equals(decoded))
+          );
+        });
+
+        if (sharesKey) {
+          problems.push(
+            `CRM_LEADS_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
           );
         }
       }

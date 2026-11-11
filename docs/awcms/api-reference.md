@@ -16004,6 +16004,648 @@ Prospective: a publication keeps the approval requirement it was created with, s
 | 409    | `IDEMPOTENCY_CONFLICT`.        | [`ApiError`](#standard-error-envelope) |
 | 503    | `SOCIAL_PUBLISHING_DISABLED`.  | [`ApiError`](#standard-error-envelope) |
 
+## CRM Leads
+
+The reusable lead/prospect pipeline (crm_leads module, Issue #1166, ADR-0153): a PRE-CUSTOMER context that never owns the customer, the identity or the consent. Tenant-defined pipelines with a VERSIONED, immutable stage catalog (closed stage categories, edges with closed declarative guards), idempotent intake on the source key, an immutable first source touch, masked contact points (ciphertext plus per-tenant keyed hash), append-only transition history decided under a row lock with optimistic concurrency, identity candidates by exact hash inside one tenant, human-verified undoable merges, conversions recorded from the customer authority (an opaque external reference) or a flagged manual path and reversed by event, soft delete and anonymising erasure that keeps funnel counts. Ships inert behind CRM_LEADS_ENABLED, Module Management and a per-tenant switch.
+
+### `POST /api/v1/crm-leads/conversions/{id}/reverse` — Record a conversion reversal
+
+- **operationId**: `reverseCrmLeadConversion`
+- **Security**: bearerAuth + tenantHeader
+
+The conversion record is stamped once with the reversal facts and the lead returns to the stage it converted from (or the initial stage) with a `conversion_reversed` transition. A replay with the same evidence answers `200` with `replayed: true`. High-risk, audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmReverseConversionRequest`](#schema-crmreverseconversionrequest)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The lead.                                                                                             | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `ALREADY_REVERSED`, `EVIDENCE_REUSED`.                         | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-leads/leads` — The tenant's leads, newest first
+
+- **operationId**: `listCrmLeads`
+- **Security**: bearerAuth + tenantHeader
+
+Keyset-paginated (`cursor` from `nextCursor`, `limit` 1-100, default 25; out-of-range values are rejected, not clamped). Contact points are MASKED; no read path decrypts. Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name                | In     | Required | Type                                           | Description |
+| ------------------- | ------ | -------- | ---------------------------------------------- | ----------- |
+| `X-Correlation-ID`  | header | no       | string                                         |             |
+| `pipelineId`        | query  | no       | string (uuid)                                  |             |
+| `stageCategory`     | query  | no       | [`CrmStageCategory`](#schema-crmstagecategory) |             |
+| `ownerTenantUserId` | query  | no       | string (uuid)                                  |             |
+| `includeDeleted`    | query  | no       | boolean                                        |             |
+| `cursor`            | query  | no       | string                                         |             |
+| `limit`             | query  | no       | integer                                        |             |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | A page of leads.                                                                                      | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads` — Lead intake (manual, import, api)
+
+- **operationId**: `createCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+Idempotent on the `Idempotency-Key` AND on the source key (kind, channel account, `externalEventId`): a replayed webhook or a re-uploaded row answers the SAME lead with `200` and `duplicate: true` and writes nothing. `import` and `api` sources must carry `externalEventId`. `website_form` and `inbound_message` are not accepted over HTTP (their consumers are follow-ups). Creates no profile, no consent and no customer. `409 CRM_LEADS_TENANT_DISABLED` while the tenant switch is off. Requires `crm_leads.leads.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`CrmCreateLeadRequest`](#schema-crmcreateleadrequest)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The existing lead for a replayed source key.                                                          | object                                 |
+| 201    | The new lead.                                                                                         | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `PIPELINE_ARCHIVED`.                                           | [`ApiError`](#standard-error-envelope) |
+| 422    | `PIPELINE_NOT_FOUND` or `OWNER_NOT_FOUND`.                                                            | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-leads/leads/{id}` — One lead with its history
+
+- **operationId**: `getCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+Masked contact points, source touches (the first touch is immutable), transitions (each naming its revision), assignments, conversions and merges. Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The lead.                                                                                             | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/crm-leads/leads/{id}` — Change the display name or contact points
+
+- **operationId**: `updateCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+Needs `expectedVersion` (`409 VERSION_CONFLICT`). A contact value is never edited: revoke it and add another. Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmUpdateLeadRequest`](#schema-crmupdateleadrequest)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The lead.                                                                                             | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`.                           | [`ApiError`](#standard-error-envelope) |
+| 422    | `CONTACT_POINT_NOT_FOUND`.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/crm-leads/leads/{id}` — Soft-delete a lead
+
+- **operationId**: `deleteCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+Restorable. Needs `If-Match: "<version>"` (`428 PRECONDITION_REQUIRED` without it). Erasure is `/anonymize`. High-risk, audited at warning. Requires `crm_leads.leads.delete`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `If-Match`         | header | yes      | string        |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Deleted.                                                                                              | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `VERSION_CONFLICT`, `LEAD_ALREADY_DELETED`.                                                 | [`ApiError`](#standard-error-envelope) |
+| 428    | `PRECONDITION_REQUIRED`.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/anonymize` — Anonymising erasure of a lead
+
+- **operationId**: `anonymizeCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+Erases the display name, every contact point and every free-text reason and note irreversibly; keeps the lead row, stage, source touches and transition and conversion facts so reported funnel counts do not change. `survivorOfLeadIds` lists leads this one absorbed by merge. High-risk, audited at warning. Requires `crm_leads.leads.delete`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Anonymised.                                                                                           | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `LEAD_ALREADY_ANONYMIZED`.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/assign` — Set or clear a lead's owner
+
+- **operationId**: `assignCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+The owner must be an active user of this tenant. Appends an assignment row and publishes `lead.assigned`. High-risk, audited at warning. Requires `crm_leads.leads.assign`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmAssignRequest`](#schema-crmassignrequest)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The lead.                                                                                             | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`.                           | [`ApiError`](#standard-error-envelope) |
+| 422    | `OWNER_NOT_FOUND`.                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-leads/leads/{id}/candidates` — Identity candidates for a lead
+
+- **operationId**: `listCrmLeadCandidates`
+- **Security**: bearerAuth + tenantHeader
+
+Other open leads of THIS tenant sharing an exact keyed hash with one of this lead's live contact points, with the matched KINDS (never values). Never a merge, never across tenants, never an email against a platform id. Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Candidates.                                                                                           | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/conversions` — Record an authority-confirmed conversion
+
+- **operationId**: `confirmCrmLeadConversion`
+- **Security**: bearerAuth + tenantHeader
+
+`mode` must be `authority_confirmed` with the authority's opaque `externalCustomerRef`. The lead moves to a converted stage along an allowed edge. A replay of the same `evidenceRef` is a no-op. Never creates a customer. High-risk, audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmConversionRequest`](#schema-crmconversionrequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                          | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | A replayed confirmation (`replayed: true`).                                                                                                                                          | object                                 |
+| 201    | The converted lead with the conversion id.                                                                                                                                           | object                                 |
+| 400    | Validation error.                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`, `EVIDENCE_REUSED`, `ALREADY_CONVERTED`, `NO_CONVERTED_STAGE`, `TRANSITION_NOT_ALLOWED`, `GUARD_NOT_MET`. | [`ApiError`](#standard-error-envelope) |
+| 422    | `STAGE_NOT_FOUND` or `CONVERSION_MODE_MISMATCH`.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`.                                                                                | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/manual-conversions` — Record a manual (unconfirmed) conversion
+
+- **operationId**: `recordCrmLeadManualConversion`
+- **Security**: bearerAuth + tenantHeader
+
+`mode` must be `authority_unconfirmed`, with a note and an evidence reference; reported separately (ADR-0153 O13). Audited at warning. Requires `crm_leads.manual_conversions.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmConversionRequest`](#schema-crmconversionrequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                          | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | A replayed confirmation (`replayed: true`).                                                                                                                                          | object                                 |
+| 201    | The converted lead with the conversion id.                                                                                                                                           | object                                 |
+| 400    | Validation error.                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`, `EVIDENCE_REUSED`, `ALREADY_CONVERTED`, `NO_CONVERTED_STAGE`, `TRANSITION_NOT_ALLOWED`, `GUARD_NOT_MET`. | [`ApiError`](#standard-error-envelope) |
+| 422    | `STAGE_NOT_FOUND` or `CONVERSION_MODE_MISMATCH`.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`.                                                                                | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/move` — Move a lead along an allowed edge
+
+- **operationId**: `moveCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+Decided under the row lock: `expectedVersion` (the loser of a race gets `409 VERSION_CONFLICT`), the edge of the current revision (`409 TRANSITION_NOT_ALLOWED`) and its guards re-checked in the transaction (`409 GUARD_NOT_MET` naming the guards). A converted stage is entered only by a conversion (`409 CONVERSION_REQUIRED`) and left only by its reversal (`409 REVERSAL_REQUIRED`). Requires `crm_leads.stages.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmMoveRequest`](#schema-crmmoverequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                                        | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The lead with the new transition id.                                                                                                                               | object                                 |
+| 400    | Validation error.                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`, `TRANSITION_NOT_ALLOWED`, `GUARD_NOT_MET`, `CONVERSION_REQUIRED`, `REVERSAL_REQUIRED`. | [`ApiError`](#standard-error-envelope) |
+| 422    | `STAGE_NOT_FOUND`.                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`.                                                              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/restore` — Restore a soft-deleted lead
+
+- **operationId**: `restoreCrmLead`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk, audited at warning. Requires `crm_leads.leads.restore`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmExpectedVersion`](#schema-crmexpectedversion)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Restored.                                                                                             | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `VERSION_CONFLICT`, `LEAD_NOT_DELETED`.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/{id}/touches` — Append a later source touch
+
+- **operationId**: `addCrmLeadTouch`
+- **Security**: bearerAuth + tenantHeader
+
+The first touch never changes. A replay of the same source key on the same lead answers `200` with `duplicate: true`; the same key already attributed to another lead is `409 SOURCE_KEY_USED` (two leads being one person is a merge, never a side effect). Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The existing touch.                                                                                   | object                                 |
+| 201    | The new touch.                                                                                        | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `SOURCE_KEY_USED`, `LEAD_NOT_OPEN`.                            | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/lookup` — Find leads by an exact contact value
+
+- **operationId**: `lookupCrmLeads`
+- **Security**: bearerAuth + tenantHeader
+
+An EXACT keyed-hash match inside this tenant. A POST so the value never sits in a URL. Returns ids only; audited without the value. Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`CrmContactPointInput`](#schema-crmcontactpointinput)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Matches.                                                                                              | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/leads/merge` — Merge two leads after human review
+
+- **operationId**: `mergeCrmLeads`
+- **Security**: bearerAuth + tenantHeader
+
+Both leads must be open, live and in the same pipeline, at the versions the reviewer saw. Another tenant's lead answers `404`. The absorbed lead is marked `merged`; nothing is moved or deleted, so the merge is undoable within the tenant's window. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`CrmMergeRequest`](#schema-crmmergerequest)
+
+**Responses**
+
+| Status | Description                                                                                                                                             | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The merge.                                                                                                                                              | object                                 |
+| 400    | Validation error.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `PIPELINE_MISMATCH`, `LEAD_NOT_OPEN`, `VERSION_CONFLICT`, `ABSORBED_LEAD_CONVERTED`, `ABSORBED_LEAD_HAS_MERGES`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`.                                                   | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/merges/{id}/revert` — Roll a merge back
+
+- **operationId**: `revertCrmLeadMerge`
+- **Security**: bearerAuth + tenantHeader
+
+Within the tenant's undo window the absorbed lead is open again exactly as it was. A second rollback is `409 ALREADY_REVERTED`; after the window `409 UNDO_WINDOW_CLOSED`. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                                                               | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Reverted.                                                                                                 | object                                 |
+| 400    | Validation error.                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `ALREADY_REVERTED`, `UNDO_WINDOW_CLOSED`, `ABSORBED_LEAD_CHANGED`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`.     | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-leads/pipelines` — The tenant's pipelines
+
+- **operationId**: `listCrmPipelines`
+- **Security**: bearerAuth + tenantHeader
+
+At most 200, ordered by code. Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The pipelines.                                                                                        | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/pipelines` — Create a pipeline with its first immutable revision
+
+- **operationId**: `createCrmPipeline`
+- **Security**: bearerAuth + tenantHeader
+
+Stages carry a tenant-chosen key and name and a CLOSED category; edges carry guards from a closed set (no expression language). No product vocabulary is seeded or assumed (ADR-0153 L2). Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`CrmCreatePipelineRequest`](#schema-crmcreatepipelinerequest)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The pipeline with its current revision.                                                               | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `PIPELINE_CODE_TAKEN`.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-leads/pipelines/{id}` — One pipeline with its current revision
+
+- **operationId**: `getCrmPipeline`
+- **Security**: bearerAuth + tenantHeader
+
+An id of another tenant answers like a missing one. Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The pipeline.                                                                                         | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-leads/pipelines/{id}/revisions` — Publish a new immutable revision
+
+- **operationId**: `publishCrmPipelineRevision`
+- **Security**: bearerAuth + tenantHeader
+
+Needs the pipeline's `expectedVersion`. A revision that removes a stage some lead is in is refused (`409 STAGES_IN_USE`, naming the stage keys) unless `stageMigrations` maps each such stage to a stage of the new revision; those leads then get a `stage_migrated` transition. An identical definition is `409 REVISION_UNCHANGED`. High-risk, audited at warning. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmPublishRevisionRequest`](#schema-crmpublishrevisionrequest)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The pipeline with its new current revision.                                                           | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `VERSION_CONFLICT`, `STAGES_IN_USE`, `REVISION_UNCHANGED`.                                  | [`ApiError`](#standard-error-envelope) |
+| 422    | `UNKNOWN_MIGRATION_SOURCE`.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-leads/settings` — The tenant switch and merge-undo window
+
+- **operationId**: `getCrmLeadsSettings`
+- **Security**: bearerAuth + tenantHeader
+
+A tenant that never set them is OFF (`enabled: false`, `mergeUndoHours: 168`). Requires `crm_leads.leads.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The settings.                                                                                         | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/crm-leads/settings` — Switch the module on or off for this tenant
+
+- **operationId**: `updateCrmLeadsSettings`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk (`configure`), audited at warning with the previous and new values. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`CrmLeadsSettingsPatch`](#schema-crmleadssettingspatch)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The settings.                                                                                         | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -17098,6 +17740,426 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
   "domainType": "subdomain",
   "routeMode": "canonical",
   "redirectToPrimary": false
+}
+```
+
+### Schema: CrmAssignRequest
+
+| Field               | Type          | Required | Nullable | Description |
+| ------------------- | ------------- | -------- | -------- | ----------- |
+| `expectedVersion`   | integer       | yes      | no       |             |
+| `ownerTenantUserId` | string (uuid) | yes      | yes      |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "ownerTenantUserId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: CrmContactPointInput
+
+| Field      | Type                                  | Required | Nullable | Description                                       |
+| ---------- | ------------------------------------- | -------- | -------- | ------------------------------------------------- |
+| `kind`     | enum(`email`, `phone`, `platform_id`) | yes      | no       |                                                   |
+| `platform` | string                                | no       | no       | Required for `platform_id` only.                  |
+| `value`    | string                                | yes      | no       | Normalised, encrypted and hashed; never returned. |
+
+**Example**
+
+```json
+{
+  "kind": "email",
+  "platform": "string",
+  "value": "string"
+}
+```
+
+### Schema: CrmConversionRequest
+
+| Field                 | Type                                                 | Required | Nullable | Description                                                        |
+| --------------------- | ---------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------ |
+| `mode`                | enum(`authority_confirmed`, `authority_unconfirmed`) | yes      | no       |                                                                    |
+| `expectedVersion`     | integer                                              | yes      | no       |                                                                    |
+| `externalCustomerRef` | string                                               | no       | no       | Required for authority_confirmed. Opaque; never a customer record. |
+| `evidenceRef`         | string                                               | yes      | no       | The replay key.                                                    |
+| `note`                | string                                               | no       | no       | Required for authority_unconfirmed.                                |
+| `toStageKey`          | string                                               | no       | no       |                                                                    |
+| `occurredAt`          | string (date-time)                                   | no       | no       |                                                                    |
+
+**Example**
+
+```json
+{
+  "mode": "authority_confirmed",
+  "expectedVersion": 1,
+  "externalCustomerRef": "string",
+  "evidenceRef": "string",
+  "note": "string",
+  "toStageKey": "string",
+  "occurredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CrmCreateLeadRequest
+
+| Field               | Type                                                            | Required | Nullable | Description |
+| ------------------- | --------------------------------------------------------------- | -------- | -------- | ----------- |
+| `pipelineId`        | string (uuid)                                                   | yes      | no       |             |
+| `displayName`       | string                                                          | no       | no       |             |
+| `ownerTenantUserId` | string (uuid)                                                   | no       | no       |             |
+| `contactPoints`     | array of [`CrmContactPointInput`](#schema-crmcontactpointinput) | no       | no       |             |
+| `source`            | [`CrmSourceInput`](#schema-crmsourceinput)                      | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "pipelineId": "00000000-0000-0000-0000-000000000000",
+  "displayName": "string",
+  "ownerTenantUserId": "00000000-0000-0000-0000-000000000000",
+  "contactPoints": [
+    {
+      "kind": "email",
+      "platform": "string",
+      "value": "string"
+    }
+  ],
+  "source": {
+    "kind": "manual",
+    "externalEventId": "string",
+    "channelAccountId": "00000000-0000-0000-0000-000000000000",
+    "campaignRef": "string",
+    "utmSource": "string",
+    "utmMedium": "string",
+    "utmCampaign": "string",
+    "landingPath": "string",
+    "referrerHost": "string",
+    "legalBasis": "consent",
+    "occurredAt": "2026-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### Schema: CrmCreatePipelineRequest
+
+| Field        | Type                                                     | Required | Nullable | Description                                     |
+| ------------ | -------------------------------------------------------- | -------- | -------- | ----------------------------------------------- |
+| `code`       | string                                                   | yes      | no       |                                                 |
+| `name`       | string                                                   | yes      | no       |                                                 |
+| `timeZone`   | string                                                   | no       | no       | IANA zone used for report buckets. Default UTC. |
+| `scope`      | object                                                   | no       | no       |                                                 |
+| `definition` | [`CrmPipelineDefinition`](#schema-crmpipelinedefinition) | yes      | no       |                                                 |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "timeZone": "string",
+  "scope": {
+    "type": "string",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "definition": {
+    "initialStageKey": "string",
+    "stages": [
+      {
+        "key": "string",
+        "name": "string",
+        "category": null,
+        "position": 0
+      }
+    ],
+    "transitions": [
+      {
+        "from": "string",
+        "to": "string",
+        "guards": []
+      }
+    ]
+  }
+}
+```
+
+### Schema: CrmExpectedVersion
+
+| Field             | Type    | Required | Nullable | Description |
+| ----------------- | ------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1
+}
+```
+
+### Schema: CrmLeadsSettingsPatch
+
+| Field            | Type    | Required | Nullable | Description |
+| ---------------- | ------- | -------- | -------- | ----------- |
+| `enabled`        | boolean | no       | no       |             |
+| `mergeUndoHours` | integer | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "enabled": false,
+  "mergeUndoHours": 1
+}
+```
+
+### Schema: CrmMergeRequest
+
+| Field             | Type          | Required | Nullable | Description |
+| ----------------- | ------------- | -------- | -------- | ----------- |
+| `survivorLeadId`  | string (uuid) | yes      | no       |             |
+| `absorbedLeadId`  | string (uuid) | yes      | no       |             |
+| `survivorVersion` | integer       | yes      | no       |             |
+| `absorbedVersion` | integer       | yes      | no       |             |
+| `note`            | string        | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "survivorLeadId": "00000000-0000-0000-0000-000000000000",
+  "absorbedLeadId": "00000000-0000-0000-0000-000000000000",
+  "survivorVersion": 1,
+  "absorbedVersion": 1,
+  "note": "string"
+}
+```
+
+### Schema: CrmMoveRequest
+
+| Field             | Type               | Required | Nullable | Description |
+| ----------------- | ------------------ | -------- | -------- | ----------- |
+| `expectedVersion` | integer            | yes      | no       |             |
+| `toStageKey`      | string             | yes      | no       |             |
+| `reason`          | string             | no       | no       |             |
+| `occurredAt`      | string (date-time) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "toStageKey": "string",
+  "reason": "string",
+  "occurredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CrmPipelineDefinition
+
+| Field             | Type                                              | Required | Nullable | Description |
+| ----------------- | ------------------------------------------------- | -------- | -------- | ----------- |
+| `initialStageKey` | string                                            | yes      | no       |             |
+| `stages`          | array of [`CrmStage`](#schema-crmstage)           | yes      | no       |             |
+| `transitions`     | array of [`CrmTransition`](#schema-crmtransition) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "initialStageKey": "string",
+  "stages": [
+    {
+      "key": "string",
+      "name": "string",
+      "category": "new",
+      "position": 0
+    }
+  ],
+  "transitions": [
+    {
+      "from": "string",
+      "to": "string",
+      "guards": []
+    }
+  ]
+}
+```
+
+### Schema: CrmPublishRevisionRequest
+
+| Field             | Type                                                     | Required | Nullable | Description                                                                       |
+| ----------------- | -------------------------------------------------------- | -------- | -------- | --------------------------------------------------------------------------------- |
+| `expectedVersion` | integer                                                  | yes      | no       |                                                                                   |
+| `definition`      | [`CrmPipelineDefinition`](#schema-crmpipelinedefinition) | yes      | no       |                                                                                   |
+| `stageMigrations` | object                                                   | no       | no       | Removed stage key -> stage key of the new revision. Never into a converted stage. |
+| `reason`          | string                                                   | no       | no       |                                                                                   |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "definition": {
+    "initialStageKey": "string",
+    "stages": [
+      {
+        "key": "string",
+        "name": "string",
+        "category": null,
+        "position": 0
+      }
+    ],
+    "transitions": [
+      {
+        "from": "string",
+        "to": "string",
+        "guards": []
+      }
+    ]
+  },
+  "stageMigrations": "(operation-specific payload)",
+  "reason": "string"
+}
+```
+
+### Schema: CrmReverseConversionRequest
+
+| Field         | Type               | Required | Nullable | Description |
+| ------------- | ------------------ | -------- | -------- | ----------- |
+| `evidenceRef` | string             | yes      | no       |             |
+| `reason`      | string             | no       | no       |             |
+| `occurredAt`  | string (date-time) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "evidenceRef": "string",
+  "reason": "string",
+  "occurredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CrmSourceInput
+
+| Field              | Type                                                                   | Required | Nullable | Description                                         |
+| ------------------ | ---------------------------------------------------------------------- | -------- | -------- | --------------------------------------------------- |
+| `kind`             | enum(`manual`, `import`, `api`)                                        | yes      | no       |                                                     |
+| `externalEventId`  | string                                                                 | no       | no       | Required for import and api: the intake replay key. |
+| `channelAccountId` | string (uuid)                                                          | no       | no       |                                                     |
+| `campaignRef`      | string                                                                 | no       | no       |                                                     |
+| `utmSource`        | string                                                                 | no       | no       |                                                     |
+| `utmMedium`        | string                                                                 | no       | no       |                                                     |
+| `utmCampaign`      | string                                                                 | no       | no       |                                                     |
+| `landingPath`      | string                                                                 | no       | no       |                                                     |
+| `referrerHost`     | string                                                                 | no       | no       |                                                     |
+| `legalBasis`       | enum(`consent`, `contract_steps`, `legitimate_interest`, `not_stated`) | no       | no       | Recorded, never decided, never a consent grant.     |
+| `occurredAt`       | string (date-time)                                                     | no       | no       |                                                     |
+
+**Example**
+
+```json
+{
+  "kind": "manual",
+  "externalEventId": "string",
+  "channelAccountId": "00000000-0000-0000-0000-000000000000",
+  "campaignRef": "string",
+  "utmSource": "string",
+  "utmMedium": "string",
+  "utmCampaign": "string",
+  "landingPath": "string",
+  "referrerHost": "string",
+  "legalBasis": "consent",
+  "occurredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CrmStage
+
+| Field      | Type                                           | Required | Nullable | Description                     |
+| ---------- | ---------------------------------------------- | -------- | -------- | ------------------------------- |
+| `key`      | string                                         | yes      | no       |                                 |
+| `name`     | string                                         | yes      | no       |                                 |
+| `category` | [`CrmStageCategory`](#schema-crmstagecategory) | yes      | no       |                                 |
+| `position` | integer                                        | no       | no       | Response only: the array order. |
+
+**Example**
+
+```json
+{
+  "key": "string",
+  "name": "string",
+  "category": "new",
+  "position": 0
+}
+```
+
+### Schema: CrmStageCategory
+
+The CLOSED platform category of a stage. Reports use it, never stage names.
+
+Enum values: `new`, `working`, `qualified`, `converted`, `lost`, `disqualified`.
+
+**Example**
+
+```json
+"new"
+```
+
+### Schema: CrmTransition
+
+| Field    | Type                                                        | Required | Nullable | Description |
+| -------- | ----------------------------------------------------------- | -------- | -------- | ----------- |
+| `from`   | string                                                      | yes      | no       |             |
+| `to`     | string                                                      | yes      | no       |             |
+| `guards` | array of [`CrmTransitionGuard`](#schema-crmtransitionguard) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "from": "string",
+  "to": "string",
+  "guards": ["owner_assigned"]
+}
+```
+
+### Schema: CrmTransitionGuard
+
+Enum values: `owner_assigned`, `contact_point_present`, `reason_required`.
+
+**Example**
+
+```json
+"owner_assigned"
+```
+
+### Schema: CrmUpdateLeadRequest
+
+| Field                   | Type                                                            | Required | Nullable | Description |
+| ----------------------- | --------------------------------------------------------------- | -------- | -------- | ----------- |
+| `expectedVersion`       | integer                                                         | yes      | no       |             |
+| `displayName`           | string                                                          | no       | yes      |             |
+| `addContactPoints`      | array of [`CrmContactPointInput`](#schema-crmcontactpointinput) | no       | no       |             |
+| `revokeContactPointIds` | array of string (uuid)                                          | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "displayName": "string",
+  "addContactPoints": [
+    {
+      "kind": "email",
+      "platform": "string",
+      "value": "string"
+    }
+  ],
+  "revokeContactPointIds": ["00000000-0000-0000-0000-000000000000"]
 }
 ```
 
@@ -20319,7 +21381,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (74)
+### Channels (82)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -20360,6 +21422,14 @@ consumer/subscriber contract in this file).
 - `awcms.comments.comment.approved` — A comment became publicly visible, either by auto-approval under the thread policy or by a moderator's approve decision. Producers: `comments/application/comment-service.ts`'s `submitComment` and `comments/application/comment-moderation.ts`'s `moderateComment`. The reply-notification consumer keys off THIS event rather than `comment.submitted`, so a comment still held for moderation never triggers a notification.
 - `awcms.comments.comment.submitted` — A comment was submitted against a published, public commentable resource (ADR-0041). Producer: `comments/application/comment-service.ts`'s `submitComment`. The payload carries opaque references only — comment and thread id, resource type, the server-derived public URL, and the resulting status. Never the body text, the author address, or any identity hash.
 - `awcms.comments.reply.created` — A submitted comment was a reply to an existing comment. Producer: `comments/application/comment-service.ts`'s `submitComment`, published alongside `comment.submitted` so a consumer can distinguish thread replies without re-reading the row. The recipient address is resolved from encrypted storage by the dispatcher at send time and is never carried here.
+- `awcms.crm_leads.lead.assigned` — A lead's owner changed. Producer: `lead-directory.ts`'s `assignLead`. Payload `CrmLeadAssigned`: the lead id and the previous and new owner tenant-user ids only.
+- `awcms.crm_leads.lead.conversion_reversed` — The customer authority reversed a conversion (a refund, a cancellation): a correction by event, never an edit of history. Producer: `lead-lifecycle.ts`'s `reverseConversion`. Payload `CrmLeadConversionReversed`.
+- `awcms.crm_leads.lead.converted` — A conversion was recorded: confirmed by the customer authority (with its opaque `externalCustomerRef`) or a flagged manual conversion (`authority_unconfirmed`). Producer: `lead-lifecycle.ts`'s `recordConversion`. Payload `CrmLeadConverted`; never a note. A replayed confirmation publishes nothing. The lead module never creates the customer.
+- `awcms.crm_leads.lead.created` — A lead was created through an intake path, in the transaction that stored it (ADR-0153, Issue #1166). Producer: `crm-leads/application/lead-directory.ts`'s `createLead`. The envelope `payload` is `CrmLeadCreated`: opaque lead, pipeline, revision and first-touch ids, the initial stage key and closed category, the source kind with opaque channel-account and campaign references, the KINDS of contact point held (never their values) and the effective and recorded times. A replayed intake publishes nothing. Never a name, an address, a phone number or a note.
+- `awcms.crm_leads.lead.lost` — A lead ENTERED a lost or disqualified stage. Producer: `lead-events.ts`'s `appendLeadTransition`. Payload `CrmLeadLost`; a stop signal for follow-up cadences (#1165).
+- `awcms.crm_leads.lead.merge_reverted` — A lead merge was rolled back within its undo window. Producer: `lead-lifecycle.ts`'s `revertMerge`. Payload `CrmLeadMergeReverted`.
+- `awcms.crm_leads.lead.merged` — Two leads of one pipeline were merged after human review. Producer: `lead-lifecycle.ts`'s `mergeLeads`. Payload `CrmLeadMerged`: the merge, survivor and absorbed lead ids and the undo deadline; never the reviewer's note.
+- `awcms.crm_leads.lead.stage_changed` — A lead's stage changed: a move, a stage migration on a new revision, a conversion, a conversion reversal, a merge or its rollback (`transitionKind`), in the transaction that appended the transition row. Producer: `crm-leads/application/lead-events.ts`'s `appendLeadTransition`. Payload `CrmLeadStageChanged`; never a reason or a note.
 - `awcms.domain-event-runtime.sample.recorded` — Reference/example event used to exercise the domain-event-runtime outbox, dispatcher, ordering, retry/backoff, dead-letter, and replay mechanism end-to-end. Real producer modules publish their OWN event types the same way, via `appendDomainEvent` — this one is intentionally self-contained rather than tied to another module's business logic in this foundation module (see `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own doc comment). Producer: any caller of `application/append-domain-event.ts`'s `appendDomainEvent` for this event type; consumers: the reference consumers declared in the descriptors of `domain_event_runtime` (a same-process cross-module audit projector and a self-contained read-model activity-rollup projection) and `reporting` (an event-activity projector), ADR-0134.
 - `awcms.email.message.cancelled` — An operator cancelled a still-queued message (`POST /api/v1/email/messages/{id}/cancel`) before dispatch. Documented contract only; producer is the structured JSON logger (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled` log line).
 - `awcms.email.message.failed` — The email dispatcher exhausted retries (or hit a non-retryable failure) for a queued message. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.failed` log line).

@@ -186,8 +186,55 @@ export const SOCIAL_JOB_PUBLISHED_EVENT_TYPE =
 export const SOCIAL_JOB_FAILED_EVENT_TYPE =
   "awcms.social_publishing.job.failed";
 
+/**
+ * `crm_leads` (ADR-0153, Issue #1166). Declared here -- not imported from
+ * `crm-leads/domain/crm-leads-constants.ts` -- for the same reason as
+ * `website_engagement` above. The literals are kept identical by the AsyncAPI
+ * parity gate and by `tests/crm-leads-contract.test.ts`.
+ */
+export const CRM_LEADS_EVENT_VERSION = "1.0";
+const CRM_LEADS_EVENT_DESCRIPTIONS: readonly [string, string][] = [
+  [
+    "awcms.crm_leads.lead.created",
+    "A lead was created through an intake path, in the transaction that stored it. Carries the opaque lead, pipeline, revision and first-touch ids, the initial stage key and category, the source kind with its opaque channel-account and campaign references, the KINDS of contact point held (never their values), and the source's effective and recorded times; never a name, an address, a phone number or a note. A replayed intake publishes nothing."
+  ],
+  [
+    "awcms.crm_leads.lead.stage_changed",
+    "A lead's stage changed (a move, a stage migration on a new revision, a conversion, a conversion reversal, a merge or its rollback), in the transaction that appended the transition row. Carries the lead, pipeline, revision and transition ids, the transition kind, the from/to stage keys and closed categories and the effective and recorded times; never a reason or a note."
+  ],
+  [
+    "awcms.crm_leads.lead.assigned",
+    "A lead's owner changed. Carries the lead id and the previous and new owner tenant-user ids only."
+  ],
+  [
+    "awcms.crm_leads.lead.merged",
+    "Two leads of one pipeline were merged after human review. Carries the merge, survivor and absorbed lead ids and the undo deadline; never the reviewer's note."
+  ],
+  [
+    "awcms.crm_leads.lead.merge_reverted",
+    "A lead merge was rolled back within its undo window. Carries the merge, survivor and absorbed lead ids only."
+  ],
+  [
+    "awcms.crm_leads.lead.converted",
+    "A conversion was recorded for a lead: confirmed by the customer authority (with its opaque external customer reference) or a flagged manual conversion (authority_unconfirmed). Carries the lead and conversion ids, the mode, the opaque customer and evidence references and the converted stage key; never a note. A replayed confirmation publishes nothing."
+  ],
+  [
+    "awcms.crm_leads.lead.conversion_reversed",
+    "The customer authority reversed a conversion (a refund, a cancellation). Carries the lead and conversion ids, the opaque reversal evidence reference and the stage key the lead returned to."
+  ],
+  [
+    "awcms.crm_leads.lead.lost",
+    "A lead entered a lost or disqualified stage. Carries the lead, pipeline and transition ids, the stage key and its category; a stop signal for follow-up cadences."
+  ]
+];
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
+    ...CRM_LEADS_EVENT_DESCRIPTIONS.map(([eventType, description]) => ({
+      eventType,
+      eventVersion: CRM_LEADS_EVENT_VERSION,
+      description
+    })),
     {
       eventType: SOCIAL_PUBLICATION_QUEUED_EVENT_TYPE,
       eventVersion: SOCIAL_PUBLISHING_EVENT_VERSION,

@@ -1,5 +1,5 @@
 {
-  "moduleCount": 36,
+  "moduleCount": 37,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -101,6 +101,29 @@
       "permissionCount": 8,
       "navigationCount": 1,
       "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "crm_leads",
+      "name": "CRM Leads",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "module_management",
+        "domain_event_runtime",
+        "profile_identity"
+      ],
+      "capabilitiesProvided": ["crm_lead"],
+      "capabilitiesConsumed": [],
+      "permissionCount": 11,
+      "navigationCount": 0,
+      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

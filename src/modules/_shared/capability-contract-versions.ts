@@ -145,5 +145,10 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // which `blog_content` already consumed (optional) while the provider was a
     // no-op. First assigned number: the port is unchanged from the day it was
     // declared (#643), what changed is that a base module now provides it.
-    social_publishing: "1.0.0"
+    social_publishing: "1.0.0",
+    // crm_lead is provided by the base `crm_leads` module (Issue #1166,
+    // ADR-0153 section 6), port `_shared/ports/crm-lead-port.ts`: read a lead's
+    // state, confirm or reverse a conversion, opaque ids only. No in-repo
+    // consumer: the customer authority is downstream. First assigned number.
+    crm_lead: "1.0.0"
   });

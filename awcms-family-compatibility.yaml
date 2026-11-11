@@ -208,6 +208,11 @@ contracts:
     # consumed (optional) by `blog_content`. First assigned number: the port
     # shape is unchanged since #643.
     social_publishing: "1.0.0"
+    # crm_lead is owned (provided) by the base `crm_leads` module (#1166,
+    # ADR-0153), port `_shared/ports/crm-lead-port.ts`: a downstream customer
+    # authority reads lead state and confirms or reverses a conversion with
+    # opaque ids only. First assigned number.
+    crm_lead: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

@@ -1,0 +1,2277 @@
+# Source fragment for the "crm_leads" module (Issue #1166, ADR-0153).
+#
+# Owns every path whose operations carry this module's OpenAPI tag, plus every
+# components.schemas entry referenced ONLY by this module's operations. NOT
+# independently valid OpenAPI: shared $refs resolve after `bun run
+# openapi:bundle`. Edit this file, never the generated bundle.
+#
+# ## What is deliberately NOT here
+#
+# No operation returns a decrypted contact value (lists and details carry the
+# masked form only; a lookup is an exact keyed-hash match), and no mutation
+# response carries the display name. No operation creates a customer, a profile
+# or a consent (ADR-0153 N1-N3). The website_form and inbound_message intake
+# paths, CSV import/export, milestones, typed extensions, consent references,
+# notes and the reporting projection are recorded follow-ups.
+#
+# Every operation answers `503 CRM_LEADS_DISABLED` (after authorization) unless
+# the deployment enables the module; every mutation refuses a machine credential
+# (`403 INTERACTIVE_SESSION_REQUIRED`) and every lead write answers
+# `409 CRM_LEADS_TENANT_DISABLED` while the tenant switch is off.
+paths:
+  /api/v1/crm-leads/settings:
+    get:
+      operationId: getCrmLeadsSettings
+      tags:
+        - CRM Leads
+      summary: The tenant switch and merge-undo window
+      description:
+        "A tenant that never set them is OFF (`enabled: false`, `mergeUndoHours:
+        168`). Requires `crm_leads.leads.read`."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadsSettings"
+                  meta:
+                    type: object
+    patch:
+      operationId: updateCrmLeadsSettings
+      tags:
+        - CRM Leads
+      summary: Switch the module on or off for this tenant
+      description:
+        High-risk (`configure`), audited at warning with the previous and new values.
+        Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED`
+        for a machine credential); a replay of the same `Idempotency-Key` answers the stored
+        response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses
+        never carry `displayName` (the stored replay body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadsSettings"
+                  meta:
+                    type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmLeadsSettingsPatch"
+  /api/v1/crm-leads/pipelines:
+    get:
+      operationId: listCrmPipelines
+      tags:
+        - CRM Leads
+      summary: The tenant's pipelines
+      description: At most 200, ordered by code. Requires `crm_leads.leads.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The pipelines.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmPipeline"
+                  meta:
+                    type: object
+    post:
+      operationId: createCrmPipeline
+      tags:
+        - CRM Leads
+      summary: Create a pipeline with its first immutable revision
+      description:
+        Stages carry a tenant-chosen key and name and a CLOSED category; edges
+        carry guards from a closed set (no expression language). No product vocabulary is
+        seeded or assumed (ADR-0153 L2). Requires `crm_leads.pipelines.configure`. A signed-in
+        person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay
+        of the same `Idempotency-Key` answers the stored response, a different body with it
+        `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored
+        replay body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "201":
+          description: The pipeline with its current revision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmPipelineWithRevision"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `PIPELINE_CODE_TAKEN`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmCreatePipelineRequest"
+  /api/v1/crm-leads/pipelines/{id}:
+    get:
+      operationId: getCrmPipeline
+      tags:
+        - CRM Leads
+      summary: One pipeline with its current revision
+      description: An id of another tenant answers like a missing one. Requires `crm_leads.leads.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The pipeline.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmPipelineWithRevision"
+                  meta:
+                    type: object
+  /api/v1/crm-leads/pipelines/{id}/revisions:
+    post:
+      operationId: publishCrmPipelineRevision
+      tags:
+        - CRM Leads
+      summary: Publish a new immutable revision
+      description:
+        Needs the pipeline's `expectedVersion`. A revision that removes a stage
+        some lead is in is refused (`409 STAGES_IN_USE`, naming the stage keys) unless `stageMigrations`
+        maps each such stage to a stage of the new revision; those leads then get a `stage_migrated`
+        transition. An identical definition is `409 REVISION_UNCHANGED`. High-risk, audited
+        at warning. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403
+        INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key`
+        answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`.
+        Mutation responses never carry `displayName` (the stored replay body must not outlive
+        an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "201":
+          description: The pipeline with its new current revision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmPipelineWithRevision"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `VERSION_CONFLICT`, `STAGES_IN_USE`, `REVISION_UNCHANGED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`UNKNOWN_MIGRATION_SOURCE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmPublishRevisionRequest"
+  /api/v1/crm-leads/leads:
+    get:
+      operationId: listCrmLeads
+      tags:
+        - CRM Leads
+      summary: The tenant's leads, newest first
+      description:
+        Keyset-paginated (`cursor` from `nextCursor`, `limit` 1-100, default 25;
+        out-of-range values are rejected, not clamped). Contact points are MASKED; no read
+        path decrypts. Requires `crm_leads.leads.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: pipelineId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: stageCategory
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/CrmStageCategory"
+        - name: ownerTenantUserId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: includeDeleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: A page of leads.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmLead"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+    post:
+      operationId: createCrmLead
+      tags:
+        - CRM Leads
+      summary: Lead intake (manual, import, api)
+      description:
+        "Idempotent on the `Idempotency-Key` AND on the source key (kind, channel
+        account, `externalEventId`): a replayed webhook or a re-uploaded row answers the SAME
+        lead with `200` and `duplicate: true` and writes nothing. `import` and `api` sources
+        must carry `externalEventId`. `website_form` and `inbound_message` are not accepted
+        over HTTP (their consumers are follow-ups). Creates no profile, no consent and no
+        customer. `409 CRM_LEADS_TENANT_DISABLED` while the tenant switch is off. Requires
+        `crm_leads.leads.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED`
+        for a machine credential); a replay of the same `Idempotency-Key` answers the stored
+        response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses
+        never carry `displayName` (the stored replay body must not outlive an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The existing lead for a replayed source key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "201":
+          description: The new lead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `CRM_LEADS_TENANT_DISABLED`, `PIPELINE_ARCHIVED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`PIPELINE_NOT_FOUND` or `OWNER_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmCreateLeadRequest"
+  /api/v1/crm-leads/leads/lookup:
+    post:
+      operationId: lookupCrmLeads
+      tags:
+        - CRM Leads
+      summary: Find leads by an exact contact value
+      description:
+        An EXACT keyed-hash match inside this tenant. A POST so the value never
+        sits in a URL. Returns ids only; audited without the value. Requires `crm_leads.leads.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Matches.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            leadId:
+                              type: string
+                              format: uuid
+                            contactPointId:
+                              type: string
+                              format: uuid
+                  meta:
+                    type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmContactPointInput"
+  /api/v1/crm-leads/leads/merge:
+    post:
+      operationId: mergeCrmLeads
+      tags:
+        - CRM Leads
+      summary: Merge two leads after human review
+      description:
+        Both leads must be open, live and in the same pipeline, at the versions
+        the reviewer saw. Another tenant's lead answers `404`. The absorbed lead is marked
+        `merged`; nothing is moved or deleted, so the merge is undoable within the tenant's
+        window. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in
+        person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay
+        of the same `Idempotency-Key` answers the stored response, a different body with it
+        `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored
+        replay body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "201":
+          description: The merge.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmMerge"
+                  meta:
+                    type: object
+        "409":
+          description:
+            "Conflict: `CRM_LEADS_TENANT_DISABLED`, `PIPELINE_MISMATCH`, `LEAD_NOT_OPEN`,
+            `VERSION_CONFLICT`, `ABSORBED_LEAD_CONVERTED`, `ABSORBED_LEAD_HAS_MERGES`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmMergeRequest"
+  /api/v1/crm-leads/leads/{id}:
+    get:
+      operationId: getCrmLead
+      tags:
+        - CRM Leads
+      summary: One lead with its history
+      description:
+        Masked contact points, source touches (the first touch is immutable), transitions
+        (each naming its revision), assignments, conversions and merges. Requires `crm_leads.leads.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The lead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadDetail"
+                  meta:
+                    type: object
+    patch:
+      operationId: updateCrmLead
+      tags:
+        - CRM Leads
+      summary: Change the display name or contact points
+      description:
+        "Needs `expectedVersion` (`409 VERSION_CONFLICT`). A contact value is never
+        edited: revoke it and add another. Requires `crm_leads.leads.update`. A signed-in
+        person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay
+        of the same `Idempotency-Key` answers the stored response, a different body with it
+        `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored
+        replay body must not outlive an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The lead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`CONTACT_POINT_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmUpdateLeadRequest"
+    delete:
+      operationId: deleteCrmLead
+      tags:
+        - CRM Leads
+      summary: Soft-delete a lead
+      description:
+        'Restorable. Needs `If-Match: "<version>"` (`428 PRECONDITION_REQUIRED`
+        without it). Erasure is `/anonymize`. High-risk, audited at warning. Requires `crm_leads.leads.delete`.
+        A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential);
+        a replay of the same `Idempotency-Key` answers the stored response, a different body
+        with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the
+        stored replay body must not outlive an erasure).'
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `VERSION_CONFLICT`, `LEAD_ALREADY_DELETED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "428":
+          description: "`PRECONDITION_REQUIRED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-leads/leads/{id}/restore:
+    post:
+      operationId: restoreCrmLead
+      tags:
+        - CRM Leads
+      summary: Restore a soft-deleted lead
+      description:
+        High-risk, audited at warning. Requires `crm_leads.leads.restore`. A signed-in
+        person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay
+        of the same `Idempotency-Key` answers the stored response, a different body with it
+        `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored
+        replay body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Restored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      restored:
+                        type: boolean
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `VERSION_CONFLICT`, `LEAD_NOT_DELETED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmExpectedVersion"
+  /api/v1/crm-leads/leads/{id}/anonymize:
+    post:
+      operationId: anonymizeCrmLead
+      tags:
+        - CRM Leads
+      summary: Anonymising erasure of a lead
+      description:
+        Erases the display name, every contact point and every free-text reason
+        and note irreversibly; keeps the lead row, stage, source touches and transition and
+        conversion facts so reported funnel counts do not change. `survivorOfLeadIds` lists
+        leads this one absorbed by merge. High-risk, audited at warning. Requires `crm_leads.leads.delete`.
+        A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential);
+        a replay of the same `Idempotency-Key` answers the stored response, a different body
+        with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the
+        stored replay body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Anonymised.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      anonymized:
+                        type: boolean
+                      erasedContactPoints:
+                        type: integer
+                      survivorOfLeadIds:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `LEAD_ALREADY_ANONYMIZED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-leads/leads/{id}/touches:
+    post:
+      operationId: addCrmLeadTouch
+      tags:
+        - CRM Leads
+      summary: Append a later source touch
+      description:
+        "The first touch never changes. A replay of the same source key on the
+        same lead answers `200` with `duplicate: true`; the same key already attributed to
+        another lead is `409 SOURCE_KEY_USED` (two leads being one person is a merge, never
+        a side effect). Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED`
+        for a machine credential); a replay of the same `Idempotency-Key` answers the stored
+        response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses
+        never carry `displayName` (the stored replay body must not outlive an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The existing touch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmTouchResult"
+                  meta:
+                    type: object
+        "201":
+          description: The new touch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmTouchResult"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `CRM_LEADS_TENANT_DISABLED`, `SOURCE_KEY_USED`, `LEAD_NOT_OPEN`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - source
+              properties:
+                source:
+                  $ref: "#/components/schemas/CrmSourceInput"
+  /api/v1/crm-leads/leads/{id}/move:
+    post:
+      operationId: moveCrmLead
+      tags:
+        - CRM Leads
+      summary: Move a lead along an allowed edge
+      description:
+        "Decided under the row lock: `expectedVersion` (the loser of a race gets
+        `409 VERSION_CONFLICT`), the edge of the current revision (`409 TRANSITION_NOT_ALLOWED`)
+        and its guards re-checked in the transaction (`409 GUARD_NOT_MET` naming the guards).
+        A converted stage is entered only by a conversion (`409 CONVERSION_REQUIRED`) and
+        left only by its reversal (`409 REVERSAL_REQUIRED`). Requires `crm_leads.stages.update`.
+        A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential);
+        a replay of the same `Idempotency-Key` answers the stored response, a different body
+        with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the
+        stored replay body must not outlive an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The lead with the new transition id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description:
+            "Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`,
+            `TRANSITION_NOT_ALLOWED`, `GUARD_NOT_MET`, `CONVERSION_REQUIRED`, `REVERSAL_REQUIRED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`STAGE_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmMoveRequest"
+  /api/v1/crm-leads/leads/{id}/assign:
+    post:
+      operationId: assignCrmLead
+      tags:
+        - CRM Leads
+      summary: Set or clear a lead's owner
+      description:
+        The owner must be an active user of this tenant. Appends an assignment
+        row and publishes `lead.assigned`. High-risk, audited at warning. Requires `crm_leads.leads.assign`.
+        A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential);
+        a replay of the same `Idempotency-Key` answers the stored response, a different body
+        with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the
+        stored replay body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The lead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`OWNER_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmAssignRequest"
+  /api/v1/crm-leads/leads/{id}/candidates:
+    get:
+      operationId: listCrmLeadCandidates
+      tags:
+        - CRM Leads
+      summary: Identity candidates for a lead
+      description:
+        Other open leads of THIS tenant sharing an exact keyed hash with one of
+        this lead's live contact points, with the matched KINDS (never values). Never a merge,
+        never across tenants, never an email against a platform id. Requires `crm_leads.leads.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Candidates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      leadId:
+                        type: string
+                        format: uuid
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmCandidate"
+                  meta:
+                    type: object
+  /api/v1/crm-leads/leads/{id}/conversions:
+    post:
+      operationId: confirmCrmLeadConversion
+      tags:
+        - CRM Leads
+      summary: Record an authority-confirmed conversion
+      description:
+        "`mode` must be `authority_confirmed` with the authority's opaque `externalCustomerRef`.
+        The lead moves to a converted stage along an allowed edge. A replay of the same `evidenceRef`
+        is a no-op. Never creates a customer. High-risk, audited at warning. Requires `crm_leads.conversions.approve`.
+        A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential);
+        a replay of the same `Idempotency-Key` answers the stored response, a different body
+        with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the
+        stored replay body must not outlive an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: "A replayed confirmation (`replayed: true`)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "201":
+          description: The converted lead with the conversion id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description:
+            "Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`,
+            `EVIDENCE_REUSED`, `ALREADY_CONVERTED`, `NO_CONVERTED_STAGE`, `TRANSITION_NOT_ALLOWED`,
+            `GUARD_NOT_MET`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`STAGE_NOT_FOUND` or `CONVERSION_MODE_MISMATCH`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmConversionRequest"
+  /api/v1/crm-leads/leads/{id}/manual-conversions:
+    post:
+      operationId: recordCrmLeadManualConversion
+      tags:
+        - CRM Leads
+      summary: Record a manual (unconfirmed) conversion
+      description:
+        "`mode` must be `authority_unconfirmed`, with a note and an evidence reference;
+        reported separately (ADR-0153 O13). Audited at warning. Requires `crm_leads.manual_conversions.create`.
+        A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential);
+        a replay of the same `Idempotency-Key` answers the stored response, a different body
+        with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the
+        stored replay body must not outlive an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: "A replayed confirmation (`replayed: true`)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "201":
+          description: The converted lead with the conversion id.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description:
+            "Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_OPEN`,
+            `EVIDENCE_REUSED`, `ALREADY_CONVERTED`, `NO_CONVERTED_STAGE`, `TRANSITION_NOT_ALLOWED`,
+            `GUARD_NOT_MET`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`STAGE_NOT_FOUND` or `CONVERSION_MODE_MISMATCH`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmConversionRequest"
+  /api/v1/crm-leads/conversions/{id}/reverse:
+    post:
+      operationId: reverseCrmLeadConversion
+      tags:
+        - CRM Leads
+      summary: Record a conversion reversal
+      description:
+        "The conversion record is stamped once with the reversal facts and the
+        lead returns to the stage it converted from (or the initial stage) with a `conversion_reversed`
+        transition. A replay with the same evidence answers `200` with `replayed: true`. High-risk,
+        audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only
+        (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same
+        `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`.
+        Mutation responses never carry `displayName` (the stored replay body must not outlive
+        an erasure)."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: The lead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmLeadWrite"
+                  meta:
+                    type: object
+        "409":
+          description: "Conflict: `CRM_LEADS_TENANT_DISABLED`, `ALREADY_REVERSED`, `EVIDENCE_REUSED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmReverseConversionRequest"
+  /api/v1/crm-leads/merges/{id}/revert:
+    post:
+      operationId: revertCrmLeadMerge
+      tags:
+        - CRM Leads
+      summary: Roll a merge back
+      description:
+        Within the tenant's undo window the absorbed lead is open again exactly
+        as it was. A second rollback is `409 ALREADY_REVERTED`; after the window `409 UNDO_WINDOW_CLOSED`.
+        High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person
+        only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the
+        same `Idempotency-Key` answers the stored response, a different body with it `409
+        IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay
+        body must not outlive an erasure).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description:
+            "`CRM_LEADS_DISABLED` (deployment switch off, answered after authorization)
+            or `KEY_RING_UNAVAILABLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "200":
+          description: Reverted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      mergeId:
+                        type: string
+                        format: uuid
+                      survivorLeadId:
+                        type: string
+                        format: uuid
+                      absorbedLeadId:
+                        type: string
+                        format: uuid
+                      reverted:
+                        type: boolean
+                  meta:
+                    type: object
+        "409":
+          description:
+            "Conflict: `CRM_LEADS_TENANT_DISABLED`, `ALREADY_REVERTED`, `UNDO_WINDOW_CLOSED`,
+            `ABSORBED_LEAD_CHANGED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    CrmStageCategory:
+      type: string
+      enum:
+        - new
+        - working
+        - qualified
+        - converted
+        - lost
+        - disqualified
+      description: The CLOSED platform category of a stage. Reports use it, never stage names.
+    CrmTransitionGuard:
+      type: string
+      enum:
+        - owner_assigned
+        - contact_point_present
+        - reason_required
+    CrmLeadsSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        mergeUndoHours:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CrmLeadsSettingsPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          type: boolean
+        mergeUndoHours:
+          type: integer
+          minimum: 1
+          maximum: 720
+    CrmStage:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - name
+        - category
+      properties:
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,39}$
+        name:
+          type: string
+          maxLength: 80
+        category:
+          $ref: "#/components/schemas/CrmStageCategory"
+        position:
+          type: integer
+          description: "Response only: the array order."
+    CrmTransition:
+      type: object
+      additionalProperties: false
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,39}$
+        to:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,39}$
+        guards:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/CrmTransitionGuard"
+    CrmPipelineDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - initialStageKey
+        - stages
+        - transitions
+      properties:
+        initialStageKey:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,39}$
+        stages:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CrmStage"
+        transitions:
+          type: array
+          maxItems: 400
+          items:
+            $ref: "#/components/schemas/CrmTransition"
+    CrmPipeline:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        scope:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+              format: uuid
+        timeZone:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        version:
+          type: integer
+        currentRevisionNumber:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CrmPipelineWithRevision:
+      allOf:
+        - $ref: "#/components/schemas/CrmPipeline"
+        - type: object
+          properties:
+            currentRevision:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                revisionNumber:
+                  type: integer
+                initialStageKey:
+                  type: string
+                definitionHash:
+                  type: string
+                publishedAt:
+                  type: string
+                  format: date-time
+                publishedBy:
+                  type: string
+                  format: uuid
+                stages:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/CrmStage"
+                transitions:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/CrmTransition"
+            migratedLeadCount:
+              type: integer
+    CrmCreatePipelineRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - definition
+      properties:
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{1,39}$
+        name:
+          type: string
+          maxLength: 120
+        timeZone:
+          type: string
+          description: IANA zone used for report buckets. Default UTC.
+        scope:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+            - id
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9_]{0,39}$
+            id:
+              type: string
+              format: uuid
+        definition:
+          $ref: "#/components/schemas/CrmPipelineDefinition"
+    CrmPublishRevisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+        - definition
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        definition:
+          $ref: "#/components/schemas/CrmPipelineDefinition"
+        stageMigrations:
+          type: object
+          additionalProperties:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,39}$
+          description:
+            Removed stage key -> stage key of the new revision. Never into a converted
+            stage.
+        reason:
+          type: string
+          maxLength: 500
+    CrmContactPointInput:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - value
+      properties:
+        kind:
+          type: string
+          enum:
+            - email
+            - phone
+            - platform_id
+        platform:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,31}$
+          description: Required for `platform_id` only.
+        value:
+          type: string
+          maxLength: 254
+          description: Normalised, encrypted and hashed; never returned.
+    CrmContactPoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - email
+            - phone
+            - platform_id
+        platform:
+          type: string
+          nullable: true
+        masked:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        erased:
+          type: boolean
+    CrmSourceInput:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - manual
+            - import
+            - api
+        externalEventId:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,128}$
+          description: "Required for import and api: the intake replay key."
+        channelAccountId:
+          type: string
+          format: uuid
+        campaignRef:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,64}$
+        utmSource:
+          type: string
+          pattern: ^[A-Za-z0-9._~+-]{1,100}$
+        utmMedium:
+          type: string
+          pattern: ^[A-Za-z0-9._~+-]{1,100}$
+        utmCampaign:
+          type: string
+          pattern: ^[A-Za-z0-9._~+-]{1,100}$
+        landingPath:
+          type: string
+          maxLength: 200
+        referrerHost:
+          type: string
+          maxLength: 253
+        legalBasis:
+          type: string
+          enum:
+            - consent
+            - contract_steps
+            - legitimate_interest
+            - not_stated
+          description: Recorded, never decided, never a consent grant.
+        occurredAt:
+          type: string
+          format: date-time
+    CrmCreateLeadRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - pipelineId
+        - source
+      properties:
+        pipelineId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          maxLength: 120
+        ownerTenantUserId:
+          type: string
+          format: uuid
+        contactPoints:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/CrmContactPointInput"
+        source:
+          $ref: "#/components/schemas/CrmSourceInput"
+    CrmUpdateLeadRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        displayName:
+          type: string
+          maxLength: 120
+          nullable: true
+        addContactPoints:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/CrmContactPointInput"
+        revokeContactPointIds:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+    CrmExpectedVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+    CrmMoveRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+        - toStageKey
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        toStageKey:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,39}$
+        reason:
+          type: string
+          maxLength: 500
+        occurredAt:
+          type: string
+          format: date-time
+    CrmAssignRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+        - ownerTenantUserId
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        ownerTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+    CrmMergeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - survivorLeadId
+        - absorbedLeadId
+        - survivorVersion
+        - absorbedVersion
+        - note
+      properties:
+        survivorLeadId:
+          type: string
+          format: uuid
+        absorbedLeadId:
+          type: string
+          format: uuid
+        survivorVersion:
+          type: integer
+          minimum: 1
+        absorbedVersion:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+          maxLength: 1000
+    CrmMerge:
+      type: object
+      properties:
+        mergeId:
+          type: string
+          format: uuid
+        survivorLeadId:
+          type: string
+          format: uuid
+        absorbedLeadId:
+          type: string
+          format: uuid
+        undoUntil:
+          type: string
+          format: date-time
+    CrmConversionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - expectedVersion
+        - evidenceRef
+      properties:
+        mode:
+          type: string
+          enum:
+            - authority_confirmed
+            - authority_unconfirmed
+        expectedVersion:
+          type: integer
+          minimum: 1
+        externalCustomerRef:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,128}$
+          description: Required for authority_confirmed. Opaque; never a customer record.
+        evidenceRef:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,128}$
+          description: The replay key.
+        note:
+          type: string
+          maxLength: 1000
+          description: Required for authority_unconfirmed.
+        toStageKey:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,39}$
+        occurredAt:
+          type: string
+          format: date-time
+    CrmReverseConversionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - evidenceRef
+      properties:
+        evidenceRef:
+          type: string
+          pattern: ^[A-Za-z0-9._:-]{1,128}$
+        reason:
+          type: string
+          maxLength: 500
+        occurredAt:
+          type: string
+          format: date-time
+    CrmTouchResult:
+      type: object
+      properties:
+        leadId:
+          type: string
+          format: uuid
+        touchId:
+          type: string
+          format: uuid
+        touchNumber:
+          type: integer
+        duplicate:
+          type: boolean
+    CrmCandidate:
+      type: object
+      properties:
+        leadId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - open
+            - merged
+            - anonymized
+        stageCategory:
+          $ref: "#/components/schemas/CrmStageCategory"
+        matchedKinds:
+          type: array
+          items:
+            type: string
+            enum:
+              - email
+              - phone
+              - platform_id
+    CrmLeadWrite:
+      type: object
+      description: "A lead as returned by a mutation: never the display name."
+      properties:
+        id:
+          type: string
+          format: uuid
+        pipelineId:
+          type: string
+          format: uuid
+        revisionId:
+          type: string
+          format: uuid
+        stageKey:
+          type: string
+        stageCategory:
+          $ref: "#/components/schemas/CrmStageCategory"
+        stageEnteredAt:
+          type: string
+          format: date-time
+        ownerTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - open
+            - merged
+            - anonymized
+        mergedIntoLeadId:
+          type: string
+          format: uuid
+          nullable: true
+        externalCustomerRef:
+          type: string
+          nullable: true
+          description: Opaque; written only by a conversion.
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        anonymizedAt:
+          type: string
+          format: date-time
+          nullable: true
+        contactPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrmContactPoint"
+        duplicate:
+          type: boolean
+        transitionId:
+          type: string
+          format: uuid
+        conversionId:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean
+        changed:
+          type: boolean
+    CrmLead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pipelineId:
+          type: string
+          format: uuid
+        revisionId:
+          type: string
+          format: uuid
+        stageKey:
+          type: string
+        stageCategory:
+          $ref: "#/components/schemas/CrmStageCategory"
+        stageEnteredAt:
+          type: string
+          format: date-time
+        ownerTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - open
+            - merged
+            - anonymized
+        mergedIntoLeadId:
+          type: string
+          format: uuid
+          nullable: true
+        externalCustomerRef:
+          type: string
+          nullable: true
+          description: Opaque; written only by a conversion.
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        anonymizedAt:
+          type: string
+          format: date-time
+          nullable: true
+        contactPoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrmContactPoint"
+        displayName:
+          type: string
+          nullable: true
+    CrmLeadDetail:
+      allOf:
+        - $ref: "#/components/schemas/CrmLead"
+        - type: object
+          properties:
+            history:
+              type: object
+              properties:
+                touches:
+                  type: array
+                  items:
+                    type: object
+                transitions:
+                  type: array
+                  items:
+                    type: object
+                assignments:
+                  type: array
+                  items:
+                    type: object
+                conversions:
+                  type: array
+                  items:
+                    type: object
+                merges:
+                  type: array
+                  items:
+                    type: object
