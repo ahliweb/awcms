@@ -450,10 +450,24 @@ async function decideScope(
 
 /**
  * A caller whose access is CONFINED to business scopes (holds at least one
- * currently-effective, non-tenant-wide scope assignment). Such a caller must
- * name a scope they hold when creating an account: "no scope" means tenant-wide,
- * and a confined operator is not allowed to mint a tenant-wide account that
- * escapes the confinement they were given (ADR-0148 review M3).
+ * active, non-tenant-wide scope assignment that has not ENDED). Such a caller
+ * must name a scope they hold when creating an account: "no scope" means
+ * tenant-wide, and a confined operator is not allowed to mint a tenant-wide
+ * account that escapes the confinement they were given (ADR-0148 review M3).
+ *
+ * An assignment that has not STARTED yet confines too (Issue #1171, fail-closed).
+ * Every caller of this answer reads `true` as "show / allow less", so the
+ * uncertain side must be `true`. `effective_from` is stamped by the database
+ * (microseconds, its own clock) and compared here with the request's
+ * `new Date()` (milliseconds, truncated, the application host's clock): a
+ * request made within a millisecond of the grant — or on a host whose clock
+ * runs behind the database's — judged a just-granted confinement "not yet in
+ * force" and treated the caller as tenant-wide, showing them every brand's rows
+ * of a tenant-wide sender. A deliberately future-dated confinement is the same
+ * question asked earlier: until it starts the caller holds no scope that COVERS
+ * anything (`coveredScopesFor` still decides coverage at the chokepoint, which
+ * honours `effective_from`), so they see the rows of no brand rather than of
+ * every brand.
  */
 export function callerIsScopeConfined(
   context: AccountRouteContext
@@ -470,7 +484,6 @@ async function queryScopeConfined(
       AND tenant_user_id = ${context.auth.context.tenantUserId}
       AND status = 'active'
       AND scope_type <> 'tenant'
-      AND effective_from <= ${context.now}
       AND (effective_to IS NULL OR effective_to > ${context.now})
     LIMIT 1
   `) as unknown[];
