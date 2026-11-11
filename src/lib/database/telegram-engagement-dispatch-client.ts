@@ -21,7 +21,11 @@
  *     it is, and stops unless it is exactly the dispatch role, not SUPERUSER and
  *     not BYPASSRLS (a URL pointing at another login is refused, audit L-A).
  */
-import { buildDedicatedRoleClient, readConfiguredUrl } from "./client";
+import {
+  assertConnectedAsDedicatedRole,
+  buildDedicatedRoleClient,
+  readConfiguredUrl
+} from "./client";
 
 export const TELEGRAM_ENGAGEMENT_DISPATCH_ROLE_NAME =
   "awcms_telegram_engagement_dispatch";
@@ -72,21 +76,11 @@ export function getTelegramEngagementDispatchDatabaseClient(): Bun.SQL {
 export async function assertConnectedAsDispatchRole(
   sql: Bun.SQL
 ): Promise<void> {
-  const rows = (await sql`
-    SELECT current_user AS name, r.rolsuper AS superuser, r.rolbypassrls AS bypass
-    FROM pg_roles r
-    WHERE r.rolname = current_user
-  `) as { name: string; superuser: boolean; bypass: boolean }[];
-  const who = rows[0];
-
-  if (
-    !who ||
-    who.name !== TELEGRAM_ENGAGEMENT_DISPATCH_ROLE_NAME ||
-    who.superuser ||
-    who.bypass
-  ) {
-    throw new Error(
-      `telegram-engagement:dispatch must connect as ${TELEGRAM_ENGAGEMENT_DISPATCH_ROLE_NAME} (non-superuser, no BYPASSRLS); connected as ${who?.name ?? "unknown"}${who?.superuser ? " (SUPERUSER)" : ""}${who?.bypass ? " (BYPASSRLS)" : ""}.`
-    );
-  }
+  // The #1271 audit, L2: the LOGIN must be the role too (`session_user`), not
+  // another member login that `SET ROLE`s to it.
+  await assertConnectedAsDedicatedRole(
+    sql,
+    TELEGRAM_ENGAGEMENT_DISPATCH_ROLE_NAME,
+    "telegram-engagement:dispatch"
+  );
 }

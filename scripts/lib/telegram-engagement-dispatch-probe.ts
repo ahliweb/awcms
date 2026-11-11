@@ -185,6 +185,22 @@ export async function probeTelegramEngagementDispatchRole(
         `) as { id: string }[]
       )[0]!.id;
 
+      // The #1271 audit, M1 (sql/374): another module's event the role must
+      // neither see nor deliver to a consumer.
+      await tx`SELECT set_config('app.current_tenant_id', ${tenantA}, true)`;
+
+      const foreignEvent = (
+        (await tx`
+          INSERT INTO awcms_domain_events
+            (tenant_id, event_type, event_version, aggregate_type,
+             aggregate_id, order_key, producer_module, payload, occurred_at)
+          VALUES (${tenantA}, 'awcms.workflow.instance.approved', '1.0',
+                  'workflow_instance', ${tenantA}, 'probe', 'workflow_approval',
+                  '{}'::jsonb, now())
+          RETURNING id, event_sequence
+        `) as { id: string; event_sequence: string }[]
+      )[0]!;
+
       await tx.unsafe(`SET LOCAL ROLE ${ROLE}`);
       await tx`SELECT set_config('app.current_tenant_id', ${tenantA}, true)`;
 
@@ -273,6 +289,24 @@ export async function probeTelegramEngagementDispatchRole(
            order_key, producer_module, payload, occurred_at)
         VALUES (${tenantA}, 'awcms.identity_access.role.assigned', '1.0', 'role',
                 ${crypto.randomUUID()}, 'probe', 'identity_access', '{}'::jsonb, now())
+        RETURNING id
+      `
+      );
+      await refused(
+        "read another module's event id and sequence",
+        (sp) => sp`
+        SELECT id FROM awcms_domain_events WHERE id = ${foreignEvent.id}
+      `
+      );
+      await refused(
+        "deliver another module's event to a consumer",
+        (sp) => sp`
+        INSERT INTO awcms_domain_event_deliveries
+          (tenant_id, event_id, event_sequence, event_type, event_version,
+           order_key, consumer_name)
+        VALUES (${tenantA}, ${foreignEvent.id}, ${foreignEvent.event_sequence},
+                'awcms.telegram_engagement.consent.changed', '1.0', 'probe',
+                'hr_workforce.attendance_correction_settler')
         RETURNING id
       `
       );

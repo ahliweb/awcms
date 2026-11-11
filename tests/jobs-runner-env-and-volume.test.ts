@@ -40,8 +40,11 @@ import {
   renderRunnerDedicatedRoles
 } from "../scripts/jobs-env-allowlist";
 
-/** Jobs that run as their own database role and receive no shared login. */
-const DEDICATED_ROLE_JOBS = new Set(["telegram-engagement:dispatch"]);
+/** Jobs that run as their own database role and receive no shared login (Issues #1146, #1156). */
+const DEDICATED_ROLE_JOBS = new Set([
+  "social-publishing:dispatch",
+  "telegram-engagement:dispatch"
+]);
 
 const RUNNER = "ops/run-job.sh";
 const GLOBAL_FILE = "ops/awcms-jobs.env-global";
@@ -804,6 +807,37 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
     }
   });
 
+  test("a dedicated-role job receives none of the shared logins, whatever the host configured (Issue #1146, ADR-0157 section 6)", async () => {
+    for (const fixture of [
+      [APP, WORKER, "SETUP_DATABASE_URL=postgres://setup:s@db/awcms"],
+      [APP],
+      [APP, "WORKER_DATABASE_URL="]
+    ]) {
+      const { lines, exitCode } = await runSelection(
+        [
+          ...fixture,
+          "SOCIAL_PUBLISHING_DATABASE_URL=postgres://awcms_social_dispatch:d@db/awcms",
+          "APP_ENV=production"
+        ].join("\n"),
+        "social-publishing:dispatch"
+      );
+
+      expect(exitCode).toBe(0);
+      expect(names(lines)).not.toContain("DATABASE_URL");
+      expect(names(lines)).not.toContain("WORKER_DATABASE_URL");
+      expect(names(lines)).not.toContain("SETUP_DATABASE_URL");
+      expect(names(lines)).toContain("SOCIAL_PUBLISHING_DATABASE_URL");
+    }
+
+    // ...and an ordinary job is untouched by it.
+    const ordinary = await runSelection(
+      [APP, WORKER].join("\n"),
+      "email:dispatch"
+    );
+
+    expect(names(ordinary.lines)).toContain("WORKER_DATABASE_URL");
+  });
+
   test("every scheduled job is on the withholding side", async () => {
     const crontab = await Bun.file("ops/awcms-jobs.crontab").text();
     const scheduled = [
@@ -836,7 +870,7 @@ describe("DATABASE_URL is withheld from jobs that never open the app connection 
       }
 
       // A dedicated-role job (its own database login) receives no shared
-      // login at all, the worker one included (Issue #1156, audit H-A).
+      // login at all, the worker one included (Issues #1146, #1156).
       if (DEDICATED_ROLE_JOBS.has(job)) {
         expect(names(lines), job).not.toContain("WORKER_DATABASE_URL");
       } else {

@@ -18,6 +18,34 @@ export function isSocialPublishingEnabled(
   return env.SOCIAL_PUBLISHING_ENABLED === "true";
 }
 
+/**
+ * The Facebook Pages connector's switch (Issue #1146). Off unless exactly
+ * `"true"`, and meaningless without {@link isSocialPublishingEnabled}. While it
+ * is off: the registry has no Facebook adapter (enqueue refuses a Facebook
+ * account with `PROVIDER_ADAPTER_UNAVAILABLE`), and the dispatcher is composed
+ * with the credential port that refuses every request, so NO social credential
+ * is decrypted by anything. Read on every call.
+ */
+export function isSocialPublishingFacebookEnabled(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return (
+    isSocialPublishingEnabled(env) &&
+    env.SOCIAL_PUBLISHING_FACEBOOK_ENABLED === "true"
+  );
+}
+
+/**
+ * Whether the dispatcher may be composed with the REAL publish credential port
+ * (ADR-0157 section 6). True only when at least one connector is switched on;
+ * today that is Facebook alone.
+ */
+export function isSocialPublishCredentialPathEnabled(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return isSocialPublishingFacebookEnabled(env);
+}
+
 /** The three events `blog_content` can raise, as `SocialPublishingTriggerEvent` names them. */
 export const SOCIAL_PUBLISH_TRIGGERS = [
   "post_published",

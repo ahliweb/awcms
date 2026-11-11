@@ -182,6 +182,25 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "Nothing is ever committed: it is a behavioural probe of row policies, not " +
       "a second writer. Its attempted writes as the role (consents, domain " +
       "events) are expected to FAIL and are not seeds, so they are not excused."
+  })),
+  ...[
+    "awcms_social_publications",
+    "awcms_social_publish_jobs",
+    "awcms_channel_account_health",
+    "awcms_audit_events",
+    "awcms_domain_events",
+    "awcms_domain_event_deliveries"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/security-readiness.ts` `probeSocialDispatchWriteBoundary` " +
+      "(Issue #1146, sql/373) seeds a throwaway tenant, a publication and jobs, " +
+      "then, as `awcms_social_dispatch`, attempts the legitimate and the " +
+      "forbidden writes (each in a savepoint) inside ONE transaction that it " +
+      "ALWAYS rolls back (it throws a sentinel). Nothing it writes is ever " +
+      "committed: a behavioural probe of the role's RESTRICTIVE write " +
+      "policies, not a second writer of these tables."
   }))
 ];
 
