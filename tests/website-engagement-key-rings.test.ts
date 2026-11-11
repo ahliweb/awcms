@@ -10,6 +10,7 @@ import { describe, expect, test } from "bun:test";
 import {
   isLegacyHash,
   lookupHashCandidates,
+  needsRehash,
   resolveWebsiteEngagementRings
 } from "../src/modules/website-engagement/domain/engagement-config";
 import {
@@ -24,6 +25,11 @@ import {
   WEBSITE_ENGAGEMENT_FOREIGN_KEY_VARIABLES,
   websiteEngagementKeyProblems
 } from "../scripts/validate-env";
+import {
+  websiteEngagementContactMaterialProblem,
+  websiteEngagementTokenMaterialProblem,
+  withMaterialProbe
+} from "../scripts/security-readiness";
 
 const key = (seed: number) =>
   Buffer.from(
@@ -132,6 +138,100 @@ describe("website_engagement key rings at runtime (Issue #1262)", () => {
     ).toBe(false);
   });
 
+  test("a key id is never reused for new material (#1269 M-1), and legacy material is never a hash key under another id (M7b)", () => {
+    const NEW = key(17);
+    const WRONG = key(19);
+    const refused = (env: Record<string, string>) => {
+      const result = runtime(env);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("conflicting_keys");
+        noValueIn([result.reason]);
+      }
+    };
+
+    // k1 reused as the NEW writing encryption key while legacy k1 is the old one.
+    refused({
+      ...TRANSITION,
+      WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `k1:${NEW}`
+    });
+    // An older encryption id carrying the wrong material.
+    refused({
+      ...TRANSITION,
+      WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e2:${NEW},k1:${WRONG}`
+    });
+    // The old material decrypting under another id (old rows name k1).
+    refused({
+      ...TRANSITION,
+      WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e2:${NEW},o1:${OLD}`
+    });
+    // Hash side: k1 reused as the writing hash key.
+    refused({ ...TRANSITION, WEBSITE_ENGAGEMENT_HASH_KEYS: `k1:${NEW}` });
+    // M7b: legacy material in the hash ring under ANOTHER id. The encryption
+    // ring here does not carry the old key, so only the legacy-vs-hash
+    // MATERIAL rule can refuse it.
+    refused({
+      ...TRANSITION,
+      WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e1:${A}`,
+      WEBSITE_ENGAGEMENT_HASH_KEYS: `h1:${B},h2:${OLD}`
+    });
+    expect(
+      websiteEngagementKeyProblems({
+        ...TRANSITION,
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e1:${A}`,
+        WEBSITE_ENGAGEMENT_HASH_KEYS: `h1:${B},h2:${OLD}`
+      })
+    ).toHaveLength(1);
+
+    for (const env of [
+      { ...TRANSITION, WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `k1:${NEW}` },
+      {
+        ...TRANSITION,
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e2:${NEW},k1:${WRONG}`
+      },
+      { ...TRANSITION, WEBSITE_ENGAGEMENT_HASH_KEYS: `k1:${NEW}` }
+    ]) {
+      const problems = websiteEngagementKeyProblems(env);
+
+      expect(problems.length).toBeGreaterThanOrEqual(1);
+      noValueIn(problems);
+    }
+  });
+
+  test("a refusal carries a fixed, value-free cause code (#1269 L-1)", () => {
+    const codeOf = (env: Record<string, string>) => {
+      const result = runtime(env);
+
+      return result.ok ? null : result.code;
+    };
+
+    expect(codeOf({ ...GOOD, WEBSITE_ENGAGEMENT_KEYS: `k1:${OLD}` })).toBe(
+      "retired_variable"
+    );
+    expect(codeOf({})).toBe("missing_or_invalid");
+    expect(
+      codeOf({
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e1:${A}`,
+        WEBSITE_ENGAGEMENT_HASH_KEYS: `h1:${A}`
+      })
+    ).toBe("conflicting_keys");
+  });
+
+  test("any matched hash not under the ACTIVE hash key is re-hashed on use (#1269 L-2)", () => {
+    const resolved = runtime({
+      ...TRANSITION,
+      WEBSITE_ENGAGEMENT_HASH_KEYS: `h2:${C},h1:${B}`
+    });
+
+    if (!resolved.ok) throw new Error(resolved.reason);
+
+    expect(needsRehash(`h2:${"0".repeat(64)}`, resolved.rings)).toBe(false);
+    expect(needsRehash(`h1:${"0".repeat(64)}`, resolved.rings)).toBe(true);
+    expect(needsRehash(`k1:${"0".repeat(64)}`, resolved.rings)).toBe(true);
+    expect(needsRehash("no-prefix", resolved.rings)).toBe(false);
+  });
+
   test("lookups accept legacy hashes; writes never use a legacy key", () => {
     const resolved = runtime(TRANSITION);
 
@@ -229,13 +329,15 @@ describe("website_engagement key rings in config:validate (Issue #1262)", () => 
         ...TRANSITION,
         WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `k1:${OLD},e1:${A}`
       })
-    ).toHaveLength(1);
+      // The old key writing AND its id on the writing key: both reported.
+    ).toHaveLength(2);
     expect(
       websiteEngagementKeyProblems({
         ...TRANSITION,
         WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS: `h1:${OLD}`
       })
-    ).toHaveLength(1);
+      // Hash id repeated, old material under another id, legacy id on the writing hash key.
+    ).toHaveLength(3);
   });
 
   test("no ring and no legacy key may share material with another module's ring or single-key secret", () => {
@@ -294,6 +396,60 @@ describe("website_engagement key rings in config:validate (Issue #1262)", () => 
 });
 
 describe("security:readiness observes the transition (Issue #1262)", () => {
+  test("a material finding turns an id-only PASS into FAIL (#1269 M-1)", async () => {
+    const base = {
+      name: "x",
+      severity: "warning" as const,
+      status: "pass" as const,
+      evidence: 'Every ciphertext row is under the active key "k1".'
+    };
+    const clean = {
+      contactUnreadable: [],
+      hashMismatch: [],
+      tokenUnknown: []
+    };
+
+    expect(
+      (
+        await withMaterialProbe(
+          base,
+          websiteEngagementContactMaterialProblem,
+          async () => ({ ...clean, contactUnreadable: ["k1"] })
+        )
+      ).status
+    ).toBe("fail");
+    expect(
+      (
+        await withMaterialProbe(
+          base,
+          websiteEngagementTokenMaterialProblem,
+          async () => ({ ...clean, hashMismatch: ["k1"] })
+        )
+      ).status
+    ).toBe("fail");
+    expect(
+      (
+        await withMaterialProbe(
+          base,
+          websiteEngagementTokenMaterialProblem,
+          async () => clean
+        )
+      ).status
+    ).toBe("pass");
+    // A probe that cannot run is a failure, never a silent pass.
+    expect(
+      (
+        await withMaterialProbe(
+          base,
+          websiteEngagementContactMaterialProblem,
+          async () => {
+            throw new Error("down");
+          }
+        )
+      ).status
+    ).toBe("fail");
+  });
+
   test("both key-id checks are registered before the shared pool is closed", async () => {
     const source = await Bun.file("scripts/security-readiness.ts").text();
     const body = source.slice(

@@ -15500,15 +15500,15 @@ Requires `website_engagement.sources.manage` and a signed-in person. Audited at 
 
 **Responses**
 
-| Status | Description                                                         | Schema                                                                         |
-| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 201    | Created.                                                            | [`WebsiteEngagementSourceWithToken`](#schema-websiteengagementsourcewithtoken) |
-| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope)                                         |
-| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope)                                         |
-| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope)                                         |
-| 409    | `SOURCE_CODE_TAKEN` or `IDEMPOTENCY_CONFLICT`.                      | [`ApiError`](#standard-error-envelope)                                         |
-| 422    | `DOMAIN_NOT_FOUND`.                                                 | [`ApiError`](#standard-error-envelope)                                         |
-| 503    | The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope)                                         |
+| Status | Description                                                                                                                                                                                                       | Schema                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 201    | Created.                                                                                                                                                                                                          | [`WebsiteEngagementSourceWithToken`](#schema-websiteengagementsourcewithtoken) |
+| 400    | Validation error.                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session.                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `SOURCE_CODE_TAKEN` or `IDEMPOTENCY_CONFLICT`.                                                                                                                                                                    | [`ApiError`](#standard-error-envelope)                                         |
+| 422    | `DOMAIN_NOT_FOUND`.                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope)                                         |
+| 503    | The deployment refused its key configuration (`KEY_RING_UNAVAILABLE`) because a ring is missing or malformed, the two rings share a key or reuse a key id, or the retired `WEBSITE_ENGAGEMENT_KEYS` is still set. | [`ApiError`](#standard-error-envelope)                                         |
 
 ### `GET /api/v1/website-engagement/sources/{id}` — Read one website source
 
@@ -15627,15 +15627,15 @@ Requires `website_engagement.sources.manage` and a signed-in person. Audited at 
 
 **Responses**
 
-| Status | Description                                                         | Schema                                                                         |
-| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 200    | Rotated.                                                            | [`WebsiteEngagementSourceWithToken`](#schema-websiteengagementsourcewithtoken) |
-| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope)                                         |
-| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope)                                         |
-| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope)                                         |
-| 404    | Resource not found.                                                 | [`ApiError`](#standard-error-envelope)                                         |
-| 409    | `SOURCE_REVOKED` or `IDEMPOTENCY_CONFLICT`.                         | [`ApiError`](#standard-error-envelope)                                         |
-| 503    | The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope)                                         |
+| Status | Description                                                                                                                                                                                                       | Schema                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 200    | Rotated.                                                                                                                                                                                                          | [`WebsiteEngagementSourceWithToken`](#schema-websiteengagementsourcewithtoken) |
+| 400    | Validation error.                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session.                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope)                                         |
+| 404    | Resource not found.                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `SOURCE_REVOKED` or `IDEMPOTENCY_CONFLICT`.                                                                                                                                                                       | [`ApiError`](#standard-error-envelope)                                         |
+| 503    | The deployment refused its key configuration (`KEY_RING_UNAVAILABLE`) because a ring is missing or malformed, the two rings share a key or reuse a key id, or the retired `WEBSITE_ENGAGEMENT_KEYS` is still set. | [`ApiError`](#standard-error-envelope)                                         |
 
 ### `GET /api/v1/website-engagement/submissions` — List website submissions (masked)
 
@@ -15737,15 +15737,15 @@ Requires `website_engagement.submissions.reveal`, a separately grantable permiss
 
 **Responses**
 
-| Status | Description                                                         | Schema                                 |
-| ------ | ------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The decrypted contact details.                                      | object                                 |
-| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                         | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                         | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                 | [`ApiError`](#standard-error-envelope) |
-| 409    | `SUBMISSION_WITHDRAWN` or `NOTHING_TO_REVEAL`.                      | [`ApiError`](#standard-error-envelope) |
-| 503    | The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`). | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The decrypted contact details.                                                                                                                                                                                    | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | `SUBMISSION_WITHDRAWN` or `NOTHING_TO_REVEAL`.                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 503    | The deployment refused its key configuration (`KEY_RING_UNAVAILABLE`) because a ring is missing or malformed, the two rings share a key or reuse a key id, or the retired `WEBSITE_ENGAGEMENT_KEYS` is still set. | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/website-engagement/submissions/{id}/withdraw` — Withdraw a submission (controller opt-out)
 

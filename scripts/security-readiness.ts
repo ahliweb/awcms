@@ -52,11 +52,13 @@ import { countTelegramChatsByKeyId } from "../src/modules/telegram-delivery/appl
 import { resolveTelegramEncryptionRingUnchecked } from "../src/modules/telegram-delivery/domain/telegram-config";
 import {
   countSourceTokensByKeyId,
-  countSubmissionContactsByKeyId
+  countSubmissionContactsByKeyId,
+  probeKeyMaterial
 } from "../src/modules/website-engagement/application/key-transition";
 import {
   resolveWebsiteEngagementEncryptionRingUnchecked,
-  resolveWebsiteEngagementHashRingUnchecked
+  resolveWebsiteEngagementHashRingUnchecked,
+  resolveWebsiteEngagementLegacyHashKeysUnchecked
 } from "../src/modules/website-engagement/domain/engagement-config";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
@@ -5445,19 +5447,113 @@ export function checkTelegramChatKeyIds(
   });
 }
 
+export type WebsiteEngagementMaterialFindings = {
+  /** Encryption key ids whose sample ciphertext does not decrypt. */
+  contactUnreadable: string[];
+  /** Hash key ids whose sample identifier hash does not recompute. */
+  hashMismatch: string[];
+  /** Hash key ids of LIVE source tokens that no configured key carries. */
+  tokenUnknown: string[];
+};
+
+/**
+ * #1269 audit M-1: a key id count proves nothing about MATERIAL. `k1` reused
+ * for a new key passes an id comparison while every old row stays shut. This
+ * decrypts ONE sample per encryption key id and recomputes ONE sample
+ * identifier hash per hash key id, per tenant, and reports only key ids.
+ */
+export async function probeWebsiteEngagementMaterial(
+  env: NodeJS.ProcessEnv,
+  // Type inferred on purpose: a `name: Bun.SQL` annotation makes
+  // db:transaction-swallow:check treat `sql` as a transaction handle file-wide.
+  sql = getDatabaseClient()
+): Promise<WebsiteEngagementMaterialFindings> {
+  const encryption = resolveWebsiteEngagementEncryptionRingUnchecked(env);
+  const hash = resolveWebsiteEngagementHashRingUnchecked(env);
+  const legacy = resolveWebsiteEngagementLegacyHashKeysUnchecked(env);
+  const hashKeys = [
+    ...(hash.ok ? hash.keys : []),
+    ...(legacy.ok ? legacy.keys : [])
+  ];
+  const tenants = (await sql`
+    SELECT id FROM awcms_tenants ORDER BY id
+  `) as { id: string }[];
+  const contactUnreadable = new Set<string>();
+  const hashMismatch = new Set<string>();
+  const tokenUnknown = new Set<string>();
+
+  for (const tenant of tenants) {
+    const probe = await probeKeyMaterial(
+      sql,
+      tenant.id,
+      encryption.ok ? encryption : null,
+      hashKeys
+    );
+
+    for (const [keyId, state] of Object.entries(probe.contact)) {
+      if (state !== "ok") contactUnreadable.add(keyId);
+    }
+
+    for (const [keyId, state] of Object.entries(probe.identifierHash)) {
+      if (state === "mismatch") hashMismatch.add(keyId);
+    }
+
+    for (const keyId of Object.keys(
+      await countSourceTokensByKeyId(sql, tenant.id)
+    )) {
+      if (!hashKeys.some((key) => key.id === keyId)) tokenUnknown.add(keyId);
+    }
+  }
+
+  const sorted = (set: Set<string>) => [...set].sort();
+
+  return {
+    contactUnreadable: sorted(contactUnreadable),
+    hashMismatch: sorted(hashMismatch),
+    tokenUnknown: sorted(tokenUnknown)
+  };
+}
+
+/**
+ * Adds the material verdict to an id-distribution result: a finding turns even
+ * a `pass` into `fail` (the M-1 case, where every id "matches"). Key ids only.
+ */
+export async function withMaterialProbe(
+  base: SecurityCheckResult,
+  verdict: (findings: WebsiteEngagementMaterialFindings) => string | null,
+  probe: () => Promise<WebsiteEngagementMaterialFindings>
+): Promise<SecurityCheckResult> {
+  // A count that already failed to run has nothing to add to.
+  if (base.evidence.startsWith("Could not count")) return base;
+
+  try {
+    const problem = verdict(await probe());
+
+    return problem
+      ? { ...base, status: "fail", evidence: `${problem} ${base.evidence}` }
+      : base;
+  } catch (error) {
+    return {
+      ...base,
+      status: "fail",
+      evidence: `Could not verify key material: ${errorMessage(error)}.`
+    };
+  }
+}
+
 /**
  * Issue #1262: live website source tokens still hashed under a key other than
  * the hash ring's active one, which includes every token still verified only by
  * `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS`. There is no re-key job for a token (its
  * secret is not stored): it is re-hashed on its next accepted submission, or
- * moved by rotating it.
+ * moved by rotating it. #1269 M-1: plus a material check (see above).
  */
-export function checkWebsiteEngagementTokenKeyIds(
+export async function checkWebsiteEngagementTokenKeyIds(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<SecurityCheckResult> {
   const ring = resolveWebsiteEngagementHashRingUnchecked(env);
 
-  return checkCiphertextKeyIdDistribution({
+  const base = await checkCiphertextKeyIdDistribution({
     name: "Website engagement source tokens are under the active hash key",
     ringEnv:
       "WEBSITE_ENGAGEMENT_HASH_KEYS (or WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS)",
@@ -5467,6 +5563,40 @@ export function checkWebsiteEngagementTokenKeyIds(
     ring: ring.ok ? ring : { ok: false },
     count: countSourceTokensByKeyId
   });
+
+  return withMaterialProbe(base, websiteEngagementTokenMaterialProblem, () =>
+    probeWebsiteEngagementMaterial(env)
+  );
+}
+
+/** The token check's verdict on the material findings; `null` when sound. */
+export function websiteEngagementTokenMaterialProblem(
+  findings: WebsiteEngagementMaterialFindings
+): string | null {
+  const problems: string[] = [];
+
+  if (findings.tokenUnknown.length > 0) {
+    problems.push(
+      `Live source tokens are under key id(s) ${findings.tokenUnknown.join(", ")} that neither WEBSITE_ENGAGEMENT_HASH_KEYS nor WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS carries: those sources are refused.`
+    );
+  }
+
+  if (findings.hashMismatch.length > 0) {
+    problems.push(
+      `A sample hash under key id(s) ${findings.hashMismatch.join(", ")} does not recompute under the configured key of that id: the id was reused for different material, so tokens under it are refused. Restore the original key under its original id and give the new key a NEW id.`
+    );
+  }
+
+  return problems.length > 0 ? problems.join(" ") : null;
+}
+
+/** The contact check's verdict on the material findings; `null` when sound. */
+export function websiteEngagementContactMaterialProblem(
+  findings: WebsiteEngagementMaterialFindings
+): string | null {
+  return findings.contactUnreadable.length > 0
+    ? `A sample contact ciphertext under key id(s) ${findings.contactUnreadable.join(", ")} does not decrypt under WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS (the key is missing, or its id was reused for different material): those submissions cannot be revealed.`
+    : null;
 }
 
 /**
@@ -5475,12 +5605,12 @@ export function checkWebsiteEngagementTokenKeyIds(
  * key). There is deliberately no re-encryption job: a submission is append-only
  * evidence (sql/327 guard), so old rows leave by retention or withdrawal.
  */
-export function checkWebsiteEngagementContactKeyIds(
+export async function checkWebsiteEngagementContactKeyIds(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<SecurityCheckResult> {
   const ring = resolveWebsiteEngagementEncryptionRingUnchecked(env);
 
-  return checkCiphertextKeyIdDistribution({
+  const base = await checkCiphertextKeyIdDistribution({
     name: "Website engagement contact ciphertexts are under the active key",
     ringEnv: "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
     rekeyCommand: "",
@@ -5489,6 +5619,10 @@ export function checkWebsiteEngagementContactKeyIds(
     ring: ring.ok ? ring : { ok: false },
     count: countSubmissionContactsByKeyId
   });
+
+  return withMaterialProbe(base, websiteEngagementContactMaterialProblem, () =>
+    probeWebsiteEngagementMaterial(env)
+  );
 }
 
 // ---------------------------------------------------------------------------

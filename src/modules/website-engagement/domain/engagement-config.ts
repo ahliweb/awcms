@@ -121,7 +121,12 @@ function sharesMaterial(left: KeyRingKey[], right: KeyRingKey[]): boolean {
  *      (a stored `keyId:` prefix must say unambiguously which role wrote it);
  *   3. a legacy hash key is not the encryption ring's ACTIVE key: the old key
  *      may keep decrypting old rows, but a key that still writes ciphertext
- *      must not also be a hash oracle.
+ *      must not also be a hash oracle;
+ *   4. a key id is never reused for new material (#1269 audit M-1): a legacy
+ *      key and an encryption key agree exactly (same id <=> same material), and
+ *      neither ring's WRITING (first) key carries a legacy key id. A `k1` that
+ *      means the old key in one variable and a new key in another would make
+ *      old rows look current while they no longer open.
  */
 export function websiteEngagementRingConflicts(
   encryption: KeyRing,
@@ -156,6 +161,31 @@ export function websiteEngagementRingConflicts(
     );
   }
 
+  if (
+    legacyHash.some((legacy) =>
+      encryption.keys.some(
+        (key) => (key.id === legacy.id) !== key.key.equals(legacy.key)
+      )
+    )
+  ) {
+    conflicts.push(
+      "A key id of WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS names different key material in WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS (or the same material sits under another id); never reuse a key id for new material."
+    );
+  }
+
+  const activeHashKey = hash.keys[0];
+
+  if (
+    legacyHash.some(
+      (legacy) =>
+        legacy.id === activeEncryptionKey?.id || legacy.id === activeHashKey?.id
+    )
+  ) {
+    conflicts.push(
+      "The first (writing) key of WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS or WEBSITE_ENGAGEMENT_HASH_KEYS must not use a key id of WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS; give every new key a new id."
+    );
+  }
+
   return conflicts;
 }
 
@@ -168,8 +198,17 @@ export type WebsiteEngagementRings = {
   legacyHash: KeyRingKey[];
 };
 
+/**
+ * Why the key configuration was refused, as a fixed code that is safe to log
+ * (it never carries a value): the retired variable is set, a ring is missing
+ * or malformed, or the rings conflict (a shared key or a reused key id).
+ */
+export type WebsiteEngagementRingRefusal =
+  "retired_variable" | "missing_or_invalid" | "conflicting_keys";
+
 export type WebsiteEngagementRingsResult =
-  { ok: true; rings: WebsiteEngagementRings } | { ok: false; reason: string };
+  | { ok: true; rings: WebsiteEngagementRings }
+  | { ok: false; code: WebsiteEngagementRingRefusal; reason: string };
 
 /**
  * All key material, checked: the retired variable is unset, both rings parse,
@@ -180,16 +219,25 @@ export function resolveWebsiteEngagementRings(
   env: NodeJS.ProcessEnv = process.env
 ): WebsiteEngagementRingsResult {
   if (isRetiredSingleRingSet(env)) {
-    return { ok: false, reason: RETIRED_SINGLE_RING_REASON };
+    return {
+      ok: false,
+      code: "retired_variable",
+      reason: RETIRED_SINGLE_RING_REASON
+    };
   }
 
   const encryption = resolveWebsiteEngagementEncryptionRingUnchecked(env);
   const hash = resolveWebsiteEngagementHashRingUnchecked(env);
   const legacy = resolveWebsiteEngagementLegacyHashKeysUnchecked(env);
+  const invalid = (reason: string): WebsiteEngagementRingsResult => ({
+    ok: false,
+    code: "missing_or_invalid",
+    reason
+  });
 
-  if (!encryption.ok) return { ok: false, reason: encryption.reason };
-  if (!hash.ok) return { ok: false, reason: hash.reason };
-  if (!legacy.ok) return { ok: false, reason: legacy.reason };
+  if (!encryption.ok) return invalid(encryption.reason);
+  if (!hash.ok) return invalid(hash.reason);
+  if (!legacy.ok) return invalid(legacy.reason);
 
   const conflicts = websiteEngagementRingConflicts(
     encryption,
@@ -197,7 +245,9 @@ export function resolveWebsiteEngagementRings(
     legacy.keys
   );
 
-  if (conflicts.length > 0) return { ok: false, reason: conflicts[0]! };
+  if (conflicts.length > 0) {
+    return { ok: false, code: "conflicting_keys", reason: conflicts[0]! };
+  }
 
   return {
     ok: true,
@@ -224,18 +274,36 @@ export function lookupHashCandidates(
   ];
 }
 
+/** The `keyId` of a stored `keyId:hex` hash, or `null` without an id prefix. */
+function hashKeyId(stored: string): string | null {
+  const separator = stored.indexOf(":");
+
+  return separator < 1 ? null : stored.slice(0, separator);
+}
+
 /** True when a stored `keyId:hex` hash was written under a legacy key id. */
 export function isLegacyHash(
   stored: string,
   rings: WebsiteEngagementRings
 ): boolean {
-  const separator = stored.indexOf(":");
-
-  if (separator < 1) return false;
-
-  const keyId = stored.slice(0, separator);
+  const keyId = hashKeyId(stored);
 
   return rings.legacyHash.some((key) => key.id === keyId);
+}
+
+/**
+ * True when a stored hash that has just MATCHED should be re-written under the
+ * hash ring's active key: it carries any other key id, a legacy key of the
+ * #1262 transition or an older key of an ordinary hash-ring rotation (#1269
+ * audit L-2).
+ */
+export function needsRehash(
+  stored: string,
+  rings: WebsiteEngagementRings
+): boolean {
+  const keyId = hashKeyId(stored);
+
+  return keyId !== null && keyId !== rings.hash.keys[0]?.id;
 }
 
 export type IntakeLimits = {

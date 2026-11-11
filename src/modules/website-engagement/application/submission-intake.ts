@@ -46,8 +46,8 @@ import { appendDomainEvent } from "../../domain-event-runtime/application/append
 import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
 import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
 import {
-  isLegacyHash,
   lookupHashCandidates,
+  needsRehash,
   type WebsiteEngagementRings
 } from "../domain/engagement-config";
 import {
@@ -176,13 +176,15 @@ export async function verifyIntake(
 
     if (!accepted || !source || !origin) return null;
 
-    // Upgrade on use (Issue #1262): a token still verified under a legacy key
-    // has its stored hash re-written under the hash ring's ACTIVE key, so the
-    // legacy key can be retired. Compare-and-swap on the very hash that just
-    // matched: a rotation that landed meanwhile has changed it, and is never
-    // overwritten with a hash of the superseded secret. Only reached by a
-    // caller that has PROVEN the token, so it reveals nothing to anyone else.
-    if (isLegacyHash(source.token_hash, rings)) {
+    // Upgrade on use (Issue #1262, #1269 L-2): a token verified under any key
+    // other than the hash ring's ACTIVE one (a legacy key of the transition, or
+    // an older hash-ring key after an ordinary rotation) has its stored hash
+    // re-written under the active key, so the old key can be retired.
+    // Compare-and-swap on the very hash that just matched: a rotation that
+    // landed meanwhile has changed it, and is never overwritten with a hash of
+    // the superseded secret. Only reached AFTER every check above (token,
+    // status, tenant, module, Origin), so it reveals nothing to anyone else.
+    if (needsRehash(source.token_hash, rings)) {
       await tx`
         UPDATE awcms_engagement_sources
         SET token_hash = ${keyedHashPrimary(token.secret, tokenDomain, rings.hash)}

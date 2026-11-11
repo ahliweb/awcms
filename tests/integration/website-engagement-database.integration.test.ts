@@ -65,8 +65,14 @@ import {
 } from "../../src/modules/website-engagement/application/submission-intake";
 import {
   countSourceTokensByKeyId,
-  countSubmissionContactsByKeyId
+  countSubmissionContactsByKeyId,
+  probeKeyMaterial
 } from "../../src/modules/website-engagement/application/key-transition";
+import {
+  probeWebsiteEngagementMaterial,
+  websiteEngagementContactMaterialProblem,
+  websiteEngagementTokenMaterialProblem
+} from "../../scripts/security-readiness";
 import {
   resolveWebsiteEngagementRings,
   lookupHashCandidates,
@@ -1565,6 +1571,120 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       expect(await storedTokenHash(old.sourceId)).toMatch(/^h1:/);
       expect((await submit(body(old.token))).status).toBe(403);
       expect((await submit(body(rotated.token))).status).toBe(200);
+    });
+
+    test("no re-hash for a request that is not fully accepted: a foreign Origin, a paused source, a revoked source (#1269 L-3)", async () => {
+      useTransitionRings();
+
+      const foreign = await writeUnderSingleRing("legacy-foreign");
+
+      expect(
+        (await submit(body(foreign.token), { origin: `https://${OTHER}` }))
+          .status
+      ).toBe(403);
+      expect(await storedTokenHash(foreign.sourceId)).toMatch(/^k1:/);
+
+      const paused = await writeUnderSingleRing("legacy-paused");
+
+      await getAdminSql()`
+        UPDATE awcms_engagement_sources SET status = 'paused' WHERE id = ${paused.sourceId}
+      `;
+      expect((await submit(body(paused.token))).status).toBe(403);
+      expect(await storedTokenHash(paused.sourceId)).toMatch(/^k1:/);
+
+      const revoked = await writeUnderSingleRing("legacy-revoked");
+
+      await inTenant(T1, (tx) => revokeSource(tx, T1, U1, revoked.sourceId));
+      expect((await submit(body(revoked.token))).status).toBe(403);
+      expect(await storedTokenHash(revoked.sourceId)).toMatch(/^k1:/);
+    });
+
+    test("an ordinary hash-ring rotation re-hashes on use too (#1269 L-2)", async () => {
+      useCurrentRings();
+      process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = `h2:${keyBytes(17)},${HASH_SPEC}`;
+
+      expect(await storedTokenHash(fx.sourceIds.a!)).toMatch(/^h1:/);
+      expect((await submit(body(fx.tokens.a!))).status).toBe(200);
+      expect(await storedTokenHash(fx.sourceIds.a!)).toMatch(/^h2:/);
+      expect((await submit(body(fx.tokens.a!))).status).toBe(200);
+    });
+
+    test("the security:readiness material probe catches a key id reused for new material, though every id 'matches' (#1269 M-1)", async () => {
+      useTransitionRings();
+      await writeUnderSingleRing("legacy-probe");
+
+      // The documented transition: material verifies, nothing reused.
+      const good = await probeKeyMaterial(
+        getRuntimeSql(),
+        T1,
+        rings().encryption,
+        [...rings().hash.keys, ...rings().legacyHash]
+      );
+
+      expect(good.contact.k1).toBe("ok");
+      expect(good.identifierHash.k1).toBe("ok");
+
+      const probe = (env: Record<string, string>) =>
+        probeWebsiteEngagementMaterial(
+          env as NodeJS.ProcessEnv,
+          getRuntimeSql()
+        );
+      const right = await probe({
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `${ENCRYPTION_SPEC},${OLD_SPEC}`,
+        WEBSITE_ENGAGEMENT_HASH_KEYS: HASH_SPEC,
+        WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS: OLD_SPEC
+      });
+
+      expect(websiteEngagementContactMaterialProblem(right)).toBeNull();
+      expect(websiteEngagementTokenMaterialProblem(right)).toBeNull();
+
+      // `k1` reused for NEW material as the encryption ring's ACTIVE key: every
+      // stored id equals the active id, so the id-only check alone would pass.
+      const reusedEncryption = await probe({
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `k1:${keyBytes(19)}`
+      });
+
+      expect(reusedEncryption.contactUnreadable).toContain("k1");
+      expect(
+        websiteEngagementContactMaterialProblem(reusedEncryption)
+      ).toContain("does not decrypt");
+
+      // `e2:<NEW>,k1:<WRONG>`: an older id carrying the wrong key.
+      const wrongOld = await probe({
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `e2:${keyBytes(19)},k1:${keyBytes(29)}`
+      });
+
+      expect(wrongOld.contactUnreadable).toContain("k1");
+
+      // Hash side: `k1` reused for NEW material (the encryption ring is right,
+      // so the identifier sample can be recomputed).
+      const reusedHash = await probe({
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `${ENCRYPTION_SPEC},${OLD_SPEC}`,
+        WEBSITE_ENGAGEMENT_HASH_KEYS: `k1:${keyBytes(23)}`
+      });
+
+      expect(reusedHash.hashMismatch).toContain("k1");
+      expect(websiteEngagementTokenMaterialProblem(reusedHash)).toContain(
+        "reused for different material"
+      );
+
+      // The legacy keys dropped too early: live tokens under an unknown id.
+      const dropped = await probe({
+        WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS: `${ENCRYPTION_SPEC},${OLD_SPEC}`,
+        WEBSITE_ENGAGEMENT_HASH_KEYS: HASH_SPEC
+      });
+
+      expect(dropped.tokenUnknown).toEqual(["k1"]);
+
+      for (const findings of [reusedEncryption, wrongOld, reusedHash]) {
+        const text = [
+          websiteEngagementContactMaterialProblem(findings),
+          websiteEngagementTokenMaterialProblem(findings)
+        ].join(" ");
+
+        expect(text).not.toContain(keyBytes(19));
+        expect(text).not.toContain("Budi");
+      }
     });
   });
 

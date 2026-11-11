@@ -4,6 +4,7 @@
  * the refusals, so the route files stay thin and cannot drift into different
  * spellings of the same answer.
  */
+import { log } from "../../../lib/logging/logger";
 import { isTurnstileRequired } from "../../../lib/security/turnstile";
 import {
   bodyTooLargeResponse,
@@ -45,13 +46,19 @@ export function personOnlyRefusal(auth: {
 
 /** Fail closed BEFORE any work that would hash a token or touch a ciphertext. */
 export function ringUnavailable(): Response | null {
-  return resolveWebsiteEngagementRings().ok
-    ? null
-    : fail(
-        503,
-        "KEY_RING_UNAVAILABLE",
-        "Website engagement keys are not configured on this deployment."
-      );
+  const keys = resolveWebsiteEngagementRings();
+
+  if (keys.ok) return null;
+
+  // A fixed cause code (retired variable, missing/invalid ring, conflicting
+  // keys), never a value; the answer itself stays generic (#1269 L-1).
+  log("error", "website_engagement.ring_unavailable", { cause: keys.code });
+
+  return fail(
+    503,
+    "KEY_RING_UNAVAILABLE",
+    "The website engagement key configuration was refused on this deployment."
+  );
 }
 
 export function readIdempotencyKey(request: Request): string | Response {

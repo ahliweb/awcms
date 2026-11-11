@@ -180,7 +180,8 @@ export async function handlePublicSubmission(
   const keys = resolveWebsiteEngagementRings();
 
   if (!keys.ok) {
-    log("error", "website_engagement.ring_unavailable");
+    // A fixed cause code, never a value (#1269 L-1).
+    log("error", "website_engagement.ring_unavailable", { cause: keys.code });
     recordCounter("website_engagement_submission_total", {
       outcome: "unavailable"
     });
