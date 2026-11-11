@@ -285,6 +285,12 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
     reason:
       "Telegram's Bot API calls it for one CUSTOMER bot, never a person (ADR-0152 section 4, Issue #1156). The credential is the opaque per-bot callback token in the path (proven against a stored SHA-256; it names the tenant and endpoint, nothing in the body does) plus X-Telegram-Bot-Api-Secret-Token compared in constant time before the body is read; every failure is one generic 401; off (TELEGRAM_ENGAGEMENT_ENABLED unset) it is a 404."
   },
+  {
+    method: "POST",
+    pattern: "/api/v1/email/webhooks/mailketing/:token",
+    reason:
+      "Mailketing calls it, never a person, and documents no signature: the opaque per-account token in the path only locates the tenant and account, compared in constant time after a per-address bucket and a 32 KiB cap. Every event is quarantined as unauthenticated and changes no state (ADR-0151 section 5 strict); off (EMAIL_WEBHOOK_ENABLED unset) it is a 404."
+  },
 
   // ---- Retired: answers 410 without reading anything ----
   {

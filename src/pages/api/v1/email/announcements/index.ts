@@ -29,7 +29,11 @@ import {
   resolveEnqueueEmailSender
 } from "../../../../../modules/email/application/email-sender-directory";
 import { validateAnnouncementInput } from "../../../../../modules/email/domain/announcement-validation";
-import { purposeForEmailCategory } from "../../../../../modules/email/domain/email-sender";
+import {
+  isRequestReservedEmailCategory,
+  purposeForEmailCategory,
+  TEMPLATE_CATEGORY_RESERVED_CODE
+} from "../../../../../modules/email/domain/email-sender";
 import {
   loadEmailSenderAccess,
   tryLoadEmailSenderPort
@@ -144,6 +148,17 @@ export const POST: APIRoute = async ({
     }
 
     const input = validation.value;
+
+    // Issue #1161: announcement routes no longer accept auth/security
+    // templates; security mail is sent only by internal ports.
+    if (isRequestReservedEmailCategory(input.templateKey)) {
+      return fail(
+        422,
+        TEMPLATE_CATEGORY_RESERVED_CODE,
+        "This template category is reserved for system security mail and cannot be sent as an announcement."
+      );
+    }
+
     const isBulk =
       input.target.type === "role" || input.target.type === "tenant";
     const requestHash = computeRequestHash(input);

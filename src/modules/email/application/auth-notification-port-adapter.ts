@@ -22,6 +22,7 @@
  */
 import { enqueueAnnouncement } from "./announcement-directory";
 import { enqueueDirectAddressEmail } from "./direct-address-notification";
+import { SECURITY_MAIL_GRANT } from "./security-mail-grant";
 import type {
   AuthAddressNotificationRequest,
   AuthNotificationPort,
@@ -41,7 +42,12 @@ export function createEmailAuthNotificationAdapter(): AuthNotificationPort {
         request.templateKey,
         request.variables,
         { type: "users", userIds: [request.recipientTenantUserId] },
-        request.correlationId ?? crypto.randomUUID()
+        request.correlationId ?? crypto.randomUUID(),
+        undefined,
+        undefined,
+        // The internal auth port is the sender of security mail (Issue #1161
+        // audit H-1): only `identity_access` reaches it, never a request body.
+        SECURITY_MAIL_GRANT
       );
 
       return { enqueued: (result?.recipientCount ?? 0) > 0 };
@@ -64,7 +70,9 @@ export function createEmailAuthNotificationAdapter(): AuthNotificationPort {
         request.templateKey,
         request.recipientAddress,
         request.variables,
-        request.correlationId ?? crypto.randomUUID()
+        request.correlationId ?? crypto.randomUUID(),
+        undefined,
+        SECURITY_MAIL_GRANT
       );
     }
   };

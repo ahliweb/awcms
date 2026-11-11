@@ -43,7 +43,7 @@ export type EmailSenderAccessContext = Pick<
 export type EmailSenderAccessGuard = {
   moduleKey: string;
   activityCode: string;
-  action: "read" | "configure" | "use";
+  action: "read" | "configure" | "use" | "approve";
 };
 
 export type EmailSenderAccess = {
@@ -115,6 +115,24 @@ export async function loadEmailSenderAccess(): Promise<EmailSenderAccess | null>
     };
   } catch {
     // A module import, not a query: default-deny.
+    return null;
+  }
+}
+
+/**
+ * Issue #1161: the Mailketing callback credential is a `channel_accounts`
+ * webhook subscription (ADR-0148, `sql/318`), so its reads and writes are that
+ * module's functions, loaded here and nowhere else in `email`. `null` when the
+ * module cannot be loaded: the callback route then refuses (default-deny) and
+ * the admin routes answer that the feature is unavailable.
+ */
+export type EmailWebhookSubscriptionDirectory =
+  typeof import("../../channel-accounts/application/webhook-subscription-directory");
+
+export async function tryLoadWebhookSubscriptionDirectory(): Promise<EmailWebhookSubscriptionDirectory | null> {
+  try {
+    return await import("../../channel-accounts/application/webhook-subscription-directory");
+  } catch {
     return null;
   }
 }

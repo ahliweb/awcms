@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 39    |
-| Migrations                          | 268   |
-| `awcms_*` tables                    | 267   |
-| Tables with `FORCE` RLS             | 249   |
+| Migrations                          | 270   |
+| `awcms_*` tables                    | 268   |
+| Tables with `FORCE` RLS             | 250   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 814   |
-| Route files                         | 661   |
+| Test files                          | 817   |
+| Route files                         | 666   |
 | ADR                                 | 320   |
 
 ### Modules
@@ -332,6 +332,8 @@
 | 266 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
 | 267 | `sql/373_awcms_social_dispatch_runtime_grants.sql`                     |
 | 268 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
+| 269 | `sql/379_awcms_email_provider_events_quarantine.sql`                   |
+| 270 | `sql/380_awcms_email_webhook_permissions.sql`                          |
 
 ### Tables & Row-Level Security
 
@@ -427,6 +429,7 @@
 | `awcms_edge_cache_purges`                      | `sql/068_awcms_edge_cache_purge_queue.sql`                 | yes | yes   |
 | `awcms_email_delivery_attempts`                | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_messages`                         | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_provider_events`                  | `sql/379_awcms_email_provider_events_quarantine.sql`       | yes | yes   |
 | `awcms_email_sender_policies`                  | `sql/346_awcms_email_sender_routing.sql`                   | yes | yes   |
 | `awcms_email_suppression_list`                 | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_templates`                        | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
@@ -609,16 +612,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 607        |
+| `(root)`      | 609        |
 | `e2e`         | 30         |
-| `integration` | 176        |
+| `integration` | 177        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 547   |
+| `/api/v1/**`    | 552   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

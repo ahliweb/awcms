@@ -9,6 +9,8 @@ import { defineModule } from "../_shared/module-contract";
  */
 export const EMAIL_MESSAGES_LIFECYCLE_KEY = "email.messages";
 export const EMAIL_ATTEMPTS_LIFECYCLE_KEY = "email.delivery_attempts";
+/** Issue #1161: the quarantine of provider-reported Mailketing events (`sql/379`). */
+export const EMAIL_PROVIDER_EVENTS_LIFECYCLE_KEY = "email.provider_events";
 
 export const emailModule = defineModule({
   key: "email",
@@ -174,6 +176,27 @@ export const emailModule = defineModule({
       action: "configure",
       description:
         "Set or clear the default email sender of a business scope; affects later messages only (high-risk, audited at warning)"
+    },
+    // Issue #1161 (`sql/380`). Enforced by GET/POST /email/webhook-callbacks,
+    // POST /email/webhook-callbacks/{id}/revoke, GET /email/provider-events and
+    // POST /email/provider-events/{id}/review.
+    {
+      activityCode: "webhook",
+      action: "read",
+      description:
+        "Read Mailketing webhook callback credentials (never the token) and the quarantine of provider-reported, unauthenticated delivery events (recipients masked)"
+    },
+    {
+      activityCode: "webhook",
+      action: "configure",
+      description:
+        "Issue, rotate or revoke the webhook callback URL of a Mailketing account (high-risk, audited at warning)"
+    },
+    {
+      activityCode: "provider_events",
+      action: "approve",
+      description:
+        "Confirm a quarantined bounce or unsubscribe into the suppression list, or dismiss it (high-risk, audited at warning)"
     }
   ],
   events: {
@@ -368,6 +391,20 @@ export const emailModule = defineModule({
         "The tenant's default email sender per business scope. Holds no recipient and no address of a person; the only person referenced is the operator who last changed it."
     },
     {
+      // Issue #1161 (`sql/379`). Keyed by a recipient HASH bound to our own
+      // message, never by account, so no per-tenant subject id reaches it; the
+      // only person-shaped column is the reviewer stamp.
+      key: "email.email_provider_events",
+      tableName: "awcms_email_provider_events",
+      ownerModuleKey: "email",
+      subjectColumns: [{ column: "reviewed_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Provider-reported, unauthenticated Mailketing delivery events (bounce, open, click, unsubscribe, delivered) quarantined for operator review. The recipient appears only as a lookup hash and a masked display form, a click only as a link host and hash; no address, URL, bounce text or provider payload is stored. The only person reached by account is the operator who reviewed a row; the rows themselves are bounded by this module's retention (90 days, a pending one 365).",
+      redactedColumns: ["recipient_hash", "link_hash", "dedupe_key"]
+    },
+    {
       key: "email.email_delivery_attempts",
       tableName: "awcms_email_delivery_attempts",
       ownerModuleKey: "email",
@@ -482,6 +519,56 @@ export const emailModule = defineModule({
           "src/modules/email/application/email-queue-purge.ts#purgeEmailQueue",
         description:
           "Deletes terminal (`sent`/`failed`/`cancelled`/`suppressed`) messages older than the cutoff in bounded batches, skipping any that still have attempt rows so the foreign key holds. Skips the whole step when a legal hold covers email.messages."
+      }
+    },
+    {
+      key: EMAIL_PROVIDER_EVENTS_LIFECYCLE_KEY,
+      tableName: "awcms_email_provider_events",
+      ownerModuleKey: "email",
+      scope: "tenant",
+      // Written ONLY by the table's trigger (database clock at insert), so no
+      // role can make a fresh row look old to the purge or to the floor.
+      cursorColumn: "received_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 30,
+      retentionMaxDays: 365,
+      defaultRetentionDays: 90,
+      partition: {
+        eligible: false,
+        rationale:
+          "Bounded by construction, not by the rate limit alone: an event that binds to no message this account sent is discarded; dedupe ignores the provider timestamp, so there is at most one row per (account, type, message) for bounce/open/delivered and one per (account, type, recipient, UTC day) for click/unsubscribe, with at most one pending unsubscribe per recipient; pending rows are capped per tenant (EMAIL_WEBHOOK_MAX_PENDING); and a 90-day window (365 for pending). There is no long history to range-scan."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "Unauthenticated provider reports with a recipient hash and masked address: evidence for an operator's decision, whose outcome (a suppression) is kept in the suppression list. Nothing here is worth a second, longer-lived copy."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Reviewed and informational rows after the window; a still-pending bounce or unsubscribe only after 365 days, because it may be a person's request nobody has acted on yet. A RESTRICTIVE policy (sql/379) refuses the worker any row younger than 30 days, or a pending one younger than 365."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "received_at"],
+          purpose:
+            "awcms_email_provider_events_retention_idx (sql/379) — the purge's own oldest-first scan."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists. A restore can bring back events past the window: the next purge removes them. A replayed provider delivery after a restore collapses on the (tenant, dedupe_key) unique key.",
+      executionMode: "delegated",
+      existingAdopter: {
+        jobCommand: "bun run email:queue:purge",
+        purgeFunctionRef:
+          "src/modules/email/application/email-queue-purge.ts#purgeEmailQueue",
+        description:
+          "Deletes reviewed and informational provider events older than 90 days, and pending ones older than 365, in bounded batches. Skips the step when a legal hold covers email.provider_events."
       }
     }
   ]

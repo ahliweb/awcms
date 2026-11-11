@@ -346,5 +346,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "crm_follow_up.rules.read",
   "crm_follow_up.stop_signals.create",
   "crm_follow_up.tasks.read",
-  "crm_follow_up.tasks.update"
+  "crm_follow_up.tasks.update",
+
+  // email Mailketing webhook (3) — Issue #1161, ADR-0151 section 5. API-first:
+  // the callback URL management and the quarantine review queue ("provider-
+  // reported, unauthenticated") belong to the email admin UI of Issue #1162,
+  // which claims these keys and removes them from this ledger in that change.
+  "email.provider_events.approve",
+  "email.webhook.configure",
+  "email.webhook.read"
 ];

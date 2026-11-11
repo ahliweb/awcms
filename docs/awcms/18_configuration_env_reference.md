@@ -434,6 +434,18 @@ environment variables; tenant senders always use Mailketing v2.
 | `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`   | Below this reported balance every sender of the account is held (`0` holds only on an unknown balance)                                       |
 | `EMAIL_SENDER_RATE_PER_HOUR`          | `300`   | Local cap per tenant sender per trailing hour (ADR-0151 M9)                                                                                  |
 
+Mailketing delivery callbacks (Issue #1161, ADR-0151 section 5, `strict` mode).
+Mailketing documents no way to authenticate a callback, so every event is
+quarantined as unauthenticated and changes no state until an operator confirms
+it.
+
+| Variable                              | Default | Purpose                                                                                                                                                    |
+| ------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_WEBHOOK_ENABLED`               | unset   | Exactly `true` opens `POST /api/v1/email/webhooks/mailketing/{token}`; otherwise it answers `404`                                                          |
+| `EMAIL_WEBHOOK_RATE_PER_MINUTE`       | `120`   | Accepted requests per minute per callback URL, after proof (10..6000)                                                                                      |
+| `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` | `3`     | Soft/unclassified bounces of one recipient on DISTINCT messages in 30 days before an operator may confirm one (2..20)                                      |
+| `EMAIL_WEBHOOK_MAX_PENDING`           | `5000`  | Pending (unreviewed) provider events per tenant (100..100000); past it, further bounces and unsubscribes are not recorded until operators review the queue |
+
 Concrete email provider credentials (e.g. `EMAIL_<PROVIDER>_API_TOKEN`) are
 added once that provider adapter is actually implemented — they are not
 registered up front.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:0ac50bd627283b67a3a1d98565b2ef1185de87f4ea81f5c3e30a27f4b753514a -->
+<!-- i18n-source-hash: sha256:ebef3cb8cfda2409c028d07197742919f4abb19d961eccde8f01aac30079da13 -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -428,6 +428,18 @@ tenant selalu memakai Mailketing v2.
 | `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`  | Verifikasi pengirim atau kredit akun yang lebih tua dari ini dianggap basi dan MENAHAN email; jalankan `email:senders:verify` lebih sering dari ini |
 | `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`  | Di bawah saldo yang dilaporkan ini, semua pengirim akun itu ditahan (`0` hanya menahan saat saldo tidak diketahui)                                  |
 | `EMAIL_SENDER_RATE_PER_HOUR`          | `300`  | Batas lokal per pengirim tenant per jam berjalan (ADR-0151 M9)                                                                                      |
+
+Callback pengiriman Mailketing (Issue #1161, ADR-0151 bagian 5, mode `strict`).
+Mailketing tidak mendokumentasikan cara mengautentikasi callback, jadi setiap
+event dikarantina sebagai tidak terautentikasi dan tidak mengubah state apa pun
+sampai operator mengonfirmasinya.
+
+| Variabel                              | Bawaan | Fungsi                                                                                                                                                 |
+| ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EMAIL_WEBHOOK_ENABLED`               | kosong | Tepat `true` membuka `POST /api/v1/email/webhooks/mailketing/{token}`; selain itu menjawab `404`                                                       |
+| `EMAIL_WEBHOOK_RATE_PER_MINUTE`       | `120`  | Permintaan diterima per menit per URL callback, setelah pembuktian (10..6000)                                                                          |
+| `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` | `3`    | Jumlah bounce lunak/tak terklasifikasi satu penerima pada pesan BERBEDA dalam 30 hari sebelum operator boleh mengonfirmasi (2..20)                     |
+| `EMAIL_WEBHOOK_MAX_PENDING`           | `5000` | Event pending (belum ditinjau) per tenant (100..100000); melewatinya, bounce dan unsubscribe berikutnya tidak dicatat sampai operator meninjau antrean |
 
 Kredensial provider email konkret (mis. `EMAIL_<PROVIDER>_API_TOKEN`)
 ditambahkan begitu adapter provider tersebut benar-benar diimplementasikan —

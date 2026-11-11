@@ -51,6 +51,16 @@ import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/applic
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import { countTelegramChatsByKeyId } from "../src/modules/telegram-delivery/application/telegram-chat-rekey";
 import { resolveTelegramEncryptionRingUnchecked } from "../src/modules/telegram-delivery/domain/telegram-config";
+import {
+  countSourceTokensByKeyId,
+  countSubmissionContactsByKeyId,
+  probeKeyMaterial
+} from "../src/modules/website-engagement/application/key-transition";
+import {
+  resolveWebsiteEngagementEncryptionRingUnchecked,
+  resolveWebsiteEngagementHashRingUnchecked,
+  resolveWebsiteEngagementLegacyHashKeysUnchecked
+} from "../src/modules/website-engagement/domain/engagement-config";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
 import {
@@ -755,6 +765,11 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // revoked, a contact ended in place, a message finalised; only the retention
   // job may purge receipts and messages) and UPDATE on the two append-only
   // ledgers (consent evidence and receipts are evidence, a correction is a new row).
+  // `sql/379` (Issue #1161). NOT retired -- the quarantine of provider-reported
+  // events, actively written (and reviewed, hence UPDATE). The runtime role has
+  // no DELETE at all: nothing in the request path deletes evidence, only the
+  // retention job (`awcms_worker`, under a restrictive floor and a trigger) does.
+  awcms_email_provider_events: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_endpoints: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_contacts: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_consents: ["SELECT", "INSERT"],
@@ -1448,6 +1463,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_email_delivery_attempts: ["INSERT", "DELETE", "SELECT"],
   awcms_email_templates: ["SELECT"],
   awcms_email_suppression_list: ["SELECT"],
+  // `sql/379` (Issue #1161) for `bun run email:queue:purge`: the quarantine of
+  // provider-reported events, under a RESTRICTIVE delete floor on
+  // `received_at` (a column only the table's trigger writes).
+  awcms_email_provider_events: ["SELECT", "DELETE"],
   awcms_workflow_tasks: ["SELECT", "UPDATE"],
   awcms_workflow_instances: ["SELECT"],
   awcms_workflow_definitions: ["SELECT"],
@@ -2569,13 +2588,50 @@ export const SOCIAL_RETENTION_FLOOR_POLICIES: readonly PinnedPolicy[] = [
   }
 ];
 
+/**
+ * sql/379 (Issue #1161, audit M-3 of PR #1272): the worker's retention DELETE
+ * on the Mailketing quarantine, pinned to its exact canonical expression.
+ */
+export const EMAIL_PROVIDER_EVENT_RETENTION_FLOOR_POLICY: PinnedPolicy = {
+  table: "awcms_email_provider_events",
+  policy: "awcms_email_provider_events_worker_retention_floor",
+  role: WORKER_ROLE,
+  command: "d",
+  expression:
+    "((received_at < (now() - '30 days'::interval)) AND ((review_status <> 'pending'::text) OR (received_at < (now() - '365 days'::interval))))"
+};
+
 /** A trigger whose function body is pinned exactly (whitespace-normalised `prosrc`). */
 export type PinnedTrigger = {
   table: string;
   trigger: string;
   fn: string;
   body: string;
+  /** Default `insert_update`: BEFORE INSERT OR UPDATE FOR EACH ROW. */
+  events?: "insert_update" | "delete";
 };
+
+/**
+ * sql/379: the only writer of `received_at` (the stamp the retention floor rests
+ * on) and the immutability of the quarantine; and the role-independent DELETE
+ * floor that holds where the restrictive policy does not bind (an owner, or a
+ * single-role deployment).
+ */
+export const EMAIL_PROVIDER_EVENT_TRIGGERS: readonly PinnedTrigger[] = [
+  {
+    table: "awcms_email_provider_events",
+    trigger: "awcms_email_provider_events_guard",
+    fn: "awcms_email_provider_events_guard",
+    body: "BEGIN IF TG_OP = 'INSERT' THEN NEW.received_at := now(); NEW.authenticity := 'unauthenticated'; IF NEW.review_status NOT IN ('pending', 'informational') THEN RAISE EXCEPTION 'a provider event is recorded unreviewed' USING ERRCODE = '23514'; END IF; RETURN NEW; END IF; IF NEW.id IS DISTINCT FROM OLD.id OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.subscription_id IS DISTINCT FROM OLD.subscription_id OR NEW.esp_account_id IS DISTINCT FROM OLD.esp_account_id OR NEW.email_message_id IS DISTINCT FROM OLD.email_message_id OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.event_type IS DISTINCT FROM OLD.event_type OR NEW.correlation IS DISTINCT FROM OLD.correlation OR NEW.provider_message_id IS DISTINCT FROM OLD.provider_message_id OR NEW.recipient_hash IS DISTINCT FROM OLD.recipient_hash OR NEW.recipient_masked IS DISTINCT FROM OLD.recipient_masked OR NEW.bounce_class IS DISTINCT FROM OLD.bounce_class OR NEW.status_code IS DISTINCT FROM OLD.status_code OR NEW.link_host IS DISTINCT FROM OLD.link_host OR NEW.link_hash IS DISTINCT FROM OLD.link_hash OR NEW.provider_reported_at IS DISTINCT FROM OLD.provider_reported_at OR NEW.dedupe_key IS DISTINCT FROM OLD.dedupe_key OR NEW.authenticity IS DISTINCT FROM OLD.authenticity OR NEW.received_at IS DISTINCT FROM OLD.received_at THEN RAISE EXCEPTION 'a provider event is immutable except its review' USING ERRCODE = '23514'; END IF; IF NEW.review_status IS DISTINCT FROM OLD.review_status THEN IF OLD.review_status <> 'pending' OR NEW.review_status NOT IN ('confirmed', 'dismissed') THEN RAISE EXCEPTION 'a provider event is reviewed once, from pending' USING ERRCODE = '23514'; END IF; NEW.reviewed_at := now(); ELSIF NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by OR NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at OR NEW.suppression_id IS DISTINCT FROM OLD.suppression_id THEN RAISE EXCEPTION 'a provider event review is final' USING ERRCODE = '23514'; END IF; RETURN NEW; END;"
+  },
+  {
+    table: "awcms_email_provider_events",
+    trigger: "awcms_email_provider_events_delete_floor",
+    fn: "awcms_email_provider_events_delete_floor",
+    events: "delete",
+    body: "BEGIN IF OLD.received_at >= now() - interval '30 days' OR (OLD.review_status = 'pending' AND OLD.received_at >= now() - interval '365 days') THEN RAISE EXCEPTION 'a provider event is deleted only by retention, past its window' USING ERRCODE = '23514'; END IF; RETURN OLD; END;"
+  }
+];
 
 /** sql/357: the only writers of `terminal_at`, the stamp the floors rest on. */
 export const SOCIAL_TERMINAL_STAMP_TRIGGERS: readonly PinnedTrigger[] = [
@@ -2651,10 +2707,11 @@ export async function pinTriggerFunction(
   db: Bun.SQL,
   pin: PinnedTrigger
 ): Promise<string | null> {
+  // tgtype bits: 1 ROW, 2 BEFORE, 4 INSERT, 8 DELETE, 16 UPDATE.
+  const shapeMask = pin.events === "delete" ? 1 | 2 | 8 : 1 | 2 | 4 | 16;
   const rows = (await db`
     SELECT t.tgenabled <> 'D' AS enabled,
-           (t.tgtype & 1) = 1 AND (t.tgtype & 2) = 2
-             AND (t.tgtype & 4) = 4 AND (t.tgtype & 16) = 16 AS shape_ok,
+           (t.tgtype & ${shapeMask}) = ${shapeMask} AS shape_ok,
            t.tgfoid = to_regproc(${pin.fn}) AS fn_ok,
            p.prosrc AS body
     FROM pg_trigger t
@@ -2678,7 +2735,7 @@ export async function pinTriggerFunction(
     !row.fn_ok ||
     normalizePolicyExpression(row.body) !== normalizePolicyExpression(pin.body)
   ) {
-    return `${label} is disabled, reshaped or no longer runs its reviewed body (the retention floor's terminal_at stamp could be forged)`;
+    return `${label} is disabled, reshaped or no longer runs its reviewed body (a retention floor's stamp could be forged or its floor bypassed)`;
   }
 
   return null;
@@ -2829,6 +2886,139 @@ export async function probeSocialDispatchSecretVisibility(
     return {
       ran: true,
       finding: `awcms_social_dispatch saw ${visible.length} secret(s) where exactly the one live, publish-granted social access token was expected (the row policies admit WhatsApp, refresh, unreferenced, denied or revoked secrets, or hide the legitimate one)`
+    };
+  }
+
+  return { ran: true };
+}
+
+/**
+ * The behavioural half of the sql/379 pins (Issue #1161, audit M-3 of PR
+ * #1272). In ONE transaction that is always rolled back: seed a throwaway
+ * tenant with four quarantined events whose `received_at` is back-dated (the
+ * guard trigger would stamp `now()`, so triggers are suspended for the seed via
+ * `session_replication_role`, superuser only), `SET LOCAL ROLE awcms_worker`,
+ * try to delete each one in its own savepoint, and require that exactly the two
+ * the retention rule allows are gone: a reviewed row of 100 days and a pending
+ * row of 400 days; never a reviewed row of 10 days or a pending row of 100.
+ *
+ * Skipped (and said so) on a connection that is not a superuser or cannot
+ * assume the worker role; the exact pins above are then the guard.
+ */
+export async function probeEmailProviderEventRetentionFloor(
+  db: Bun.SQL
+): Promise<{ ran: boolean; finding?: string }> {
+  const can = (await db`
+    SELECT rolsuper AS can FROM pg_roles WHERE rolname = current_user
+  `) as { can: boolean }[];
+
+  if (!can[0]?.can) return { ran: false };
+
+  const expectedGone = new Set<string>();
+  const gone = new Set<string>();
+
+  try {
+    await db.begin(async (tx) => {
+      const tenant = crypto.randomUUID();
+      const code = `probe-${tenant.slice(0, 8)}`;
+
+      await tx`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenant}, ${code}, ${code})
+      `;
+      await tx`SELECT set_config('app.current_tenant_id', ${tenant}, true)`;
+
+      const esp = (await tx`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, status)
+        VALUES (${tenant}, 'mailketing', 'esp_account', ${`probe-${code}`},
+                'probe', 'api_token', 'connected')
+        RETURNING id
+      `) as { id: string }[];
+      const subscription = crypto.randomUUID();
+
+      await tx`
+        INSERT INTO awcms_channel_webhook_subscriptions
+          (id, tenant_id, account_id, provider, callback_token_hash,
+           verification_mode, status)
+        VALUES (${subscription}, ${tenant}, ${esp[0]!.id}, 'mailketing',
+                ${`sha256:${"0".repeat(64)}`}, 'unauthenticated', 'active')
+      `;
+
+      await tx`SET LOCAL session_replication_role = replica`;
+
+      const seed = async (
+        reviewStatus: "pending" | "dismissed",
+        ageDays: number,
+        shouldGo: boolean
+      ): Promise<string> => {
+        const rows = (await tx`
+          INSERT INTO awcms_email_provider_events
+            (tenant_id, subscription_id, esp_account_id, email_message_id,
+             event_type, correlation, recipient_hash, recipient_masked,
+             dedupe_key, review_status, reviewed_at, received_at)
+          VALUES
+            (${tenant}, ${subscription}, ${esp[0]!.id}, ${crypto.randomUUID()},
+             'unsubscribe', 'recipient_only',
+             ${crypto.randomUUID().replaceAll("-", "").repeat(2)}, 'p***',
+             ${crypto.randomUUID().replaceAll("-", "").repeat(2)},
+             ${reviewStatus},
+             ${reviewStatus === "pending" ? null : new Date()},
+             now() - make_interval(days => ${ageDays}))
+          RETURNING id
+        `) as { id: string }[];
+
+        if (shouldGo) expectedGone.add(rows[0]!.id);
+
+        return rows[0]!.id;
+      };
+
+      const ids = [
+        await seed("dismissed", 10, false),
+        await seed("dismissed", 100, true),
+        await seed("pending", 100, false),
+        await seed("pending", 400, true)
+      ];
+
+      await tx`SET LOCAL session_replication_role = origin`;
+      await tx.unsafe(`SET LOCAL ROLE ${WORKER_ROLE}`);
+
+      for (const id of ids) {
+        try {
+          await tx.savepoint(async (sp) => {
+            const deleted = (await sp`
+              DELETE FROM awcms_email_provider_events WHERE id = ${id}
+              RETURNING id
+            `) as { id: string }[];
+
+            if (deleted.length > 0) gone.add(id);
+          });
+        } catch {
+          // tx-swallow-ok: savepoint — the trigger refusing an ineligible row
+          // rolls back to the savepoint only; the probe records "not gone".
+        }
+      }
+
+      throw new RollbackProbe();
+    });
+  } catch (error) {
+    if (!(error instanceof RollbackProbe)) {
+      return {
+        ran: true,
+        finding: `the awcms_email_provider_events retention probe could not run: ${errorMessage(error)}`
+      };
+    }
+  }
+
+  const same =
+    gone.size === expectedGone.size &&
+    [...gone].every((id) => expectedGone.has(id));
+
+  if (!same) {
+    return {
+      ran: true,
+      finding: `awcms_worker deleted ${gone.size} of 4 probe rows from awcms_email_provider_events where exactly the 2 past their retention window were expected (the floor no longer protects young or pending quarantine rows, or the purge can no longer remove expired ones)`
     };
   }
 
@@ -3546,6 +3736,28 @@ export async function checkWorkerSetupRoleGrants(
 
         if (finding) findings.push(finding);
       }
+
+      // sql/379 (Issue #1161, audit M-3 of PR #1272): the worker's DELETE on
+      // the Mailketing quarantine, its two triggers (the only writer of the
+      // `received_at` stamp the floor rests on, and the role-independent
+      // delete floor), each pinned exactly, then PROBED on back-dated rows in a
+      // rolled-back transaction.
+      const floorFinding = await pinPolicyExpression(
+        sql,
+        EMAIL_PROVIDER_EVENT_RETENTION_FLOOR_POLICY
+      );
+
+      if (floorFinding) findings.push(floorFinding);
+
+      for (const pin of EMAIL_PROVIDER_EVENT_TRIGGERS) {
+        const finding = await pinTriggerFunction(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+
+      const floorProbe = await probeEmailProviderEventRetentionFloor(sql);
+
+      if (floorProbe.finding) findings.push(floorProbe.finding);
     }
 
     // sql/358 (Issue #1145, ADR-0157 section 6): the social dispatcher's own
@@ -3924,6 +4136,10 @@ export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
     "integrity hash of the template variables; not a login secret",
   "awcms_email_suppression_list.recipient_hash":
     "keyed hash of a suppressed address; not a login secret",
+  "awcms_email_provider_events.recipient_hash":
+    "the same lookup hash of a recipient address as awcms_email_messages.to_address_hash, binding a quarantined provider event to our message (sql/379); not a login secret",
+  "awcms_email_provider_events.link_hash":
+    "SHA-256 of a clicked link reported by the provider, kept instead of the URL so the link is never stored, rendered or fetched (sql/379); not a secret",
   "awcms_idempotency_keys.request_hash":
     "keyed hash of the request body that binds a replay to its first request (ADR-0145); not a login secret",
   "awcms_idn_admin_regions.source_row_hash":
@@ -6018,6 +6234,8 @@ type KeyIdCountInput = {
   name: string;
   ringEnv: string;
   rekeyCommand: string;
+  /** Replaces the "Run `bun run <rekeyCommand>`" advice when a dataset has no re-key job. */
+  remedy?: string;
   ring: { ok: true; keys: { id: string }[] } | { ok: false };
   count: typeof countPushAuthSecretsByKeyId;
 };
@@ -6088,7 +6306,7 @@ async function checkCiphertextKeyIdDistribution(
         name,
         severity,
         status: "fail",
-        evidence: `${stale} row(s) are still under a key id other than the active key "${activeKeyId}" (rows per key id: ${summary}). Run \`bun run ${input.rekeyCommand}\` (idempotent, resumable); an old key in ${input.ringEnv} may be removed only once this reaches zero.`
+        evidence: `${stale} row(s) are still under a key id other than the active key "${activeKeyId}" (rows per key id: ${summary}). ${input.remedy ?? `Run \`bun run ${input.rekeyCommand}\` (idempotent, resumable);`} an old key in ${input.ringEnv} may be removed only once this reaches zero.`
       };
     }
 
@@ -6134,6 +6352,184 @@ export function checkTelegramChatKeyIds(
     ring: ring.ok ? ring : { ok: false },
     count: countTelegramChatsByKeyId
   });
+}
+
+export type WebsiteEngagementMaterialFindings = {
+  /** Encryption key ids whose sample ciphertext does not decrypt. */
+  contactUnreadable: string[];
+  /** Hash key ids whose sample identifier hash does not recompute. */
+  hashMismatch: string[];
+  /** Hash key ids of LIVE source tokens that no configured key carries. */
+  tokenUnknown: string[];
+};
+
+/**
+ * #1269 audit M-1: a key id count proves nothing about MATERIAL. `k1` reused
+ * for a new key passes an id comparison while every old row stays shut. This
+ * decrypts ONE sample per encryption key id and recomputes ONE sample
+ * identifier hash per hash key id, per tenant, and reports only key ids.
+ */
+export async function probeWebsiteEngagementMaterial(
+  env: NodeJS.ProcessEnv,
+  // Type inferred on purpose: a `name: Bun.SQL` annotation makes
+  // db:transaction-swallow:check treat `sql` as a transaction handle file-wide.
+  sql = getDatabaseClient()
+): Promise<WebsiteEngagementMaterialFindings> {
+  const encryption = resolveWebsiteEngagementEncryptionRingUnchecked(env);
+  const hash = resolveWebsiteEngagementHashRingUnchecked(env);
+  const legacy = resolveWebsiteEngagementLegacyHashKeysUnchecked(env);
+  const hashKeys = [
+    ...(hash.ok ? hash.keys : []),
+    ...(legacy.ok ? legacy.keys : [])
+  ];
+  const tenants = (await sql`
+    SELECT id FROM awcms_tenants ORDER BY id
+  `) as { id: string }[];
+  const contactUnreadable = new Set<string>();
+  const hashMismatch = new Set<string>();
+  const tokenUnknown = new Set<string>();
+
+  for (const tenant of tenants) {
+    const probe = await probeKeyMaterial(
+      sql,
+      tenant.id,
+      encryption.ok ? encryption : null,
+      hashKeys
+    );
+
+    for (const [keyId, state] of Object.entries(probe.contact)) {
+      if (state !== "ok") contactUnreadable.add(keyId);
+    }
+
+    for (const [keyId, state] of Object.entries(probe.identifierHash)) {
+      if (state === "mismatch") hashMismatch.add(keyId);
+    }
+
+    for (const keyId of Object.keys(
+      await countSourceTokensByKeyId(sql, tenant.id)
+    )) {
+      if (!hashKeys.some((key) => key.id === keyId)) tokenUnknown.add(keyId);
+    }
+  }
+
+  const sorted = (set: Set<string>) => [...set].sort();
+
+  return {
+    contactUnreadable: sorted(contactUnreadable),
+    hashMismatch: sorted(hashMismatch),
+    tokenUnknown: sorted(tokenUnknown)
+  };
+}
+
+/**
+ * Adds the material verdict to an id-distribution result: a finding turns even
+ * a `pass` into `fail` (the M-1 case, where every id "matches"). Key ids only.
+ */
+export async function withMaterialProbe(
+  base: SecurityCheckResult,
+  verdict: (findings: WebsiteEngagementMaterialFindings) => string | null,
+  probe: () => Promise<WebsiteEngagementMaterialFindings>
+): Promise<SecurityCheckResult> {
+  // A count that already failed to run has nothing to add to.
+  if (base.evidence.startsWith("Could not count")) return base;
+
+  try {
+    const problem = verdict(await probe());
+
+    return problem
+      ? { ...base, status: "fail", evidence: `${problem} ${base.evidence}` }
+      : base;
+  } catch (error) {
+    return {
+      ...base,
+      status: "fail",
+      evidence: `Could not verify key material: ${errorMessage(error)}.`
+    };
+  }
+}
+
+/**
+ * Issue #1262: live website source tokens still hashed under a key other than
+ * the hash ring's active one, which includes every token still verified only by
+ * `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS`. There is no re-key job for a token (its
+ * secret is not stored): it is re-hashed on its next accepted submission, or
+ * moved by rotating it. #1269 M-1: plus a material check (see above).
+ */
+export async function checkWebsiteEngagementTokenKeyIds(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<SecurityCheckResult> {
+  const ring = resolveWebsiteEngagementHashRingUnchecked(env);
+
+  const base = await checkCiphertextKeyIdDistribution({
+    name: "Website engagement source tokens are under the active hash key",
+    ringEnv:
+      "WEBSITE_ENGAGEMENT_HASH_KEYS (or WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS)",
+    rekeyCommand: "",
+    remedy:
+      "Each source is re-hashed on its next accepted submission; rotate any source that does not submit (POST /api/v1/website-engagement/sources/{id}/rotate);",
+    ring: ring.ok ? ring : { ok: false },
+    count: countSourceTokensByKeyId
+  });
+
+  return withMaterialProbe(base, websiteEngagementTokenMaterialProblem, () =>
+    probeWebsiteEngagementMaterial(env)
+  );
+}
+
+/** The token check's verdict on the material findings; `null` when sound. */
+export function websiteEngagementTokenMaterialProblem(
+  findings: WebsiteEngagementMaterialFindings
+): string | null {
+  const problems: string[] = [];
+
+  if (findings.tokenUnknown.length > 0) {
+    problems.push(
+      `Live source tokens are under key id(s) ${findings.tokenUnknown.join(", ")} that neither WEBSITE_ENGAGEMENT_HASH_KEYS nor WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS carries: those sources are refused.`
+    );
+  }
+
+  if (findings.hashMismatch.length > 0) {
+    problems.push(
+      `A sample hash under key id(s) ${findings.hashMismatch.join(", ")} does not recompute under the configured key of that id: the id was reused for different material, so tokens under it are refused. Restore the original key under its original id and give the new key a NEW id.`
+    );
+  }
+
+  return problems.length > 0 ? problems.join(" ") : null;
+}
+
+/** The contact check's verdict on the material findings; `null` when sound. */
+export function websiteEngagementContactMaterialProblem(
+  findings: WebsiteEngagementMaterialFindings
+): string | null {
+  return findings.contactUnreadable.length > 0
+    ? `A sample contact ciphertext under key id(s) ${findings.contactUnreadable.join(", ")} does not decrypt under WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS (the key is missing, or its id was reused for different material): those submissions cannot be revealed.`
+    : null;
+}
+
+/**
+ * Issue #1262: submission contact ciphertexts still under a key other than the
+ * encryption ring's active one (after the transition: the retired single-ring
+ * key). There is deliberately no re-encryption job: a submission is append-only
+ * evidence (sql/327 guard), so old rows leave by retention or withdrawal.
+ */
+export async function checkWebsiteEngagementContactKeyIds(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<SecurityCheckResult> {
+  const ring = resolveWebsiteEngagementEncryptionRingUnchecked(env);
+
+  const base = await checkCiphertextKeyIdDistribution({
+    name: "Website engagement contact ciphertexts are under the active key",
+    ringEnv: "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+    rekeyCommand: "",
+    remedy:
+      "There is no re-encryption job (a submission is append-only evidence); these rows leave through the retention purge or a withdrawal;",
+    ring: ring.ok ? ring : { ok: false },
+    count: countSubmissionContactsByKeyId
+  });
+
+  return withMaterialProbe(base, websiteEngagementContactMaterialProblem, () =>
+    probeWebsiteEngagementMaterial(env)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -6736,6 +7132,8 @@ export async function runSecurityReadinessChecks(): Promise<
     checkPushAuthSecretRingConfigured(),
     await checkPushAuthSecretKeyIds(),
     await checkTelegramChatKeyIds(),
+    await checkWebsiteEngagementTokenKeyIds(),
+    await checkWebsiteEngagementContactKeyIds(),
     // MUST stay last: it closes the shared database pool when it finishes.
     await checkEntitlementBlastRadius()
   ];

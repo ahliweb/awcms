@@ -39,7 +39,8 @@ import { recordAuditEvent } from "../../logging/application/audit-log";
 import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
 import {
   EMAIL_ATTEMPTS_LIFECYCLE_KEY,
-  EMAIL_MESSAGES_LIFECYCLE_KEY
+  EMAIL_MESSAGES_LIFECYCLE_KEY,
+  EMAIL_PROVIDER_EVENTS_LIFECYCLE_KEY
 } from "../module";
 
 /**
@@ -49,6 +50,15 @@ import {
  */
 export const EMAIL_MESSAGE_DEFAULT_RETENTION_DAYS = 90;
 export const EMAIL_ATTEMPT_DEFAULT_RETENTION_DAYS = 30;
+/**
+ * Issue #1161: the quarantine of provider-reported events. Reviewed and
+ * informational rows go after 90 days; a still-PENDING row (an unreviewed
+ * bounce or unsubscribe, i.e. possibly a person's request) is kept for a year.
+ * The database floor (`sql/379`) refuses anything younger than 30 days, or a
+ * pending row younger than 365, whatever this code asks for.
+ */
+export const EMAIL_PROVIDER_EVENT_DEFAULT_RETENTION_DAYS = 90;
+export const EMAIL_PROVIDER_EVENT_PENDING_RETENTION_DAYS = 365;
 export const EMAIL_PURGE_BATCH_LIMIT = 5000;
 
 /**
@@ -86,6 +96,7 @@ export type PurgeEmailQueueOptions = {
 export type PurgeEmailQueueResult = {
   purgedAttempts: number;
   purgedMessages: number;
+  purgedProviderEvents: number;
 };
 
 type IdRow = { id: string };
@@ -113,7 +124,8 @@ export async function purgeEmailQueue(
     async (tx) => {
       const result: PurgeEmailQueueResult = {
         purgedAttempts: 0,
-        purgedMessages: 0
+        purgedMessages: 0,
+        purgedProviderEvents: 0
       };
 
       // 1. Attempts. Gated on its OWN descriptor: a hold placed on the attempt
@@ -172,7 +184,46 @@ export async function purgeEmailQueue(
         result.purgedMessages = deleted.length;
       }
 
-      const total = result.purgedAttempts + result.purgedMessages;
+      // 3. Provider events (Issue #1161). Independent of the two above: an
+      //    event REFERENCES a message without a foreign key, so neither purge
+      //    blocks the other.
+      if (
+        !(await legalHoldGuard.isDescriptorHeld(
+          tx,
+          tenantId,
+          EMAIL_PROVIDER_EVENTS_LIFECYCLE_KEY
+        ))
+      ) {
+        const reviewedCutoff = resolveEmailRetentionCutoff(
+          now,
+          EMAIL_PROVIDER_EVENT_DEFAULT_RETENTION_DAYS
+        );
+        const pendingCutoff = resolveEmailRetentionCutoff(
+          now,
+          EMAIL_PROVIDER_EVENT_PENDING_RETENTION_DAYS
+        );
+        const deleted = (await tx`
+          DELETE FROM awcms_email_provider_events
+          WHERE id IN (
+            SELECT id FROM awcms_email_provider_events
+            WHERE tenant_id = ${tenantId}
+              AND (
+                (review_status <> 'pending' AND received_at < ${reviewedCutoff})
+                OR received_at < ${pendingCutoff}
+              )
+            ORDER BY received_at ASC
+            LIMIT ${batchLimit}
+          )
+          RETURNING id
+        `) as IdRow[];
+
+        result.purgedProviderEvents = deleted.length;
+      }
+
+      const total =
+        result.purgedAttempts +
+        result.purgedMessages +
+        result.purgedProviderEvents;
 
       if (total > 0) {
         await recordAuditEvent(tx, {
@@ -185,6 +236,7 @@ export async function purgeEmailQueue(
           attributes: {
             purgedAttempts: result.purgedAttempts,
             purgedMessages: result.purgedMessages,
+            purgedProviderEvents: result.purgedProviderEvents,
             messageCutoff: messageCutoff.toISOString(),
             attemptCutoff: attemptCutoff.toISOString(),
             ...(options.correlationId
