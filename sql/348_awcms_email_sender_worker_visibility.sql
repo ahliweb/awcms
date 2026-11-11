@@ -72,6 +72,7 @@ CREATE POLICY awcms_channel_secrets_worker_dispatch_purposes
             AND a.secret_id = awcms_channel_secrets.id
             AND a.provider = 'mailketing'
             AND a.account_kind = 'esp_account'
+            AND a.status = 'connected'
             AND a.deleted_at IS NULL
         )
       )

@@ -391,6 +391,54 @@ async function claimSenderLane(
   );
 }
 
+/**
+ * Issue #1160 audit L4: the hold budget for tenant-sender rows nothing claims
+ * (routing switched off, the account's breaker open, the sender's hourly cap
+ * reached). Waiting rows older than `EMAIL_SENDER_HOLD_BUDGET_MS` FAIL with a
+ * named reason instead of going out hours late. Bounded per pass; never sends
+ * anything and never re-points a row. `senderAccountId` NULL means every
+ * tenant sender of the tenant (the routing-off case); the deployment sender's
+ * rows (`sender_account_id` NULL) are never touched.
+ */
+async function expireOverdueSenderRows(
+  sql: Bun.SQL,
+  tenantId: string,
+  now: Date,
+  senderAccountId: string | null
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - EMAIL_SENDER_HOLD_BUDGET_MS);
+
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      const rows = await tx`
+        WITH overdue AS MATERIALIZED (
+          SELECT id FROM awcms_email_messages
+          WHERE tenant_id = ${tenantId}
+            AND sender_account_id IS NOT NULL
+            AND (${senderAccountId}::uuid IS NULL
+                 OR sender_account_id = ${senderAccountId}::uuid)
+            AND status IN ('queued', 'retry_wait')
+            AND created_at <= ${cutoff}
+          ORDER BY created_at
+          LIMIT 500
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE awcms_email_messages AS t
+        SET status = 'failed', next_attempt_at = null,
+            last_error = 'SENDER_HOLD_BUDGET_EXCEEDED: the sender could not send (routing off, breaker open or hourly cap reached) for longer than the hold budget; the message was not sent and was not rerouted.'
+        FROM overdue
+        WHERE t.id = overdue.id
+        RETURNING t.id
+      `;
+
+      return (rows as unknown[]).length;
+    },
+    { workClass: "background_sync" }
+  );
+}
+
 /** `awcms_tenants` has no RLS (it's the root table, not tenant-scoped data — same reasoning `object-sync-dispatch.ts` relies on) — queried directly, no `withTenant` needed. Falls back to `DEFAULT_RENDER_LOCALE` if the tenant row is somehow missing (defensive; should never happen for an active tenant). */
 async function fetchTenantDefaultLocale(
   sql: Bun.SQL,
@@ -1025,7 +1073,17 @@ export async function dispatchEmailQueue(
   const senders = options.senders;
   const credentials = options.credentials;
 
-  if (!senders || !credentials || !isEmailSenderRoutingEnabled(env)) {
+  if (!senders || !credentials) {
+    return result;
+  }
+
+  if (!isEmailSenderRoutingEnabled(env)) {
+    // Audit L4: with routing switched off nothing claims a tenant-sender row,
+    // so the hold budget is applied here instead: a row older than it FAILS
+    // (`SENDER_HOLD_BUDGET_EXCEEDED`) rather than going out hours later when
+    // routing is turned back on. It is never sent through the deployment.
+    result.failed += await expireOverdueSenderRows(sql, tenantId, now, null);
+
     return result;
   }
 
@@ -1174,6 +1232,13 @@ export async function dispatchEmailQueue(
         moduleKey: MODULE_KEY,
         senderAccountId: laneSenderId
       });
+      // Audit L4: the lane waits, but not past the hold budget.
+      result.failed += await expireOverdueSenderRows(
+        sql,
+        tenantId,
+        now,
+        laneSenderId
+      );
       return;
     }
 
@@ -1195,6 +1260,12 @@ export async function dispatchEmailQueue(
         moduleKey: MODULE_KEY,
         senderAccountId: laneSenderId
       });
+      result.failed += await expireOverdueSenderRows(
+        sql,
+        tenantId,
+        now,
+        laneSenderId
+      );
       return;
     }
 

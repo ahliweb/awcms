@@ -946,7 +946,13 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
           first ? { ok: true, value: 500 } : { ok: false, failure: "auth" },
         listVerifiedSenders: async () =>
           first
-            ? { ok: true, value: new Set([s1!.address]) }
+            ? {
+                ok: true,
+                value: {
+                  verified: new Set([s1!.address]),
+                  ambiguous: new Set<string>()
+                }
+              }
             : { ok: false, failure: "auth" }
       };
     };
@@ -999,5 +1005,184 @@ suite("email sender routing against PostgreSQL (Issue #1160)", () => {
         businessScope: SCOPE_X
       })
     ).toMatchObject({ ok: false, reason: "SENDER_UNAVAILABLE" });
+  });
+
+  describe("audit M2: a parent lends only to a child whose scope it contains", () => {
+    const SCOPE_Y = {
+      type: "brand",
+      id: "d1160000-0000-4000-8000-0000000000b2"
+    };
+
+    /** A brand-Y sender registered (bypassing the route) under brand X's scoped account. */
+    async function seedCrossScopeSender(): Promise<{
+      id: string;
+      address: string;
+    }> {
+      const address = "cross@brand-y.example";
+      const rows = (await getAdminSql()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, business_scope_type, business_scope_id, provider,
+           account_kind, external_id, display_name, auth_mode, status,
+           parent_account_id)
+        VALUES (${TENANT_A}, ${SCOPE_Y.type}, ${SCOPE_Y.id}, 'mailketing',
+                'sender_identity', ${address}, 'Brand Y', 'api_token',
+                'connected', ${fx(TENANT_A).accounts[1]!.id})
+        RETURNING id
+      `) as { id: string }[];
+      const id = rows[0]!.id;
+
+      await getAdminSql()`
+        UPDATE awcms_channel_accounts
+        SET business_scope_type = ${SCOPE_X.type},
+            business_scope_id = ${SCOPE_X.id}
+        WHERE id = ${fx(TENANT_A).accounts[1]!.id}
+      `;
+      await getAdminSql()`
+        INSERT INTO awcms_channel_account_capabilities
+          (tenant_id, account_id, capability, state, evidence_kind,
+           evidence_ref, matrix_version, verified_at)
+        VALUES (${TENANT_A}, ${id}, 'dm', 'granted', 'written_authorization',
+                'evidence-1', ${PROVIDER_MATRIX_VERSION}, now())
+      `;
+      await health(TENANT_A, id, "ok");
+
+      return { id, address };
+    }
+
+    test("layer 2 (lending): the port and the credential refuse, even with the database guard switched off", async () => {
+      await requireWorker();
+      const cross = await seedCrossScopeSender();
+
+      expect(
+        await enqueue(TENANT_A, {
+          senderAccountId: cross.id,
+          businessScope: SCOPE_Y
+        })
+      ).toMatchObject({ ok: false, reason: "SENDER_UNAVAILABLE" });
+
+      const credential = await inTenant(TENANT_A, (tx) =>
+        credentials.resolveEmailCredential(tx, {
+          tenantId: TENANT_A,
+          accountId: cross.id
+        })
+      );
+
+      expect(credential).toEqual({
+        ok: false,
+        reason: "CREDENTIAL_UNAVAILABLE"
+      });
+
+      // Mutation: with the trigger DISABLED a row can be queued; the lending
+      // check alone still stops brand Y from spending brand X's token.
+      await getAdminSql()`
+        ALTER TABLE awcms_email_messages DISABLE TRIGGER awcms_email_messages_sender_guard
+      `;
+
+      try {
+        await getAdminSql()`
+          INSERT INTO awcms_email_messages
+            (tenant_id, category, template_key, to_address, to_address_hash,
+             to_address_masked, subject, sender_account_id, sender_selection,
+             sender_address, business_scope_type, business_scope_id)
+          VALUES (${TENANT_A}, 'system.announcement', 'system.announcement',
+                  'x@y.test', 'h-cross', 'x***', 's', ${cross.id}, 'explicit',
+                  ${cross.address}, ${SCOPE_Y.type}, ${SCOPE_Y.id})
+        `;
+      } finally {
+        await getAdminSql()`
+          ALTER TABLE awcms_email_messages ENABLE TRIGGER awcms_email_messages_sender_guard
+        `;
+      }
+
+      const h = harness();
+
+      await dispatch(TENANT_A, h);
+      expect(h.sent).toEqual([]);
+    });
+
+    test("layer 3 (database): the guard refuses a brand-Y row borrowing brand X's account", async () => {
+      const cross = await seedCrossScopeSender();
+
+      await expectPgRejected(
+        inTenant(
+          TENANT_A,
+          (tx) => tx`
+            INSERT INTO awcms_email_messages
+              (tenant_id, category, template_key, to_address, to_address_hash,
+               to_address_masked, subject, sender_account_id, sender_selection,
+               sender_address, business_scope_type, business_scope_id)
+            VALUES (${TENANT_A}, 'system.announcement', 'system.announcement',
+                    'x@y.test', 'h', 'x***', 's', ${cross.id}, 'explicit',
+                    ${cross.address}, ${SCOPE_Y.type}, ${SCOPE_Y.id})
+          `
+        ),
+        "cross-scope borrow",
+        "23514"
+      );
+    });
+
+    test("createAccount refuses a child outside its parent's scope", async () => {
+      await getAdminSql()`
+        UPDATE awcms_channel_accounts
+        SET business_scope_type = ${SCOPE_X.type},
+            business_scope_id = ${SCOPE_X.id}
+        WHERE id = ${fx(TENANT_A).accounts[1]!.id}
+      `;
+
+      const { createAccount } =
+        await import("../../src/modules/channel-accounts/application/account-directory");
+      const result = await inTenant(TENANT_A, (tx) =>
+        createAccount(tx, TENANT_A, fx(TENANT_A).userId, {
+          provider: "mailketing",
+          accountKind: "sender_identity",
+          externalId: "y2@brand-y.example",
+          displayName: "Y",
+          authMode: "api_token",
+          connectionId: null,
+          parentAccountId: fx(TENANT_A).accounts[1]!.id,
+          businessScope: SCOPE_Y
+        })
+      );
+
+      expect(result).toEqual({ outcome: "refused", code: "PARENT_INVALID" });
+    });
+  });
+
+  test("audit M3/Info: the worker never sees a sender_identity's own token, and the credential port never uses one", async () => {
+    await requireWorker();
+    const sender = fx(TENANT_A).senders[0]!;
+    const ref = await inTenant(TENANT_A, (tx) =>
+      store.put(tx, {
+        tenantId: TENANT_A,
+        purpose: "api_token",
+        plaintext: "CANARY-sender-own-tok",
+        createdBy: null
+      })
+    );
+
+    await getAdminSql()`
+      UPDATE awcms_channel_accounts SET secret_id = ${ref.secretId}
+      WHERE id = ${sender.id}
+    `;
+
+    const seen = (await withTenantOrThrow(
+      getWorkerRoleSql(),
+      TENANT_A,
+      (tx) => tx`SELECT id FROM awcms_channel_secrets`
+    )) as { id: string }[];
+
+    expect(seen.map((row) => row.id)).not.toContain(ref.secretId);
+
+    const credential = await inTenant(TENANT_A, (tx) =>
+      credentials.resolveEmailCredential(tx, {
+        tenantId: TENANT_A,
+        accountId: sender.id
+      })
+    );
+
+    expect(credential).toMatchObject({
+      ok: true,
+      credential: fx(TENANT_A).accounts[0]!.token
+    });
   });
 });

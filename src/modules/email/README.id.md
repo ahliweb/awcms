@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:cb964c8b7c8ec56accd7398bd6b8f8325b7095e52cb8950c967a14ab8dea2070 -->
+<!-- i18n-source-hash: sha256:b5fc3fddd43d4667130060a4f9eb77d780d3641691242b76316904996de5f70b -->
 
 # Email
 
@@ -276,20 +276,35 @@ token di JSON pengaturan atau di browser.
   token induknya hanya selama induk `connected`. Kapabilitas (`dm` untuk email
   transaksional) diberikan dengan bukti lewat rute `channel_accounts` yang ada.
 - **Terverifikasi berarti provider yang menyatakannya.**
-  `bun run email:senders:verify` (per jam, sebagai `awcms_app`) memanggil
+  `bun run email:senders:verify` (sebagai `awcms_app`) memanggil
   `GET /api/v2/credits` dan `GET /api/v2/senders` yang hanya-baca per akun dan
   mencatat health: pengirim yang terdaftar terverifikasi menjadi `connected`;
-  yang tidak terdaftar `degraded`/`SENDER_UNVERIFIED`; respons yang tak dikenali
-  `unknown`; 401 mengeluarkan akun dari layanan; probe yang tak mempelajari
-  apa pun tidak menulis apa pun (faktanya menjadi basi). Repo ini **tidak
+  yang tidak terdaftar `degraded`/`SENDER_UNVERIFIED`; respons yang tak
+  dikenali, atau entri yang saling bertentangan untuk satu alamat, `unknown`;
+  401 mengeluarkan akun dari layanan; probe yang tak mempelajari apa pun tidak
+  menulis apa pun (faktanya menjadi basi); hasil dibuang bila token akun diganti
+  selama probe berjalan. **Job ini manual: TIDAK ada di crontab yang
+  di-generate** (ia menulis health channel-account, yang hanya boleh dilakukan
+  `awcms_app`, dan Issue #1132 menjauhkan koneksi app dari job crontab).
+  Operator wajib menjadwalkannya lebih sering dari
+  `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` (360). Tanpa jadwal itu setiap pengirim
+  tenant menjadi basi setelah 360 menit, emailnya ditahan lalu GAGAL
+  (`SENDER_HOLD_BUDGET_EXCEEDED`) satu jam setelah enqueue; tidak ada yang
+  dialihkan ke pengirim deployment. Repo ini **tidak
   membuat atau memverifikasi domain di Mailketing**: API terdokumentasi tidak
   menyediakan panggilan itu. SPF/DKIM/DMARC diatur orang di DNS tenant dan di
   provider; hanya putusan provider yang dibaca.
 - **Enqueue.** `POST /api/v1/email/announcements` menerima `senderAccountId` /
-  `businessScope` opsional (butuh `email.senders.use` plus aturan akses
-  channel-account). Pengirim adalah yang eksplisit, jika tidak default prospektif
-  scope itu (`PUT /api/v1/email/sender-policy`, `email.sender_policy.configure`,
-  berisiko tinggi, idempoten, diaudit), jika tidak pengirim deployment.
+  `businessScope` opsional. Pengirim adalah yang eksplisit, jika tidak default
+  prospektif scope itu (atau tenant-wide) (`PUT /api/v1/email/sender-policy`,
+  `email.sender_policy.configure`, berisiko tinggi, idempoten, diaudit), jika
+  tidak pengirim deployment. Setiap kali hasilnya pengirim TENANT (disebut, atau
+  dipilih kebijakan, termasuk tenant-wide) atau business scope disebut, pemanggil
+  butuh `email.senders.use` DAN aturan akses channel-account pada pengirim itu
+  (assignment, scope); kebijakan menentukan brand mana yang berbicara, bukan
+  mengizinkan setiap pengirim surel berbicara atas namanya. Pengirim tenant
+  wajib milik akun Mailketing yang business scope-nya mencakup scope-nya
+  (ditegakkan saat registrasi, setiap peminjaman token, dan oleh trigger).
   Pengirim terpilih, alamat terverifikasi dan nama tampilannya, versi kebijakan,
   dan business scope **di-snapshot tak-berubah** di setiap baris (`sql/346`,
   ditegakkan trigger untuk semua role). Pengirim yang tak bisa mengirim adalah
@@ -304,9 +319,12 @@ token di JSON pengaturan atau di browser.
   `EMAIL_MAILKETING_CREDIT_FLOOR`; diklaim di bawah batas per jam
   (`EMAIL_SENDER_RATE_PER_HOUR`, advisory lock per pengirim); dikirim lewat
   provider v2 dengan token akun itu (didekripsi di memori, `sql/348` hanya
-  membolehkan worker melihat token milik `esp_account` hidup) dan breaker
+  membolehkan worker melihat token milik `esp_account` yang CONNECTED;
+  `security:readiness` mem-pin policy itu persis dan mem-probe-nya) dan breaker
   akun itu sendiri (`email-mailketing:account:<id>`), DARI alamat snapshot
-  baris. Penahanan dibatasi (`SENDER_HOLD_BUDGET_EXCEEDED` setelah satu jam);
+  baris. Penahanan dibatasi (`SENDER_HOLD_BUDGET_EXCEEDED` satu jam setelah
+  enqueue, juga untuk baris yang menunggu tak diklaim karena routing dimatikan,
+  breaker akun terbuka, atau batas per jam tercapai);
   pengirim yang dicabut, dinonaktifkan, atau milik tenant lain gagal dengan
   `SENDER_UNAVAILABLE`. **Tidak ada rotasi otomatis** antarpengirim atau
   antarakun.
@@ -315,8 +333,8 @@ token di JSON pengaturan atau di browser.
   tetap bekerja persis sama, pengirim yang disebut ditolak
   (`409 SENDER_ROUTING_DISABLED`), dan baris pengirim tenant tidak pernah
   diklaim. Peralihan = menyalakan flag setelah akun dan pengirim terverifikasi;
-  rollback = mematikannya (baris tenant yang mengantre menunggu, tak ada data
-  yang disalin).
+  rollback = mematikannya (tak ada data yang disalin; baris tenant yang
+  mengantre menunggu, dan gagal begitu berumur satu jam).
 - **Bukan di sini:** layar admin (#1162; permission-nya sudah di-seed dan
   ditegakkan API), webhook (#1161), purpose marketing dan gerbang
   persetujuannya (CHECK `purpose` hanya menerima `transactional`/`security`).
@@ -324,7 +342,8 @@ token di JSON pengaturan atau di browser.
 Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
 bentuk respons live `/senders` dan `/credits` belum diverifikasi (parser hanya
 menerima `verified: true` / `status: "verified"` eksplisit dan saldo numerik);
-401/403 saat kirim tidak langsung menurunkan status akun (worker tak bisa menulis
+`email:senders:verify` manual (lihat di atas) sampai pengecualian job terjadwal
+ber-role app diputuskan; 401/403 saat kirim tidak langsung menurunkan status akun (worker tak bisa menulis
 health; breaker per akun menghentikan jalur dan putaran verify berikutnya
 mencatatnya); notifikasi workflow tidak memakai kebijakan default (hanya
 pengumuman).

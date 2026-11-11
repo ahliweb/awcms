@@ -405,11 +405,19 @@ export type MailketingV2ProbeFailure =
 export type MailketingV2ProbeResult<T> =
   { ok: true; value: T } | { ok: false; failure: MailketingV2ProbeFailure };
 
+/** What `GET /senders` said, per address: explicitly verified, or contradictory (unknown). Everything else is unverified. */
+export type MailketingV2SenderVerdicts = {
+  verified: ReadonlySet<string>;
+  ambiguous: ReadonlySet<string>;
+};
+
 export type MailketingV2AccountProbe = {
   /** `GET /api/v2/credits`: the reported balance. Spends nothing, sends nothing. */
   readCredits(): Promise<MailketingV2ProbeResult<number>>;
   /** `GET /api/v2/senders`: the addresses the provider reports as VERIFIED. */
-  listVerifiedSenders(): Promise<MailketingV2ProbeResult<ReadonlySet<string>>>;
+  listVerifiedSenders(): Promise<
+    MailketingV2ProbeResult<MailketingV2SenderVerdicts>
+  >;
 };
 
 /**
@@ -470,11 +478,14 @@ export function createMailketingV2AccountProbe(
           : { ok: false as const };
       }),
     listVerifiedSenders: () =>
-      read<ReadonlySet<string>>("/api/v2/senders", (body) => {
+      read<MailketingV2SenderVerdicts>("/api/v2/senders", (body) => {
         const parsed = parseMailketingV2Senders(body);
 
         return parsed.ok
-          ? { ok: true as const, value: parsed.verified }
+          ? {
+              ok: true as const,
+              value: { verified: parsed.verified, ambiguous: parsed.ambiguous }
+            }
           : { ok: false as const };
       })
   };

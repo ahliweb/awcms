@@ -287,13 +287,30 @@ export type EmailAccountSummary = {
   senders: { accountId: string; address: string; status: string }[];
 };
 
+/** Which stored credential, at which version, a Mailketing account holds right now (no value). */
+export type EmailAccountSecretRef = { secretId: string; version: number };
+
 export interface ChannelEmailAccountDirectoryPort {
   /** Live (`pending`, `connected`, `degraded`) Mailketing accounts of `tenantId` and their live sender identities. Bounded. */
   listEmailAccounts(
     tx: Bun.SQL,
     tenantId: string
   ): Promise<EmailAccountSummary[]>;
+  /**
+   * Issue #1160 audit L5: the account's CURRENT secret reference and version,
+   * so a verification computed with a token that was replaced meanwhile is
+   * not recorded as the new token's health. `null`: no live credential.
+   */
+  readEmailAccountSecretRef(
+    tx: Bun.SQL,
+    tenantId: string,
+    accountId: string
+  ): Promise<EmailAccountSecretRef | null>;
 }
+
+export type ResolveEmailAccountCredentialResult =
+  | { ok: true; credential: string; secretRef: EmailAccountSecretRef }
+  | { ok: false; reason: EmailSenderUnavailableReason };
 
 export interface ChannelEmailAccountCredentialPort {
   /**
@@ -307,5 +324,5 @@ export interface ChannelEmailAccountCredentialPort {
   resolveEmailAccountCredential(
     tx: Bun.SQL,
     input: { tenantId: string; accountId: string }
-  ): Promise<ResolveEmailCredentialResult>;
+  ): Promise<ResolveEmailAccountCredentialResult>;
 }

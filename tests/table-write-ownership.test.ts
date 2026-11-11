@@ -109,20 +109,25 @@ describe("findSharedTableWrites", () => {
     // alongside `tenant_admin` and `profile_identity` — which silently
     // re-permitted the exact write this change removed. The first test in this
     // file failed on it, which is why the shape is `excusedOwner` now.
+    // Issue #1160 audit M3 adds ONE more forgiven writer: the rolled-back
+    // behavioural probe in `scripts/lib/worker-secret-probe.ts`, on exactly the four tables
+    // it seeds. Each entry still names a single writer.
+    const PROBE_TABLES = [
+      "awcms_tenants",
+      "awcms_channel_accounts",
+      "awcms_channel_provider_connections",
+      "awcms_channel_secrets",
+      "awcms_channel_account_capabilities"
+    ];
+
     for (const entry of DOCUMENTED_EXCEPTIONS) {
-      // The one non-module exception (Issue #1145, PR #1261 audit M-1): the
-      // security:readiness probe writes INSIDE a transaction it always rolls
-      // back. It may forgive only the tooling writer, only on the five tables
-      // the probe seeds, and only with the reason that says so.
+      // Tooling exceptions: the rolled-back behavioural probes (#1145 M-1 in
+      // `scripts/security-readiness.ts`, #1160 M3 in `scripts/lib/worker-secret-probe.ts`).
+      // Each forgives only the tooling writer, only on the tables it seeds, and
+      // only with a reason that says the transaction always rolls back.
       if (entry.excusedOwner === "(scripts tooling)") {
-        expect([
-          "awcms_tenants",
-          "awcms_channel_secrets",
-          "awcms_channel_provider_connections",
-          "awcms_channel_accounts",
-          "awcms_channel_account_capabilities"
-        ]).toContain(entry.table);
-        expect(entry.reason).toContain("ALWAYS rolls");
+        expect(PROBE_TABLES).toContain(entry.table);
+        expect(entry.reason).toMatch(/always rolls/i);
         continue;
       }
 

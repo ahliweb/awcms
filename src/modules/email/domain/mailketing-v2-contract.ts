@@ -289,6 +289,8 @@ export type MailketingV2SendersParse =
       ok: true;
       /** Lower-cased addresses the provider explicitly reports as verified. */
       verified: ReadonlySet<string>;
+      /** Addresses whose entries contradict each other (flags or duplicates): unknown, never verified. */
+      ambiguous: ReadonlySet<string>;
     }
   | { ok: false };
 
@@ -308,7 +310,11 @@ export function parseMailketingV2Senders(
 
   if (!list) return { ok: false };
 
-  const verified = new Set<string>();
+  // Issue #1160 audit L5: one verdict per address. An entry whose two flags
+  // disagree (`verified: true` with a non-"verified" status, or the reverse),
+  // or an address listed twice with different verdicts, is AMBIGUOUS: neither
+  // verified nor unverified, recorded as unknown (a hold), never as verified.
+  const verdicts = new Map<string, "verified" | "unverified" | "ambiguous">();
 
   for (const entry of list.slice(0, MAILKETING_V2_MAX_SENDER_ENTRIES)) {
     if (!isRecord(entry)) continue;
@@ -323,12 +329,36 @@ export function parseMailketingV2Senders(
 
     if (!SENDER_ADDRESS.test(address)) continue;
 
-    if (entry.verified === true || entry.status === "verified") {
-      verified.add(address);
+    const flagSays =
+      entry.verified === undefined ? null : entry.verified === true;
+    const statusSays =
+      entry.status === undefined ? null : entry.status === "verified";
+    let verdict: "verified" | "unverified" | "ambiguous";
+
+    if (flagSays !== null && statusSays !== null && flagSays !== statusSays) {
+      verdict = "ambiguous";
+    } else {
+      verdict =
+        flagSays === true || statusSays === true ? "verified" : "unverified";
     }
+
+    const previous = verdicts.get(address);
+
+    verdicts.set(
+      address,
+      previous === undefined || previous === verdict ? verdict : "ambiguous"
+    );
   }
 
-  return { ok: true, verified };
+  const verified = new Set<string>();
+  const ambiguous = new Set<string>();
+
+  for (const [address, verdict] of verdicts) {
+    if (verdict === "verified") verified.add(address);
+    if (verdict === "ambiguous") ambiguous.add(address);
+  }
+
+  return { ok: true, verified, ambiguous };
 }
 
 export type MailketingV2HttpCategory =

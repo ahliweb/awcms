@@ -162,16 +162,42 @@ export const POST: APIRoute = async ({
       }
     }
 
-    // Issue #1160 (ADR-0151 section 2): naming a sender or a business scope is
-    // sending AS a brand, which needs `email.senders.use` on top of the
-    // announcement permissions, and the per-account access rules of
-    // `channel_accounts` (assignment, scope). Decided BEFORE the idempotent
-    // section, so a refusal is never stored for replay and a replay by a caller
-    // who has since lost the right is refused.
-    const wantsSender =
-      input.senderAccountId !== undefined || input.businessScope !== undefined;
+    // Issue #1160 (ADR-0151 section 2). The sender is decided FIRST: explicit,
+    // else the scope's prospective default, else the deployment sender. A
+    // sender that cannot send is refused, never swapped. Decided, and the
+    // caller's right to it checked, BEFORE the idempotent section, so a
+    // refusal is never stored for replay and a replay by a caller who has
+    // since lost the right is refused.
+    const senderDecision = await resolveEnqueueEmailSender(tx, {
+      tenantId,
+      explicitSenderAccountId: input.senderAccountId ?? null,
+      businessScope: input.businessScope ?? null,
+      purpose: purposeForEmailCategory(input.templateKey),
+      senders: tryLoadEmailSenderPort
+    });
 
-    if (wantsSender) {
+    if (!senderDecision.ok) {
+      logEmailSenderRefusal(tenantId, senderDecision.detail, correlationId);
+
+      return senderDecision.reason === "SENDER_ROUTING_DISABLED"
+        ? fail(
+            409,
+            "SENDER_ROUTING_DISABLED",
+            "Tenant email senders are not enabled on this deployment."
+          )
+        : senderUnavailable();
+    }
+
+    // Sending AS a brand needs `email.senders.use` on top of the announcement
+    // permissions, and the per-account access rules of `channel_accounts`
+    // (assignment, scope) on the sender ACTUALLY used. That includes a sender
+    // chosen by the default-sender policy (audit L2, fail closed): a policy
+    // names which brand speaks; it does not grant every mailer the right to
+    // speak as it. Naming a business scope is asking to speak as that brand
+    // even when its policy resolves to the deployment sender.
+    const tenantSenderId = senderDecision.snapshot.senderAccountId;
+
+    if (tenantSenderId !== null || input.businessScope !== undefined) {
       const useAuth = await authorizeInTransaction(
         tx,
         tenantId,
@@ -197,20 +223,23 @@ export const POST: APIRoute = async ({
         request,
         clientAddress
       };
-      const scopeRefusal = await access.authorizeScope(
-        accessContext,
-        SENDER_USE_GUARD,
-        input.businessScope ?? null
-      );
 
-      if (scopeRefusal) return scopeRefusal;
+      if (input.businessScope !== undefined) {
+        const scopeRefusal = await access.authorizeScope(
+          accessContext,
+          SENDER_USE_GUARD,
+          input.businessScope
+        );
+
+        if (scopeRefusal) return scopeRefusal;
+      }
 
       if (
-        input.senderAccountId !== undefined &&
+        tenantSenderId !== null &&
         !(await access.canUseAccount(
           accessContext,
           SENDER_USE_GUARD,
-          input.senderAccountId,
+          tenantSenderId,
           "operator"
         ))
       ) {
@@ -238,28 +267,6 @@ export const POST: APIRoute = async ({
       return jsonResponse(existingIdempotency.responseBody, {
         status: existingIdempotency.responseStatus
       });
-    }
-
-    // The sender: explicit, else the scope's prospective default, else the
-    // deployment sender. A sender that cannot send is refused, never swapped.
-    const senderDecision = await resolveEnqueueEmailSender(tx, {
-      tenantId,
-      explicitSenderAccountId: input.senderAccountId ?? null,
-      businessScope: input.businessScope ?? null,
-      purpose: purposeForEmailCategory(input.templateKey),
-      senders: tryLoadEmailSenderPort
-    });
-
-    if (!senderDecision.ok) {
-      logEmailSenderRefusal(tenantId, senderDecision.detail, correlationId);
-
-      return senderDecision.reason === "SENDER_ROUTING_DISABLED"
-        ? fail(
-            409,
-            "SENDER_ROUTING_DISABLED",
-            "Tenant email senders are not enabled on this deployment."
-          )
-        : senderUnavailable();
     }
 
     const result = await enqueueAnnouncement(

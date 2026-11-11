@@ -1548,7 +1548,13 @@ describe("static contracts", () => {
     expect(readiness).toContain(
       "p.polname = 'awcms_channel_secrets_worker_dispatch_purposes'"
     );
-    expect(readiness).toContain("LIKE '%whatsapp_cloud%'");
+    // Issue #1160 audit M3: no longer a substring pin. The exact normalised
+    // expression (which names `whatsapp_cloud`) and a behavioural probe.
+    expect(readiness).toContain(
+      "normalizePolicyExpression(expr) !== WORKER_SECRET_POLICY_EXPRESSION"
+    );
+    expect(readiness).toContain("a.provider=any(array['whatsapp_cloud'");
+    expect(readiness).toContain("probeWorkerSecretVisibility(sql)");
   });
 
   test("#1233 M1: both sender routes ask channel_accounts, default-deny, and never trust the body's scope", () => {

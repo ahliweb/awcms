@@ -141,6 +141,31 @@ export async function verifyEmailSendersForTenant(
       sql,
       tenantId,
       async (tx) => {
+        // Audit L5: what was learnt belongs to the token that was used. If the
+        // account's credential was replaced (or removed) while the probes ran,
+        // these results describe a token the account no longer holds: nothing
+        // is written, and the next pass verifies the new one.
+        const current = await deps.directory.readEmailAccountSecretRef(
+          tx,
+          tenantId,
+          account.espAccountId
+        );
+
+        if (
+          !current ||
+          current.secretId !== credential.secretRef.secretId ||
+          current.version !== credential.secretRef.version
+        ) {
+          summary.accountsSkipped += 1;
+          log("warning", "email.senders_verify.credential_changed", {
+            tenantId,
+            moduleKey: MODULE_KEY,
+            accountId: account.espAccountId
+          });
+
+          return;
+        }
+
         if (credits.ok) {
           await deps.recordHealth(tx, tenantId, account.espAccountId, {
             state: "ok",
@@ -169,8 +194,16 @@ export async function verifyEmailSendersForTenant(
         // `unavailable`: nothing learnt, nothing written; the last fact goes stale.
 
         for (const sender of account.senders) {
-          if (senders.ok) {
-            const verified = senders.value.has(sender.address);
+          if (senders.ok && senders.value.ambiguous.has(sender.address)) {
+            // Audit L5: contradictory entries for this address are not a
+            // verdict; unknown holds the sender until the provider is clear.
+            await deps.recordHealth(tx, tenantId, sender.accountId, {
+              state: "unknown",
+              reasonCode: "SENDER_STATUS_AMBIGUOUS"
+            });
+            summary.sendersUnknown += 1;
+          } else if (senders.ok) {
+            const verified = senders.value.verified.has(sender.address);
 
             await deps.recordHealth(tx, tenantId, sender.accountId, {
               state: verified ? "ok" : "degraded",

@@ -47,6 +47,7 @@ import type {
   ChannelSenderCredentialPort,
   EmailSenderUnavailableReason,
   PublisherUnavailableReason,
+  ResolveEmailAccountCredentialResult,
   ResolveEmailCredentialResult,
   ResolvePublishCredentialResult,
   ResolveSenderCredentialResult,
@@ -157,7 +158,14 @@ async function referenceFor(
 
   if (!purpose) return { reason: "CREDENTIAL_UNAVAILABLE" };
 
-  let secretId = account.secret_id;
+  // Issue #1160: a Mailketing sender identity never uses a token of its own,
+  // even if one was stored on it by a path that bypassed the credential route;
+  // it only ever borrows its (connected, scope-containing) account's.
+  let secretId =
+    account.provider === "mailketing" &&
+    account.account_kind === "sender_identity"
+      ? null
+      : account.secret_id;
 
   if (!secretId && account.parent_account_id) {
     // Only a parent that really is this child's `connected` container lends.
@@ -360,7 +368,7 @@ export function createChannelSenderCredentialAdapter(
     async resolveEmailAccountCredential(
       tx,
       input
-    ): Promise<ResolveEmailCredentialResult> {
+    ): Promise<ResolveEmailAccountCredentialResult> {
       if (!isChannelAccountsEnabled(options.env ?? process.env)) {
         return { ok: false, reason: "CHANNEL_ACCOUNTS_DISABLED" };
       }
@@ -392,6 +400,21 @@ export function createChannelSenderCredentialAdapter(
         return { ok: false, reason: "CREDENTIAL_UNAVAILABLE" };
       }
 
+      // Audit L5: the version is read BEFORE the decrypt. If the token is
+      // replaced in between, the recorded version is the older one and the
+      // verify job refuses to write health for it (the safe direction).
+      const versions = (await tx`
+        SELECT version FROM awcms_channel_secrets
+        WHERE tenant_id = ${input.tenantId} AND id = ${account.secret_id}
+      `) as { version: number }[];
+
+      if (!versions[0]) return { ok: false, reason: "CREDENTIAL_UNAVAILABLE" };
+
+      const secretRef = {
+        secretId: account.secret_id,
+        version: Number(versions[0].version)
+      };
+
       try {
         const credential = await store.resolve(tx, {
           tenantId: input.tenantId,
@@ -399,7 +422,7 @@ export function createChannelSenderCredentialAdapter(
           purpose: "api_token"
         });
 
-        return { ok: true, credential };
+        return { ok: true, credential, secretRef };
       } catch (error) {
         // tx-swallow-ok: a SecretStoreError is raised before any statement or
         // after a SUCCESSFUL select, so the transaction is not aborted; any

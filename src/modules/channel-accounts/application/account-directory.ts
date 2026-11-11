@@ -296,15 +296,36 @@ export async function createAccount(
     }
 
     const parent = (await tx`
-      SELECT provider, account_kind FROM awcms_channel_accounts
+      SELECT provider, account_kind, business_scope_type, business_scope_id
+      FROM awcms_channel_accounts
       WHERE tenant_id = ${tenantId} AND id = ${input.parentAccountId}
         AND deleted_at IS NULL
-    `) as { provider: string; account_kind: string }[];
+    `) as {
+      provider: string;
+      account_kind: string;
+      business_scope_type: string | null;
+      business_scope_id: string | null;
+    }[];
 
     if (
       parent.length === 0 ||
       parent[0]!.provider !== input.provider ||
       parent[0]!.account_kind !== shape.parentKind
+    ) {
+      return { outcome: "refused", code: "PARENT_INVALID" };
+    }
+
+    // Issue #1160 audit M2: a child borrows its parent's token and credit, so
+    // its scope must be CONTAINED in the parent's (a tenant-wide parent lends
+    // to any scope; a scoped parent only to its own). Same rule as binding to
+    // a connection (#1215), and the same refusal as an unknown parent.
+    const parentScopeType = parent[0]!.business_scope_type;
+
+    if (
+      parentScopeType !== null &&
+      (input.businessScope?.type !== parentScopeType ||
+        input.businessScope.id.toLowerCase() !==
+          String(parent[0]!.business_scope_id).toLowerCase())
     ) {
       return { outcome: "refused", code: "PARENT_INVALID" };
     }
@@ -569,7 +590,15 @@ export async function writeAccountCredential(
 
   const purpose = CREDENTIAL_PURPOSE[account.authMode];
 
-  if (!purpose) {
+  // Issue #1160: a Mailketing sender identity holds NO credential of its own;
+  // it borrows its account's token. A token stored on it would be one the
+  // worker's row policy hides (sql/348) and the dispatcher never reads, i.e. a
+  // dead copy of a live secret.
+  if (
+    !purpose ||
+    (account.provider === "mailketing" &&
+      account.accountKind === "sender_identity")
+  ) {
     return { outcome: "refused", code: "CREDENTIAL_NOT_APPLICABLE" };
   }
 

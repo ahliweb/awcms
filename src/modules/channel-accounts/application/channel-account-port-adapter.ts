@@ -187,6 +187,20 @@ export async function loadLendingParent(
     return { reason: "CREDENTIAL_UNAVAILABLE" };
   }
 
+  // Issue #1160 audit M2: a parent lends only to a child whose scope it
+  // CONTAINS. A tenant-wide parent lends to any child; a scoped parent only to
+  // a child of the same scope. Otherwise brand B's sender would spend brand A's
+  // token and credit. Enforced at every lend (enqueue, dispatch, decrypt), not
+  // only when the child was registered.
+  if (
+    parent.business_scope_type !== null &&
+    (account.business_scope_type !== parent.business_scope_type ||
+      String(account.business_scope_id).toLowerCase() !==
+        String(parent.business_scope_id).toLowerCase())
+  ) {
+    return { reason: "CREDENTIAL_UNAVAILABLE" };
+  }
+
   const statusReason = reasonForAccountStatus(parent.status);
 
   return statusReason ? { reason: statusReason } : { parent };
@@ -540,6 +554,21 @@ export const channelAccountPortAdapter: ChannelAccountPort &
  * caller's tenant transaction; identities and statuses only.
  */
 export const emailAccountDirectoryAdapter: ChannelEmailAccountDirectoryPort = {
+  async readEmailAccountSecretRef(tx, tenantId, accountId) {
+    const rows = (await tx`
+      SELECT s.id, s.version
+      FROM awcms_channel_accounts a
+      JOIN awcms_channel_secrets s
+        ON s.tenant_id = a.tenant_id AND s.id = a.secret_id
+      WHERE a.tenant_id = ${tenantId} AND a.id = ${accountId}
+        AND a.deleted_at IS NULL
+    `) as { id: string; version: number }[];
+
+    return rows[0]
+      ? { secretId: rows[0].id, version: Number(rows[0].version) }
+      : null;
+  },
+
   async listEmailAccounts(tx, tenantId): Promise<EmailAccountSummary[]> {
     const accounts = (await tx`
       SELECT id, status FROM awcms_channel_accounts

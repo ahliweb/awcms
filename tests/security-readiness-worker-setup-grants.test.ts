@@ -24,7 +24,8 @@ import {
   SETUP_COLUMN_GRANTS,
   WORKER_COLUMN_GRANTS,
   checkWorkerSetupRoleGrants,
-  defaultWorkerSetupRoleGrantsPolicy
+  defaultWorkerSetupRoleGrantsPolicy,
+  probeWorkerSecretVisibility
 } from "../scripts/security-readiness";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -196,52 +197,163 @@ describeOrSkip(
       }
     });
 
-    test("L-6 of the #1145 re-audit: widening the worker's secret policy to a SOCIAL provider FAILS the check, and restoring it passes", async () => {
-      if (!(await awcmsWorkerExists())) {
-        return;
-      }
+    /**
+     * The worker secret policy is pinned EXACTLY (Issue #1160 audit M1/M3).
+     * Each mutation below replaces the live policy with a variant of the
+     * `CREATE POLICY` in `sql/348` (the migration that defines it today, NOT
+     * `sql/328`, which predates the Mailketing branch), runs the check, and
+     * restores the policy from the same text in a `finally`, so a failing
+     * assertion never leaves the database without the Mailketing branch.
+     */
+    const POLICY_SOURCE = "sql/348_awcms_email_sender_worker_visibility.sql";
 
-      const original = readFileSync(
-        "sql/328_awcms_whatsapp_sender_secret_visibility.sql",
-        "utf8"
+    function currentCreatePolicy(): string {
+      const source = readFileSync(POLICY_SOURCE, "utf8");
+      const start = source.indexOf(
+        "CREATE POLICY awcms_channel_secrets_worker_dispatch_purposes"
       );
-      const create = original.slice(
-        original.indexOf(
-          "CREATE POLICY awcms_channel_secrets_worker_dispatch_purposes"
-        )
-      );
+      const end = source.indexOf(");", start) + 2;
 
-      expect(create).toContain(
-        "a.provider IN ('whatsapp_cloud', 'starsender')"
-      );
+      return source.slice(start, end);
+    }
 
-      const widened = create.replace(
-        "a.provider IN ('whatsapp_cloud', 'starsender')",
-        "a.provider IN ('whatsapp_cloud', 'starsender', 'facebook')"
-      );
+    async function withPolicy<T>(
+      text: string,
+      run: () => Promise<T>
+    ): Promise<T> {
       const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+      const restore = currentCreatePolicy();
 
       try {
         await admin.unsafe(
           "DROP POLICY awcms_channel_secrets_worker_dispatch_purposes ON awcms_channel_secrets"
         );
-        await admin.unsafe(widened);
+        await admin.unsafe(text);
 
-        let result;
+        return await run();
+      } finally {
+        await admin.unsafe(
+          "DROP POLICY IF EXISTS awcms_channel_secrets_worker_dispatch_purposes ON awcms_channel_secrets"
+        );
+        await admin.unsafe(restore);
+        await admin.close({ timeout: 1 });
+      }
+    }
 
-        try {
-          result = await checkWorkerSetupRoleGrants();
-        } finally {
-          await admin.unsafe(
-            "DROP POLICY awcms_channel_secrets_worker_dispatch_purposes ON awcms_channel_secrets"
-          );
-          await admin.unsafe(create);
+    const MUTATIONS: [string, (create: string) => string][] = [
+      [
+        "L-6: a SOCIAL provider (facebook)",
+        (create) =>
+          create.replace(
+            "a.provider IN ('whatsapp_cloud', 'starsender')",
+            "a.provider IN ('whatsapp_cloud', 'starsender', 'facebook')"
+          )
+      ],
+      [
+        "M1: Mailketing without the esp_account restriction",
+        (create) => create.replace("AND a.account_kind = 'esp_account'", "")
+      ],
+      [
+        "M3: a bot token purpose",
+        (create) =>
+          create.replace(
+            "purpose IN ('provider_access_token', 'api_token', 'device_key')",
+            "purpose IN ('provider_access_token', 'api_token', 'device_key', 'bot_token')"
+          )
+      ],
+      [
+        "M3: refresh tokens of a WhatsApp connection",
+        (create) =>
+          create.replace(
+            "AND c.access_secret_id = awcms_channel_secrets.id",
+            "AND (c.access_secret_id = awcms_channel_secrets.id OR c.refresh_secret_id = awcms_channel_secrets.id)"
+          )
+      ],
+      [
+        "L1: a NON-connected Mailketing account",
+        (create) => create.replace("AND a.status = 'connected'", "")
+      ]
+    ];
+
+    for (const [label, mutate] of MUTATIONS) {
+      test(`the worker secret policy is pinned exactly: widening it (${label}) FAILS the check, and the sql/348 policy passes`, async () => {
+        if (!(await awcmsWorkerExists())) {
+          return;
         }
+
+        const create = currentCreatePolicy();
+        const widened = mutate(create);
+
+        expect(widened).not.toBe(create);
+
+        const result = await withPolicy(widened, () =>
+          checkWorkerSetupRoleGrants()
+        );
 
         expect(result.status).toBe("fail");
         expect(result.evidence).toContain(
           "awcms_channel_secrets_worker_dispatch_purposes"
         );
+        expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+      });
+    }
+
+    test("the behavioural probe: under the sql/348 policy the worker sees only the connected Mailketing account token; widened, the probe reports the leak", async () => {
+      if (!(await awcmsWorkerExists())) {
+        return;
+      }
+
+      const sql = new Bun.SQL(DATABASE_URL!, { max: 1 });
+
+      try {
+        expect(await probeWorkerSecretVisibility(sql)).toBeNull();
+
+        const leak = await withPolicy(
+          currentCreatePolicy()
+            .replace(
+              "purpose IN ('provider_access_token', 'api_token', 'device_key')",
+              "purpose IN ('provider_access_token', 'api_token', 'device_key', 'bot_token', 'provider_refresh_token')"
+            )
+            .replace(
+              "a.provider IN ('whatsapp_cloud', 'starsender')",
+              "a.provider IN ('whatsapp_cloud', 'starsender', 'telegram', 'facebook', 'mailketing')"
+            ),
+          () => probeWorkerSecretVisibility(sql)
+        );
+
+        expect(leak).toContain("probe FAILED");
+        expect(await probeWorkerSecretVisibility(sql)).toBeNull();
+      } finally {
+        await sql.close({ timeout: 1 });
+      }
+    });
+
+    test("Issue #1160 audit L3: disabling the email sender guard or the policy no-delete trigger FAILS", async () => {
+      const admin = new Bun.SQL(DATABASE_URL!, { max: 1 });
+
+      try {
+        for (const [table, trigger] of [
+          ["awcms_email_messages", "awcms_email_messages_sender_guard"],
+          [
+            "awcms_email_sender_policies",
+            "awcms_email_sender_policies_no_delete"
+          ]
+        ] as const) {
+          await admin.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${trigger}`);
+          let result;
+
+          try {
+            result = await checkWorkerSetupRoleGrants();
+          } finally {
+            await admin.unsafe(
+              `ALTER TABLE ${table} ENABLE TRIGGER ${trigger}`
+            );
+          }
+
+          expect(result.status).toBe("fail");
+          expect(result.evidence).toContain(trigger);
+        }
+
         expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
       } finally {
         await admin.close({ timeout: 1 });

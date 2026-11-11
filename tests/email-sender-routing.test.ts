@@ -270,6 +270,29 @@ describe("provider parsers are fail-closed", () => {
     });
   });
 
+  test("audit L5: contradictory flags or duplicate entries with mixed verdicts are ambiguous, never verified", () => {
+    const parsed = parseMailketingV2Senders(
+      JSON.stringify({
+        success: true,
+        data: [
+          { email: "flags@b.example", verified: true, status: "pending" },
+          { email: "dup@b.example", verified: true },
+          { email: "DUP@b.example", status: "rejected" },
+          { email: "twice@b.example", verified: true },
+          { email: "twice@b.example", status: "verified" }
+        ]
+      })
+    );
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect([...parsed.verified]).toEqual(["twice@b.example"]);
+    expect([...parsed.ambiguous].sort()).toEqual([
+      "dup@b.example",
+      "flags@b.example"
+    ]);
+  });
+
   test("the probe sends the token in a header only and maps 401/402/5xx to fixed codes", async () => {
     const urls: string[] = [];
     const bodies: (string | undefined)[] = [];

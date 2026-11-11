@@ -170,6 +170,9 @@ DECLARE
   v_external text;
   v_scope_type text;
   v_scope_id uuid;
+  v_parent uuid;
+  v_parent_scope_type text;
+  v_parent_scope_id uuid;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     IF NEW.sender_account_id IS DISTINCT FROM OLD.sender_account_id
@@ -189,9 +192,9 @@ BEGIN
 
   IF NEW.sender_account_id IS NOT NULL THEN
     SELECT status, provider, account_kind, external_id,
-           business_scope_type, business_scope_id
+           business_scope_type, business_scope_id, parent_account_id
       INTO v_status, v_provider, v_kind, v_external,
-           v_scope_type, v_scope_id
+           v_scope_type, v_scope_id, v_parent
     FROM awcms_channel_accounts
     WHERE tenant_id = NEW.tenant_id AND id = NEW.sender_account_id
       AND deleted_at IS NULL;
@@ -215,6 +218,29 @@ BEGIN
        AND (v_scope_type IS DISTINCT FROM NEW.business_scope_type
             OR v_scope_id IS DISTINCT FROM NEW.business_scope_id) THEN
       RAISE EXCEPTION 'a scoped sender account may only send within its own business scope'
+        USING ERRCODE = '23514';
+    END IF;
+
+    -- Audit M2: the sender borrows its parent Mailketing account's token and
+    -- credit, so it must be a live child of a Mailketing account whose scope
+    -- CONTAINS its own (a tenant-wide account lends to any scope; a scoped
+    -- account only to its own).
+    SELECT business_scope_type, business_scope_id
+      INTO v_parent_scope_type, v_parent_scope_id
+    FROM awcms_channel_accounts
+    WHERE tenant_id = NEW.tenant_id AND id = v_parent
+      AND provider = 'mailketing' AND account_kind = 'esp_account'
+      AND deleted_at IS NULL;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'an email sender account must belong to a live Mailketing account of its own tenant'
+        USING ERRCODE = '23514';
+    END IF;
+
+    IF v_parent_scope_type IS NOT NULL
+       AND (v_parent_scope_type IS DISTINCT FROM v_scope_type
+            OR v_parent_scope_id IS DISTINCT FROM v_scope_id) THEN
+      RAISE EXCEPTION 'an email sender may only borrow from a Mailketing account whose business scope contains its own'
         USING ERRCODE = '23514';
     END IF;
   END IF;
