@@ -6,7 +6,7 @@ import type {
 import {
   CONVERSATIONS_ACTIVITY_CODE,
   OMNICHANNEL_INBOX_MODULE_KEY,
-  PROJECTED_EVENT_TYPES,
+  CONSUMED_EVENT_TYPES,
   PROJECTED_EVENT_VERSIONS,
   PROJECTION_ACTIVITY_CODE,
   PROJECTOR_CONSUMER_NAME,
@@ -133,8 +133,8 @@ export const omnichannelInboxModule = defineModule({
     {
       name: PROJECTOR_CONSUMER_NAME,
       description:
-        "omnichannel_inbox consumer -- projects the verified Telegram and website inbound envelopes into body-free conversation rows (ADR-0160). A no-op while OMNICHANNEL_INBOX_ENABLED is off or the tenant's module is off; the projection can be rebuilt from the log later.",
-      eventTypes: PROJECTED_EVENT_TYPES,
+        "omnichannel_inbox consumer -- projects the verified Telegram interactions and website submissions/withdrawals into body-free conversation rows (ADR-0160). Telegram consent changes are NOT subscribed (their dispatcher role may not write delivery rows, sql/374); the SLA job sweeps them from the log. A no-op while OMNICHANNEL_INBOX_ENABLED is off or the tenant's module is off; the projection can be rebuilt from the log later.",
+      eventTypes: CONSUMED_EVENT_TYPES,
       eventVersions: PROJECTED_EVENT_VERSIONS,
       handle: async (tx, event, ctx) => {
         const { isOmnichannelInboxEnabled } =

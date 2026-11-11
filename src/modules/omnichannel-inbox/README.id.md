@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:35da87798e2d1df8c69c68b0c2dc422dd1f9dd17c90080677eddc6aeaad8eb97 -->
+<!-- i18n-source-hash: sha256:abbe8153905405de59f5c7bef574c26a4b9c703f833b44b0e2886782c74078ce -->
 
 # `omnichannel_inbox`
 
@@ -29,6 +29,11 @@ omnichannel-inbox:sla` inert.
   ganda, replay, dan rebuild berujung pada baris yang sama. Event consent yang
   tiba sebelum percakapan ada diterapkan saat percakapan dibuat (dibaca ulang
   dari log).
+- **Perubahan consent di-sweep, tidak di-subscribe.** Dispatcher bot pelanggan
+  menerbitkan `consent.changed` di bawah role-nya sendiri, yang oleh `sql/374`
+  dilarang menulis baris delivery, sehingga konsumen tidak berlangganan; job SLA
+  menerapkan ulang event consent 48 jam terakhir (terbatas, idempoten per
+  sequence), pembuatan percakapan membaca ulang log, dan rebuild memutarnya.
 - **Rebuild.** `POST /projection/rebuild` memutar ulang keempat jenis event di
   dalam jendela (maksimal 365 hari) per batch 2000. State kerja staf tidak
   pernah direset.

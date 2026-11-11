@@ -29,13 +29,18 @@ import type { WorkflowNotificationPort } from "../../_shared/ports/workflow-noti
 import { resolveModuleEnabled } from "../../identity-access/application/auth-context";
 import { isOmnichannelInboxEnabled } from "../domain/inbox-config";
 import {
+  CONSENT_SWEEP_BATCH,
+  CONSENT_SWEEP_WINDOW_HOURS,
+  TELEGRAM_CONSENT_CHANGED_EVENT_TYPE,
   OMNICHANNEL_INBOX_MODULE_KEY,
   SLA_BREACH_TEMPLATE_KEY,
   SLA_SWEEP_BATCH
 } from "../domain/inbox-constants";
 import { assigneeEligibility } from "./assignee-eligibility";
+import { projectEvent } from "./conversation-projector";
 
 export type SlaTenantResult = {
+  consentApplied: number;
   revoked: number;
   breached: number;
   notified: number;
@@ -54,6 +59,51 @@ export type SlaJobDeps = {
   hierarchy: BusinessScopeHierarchyPort;
   notifier: WorkflowNotificationPort;
 };
+
+/**
+ * Applies the Telegram consent changes recorded in the last
+ * `CONSENT_SWEEP_WINDOW_HOURS` (bounded) to the projection. Idempotent: a
+ * change older than the one already applied is ignored by its sequence, so
+ * sweeping the same window every run has one effect.
+ */
+export async function applyRecentConsentChanges(
+  tx: Bun.SQL,
+  tenantId: string,
+  now: Date
+): Promise<number> {
+  const since = new Date(
+    now.getTime() - CONSENT_SWEEP_WINDOW_HOURS * 3_600_000
+  );
+  const events = (await tx`
+    SELECT id, event_type, payload, event_sequence::text AS seq
+    FROM awcms_domain_events
+    WHERE tenant_id = ${tenantId}
+      AND event_type = ${TELEGRAM_CONSENT_CHANGED_EVENT_TYPE}
+      AND event_version = '1.0'
+      AND recorded_at >= ${since}
+    ORDER BY event_sequence
+    LIMIT ${CONSENT_SWEEP_BATCH}
+  `) as {
+    id: string;
+    event_type: string;
+    payload: Record<string, unknown>;
+    seq: string;
+  }[];
+  let applied = 0;
+
+  for (const event of events) {
+    const outcome = await projectEvent(tx, tenantId, {
+      id: event.id,
+      eventType: event.event_type,
+      payload: event.payload,
+      eventSequence: event.seq
+    });
+
+    if (outcome === "state_applied") applied += 1;
+  }
+
+  return applied;
+}
 
 /** Re-checks every current assignee of the tenant; unassigns the ineligible. */
 export async function revokeIneligibleAssignees(
@@ -164,8 +214,10 @@ export async function stampBreaches(
     }
   }
 
+  let notified = 0;
+
   for (const [assignee, count] of perAssignee) {
-    await notifier.enqueueNotification(tx, {
+    const outcome = await notifier.enqueueNotification(tx, {
       tenantId,
       templateKey: SLA_BREACH_TEMPLATE_KEY,
       recipientTenantUserIds: [assignee],
@@ -173,9 +225,12 @@ export async function stampBreaches(
       variables: { breachedCount: String(count) },
       correlationId
     });
+
+    // A tenant without the template (or an unreachable assignee) queues nothing.
+    if (outcome.queued > 0) notified += 1;
   }
 
-  return { breached: due.length, notified: perAssignee.size };
+  return { breached: due.length, notified };
 }
 
 export async function runSlaForTenant(
@@ -207,9 +262,15 @@ export async function runSlaForTenant(
             AND sla_breached_at IS NULL AND response_due_at <= ${now}
         `) as { total: number }[];
 
-        return { revoked: 0, breached: rows[0]?.total ?? 0, notified: 0 };
+        return {
+          consentApplied: 0,
+          revoked: 0,
+          breached: rows[0]?.total ?? 0,
+          notified: 0
+        };
       }
 
+      const consentApplied = await applyRecentConsentChanges(tx, tenantId, now);
       const revoked = await revokeIneligibleAssignees(
         tx,
         tenantId,
@@ -224,7 +285,7 @@ export async function runSlaForTenant(
         options.correlationId
       );
 
-      return { revoked, ...stamped };
+      return { consentApplied, revoked, ...stamped };
     },
     { workClass: "maintenance" }
   );
@@ -247,7 +308,7 @@ export async function runSlaJob(
     tenantsSkipped: 0,
     tenantsErrored: 0,
     aborted: false,
-    totals: { revoked: 0, breached: 0, notified: 0 }
+    totals: { consentApplied: 0, revoked: 0, breached: 0, notified: 0 }
   };
 
   if (!isOmnichannelInboxEnabled(options.env)) {
@@ -271,6 +332,7 @@ export async function runSlaJob(
         continue;
       }
 
+      summary.totals.consentApplied += result.consentApplied;
       summary.totals.revoked += result.revoked;
       summary.totals.breached += result.breached;
       summary.totals.notified += result.notified;

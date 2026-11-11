@@ -623,6 +623,60 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
     expect(opted!.customer_state).toBe("opted_out");
     expect(opted!.awaiting_since).toBeNull();
 
+    // A LATER opt-out of an existing conversation (the dispatcher's role cannot
+    // write delivery rows, sql/374, so no consumer subscribes to it): the SLA
+    // job's consent sweep applies it, once.
+    const bot2 = await seedBot(tenantId, null);
+    const contact2 = crypto.randomUUID();
+    await telegramInbound(tenantId, bot2, contact2);
+    await dispatch(tenantId);
+    expect((await conversationRow(contact2))!.customer_state).toBe("active");
+
+    await publish(
+      tenantId,
+      "awcms.telegram_engagement.consent.changed",
+      "telegram_engagement_contact",
+      contact2,
+      {
+        contractVersion: "1",
+        provider: "telegram",
+        channelAccountId: bot2,
+        contactRef: contact2,
+        purpose: "support",
+        action: "opt_out",
+        method: "bot_blocked",
+        noticeVersion: null,
+        occurredAt: new Date().toISOString(),
+        privacyClass: "consent"
+      }
+    );
+    const noDeliveries = (await admin()`
+      SELECT count(*)::int AS n FROM awcms_domain_event_deliveries
+      WHERE consumer_name = 'omnichannel_inbox.conversation_projector'
+        AND event_type = 'awcms.telegram_engagement.consent.changed'
+    `) as { n: number }[];
+    expect(noDeliveries[0]!.n).toBe(0);
+
+    const sweepDeps = {
+      hierarchy: officeScopeHierarchyPortAdapter,
+      notifier: { enqueueNotification: async () => ({ queued: 0 }) }
+    };
+    const sweep1 = await runSlaForTenant(
+      getHandlerDatabaseClient(),
+      tenantId,
+      sweepDeps,
+      { correlationId: "corr-consent" }
+    );
+    const sweep2 = await runSlaForTenant(
+      getHandlerDatabaseClient(),
+      tenantId,
+      sweepDeps,
+      { correlationId: "corr-consent" }
+    );
+    expect(sweep1).toMatchObject({ consentApplied: 1 });
+    expect(sweep2).toMatchObject({ consentApplied: 0 });
+    expect((await conversationRow(contact2))!.customer_state).toBe("opted_out");
+
     // A website submission, then its withdrawal, then the submission replayed.
     const submission = crypto.randomUUID();
     const received = {
@@ -775,6 +829,7 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
         notifier: {
           enqueueNotification: async (_tx, request) => {
             notices.push(request.recipientTenantUserIds);
+            return { queued: 1 };
           }
         }
       },
@@ -861,6 +916,7 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
           request: { recipientTenantUserIds: string[] }
         ) => {
           notices.push(request.recipientTenantUserIds);
+          return { queued: 1 };
         }
       }
     };

@@ -72,6 +72,29 @@ export const PROJECTED_EVENT_TYPES = [
 
 export const PROJECTED_EVENT_VERSIONS = ["1.0"] as const;
 
+/**
+ * What the descriptor-declared CONSUMER subscribes to: every projected type
+ * EXCEPT `telegram_engagement.consent.changed`. That event is also published by
+ * the customer bot dispatcher under its own database role
+ * (`awcms_telegram_engagement_dispatch`), which sql/374 deliberately keeps from
+ * writing ANY delivery row (the #1271 audit, M1: a delivery INSERT let that role
+ * forge another module's delivery). Subscribing would make every `bot_blocked`
+ * / `provider_forbidden` consent fail with "permission denied" in the
+ * dispatcher. Consent changes reach the projection instead (a) when a
+ * conversation is created (the log is read back), (b) through the SLA job's
+ * bounded sweep of recent consent events, and (c) through a rebuild; all three
+ * are idempotent by event sequence.
+ */
+export const CONSUMED_EVENT_TYPES = [
+  TELEGRAM_INTERACTION_RECEIVED_EVENT_TYPE,
+  WEBSITE_SUBMISSION_RECEIVED_EVENT_TYPE,
+  WEBSITE_SUBMISSION_WITHDRAWN_EVENT_TYPE
+] as const;
+
+/** The SLA job re-applies consent events recorded within this window (idempotent). */
+export const CONSENT_SWEEP_WINDOW_HOURS = 48;
+export const CONSENT_SWEEP_BATCH = 2000;
+
 /** The events that change a customer's state (applied in event-sequence order). */
 export const CUSTOMER_STATE_EVENT_TYPES = [
   TELEGRAM_CONSENT_CHANGED_EVENT_TYPE,

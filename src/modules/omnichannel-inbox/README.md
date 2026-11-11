@@ -25,6 +25,11 @@ omnichannel-inbox:sla` is inert.
   is terminal (`sql/384`). A duplicate delivery, a replay and a rebuild converge
   on the same row. A consent event that arrives before the conversation exists
   is applied when the conversation is created (read back from the log).
+- **Consent changes are swept, not subscribed.** The customer bot dispatcher
+  publishes `consent.changed` under its own role, which `sql/374` keeps from
+  writing delivery rows, so the consumer does not subscribe to it; the SLA job
+  re-applies the consent events of the last 48 hours (bounded, idempotent by
+  sequence), creation reads the log back, and a rebuild replays it.
 - **Rebuild.** `POST /projection/rebuild` replays the four event types inside
   the window (at most 365 days) in batches of 2000. Staff work state is never
   reset.
