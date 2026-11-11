@@ -17,7 +17,7 @@ import {
 import { submissionPreflightResponse } from "./public-preflight";
 import {
   resolveIntakeLimits,
-  resolveWebsiteEngagementRing
+  resolveWebsiteEngagementRings
 } from "../domain/engagement-config";
 import { rateLimitClientKey } from "../domain/client-key";
 import { submissionCorsHeaders } from "../domain/origin-policy";
@@ -177,9 +177,9 @@ export async function handlePublicSubmission(
   }
 
   const submission = validation.value;
-  const ring = resolveWebsiteEngagementRing();
+  const keys = resolveWebsiteEngagementRings();
 
-  if (!ring.ok) {
+  if (!keys.ok) {
     log("error", "website_engagement.ring_unavailable");
     recordCounter("website_engagement_submission_total", {
       outcome: "unavailable"
@@ -223,7 +223,7 @@ export async function handlePublicSubmission(
     return refused(submission.locale);
   }
 
-  const source = await verifyIntake(sql, token, request, ring);
+  const source = await verifyIntake(sql, token, request, keys.rings);
 
   if (!source) {
     recordCounter("website_engagement_submission_total", {
@@ -332,7 +332,7 @@ export async function handlePublicSubmission(
     source,
     submission,
     challenge,
-    ring,
+    keys.rings,
     locals.correlationId
   );
 

@@ -44,8 +44,11 @@ const TENANT = "11111111-1111-4111-8111-111111111111";
 const SOURCE = "22222222-2222-4222-8222-222222222222";
 const SECRET = "A".repeat(43);
 const TOKEN = `wes1.${TENANT}.${SOURCE}.${SECRET}`;
-const RING = `k1:${Buffer.from(
+const ENCRYPTION_RING = `e1:${Buffer.from(
   Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 251)
+).toString("base64")}`;
+const HASH_RING = `h1:${Buffer.from(
+  Array.from({ length: 32 }, (_, i) => (i * 7 + 5) % 251)
 ).toString("base64")}`;
 
 /** A database that fails the test the moment anything touches it. */
@@ -389,12 +392,18 @@ describe("website_engagement public handler: every pre-proof refusal happens bef
 
     for (const name of [
       "WEBSITE_ENGAGEMENT_KEYS",
+      "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+      "WEBSITE_ENGAGEMENT_HASH_KEYS",
+      "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
       "WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX"
     ]) {
       saved[name] = process.env[name];
     }
 
-    process.env.WEBSITE_ENGAGEMENT_KEYS = RING;
+    process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS = ENCRYPTION_RING;
+    process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = HASH_RING;
+    delete process.env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS;
+    delete process.env.WEBSITE_ENGAGEMENT_KEYS;
     delete process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX;
   });
 
@@ -439,12 +448,32 @@ describe("website_engagement public handler: every pre-proof refusal happens bef
   });
 
   test("no key ring is a closed 503 and never a silent skip", async () => {
-    delete process.env.WEBSITE_ENGAGEMENT_KEYS;
+    delete process.env.WEBSITE_ENGAGEMENT_HASH_KEYS;
 
     const response = await post(goodBody());
 
     expect(response.status).toBe(503);
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  test("one key in both rings is a closed 503 before the database (Issue #1262)", async () => {
+    process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = `h1:${ENCRYPTION_RING.slice(3)}`;
+
+    const response = await post(goodBody());
+
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain(ENCRYPTION_RING.slice(3));
+  });
+
+  test("the retired single ring is a closed 503, alone or next to the new rings (Issue #1262)", async () => {
+    process.env.WEBSITE_ENGAGEMENT_KEYS = ENCRYPTION_RING;
+
+    expect((await post(goodBody())).status).toBe(503);
+
+    delete process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS;
+    delete process.env.WEBSITE_ENGAGEMENT_HASH_KEYS;
+
+    expect((await post(goodBody())).status).toBe(503);
   });
 
   test("an unparseable token is the uniform refusal, with no CORS grant", async () => {

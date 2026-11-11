@@ -66,9 +66,20 @@ import { POST as revealSubmission } from "../../src/pages/api/v1/website-engagem
 import { POST as withdrawSubmission } from "../../src/pages/api/v1/website-engagement/submissions/[id]/withdraw";
 
 const OWNER_PASSWORD = randomBytes(12).toString("hex") + "-Aa1!";
-const RING = `k1:${Buffer.from(
+// Two rings, never one (ADR-0137 section 3, Issue #1262).
+const ENCRYPTION_RING = `e1:${Buffer.from(
   Array.from({ length: 32 }, (_, i) => (i * 11 + 5) % 251)
 ).toString("base64")}`;
+const HASH_RING = `h1:${Buffer.from(
+  Array.from({ length: 32 }, (_, i) => (i * 13 + 7) % 251)
+).toString("base64")}`;
+
+function useRings() {
+  process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS = ENCRYPTION_RING;
+  process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = HASH_RING;
+  delete process.env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS;
+  delete process.env.WEBSITE_ENGAGEMENT_KEYS;
+}
 const BASE = "/api/v1/website-engagement";
 const HOST = "www.owner-site.example";
 
@@ -303,12 +314,15 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
   beforeAll(async () => {
     for (const name of [
       "WEBSITE_ENGAGEMENT_KEYS",
+      "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+      "WEBSITE_ENGAGEMENT_HASH_KEYS",
+      "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
       "WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX"
     ]) {
       savedEnv[name] = process.env[name];
     }
 
-    process.env.WEBSITE_ENGAGEMENT_KEYS = RING;
+    useRings();
     process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "10000";
     handlerReady = await ensureHandlerDatabaseReady();
   });
@@ -324,7 +338,7 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
 
   beforeEach(async () => {
     if (!handlerReady) return;
-    process.env.WEBSITE_ENGAGEMENT_KEYS = RING;
+    useRings();
     process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "10000";
     await resetHandlerDatabase();
     env = await bootstrap();
@@ -908,7 +922,8 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
 
     const source = (await create()).body.data!;
 
-    delete process.env.WEBSITE_ENGAGEMENT_KEYS;
+    delete process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS;
+    delete process.env.WEBSITE_ENGAGEMENT_HASH_KEYS;
 
     expect((await create({ code: "no-ring" })).status).toBe(503);
     expect(
@@ -922,6 +937,6 @@ suite("website_engagement HTTP surface (Issue #1153)", () => {
     ).toBe(503);
     expect((await publicPost(source.token)).status).toBe(503);
 
-    process.env.WEBSITE_ENGAGEMENT_KEYS = RING;
+    useRings();
   });
 });

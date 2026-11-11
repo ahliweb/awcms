@@ -17,7 +17,7 @@ import {
   userIdempotencyActor
 } from "../../_shared/idempotency";
 import { recordAuditEvent } from "../../logging/application/audit-log";
-import { resolveWebsiteEngagementRing } from "../domain/engagement-config";
+import { resolveWebsiteEngagementRings } from "../domain/engagement-config";
 import type { Validated } from "../domain/source-validation";
 import { isUuid } from "../domain/source-validation";
 import {
@@ -45,7 +45,7 @@ export function personOnlyRefusal(auth: {
 
 /** Fail closed BEFORE any work that would hash a token or touch a ciphertext. */
 export function ringUnavailable(): Response | null {
-  return resolveWebsiteEngagementRing().ok
+  return resolveWebsiteEngagementRings().ok
     ? null
     : fail(
         503,

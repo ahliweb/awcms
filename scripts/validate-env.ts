@@ -25,7 +25,14 @@ import {
   isMailketingV2Verified,
   resolveMailketingV2BaseUrl
 } from "../src/modules/email/domain/mailketing-v2-contract";
-import { resolveWebsiteEngagementRing } from "../src/modules/website-engagement/domain/engagement-config";
+import {
+  RETIRED_SINGLE_RING_REASON,
+  isRetiredSingleRingSet,
+  resolveWebsiteEngagementEncryptionRingUnchecked,
+  resolveWebsiteEngagementHashRingUnchecked,
+  resolveWebsiteEngagementLegacyHashKeysUnchecked,
+  websiteEngagementRingConflicts
+} from "../src/modules/website-engagement/domain/engagement-config";
 import {
   crmLeadsRingsShareAKey,
   resolveCrmLeadsEncryptionRingUnchecked,
@@ -498,10 +505,32 @@ const RULES: readonly Rule[] = [
   },
 
   // website_engagement (ADR-0155, Issue #1153). No deployment switch: the module
-  // is inert until a tenant creates a source. The ring encrypts every submission's
-  // contact details and keys every source-token and identifier hash, and is a
-  // secret, never echoed. Absent means the public intake and source creation fail
-  // closed; present it is validated below.
+  // is inert until a tenant creates a source. TWO secret rings (ADR-0137 section
+  // 3, Issue #1262): one encrypts every submission's contact details, the other
+  // keys every source-token and identifier hash; never echoed. Absent means the
+  // public intake and source creation fail closed; present they are validated
+  // below. The LEGACY hash keys are verify-only, for source tokens hashed under
+  // the retired single ring, and are removed once `security:readiness` shows no
+  // source left on them. `WEBSITE_ENGAGEMENT_KEYS` is that retired single ring:
+  // still declared so a stale value is REFUSED by name instead of ignored.
+  {
+    name: "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_HASH_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
   {
     name: "WEBSITE_ENGAGEMENT_KEYS",
     required: false,
@@ -845,7 +874,9 @@ export function keyMaterialOf(env: EnvBag, name: string): Buffer[] {
 
 /** Every OTHER secret key a crm_leads ring must not share material with. */
 export const CRM_LEADS_FOREIGN_KEY_VARIABLES = [
-  "WEBSITE_ENGAGEMENT_KEYS",
+  "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+  "WEBSITE_ENGAGEMENT_HASH_KEYS",
+  "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
   "CHANNEL_SECRETS_ENCRYPTION_KEYS",
   "TELEGRAM_CHAT_ENCRYPTION_KEYS",
   "TELEGRAM_CHAT_HASH_KEYS",
@@ -857,6 +888,120 @@ export const CRM_LEADS_FOREIGN_KEY_VARIABLES = [
   "AUTH_URL_PARAM_ENCRYPTION_KEY",
   "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY"
 ] as const;
+
+/** Every OTHER secret key a website_engagement ring must not share material with. */
+export const WEBSITE_ENGAGEMENT_FOREIGN_KEY_VARIABLES = [
+  "CRM_LEADS_ENCRYPTION_KEYS",
+  "CRM_LEADS_HASH_KEYS",
+  "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+  "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+  "TELEGRAM_CHAT_HASH_KEYS",
+  "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+  "WHATSAPP_RECIPIENT_HASH_KEYS",
+  // Single-key secrets (one base64 value, not a ring).
+  "AUTH_MFA_SECRET_ENCRYPTION_KEY",
+  "AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY",
+  "AUTH_URL_PARAM_ENCRYPTION_KEY",
+  "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY"
+] as const;
+
+/**
+ * The website_engagement key problems (ADR-0155, ADR-0137 section 3, Issue
+ * #1262). Optional as a whole (the module is inert without a source), but:
+ * the retired single ring is refused by name; the encryption and hash rings
+ * are set together, parse, and share no key; the verify-only legacy hash keys
+ * need the pair, parse, and break none of the transition rules; and no ring or
+ * legacy key shares material with another module's ring or single-key secret.
+ * Same predicates as the runtime resolver. No value is ever echoed.
+ */
+export function websiteEngagementKeyProblems(env: EnvBag): string[] {
+  const problems: string[] = [];
+  const processEnv = env as NodeJS.ProcessEnv;
+
+  if (isRetiredSingleRingSet(processEnv)) {
+    problems.push(
+      `${RETIRED_SINGLE_RING_REASON} Selama transisi: kunci lama masuk ke WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS sebagai kunci BUKAN-pertama dan ke WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS (hanya verifikasi); kunci pertama kedua cincin wajib kunci baru.`
+    );
+  }
+
+  const encryptionSet =
+    (env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS ?? "").trim() !== "";
+  const hashSet = (env.WEBSITE_ENGAGEMENT_HASH_KEYS ?? "").trim() !== "";
+  const legacySet =
+    (env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS ?? "").trim() !== "";
+
+  if (!encryptionSet && !hashSet) {
+    if (legacySet) {
+      problems.push(
+        "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS hanya bermakna bersama WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS dan WEBSITE_ENGAGEMENT_HASH_KEYS (kunci lama hanya untuk verifikasi token sumber)."
+      );
+    }
+
+    return problems;
+  }
+
+  if (encryptionSet !== hashSet) {
+    problems.push(
+      "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS dan WEBSITE_ENGAGEMENT_HASH_KEYS harus diisi bersama (kontak pengunjung dienkripsi dengan yang satu, token sumber dan identifier di-hash dengan yang lain)."
+    );
+    return problems;
+  }
+
+  const encryption =
+    resolveWebsiteEngagementEncryptionRingUnchecked(processEnv);
+  const hash = resolveWebsiteEngagementHashRingUnchecked(processEnv);
+  const legacy = resolveWebsiteEngagementLegacyHashKeysUnchecked(processEnv);
+
+  if (!encryption.ok) {
+    problems.push(
+      `${encryption.reason} Cincin kunci enkripsi website_engagement tidak valid (tanpa kunci yang sah, kontak pengunjung tidak dapat disimpan; tidak ada fallback plaintext).`
+    );
+  }
+
+  if (!hash.ok) {
+    problems.push(
+      `${hash.reason} Cincin kunci hash website_engagement tidak valid (tanpa kunci yang sah, token sumber tidak dapat diverifikasi).`
+    );
+  }
+
+  if (!legacy.ok) {
+    problems.push(
+      `${legacy.reason} Kunci hash lama website_engagement tidak valid.`
+    );
+  }
+
+  if (!encryption.ok || !hash.ok || !legacy.ok) return problems;
+
+  for (const conflict of websiteEngagementRingConflicts(
+    encryption,
+    hash,
+    legacy.keys
+  )) {
+    problems.push(
+      `${conflict} (ADR-0137 bagian 3: kunci HMAC tidak pernah melindungi ciphertext.)`
+    );
+  }
+
+  for (const [name, keys] of [
+    ["WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS", encryption.keys],
+    ["WEBSITE_ENGAGEMENT_HASH_KEYS", hash.keys],
+    ["WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS", legacy.keys]
+  ] as const) {
+    for (const other of WEBSITE_ENGAGEMENT_FOREIGN_KEY_VARIABLES) {
+      const shares = keyMaterialOf(env, other).some((material) =>
+        keys.some((key) => key.key.equals(material))
+      );
+
+      if (shares) {
+        problems.push(
+          `${name} dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai kunci terpisah.`
+        );
+      }
+    }
+  }
+
+  return problems;
+}
 
 /** The crm_leads key-ring problems (ADR-0153, ADR-0137 section 3). No value is ever echoed. */
 export function crmLeadsKeyProblems(env: EnvBag): string[] {
@@ -1298,51 +1443,10 @@ export function validateEnv(env: EnvBag): string[] {
     }
   }
 
-  // website_engagement (ADR-0155): the key ring is optional (the module is inert
-  // without a source), but a ring that is PRESENT must be valid, parsed by the
-  // same helper the runtime uses, and must not share a key with another module's
-  // ring: one compromised ring would then open two datasets. No value is echoed.
-  if ((env.WEBSITE_ENGAGEMENT_KEYS ?? "").trim() !== "") {
-    const engagementRing = resolveWebsiteEngagementRing(
-      env as NodeJS.ProcessEnv
-    );
-
-    if (!engagementRing.ok) {
-      problems.push(
-        `${engagementRing.reason} Cincin kunci website_engagement tidak valid (tanpa kunci yang sah, kontak pengunjung tidak dapat disimpan; tidak ada fallback plaintext).`
-      );
-    } else {
-      for (const other of [
-        "CHANNEL_SECRETS_ENCRYPTION_KEYS",
-        "TELEGRAM_CHAT_ENCRYPTION_KEYS",
-        "TELEGRAM_CHAT_HASH_KEYS",
-        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
-        "WHATSAPP_RECIPIENT_HASH_KEYS"
-      ]) {
-        const sharesKey = (env[other] ?? "").split(",").some((entry) => {
-          const separator = entry.indexOf(":");
-
-          if (separator < 1) return false;
-
-          const decoded = Buffer.from(
-            entry.slice(separator + 1).trim(),
-            "base64"
-          );
-
-          return (
-            decoded.length > 0 &&
-            engagementRing.keys.some((key) => key.key.equals(decoded))
-          );
-        });
-
-        if (sharesKey) {
-          problems.push(
-            `WEBSITE_ENGAGEMENT_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
-          );
-        }
-      }
-    }
-  }
+  // website_engagement (ADR-0155, ADR-0137 section 3, Issue #1262): TWO rings
+  // plus the verify-only legacy hash keys of the single-ring transition. See
+  // `websiteEngagementKeyProblems`.
+  problems.push(...websiteEngagementKeyProblems(env));
 
   // crm_leads (ADR-0153, ADR-0137 section 3): TWO rings, an encryption ring and
   // an HMAC ring. Optional (the module ships off), but a PRESENT ring must

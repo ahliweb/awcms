@@ -59,7 +59,30 @@ import {
   revealSubmission,
   withdrawSubmission
 } from "../../src/modules/website-engagement/application/submission-directory";
-import { resolveWebsiteEngagementRing } from "../../src/modules/website-engagement/domain/engagement-config";
+import {
+  recordSubmission,
+  verifyIntake
+} from "../../src/modules/website-engagement/application/submission-intake";
+import {
+  countSourceTokensByKeyId,
+  countSubmissionContactsByKeyId
+} from "../../src/modules/website-engagement/application/key-transition";
+import {
+  resolveWebsiteEngagementRings,
+  lookupHashCandidates,
+  type WebsiteEngagementRings
+} from "../../src/modules/website-engagement/domain/engagement-config";
+import { parseSourceToken } from "../../src/modules/website-engagement/domain/source-token";
+import { validateSubmissionRequest } from "../../src/modules/website-engagement/domain/submission-request";
+import {
+  SOURCE_TOKEN_HASH_PURPOSE,
+  SUBMISSION_EMAIL_HASH_PURPOSE
+} from "../../src/modules/website-engagement/domain/website-engagement-constants";
+import {
+  matchesAnyHash,
+  parseKeyRing,
+  type KeyRing
+} from "../../src/lib/security/field-encryption";
 
 const T1 = "e1153000-0000-4000-8000-000000000001";
 const T2 = "e1153000-0000-4000-8000-000000000002";
@@ -71,12 +94,27 @@ const BLOG = "blog.example.id";
 const PENDING = "pending.example.id";
 const OTHER = "other.example.id";
 
-const RING_SPEC = `k1:${Buffer.from(
-  Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 251)
-).toString("base64")}`;
+const keyBytes = (seed: number) =>
+  Buffer.from(
+    Array.from({ length: 32 }, (_, i) => (i * 7 + seed) % 251)
+  ).toString("base64");
+// Two rings, never one (ADR-0137 section 3, Issue #1262).
+const ENCRYPTION_SPEC = `e1:${keyBytes(3)}`;
+const HASH_SPEC = `h1:${keyBytes(5)}`;
+
+/** The rings every test runs on, and nothing of the #1262 transition. */
+function useCurrentRings() {
+  process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS = ENCRYPTION_SPEC;
+  process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = HASH_SPEC;
+  delete process.env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS;
+  delete process.env.WEBSITE_ENGAGEMENT_KEYS;
+}
 const savedEnv: Record<string, string | undefined> = {};
 const ENV_NAMES = [
   "WEBSITE_ENGAGEMENT_KEYS",
+  "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+  "WEBSITE_ENGAGEMENT_HASH_KEYS",
+  "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
   "WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX",
   "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX",
   "WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX",
@@ -87,12 +125,12 @@ const ENV_NAMES = [
   "TURNSTILE_EXPECTED_HOSTNAME"
 ];
 
-function ring() {
-  const resolved = resolveWebsiteEngagementRing();
+function rings() {
+  const resolved = resolveWebsiteEngagementRings();
 
   if (!resolved.ok) throw new Error(resolved.reason);
 
-  return resolved;
+  return resolved.rings;
 }
 
 const inTenant = <T>(tenantId: string, work: (tx: Bun.SQL) => Promise<T>) =>
@@ -181,7 +219,7 @@ async function newSource(
         domainIds,
         ...extra
       },
-      ring()
+      rings().hash
     )
   );
 
@@ -323,7 +361,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
   beforeAll(async () => {
     for (const name of ENV_NAMES) savedEnv[name] = process.env[name];
 
-    process.env.WEBSITE_ENGAGEMENT_KEYS = RING_SPEC;
+    useCurrentRings();
     process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "10000";
     process.env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX = "10000";
     await setupIntegrationDatabase();
@@ -340,7 +378,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
 
   beforeEach(async () => {
     resetRateLimitForTests();
-    process.env.WEBSITE_ENGAGEMENT_KEYS = RING_SPEC;
+    useCurrentRings();
     process.env.WEBSITE_ENGAGEMENT_RATE_LIMIT_MAX = "10000";
     process.env.WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_MAX = "10000";
     delete process.env.WEBSITE_ENGAGEMENT_INTERACTION_RATE_LIMIT_MAX;
@@ -396,7 +434,8 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       expect(row.utm_source).toBe("newsletter");
       expect(row.locale).toBe("id");
       expect(row.email_masked).toBe("b***********@example.com");
-      expect(row.email_hash).toMatch(/^k1:[0-9a-f]{64}$/);
+      expect(row.email_hash).toMatch(/^h1:[0-9a-f]{64}$/);
+      expect(row.contact_encrypted).toMatch(/^v2:e1:/);
 
       // No identifier, no IP, no user agent anywhere in the persisted row.
       const persisted = JSON.stringify(row);
@@ -415,7 +454,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       }
 
       const stored = await inTenant(T1, (tx) =>
-        revealSubmission(tx, T1, row.id, ring())
+        revealSubmission(tx, T1, row.id, rings().encryption)
       );
 
       expect(stored?.email).toBe("Budi.Santoso@Example.com");
@@ -629,7 +668,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       await sameRefusal(fx.tokens.c!);
 
       const rotated = await inTenant(T1, (tx) =>
-        rotateSource(tx, T1, U1, fx.sourceIds.a!, ring())
+        rotateSource(tx, T1, U1, fx.sourceIds.a!, rings().hash)
       );
 
       expect(rotated.outcome).toBe("rotated");
@@ -772,7 +811,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
         }[]
       )[0]!.id;
       const revealed = await inTenant(T1, (tx) =>
-        revealSubmission(tx, T1, id, ring())
+        revealSubmission(tx, T1, id, rings().encryption)
       );
 
       expect(revealed?.message).toBe(sqli);
@@ -1169,7 +1208,9 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
         await inTenant(T2, (tx) => fetchSubmission(tx, T2, id!))
       ).toBeNull();
       expect(
-        await inTenant(T2, (tx) => revealSubmission(tx, T2, id!, ring()))
+        await inTenant(T2, (tx) =>
+          revealSubmission(tx, T2, id!, rings().encryption)
+        )
       ).toBeNull();
       expect(
         (
@@ -1225,7 +1266,9 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
         consent_copy_version: "v1"
       });
       expect(
-        await inTenant(T1, (tx) => revealSubmission(tx, T1, id!, ring()))
+        await inTenant(T1, (tx) =>
+          revealSubmission(tx, T1, id!, rings().encryption)
+        )
       ).toBeNull();
 
       const withdrawn = await events(
@@ -1264,6 +1307,268 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
   });
 
   // -------------------------------------------------------------------------
+  describe("the single-ring transition (Issue #1262, ADR-0137 section 3)", () => {
+    // The retired single ring: one key that encrypted AND hashed.
+    const OLD_SPEC = `k1:${keyBytes(9)}`;
+    const OLD_RING = parseKeyRing(OLD_SPEC, "OLD") as KeyRing;
+    const SINGLE_RING: WebsiteEngagementRings = {
+      encryption: OLD_RING,
+      hash: OLD_RING,
+      legacyHash: []
+    };
+
+    /** The documented transition: old key LAST in the encryption ring, and verify-only for hashes. */
+    function useTransitionRings() {
+      process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS = `${ENCRYPTION_SPEC},${OLD_SPEC}`;
+      process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = HASH_SPEC;
+      process.env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS = OLD_SPEC;
+      delete process.env.WEBSITE_ENGAGEMENT_KEYS;
+    }
+
+    /** What a deployment produced BEFORE #1262: a source and a submission, both under the one key. */
+    async function writeUnderSingleRing(code: string) {
+      const created = await inTenant(T1, (tx) =>
+        createSource(
+          tx,
+          T1,
+          U1,
+          {
+            code,
+            name: code,
+            consentCopyVersion: "v1",
+            challengeMode: "none",
+            acceptedKinds: ["contact", "lead", "interaction"],
+            domainIds: [fx.domainIds.shop!]
+          },
+          OLD_RING
+        )
+      );
+
+      if (created.outcome !== "created") throw new Error("fixture");
+
+      const parsed = parseSourceToken(created.token)!;
+      const verified = await verifyIntake(
+        getRuntimeSql(),
+        parsed,
+        new Request("https://cms.integration.test/x", {
+          method: "POST",
+          headers: { origin: `https://${SHOP}` }
+        }),
+        SINGLE_RING
+      );
+
+      if (!verified) throw new Error("fixture: single-ring verify");
+
+      const validated = validateSubmissionRequest(body(created.token));
+
+      if (!validated.valid) throw new Error("fixture: body");
+
+      const recorded = await recordSubmission(
+        getRuntimeSql(),
+        verified,
+        validated.value,
+        "source_none",
+        SINGLE_RING,
+        "corr-1262"
+      );
+
+      if (recorded.outcome !== "created") throw new Error("fixture: record");
+
+      return {
+        sourceId: created.source.id,
+        token: created.token,
+        secret: parsed.secret,
+        submissionId: recorded.submissionId,
+        emailNormalized: validated.value.contact!.emailNormalized!
+      };
+    }
+
+    async function storedTokenHash(sourceId: string): Promise<string> {
+      const rows = (await getAdminSql()`
+        SELECT token_hash FROM awcms_engagement_sources WHERE id = ${sourceId}
+      `) as { token_hash: string }[];
+
+      return rows[0]!.token_hash;
+    }
+
+    async function storedSubmission(id: string) {
+      const rows = (await getAdminSql()`
+        SELECT contact_encrypted, email_hash, phone_hash
+        FROM awcms_engagement_submissions WHERE id = ${id}
+      `) as {
+        contact_encrypted: string;
+        email_hash: string;
+        phone_hash: string;
+      }[];
+
+      return rows[0]!;
+    }
+
+    test("a token and the contact details written under the retired single ring keep resolving, and the token moves onto the hash ring on first use", async () => {
+      useTransitionRings();
+
+      const old = await writeUnderSingleRing("legacy-site");
+      const before = await storedSubmission(old.submissionId);
+
+      expect(await storedTokenHash(old.sourceId)).toMatch(/^k1:[0-9a-f]{64}$/);
+      expect(before.contact_encrypted).toMatch(/^v2:k1:/);
+      expect(before.email_hash).toMatch(/^k1:[0-9a-f]{64}$/);
+      expect((await countSourceTokensByKeyId(getRuntimeSql(), T1)).k1).toBe(1);
+
+      // Old ciphertext still decrypts: the old key is a NON-first encryption key.
+      const revealed = await inTenant(T1, (tx) =>
+        revealSubmission(tx, T1, old.submissionId, rings().encryption)
+      );
+
+      expect(revealed?.email).toBe("Budi.Santoso@Example.com");
+
+      // An old identifier hash still resolves through the lookup candidates.
+      expect(
+        matchesAnyHash(
+          before.email_hash,
+          lookupHashCandidates(
+            old.emailNormalized,
+            { purpose: SUBMISSION_EMAIL_HASH_PURPOSE, tenantId: T1 },
+            rings()
+          )
+        )
+      ).toBe(true);
+
+      // The old token is accepted through the public intake ...
+      const first = await submit(body(old.token));
+
+      expect(first.status).toBe(200);
+
+      // ... and its stored hash now lives under the ACTIVE hash key.
+      const upgraded = await storedTokenHash(old.sourceId);
+
+      expect(upgraded).toMatch(/^h1:[0-9a-f]{64}$/);
+      expect(
+        matchesAnyHash(
+          upgraded,
+          lookupHashCandidates(
+            old.secret,
+            { purpose: SOURCE_TOKEN_HASH_PURPOSE, tenantId: T1 },
+            rings()
+          )
+        )
+      ).toBe(true);
+      expect(
+        (await countSourceTokensByKeyId(getRuntimeSql(), T1)).k1
+      ).toBeUndefined();
+
+      // New rows are written by the two NEW keys, never by the old one.
+      const fresh = (await getAdminSql()`
+        SELECT contact_encrypted, email_hash, phone_hash
+        FROM awcms_engagement_submissions
+        WHERE source_id = ${old.sourceId} AND id <> ${old.submissionId}
+      `) as {
+        contact_encrypted: string;
+        email_hash: string;
+        phone_hash: string;
+      }[];
+
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0]!.contact_encrypted).toMatch(/^v2:e1:/);
+      expect(fresh[0]!.email_hash).toMatch(/^h1:/);
+      expect(fresh[0]!.phone_hash).toMatch(/^h1:/);
+
+      // The old submission is evidence: nothing rewrote it.
+      expect(await storedSubmission(old.submissionId)).toEqual(before);
+      expect(await countSubmissionContactsByKeyId(getRuntimeSql(), T1)).toEqual(
+        { k1: 1, e1: 1 }
+      );
+
+      // Without the legacy keys now, the token keeps working: it is on h1.
+      delete process.env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS;
+      expect((await submit(body(old.token))).status).toBe(200);
+    });
+
+    test("without the legacy keys a single-ring token is the uniform refusal, and the retired variable fails closed", async () => {
+      useTransitionRings();
+
+      const old = await writeUnderSingleRing("legacy-off");
+
+      delete process.env.WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS;
+
+      const refusedOld = await submit(body(old.token));
+      const refusedGarbage = await submit(
+        body(`${old.token.slice(0, -4)}AAAA`)
+      );
+
+      expect(refusedOld.status).toBe(403);
+      expect(refusedOld.text).toBe(refusedGarbage.text);
+      expect(await storedTokenHash(old.sourceId)).toMatch(/^k1:/);
+
+      // Only the retired single ring: refused by name, never used for a role.
+      delete process.env.WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS;
+      delete process.env.WEBSITE_ENGAGEMENT_HASH_KEYS;
+      process.env.WEBSITE_ENGAGEMENT_KEYS = OLD_SPEC;
+      expect((await submit(body(old.token))).status).toBe(503);
+
+      // Still set NEXT TO the new rings: also refused.
+      useTransitionRings();
+      process.env.WEBSITE_ENGAGEMENT_KEYS = OLD_SPEC;
+      expect((await submit(body(old.token))).status).toBe(503);
+
+      // One key in both new rings: refused at runtime, whatever config:validate said.
+      useCurrentRings();
+      process.env.WEBSITE_ENGAGEMENT_HASH_KEYS = `h9:${keyBytes(3)}`;
+      expect((await submit(body(fx.tokens.a!))).status).toBe(503);
+    });
+
+    test("the upgrade never overwrites a rotation that commits while it runs (compare-and-swap)", async () => {
+      useTransitionRings();
+
+      const old = await writeUnderSingleRing("legacy-race");
+      const ROTATED = `h1:${"a".repeat(64)}`;
+      let upgrade: Promise<unknown> | undefined;
+
+      // A rotation holds the row; the intake reads the OLD hash, matches it, and
+      // its upgrade UPDATE waits for the lock. The rotation then commits.
+      await asApp(T1, async (tx) => {
+        await tx`
+          SELECT 1 FROM awcms_engagement_sources WHERE id = ${old.sourceId} FOR UPDATE
+        `;
+        upgrade = verifyIntake(
+          getRuntimeSql(),
+          parseSourceToken(old.token)!,
+          new Request("https://cms.integration.test/x", {
+            method: "POST",
+            headers: { origin: `https://${SHOP}` }
+          }),
+          rings()
+        );
+        await Bun.sleep(400);
+        await tx`
+          UPDATE awcms_engagement_sources SET token_hash = ${ROTATED}
+          WHERE id = ${old.sourceId}
+        `;
+      });
+
+      await upgrade;
+
+      // The upgrade found no row still carrying the hash it matched.
+      expect(await storedTokenHash(old.sourceId)).toBe(ROTATED);
+    });
+
+    test("rotating a single-ring source moves it onto the hash ring and retires the old token", async () => {
+      useTransitionRings();
+
+      const old = await writeUnderSingleRing("legacy-rotate");
+      const rotated = await inTenant(T1, (tx) =>
+        rotateSource(tx, T1, U1, old.sourceId, rings().hash)
+      );
+
+      if (rotated.outcome !== "rotated") throw new Error("rotate");
+
+      expect(await storedTokenHash(old.sourceId)).toMatch(/^h1:/);
+      expect((await submit(body(old.token))).status).toBe(403);
+      expect((await submit(body(rotated.token))).status).toBe(200);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe("sources", () => {
     test("the token is stored only as a keyed hash; the view never carries it", async () => {
       const secret = fx.tokens.a!.split(".")[3]!;
@@ -1273,7 +1578,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
 
       for (const row of rows) {
         expect(row.row).not.toContain(secret);
-        expect(row.row).toMatch(/"token_hash": "k1:[0-9a-f]{64}"/);
+        expect(row.row).toMatch(/"token_hash": "h1:[0-9a-f]{64}"/);
       }
 
       const view = await inTenant(T1, (tx) =>
@@ -1289,7 +1594,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
             acceptedKinds: ["lead"],
             domainIds: []
           },
-          ring()
+          rings().hash
         )
       );
 
@@ -1320,7 +1625,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
             acceptedKinds: ["lead"],
             domainIds: []
           },
-          ring()
+          rings().hash
         )
       );
       const foreign = await inTenant(T1, (tx) =>
@@ -1336,7 +1641,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
             acceptedKinds: ["lead"],
             domainIds: [fx.domainIds.other!]
           },
-          ring()
+          rings().hash
         )
       );
       const sameCodeOtherTenant = await inTenant(T2, (tx) =>
@@ -1352,7 +1657,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
             acceptedKinds: ["lead"],
             domainIds: []
           },
-          ring()
+          rings().hash
         )
       );
 
@@ -1382,7 +1687,7 @@ suite("website_engagement against PostgreSQL (Issue #1153)", () => {
       expect(
         (
           await inTenant(T1, (tx) =>
-            rotateSource(tx, T1, U1, fx.sourceIds.a!, ring())
+            rotateSource(tx, T1, U1, fx.sourceIds.a!, rings().hash)
           )
         ).outcome
       ).toBe("revoked");

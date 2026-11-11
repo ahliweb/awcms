@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](website-engagement.md)
 
-<!-- i18n-source-hash: sha256:56bd2a85afddb4533868d8a8d592c3a84b137bc6fc4926510215934dc31749b2 -->
+<!-- i18n-source-hash: sha256:85feadca81c53949dddac29414b0009c4836ecaa5cf310f84c3f09ae1cf92ea2 -->
 
 # Website engagement — intake lead dan kontak (Issue #1153, ADR-0155)
 
@@ -101,7 +101,7 @@ Tidak ada kanal penarikan publik; tidak ada mode server-ke-server bertanda tanga
 
 ## Pengoperasian
 
-Setel `WEBSITE_ENGAGEMENT_KEYS` (lihat `.env.example`), aktifkan modul untuk tenant di Module Management (aktif secara bawaan), buat source dengan `POST /sources` yang mendaftar id domain tenant, berikan ke situs web token sekali-tampil, versi teks persetujuan yang ditampilkannya, dan `eventId` yang dibuat per render formulir. Rotasi dengan `POST /sources/{id}/rotate`; hentikan situs dengan `POST /sources/{id}/revoke`.
+Setel dua cincin kunci `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS` dan `WEBSITE_ENGAGEMENT_HASH_KEYS` yang tidak berbagi kunci (lihat `.env.example`; deployment yang memakai cincin tunggal pensiunan `WEBSITE_ENGAGEMENT_KEYS` mengikuti runbook transisi di README modul, Issue #1262), aktifkan modul untuk tenant di Module Management (aktif secara bawaan), buat source dengan `POST /sources` yang mendaftar id domain tenant, berikan ke situs web token sekali-tampil, versi teks persetujuan yang ditampilkannya, dan `eventId` yang dibuat per render formulir. Rotasi dengan `POST /sources/{id}/rotate`; hentikan situs dengan `POST /sources/{id}/revoke`.
 
 ## Keputusan audit lanjutan
 

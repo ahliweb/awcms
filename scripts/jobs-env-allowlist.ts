@@ -892,9 +892,24 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
       "verified by the webhook route; the registration script is run by an operator, not scheduled"
   },
   {
+    name: "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+    reason:
+      "a secret: the ring that encrypts website submissions' contact details (ADR-0155, ADR-0137 section 3, Issue #1262); read only by the public intake and the admin routes. The retention purge deletes aged rows by id under column-only grants and never decrypts, so no cron job reads it"
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_HASH_KEYS",
+    reason:
+      "a secret: the HMAC ring that keys every website source-token and identifier hash (ADR-0155, ADR-0137 section 3, Issue #1262); read only by the public intake and the admin routes. No cron job hashes or looks up a token"
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
+    reason:
+      "a secret: verify-only keys of the retired single ring, accepted only when the public intake checks a source token during the Issue #1262 transition; never used by a job"
+  },
+  {
     name: "WEBSITE_ENGAGEMENT_KEYS",
     reason:
-      "a secret: the ring that encrypts website submissions' contact details and keys every source-token and identifier hash (ADR-0155); read only by the public intake and the admin routes. The retention purge deletes aged rows by id under column-only grants and never decrypts, so no cron job reads it"
+      "the RETIRED single ring (Issue #1262), read only so a stale value makes the website_engagement routes refuse by name; no job reads it"
   },
   {
     name: "CRM_LEADS_ENCRYPTION_KEYS",

@@ -12,9 +12,33 @@ A tenant's website posts a contact request, a lead or an interaction to ONE publ
 - **Events**: `awcms.website_engagement.submission.received` and `...submission.withdrawn` (AsyncAPI), carrying an opaque reference, never the visitor's details.
 - **Admin API**: sources (create, change, rotate, revoke, delete), masked submission reads, an audited **reveal**, and the controller's **withdrawal**; every route is default-deny and `experimental` with no navigation entry until the screen lands.
 - **Retention**: declared in `module.ts` through `data_lifecycle` (default 180 days).
-- **Configuration**: `WEBSITE_ENGAGEMENT_KEYS` (required to store anything; fail closed) and the rate-limit variables in `.env.example`.
+- **Configuration**: TWO key rings, `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS` (contact details) and `WEBSITE_ENGAGEMENT_HASH_KEYS` (source-token and identifier hashes), both required to store anything (fail closed) and sharing no key with each other or with any other secret (ADR-0137 section 3, Issue #1262; enforced at runtime and by `config:validate`); the optional, transitional `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS`; and the rate-limit variables in `.env.example`.
 
-Layout: `domain/` (pure: token, validator, origin policy, events, messages), `application/` (source and submission directories, the intake, the public handler), `module.ts`. Routes live under `src/pages/api/v1/website-engagement/`.
+Layout: `domain/` (pure: token, validator, origin policy, events, messages, key rings), `application/` (source and submission directories, the intake, the public handler, key-transition counts), `module.ts`. Routes live under `src/pages/api/v1/website-engagement/`.
+
+## Key rings and the single-ring transition (Issue #1262)
+
+Until Issue #1262 one ring, `WEBSITE_ENGAGEMENT_KEYS`, both encrypted contact details and keyed every hash, which ADR-0137 section 3 forbids: a leaked key exposed the ciphertext and the hash oracle at once. It is now **retired**: if it is still set, every route answers 503 (`KEY_RING_UNAVAILABLE`, or the generic public refusal) and `config:validate` fails by name. It is never silently used for either role.
+
+| Variable                              | Role                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS`  | First key encrypts new contact details; every key decrypts.                                                       |
+| `WEBSITE_ENGAGEMENT_HASH_KEYS`        | First key writes every new token and identifier hash; every key verifies.                                         |
+| `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS` | Transitional, verify-only: accepted when a source token (or an older identifier hash) is looked up; never writes. |
+
+Rules, checked by the same predicate at runtime and in `config:validate`: the encryption and hash rings share no key; a legacy key is neither a current hash key nor a current hash key id; a legacy key is never the **first** (writing) encryption key; nothing shares material with another module's ring or single-key secret.
+
+**Runbook for an existing deployment** whose old ring was `k1:<OLD>`:
+
+1. Generate two new keys (`openssl rand -base64 32` twice).
+2. Set `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS=e2:<NEW_E>,k1:<OLD>` (old key last: it only decrypts old submissions), `WEBSITE_ENGAGEMENT_HASH_KEYS=h1:<NEW_H>` and `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS=k1:<OLD>`; unset `WEBSITE_ENGAGEMENT_KEYS`.
+3. Run `bun run config:validate`, then deploy. Every existing source token keeps working: it verifies through the legacy key and, on its first accepted submission, its stored hash is re-written under `h1` (a compare-and-swap, so a rotation that lands meanwhile is never undone). New submissions are encrypted under `e2` and hashed under `h1`.
+4. Watch `bun run security:readiness`: "Website engagement source tokens are under the active hash key" lists live sources per key id. Rotate any source that does not submit (`POST /api/v1/website-engagement/sources/{id}/rotate`). When no live source is left on `k1`, unset `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS`.
+5. "Website engagement contact ciphertexts are under the active key" lists stored contact ciphertexts per key id. Remove `k1` from the encryption ring only when it reaches zero there **and** in every backup you may restore (ADR-0137 section 2).
+
+Identifier hashes (`email_hash`, `phone_hash`) written before the transition stay under `k1`; no reader in this repository looks them up today, and they resolve through `lookupHashCandidates` only while the legacy keys are configured. A future consumer that looks them up must keep the legacy keys until step 5 reaches zero.
+
+**Open decision (fail closed).** There is deliberately **no re-encryption or re-hash job** for submissions: a submission is append-only evidence and the `sql/327` guard refuses any rewrite of its ciphertext or hashes outside a withdrawal. Old rows therefore leave through the retention purge (default 180 days) or a withdrawal, and the old key stays a decrypt-only key until then. Loosening the evidence guard to allow an in-place re-key is a separate decision (it would let the application rewrite stored evidence) and is not taken here.
 
 ## Residual risks
 

@@ -50,6 +50,14 @@ import { countPushAuthSecretsByKeyId } from "../src/modules/push-delivery/applic
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import { countTelegramChatsByKeyId } from "../src/modules/telegram-delivery/application/telegram-chat-rekey";
 import { resolveTelegramEncryptionRingUnchecked } from "../src/modules/telegram-delivery/domain/telegram-config";
+import {
+  countSourceTokensByKeyId,
+  countSubmissionContactsByKeyId
+} from "../src/modules/website-engagement/application/key-transition";
+import {
+  resolveWebsiteEngagementEncryptionRingUnchecked,
+  resolveWebsiteEngagementHashRingUnchecked
+} from "../src/modules/website-engagement/domain/engagement-config";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
 import {
@@ -5317,6 +5325,8 @@ type KeyIdCountInput = {
   name: string;
   ringEnv: string;
   rekeyCommand: string;
+  /** Replaces the "Run `bun run <rekeyCommand>`" advice when a dataset has no re-key job. */
+  remedy?: string;
   ring: { ok: true; keys: { id: string }[] } | { ok: false };
   count: typeof countPushAuthSecretsByKeyId;
 };
@@ -5387,7 +5397,7 @@ async function checkCiphertextKeyIdDistribution(
         name,
         severity,
         status: "fail",
-        evidence: `${stale} row(s) are still under a key id other than the active key "${activeKeyId}" (rows per key id: ${summary}). Run \`bun run ${input.rekeyCommand}\` (idempotent, resumable); an old key in ${input.ringEnv} may be removed only once this reaches zero.`
+        evidence: `${stale} row(s) are still under a key id other than the active key "${activeKeyId}" (rows per key id: ${summary}). ${input.remedy ?? `Run \`bun run ${input.rekeyCommand}\` (idempotent, resumable);`} an old key in ${input.ringEnv} may be removed only once this reaches zero.`
       };
     }
 
@@ -5435,6 +5445,52 @@ export function checkTelegramChatKeyIds(
   });
 }
 
+/**
+ * Issue #1262: live website source tokens still hashed under a key other than
+ * the hash ring's active one, which includes every token still verified only by
+ * `WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS`. There is no re-key job for a token (its
+ * secret is not stored): it is re-hashed on its next accepted submission, or
+ * moved by rotating it.
+ */
+export function checkWebsiteEngagementTokenKeyIds(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<SecurityCheckResult> {
+  const ring = resolveWebsiteEngagementHashRingUnchecked(env);
+
+  return checkCiphertextKeyIdDistribution({
+    name: "Website engagement source tokens are under the active hash key",
+    ringEnv:
+      "WEBSITE_ENGAGEMENT_HASH_KEYS (or WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS)",
+    rekeyCommand: "",
+    remedy:
+      "Each source is re-hashed on its next accepted submission; rotate any source that does not submit (POST /api/v1/website-engagement/sources/{id}/rotate);",
+    ring: ring.ok ? ring : { ok: false },
+    count: countSourceTokensByKeyId
+  });
+}
+
+/**
+ * Issue #1262: submission contact ciphertexts still under a key other than the
+ * encryption ring's active one (after the transition: the retired single-ring
+ * key). There is deliberately no re-encryption job: a submission is append-only
+ * evidence (sql/327 guard), so old rows leave by retention or withdrawal.
+ */
+export function checkWebsiteEngagementContactKeyIds(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<SecurityCheckResult> {
+  const ring = resolveWebsiteEngagementEncryptionRingUnchecked(env);
+
+  return checkCiphertextKeyIdDistribution({
+    name: "Website engagement contact ciphertexts are under the active key",
+    ringEnv: "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+    rekeyCommand: "",
+    remedy:
+      "There is no re-encryption job (a submission is append-only evidence); these rows leave through the retention purge or a withdrawal;",
+    ring: ring.ok ? ring : { ok: false },
+    count: countSubmissionContactsByKeyId
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
@@ -5479,6 +5535,8 @@ export async function runSecurityReadinessChecks(): Promise<
     checkPushAuthSecretRingConfigured(),
     await checkPushAuthSecretKeyIds(),
     await checkTelegramChatKeyIds(),
+    await checkWebsiteEngagementTokenKeyIds(),
+    await checkWebsiteEngagementContactKeyIds(),
     // MUST stay last: it closes the shared database pool when it finishes.
     await checkEntitlementBlastRadius()
   ];

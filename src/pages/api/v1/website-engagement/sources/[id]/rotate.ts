@@ -12,7 +12,7 @@ import {
   runIdempotent,
   withEffectiveChallenge
 } from "../../../../../../modules/website-engagement/application/route-support";
-import { resolveWebsiteEngagementRing } from "../../../../../../modules/website-engagement/domain/engagement-config";
+import { resolveWebsiteEngagementRings } from "../../../../../../modules/website-engagement/domain/engagement-config";
 import { WEBSITE_ENGAGEMENT_GUARDS } from "../../../../../../modules/website-engagement/domain/website-engagement-constants";
 
 const SCOPE = "website_engagement_source_rotate";
@@ -33,9 +33,11 @@ export const POST = defineTenantRoute<string>({
 
     if (refused) return refused;
 
-    const ring = resolveWebsiteEngagementRing();
+    const keys = resolveWebsiteEngagementRings();
 
-    if (!ring.ok) return ringUnavailable()!;
+    if (!keys.ok) return ringUnavailable()!;
+
+    const ring = keys.rings.hash;
 
     const id = asUuid(context.params.id);
 
