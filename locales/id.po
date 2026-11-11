@@ -9477,3 +9477,27 @@ msgstr[0] "Pencabutan bersifat permanen. Kredensial otorisasi dihapus dan hingga
 
 msgid "Only a connected account can be the default sender. This one is not connected yet."
 msgstr "Hanya akun yang terhubung yang dapat menjadi pengirim default. Akun ini belum terhubung."
+
+msgid "Delivery progress"
+msgstr "Progres pengiriman"
+
+msgid "Messages queued through this sender, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed."
+msgstr "Pesan yang diantrekan melalui pengirim ini, menurut status. Diperbarui selama halaman ini terbuka; ini bukan tanda terima pengiriman dan berhenti saat tab ditutup."
+
+msgid "Connection"
+msgstr "Koneksi"
+
+msgid "Reconnecting…"
+msgstr "Menyambung ulang…"
+
+msgid "Not live — showing the state as of {time}"
+msgstr "Tidak langsung — menampilkan keadaan per {time}"
+
+msgid "Your access to this progress ended. Reload the page to see what you can still view."
+msgstr "Akses Anda ke progres ini berakhir. Muat ulang halaman untuk melihat apa yang masih dapat Anda lihat."
+
+msgid "{sent} sent, {failed} failed, {waiting} waiting"
+msgstr "{sent} terkirim, {failed} gagal, {waiting} menunggu"
+
+msgid "Refresh progress"
+msgstr "Muat ulang progres"

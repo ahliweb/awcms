@@ -11,6 +11,13 @@ info:
     channels here (and their own `ModuleDescriptor.events.publishes` entries)
     when they start calling `appendDomainEvent`
     (docs/awcms/10_template_kode_coding_standard.md §Domain event envelope).
+
+    Realtime progress streams are NOT channels of this contract (Issue
+    #1171, ADR-0154). `GET /api/v1/whatsapp/senders/{id}/progress/stream`
+    is a Server-Sent Events projection of committed queue rows, re-read and
+    re-authorized per tick; it publishes no domain event, consumes none, and
+    is not a broker. Its frame (`WhatsappSenderProgressFrame`) is documented
+    in the OpenAPI contract with the endpoint that serves it.
 channels:
   awcms.domain-event-runtime.sample.recorded:
     address: awcms.domain-event-runtime.sample.recorded

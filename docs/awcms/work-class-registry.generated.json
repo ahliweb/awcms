@@ -2307,6 +2307,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/whatsapp/senders/[id]/progress.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/whatsapp/suppressions/[id].ts",
       "workClass": "interactive",
       "source": "factory"

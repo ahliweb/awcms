@@ -43,5 +43,5 @@
 ## Concrete implementation follow-ups (2026-10-24)
 
 - [#1170](https://github.com/ahliweb/awcms/issues/1170): audit and test that delivery/job/container launch commands execute the pinned Bun binary, without false positives for Bun-hosted Node built-ins.
-- [#1171](https://github.com/ahliweb/awcms/issues/1171): implement an authenticated SSE-first / optional native Bun WebSocket gateway **only after** [#1168](https://github.com/ahliweb/awcms/issues/1168) accepts its architecture; do not claim a gateway already ships.
+- [#1171](https://github.com/ahliweb/awcms/issues/1171): **implemented as SSE only**, per [ADR-0154](../adr/0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.md) (accepted). The first admitted topic is one WhatsApp sender's delivery progress (`GET /api/v1/whatsapp/senders/{id}/progress/stream`), served by the existing Bun process and projected from the queue rows. **No WebSocket gateway exists** and none is admitted; there is no inbox or campaign topic yet. Operations: [realtime-progress-streams.md](realtime-progress-streams.md).
 - [AWCMS-One #469](https://github.com/ahliweb/awcms-one/issues/469): root template/deploy/commerce runtime guard, leaving upstream `apps/cms` intact.

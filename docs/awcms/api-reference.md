@@ -14031,6 +14031,58 @@ One entry per sender that has any queue row in the last 35 days, plus the deploy
 | 401    | Missing or invalid session.                         | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                         | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/whatsapp/senders/{id}/progress` — Snapshot of one sender's delivery progress (the stream's REST snapshot and polling fallback).
+
+- **operationId**: `getWhatsappSenderProgress`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1171, ADR-0154. Counts per queue status for this sender, the 20 most recently changed messages (id, status, when — never a number, a body, a template, a provider response or an error text) and the `cursor` a stream resumes from. It is the page's state with no stream, the polling fallback, and what a client re-fetches on `snapshot-required`. Requires `whatsapp_delivery.progress.read`, and the sender must be an account the caller may see by the rules of `channel_accounts` (assignment, business scope). An unknown id, another tenant's account and a hidden account are one answer: `404`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description                             |
+| ---- | ---- | -------- | ------------- | --------------------------------------- |
+| `id` | path | yes      | string (uuid) | The sender's channel account id (uuid). |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The progress snapshot.      | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/whatsapp/senders/{id}/progress/stream` — Server-Sent Events stream of one sender's delivery progress, re-authorized every tick.
+
+- **operationId**: `streamWhatsappSenderProgress`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1171, ADR-0154. `text/event-stream` from the existing Bun process; there is no WebSocket. A projection of committed queue rows: a frame never causes a send, an enqueue or a status change.
+
+**Opening.** A present `Origin` that is not the site's own origin is refused with `403 ORIGIN_REFUSED` before any work. The caller needs `whatsapp_delivery.progress.read` and must be able to see the sender (same rule as the snapshot); otherwise `401`/`403`/`404`, and no stream opens. Over the per-actor, per-tenant or per-instance cap the answer is `429 STREAM_CAPACITY_REACHED` with `Retry-After`, never a queued stream. A client resumes by sending the last event id back as `Last-Event-ID` (`EventSource` does this by itself).
+
+**Events.** Every data event carries `id: <cursor>` (a database keyset position). `progress` carries a `WhatsappSenderProgressFrame`: the current counts (coalesced, latest value per tick) and the messages that changed since the previous cursor, at most 50; a tick with nothing new writes a heartbeat comment instead. `snapshot-required` means re-fetch `GET /api/v1/whatsapp/senders/{id}/progress`: the `Last-Event-ID` was malformed, foreign or purged, or more than 50 messages changed at once. Terminal: `authorization-revoked` (do NOT reconnect; the role, the assignment, the business scope or the session ended — audited), `stream-error` (the database refused; back off with jitter), `slow-consumer` (the client fell behind and was evicted) and `stream-expired` (the 10-minute lifetime ended; reconnect with the cursor). Re-authorized every 5 s, which is also the revocation latency.
+
+**Parameters**
+
+| Name            | In     | Required | Type          | Description                                                    |
+| --------------- | ------ | -------- | ------------- | -------------------------------------------------------------- |
+| `id`            | path   | yes      | string (uuid) | The sender's channel account id (uuid).                        |
+| `Last-Event-ID` | header | no       | string        | The cursor of the last event received, sent back on reconnect. |
+
+**Responses**
+
+| Status | Description                                                                         | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The event stream.                                                                   | string                                 |
+| 400    | Validation error.                                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 429    | A connection cap is reached; retry after `Retry-After` seconds or use the snapshot. | [`ApiError`](#standard-error-envelope) |
+| 503    | The database refused the opening transaction; retry later.                          | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/whatsapp/suppressions` — List the suppression list.
 
 - **operationId**: `listWhatsappSuppressions`

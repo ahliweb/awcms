@@ -1019,10 +1019,11 @@ describe("module descriptor", () => {
     ).toEqual([...tables, "awcms_whatsapp_sender_policies"].sort());
   });
 
-  test("the twelve permissions mirror the sql/179 and sql/323 seeds exactly", () => {
+  test("the thirteen permissions mirror the sql/179, sql/323 and sql/360 seeds exactly", () => {
     const seeded = [
       "sql/179_awcms_whatsapp_delivery_permissions.sql",
-      "sql/323_awcms_whatsapp_sender_routing_permissions.sql"
+      "sql/323_awcms_whatsapp_sender_routing_permissions.sql",
+      "sql/360_awcms_whatsapp_sender_progress_stream.sql"
     ]
       .flatMap((file) => [
         ...readFileSync(file, "utf8").matchAll(
@@ -1035,7 +1036,7 @@ describe("module descriptor", () => {
       .map((p) => `${p.activityCode}.${p.action}`)
       .sort();
 
-    expect(declared).toHaveLength(12);
+    expect(declared).toHaveLength(13);
     expect(declared).toEqual(seeded);
   });
 

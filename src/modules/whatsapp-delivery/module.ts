@@ -208,6 +208,16 @@ export const whatsappDeliveryModule = defineModule({
       action: "configure",
       description:
         "Set or clear the default WhatsApp sender of a business scope; affects later messages only (high-risk, audited at warning)"
+    },
+    {
+      // Issue #1171, ADR-0154: the realtime progress topic
+      // `whatsapp.sender.progress` (REST snapshot + SSE stream), seeded by
+      // `sql/360`. Separate from `senders.read` so live progress can be granted
+      // without the sender diagnostics, and revoked on its own mid-stream.
+      activityCode: "progress",
+      action: "read",
+      description:
+        "Watch one WhatsApp sender's delivery progress live (counts per status and message ids with their status; never a number, a body or a provider response)"
     }
   ],
   navigation: [

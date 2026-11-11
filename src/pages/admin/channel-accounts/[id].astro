@@ -85,6 +85,11 @@ import {
   resolveSenderScreen,
   type SenderScreen
 } from "../../../modules/whatsapp-delivery/application/whatsapp-sender-screen";
+import {
+  readSenderProgressSnapshot,
+  resolveVisibleSender,
+  type WhatsappSenderProgressSnapshot
+} from "../../../modules/whatsapp-delivery/application/whatsapp-sender-progress";
 
 const ssr = Astro.locals.ssrContext!;
 const { t, tn } = getTranslatorFor(Astro.locals.locale);
@@ -122,6 +127,12 @@ const SENDERS_READ_GUARD = {
   activityCode: "senders",
   action: "read"
 } as const;
+/** Issue #1171 — the live progress panel; enforced by the snapshot and stream routes. */
+const PROGRESS_GUARD = {
+  moduleKey: "whatsapp_delivery",
+  activityCode: "progress",
+  action: "read"
+} as const;
 
 /** The `?notice=` values the client sets after a successful action: an allow-list, never echoed text. */
 const NOTICES: Record<string, string> = {
@@ -150,6 +161,7 @@ type DetailData =
       health: AccountHealthView | null;
       capabilities: CapabilityView[];
       sender: SenderScreen | null;
+      progress: WhatsappSenderProgressSnapshot | null;
     };
 
 const screen = await loadAdminScreen({
@@ -197,7 +209,27 @@ const screen = await loadAdminScreen({
       );
     }
 
-    return { found: true, enabled: true, access, health, capabilities, sender };
+    // Issue #1171 — the same permission and visibility rule as the snapshot
+    // route, so the panel is never more generous than the stream behind it.
+    let progress: WhatsappSenderProgressSnapshot | null = null;
+
+    if (sender !== null && (await can({ ...PROGRESS_GUARD }))) {
+      const resource = await resolveVisibleSender(context, account.id);
+
+      if (resource !== null) {
+        progress = await readSenderProgressSnapshot(context, resource, 20);
+      }
+    }
+
+    return {
+      found: true,
+      enabled: true,
+      access,
+      health,
+      capabilities,
+      sender,
+      progress
+    };
   },
   onError: (error) => {
     logAdminPageError(
@@ -221,6 +253,7 @@ const providerName = account ? channelProviderLabel(t, account.provider) : "";
 const confirmAccountText = account?.displayName ?? "";
 const confirmConnectionText = providerName;
 const sender = detail?.sender ?? null;
+const progress = detail?.progress ?? null;
 const hasActions =
   detail !== null &&
   (detail.canDisconnect ||
@@ -395,6 +428,77 @@ function quota(health: AccountHealthView): string | null {
           </dl>
         )}
       </section>
+
+      {progress !== null && account !== null && (
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="channel-account-progress-title"
+          id="channel-account-progress"
+          data-delivery-progress
+          data-stream-url={`/api/v1/whatsapp/senders/${account.id}/progress/stream`}
+          data-snapshot-url={`/api/v1/whatsapp/senders/${account.id}/progress`}
+          data-connection="stale"
+          data-label-live={t("Live")}
+          data-label-reconnecting={t("Reconnecting…")}
+          data-label-stale={t("Not live — showing the state as of {time}")}
+          data-label-revoked={t(
+            "Your access to this progress ended. Reload the page to see what you can still view."
+          )}
+          data-label-summary={t(
+            "{sent} sent, {failed} failed, {waiting} waiting"
+          )}
+        >
+          <h2 class="admin-section-title" id="channel-account-progress-title">
+            {t("Delivery progress")}
+          </h2>
+          <p class="page-description">
+            {t(
+              "Messages queued through this sender, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed."
+            )}
+          </p>
+          <p class="page-description">
+            <strong>{t("Connection")}:</strong>{" "}
+            <span data-progress-state>
+              {t("Not live — showing the state as of {time}", {
+                time: formatUtcMinute(progress.at)
+              })}
+            </span>
+          </p>
+          <dl class="admin-detail-list" id="channel-account-progress-counts">
+            <dt>{t("Queued")}</dt>
+            <dd data-progress-count="queued">{progress.counts.queued}</dd>
+            <dt>{t("Waiting to retry")}</dt>
+            <dd data-progress-count="retry_wait">
+              {progress.counts.retry_wait}
+            </dd>
+            <dt>{t("Sending")}</dt>
+            <dd data-progress-count="sending">{progress.counts.sending}</dd>
+            <dt>{t("Sent")}</dt>
+            <dd data-progress-count="sent">{progress.counts.sent}</dd>
+            <dt>{t("Failed")}</dt>
+            <dd data-progress-count="failed">{progress.counts.failed}</dd>
+            <dt>{t("Cancelled")}</dt>
+            <dd data-progress-count="cancelled">{progress.counts.cancelled}</dd>
+            <dt>{t("Expired")}</dt>
+            <dd data-progress-count="expired">{progress.counts.expired}</dd>
+          </dl>
+          <p
+            class="visually-hidden"
+            aria-live="polite"
+            aria-atomic="true"
+            data-progress-announce
+          ></p>
+          <div>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-progress-refresh
+            >
+              {t("Refresh progress")}
+            </button>
+          </div>
+        </section>
+      )}
 
       {detail.connection !== null && (
         <section
@@ -902,6 +1006,15 @@ function quota(health: AccountHealthView): string | null {
     newKey
   } from "../../../lib/ui/admin-idempotency-key";
   import { confirmationMatches } from "../../../lib/ui/channel-accounts-screen";
+  import { mountDeliveryProgress } from "../../../lib/ui/delivery-progress-client";
+
+  // Issue #1171 — the live delivery progress panel (rendered only for a caller
+  // who may read it). Works with no stream: see the module header.
+  for (const panel of document.querySelectorAll<HTMLElement>(
+    "[data-delivery-progress]"
+  )) {
+    mountDeliveryProgress(panel);
+  }
 
   const host = document.getElementById("channel-account-i18n");
 

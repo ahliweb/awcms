@@ -130,7 +130,7 @@ See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every tas
 
 ## AWCMS documentation package
 
-[Bun-only channel worker and realtime standard](bun-delivery-realtime-runtime.md) (issue #1167, realtime ADR #1168) governs current Bun email/WhatsApp/Web Push dispatch and planned Bun SSE/WebSocket. It does not claim a gateway already exists.
+[Bun-only channel worker and realtime standard](bun-delivery-realtime-runtime.md) (issue #1167, realtime ADR #1168) governs current Bun email/WhatsApp/Web Push dispatch. Realtime progress is SSE only (ADR-0154, issue #1171): [realtime progress streams](realtime-progress-streams.md) documents the one admitted topic and its operations. No WebSocket gateway exists.
 
 ## Omnichannel foundation (design, Accepted)
 

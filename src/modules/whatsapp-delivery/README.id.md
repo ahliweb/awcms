@@ -214,3 +214,14 @@ Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q
 ## Runtime Bun WhatsApp / status UI terencana
 
 `bun run whatsapp:dispatch` sudah mengirim melalui API provider dari antrean Bun tunggal. Perutean Meta multi-pengirim ([#1141](https://github.com/ahliweb/awcms/issues/1141)) memakainya, dan pekerjaan StarSender serta webhook [#1142–#1143](https://github.com/ahliweb/awcms/issues/1142) wajib memakainya juga, tanpa worker Node.js/Socket.IO. SSE/WS Bun nanti hanya menampilkan status; diterima provider bukan delivered. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).
+
+## Progres pengirim real-time (Issue #1171, ADR-0154)
+
+Progres pengiriman satu pengirim, secara langsung, sebagai Server-Sent Events dari proses Bun yang sudah ada: `GET /api/v1/whatsapp/senders/{id}/progress/stream`, dengan snapshot REST dan fallback polling `GET /api/v1/whatsapp/senders/{id}/progress`, di bawah permission yang dapat diberikan terpisah `whatsapp_delivery.progress.read` (`sql/360`, yang juga menambah indeks keyset `(tenant_id, sender_account_id, updated_at, id)`). Implementasi: `application/whatsapp-sender-progress.ts` (topik) di atas `_shared/progress-sse-route.ts` (factory).
+
+- **Proyeksi, bukan jalur kirim.** Frame dibaca dari `awcms_whatsapp_messages`; tidak ada yang di stream mengantrekan, mengirim, atau mengubah status (ADR-0148 I10). "Terkirim" berarti provider menerima pesan, sama seperti di bagian lain modul ini.
+- **Visibilitas sama dengan `GET /senders`.** Pengirim harus akun `channel_accounts` yang boleh dilihat pemanggil (penugasan, business scope); akun tak dikenal, milik tenant lain, dan tersembunyi adalah satu `404`. Diputuskan ulang setiap tick 5 dtk bersama permission: peran, penugasan, atau brand yang dicabut saat stream berjalan mengakhiri stream dengan `authorization-revoked` dan baris audit `realtime_stream.revoked`.
+- **Teredaksi.** Jumlah per status, dan per pesan yang berubah hanya id, status, dan waktunya. Tidak pernah nomor (mentah, masked, atau hash), isi, variabel, template, respons provider, atau teks error.
+- **Cursor.** `wsp1.<akun>.<updated_at µs>.<id pesan>`, dihitung PostgreSQL; `Last-Event-ID` melanjutkan; cursor asing, salah bentuk, atau sudah dipurge, atau lebih dari 50 perubahan sekaligus, menghasilkan `snapshot-required`.
+- **Layar.** Panel progres di `/admin/channel-accounts/{id}` merender jumlah di server, punya tombol muat ulang manual, melakukan polling saat stream tak tersedia, menyatakan koneksi sebagai teks, dan mengumumkan secara sopan dengan laju terbatas.
+- **Keputusan terbuka (fail-closed untuk sekarang):** pengirim deployment (`sender_account_id` NULL) tidak punya stream: ia tidak punya id akun untuk di-scope, dan menampilkan lajur seluruh tenant kepada pemanggil yang terbatas pada satu brand akan membocorkan volume brand lain. Operasional: [stream progres real-time](../../../docs/awcms/realtime-progress-streams.id.md).

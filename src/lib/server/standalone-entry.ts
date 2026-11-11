@@ -71,6 +71,7 @@ import { resolveIdempotencyHmacKey } from "../security/idempotency-hmac";
 import { buildSecurityHeaders } from "../security/security-headers";
 import { isTurnstileRequired } from "../security/turnstile";
 import { isVideoEmbedEnabled } from "../security/video-embed";
+import { runWithResponsePressure } from "./response-pressure";
 
 const DEFAULT_PORT = 4321;
 const DEFAULT_HOST = "localhost";
@@ -124,7 +125,11 @@ export function applySecurityHeaders(
 export function createRequestListener(handler: AstroNodeHandler) {
   return (req: IncomingMessage, res: ServerResponse): void => {
     applySecurityHeaders(res);
-    handler(req, res);
+    // Issue #1171 — a stream route can only see how far its client has fallen
+    // behind through this probe; see `response-pressure.ts` for the
+    // measurement that made it necessary. Adds no header and no behaviour to a
+    // route that never asks.
+    runWithResponsePressure(res, () => handler(req, res));
   };
 }
 
