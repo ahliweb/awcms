@@ -223,3 +223,13 @@ export function getWorkerDatabaseClient(): Bun.SQL {
 export function getSetupDatabaseClient(): Bun.SQL {
   return getNamedDatabaseClient("setup");
 }
+
+/**
+ * A pool configured exactly like the named clients above, for a dedicated
+ * per-job role whose connection string lives in its own module (so that only
+ * the job that needs that role's URL reaches the code reading it). First user:
+ * `telegram-engagement-dispatch-client.ts` (Issue #1156).
+ */
+export function buildDedicatedRoleClient(databaseUrl: string): Bun.SQL {
+  return buildClient(databaseUrl, "worker");
+}

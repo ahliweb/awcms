@@ -1,5 +1,5 @@
 {
-  "moduleCount": 37,
+  "moduleCount": 38,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -616,6 +616,29 @@
       "permissionCount": 6,
       "navigationCount": 1,
       "jobCount": 3,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "telegram_engagement",
+      "name": "Telegram Engagement",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "system",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "module_management",
+        "domain_event_runtime",
+        "channel_accounts"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 5,
+      "navigationCount": 0,
+      "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

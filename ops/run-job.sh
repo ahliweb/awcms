@@ -322,13 +322,31 @@ case "$JOB" in
 esac
 # END GENERATED: targets that need DATABASE_URL
 
+# A job that runs as its OWN database role (Issue #1156, audit H-A of PR #1260)
+# receives none of the shared logins, whatever the host configured: next to its
+# key ring, `DATABASE_URL` (awcms_app) or `WORKER_DATABASE_URL` (awcms_worker)
+# would be a broader credential than the role it was given.
+# BEGIN GENERATED: dedicated-role jobs (bun run jobs:env-allowlist:generate)
+# Source: dedicatedRoleTargets() in scripts/jobs-env-allowlist.ts, derived from each
+# target's import closure. Do not edit between the markers; regenerate.
+case "$JOB" in
+  telegram-engagement:dispatch)
+    WITHHOLD_ALL_DATABASE_URLS=1
+    ;;
+  *)
+    WITHHOLD_ALL_DATABASE_URLS=0
+    ;;
+esac
+# END GENERATED: dedicated-role jobs
+
 # `WORKER_DATABASE_URL` counts as configured only when it is not blank after
 # trimming, exactly as `readConfiguredUrl` in `src/lib/database/client.ts` reads
 # it: a blank value falls back to DATABASE_URL, so the credential stays.
 docker exec "$APP" printenv \
-  | WITHHOLD="$WITHHOLD_DATABASE_URL" awk -F= '
+  | WITHHOLD="$WITHHOLD_DATABASE_URL" DEDICATED="$WITHHOLD_ALL_DATABASE_URLS" awk -F= '
       NR==FNR { want[$0]=1; next }
       ($1 in want) {
+        if (ENVIRON["DEDICATED"] == "1" && ($1 == "DATABASE_URL" || $1 == "WORKER_DATABASE_URL" || $1 == "SETUP_DATABASE_URL")) next
         kept[++n] = $0
         if ($1 == "DATABASE_URL") db = n
         if ($1 == "WORKER_DATABASE_URL") {
@@ -346,7 +364,9 @@ docker exec "$APP" printenv \
     ' <(printf '%s\n' "$NAMES") - \
   > "$ENVFILE"
 
-if [ "$WITHHOLD_DATABASE_URL" = "1" ] && ! grep -q '^DATABASE_URL=' "$ENVFILE"; then
+if [ "$WITHHOLD_ALL_DATABASE_URLS" = "1" ]; then
+  log "DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL withheld from $JOB (it runs as its own database role)"
+elif [ "$WITHHOLD_DATABASE_URL" = "1" ] && ! grep -q '^DATABASE_URL=' "$ENVFILE"; then
   log "DATABASE_URL withheld from $JOB (WORKER_DATABASE_URL is configured; this job never opens the app connection)"
 fi
 

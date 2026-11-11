@@ -807,6 +807,40 @@ channels:
       `WebsiteEngagementSubmissionWithdrawn`. Downstream consumers MUST honour
       it. Idempotent: withdrawing an already withdrawn submission publishes
       nothing.
+  awcms.telegram_engagement.interaction.received:
+    address: awcms.telegram_engagement.interaction.received
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A verified customer Telegram update was ingested, in the transaction that
+      receipted it (ADR-0152, ADR-0150 section 3 envelope, Issue #1156). Producer:
+      `telegram-engagement/application/webhook-ingest.ts`'s
+      `ingestVerifiedUpdate`, for a `/start` (`eventKind: command`) or a message
+      (`eventKind: message`) from a contact who started the bot. The envelope
+      `payload` is `TelegramEngagementInteractionReceived` (contract version 1):
+      the channel account id, the opaque ACCOUNT-SCOPED contact reference as both
+      sender and conversation, the per-bot `providerEventId` (the update id,
+      never compared across bots), the content KINDS, whether it was forwarded,
+      `provenance: secret_header` and the `privacyClass`. Never a Telegram user
+      id, chat id, username, display name, phone number, message text, token or
+      header; the body is not kept upstream (ADR-0150 section 1). A replayed or
+      duplicate update publishes nothing. The intended consumer is the
+      cross-channel inbox (#1164) and the downstream CRM adapter (awcms-one #460).
+  awcms.telegram_engagement.consent.changed:
+    address: awcms.telegram_engagement.consent.changed
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A customer Telegram contact's consent changed for one purpose (ADR-0152
+      section 6, Issue #1156), in the transaction that recorded the append-only
+      evidence. Producer: `telegram-engagement/application/contact-directory.ts`'s
+      `recordConsent`. The envelope `payload` is
+      `TelegramEngagementConsentChanged`: the channel account id, the opaque
+      contact reference, the purpose, the action, the method and the notice
+      version (`privacyClass: consent`). Downstream consumers MUST honour an
+      `opt_out` at once. Never the evidence payload or an identity.
   awcms.social_publishing.publication.queued:
     address: awcms.social_publishing.publication.queued
     messages:
@@ -1377,6 +1411,18 @@ operations:
       $ref: "#/channels/awcms.website_engagement.submission.withdrawn"
     messages:
       - $ref: "#/channels/awcms.website_engagement.submission.withdrawn/messages/DomainEvent"
+  publishTelegramEngagementInteractionReceived:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.telegram_engagement.interaction.received"
+    messages:
+      - $ref: "#/channels/awcms.telegram_engagement.interaction.received/messages/DomainEvent"
+  publishTelegramEngagementConsentChanged:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.telegram_engagement.consent.changed"
+    messages:
+      - $ref: "#/channels/awcms.telegram_engagement.consent.changed/messages/DomainEvent"
   publishSocialPublicationQueued:
     action: send
     channel:
@@ -1602,6 +1648,85 @@ components:
           }
         withdrawnAt: { type: string, format: date-time }
         privacyClass: { type: string, enum: [personal, anonymous] }
+    TelegramEngagementInteractionReceived:
+      type: object
+      description: >-
+        The `payload` of `awcms.telegram_engagement.interaction.received`,
+        eventVersion 1.0, contractVersion 1 (the ADR-0150 section 3 envelope).
+        Ids, kinds and classes; never an identity or the words.
+      required:
+        - contractVersion
+        - provider
+        - channelAccountId
+        - eventKind
+        - providerEventId
+        - conversationRef
+        - senderRef
+        - contentKinds
+        - forwarded
+        - provenance
+        - occurredAt
+        - receivedAt
+        - correlationId
+        - privacyClass
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        provider: { type: string, enum: [telegram] }
+        channelAccountId: { type: string, format: uuid }
+        eventKind: { type: string, enum: [message, command, membership] }
+        providerEventId:
+          type: string
+          description: The per-bot Telegram update id. Unique only together with `channelAccountId`.
+        conversationRef:
+          type: string
+          format: uuid
+          description: The account-scoped contact id (a private chat is the contact).
+        senderRef: { type: string, format: uuid }
+        contentKinds:
+          type: array
+          items: { type: string, enum: [text, media, contact, location, other] }
+        forwarded: { type: boolean }
+        provenance: { type: string, enum: [secret_header] }
+        occurredAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        correlationId: { type: string }
+        privacyClass:
+          type: string
+          enum: [operational, consent, conversation_meta, customer_content]
+    TelegramEngagementConsentChanged:
+      type: object
+      description: >-
+        The `payload` of `awcms.telegram_engagement.consent.changed`, eventVersion 1.0.
+      required:
+        - contractVersion
+        - provider
+        - channelAccountId
+        - contactRef
+        - purpose
+        - action
+        - method
+        - occurredAt
+        - privacyClass
+      properties:
+        contractVersion: { type: string, enum: ["1"] }
+        provider: { type: string, enum: [telegram] }
+        channelAccountId: { type: string, format: uuid }
+        contactRef: { type: string, format: uuid }
+        purpose: { type: string, enum: [support, transactional, marketing] }
+        action: { type: string, enum: [opt_in, opt_out] }
+        method:
+          type: string
+          enum:
+            - start_command
+            - stop_command
+            - consent_button
+            - withdraw_button
+            - bot_blocked
+            - provider_forbidden
+            - operator_withdrawal
+        noticeVersion: { type: string, nullable: true }
+        occurredAt: { type: string, format: date-time }
+        privacyClass: { type: string, enum: [consent] }
     SocialPublicationQueued:
       type: object
       description: >-

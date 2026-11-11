@@ -345,6 +345,126 @@ export function renderRunnerDatabaseUrl(targets: readonly string[]): string {
   ].join("\n");
 }
 
+/** The markers around the generated dedicated-role decision in `ops/run-job.sh`. */
+export const RUNNER_DEDICATED_BEGIN =
+  "# BEGIN GENERATED: dedicated-role jobs (bun run jobs:env-allowlist:generate)";
+export const RUNNER_DEDICATED_END = "# END GENERATED: dedicated-role jobs";
+
+/**
+ * Connection seams of a DEDICATED per-job database role (Issue #1156, audit H-A
+ * of PR #1260): file -> the one env name holding that role's login. A job that
+ * reaches one of these runs as that role ONLY, so the runner withholds
+ * `DATABASE_URL`, `WORKER_DATABASE_URL` and `SETUP_DATABASE_URL`
+ * unconditionally: either broader login next to the job's key ring would undo
+ * the role (`awcms_app` sees every channel secret; `awcms_worker` sees the
+ * WhatsApp sender credentials).
+ */
+export const DEDICATED_ROLE_CLIENT_FILES: Readonly<Record<string, string>> = {
+  "src/lib/database/telegram-engagement-dispatch-client.ts":
+    "TELEGRAM_ENGAGEMENT_DATABASE_URL"
+};
+
+/** The shared-role client calls a dedicated-role job must not reach. */
+const SHARED_CLIENT_CALL =
+  /\b(getDatabaseClient|getWorkerDatabaseClient|getSetupDatabaseClient)\s*\(/;
+
+/**
+ * Targets that run as a dedicated role, derived from the import closure (a
+ * closure that reaches a `DEDICATED_ROLE_CLIENT_FILES` entry). Two-way gate:
+ * such a target must NOT also reach a shared-role client call or need the app
+ * connection string, or the generator fails; the generated runner block lists
+ * exactly these targets, so a new dedicated-role job cannot ship without the
+ * runner withholding the broader logins from it.
+ */
+export function dedicatedRoleTargets(
+  packageScripts: Record<string, string>,
+  root = process.cwd()
+): { targets: string[]; problems: string[] } {
+  const operatorOnly = new Set(
+    OPERATOR_ONLY_TARGETS.map((entry) => entry.target)
+  );
+  const targets: string[] = [];
+  const problems: string[] = [];
+
+  for (const target of Object.keys(packageScripts)) {
+    if (operatorOnly.has(target)) continue;
+
+    const entry = resolveTargetEntry(target, packageScripts);
+
+    if (entry === null) continue;
+
+    const trace = traceImports(entry, root);
+
+    if (
+      !trace.files.some((file) =>
+        Object.hasOwn(DEDICATED_ROLE_CLIENT_FILES, file)
+      )
+    ) {
+      continue;
+    }
+
+    targets.push(target);
+
+    for (const file of trace.files) {
+      if (file === DATABASE_CLIENT_FILE) continue;
+      if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file)) continue;
+
+      const source = stripComments(readFileSync(path.join(root, file), "utf8"));
+
+      if (SHARED_CLIENT_CALL.test(source)) {
+        problems.push(
+          `${target} runs as a dedicated database role but ${file} calls a shared-role client; split it out of the job's closure`
+        );
+      }
+    }
+
+    if (needsAppConnectionString(target, packageScripts, root)) {
+      problems.push(
+        `${target} runs as a dedicated database role but needs the app connection string (DATABASE_URL); a dedicated-role job may hold no broader login`
+      );
+    }
+  }
+
+  return { targets: sortedCodePoints(targets), problems };
+}
+
+/**
+ * The shell that sets `WITHHOLD_ALL_DATABASE_URLS=1` for a dedicated-role job:
+ * the runner then drops `DATABASE_URL`, `WORKER_DATABASE_URL` and
+ * `SETUP_DATABASE_URL` from its environment whatever the host configured.
+ */
+export function renderRunnerDedicatedRoles(targets: readonly string[]): string {
+  const names = sortedCodePoints(targets);
+  const bad = names.filter(
+    (name) => !/^[A-Za-z0-9][A-Za-z0-9:_-]*$/.test(name)
+  );
+
+  if (bad.length > 0) {
+    throw new Error(
+      `the dedicated-role target list must hold plain package-script names; got ${JSON.stringify(bad)}`
+    );
+  }
+
+  return [
+    RUNNER_DEDICATED_BEGIN,
+    "# Source: dedicatedRoleTargets() in scripts/jobs-env-allowlist.ts, derived from each",
+    "# target's import closure. Do not edit between the markers; regenerate.",
+    'case "$JOB" in',
+    ...(names.length > 0
+      ? [
+          `  ${names.join(" | ")})`,
+          "    WITHHOLD_ALL_DATABASE_URLS=1",
+          "    ;;"
+        ]
+      : []),
+    "  *)",
+    "    WITHHOLD_ALL_DATABASE_URLS=0",
+    "    ;;",
+    "esac",
+    RUNNER_DEDICATED_END
+  ].join("\n");
+}
+
 /** `source` with the text between `begin` and `end` (inclusive) replaced by `block`; null when a marker is missing. */
 export function spliceBetween(
   source: string,
@@ -446,6 +566,35 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "email:senders:verify",
         reason:
           "decrypts each tenant Mailketing account's token once per pass for the read-only GET /credits and GET /senders probes (#1160)"
+      },
+      {
+        target: "telegram-engagement:dispatch",
+        reason:
+          "decrypts a customer bot's token and webhook seed in memory, per claimed endpoint or message, for that row's tenant (#1156, ADR-0152 section 10). It connects ONLY as its own role awcms_telegram_engagement_dispatch (sql/353), whose RESTRICTIVE policy shows it only live customer bot tokens and webhook seeds; the runner withholds DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL from it unconditionally (dedicatedRoleTargets), and the job refuses to start if either is present or if it is not connected as that role, so the ring meets no login that could read a WhatsApp, Mailketing or social secret (audits H-2 and H-A of PR #1260)"
+      }
+    ]
+  },
+  {
+    name: "TELEGRAM_ENGAGEMENT_DATABASE_URL",
+    reason:
+      "the login of the awcms_telegram_engagement_dispatch role (sql/353); whoever holds it can read the customer bot tokens and webhook seeds of every tenant, and nothing else of the channel secrets",
+    jobs: [
+      {
+        target: "telegram-engagement:dispatch",
+        reason:
+          "its only database connection, with no fallback to DATABASE_URL (#1156, audit H-2 of PR #1260)"
+      }
+    ]
+  },
+  {
+    name: "TELEGRAM_ENGAGEMENT_KEYS",
+    reason:
+      "the ring that encrypts customer Telegram chat ids and queued message text and keys the contact hash (ADR-0152 section 6); whoever holds it can read every stored customer chat id",
+    jobs: [
+      {
+        target: "telegram-engagement:dispatch",
+        reason:
+          "decrypts the chat id and the text of each message it delivers (#1156)"
       }
     ]
   },
@@ -1301,11 +1450,35 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const dedicated = dedicatedRoleTargets(packageScripts, ROOT);
+
+  if (dedicated.problems.length > 0) {
+    console.error(
+      `jobs:env-allowlist FAILED — dedicated-role jobs reach a broader database login:\n  ${dedicated.problems.join("\n  ")}`
+    );
+    process.exit(1);
+  }
+
+  const runnerWithDedicated = spliceBetween(
+    runnerRendered,
+    RUNNER_DEDICATED_BEGIN,
+    RUNNER_DEDICATED_END,
+    renderRunnerDedicatedRoles(dedicated.targets)
+  );
+
+  if (runnerWithDedicated === null) {
+    console.error(
+      `jobs:env-allowlist FAILED — ${RUNNER} lacks the generated block between\n  ${RUNNER_DEDICATED_BEGIN}\n  ${RUNNER_DEDICATED_END}\n` +
+        "  Without it a dedicated-role job would receive DATABASE_URL and WORKER_DATABASE_URL."
+    );
+    process.exit(1);
+  }
+
   const fingerprint = envFingerprint(names, pairs);
   const outputs = [
     { file: OUTPUT, rendered: renderGlobal(names, fingerprint) },
     { file: SCOPED_OUTPUT, rendered: renderScoped(pairs, fingerprint) },
-    { file: RUNNER, rendered: runnerRendered }
+    { file: RUNNER, rendered: runnerWithDedicated }
   ];
 
   if (CHECK_ONLY) {
