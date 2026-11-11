@@ -72,7 +72,11 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // The other content capability `public_content` (blog_content provides it)
     // remains unlisted — out of scope for this change. `social_publishing` is
     // listed at the end of this map since Issue #1145 gave it a provider.
-    media_library: "1.0.0",
+    // `1.1.0` (Issue #1145, residual L8 of ADR-0157) ADDS the exported
+    // `MediaPublicationRecheckPort` (the social dispatcher re-checks a media
+    // object's availability and rights just before a provider call).
+    // `MediaLibraryPort` is unchanged: a new interface, a MINOR bump.
+    media_library: "1.1.0",
     // seo_facts provides (ADR-0038 seo_distribution admission — the DISCOVERY
     // scope, adapting awcms-micro ADR-0028). Owned (provided) by `blog_content`
     // and consumed by `seo_distribution` (optional), both shipping in this base,
@@ -160,6 +164,12 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // no-op. First assigned number: the port is unchanged from the day it was
     // declared (#643), what changed is that a base module now provides it.
     social_publishing: "1.0.0",
+    // article_publication_status is provided by `blog_content` (Issue #1145,
+    // residual L8 of ADR-0157), port
+    // `_shared/ports/article-publication-status-port.ts`, consumed (optional) by
+    // `social_publishing`'s dispatcher: "is this article still published
+    // publicly?" asked just before a provider call. First assigned number.
+    article_publication_status: "1.0.0",
     // crm_lead is provided by the base `crm_leads` module (Issue #1166,
     // ADR-0153 section 6), port `_shared/ports/crm-lead-port.ts`: read a lead's
     // state, confirm or reverse a conversion, opaque ids only. No in-repo

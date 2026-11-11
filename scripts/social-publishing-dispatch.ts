@@ -44,9 +44,12 @@ import { logScriptFailure } from "../src/lib/logging/error-log";
 import type { ChannelPublisherCredentialPort } from "../src/modules/_shared/ports/channel-account-port";
 import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
+import { articlePublicationStatusAdapter } from "../src/modules/blog-content/application/article-publication-status-adapter";
+import { mediaPublicationRecheckAdapter } from "../src/modules/media-library/application/media-publication-recheck-adapter";
 import {
   dispatchSocialPublishQueue,
-  noPublishCredentialPort
+  noPublishCredentialPort,
+  type PublicationSourceChecks
 } from "../src/modules/social-publishing/application/social-publish-dispatch";
 import {
   isSocialPublishCredentialPathEnabled,
@@ -54,6 +57,17 @@ import {
 } from "../src/modules/social-publishing/domain/social-publishing-constants";
 
 const MAX_PASSES_PER_TENANT = 10;
+
+/**
+ * The dispatch-time source re-check (ADR-0157 L8), composed unconditionally:
+ * the article and media facts belong to `blog_content` and `media_library`, and
+ * each adapter calls its narrow SECURITY DEFINER function (`sql/386`), whose
+ * EXECUTE only this job's role holds.
+ */
+export const PUBLICATION_SOURCE_CHECKS: PublicationSourceChecks = {
+  articles: articlePublicationStatusAdapter,
+  media: mediaPublicationRecheckAdapter
+};
 
 type TenantRow = { id: string };
 
@@ -130,7 +144,8 @@ async function main() {
             correlationId,
             publishers: channelAccountPortAdapter,
             credentials,
-            health: channelAccountPortAdapter
+            health: channelAccountPortAdapter,
+            sources: PUBLICATION_SOURCE_CHECKS
           });
 
           claimed += result.claimed;

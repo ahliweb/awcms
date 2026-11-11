@@ -85,6 +85,46 @@ export type ResolvedMediaReferenceDTO = {
     | null;
 };
 
+/**
+ * Why a media object can no longer go out on a publication (Issue #1145,
+ * residual L8 of ADR-0157). A closed vocabulary: it is written to a job row.
+ */
+export type MediaPublicationRefusal =
+  "MEDIA_UNAVAILABLE" | "MEDIA_RIGHTS_REVOKED";
+
+export type MediaPublicationRecheck =
+  { eligible: true } | { eligible: false; reason: MediaPublicationRefusal };
+
+/**
+ * `MediaPublicationRecheckPort` (capability `media_library` 1.1.0, additive:
+ * `MediaLibraryPort` is unchanged). The question `social_publishing`'s
+ * dispatcher asks immediately before a provider call: "may this media object
+ * STILL be published under the tenant's name?" The snapshot taken at enqueue
+ * decides WHAT is sent; this decides whether it may be sent at all, so a
+ * takedown or a withdrawn rights adjudication after the job was queued stops it.
+ *
+ * The concrete adapter
+ * (`media-library/application/media-publication-recheck-adapter.ts`) calls the
+ * narrow SECURITY DEFINER function `awcms_social_source_media_state`
+ * (`sql/386`); EXECUTE belongs to the dispatcher's role only, which learns one
+ * closed code for one id and gains no read of the media registry.
+ */
+export type MediaPublicationRecheckPort = {
+  /**
+   * `eligible: true` only when the object of `tenantId` exists, is not
+   * soft-deleted, is `verified` or `attached`, its rights adjudication is still
+   * `verified` and its copyright status is a known one (`fair_use` included, as
+   * at enqueue). `MEDIA_UNAVAILABLE` for a missing, deleted, other-tenant or
+   * no-longer-safe object; `MEDIA_RIGHTS_REVOKED` when the rights no longer
+   * clear it. `tx` must be scoped to `tenantId`; a mismatch or a database error
+   * THROWS and is never read as "eligible".
+   */
+  recheckMediaForPublication(
+    tx: Bun.SQL,
+    input: { tenantId: string; mediaObjectId: string }
+  ): Promise<MediaPublicationRecheck>;
+};
+
 export type MediaLibraryPort = {
   /**
    * `true` only when managed-media enforcement is genuinely active for

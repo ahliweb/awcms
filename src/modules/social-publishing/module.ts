@@ -129,6 +129,13 @@ export const socialPublishingModule = defineModule({
         capability: "media_library",
         providedBy: "media_library",
         optional: true
+      },
+      // ADR-0157 L8: the dispatcher re-checks the source article just before a
+      // provider call. Composed by `scripts/social-publishing-dispatch.ts`.
+      {
+        capability: "article_publication_status",
+        providedBy: "blog_content",
+        optional: true
       }
     ]
   },

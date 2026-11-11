@@ -32,7 +32,8 @@ describe("media capability ownership (ADR-0036)", () => {
 
   test("RETIREMENT: `news_media` is gone from the version registry, `media_library` is present, and nobody declares news_media", () => {
     expect(CAPABILITY_CONTRACT_VERSIONS.news_media).toBeUndefined();
-    expect(CAPABILITY_CONTRACT_VERSIONS.media_library).toBe("1.0.0");
+    // 1.1.0 (Issue #1145, ADR-0157 L8): the additive MediaPublicationRecheckPort.
+    expect(CAPABILITY_CONTRACT_VERSIONS.media_library).toBe("1.1.0");
 
     for (const module of [mediaLibraryModule, blogContentModule]) {
       expect(module.capabilities?.provides ?? []).not.toContain("news_media");

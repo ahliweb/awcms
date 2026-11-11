@@ -8,7 +8,7 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 39    |
-| Migrations                          | 268   |
+| Migrations                          | 269   |
 | `awcms_*` tables                    | 267   |
 | Tables with `FORCE` RLS             | 249   |
 | RLS-free tables (global, by design) | 18    |
@@ -332,6 +332,7 @@
 | 266 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
 | 267 | `sql/373_awcms_social_dispatch_runtime_grants.sql`                     |
 | 268 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
+| 269 | `sql/386_awcms_social_dispatch_source_recheck.sql`                     |
 
 ### Tables & Row-Level Security
 

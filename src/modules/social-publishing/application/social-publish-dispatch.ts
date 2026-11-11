@@ -25,8 +25,9 @@
  *    per-account advisory lock, enforce fair share and the daily cap, re-resolve
  *    each account through the `channel_accounts` port, and flip the usable ones
  *    to `publishing` with a lease. Database reads and writes only.
- * 2. SEND (no transaction): decrypt the credential in a transaction of its own
- *    that closes before the call, hand it to the adapter in memory, call the
+ * 2. SEND (no transaction): in a transaction of its own that closes before the
+ *    call, RE-CHECK the source (below) and only then decrypt the credential;
+ *    hand it to the adapter in memory, call the
  *    provider with an `ssrfSafeFetch` client bound to the call's abort signal
  *    (a timeout CANCELS the request, it does not abandon it), no redirects, and a
  *    per-account circuit breaker.
@@ -54,6 +55,19 @@
  *   the job is claimed again): that window, a slow provider and a lost response
  *   are all the same case, and for a provider without a dedupe key the only
  *   protection is the operator, not the dispatcher.
+ * - A source that can no longer be published is never sent (ADR-0157 L8). The
+ *   snapshot decides WHAT is sent; immediately before the call the dispatcher
+ *   asks the modules that own the facts whether it may still be sent at all: the
+ *   source article through `ArticlePublicationStatusPort` (`blog_content`) and
+ *   the media object through `MediaPublicationRecheckPort` (`media_library`).
+ *   An article unpublished, archived, made private or deleted after enqueue
+ *   (`SOURCE_RETRACTED`), a media object taken down (`MEDIA_UNAVAILABLE`) or
+ *   whose rights were withdrawn (`MEDIA_RIGHTS_REVOKED`) fails the job
+ *   terminally: no credential is decrypted, the provider is not called, the
+ *   breaker is not charged, nothing retries it, and the audit row carries ids
+ *   and the code only. A check that cannot be answered (a database error) is
+ *   never read as "may send": the job waits and is retried
+ *   (`SOURCE_CHECK_UNAVAILABLE`), within its retry budget.
  * - The credential is in memory for one call, is never logged, stored, evented,
  *   audited or put in an error, and a thrown adapter error's MESSAGE is never
  *   kept (only a fixed code).
@@ -70,6 +84,11 @@ import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { resolveModuleEnabled } from "../../identity-access/application/auth-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import type { ArticlePublicationStatusPort } from "../../_shared/ports/article-publication-status-port";
+import type {
+  MediaPublicationRecheckPort,
+  MediaPublicationRefusal
+} from "../../_shared/ports/media-library-port";
 import type {
   SocialPublishAdapter,
   SocialPublishContent,
@@ -122,9 +141,20 @@ function inTenantWork<T>(
   });
 }
 
+/**
+ * The two questions asked immediately before every provider call (ADR-0157
+ * L8). REQUIRED: a dispatcher that cannot ask them cannot be composed, so there
+ * is no "unchecked" default to fall back to.
+ */
+export type PublicationSourceChecks = {
+  articles: ArticlePublicationStatusPort;
+  media: MediaPublicationRecheckPort;
+};
+
 export type DispatchSocialPublishOptions = {
   publishers: ChannelPublisherPort;
   credentials: ChannelPublisherCredentialPort;
+  sources: PublicationSourceChecks;
   /**
    * Where a credential the PROVIDER refused is reported (Issue #1146): the
    * account goes `degraded`, so its other jobs are held, not failed one by one.
@@ -179,6 +209,10 @@ type Candidate = {
   caption: string;
   link_url: string | null;
   media_snapshot: MediaSnapshot | null;
+  /** Which source the publication names: re-checked before the call (L8). */
+  source_kind: "article" | "manual";
+  source_id: string | null;
+  media_object_id: string | null;
 };
 
 type Claimed = Candidate & {
@@ -216,8 +250,37 @@ const PHRASES: Record<string, string> = {
   RETRIES_EXHAUSTED: "The retry budget is spent.",
   HOLD_EXHAUSTED: "The account stayed unavailable for too long.",
   NEEDS_REAUTH: "The account must be re-authorised.",
-  REJECTED: "The provider refused this content."
+  REJECTED: "The provider refused this content.",
+  SOURCE_RETRACTED:
+    "The source article is no longer published; nothing was sent.",
+  MEDIA_UNAVAILABLE:
+    "The media object is no longer available; nothing was sent.",
+  MEDIA_RIGHTS_REVOKED:
+    "The media object's rights no longer clear it; nothing was sent.",
+  SOURCE_CHECK_UNAVAILABLE:
+    "Whether the source may still be published could not be checked; nothing was sent."
 };
+
+/** The terminal verdicts of the source re-check: the job is never sent and never retried by the dispatcher. */
+type SourceWithdrawnCode = "SOURCE_RETRACTED" | MediaPublicationRefusal;
+
+/** What the pre-send transaction decided. Only `checked` may go on to a provider call. */
+type PreSend =
+  | { kind: "unchecked" }
+  | { kind: "withdrawn"; code: SourceWithdrawnCode }
+  | {
+      kind: "checked";
+      credential: Awaited<
+        ReturnType<ChannelPublisherCredentialPort["resolvePublishCredential"]>
+      >;
+    };
+
+const SOURCE_WITHDRAWN_CODES: ReadonlySet<string> =
+  new Set<SourceWithdrawnCode>([
+    "SOURCE_RETRACTED",
+    "MEDIA_UNAVAILABLE",
+    "MEDIA_RIGHTS_REVOKED"
+  ]);
 
 function phraseFor(code: string): string {
   if (PHRASES[code]) return PHRASES[code]!;
@@ -292,7 +355,7 @@ async function claim(
       SELECT j.id, j.status, j.publication_id, j.channel_account_id, j.provider,
              j.account_kind, j.variant, j.attempt_count, j.max_attempts,
              j.hold_count, j.idempotency_key, p.title, p.caption, p.link_url,
-             p.media_snapshot
+             p.media_snapshot, p.source_kind, p.source_id, p.media_object_id
       FROM awcms_social_publish_jobs AS j
       JOIN awcms_social_publications AS p
         ON p.tenant_id = j.tenant_id AND p.id = j.publication_id
@@ -824,7 +887,9 @@ async function finalise(
       resourceType: "social_publish_job",
       resourceId: job.id,
       severity: "warning",
-      message: "A social publish job failed.",
+      message: SOURCE_WITHDRAWN_CODES.has(finalCode)
+        ? "A social publish job was stopped before sending: its source can no longer be published."
+        : "A social publish job failed.",
       attributes: {
         publicationId: job.publication_id,
         accountId: job.channel_account_id,
@@ -970,6 +1035,49 @@ function ambiguous(adapter: SocialPublishAdapter, code: string): FinalOutcome {
 }
 
 /**
+ * The L8 re-check (ADR-0157): may this claimed job's source still be published?
+ * Asked in the pre-send transaction, before any credential is decrypted. The
+ * article is checked first (a retracted article makes its media moot), then the
+ * media object, if the publication carries one. `null` means "may be sent".
+ */
+async function recheckSource(
+  tx: Bun.SQL,
+  tenantId: string,
+  job: Claimed,
+  sources: PublicationSourceChecks
+): Promise<SourceWithdrawnCode | null> {
+  if (job.source_kind === "article") {
+    // sql/330 guarantees an article publication names its article; a row that
+    // somehow does not is treated as retracted, never as "nothing to check".
+    if (job.source_id === null) return "SOURCE_RETRACTED";
+
+    const article = await sources.articles.checkArticlePublished(tx, {
+      tenantId,
+      articleId: job.source_id
+    });
+
+    if (!article.published) return article.reason;
+  }
+
+  // The snapshot and the media reference are set together (sql/330 CHECK); a
+  // snapshot without its reference cannot be re-checked, so it is not sent.
+  if (job.media_snapshot !== null && job.media_object_id === null) {
+    return "MEDIA_UNAVAILABLE";
+  }
+
+  if (job.media_object_id !== null) {
+    const media = await sources.media.recheckMediaForPublication(tx, {
+      tenantId,
+      mediaObjectId: job.media_object_id
+    });
+
+    if (!media.eligible) return media.reason;
+  }
+
+  return null;
+}
+
+/**
  * The credential port of a dispatcher that may NOT read a social credential
  * (the #1145 audit, H1): every request is refused, so nothing can be published
  * through it. The default composition while no connector is switched on; the
@@ -1075,15 +1183,70 @@ export async function dispatchSocialPublishQueue(
       continue;
     }
 
-    // The credential is decrypted in a transaction of its own that CLOSES before
-    // the provider call. A refusal is a returned reason; only a database error
-    // throws (and that job's lease simply expires and it is claimed again).
-    const credential = await inTenantWork(sql, tenantId, (tx) =>
-      options.credentials.resolvePublishCredential(tx, {
-        tenantId,
-        accountId: job.channel_account_id
-      })
+    // The pre-send transaction, which CLOSES before the provider call: first
+    // the source re-check (ADR-0157 L8) and, only when it passes, the
+    // credential. A refusal is a returned value; a database error inside the
+    // re-check is a "could not check" (never "may send"); one in the credential
+    // read throws (and that job's lease simply expires and it is claimed again).
+    const preSend = await inTenantWork(
+      sql,
+      tenantId,
+      async (tx): Promise<PreSend> => {
+        let withdrawn: SourceWithdrawnCode | null;
+
+        try {
+          // A savepoint: a failed check rolls back to it and leaves the
+          // transaction usable (nothing else runs in it anyway).
+          withdrawn = await tx.savepoint((sp) =>
+            recheckSource(sp, tenantId, job, options.sources)
+          );
+        } catch {
+          // The thrown message is never kept (it is a database error).
+          return { kind: "unchecked" };
+        }
+
+        if (withdrawn !== null) return { kind: "withdrawn", code: withdrawn };
+
+        return {
+          kind: "checked",
+          credential: await options.credentials.resolvePublishCredential(tx, {
+            tenantId,
+            accountId: job.channel_account_id
+          })
+        };
+      }
     );
+
+    if (preSend.kind === "unchecked") {
+      log("error", "social_publishing.dispatch.source_check_failed", {
+        tenantId,
+        moduleKey: SOCIAL_PUBLISHING_MODULE_KEY,
+        provider: job.provider
+      });
+      await finalise(
+        sql,
+        tenantId,
+        job,
+        { kind: "retry", code: "SOURCE_CHECK_UNAVAILABLE" },
+        clock(),
+        ctx
+      );
+      continue;
+    }
+
+    if (preSend.kind === "withdrawn") {
+      await finalise(
+        sql,
+        tenantId,
+        job,
+        { kind: "fail", code: preSend.code, outcome: "rejected" },
+        clock(),
+        ctx
+      );
+      continue;
+    }
+
+    const credential = preSend.credential;
 
     if (!credential.ok) {
       const verdict = classifyAccountReason(credential.reason);

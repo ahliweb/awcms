@@ -48,7 +48,10 @@ export const blogContentModule = defineModule({
     // consumes. `blog_content` is the base's single declared `seo_facts` provider
     // (it owns the public post resources SEO renders); `news_portal` composes those
     // posts but owns no standalone public resource, so it is not a second provider.
-    provides: ["public_content", "seo_facts"],
+    // `article_publication_status` (Issue #1145, ADR-0157 L8): the social
+    // dispatcher's "is this article still published?" re-check, answered by
+    // `application/article-publication-status-adapter.ts`.
+    provides: ["public_content", "seo_facts", "article_publication_status"],
     consumes: [
       // ADR-0044 flipped this from `optional: true`. Before the merge, this
       // module's own media handling genuinely degraded safely: managed-media
