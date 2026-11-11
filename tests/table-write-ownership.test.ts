@@ -120,6 +120,8 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_account_capabilities",
       "awcms_telegram_engagement_endpoints",
       "awcms_telegram_engagement_contacts",
+      // #1268: the telegram probe's refused forged-opt-in attempt.
+      "awcms_telegram_engagement_consents",
       // #1146: the social dispatch write-boundary probe.
       "awcms_social_publications",
       "awcms_social_publish_jobs",
@@ -143,6 +145,83 @@ describe("findSharedTableWrites", () => {
 
       expect(entry.excusedOwner).toBe("tenant_admin");
     }
+  });
+});
+
+describe("scripts/** is scanned (Issue #1268)", () => {
+  const TOOLING = "(scripts tooling)";
+
+  test("a file under scripts/lib is attributed to tooling, not to nobody", () => {
+    expect(ownerOfFile("scripts/lib/some-probe.ts", new Map(), [])).toBe(
+      TOOLING
+    );
+  });
+
+  test("a planted scripts/lib write to a module-owned table is a finding", () => {
+    const shared = findSharedTableWrites([
+      {
+        table: "awcms_planted_probe_table",
+        owner: "some_module",
+        file: "src/modules/some-module/application/x.ts"
+      },
+      {
+        table: "awcms_planted_probe_table",
+        owner: TOOLING,
+        file: "scripts/lib/planted-probe.ts"
+      }
+    ]);
+
+    expect(shared).toHaveLength(1);
+    expect(shared[0]!.owners).toContain(TOOLING);
+  });
+
+  test("every real tooling write has a documented exception, and every tooling exception matches a real write", async () => {
+    const writes = await collectTableWrites();
+    const written = new Set(
+      writes
+        .filter((write) => write.owner === TOOLING)
+        .map((write) => write.table)
+    );
+    const excused = new Set(
+      DOCUMENTED_EXCEPTIONS.filter(
+        (entry) => entry.excusedOwner === TOOLING
+      ).map((entry) => entry.table)
+    );
+
+    // The glob must really reach scripts/lib: the probes live there.
+    expect(
+      writes.some(
+        (write) =>
+          write.file === "scripts/lib/worker-secret-probe.ts" &&
+          write.owner === TOOLING
+      )
+    ).toBe(true);
+
+    // A tooling write with no exception: a second writer added under scripts/
+    // (also catches a table nobody else writes, which the one-writer rule
+    // alone would not flag).
+    // The migration runner is the ONE tooling-only table: no module writes
+    // `awcms_schema_migrations`, so tooling is its owner rather than a second
+    // writer. Anything else added here needs the same argument.
+    const TOOLING_OWNED = new Set(["awcms_schema_migrations"]);
+
+    for (const table of TOOLING_OWNED) {
+      expect(
+        writes.filter(
+          (write) => write.table === table && write.owner !== TOOLING
+        )
+      ).toEqual([]);
+    }
+
+    expect(
+      [...written].filter(
+        (table) => !excused.has(table) && !TOOLING_OWNED.has(table)
+      )
+    ).toEqual([]);
+
+    // An exception nothing uses is a paper exception: it would silently
+    // excuse a future writer of that table.
+    expect([...excused].filter((table) => !written.has(table))).toEqual([]);
   });
 });
 

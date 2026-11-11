@@ -53,7 +53,7 @@ import { stripComments } from "./lib/source-text";
 const WRITE_PATTERN =
   /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(awcms_\w+)/gi;
 
-const SOURCE_GLOBS = ["src/**/*.ts", "src/**/*.astro", "scripts/*.ts"];
+const SOURCE_GLOBS = ["src/**/*.ts", "src/**/*.astro", "scripts/**/*.ts"];
 
 /**
  * Owners that are not modules. Named so a violation reads as a sentence.
@@ -168,7 +168,13 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
     "awcms_channel_secrets",
     "awcms_channel_accounts",
     "awcms_telegram_engagement_endpoints",
-    "awcms_telegram_engagement_contacts"
+    "awcms_telegram_engagement_contacts",
+    // The probe's `refused(...)` forged-opt-in attempt, run as the dispatch
+    // role. It is NOT a seed: the database is expected to refuse it, and the
+    // probe records a finding if it succeeds. It becomes visible only now that
+    // the gate scans `scripts/**` (Issue #1268), and it is excused for the same
+    // reason as the other refused writes, on this one table.
+    "awcms_telegram_engagement_consents"
   ].map((table) => ({
     table,
     excusedOwner: TOOLING,
@@ -180,8 +186,9 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "throws a sentinel), then assumes `awcms_telegram_engagement_dispatch` to " +
       "prove what the role can see and that its forbidden writes are refused. " +
       "Nothing is ever committed: it is a behavioural probe of row policies, not " +
-      "a second writer. Its attempted writes as the role (consents, domain " +
-      "events) are expected to FAIL and are not seeds, so they are not excused."
+      "a second writer. Its attempted writes as the role (the forged consent " +
+      "opt-in, domain events and deliveries) are expected to be REFUSED, never " +
+      "succeed, and roll back with the rest."
   })),
   ...[
     "awcms_social_publications",
