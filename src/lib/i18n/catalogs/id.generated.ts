@@ -1225,7 +1225,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Menus": ["Menu"],
   "Merged": ["Digabungkan"],
   "Message": ["Pesan"],
-  "Messages queued through this sender, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed.": ["Pesan yang diantrekan melalui pengirim ini, menurut status. Diperbarui selama halaman ini terbuka; ini bukan tanda terima pengiriman dan berhenti saat tab ditutup."],
+  "Messages queued through this sender in the last {days} days that you may see, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed.": ["Pesan yang diantrekan melalui pengirim ini dalam {days} hari terakhir yang boleh Anda lihat, menurut status. Diperbarui selama halaman ini terbuka; ini bukan tanda terima pengiriman dan berhenti saat tab ditutup."],
   "Meta description": ["Deskripsi meta"],
   "Method": ["Metode"],
   "Metric": ["Metrik"],

@@ -25,7 +25,11 @@ import {
 } from "../identity-access/domain/suspended-tenant-allowlist";
 import { resolvePlatformTenantIdIgnoringStatus } from "../../lib/tenant/platform-tenant";
 import { runSseLoop, type SseTickOutcome } from "./sse-stream";
-import { declaredAppOrigin, isStreamOriginAllowed } from "./sse-progress";
+import {
+  declaredAppOrigin,
+  isStreamFetchMetadataAllowed,
+  isStreamOriginAllowed
+} from "./sse-progress";
 import { resolveRequestOrigin } from "../../lib/http/site-origin";
 
 /**
@@ -623,6 +627,15 @@ export function defineSseTenantRoute<TSnapshot>(
 
     if (!isStreamOriginAllowed(request.headers.get("origin"), allowedOrigins)) {
       return fail(403, "ORIGIN_REFUSED", "Stream origin is not allowed.");
+    }
+
+    // Audit L-2: a cross-site or navigation request never opens a stream.
+    if (!isStreamFetchMetadataAllowed(request.headers)) {
+      return fail(
+        403,
+        "ORIGIN_REFUSED",
+        "Stream request context is not allowed."
+      );
     }
 
     const { tenantId, token } = resolveAuthInputs(request, cookies);

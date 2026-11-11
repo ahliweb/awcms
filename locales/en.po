@@ -9520,7 +9520,7 @@ msgstr ""
 msgid "Delivery progress"
 msgstr ""
 
-msgid "Messages queued through this sender, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed."
+msgid "Messages queued through this sender in the last {days} days that you may see, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed."
 msgstr ""
 
 msgid "Connection"

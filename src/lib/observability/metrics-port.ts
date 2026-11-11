@@ -105,7 +105,7 @@ export const METRIC_DEFINITIONS = {
       "Current in-flight request count per database work class (src/lib/database/work-class.ts).",
     allowedLabelKeys: ["workClass"],
     approxCardinality:
-      "Exactly 5 — the fixed WorkClass enum (critical_transaction, interactive, reporting, background_sync, maintenance).",
+      "Exactly 6 — the fixed WorkClass enum (critical_transaction, interactive, reporting, background_sync, maintenance, realtime_stream).",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
   db_pool_work_class_queued: {
@@ -114,7 +114,7 @@ export const METRIC_DEFINITIONS = {
     description:
       "Current FIFO-queued waiter count per database work class (backpressure signal).",
     allowedLabelKeys: ["workClass"],
-    approxCardinality: "Exactly 5 — same fixed WorkClass enum.",
+    approxCardinality: "Exactly 6 — same fixed WorkClass enum.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
   db_pool_work_class_rejected_total: {
@@ -123,7 +123,7 @@ export const METRIC_DEFINITIONS = {
     description:
       "Count of database work-class acquisitions rejected immediately (Issue #743) because the bounded FIFO queue for that class was already full — distinct from a queued caller that later timed out (see db_pool_work_class_wait_ms's outcome label).",
     allowedLabelKeys: ["workClass"],
-    approxCardinality: "Exactly 5 — same fixed WorkClass enum.",
+    approxCardinality: "Exactly 6 — same fixed WorkClass enum.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
   db_pool_work_class_wait_ms: {

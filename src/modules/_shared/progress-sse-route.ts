@@ -22,6 +22,7 @@ import { recordAuditEvent } from "../logging/application/audit-log";
 import { fail } from "./api-response";
 import {
   declaredAppOrigin,
+  isStreamFetchMetadataAllowed,
   isStreamOriginAllowed,
   progressStreamConnections,
   PROGRESS_ENVELOPE_VERSION,
@@ -32,6 +33,8 @@ import {
   type ProgressOutEvent,
   type ProgressTickOutcome,
   type SnapshotRequiredReason,
+  type SseCapRefusal,
+  type SseConnectionLease,
   type SseConnectionRegistry
 } from "./sse-progress";
 
@@ -96,6 +99,17 @@ export type ProgressChangesPage<TChange> = {
  * One topic. Every function runs inside an already-authorized tick
  * transaction and must apply the SAME scope filter as the topic's REST
  * snapshot (ADR-0154 R6).
+ *
+ * ## Memoisation is keyed by `context.request`, and that is a contract
+ *
+ * The factory hands every tick a FRESH `Request` identity (`perTickRequest`).
+ * Any memo or authorization read cache a topic (or a helper it calls) keeps
+ * MUST be keyed by `context.request` (a `WeakMap` on it), never by the
+ * connection, the resource id, a module-level variable or a closure that
+ * outlives the tick. Keyed any other way, the first tick's "you may see this"
+ * is replayed for the whole connection and a revocation never lands — the
+ * defect `tests/integration/realtime-progress-stream.integration.test.ts`
+ * ("a business scope removed during the stream ends it") was written to catch.
  */
 export type ProgressTopic<TResource, TCounts, TChange> = {
   /** Code-defined name, from `realtime-topics.ts`. */
@@ -342,7 +356,7 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
   return async ({ request, cookies, clientAddress, params, url }) => {
     const env = config.env ?? process.env;
 
-    // 1. Origin, before any work (ADR-0154 section 3).
+    // 1. Origin and Fetch Metadata, before any work (ADR-0154 section 3).
     const allowedOrigins = [resolveRequestOrigin(url, request, env)];
     const appOrigin = declaredAppOrigin(env);
 
@@ -353,6 +367,14 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
         topic.topic,
         "origin",
         fail(403, "ORIGIN_REFUSED", "Stream origin is not allowed.")
+      );
+    }
+
+    if (!isStreamFetchMetadataAllowed(request.headers)) {
+      return refuse(
+        topic.topic,
+        "origin",
+        fail(403, "ORIGIN_REFUSED", "Stream request context is not allowed.")
       );
     }
 
@@ -392,12 +414,35 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
     const limits = resolveSseRuntimeLimits(env);
     const maxChanges = config.maxChangesPerFrame;
 
-    const openTick = async <T>(
-      body: (context: ProgressTopicContext) => Promise<T>
-    ): Promise<T | { refused: Response } | Response> => {
-      // The 503 `Response` a refusing pool returns is part of the result type
-      // and is turned into a refusal by the caller, never dropped.
-      const opened = await withTenant<T | { refused: Response }>(
+    /**
+     * 2. The opening transaction, in this order (audit M-2a):
+     *
+     *   authorize -> take a connection slot -> resolve the resource -> read.
+     *
+     * The slot is taken right after the decision and BEFORE any topic query,
+     * so a refused-over-cap request (`429`) costs one guard chain and nothing
+     * else. Every path that does not end in an open stream releases it.
+     */
+    type Opening =
+      | { kind: "refused"; response: Response }
+      | { kind: "capped"; refusedBy: SseCapRefusal }
+      | { kind: "not_found" }
+      | {
+          kind: "ok";
+          actorKey: string;
+          events: ProgressOutEvent[];
+          state: FrameState;
+        };
+
+    let lease: SseConnectionLease | null = null;
+    const releaseUnused = () => {
+      lease?.release();
+      lease = null;
+    };
+    let opening: Opening | Response;
+
+    try {
+      opening = await withTenant<Opening>(
         sql,
         tenantId,
         async (tx) => {
@@ -411,9 +456,20 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
             { clientIp }
           );
 
-          if (!auth.allowed) return { refused: auth.denied };
+          if (!auth.allowed) return { kind: "refused", response: auth.denied };
 
-          return body({
+          const acquired = connections.tryAcquire(
+            tenantId,
+            auth.context.tenantUserId,
+            limits.connections
+          );
+
+          if (!acquired.ok)
+            return { kind: "capped", refusedBy: acquired.refusedBy };
+
+          lease = acquired.lease;
+
+          const context: ProgressTopicContext = {
             tx,
             tenantId,
             auth,
@@ -421,48 +477,31 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
             request,
             clientAddress,
             now
-          });
+          };
+          const resource = await topic.resolveResource(context, resourceId);
+
+          if (resource === null) return { kind: "not_found" };
+
+          const first = await readOpeningEvents(
+            topic,
+            context,
+            resource,
+            resourceId,
+            lastEventId,
+            maxChanges
+          );
+
+          return {
+            kind: "ok",
+            actorKey: auth.context.tenantUserId,
+            ...first
+          };
         },
         { workClass: config.workClass, queueTimeoutMs: config.queueTimeoutMs }
       );
-
-      return opened;
-    };
-
-    // 2. The opening transaction: decide, resolve the resource, first read.
-    type Opening =
-      | { kind: "not_found" }
-      | {
-          kind: "ok";
-          actorKey: string;
-          events: ProgressOutEvent[];
-          state: FrameState;
-        };
-
-    let opening: Opening | { refused: Response } | Response;
-
-    try {
-      opening = await openTick<Opening>(async (context) => {
-        const resource = await topic.resolveResource(context, resourceId);
-
-        if (resource === null) return { kind: "not_found" };
-
-        const first = await readOpeningEvents(
-          topic,
-          context,
-          resource,
-          resourceId,
-          lastEventId,
-          maxChanges
-        );
-
-        return {
-          kind: "ok",
-          actorKey: context.auth.context.tenantUserId,
-          ...first
-        };
-      });
     } catch {
+      releaseUnused();
+
       return refuse(
         topic.topic,
         "unavailable",
@@ -471,12 +510,29 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
     }
 
     if (opening instanceof Response) {
+      releaseUnused();
       return refuse(topic.topic, "unavailable", opening);
     }
-    if ("refused" in opening) {
-      return refuse(topic.topic, "auth_denied", opening.refused);
+    if (opening.kind === "refused") {
+      releaseUnused();
+      return refuse(topic.topic, "auth_denied", opening.response);
     }
-    if (opening.kind === "not_found") {
+    if (opening.kind === "capped") {
+      return refuse(
+        topic.topic,
+        `capped_${opening.refusedBy}`,
+        fail(
+          429,
+          "STREAM_CAPACITY_REACHED",
+          "Too many open streams. Use the snapshot or retry later.",
+          {},
+          { scope: opening.refusedBy },
+          { "retry-after": "30" }
+        )
+      );
+    }
+    if (opening.kind === "not_found" || lease === null) {
+      releaseUnused();
       return refuse(
         topic.topic,
         "not_found",
@@ -484,29 +540,7 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
       );
     }
 
-    // 3. Caps, keyed on the AUTHENTICATED actor and tenant.
-    const acquired = connections.tryAcquire(
-      tenantId,
-      opening.actorKey,
-      limits.connections
-    );
-
-    if (!acquired.ok) {
-      return refuse(
-        topic.topic,
-        `capped_${acquired.refusedBy}`,
-        fail(
-          429,
-          "STREAM_CAPACITY_REACHED",
-          "Too many open streams. Use the snapshot or retry later.",
-          {},
-          { scope: acquired.refusedBy },
-          { "retry-after": "30" }
-        )
-      );
-    }
-
-    const lease = acquired.lease;
+    const heldLease: SseConnectionLease = lease;
     const actorKey = opening.actorKey;
     const initialEvents = opening.events;
     let state = opening.state;
@@ -582,7 +616,14 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
 
             return { state: "ok", events: next.events };
           },
-          { workClass: config.workClass, queueTimeoutMs: config.queueTimeoutMs }
+          // Audit M-2b: ticks have their OWN small work class, so hundreds of
+          // open streams can never take the slots of interactive requests. A
+          // full queue returns the 503 `Response` below and ends the stream
+          // with `stream-error` (load shedding, ADR-0154 section 5).
+          {
+            workClass: "realtime_stream",
+            queueTimeoutMs: config.queueTimeoutMs
+          }
         );
 
         // `withTenant` RETURNS the 503 `Response` when the pool or breaker
@@ -717,7 +758,7 @@ export function defineProgressSseRoute<TResource, TCounts, TChange>(
         } finally {
           stopWaiting();
           request.signal.removeEventListener("abort", onAbort);
-          lease.release();
+          heldLease.release();
           recordGauge("realtime_stream_open", connections.openCount());
 
           closed = true;

@@ -148,7 +148,11 @@ paths:
         `whatsapp_delivery.progress.read`, and the sender must be an account the
         caller may see by the rules of `channel_accounts` (assignment, business
         scope). An unknown id, another tenant's account and a hidden account are
-        one answer: `404`.
+        one answer: `404`. A caller confined to business scopes sees, through a
+        tenant-wide sender, only the messages whose own business scope they
+        hold (counts, `recent` and `cursor` alike); unscoped messages are not
+        visible to them. `counts` covers messages created in the last 7 days
+        (`countWindowDays`).
       parameters:
         - name: id
           in: path
@@ -191,8 +195,11 @@ paths:
         never causes a send, an enqueue or a status change.
 
 
-        **Opening.** A present `Origin` that is not the site's own origin is
-        refused with `403 ORIGIN_REFUSED` before any work. The caller needs
+        **Opening.** A present `Origin` that is not the site's own origin, or
+        `Sec-Fetch-Site: cross-site`, or `Sec-Fetch-Mode: navigate`, is refused
+        with `403 ORIGIN_REFUSED` before any work. Rows are filtered exactly as
+        in the snapshot (business scope of a confined caller, 7-day counting
+        window). The caller needs
         `whatsapp_delivery.progress.read` and must be able to see the sender
         (same rule as the snapshot); otherwise `401`/`403`/`404`, and no stream
         opens. Over the per-actor, per-tenant or per-instance cap the answer is
@@ -1244,7 +1251,11 @@ components:
             $ref: "#/components/schemas/WhatsappSenderPolicy"
     WhatsappSenderProgressCounts:
       type: object
-      description: Messages of this sender per queue status (every status present, zero included).
+      description: >-
+        Messages of this sender created within the counting window (7 days) per
+        queue status, every status present, zero included. For a caller confined
+        to business scopes, only messages whose own business scope the caller
+        holds are counted; an unscoped message is not.
       required:
         - queued
         - retry_wait
@@ -1293,6 +1304,7 @@ components:
         - cursor
         - at
         - counts
+        - countWindowDays
         - recent
       properties:
         v:
@@ -1314,6 +1326,9 @@ components:
           format: date-time
         counts:
           $ref: "#/components/schemas/WhatsappSenderProgressCounts"
+        countWindowDays:
+          type: integer
+          description: The counting window of `counts`, in days (messages created within it).
         recent:
           type: array
           maxItems: 20

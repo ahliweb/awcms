@@ -15,7 +15,7 @@
  * A campaign module would add its own topic over its own rows
  * (`_shared/realtime-topics.ts`).
  *
- * ## Scope: the same rule as `GET /whatsapp/senders`
+ * ## Scope: the account, AND the rows (audit M-1)
  *
  * A sender IS a `channel_accounts` account, so who may see it is decided by
  * `loadSenderAccess().canUseAccount(..., "viewer")`: the account exists in this
@@ -23,6 +23,12 @@
  * is one the caller holds. An unknown id, another tenant's account and an
  * account the caller cannot see are one answer: `null`, which the route turns
  * into `404`. A failed import of the channel module is a denial.
+ *
+ * Seeing the account is not seeing every row through it. A TENANT-WIDE sender
+ * (no business scope) carries messages of every brand, so a caller confined to
+ * business scopes sees only the rows whose OWN scope they hold, in the counts,
+ * the change list, the recent list and the cursor alike; an unscoped row is
+ * invisible to them. An unconfined caller sees every row, as before.
  *
  * ## What a frame may carry (R7)
  *
@@ -36,8 +42,9 @@
  * keyset position over `(updated_at, id)` for this sender, computed by
  * PostgreSQL (microsecond-exact; a JS `Date` would truncate to milliseconds and
  * re-send or skip rows at the boundary). It names its account, so a cursor from
- * another sender, another tenant (RLS hides the row) or a purged row fails
- * `isCursorHonourable` and the client is told to re-fetch the snapshot.
+ * another sender, another tenant (RLS hides the row), a row the caller may not
+ * see, or a purged row fails `isCursorHonourable` and the client is told to
+ * re-fetch the snapshot.
  *
  * ### The limit of a timestamp keyset, stated plainly
  *
@@ -70,6 +77,15 @@ export const WHATSAPP_PROGRESS_GUARD = {
   action: "read"
 } as const satisfies SenderAccessGuard;
 
+/**
+ * The counting window (audit M-2c): counters cover messages of this sender
+ * CREATED in the last seven days, read from
+ * `awcms_whatsapp_messages_sender_window_idx`. A broadcast lives inside it; an
+ * all-time count would grow with the queue's whole retention and be paid on
+ * every tick of every open stream.
+ */
+export const WHATSAPP_PROGRESS_COUNT_WINDOW_DAYS = 7;
+
 export type WhatsappSenderProgressCounts = Record<
   WhatsappMessageStatusValue,
   number
@@ -81,7 +97,17 @@ export type WhatsappSenderProgressChange = {
   updatedAt: string;
 };
 
-export type WhatsappSenderResource = { accountId: string };
+/**
+ * A sender the caller may see, and WHICH OF ITS ROWS they may see.
+ *
+ * `scopeKeys` is `null` for a caller who is not confined to business scopes
+ * (every row). For a confined caller it is the `type:id` list of the scopes
+ * they hold; an empty list means "no row" (fail-closed).
+ */
+export type WhatsappSenderResource = {
+  accountId: string;
+  scopeKeys: string[] | null;
+};
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const UUID_PATTERN = new RegExp(`^${UUID}$`);
@@ -114,7 +140,7 @@ export function parseSenderCursor(raw: string): ParsedSenderCursor | null {
   return { accountId: match[1]!, micros: match[2]!, messageId: match[3]! };
 }
 
-/** The cursor of a sender with no messages yet: "nothing seen". */
+/** The cursor of a sender with no visible messages yet: "nothing seen". */
 export function zeroSenderCursor(accountId: string): string {
   return encodeSenderCursor({ accountId, micros: "0", messageId: NIL_UUID });
 }
@@ -129,7 +155,7 @@ function emptyCounts(): WhatsappSenderProgressCounts {
   ) as WhatsappSenderProgressCounts;
 }
 
-/** Visibility, by the rules of `channel_accounts` (see the module header). */
+/** Visibility of the account AND of its rows (see the module header). */
 export async function resolveVisibleSender(
   context: ProgressTopicContext,
   accountId: string
@@ -145,20 +171,50 @@ export async function resolveVisibleSender(
     "viewer"
   );
 
-  return visible ? { accountId } : null;
+  if (!visible) return null;
+
+  // Decided per call — per tick, on a fresh request identity — so a scope
+  // gained or lost mid-stream changes the rows on the next tick.
+  if (!(await access.isConfined(context))) {
+    return { accountId, scopeKeys: null };
+  }
+
+  const covered = await access.coveredScopes(context, WHATSAPP_PROGRESS_GUARD);
+
+  return {
+    accountId,
+    scopeKeys: covered.map((scope) => `${scope.type}:${scope.id}`)
+  };
+}
+
+/**
+ * The row filter every read below applies, as two bound values:
+ * `unconfined` (every row) or `keys` (rows whose own `type:id` scope is
+ * listed). A NULL scope concatenates to NULL and never matches, so an unscoped
+ * row is invisible to a confined caller.
+ */
+function rowScope(tx: Bun.SQL, resource: WhatsappSenderResource) {
+  return {
+    unconfined: resource.scopeKeys === null,
+    keys: tx.array(resource.scopeKeys ?? [], "text")
+  };
 }
 
 export async function readSenderHead(
   tx: Bun.SQL,
   tenantId: string,
-  accountId: string
+  resource: WhatsappSenderResource
 ): Promise<string> {
+  const { accountId } = resource;
+  const scope = rowScope(tx, resource);
   const rows = (await tx`
     SELECT ((extract(epoch FROM updated_at) * 1000000)::bigint)::text AS micros,
            id::text AS id
     FROM awcms_whatsapp_messages
     WHERE tenant_id = ${tenantId}
       AND sender_account_id = ${accountId}
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
   `) as { micros: string; id: string }[];
@@ -172,17 +228,20 @@ export async function readSenderHead(
 export async function isSenderCursorHonourable(
   tx: Bun.SQL,
   tenantId: string,
-  accountId: string,
+  resource: WhatsappSenderResource,
   cursor: string
 ): Promise<boolean> {
+  const { accountId } = resource;
   const parsed = parseSenderCursor(cursor);
 
   if (!parsed || parsed.accountId !== accountId) return false;
   if (parsed.micros === "0") return parsed.messageId === NIL_UUID;
 
-  // The row must still exist, for THIS sender, in THIS tenant (RLS), and must
-  // not have been stamped earlier than the position claims: a fabricated
-  // future position is refused rather than silently skipping changes.
+  // The row must still exist, for THIS sender, in THIS tenant (RLS), be one
+  // the caller may see, and not have been stamped earlier than the position
+  // claims: a fabricated future position is refused rather than silently
+  // skipping changes.
+  const scope = rowScope(tx, resource);
   const rows = (await tx`
     SELECT 1 AS present
     FROM awcms_whatsapp_messages
@@ -190,6 +249,8 @@ export async function isSenderCursorHonourable(
       AND sender_account_id = ${accountId}
       AND id = ${parsed.messageId}
       AND updated_at >= timestamptz 'epoch' + (${parsed.micros}::bigint * interval '1 microsecond')
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     LIMIT 1
   `) as { present: number }[];
 
@@ -199,10 +260,11 @@ export async function isSenderCursorHonourable(
 export async function readSenderChangesSince(
   tx: Bun.SQL,
   tenantId: string,
-  accountId: string,
+  resource: WhatsappSenderResource,
   cursor: string,
   limit: number
 ): Promise<ProgressChangesPage<WhatsappSenderProgressChange>> {
+  const { accountId } = resource;
   const parsed = parseSenderCursor(cursor);
 
   // Unreachable through the route (the cursor was validated or produced by the
@@ -210,6 +272,7 @@ export async function readSenderChangesSince(
   if (!parsed || parsed.accountId !== accountId)
     return { items: [], more: true };
 
+  const scope = rowScope(tx, resource);
   const rows = (await tx`
     SELECT id::text AS id,
            status,
@@ -222,6 +285,8 @@ export async function readSenderChangesSince(
         timestamptz 'epoch' + (${parsed.micros}::bigint * interval '1 microsecond'),
         ${parsed.messageId}::uuid
       )
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     ORDER BY updated_at, id
     LIMIT ${limit + 1}
   `) as {
@@ -254,16 +319,25 @@ export async function readSenderChangesSince(
   return { items, more };
 }
 
+/**
+ * Counts per status over the counting window, with the caller's row filter.
+ * ONE statement with every value bound exactly as the stream binds it, so the
+ * query-budget test measures the plan the stream runs.
+ */
 export async function readSenderCounts(
   tx: Bun.SQL,
   tenantId: string,
-  accountId: string
+  resource: WhatsappSenderResource
 ): Promise<WhatsappSenderProgressCounts> {
+  const scope = rowScope(tx, resource);
   const rows = (await tx`
     SELECT status, count(*)::int AS n
     FROM awcms_whatsapp_messages
     WHERE tenant_id = ${tenantId}
-      AND sender_account_id = ${accountId}
+      AND sender_account_id = ${resource.accountId}
+      AND created_at >= now() - make_interval(days => ${WHATSAPP_PROGRESS_COUNT_WINDOW_DAYS}::int)
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     GROUP BY status
   `) as { status: string; n: number }[];
   const counts = emptyCounts();
@@ -296,24 +370,19 @@ export const whatsappSenderProgressTopic: ProgressTopic<
   resolveResource: (context, resourceId) =>
     resolveVisibleSender(context, resourceId),
   readHead: (context, resource) =>
-    readSenderHead(context.tx, context.tenantId, resource.accountId),
+    readSenderHead(context.tx, context.tenantId, resource),
   isCursorHonourable: (context, resource, cursor) =>
-    isSenderCursorHonourable(
-      context.tx,
-      context.tenantId,
-      resource.accountId,
-      cursor
-    ),
+    isSenderCursorHonourable(context.tx, context.tenantId, resource, cursor),
   readChangesSince: (context, resource, cursor, limit) =>
     readSenderChangesSince(
       context.tx,
       context.tenantId,
-      resource.accountId,
+      resource,
       cursor,
       limit
     ),
   readCounts: (context, resource) =>
-    readSenderCounts(context.tx, context.tenantId, resource.accountId),
+    readSenderCounts(context.tx, context.tenantId, resource),
   cursorTimestampMs: senderCursorTimestampMs
 };
 
@@ -325,7 +394,9 @@ export type WhatsappSenderProgressSnapshot = {
   cursor: string;
   at: string;
   counts: WhatsappSenderProgressCounts;
-  /** The most recently changed messages of this sender (id, status, when), newest first. */
+  /** The counting window of `counts`, in days (messages created within it). */
+  countWindowDays: number;
+  /** The most recently changed messages the caller may see (id, status, when), newest first. */
   recent: WhatsappSenderProgressChange[];
 };
 
@@ -337,13 +408,16 @@ export async function readSenderProgressSnapshot(
   const { tx, tenantId } = context;
   // Head first, then counts: anything committed in between appears in the
   // counts and again later as a change, never the other way round.
-  const cursor = await readSenderHead(tx, tenantId, resource.accountId);
-  const counts = await readSenderCounts(tx, tenantId, resource.accountId);
+  const cursor = await readSenderHead(tx, tenantId, resource);
+  const counts = await readSenderCounts(tx, tenantId, resource);
+  const scope = rowScope(tx, resource);
   const rows = (await tx`
     SELECT id::text AS id, status, updated_at
     FROM awcms_whatsapp_messages
     WHERE tenant_id = ${tenantId}
       AND sender_account_id = ${resource.accountId}
+      AND (${scope.unconfined}::boolean
+           OR (business_scope_type || ':' || business_scope_id::text) = ANY(${scope.keys}))
     ORDER BY updated_at DESC, id DESC
     LIMIT ${recentLimit}
   `) as { id: string; status: string; updated_at: Date | string }[];
@@ -355,6 +429,7 @@ export async function readSenderProgressSnapshot(
     cursor,
     at: context.now.toISOString(),
     counts,
+    countWindowDays: WHATSAPP_PROGRESS_COUNT_WINDOW_DAYS,
     recent: rows.flatMap((row) =>
       isStatus(row.status)
         ? [

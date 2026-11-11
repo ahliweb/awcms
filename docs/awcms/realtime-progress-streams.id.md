@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](realtime-progress-streams.md)
 
-<!-- i18n-source-hash: sha256:2ca5fa75c8ccad572576c7c9ecf6333159006f549a59574cc30a079bf6d818cd -->
+<!-- i18n-source-hash: sha256:dd3ba73aba2e4a634a9da48f0f9a4d4cc000af53733f63fac63a9d46388947ec -->
 
 # Stream progres real-time — operasional
 
@@ -51,6 +51,49 @@ sebelum sebuah tick dan commit sesudahnya tidak dilaporkan di daftar perubahan
 stream itu. **Penghitung dihitung ulang dari tabel di setiap tick dan selalu
 benar**; daftar perubahan adalah petunjuk, dan snapshot adalah otoritas untuk
 satu pesan.
+
+### Baris yang dilihat pemanggil terkurung (audit keamanan M-1)
+
+Melihat sebuah pengirim bukan berarti melihat setiap baris lewatnya. Pengirim
+seluruh tenant membawa pesan setiap brand; pemanggil yang terkurung business
+scope hanya melihat lewatnya pesan yang business scope-nya sendiri ia pegang
+(diputuskan setiap tick lewat chokepoint, termasuk scope turunan). Jumlah,
+daftar perubahan, daftar terbaru, dan cursor frame pertama semuanya difilter;
+pesan tanpa scope tidak terlihat oleh pemanggil terkurung, dan `Last-Event-ID`
+yang menunjuk baris yang tak boleh ia lihat mendapat `snapshot-required`.
+Pemanggil tak terkurung melihat semua baris.
+
+### Konteks request (audit L-2)
+
+Selain `Origin` asing, request dengan `Sec-Fetch-Site: cross-site` atau
+`Sec-Fetch-Mode: navigate` ditolak dengan `403 ORIGIN_REFUSED` sebelum pekerjaan
+apa pun, di kedua route stream (termasuk `push/stream`). Header yang tidak ada
+diizinkan.
+
+### Batas biaya (audit M-2)
+
+- Slot koneksi diambil tepat setelah keputusan otorisasi dan sebelum query topik
+  apa pun: `429` hanya membayar satu rantai guard.
+- Tick berjalan di work class sendiri, `realtime_stream` (3 bersamaan, antrean
+  dibatasi `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`), sehingga stream terbuka tidak
+  pernah mengambil slot request interaktif. Antrean penuh mengakhiri stream
+  dengan `stream-error` dan klien mundur dengan jitter.
+- Jumlah mencakup pesan yang **dibuat dalam 7 hari terakhir** (`countWindowDays`
+  di snapshot), dilayani `awcms_whatsapp_messages_sender_window_idx`. Setiap
+  pembacaan satu statement;
+  `tests/integration/whatsapp-sender-progress-query-budget.integration.test.ts`
+  menjaga anggarannya dan memeriksa statement nyata tidak pernah memindai tabel.
+
+## Deploy
+
+`sql/360` membangun dua indeks di `awcms_whatsapp_messages` **tanpa
+`CONCURRENTLY`**: runner migrasi membungkus tiap berkas dalam transaksi, tempat
+`CREATE INDEX CONCURRENTLY` mustahil (batasan yang sama dicatat `sql/143`).
+`CREATE INDEX` biasa memegang lock SHARE, sehingga enqueue dan finalisasi
+dispatcher **menunggu** sampai kedua build selesai. Untuk antrean besar,
+jalankan migrasi di jendela sepi, atau hentikan `whatsapp:dispatch` selama
+berlangsung. Kedua indeks parsial (`sender_account_id IS NOT NULL`); deployment
+yang tidak pernah merutekan lewat pengirim bernama membangunnya atas nol baris.
 
 ## Konfigurasi
 
@@ -137,7 +180,10 @@ Alasan penolakan: `origin`, `auth_denied`, `not_found`, `capped_actor`,
 
 1. Implementasikan `ProgressTopic` (`src/modules/_shared/progress-sse-route.ts`)
    di modul pemilik baris, dengan aturan visibilitas yang sama seperti pembacaan
-   REST-nya.
+   REST-nya — pada BARIS, bukan hanya pada resource. Memo atau cache otorisasi
+   apa pun yang ia (atau helper-nya) simpan wajib berkunci `context.request`,
+   yang merupakan objek baru setiap tick; berkunci cara lain, pencabutan tidak
+   pernah berlaku.
 2. Tambahkan topik ke `src/modules/_shared/realtime-topics.ts`, permission-nya ke
    descriptor modul, dan migrasi seed.
 3. Tambahkan route snapshot dan route stream yang dibangun dengan

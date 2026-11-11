@@ -68,13 +68,14 @@ used, only to record connection failures to the structured logger.
 `src/lib/database/work-class.ts` is an in-memory per-process semaphore (not
 cross-instance). Five work classes and their concurrency limits:
 
-| Work class             | Example (ERP target)                                | Priority  | Max |
-| ---------------------- | --------------------------------------------------- | --------- | --: |
-| `critical_transaction` | Journal/ledger posting, payroll run, stock movement | Highest   |  10 |
-| `interactive`          | Admin CRUD, master data search                      | High      |   8 |
-| `reporting`            | Financial/inventory reports, dashboard              | Medium    |   4 |
-| `background_sync`      | Sync push/pull, outbox, external integration        | Low       |   4 |
-| `maintenance`          | Migration, backup                                   | Scheduled |   1 |
+| Work class             | Example (ERP target)                                 | Priority  | Max |
+| ---------------------- | ---------------------------------------------------- | --------- | --: |
+| `critical_transaction` | Journal/ledger posting, payroll run, stock movement  | Highest   |  10 |
+| `interactive`          | Admin CRUD, master data search                       | High      |   8 |
+| `reporting`            | Financial/inventory reports, dashboard               | Medium    |   4 |
+| `background_sync`      | Sync push/pull, outbox, external integration         | Low       |   4 |
+| `maintenance`          | Migration, backup                                    | Scheduled |   1 |
+| `realtime_stream`      | Per-tick read of an open SSE progress stream (#1171) | Low       |   3 |
 
 These numbers are small and fixed (not env-tunable) on purpose — they are far
 below `DATABASE_POOL_MAX` (default 20) so there is still headroom in the

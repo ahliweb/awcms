@@ -272,13 +272,14 @@ function snapshot(token: string, id: string) {
 
 /** A test route: the production topic and factory, with test-sized numbers. */
 function testRoute(options: {
+  topic?: typeof whatsappSenderProgressTopic;
   connections?: ReturnType<typeof createSseConnectionRegistry>;
   maxConnectionMs?: number;
   maxChangesPerFrame?: number;
   env?: NodeJS.ProcessEnv;
 }): APIRoute {
   return defineProgressSseRoute({
-    topic: whatsappSenderProgressTopic,
+    topic: options.topic ?? whatsappSenderProgressTopic,
     workClass: "interactive",
     tickIntervalMs: 40,
     heartbeatMs: 10_000,
@@ -862,6 +863,143 @@ suite("realtime progress stream: whatsapp.sender.progress (#1171)", () => {
 
     await stream.waitFor((e) => e.event === "stream-expired");
     await stream.ended;
+    expect(connections.openCount()).toBe(0);
+  });
+
+  test("a TENANT-WIDE sender, two brands: a viewer confined to brand A sees only brand A's rows (REST and stream), never brand B's or unscoped ones (audit M-1)", async () => {
+    const brandA = await seedOffice("brand-a");
+    const brandB = await seedOffice("brand-b");
+    const sender = await seedSender(tenantId, null);
+    const a1 = await queueRow(tenantId, sender, "queued", brandA);
+    const a2 = await queueRow(tenantId, sender, "sent", brandA);
+    const b1 = await queueRow(tenantId, sender, "failed", brandB);
+    // Newest of all, and unscoped: it must not even become the cursor.
+    const unscoped = await queueRow(tenantId, sender, "queued", null);
+    const confined = await seedUser(tenantId, "brand-a-only", PROGRESS);
+    const unconfined = await seedUser(tenantId, "everyone", PROGRESS);
+
+    await holdScope(confined.tenantUserId, brandA);
+
+    // REST snapshot.
+    const mine = await snapshot(confined.token, sender);
+
+    expect(mine.status).toBe(200);
+    expect(mine.body.data?.counts).toMatchObject({
+      queued: 1,
+      sent: 1,
+      failed: 0
+    });
+    expect(mine.body.data?.recent.map((r) => r.id).sort()).toEqual(
+      [a1, a2].sort()
+    );
+    expect(parseSenderCursor(mine.body.data!.cursor)?.messageId).toBe(a2);
+    expect(JSON.stringify(mine.body)).not.toContain(b1);
+    expect(JSON.stringify(mine.body)).not.toContain(unscoped);
+
+    const all = await snapshot(unconfined.token, sender);
+
+    expect(all.body.data?.counts).toMatchObject({
+      queued: 2,
+      sent: 1,
+      failed: 1
+    });
+    expect(all.body.data?.recent).toHaveLength(4);
+
+    // Stream: the first frame, then live changes on both brands.
+    const stream = await open(testRoute({}), confined.token, sender);
+
+    expect(stream.response.status).toBe(200);
+
+    const first = await stream.waitFor((e) => e.event === "progress");
+
+    expect(parseSenderCursor(first.id!)?.messageId).toBe(a2);
+    expect(
+      (first.data as { counts: Record<string, number> }).counts
+    ).toMatchObject({ queued: 1, sent: 1, failed: 0 });
+
+    await setStatus(b1, "sent");
+    const b2 = await queueRow(tenantId, sender, "queued", brandB);
+    const unscoped2 = await queueRow(tenantId, sender, "queued", null);
+
+    await setStatus(a1, "sent");
+
+    const changed = await stream.waitFor(
+      progressWith((d) => (d.counts as Record<string, number>).sent === 2)
+    );
+
+    expect(
+      (changed.data as { changes: { id: string }[] }).changes.map((c) => c.id)
+    ).toEqual([a1]);
+    expect(
+      (changed.data as { counts: Record<string, number> }).counts
+    ).toMatchObject({ queued: 0, sent: 2, failed: 0 });
+
+    const everything = JSON.stringify(stream.events);
+
+    for (const hidden of [b1, b2, unscoped, unscoped2]) {
+      expect(everything).not.toContain(hidden);
+    }
+
+    stream.close();
+    await stream.ended;
+
+    // A cursor naming a row this caller may not see is not honoured.
+    const foreignCursor = all.body.data!.cursor;
+
+    expect(parseSenderCursor(foreignCursor)?.messageId).toBe(unscoped);
+
+    const resumed = await open(testRoute({}), confined.token, sender, {
+      "last-event-id": foreignCursor
+    });
+
+    await resumed.waitFor((e) => e.event === "snapshot-required");
+    resumed.close();
+    await resumed.ended;
+  });
+
+  test("the connection slot is taken after authorize and BEFORE any topic query: a 429 costs no resource read, and a 404 returns its slot (audit M-2a)", async () => {
+    const sender = await seedSender(tenantId, null);
+    const viewer = await seedUser(tenantId, "viewer", PROGRESS);
+    let resolves = 0;
+    const spy: typeof whatsappSenderProgressTopic = {
+      ...whatsappSenderProgressTopic,
+      resolveResource: async (context, resourceId) => {
+        resolves += 1;
+        return whatsappSenderProgressTopic.resolveResource(context, resourceId);
+      }
+    };
+    const connections = createSseConnectionRegistry();
+    const route = testRoute({
+      topic: spy,
+      connections,
+      env: {
+        ...process.env,
+        APP_URL: "https://app.example",
+        REALTIME_SSE_MAX_CONNECTIONS_PER_ACTOR: "1"
+      }
+    });
+
+    // The actor's one slot is held (as by an open stream elsewhere).
+    const parked = connections.tryAcquire(tenantId, viewer.tenantUserId, {
+      perActor: 10,
+      perTenant: 10,
+      perInstance: 10
+    });
+
+    expect(parked.ok).toBe(true);
+
+    const refused = await open(route, viewer.token, sender);
+
+    expect(refused.response.status).toBe(429);
+    expect(resolves).toBe(0);
+
+    if (parked.ok) parked.lease.release();
+    expect(connections.openCount()).toBe(0);
+
+    const missing = await open(route, viewer.token, crypto.randomUUID());
+
+    expect(missing.response.status).toBe(404);
+    expect(resolves).toBe(1);
     expect(connections.openCount()).toBe(0);
   });
 });

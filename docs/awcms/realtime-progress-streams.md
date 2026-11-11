@@ -48,6 +48,46 @@ stream's change list. The **counters are recomputed from the table on every
 tick and are always right**; the change list is a hint, and the snapshot is the
 authority for an individual message.
 
+### Rows a confined caller sees (security audit M-1)
+
+Seeing a sender is not seeing every row through it. A tenant-wide sender
+carries messages of every brand; a caller confined to business scopes sees
+through it only the messages whose own business scope they hold (decided every
+tick through the chokepoint, descendant scopes included). Counts, change list,
+recent list and the first frame's cursor are all filtered; an unscoped message
+is invisible to a confined caller, and a `Last-Event-ID` naming a row they may
+not see gets `snapshot-required`. An unconfined caller sees every row.
+
+### Request context (audit L-2)
+
+Besides a foreign `Origin`, a request with `Sec-Fetch-Site: cross-site` or
+`Sec-Fetch-Mode: navigate` is refused with `403 ORIGIN_REFUSED` before any
+work, on both stream routes (`push/stream` too). Absent headers are allowed.
+
+### Cost bounds (audit M-2)
+
+- The connection slot is taken right after the authorization decision and
+  before any topic query: a `429` costs one guard chain and nothing else.
+- Ticks run on their own work class, `realtime_stream` (3 concurrent, queue
+  bounded by `DATABASE_WORK_CLASS_QUEUE_MULTIPLIER`), so open streams never take
+  the slots of interactive requests. A full queue ends the stream with
+  `stream-error` and the client backs off with jitter.
+- Counts cover messages **created in the last 7 days** (`countWindowDays` in the
+  snapshot), served by `awcms_whatsapp_messages_sender_window_idx`. Each read is
+  one statement; `tests/integration/whatsapp-sender-progress-query-budget.integration.test.ts`
+  holds the budget and checks the real statement never scans the table.
+
+## Deploy
+
+`sql/360` builds two indexes on `awcms_whatsapp_messages` **without
+`CONCURRENTLY`**: the migration runner wraps each file in a transaction, where
+`CREATE INDEX CONCURRENTLY` is impossible (the same constraint `sql/143`
+records). A plain `CREATE INDEX` holds a SHARE lock, so enqueues and dispatcher
+finalisations **wait** until both builds finish. On a large queue run the
+migration in a quiet window, or stop `whatsapp:dispatch` for its duration. Both
+indexes are partial (`sender_account_id IS NOT NULL`); a deployment that never
+routes through a named sender builds them over zero rows.
+
 ## Configuration
 
 All optional. Unset or invalid falls back to the default; `bun run
@@ -131,7 +171,10 @@ Refusal reasons: `origin`, `auth_denied`, `not_found`, `capped_actor`,
 ## Adding a topic
 
 1. Implement `ProgressTopic` (`src/modules/_shared/progress-sse-route.ts`) in the
-   module that owns the rows, applying the same visibility rule as its REST read.
+   module that owns the rows, applying the same visibility rule as its REST read
+   — to the ROWS, not only to the resource. Any memo or authorization cache it
+   (or a helper) keeps must be keyed by `context.request`, which is a fresh
+   object every tick; keyed any other way, a revocation never lands.
 2. Add the topic to `src/modules/_shared/realtime-topics.ts`, its permission to
    the module descriptor and a seeding migration.
 3. Add the snapshot route and a stream route built with

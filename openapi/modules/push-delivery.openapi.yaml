@@ -341,6 +341,9 @@ paths:
         a connection slot forever. The message and attempt lists are NOT
         streamed — they are bounded at 50 rows and change shape rather than
         value. Requires `push_delivery.diagnostics.read`, re-checked per tick.
+        A present foreign `Origin`, `Sec-Fetch-Site: cross-site` or
+        `Sec-Fetch-Mode: navigate` is refused with `403 ORIGIN_REFUSED` before
+        any work (Issue #1171, ADR-0154 section 3).
       responses:
         "200":
           description: The event stream.
@@ -352,6 +355,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/push/test:
     post:
       operationId: sendPushTestNotification

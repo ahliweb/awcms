@@ -453,7 +453,8 @@ function quota(health: AccountHealthView): string | null {
           </h2>
           <p class="page-description">
             {t(
-              "Messages queued through this sender, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed."
+              "Messages queued through this sender in the last {days} days that you may see, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed.",
+              { days: progress.countWindowDays }
             )}
           </p>
           <p class="page-description">

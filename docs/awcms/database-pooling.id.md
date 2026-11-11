@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](database-pooling.md)
 
-<!-- i18n-source-hash: sha256:6d39f1c891810406cb7753c9ace4fef0640c3d23d0ddafda32fafa0f768c9e36 -->
+<!-- i18n-source-hash: sha256:1b4f8bacaf29bbf8afe59067c5729bc3ed55ed542c2a3fe701d6d003258a4fa0 -->
 
 # Database Connection Pooling and Backpressure
 
@@ -77,6 +77,7 @@ lintas-instance). Lima work class dan batas konkurensinya:
 | `reporting`            | Laporan keuangan/inventori, dashboard              | Sedang    |   4 |
 | `background_sync`      | Sync push/pull, outbox, integrasi eksternal        | Rendah    |   4 |
 | `maintenance`          | Migration, backup                                  | Terjadwal |   1 |
+| `realtime_stream`      | Pembacaan per tick stream progres SSE (#1171)      | Rendah    |   3 |
 
 Angka ini kecil dan tetap (tidak env-tunable) secara sengaja — jumlahnya jauh
 di bawah `DATABASE_POOL_MAX` (default 20) sehingga masih ada headroom di pool

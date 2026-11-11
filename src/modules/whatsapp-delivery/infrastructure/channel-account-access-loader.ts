@@ -52,6 +52,15 @@ export type SenderAccess = {
   ): Promise<boolean>;
   /** Whether the caller's access is confined to business scopes (tenant-wide data is then not theirs). */
   isConfined(context: SenderAccessContext): Promise<boolean>;
+  /**
+   * The business scopes a confined caller holds for `guard`, decided through
+   * the chokepoint (Issue #1171 audit M-1). Used to filter ROWS by their own
+   * scope when the account itself is tenant-wide. Bounded, fail-closed.
+   */
+  coveredScopes(
+    context: SenderAccessContext,
+    guard: SenderAccessGuard
+  ): Promise<{ type: string; id: string }[]>;
 };
 
 export async function loadSenderAccess(): Promise<SenderAccess | null> {
@@ -67,6 +76,8 @@ export async function loadSenderAccess(): Promise<SenderAccess | null> {
       scopeCovered: (context, guard, scope) =>
         support.scopeCoveredFor(context, guard, scope),
       isConfined: (context) => support.callerIsScopeConfined(context),
+      coveredScopes: (context, guard) =>
+        support.coveredScopesFor(context, guard),
       canUseAccount: async (context, guard, accountId, minimumKind) => {
         const account = await directory.fetchAccountRecord(
           context.tx,

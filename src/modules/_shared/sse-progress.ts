@@ -441,6 +441,24 @@ export function isStreamOriginAllowed(
   );
 }
 
+/**
+ * Fetch Metadata (audit L-2): a browser that sends `Sec-Fetch-Site:
+ * cross-site` is telling us the request was started by another site, and
+ * `Sec-Fetch-Mode: navigate` means a top-level navigation rather than an
+ * `EventSource`/`fetch`. Neither is how the progress panel opens a stream, so
+ * both are refused. Absent headers (older browsers, non-browser clients) are
+ * allowed; the cookie, the Origin rule and the chokepoint still apply.
+ */
+export function isStreamFetchMetadataAllowed(headers: Headers): boolean {
+  const site = headers.get("sec-fetch-site")?.trim().toLowerCase();
+  const mode = headers.get("sec-fetch-mode")?.trim().toLowerCase();
+
+  if (site === "cross-site") return false;
+  if (mode === "navigate") return false;
+
+  return true;
+}
+
 /** `APP_URL`'s origin, or `null` when unset/unparseable. */
 export function declaredAppOrigin(
   env: NodeJS.ProcessEnv = process.env

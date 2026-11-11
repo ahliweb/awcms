@@ -24,10 +24,16 @@
  * |                         |     | never starve interactive/reporting traffic.  |
  * | `maintenance`           |   1 | Scheduled, not an HTTP concern in this base — |
  * |                         |     | serialized to avoid overlapping runs.        |
+ * | `realtime_stream`       |   3 | Issue #1171 (ADR-0154): the per-tick read of |
+ * |                         |     | an open SSE progress stream. Small on purpose |
+ * |                         |     | so hundreds of open streams can never take   |
+ * |                         |     | interactive's slots; a full queue ends the   |
+ * |                         |     | stream with `stream-error` and the client    |
+ * |                         |     | backs off with jitter (load shedding).       |
  *
  * NOTE (corrected by Issue #743 — the original text here claimed these five
  * numbers "add up to well under `DATABASE_POOL_MAX` (default 20)", which is
- * false: 10+8+4+4+1 = 27 > 20. This is an intentional, DOCUMENTED
+ * false: 10+8+4+4+1 = 27 > 20 (30 since Issue #1171 added `realtime_stream: 3`). This is an intentional, DOCUMENTED
  * oversubscription, not a bug: a work-class "slot" is an application-level
  * concurrency permit, not a guaranteed physical connection — not every work
  * class peaks at its own max at the same instant, and when the underlying
@@ -76,7 +82,8 @@ export type WorkClass =
   | "interactive"
   | "reporting"
   | "background_sync"
-  | "maintenance";
+  | "maintenance"
+  | "realtime_stream";
 
 export type WorkClassSlot = {
   release: () => void;
@@ -121,7 +128,8 @@ const WORK_CLASS_MAX: Record<WorkClass, number> = {
   interactive: 8,
   reporting: 4,
   background_sync: 4,
-  maintenance: 1
+  maintenance: 1,
+  realtime_stream: 3
 };
 
 const DEFAULT_QUEUE_DEPTH_MULTIPLIER = 4;
@@ -199,13 +207,14 @@ function createGateState(): Record<WorkClass, GateState> {
     interactive: { active: 0, queue: [] },
     reporting: { active: 0, queue: [] },
     background_sync: { active: 0, queue: [] },
-    maintenance: { active: 0, queue: [] }
+    maintenance: { active: 0, queue: [] },
+    realtime_stream: { active: 0, queue: [] }
   };
 }
 
 let gates = createGateState();
 
-/** Mirrors `gates[workClass]`'s current active/queued counts into gauges — called at every point either number changes. `workClass` is a fixed 5-value enum, so this is always a safe, low-cardinality label. */
+/** Mirrors `gates[workClass]`'s current active/queued counts into gauges — called at every point either number changes. `workClass` is a fixed 6-value enum, so this is always a safe, low-cardinality label. */
 function emitWorkClassGauges(workClass: WorkClass): void {
   const gate = gates[workClass];
 

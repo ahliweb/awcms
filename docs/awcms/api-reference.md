@@ -9584,7 +9584,7 @@ Only `queued` and `retry_wait` are cancellable. A row in `sending` has been clai
 
 Three event names. `push-queue-summary` carries a `PushQueueSummary` every 5 s. `authorization-revoked` is terminal and the client must NOT reconnect — whatever it held is gone. `stream-error` is terminal and retryable, and is deliberately a DIFFERENT name: telling a client its access was revoked when the database was merely busy is a lie in the direction that gets investigated as a permissions bug.
 
-A connection ends after 10 minutes regardless; `EventSource` reconnects by itself, so the ceiling costs a reconnect while its absence would cost a connection slot forever. The message and attempt lists are NOT streamed — they are bounded at 50 rows and change shape rather than value. Requires `push_delivery.diagnostics.read`, re-checked per tick.
+A connection ends after 10 minutes regardless; `EventSource` reconnects by itself, so the ceiling costs a reconnect while its absence would cost a connection slot forever. The message and attempt lists are NOT streamed — they are bounded at 50 rows and change shape rather than value. Requires `push_delivery.diagnostics.read`, re-checked per tick. A present foreign `Origin`, `Sec-Fetch-Site: cross-site` or `Sec-Fetch-Mode: navigate` is refused with `403 ORIGIN_REFUSED` before any work (Issue #1171, ADR-0154 section 3).
 
 **Responses**
 
@@ -9593,6 +9593,7 @@ A connection ends after 10 minutes regardless; `EventSource` reconnects by itsel
 | 200    | The event stream.           | string                                 |
 | 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/push/subscriptions` — List the caller's own registered push devices.
 
@@ -14036,7 +14037,7 @@ One entry per sender that has any queue row in the last 35 days, plus the deploy
 - **operationId**: `getWhatsappSenderProgress`
 - **Security**: bearerAuth + tenantHeader
 
-Issue #1171, ADR-0154. Counts per queue status for this sender, the 20 most recently changed messages (id, status, when — never a number, a body, a template, a provider response or an error text) and the `cursor` a stream resumes from. It is the page's state with no stream, the polling fallback, and what a client re-fetches on `snapshot-required`. Requires `whatsapp_delivery.progress.read`, and the sender must be an account the caller may see by the rules of `channel_accounts` (assignment, business scope). An unknown id, another tenant's account and a hidden account are one answer: `404`.
+Issue #1171, ADR-0154. Counts per queue status for this sender, the 20 most recently changed messages (id, status, when — never a number, a body, a template, a provider response or an error text) and the `cursor` a stream resumes from. It is the page's state with no stream, the polling fallback, and what a client re-fetches on `snapshot-required`. Requires `whatsapp_delivery.progress.read`, and the sender must be an account the caller may see by the rules of `channel_accounts` (assignment, business scope). An unknown id, another tenant's account and a hidden account are one answer: `404`. A caller confined to business scopes sees, through a tenant-wide sender, only the messages whose own business scope they hold (counts, `recent` and `cursor` alike); unscoped messages are not visible to them. `counts` covers messages created in the last 7 days (`countWindowDays`).
 
 **Parameters**
 
@@ -14060,7 +14061,7 @@ Issue #1171, ADR-0154. Counts per queue status for this sender, the 20 most rece
 
 Issue #1171, ADR-0154. `text/event-stream` from the existing Bun process; there is no WebSocket. A projection of committed queue rows: a frame never causes a send, an enqueue or a status change.
 
-**Opening.** A present `Origin` that is not the site's own origin is refused with `403 ORIGIN_REFUSED` before any work. The caller needs `whatsapp_delivery.progress.read` and must be able to see the sender (same rule as the snapshot); otherwise `401`/`403`/`404`, and no stream opens. Over the per-actor, per-tenant or per-instance cap the answer is `429 STREAM_CAPACITY_REACHED` with `Retry-After`, never a queued stream. A client resumes by sending the last event id back as `Last-Event-ID` (`EventSource` does this by itself).
+**Opening.** A present `Origin` that is not the site's own origin, or `Sec-Fetch-Site: cross-site`, or `Sec-Fetch-Mode: navigate`, is refused with `403 ORIGIN_REFUSED` before any work. Rows are filtered exactly as in the snapshot (business scope of a confined caller, 7-day counting window). The caller needs `whatsapp_delivery.progress.read` and must be able to see the sender (same rule as the snapshot); otherwise `401`/`403`/`404`, and no stream opens. Over the per-actor, per-tenant or per-instance cap the answer is `429 STREAM_CAPACITY_REACHED` with `Retry-After`, never a queued stream. A client resumes by sending the last event id back as `Last-Event-ID` (`EventSource` does this by itself).
 
 **Events.** Every data event carries `id: <cursor>` (a database keyset position). `progress` carries a `WhatsappSenderProgressFrame`: the current counts (coalesced, latest value per tick) and the messages that changed since the previous cursor, at most 50; a tick with nothing new writes a heartbeat comment instead. `snapshot-required` means re-fetch `GET /api/v1/whatsapp/senders/{id}/progress`: the `Last-Event-ID` was malformed, foreign or purged, or more than 50 messages changed at once. Terminal: `authorization-revoked` (do NOT reconnect; the role, the assignment, the business scope or the session ended — audited), `stream-error` (the database refused; back off with jitter), `slow-consumer` (the client fell behind and was evicted) and `stream-expired` (the 10-minute lifetime ended; reconnect with the cursor). Re-authorized every 5 s, which is also the revocation latency.
 
