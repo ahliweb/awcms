@@ -11,9 +11,19 @@
  *
  * No-op (claims nothing, exits 0) when `EMAIL_ENABLED` is not `"true"` —
  * see `dispatchEmailQueue`'s own early return.
+ *
+ * Issue #1160 (ADR-0151 section 2): this is the composition root that hands the
+ * dispatcher the `channel_accounts` sender port and the CREDENTIAL port, so this
+ * job (and only the dispatch jobs) is granted the key ring
+ * `CHANNEL_SECRETS_ENCRYPTION_KEYS`. A tenant sender's borrowed Mailketing token
+ * is decrypted in memory per lane, for the claimed rows' tenant; with
+ * `EMAIL_SENDER_ROUTING_ENABLED` off no tenant-sender row is claimed at all.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
+import { channelAccountPortAdapter } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
+import { channelSenderCredentialAdapter } from "../src/modules/channel-accounts/application/channel-sender-credential-adapter";
+import { snapshotSecretDecryptCounts } from "../src/modules/channel-accounts/application/secret-store";
 import {
   MAILKETING_V2_UNVERIFIED_WARNING,
   isMailketingV2Verified
@@ -48,12 +58,16 @@ async function main() {
     let totalSuppressed = 0;
     let totalUncertain = 0;
     let totalMisconfigured = 0;
+    let totalSenderHeld = 0;
+    let totalSenderLanesSkipped = 0;
     let breakerSeenOpen = false;
 
     for (const tenant of tenants) {
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
         const result = await dispatchEmailQueue(sql, tenant.id, {
-          correlationId
+          correlationId,
+          senders: channelAccountPortAdapter,
+          credentials: channelSenderCredentialAdapter
         });
 
         totalClaimed += result.claimed;
@@ -64,6 +78,8 @@ async function main() {
         totalSuppressed += result.suppressed;
         totalUncertain += result.uncertain;
         totalMisconfigured += result.misconfigured;
+        totalSenderHeld += result.senderHeld;
+        totalSenderLanesSkipped += result.senderLanesSkipped;
         breakerSeenOpen ||= result.breakerOpen;
 
         if (result.claimed === 0) {
@@ -78,6 +94,10 @@ async function main() {
         `retried=${totalRetried} failed=${totalFailed} ` +
         `deferred=${totalDeferred} suppressed=${totalSuppressed} ` +
         `uncertain=${totalUncertain} misconfigured=${totalMisconfigured} ` +
+        `senderHeld=${totalSenderHeld} senderLanesSkipped=${totalSenderLanesSkipped} ` +
+        // A count per tenant and purpose, never a value: a compromised worker
+        // enumerating credentials shows up as a rate nobody scheduled.
+        `senderCredentialDecrypts=${snapshotSecretDecryptCounts().reduce((sum, row) => sum + row.count, 0)} ` +
         `breakerOpen=${breakerSeenOpen}`
     );
 

@@ -136,6 +136,7 @@
     "email:dispatch": "bun scripts/email-dispatch.ts",
     "email:provider:health": "bun scripts/email-provider-health.ts",
     "email:queue:purge": "bun scripts/email-queue-purge.ts",
+    "email:senders:verify": "bun scripts/email-senders-verify.ts",
     "email:templates:seed-defaults": "bun scripts/email-templates-seed-defaults.ts",
     "reporting:projections:refresh": "bun scripts/reporting-projections-refresh.ts",
     "reporting:projections:registry:check": "bun scripts/reporting-projection-registry-check.ts",

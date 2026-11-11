@@ -190,3 +190,122 @@ export interface ChannelPublisherCredentialPort {
     input: ResolvePublisherInput
   ): Promise<ResolvePublishCredentialResult>;
 }
+
+// ---------------------------------------------------------------------------
+// Email senders (Issue #1160, ADR-0151 section 2; capability `channel_account`
+// 1.2.0)
+// ---------------------------------------------------------------------------
+//
+// `email` asks the same two questions of a Mailketing SENDER IDENTITY that
+// `whatsapp_delivery` asks of a WhatsApp number, under the same rules: every
+// refusal is a returned value, a database error is the only thing that throws,
+// another tenant's account and an unknown id are one answer, and there is no
+// fallback to another sender, account or provider (ADR-0151 M5, M6).
+//
+// A sender identity (`mailketing` / `sender_identity`) is a verified from-address
+// and holds no credential of its own: it borrows the API token of its parent
+// Mailketing account (`esp_account`, a container), and only while that parent is
+// `connected`. SEPARATE types again, so a 1.1.0 implementer or fake still
+// compiles (a MINOR bump).
+
+/** The provider-matrix capability an email needs: a transactional send (`dm`) or a marketing send (`broadcast`). */
+export type EmailSenderCapability = "dm" | "broadcast";
+
+/** The email reasons are the sender reasons plus one: the account is not a Mailketing sender identity. */
+export type EmailSenderUnavailableReason =
+  | SenderUnavailableReason
+  /** Another provider or kind (a Mailketing `esp_account` container, a WhatsApp number). */
+  | "NOT_AN_EMAIL_SENDER";
+
+export type ResolvedEmailSender = {
+  accountId: string;
+  provider: "mailketing";
+  accountKind: "sender_identity";
+  /** The verified from-address (the account's `external_id`, lower case). Read from the account, never from a caller. */
+  address: string;
+  /** The Mailketing account (connection) whose token this sender borrows; the per-connection breaker and failure budget key. */
+  espAccountId: string;
+  /** `null` is tenant-wide. */
+  businessScope: { type: string; id: string } | null;
+  /** The display name, ONLY when `withDisplayName` was asked (the enqueue path, as `awcms_app`); `null` otherwise. The worker role cannot read it. */
+  displayName: string | null;
+};
+
+export type ResolveEmailSenderInput = {
+  tenantId: string;
+  accountId: string;
+  capability: EmailSenderCapability;
+  /** Read the display name too. Only on the enqueue path: `awcms_worker` holds no grant on it (`sql/322`). */
+  withDisplayName?: boolean;
+};
+
+export type ResolveEmailSenderResult =
+  | { usable: true; sender: ResolvedEmailSender }
+  | { usable: false; reason: EmailSenderUnavailableReason };
+
+export interface ChannelEmailSenderPort {
+  /**
+   * Whether `accountId` of `tenantId` may send an email under `capability`
+   * right now: a Mailketing `sender_identity` that is `connected` (verified),
+   * whose parent Mailketing account is `connected`, with the capability
+   * `granted` with evidence under the current provider matrix. Re-evaluated on
+   * every call. Never returns a credential.
+   */
+  resolveEmailSender(
+    tx: Bun.SQL,
+    input: ResolveEmailSenderInput
+  ): Promise<ResolveEmailSenderResult>;
+}
+
+export type ResolveEmailCredentialResult =
+  /** `credential` is the parent Mailketing account's API token. */
+  | { ok: true; credential: string }
+  | { ok: false; reason: EmailSenderUnavailableReason };
+
+export interface ChannelEmailCredentialPort {
+  /**
+   * DISPATCHER ONLY. Decrypts the API token a sender identity the caller has
+   * ALREADY resolved as usable borrows from its parent Mailketing account, for
+   * the transaction's tenant, in memory. The value must not be logged, stored,
+   * evented, audited, put in a URL, a job payload or a response (ADR-0151 M1).
+   * Counted per tenant and purpose like every other decrypt.
+   */
+  resolveEmailCredential(
+    tx: Bun.SQL,
+    input: { tenantId: string; accountId: string }
+  ): Promise<ResolveEmailCredentialResult>;
+}
+
+/**
+ * The verification job's view of a tenant's Mailketing accounts (Issue #1160):
+ * each live account with its live sender identities. Identities and statuses
+ * only; never a credential, a secret reference or a display name.
+ */
+export type EmailAccountSummary = {
+  espAccountId: string;
+  status: string;
+  senders: { accountId: string; address: string; status: string }[];
+};
+
+export interface ChannelEmailAccountDirectoryPort {
+  /** Live (`pending`, `connected`, `degraded`) Mailketing accounts of `tenantId` and their live sender identities. Bounded. */
+  listEmailAccounts(
+    tx: Bun.SQL,
+    tenantId: string
+  ): Promise<EmailAccountSummary[]>;
+}
+
+export interface ChannelEmailAccountCredentialPort {
+  /**
+   * `email:senders:verify` ONLY. Decrypts the API token of a Mailketing
+   * ACCOUNT (an `esp_account`) so its read-only `GET /credits` and
+   * `GET /senders` can be called. Allowed while the account is `pending`,
+   * `connected` or `degraded` (verification is how a pending account and its
+   * senders become `connected`); refused when revoked, disabled or deleted.
+   * Same handling rules as every other decrypt (ADR-0151 M1).
+   */
+  resolveEmailAccountCredential(
+    tx: Bun.SQL,
+    input: { tenantId: string; accountId: string }
+  ): Promise<ResolveEmailCredentialResult>;
+}

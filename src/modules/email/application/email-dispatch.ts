@@ -35,17 +35,44 @@
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
+import type {
+  ChannelEmailCredentialPort,
+  ChannelEmailSenderPort
+} from "../../_shared/ports/channel-account-port";
 import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
-import { resolveEmailSendMaxRetries } from "../domain/email-config";
+import {
+  emailSenderAllowance,
+  loadEmailSenderHealth
+} from "./email-sender-directory";
+import {
+  isEmailSenderRoutingEnabled,
+  resolveEmailMailketingCreditFloor,
+  resolveEmailSendMaxRetries,
+  resolveEmailSendTimeoutMs,
+  resolveEmailSenderHealthMaxAgeMs
+} from "../domain/email-config";
 import { redactEmailAddressesInText } from "../domain/email-log-redaction";
 import {
   EMAIL_CREDIT_HOLD_BUDGET_MS,
+  EMAIL_SENDER_HOLD_BUDGET_MS,
+  EMAIL_SENDER_HOLD_MS,
   evaluateEmailRetry
 } from "../domain/email-retry";
 import {
+  EMAIL_SENDER_UNAVAILABLE_CODE,
+  capabilityForEmailPurpose,
+  classifyEmailSenderUnavailable,
+  emailSenderBreakerKey,
+  emailSenderScopeAllows,
+  evaluateEmailSenderHealth,
+  type EmailPurpose
+} from "../domain/email-sender";
+import {
   MAILKETING_V2_UNVERIFIED_WARNING,
+  isMailketingTokenHeaderSafe,
   isMailketingV2Verified
 } from "../domain/mailketing-v2-contract";
+import { createMailketingV2Provider } from "../infrastructure/mailketing-v2-provider";
 import { fetchSuppressedRecipientHashes } from "./suppression-directory";
 import {
   renderEmailTemplate,
@@ -83,6 +110,23 @@ type ClaimedRow = {
   created_at?: Date | string;
 };
 
+/** Issue #1160: a row of a tenant sender's lane carries its immutable sender snapshot. */
+type ClaimedSenderRow = ClaimedRow & {
+  sender_account_id: string;
+  sender_address: string;
+  sender_name: string | null;
+  business_scope_type: string | null;
+  business_scope_id: string | null;
+  purpose: EmailPurpose;
+};
+
+/** Issue #1160: what the composition root may hand a tenant-sender lane's provider factory. */
+export type BuildEmailSenderProviderInput = {
+  apiToken: string;
+  breakerKey: string;
+  env: NodeJS.ProcessEnv;
+};
+
 export type DispatchEmailQueueOptions = {
   limit?: number;
   now?: Date;
@@ -91,6 +135,21 @@ export type DispatchEmailQueueOptions = {
   fromAddress?: string;
   fromName?: string;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Issue #1160. Resolves a tenant-owned Mailketing sender (no secret). Omitted
+   * (or `EMAIL_SENDER_ROUTING_ENABLED` not `"true"`): tenant-sender rows are not
+   * claimed at all; they wait, untouched, and nothing else sends them.
+   */
+  senders?: ChannelEmailSenderPort;
+  /**
+   * Issue #1160. Decrypts a sender's borrowed Mailketing token, in memory, per
+   * lane. Supplied ONLY by the dispatcher's composition root
+   * (`scripts/email-dispatch.ts`); omitted, tenant-sender rows are not claimed
+   * (fail closed).
+   */
+  credentials?: ChannelEmailCredentialPort;
+  /** Issue #1160. Test seam for the per-account v2 provider (no network). */
+  buildSenderProvider?: (input: BuildEmailSenderProviderInput) => EmailProvider;
 };
 
 export type DispatchEmailQueueResult = {
@@ -123,7 +182,14 @@ export type DispatchEmailQueueResult = {
    * configuration is fixed; a configuration error never fails a message.
    */
   misconfigured: number;
+  /** The DEPLOYMENT sender's breaker (unchanged meaning). A tenant sender's breaker is per Mailketing account and reported in `senderLanesSkipped`. */
   breakerOpen: boolean;
+  /** Issue #1160: tenant-sender lanes this pass looked at. */
+  senderLanes: number;
+  /** Issue #1160: lanes not served this pass (their account's breaker open, or the sender's hourly cap reached). Nothing was claimed or rerouted. */
+  senderLanesSkipped: number;
+  /** Issue #1160: claimed rows of a tenant sender that could not send right now and were parked (a subset of `deferred`). */
+  senderHeld: number;
 };
 
 function toStringVariables(
@@ -181,6 +247,9 @@ async function claimEligibleEntries(
         WITH due AS MATERIALIZED (
           SELECT id, (status = 'sending') AS reclaimed FROM awcms_email_messages
           WHERE tenant_id = ${tenantId}
+            -- Issue #1160: the DEPLOYMENT lane only. A tenant sender's row is
+            -- claimed by its own lane, never sent with the deployment token.
+            AND sender_account_id IS NULL
             AND (
               (status IN ('queued', 'retry_wait')
                 AND (next_attempt_at IS NULL OR next_attempt_at <= ${now}))
@@ -202,6 +271,121 @@ async function claimEligibleEntries(
       `;
 
       return rows as unknown as ClaimedRow[];
+    },
+    { workClass: "background_sync" }
+  );
+}
+
+/** Most tenant-sender lanes one pass looks at; the oldest-waiting come first, so a lane past this limit is served by the next pass, not starved. */
+const MAX_SENDER_LANES_PER_PASS = 64;
+
+/**
+ * Issue #1160: the tenant senders that have due rows, oldest-waiting first. One
+ * statement, bounded, over the tenant's own queue (RLS and the predicate).
+ */
+async function discoverSenderLanes(
+  sql: Bun.SQL,
+  tenantId: string,
+  now: Date
+): Promise<string[]> {
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      const rows = (await tx`
+        SELECT sender_account_id
+        FROM awcms_email_messages
+        WHERE tenant_id = ${tenantId}
+          AND sender_account_id IS NOT NULL
+          AND (
+            (status IN ('queued', 'retry_wait')
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ${now}))
+            OR (status = 'sending' AND next_attempt_at <= ${now})
+          )
+        GROUP BY sender_account_id
+        ORDER BY min(created_at), sender_account_id
+        LIMIT ${MAX_SENDER_LANES_PER_PASS}
+      `) as { sender_account_id: string }[];
+
+      return rows.map((row) => row.sender_account_id);
+    },
+    { workClass: "background_sync" }
+  );
+}
+
+/**
+ * Issue #1160: claims due rows of ONE tenant sender. With `quotaEnv` the
+ * sender's hourly allowance is computed and CLAIMED in this one transaction,
+ * under a lock keyed on the sender (the WhatsApp lesson of Issue #1231 M2):
+ * two overlapping passes would otherwise both read the same allowance and
+ * together exceed the cap. The lock is taken first, before any row lock (the
+ * claim is `SKIP LOCKED` and never waits), and released at COMMIT; it is never
+ * held across a network send.
+ */
+async function claimSenderLane(
+  sql: Bun.SQL,
+  tenantId: string,
+  senderAccountId: string,
+  now: Date,
+  limit: number,
+  quotaEnv: NodeJS.ProcessEnv | null
+): Promise<{ rows: ClaimedSenderRow[]; quotaReached: boolean }> {
+  const leaseExpiry = new Date(
+    now.getTime() + EMAIL_DISPATCH_LEASE_MINUTES * 60_000
+  );
+
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      let take = limit;
+
+      if (quotaEnv !== null) {
+        await tx`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(${`awcms_email_sender_quota:${tenantId}:${senderAccountId}`}, 0)
+          )
+        `;
+
+        take = Math.min(
+          limit,
+          await emailSenderAllowance(tx, tenantId, senderAccountId, quotaEnv)
+        );
+
+        if (take <= 0) return { rows: [], quotaReached: true };
+      }
+
+      const rows = await tx`
+        WITH due AS MATERIALIZED (
+          SELECT id, (status = 'sending') AS reclaimed FROM awcms_email_messages
+          WHERE tenant_id = ${tenantId}
+            AND sender_account_id = ${senderAccountId}::uuid
+            AND (
+              (status IN ('queued', 'retry_wait')
+                AND (next_attempt_at IS NULL OR next_attempt_at <= ${now}))
+              OR (status = 'sending' AND next_attempt_at <= ${now})
+            )
+          ORDER BY
+            CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+            created_at
+          LIMIT ${take}
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE awcms_email_messages AS t
+        SET status = 'sending', next_attempt_at = ${leaseExpiry}
+        FROM due
+        WHERE t.id = due.id
+        RETURNING t.id, t.correlation_id, t.category, t.template_key,
+                  t.to_address, t.to_address_hash, t.subject, t.variables,
+                  t.retry_count, t.created_at, due.reclaimed,
+                  t.sender_account_id, t.sender_address, t.sender_name,
+                  t.business_scope_type, t.business_scope_id, t.purpose
+      `;
+
+      return {
+        rows: rows as unknown as ClaimedSenderRow[],
+        quotaReached: false
+      };
     },
     { workClass: "background_sync" }
   );
@@ -435,6 +619,23 @@ function createTemplateLoader(
  * `awcms_email_messages` entries for a single tenant. Safe to call
  * repeatedly (claim-lease pattern); the CLI script loops per tenant to
  * drain a larger backlog.
+ *
+ * ## Lanes (Issue #1160, ADR-0151 sections 1 and 2)
+ *
+ * The ONE queue is served in lanes. The DEPLOYMENT lane (`sender_account_id`
+ * NULL) is exactly the dispatcher it always was: the deployment provider from
+ * the environment, the global `email-mailketing` breaker, `EMAIL_FROM_*`.
+ *
+ * Each TENANT SENDER is its own lane, served only when routing is switched on
+ * and the composition root supplied both ports. Per lane, before anything is
+ * claimed: the sender is re-resolved for the row's tenant (verified, its
+ * Mailketing account connected, capability granted), its verification and its
+ * account's credit must be known and fresh, and its account's own breaker must
+ * be closed. Then the rows are claimed under the sender's hourly cap, the
+ * account's token is decrypted in memory, and each row is sent FROM ITS OWN
+ * SNAPSHOTTED ADDRESS through a v2 provider keyed to that account. A sender that
+ * cannot send makes its rows wait (bounded) or fail; nothing is ever rerouted
+ * to the deployment sender, another sender or another account (M5, M6).
  */
 export async function dispatchEmailQueue(
   sql: Bun.SQL,
@@ -458,63 +659,54 @@ export async function dispatchEmailQueue(
     deferred: 0,
     uncertain: 0,
     misconfigured: 0,
-    breakerOpen
+    breakerOpen,
+    senderLanes: 0,
+    senderLanesSkipped: 0,
+    senderHeld: 0
   };
 
   if (env.EMAIL_ENABLED !== "true") {
     return result;
   }
 
-  if (breakerOpen) {
-    log("warning", "email.dispatch.breaker_open", {
-      correlationId,
-      tenantId,
-      moduleKey: MODULE_KEY
-    });
-    return result;
+  let renderLocale: string | null = null;
+  let loadTemplate:
+    ((templateKey: string) => Promise<EmailTemplateSource | null>) | null =
+    null;
+  let suppressedHashes: Set<string> | null = null;
+
+  /** Loaded once per pass, on first need, for every lane alike. */
+  async function prepareRendering(): Promise<void> {
+    if (renderLocale === null) {
+      renderLocale = await fetchTenantDefaultLocale(sql, tenantId);
+      loadTemplate = createTemplateLoader(sql, tenantId);
+      suppressedHashes = await withTenantOrThrow(
+        sql,
+        tenantId,
+        (tx) => fetchSuppressedRecipientHashes(tx, tenantId),
+        { workClass: "background_sync" }
+      );
+    }
   }
 
-  const claimed = await claimEligibleEntries(sql, tenantId, now, limit);
-  result.claimed = claimed.length;
+  type SendContext = {
+    provider: EmailProvider;
+    from: { address: string; name: string };
+    providerName: string;
+  };
 
-  if (claimed.length === 0) {
-    return result;
-  }
+  /**
+   * The suppression re-check, render, send and finalize of ONE claimed row.
+   * Identical for every lane: what differs is only the provider and the
+   * from-address the lane hands it.
+   */
+  async function sendClaimedEntry(
+    entry: ClaimedRow,
+    context: SendContext
+  ): Promise<void> {
+    await prepareRendering();
 
-  log("info", "email.dispatch.claimed", {
-    correlationId,
-    tenantId,
-    moduleKey: MODULE_KEY,
-    count: claimed.length
-  });
-
-  if (
-    env.EMAIL_PROVIDER === "mailketing" &&
-    env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
-    !isMailketingV2Verified(env)
-  ) {
-    log("warning", "email.dispatch.mailketing_v2_unverified", {
-      correlationId,
-      tenantId,
-      moduleKey: MODULE_KEY,
-      warning: MAILKETING_V2_UNVERIFIED_WARNING
-    });
-  }
-
-  const provider = (options.resolveProvider ?? resolveEmailProvider)(env);
-  const fromAddress = options.fromAddress ?? env.EMAIL_FROM_ADDRESS ?? "";
-  const fromName = options.fromName ?? env.EMAIL_FROM_NAME ?? "";
-  const renderLocale = await fetchTenantDefaultLocale(sql, tenantId);
-  const loadTemplate = createTemplateLoader(sql, tenantId);
-  const suppressedHashes = await withTenantOrThrow(
-    sql,
-    tenantId,
-    (tx) => fetchSuppressedRecipientHashes(tx, tenantId),
-    { workClass: "background_sync" }
-  );
-
-  for (const entry of claimed) {
-    if (suppressedHashes.has(entry.to_address_hash)) {
+    if (suppressedHashes!.has(entry.to_address_hash)) {
       await finalizeSuppressed(sql, tenantId, entry.id);
       log("info", "email.dispatch.suppressed", {
         correlationId: entry.correlation_id ?? correlationId,
@@ -523,17 +715,18 @@ export async function dispatchEmailQueue(
         category: entry.category
       });
       result.suppressed += 1;
-      continue;
+      return;
     }
 
     const retryCount = Number(entry.retry_count);
     const attemptNo = retryCount + 1;
     const messageCorrelationId = entry.correlation_id ?? correlationId;
+    const providerName = context.providerName;
 
     let template: EmailTemplateSource | null = null;
 
     if (entry.template_key) {
-      template = await loadTemplate(entry.template_key);
+      template = await loadTemplate!(entry.template_key);
     }
 
     if (!template) {
@@ -547,7 +740,7 @@ export async function dispatchEmailQueue(
         entry.id,
         attemptNo,
         "failure",
-        env.EMAIL_PROVIDER ?? "unknown",
+        providerName,
         null,
         errorMessage
       );
@@ -562,19 +755,19 @@ export async function dispatchEmailQueue(
         errorMessage
       );
       result.failed += 1;
-      continue;
+      return;
     }
 
     const rendered = renderEmailTemplate(
       template,
       toStringVariables(entry.variables),
       entry.template_key!,
-      renderLocale
+      renderLocale!
     );
 
-    const deliveryResult = await provider.send({
+    const deliveryResult = await context.provider.send({
       to: [{ address: entry.to_address }],
-      from: { address: fromAddress, name: fromName },
+      from: context.from,
       subject: entry.subject || rendered.subject,
       textBody: rendered.textBody,
       htmlBody: rendered.htmlBody,
@@ -611,7 +804,7 @@ export async function dispatchEmailQueue(
         entry.id,
         attemptNo,
         "success",
-        env.EMAIL_PROVIDER ?? "unknown",
+        providerName,
         deliveryResult.providerMessageId
           ? redactEmailAddressesInText(
               deliveryResult.providerMessageId.slice(
@@ -626,7 +819,7 @@ export async function dispatchEmailQueue(
         sql,
         tenantId,
         entry.id,
-        env.EMAIL_PROVIDER ?? "unknown",
+        providerName,
         deliveryResult.providerMessageId,
         entry.reclaimed ? UNCERTAIN_REDELIVERY_NOTE : null
       );
@@ -634,10 +827,11 @@ export async function dispatchEmailQueue(
         correlationId: messageCorrelationId,
         tenantId,
         moduleKey: MODULE_KEY,
-        category: entry.category
+        category: entry.category,
+        ...senderLogField(entry)
       });
       result.sent += 1;
-      continue;
+      return;
     }
 
     const safeError = redactEmailAddressesInText(
@@ -662,7 +856,7 @@ export async function dispatchEmailQueue(
         entry.id,
         attemptNo,
         "failure",
-        env.EMAIL_PROVIDER ?? "unknown",
+        providerName,
         budgetError,
         annotate(budgetError)
       );
@@ -682,10 +876,11 @@ export async function dispatchEmailQueue(
         moduleKey: MODULE_KEY,
         category: entry.category,
         retryCount: retryCount + 1,
-        error: budgetError
+        error: budgetError,
+        ...senderLogField(entry)
       });
       result.failed += 1;
-      continue;
+      return;
     }
 
     if (deliveryResult.skipped) {
@@ -724,7 +919,7 @@ export async function dispatchEmailQueue(
       }
 
       result.deferred += 1;
-      continue;
+      return;
     }
 
     await recordDeliveryAttempt(
@@ -733,7 +928,7 @@ export async function dispatchEmailQueue(
       entry.id,
       attemptNo,
       "failure",
-      env.EMAIL_PROVIDER ?? "unknown",
+      providerName,
       safeError,
       annotate(safeError)
     );
@@ -767,11 +962,316 @@ export async function dispatchEmailQueue(
         moduleKey: MODULE_KEY,
         category: entry.category,
         retryCount: retryCount + 1,
-        error: safeError
+        error: safeError,
+        ...senderLogField(entry)
       });
       result.failed += 1;
     }
   }
 
+  // -------------------------------------------------------------------------
+  // The deployment lane: unchanged behaviour.
+  // -------------------------------------------------------------------------
+  if (breakerOpen) {
+    log("warning", "email.dispatch.breaker_open", {
+      correlationId,
+      tenantId,
+      moduleKey: MODULE_KEY
+    });
+  } else {
+    const claimed = await claimEligibleEntries(sql, tenantId, now, limit);
+    result.claimed += claimed.length;
+
+    if (claimed.length > 0) {
+      log("info", "email.dispatch.claimed", {
+        correlationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        count: claimed.length
+      });
+
+      if (
+        env.EMAIL_PROVIDER === "mailketing" &&
+        env.EMAIL_MAILKETING_API_VERSION?.trim() === "v2" &&
+        !isMailketingV2Verified(env)
+      ) {
+        log("warning", "email.dispatch.mailketing_v2_unverified", {
+          correlationId,
+          tenantId,
+          moduleKey: MODULE_KEY,
+          warning: MAILKETING_V2_UNVERIFIED_WARNING
+        });
+      }
+
+      const provider = (options.resolveProvider ?? resolveEmailProvider)(env);
+      const deploymentContext: SendContext = {
+        provider,
+        from: {
+          address: options.fromAddress ?? env.EMAIL_FROM_ADDRESS ?? "",
+          name: options.fromName ?? env.EMAIL_FROM_NAME ?? ""
+        },
+        providerName: env.EMAIL_PROVIDER ?? "unknown"
+      };
+
+      for (const entry of claimed) {
+        await sendClaimedEntry(entry, deploymentContext);
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Tenant-sender lanes (Issue #1160).
+  // -------------------------------------------------------------------------
+  const senders = options.senders;
+  const credentials = options.credentials;
+
+  if (!senders || !credentials || !isEmailSenderRoutingEnabled(env)) {
+    return result;
+  }
+
+  const lanes = await discoverSenderLanes(sql, tenantId, now);
+
+  for (const laneSenderId of lanes) {
+    result.senderLanes += 1;
+    await serveSenderLane(laneSenderId, senders, credentials);
+  }
+
   return result;
+
+  /** Parks or fails every claimed row of a lane whose sender cannot send now. Nothing is sent; no attempt is written. */
+  async function refuseLaneRows(
+    rows: ClaimedSenderRow[],
+    kind: "hold" | "terminal",
+    reason: string
+  ): Promise<void> {
+    for (const entry of rows) {
+      const retryCount = Number(entry.retry_count);
+      const budgetSpent =
+        kind === "hold" &&
+        entry.created_at !== undefined &&
+        now.getTime() - new Date(entry.created_at).getTime() >=
+          EMAIL_SENDER_HOLD_BUDGET_MS;
+
+      if (kind === "hold" && !budgetSpent) {
+        await finalizeDeferred(
+          sql,
+          tenantId,
+          entry.id,
+          `${EMAIL_SENDER_UNAVAILABLE_CODE} (${reason}); waiting for this sender, never rerouted.`,
+          new Date(now.getTime() + EMAIL_SENDER_HOLD_MS)
+        );
+        log("warning", "email.dispatch.sender_held", {
+          correlationId: entry.correlation_id ?? correlationId,
+          tenantId,
+          moduleKey: MODULE_KEY,
+          category: entry.category,
+          senderAccountId: entry.sender_account_id,
+          reason
+        });
+        result.deferred += 1;
+        result.senderHeld += 1;
+        continue;
+      }
+
+      const message = budgetSpent
+        ? `SENDER_HOLD_BUDGET_EXCEEDED: the sender could not send (${reason}) for longer than the hold budget; the message was not sent and was not rerouted.`
+        : `${EMAIL_SENDER_UNAVAILABLE_CODE}: the sender cannot send (${reason}); the message was not sent and was not rerouted.`;
+
+      await finalizeFailure(
+        sql,
+        tenantId,
+        entry.id,
+        retryCount,
+        maxRetries,
+        false,
+        now,
+        message
+      );
+      log("error", "email.dispatch.failed", {
+        correlationId: entry.correlation_id ?? correlationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        category: entry.category,
+        senderAccountId: entry.sender_account_id,
+        error: message
+      });
+      result.failed += 1;
+    }
+  }
+
+  async function serveSenderLane(
+    laneSenderId: string,
+    senderPort: ChannelEmailSenderPort,
+    credentialPort: ChannelEmailCredentialPort
+  ): Promise<void> {
+    // 1. The lane's verdict, for THIS tenant, re-evaluated every pass: the
+    //    account record, its parent account, the capability, then the
+    //    freshness of its verification and its account's credit.
+    const gate = await withTenantOrThrow(
+      sql,
+      tenantId,
+      async (tx) => {
+        const verdict = await senderPort.resolveEmailSender(tx, {
+          tenantId,
+          accountId: laneSenderId,
+          capability: capabilityForEmailPurpose("transactional")
+        });
+
+        if (!verdict.usable) {
+          return {
+            usable: false as const,
+            kind: classifyEmailSenderUnavailable(verdict.reason),
+            reason: verdict.reason as string
+          };
+        }
+
+        const health = await loadEmailSenderHealth(
+          tx,
+          tenantId,
+          verdict.sender
+        );
+        const hold = evaluateEmailSenderHealth({
+          sender: health.sender,
+          account: health.account,
+          now,
+          maxAgeMs: resolveEmailSenderHealthMaxAgeMs(env),
+          creditFloor: resolveEmailMailketingCreditFloor(env)
+        });
+
+        return hold
+          ? { usable: false as const, kind: "hold" as const, reason: hold }
+          : { usable: true as const, sender: verdict.sender };
+      },
+      { workClass: "background_sync" }
+    );
+
+    if (!gate.usable) {
+      // Claimed only to park (bounded) or fail them; never sent elsewhere.
+      const claimed = await claimSenderLane(
+        sql,
+        tenantId,
+        laneSenderId,
+        now,
+        limit,
+        null
+      );
+
+      result.claimed += claimed.rows.length;
+      await refuseLaneRows(claimed.rows, gate.kind, gate.reason);
+      return;
+    }
+
+    const sender = gate.sender;
+    const breakerKey = emailSenderBreakerKey(sender.espAccountId);
+
+    // 2. This ACCOUNT's breaker only: another tenant's (or the deployment's)
+    //    failures never reach it, and its failures never reach them (M9).
+    if (!getProviderCircuitBreaker(breakerKey).canAttempt(now)) {
+      result.senderLanesSkipped += 1;
+      log("warning", "email.dispatch.sender_breaker_open", {
+        correlationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        senderAccountId: laneSenderId
+      });
+      return;
+    }
+
+    // 3. Claim under the sender's hourly cap.
+    const claimed = await claimSenderLane(
+      sql,
+      tenantId,
+      laneSenderId,
+      now,
+      limit,
+      env
+    );
+
+    if (claimed.quotaReached) {
+      result.senderLanesSkipped += 1;
+      log("info", "email.dispatch.sender_quota_reached", {
+        correlationId,
+        tenantId,
+        moduleKey: MODULE_KEY,
+        senderAccountId: laneSenderId
+      });
+      return;
+    }
+
+    result.claimed += claimed.rows.length;
+
+    if (claimed.rows.length === 0) return;
+
+    // 4. The borrowed token, decrypted in memory for this lane only. Never
+    //    logged, stored, put in a URL or a result (M1).
+    const credential = await withTenantOrThrow(
+      sql,
+      tenantId,
+      (tx) =>
+        credentialPort.resolveEmailCredential(tx, {
+          tenantId,
+          accountId: laneSenderId
+        }),
+      { workClass: "background_sync" }
+    );
+
+    if (!credential.ok) {
+      await refuseLaneRows(
+        claimed.rows,
+        classifyEmailSenderUnavailable(credential.reason),
+        credential.reason
+      );
+      return;
+    }
+
+    if (!isMailketingTokenHeaderSafe(credential.credential)) {
+      await refuseLaneRows(claimed.rows, "hold", "CREDENTIAL_UNUSABLE");
+      return;
+    }
+
+    const provider = (
+      options.buildSenderProvider ??
+      ((input: BuildEmailSenderProviderInput) =>
+        createMailketingV2Provider({
+          apiToken: input.apiToken,
+          timeoutMs: resolveEmailSendTimeoutMs(input.env),
+          env: input.env,
+          breakerKey: input.breakerKey
+        }))
+    )({ apiToken: credential.credential, breakerKey, env });
+
+    for (const entry of claimed.rows) {
+      // The row is sent FROM ITS OWN SNAPSHOT, and only while the account still
+      // carries that address and the row's scope is one the sender may serve.
+      const rowScope =
+        entry.business_scope_type && entry.business_scope_id
+          ? { type: entry.business_scope_type, id: entry.business_scope_id }
+          : null;
+
+      if (
+        entry.sender_address !== sender.address ||
+        !emailSenderScopeAllows(sender.businessScope, rowScope) ||
+        entry.purpose === "security"
+      ) {
+        await refuseLaneRows([entry], "terminal", "SENDER_SNAPSHOT_MISMATCH");
+        continue;
+      }
+
+      await sendClaimedEntry(entry, {
+        provider,
+        from: { address: entry.sender_address, name: entry.sender_name ?? "" },
+        providerName: "mailketing"
+      });
+    }
+  }
+}
+
+/** The sender key on a log line (never its address or credential); absent for the deployment lane. */
+function senderLogField(
+  entry: ClaimedRow
+): { senderAccountId: string } | Record<string, never> {
+  const senderAccountId = (entry as Partial<ClaimedSenderRow>)
+    .sender_account_id;
+
+  return senderAccountId ? { senderAccountId } : {};
 }

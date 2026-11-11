@@ -2093,6 +2093,21 @@ export const WORKER_COLUMN_GRANTS: Record<
   awcms_channel_secrets: {
     SELECT: ["id", "tenant_id", "purpose", "ciphertext"]
   },
+  // sql/348 (Issue #1160, ADR-0151 section 2): `email:dispatch` holds a tenant
+  // sender whose verification or account credit is stale, unknown or below the
+  // floor. It reads the latest health row: state, fixed reason code, when it was
+  // checked and the reported balance. No token expiry, no quota limit, and no
+  // write (a worker that could write health could mark a sender verified).
+  awcms_channel_account_health: {
+    SELECT: [
+      "tenant_id",
+      "account_id",
+      "state",
+      "reason_code",
+      "checked_at",
+      "quota_remaining"
+    ]
+  },
   // sql/340 (Issue #1142, ADR-0148 section 7): the send decision asks whether the
   // tenant's acknowledgement of an UNOFFICIAL provider's current text is still in
   // force. Exactly those five columns: not the acting person, not the text hash,
@@ -2820,6 +2835,9 @@ export async function checkWorkerSetupRoleGrants(
             AND p.polqual IS NOT NULL
             AND pg_get_expr(p.polqual, p.polrelid) LIKE '%whatsapp_cloud%'
             AND pg_get_expr(p.polqual, p.polrelid) LIKE '%awcms_channel_accounts%'
+            -- sql/348 (Issue #1160): a Mailketing token is visible only as the
+            -- own credential of a live esp_account, never by provider alone.
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%esp_account%'
             -- L-6 of the #1145 re-audit: the policy must stay WhatsApp-only. A
             -- widening to any social provider (the withdrawn first revision of
             -- ADR-0157 did exactly that) lets a compromised whatsapp:dispatch
@@ -2835,7 +2853,7 @@ export async function checkWorkerSetupRoleGrants(
 
       if (!policy[0]?.has_policy) {
         findings.push(
-          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
+          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials and Mailketing account tokens, sql/328 + sql/348) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social tokens)`
         );
       }
 

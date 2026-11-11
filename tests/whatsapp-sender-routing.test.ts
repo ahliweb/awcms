@@ -1342,10 +1342,16 @@ describe("static contracts", () => {
       }
     }
 
-    // Still ONE (the #1145 audit, H1): `social-publishing:dispatch` shares the
+    // The #1145 audit (H1): `social-publishing:dispatch` shares the
     // `awcms_worker` role and must NOT be handed the key ring, or a compromised
-    // WhatsApp worker could decrypt social tokens through it.
-    expect(importers).toEqual(["scripts/whatsapp-dispatch.ts"]);
+    // WhatsApp worker could decrypt social tokens through it. Issue #1160
+    // (ADR-0151 section 2) adds exactly the two EMAIL jobs that resolve a
+    // tenant's Mailketing token: the dispatcher and the sender verifier.
+    expect(importers.sort()).toEqual([
+      "scripts/email-dispatch.ts",
+      "scripts/email-senders-verify.ts",
+      "scripts/whatsapp-dispatch.ts"
+    ]);
   });
 
   test("one queue, no dual write: the migration creates no queue table and the module owns exactly one message table", () => {

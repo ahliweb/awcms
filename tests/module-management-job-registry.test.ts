@@ -105,6 +105,7 @@ describe("fetchModuleJobs", () => {
         "bun run email:dispatch",
         "bun run email:provider:health",
         "bun run email:queue:purge",
+        "bun run email:senders:verify",
         "bun run email:templates:seed-defaults",
         "bun run entitlements:backfill",
         "bun run form-drafts:purge",

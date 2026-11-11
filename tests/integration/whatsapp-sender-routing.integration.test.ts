@@ -3221,8 +3221,12 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           (tx: Bun.SQL) =>
             tx`SELECT state_hash FROM awcms_channel_oauth_states`,
           (tx: Bun.SQL) => tx`SELECT id FROM awcms_channel_account_assignments`,
+          // sql/348 (Issue #1160) grants `email:dispatch` six health columns
+          // (state, reason, checked_at, balance); the rest stay denied.
           (tx: Bun.SQL) =>
-            tx`SELECT account_id FROM awcms_channel_account_health`
+            tx`SELECT token_expires_at FROM awcms_channel_account_health`,
+          (tx: Bun.SQL) =>
+            tx`SELECT quota_limit FROM awcms_channel_account_health`
         ]) {
           await assertPgRejected(
             inTenantWorker(TENANT_A, (tx) => probe(tx)),

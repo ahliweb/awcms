@@ -436,6 +436,16 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "whatsapp:dispatch",
         reason:
           "decrypts a tenant-owned WhatsApp sender's credential in memory, per lane, for the claimed row's tenant (#1141, the residual risk ADR-0148 section 5 accepts). The job that only ENQUEUES (booking:reminders:dispatch) never reaches the secret store"
+      },
+      {
+        target: "email:dispatch",
+        reason:
+          "decrypts the Mailketing token a tenant-owned email sender borrows from its account, in memory, per lane, for the claimed rows' tenant (#1160, ADR-0151 section 2 applying ADR-0148 section 5 to email)"
+      },
+      {
+        target: "email:senders:verify",
+        reason:
+          "decrypts each tenant Mailketing account's token once per pass for the read-only GET /credits and GET /senders probes (#1160)"
       }
     ]
   },

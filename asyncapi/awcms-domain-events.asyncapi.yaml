@@ -473,7 +473,10 @@ channels:
       contract only, same convention as `database.pool.saturated` — the
       concrete producer is the structured JSON logger, invoked from
       `email/application/announcement-directory.ts`'s `enqueueAnnouncement`
-      (`email.message.queued` log line).
+      (`email.message.queued` log line). Issue #1160 (ADR-0151 section 7,
+      additive): the line carries `senderAccountId` - the tenant-owned
+      Mailketing sender identity snapshotted on the rows, or `null` for the
+      deployment sender. Never the sender's address or credential.
   awcms.email.message.sent:
     address: awcms.email.message.sent
     messages:
@@ -483,7 +486,9 @@ channels:
       The email dispatcher (`bun run email:dispatch`) delivered a message
       through the configured provider. Documented contract only; producer is
       the structured JSON logger (`email/application/email-dispatch.ts`'s
-      `email.dispatch.sent` log line).
+      `email.dispatch.sent` log line). Issue #1160 (additive): a row of a
+      tenant sender's lane carries `senderAccountId`; "sent" means accepted
+      (queued) by the provider, never delivered.
   awcms.email.message.failed:
     address: awcms.email.message.failed
     messages:
@@ -493,7 +498,10 @@ channels:
       The email dispatcher exhausted retries (or hit a non-retryable failure)
       for a queued message. Documented contract only; producer is the
       structured JSON logger (`email/application/email-dispatch.ts`'s
-      `email.dispatch.failed` log line).
+      `email.dispatch.failed` log line). Issue #1160 (additive): a tenant
+      sender's row carries `senderAccountId`, and a row whose sender could not
+      send fails with `SENDER_UNAVAILABLE` or `SENDER_HOLD_BUDGET_EXCEEDED`
+      (never rerouted to another sender).
   awcms.email.message.suppressed:
     address: awcms.email.message.suppressed
     messages:

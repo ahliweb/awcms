@@ -5,6 +5,10 @@
  * the application layer against the database.
  */
 import { isKnownEmailTemplateCategory } from "./email-template-categories";
+import {
+  parseEmailBusinessScope,
+  type EmailBusinessScope
+} from "./email-sender";
 
 export type ValidationError = {
   field: string;
@@ -24,6 +28,10 @@ export type AnnouncementInput = {
   variables: Record<string, string>;
   target: AnnouncementTarget;
   locale?: string;
+  /** Issue #1160: send as this tenant-owned Mailketing sender (needs `email.senders.use`). */
+  senderAccountId?: string;
+  /** Issue #1160: the business scope (brand) this announcement speaks for; selects that scope's default sender (needs `email.senders.use`). */
+  businessScope?: EmailBusinessScope;
 };
 
 const UUID_PATTERN =
@@ -147,6 +155,39 @@ export function validateAnnouncementInput(
   const variables = validateVariables(record.variables, errors);
   const target = validateTarget(record.target, errors);
 
+  // Issue #1160: optional tenant-sender routing. Shape only here; whether the
+  // sender may be used is the application layer's decision (port, scope,
+  // `email.senders.use`).
+  let senderAccountId: string | undefined;
+  if (record.senderAccountId !== undefined && record.senderAccountId !== null) {
+    if (
+      typeof record.senderAccountId !== "string" ||
+      !UUID_PATTERN.test(record.senderAccountId)
+    ) {
+      errors.push({
+        field: "senderAccountId",
+        message: "senderAccountId must be a UUID when present."
+      });
+    } else {
+      senderAccountId = record.senderAccountId.toLowerCase();
+    }
+  }
+
+  let businessScope: EmailBusinessScope | undefined;
+  if (record.businessScope !== undefined && record.businessScope !== null) {
+    const parsed = parseEmailBusinessScope(record.businessScope);
+
+    if (parsed === "invalid" || parsed === null) {
+      errors.push({
+        field: "businessScope",
+        message:
+          "businessScope must be { type: lowercase snake_case, id: uuid } when present."
+      });
+    } else {
+      businessScope = parsed;
+    }
+  }
+
   let locale: string | undefined;
   if (record.locale !== undefined) {
     if (
@@ -172,7 +213,80 @@ export function validateAnnouncementInput(
       templateKey: templateKey!,
       variables: variables!,
       target: target!,
-      locale
+      locale,
+      ...(senderAccountId !== undefined ? { senderAccountId } : {}),
+      ...(businessScope !== undefined ? { businessScope } : {})
+    }
+  };
+}
+
+export type EmailSenderPolicyInput = {
+  businessScope: EmailBusinessScope | null;
+  defaultSenderAccountId: string | null;
+};
+
+/** `PUT /api/v1/email/sender-policy` (Issue #1160). Both keys are required; `null` is meaningful for each. Unknown keys are refused. */
+export function validateEmailSenderPolicyInput(
+  body: unknown
+): Result<EmailSenderPolicyInput> {
+  if (!isPlainObject(body)) {
+    return {
+      valid: false,
+      errors: [{ field: "body", message: "Request body must be an object." }]
+    };
+  }
+
+  const errors: ValidationError[] = [];
+
+  for (const key of Object.keys(body)) {
+    if (key !== "businessScope" && key !== "defaultSenderAccountId") {
+      errors.push({ field: key, message: `Unknown field "${key}".` });
+    }
+  }
+
+  if (body.businessScope === undefined) {
+    errors.push({
+      field: "businessScope",
+      message: "businessScope is required (an object, or null for tenant-wide)."
+    });
+  }
+
+  const scope = parseEmailBusinessScope(body.businessScope);
+
+  if (scope === "invalid") {
+    errors.push({
+      field: "businessScope",
+      message:
+        "businessScope must be null or { type: lowercase snake_case, id: uuid }."
+    });
+  }
+
+  const sender = body.defaultSenderAccountId;
+
+  if (sender === undefined) {
+    errors.push({
+      field: "defaultSenderAccountId",
+      message:
+        "defaultSenderAccountId is required (an account id, or null for the deployment sender)."
+    });
+  } else if (
+    sender !== null &&
+    (typeof sender !== "string" || !UUID_PATTERN.test(sender))
+  ) {
+    errors.push({
+      field: "defaultSenderAccountId",
+      message: "defaultSenderAccountId must be a UUID or null."
+    });
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+
+  return {
+    valid: true,
+    value: {
+      businessScope: scope as EmailBusinessScope | null,
+      defaultSenderAccountId:
+        sender === null ? null : (sender as string).toLowerCase()
     }
   };
 }

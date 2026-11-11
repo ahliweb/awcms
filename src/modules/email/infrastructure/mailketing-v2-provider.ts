@@ -45,6 +45,8 @@ import {
   buildMailketingV2Headers,
   buildMailketingV2SendBody,
   classifyMailketingV2Response,
+  parseMailketingV2Credits,
+  parseMailketingV2Senders,
   type MailketingV2Outcome
 } from "../domain/mailketing-v2-contract";
 
@@ -80,6 +82,15 @@ export type MailketingV2ProviderConfig = {
   transport?: MailketingV2Transport;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
+  /**
+   * Issue #1160 (ADR-0151 M9): the breaker this connection feeds and obeys.
+   * Default `email-mailketing`, the DEPLOYMENT sender's key (unchanged). A
+   * tenant-owned Mailketing account passes its own per-account key
+   * (`emailSenderBreakerKey`), so one tenant's bad token, empty balance or
+   * refusal streak opens only its own lane, never the deployment's or another
+   * tenant's.
+   */
+  breakerKey?: string;
 };
 
 export function createSsrfGuardedMailketingTransport(
@@ -129,7 +140,7 @@ export function createMailketingV2Provider(
   const transport =
     config.transport ?? createSsrfGuardedMailketingTransport(config.env);
   const clock = config.now ?? (() => new Date());
-  const breaker = getProviderCircuitBreaker(PROVIDER_KEY);
+  const breaker = getProviderCircuitBreaker(config.breakerKey ?? PROVIDER_KEY);
 
   type Exchange =
     | { ok: true; outcome: MailketingV2Outcome }
@@ -372,4 +383,99 @@ export function createMailketingV2Provider(
         };
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Read-only account probe (Issue #1160, ADR-0151 sections 2 and 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a probe learnt. Fixed codes only: never the provider's text, the token,
+ * or an address the caller did not already hold.
+ *
+ * - `auth`        401: the token is invalid or revoked.
+ * - `credit`      402 on a read: the account has no credit.
+ * - `unavailable` network, timeout, 5xx, 429, a redirect, an egress refusal or
+ *                 any other HTTP status: nothing was learnt.
+ * - `malformed`   2xx whose body the fail-closed parser does not recognise.
+ */
+export type MailketingV2ProbeFailure =
+  "auth" | "credit" | "unavailable" | "malformed";
+
+export type MailketingV2ProbeResult<T> =
+  { ok: true; value: T } | { ok: false; failure: MailketingV2ProbeFailure };
+
+export type MailketingV2AccountProbe = {
+  /** `GET /api/v2/credits`: the reported balance. Spends nothing, sends nothing. */
+  readCredits(): Promise<MailketingV2ProbeResult<number>>;
+  /** `GET /api/v2/senders`: the addresses the provider reports as VERIFIED. */
+  listVerifiedSenders(): Promise<MailketingV2ProbeResult<ReadonlySet<string>>>;
+};
+
+/**
+ * The two read-only calls `email:senders:verify` makes per Mailketing account.
+ * Same transport rules as the sender (header-only token, fixed allow-listed
+ * host, no redirects, size cap, timeout). It does NOT feed the send breaker:
+ * the breaker answers "is sending through this account failing", and a read
+ * probe's outcome is recorded as the account's health instead (where the
+ * dispatcher's freshness gate reads it).
+ */
+export function createMailketingV2AccountProbe(
+  config: Omit<MailketingV2ProviderConfig, "now"> & { now?: () => Date }
+): MailketingV2AccountProbe {
+  const baseUrl = config.baseUrl ?? MAILKETING_V2_DEFAULT_BASE_URL;
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const transport =
+    config.transport ?? createSsrfGuardedMailketingTransport(config.env);
+
+  async function read<T>(
+    path: string,
+    parse: (body: string) => { ok: true; value: T } | { ok: false }
+  ): Promise<MailketingV2ProbeResult<T>> {
+    let result: MailketingV2TransportResult;
+
+    try {
+      result = await transport({
+        url: `${baseUrl}${path}`,
+        method: "GET",
+        headers: buildMailketingV2Headers(config.apiToken, false),
+        timeoutMs
+      });
+    } catch {
+      return { ok: false, failure: "unavailable" };
+    }
+
+    if (!result.ok) return { ok: false, failure: "unavailable" };
+
+    if (result.status === 401) return { ok: false, failure: "auth" };
+    if (result.status === 402) return { ok: false, failure: "credit" };
+    if (result.status < 200 || result.status >= 300) {
+      return { ok: false, failure: "unavailable" };
+    }
+
+    const parsed = parse(result.body);
+
+    return parsed.ok
+      ? { ok: true, value: parsed.value }
+      : { ok: false, failure: "malformed" };
+  }
+
+  return {
+    readCredits: () =>
+      read<number>("/api/v2/credits", (body) => {
+        const parsed = parseMailketingV2Credits(body);
+
+        return parsed.ok
+          ? { ok: true as const, value: parsed.balance }
+          : { ok: false as const };
+      }),
+    listVerifiedSenders: () =>
+      read<ReadonlySet<string>>("/api/v2/senders", (body) => {
+        const parsed = parseMailketingV2Senders(body);
+
+        return parsed.ok
+          ? { ok: true as const, value: parsed.verified }
+          : { ok: false as const };
+      })
+  };
 }

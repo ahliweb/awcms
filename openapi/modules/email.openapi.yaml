@@ -37,6 +37,16 @@ paths:
                   type: object
                 locale:
                   type: string
+                senderAccountId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: "Issue #1160 - send AS this tenant-owned, provider-verified Mailketing sender (a channel account id of the caller's tenant; never a token or an address). Requires `email.senders.use` and the channel-account access rules. Without it the tenant's prospective default sender (routing enabled and a policy set) or the deployment sender is used. The chosen sender is snapshotted on every queued row and never changes; one that cannot send is refused (422 SENDER_UNAVAILABLE, or 409 SENDER_ROUTING_DISABLED when tenant senders are off), never swapped. Security mail (auth.*, system.security_notice) always uses the deployment sender."
+                businessScope:
+                  description: "Issue #1160 - the business scope (brand) this announcement speaks for; selects that scope's default sender. Requires `email.senders.use`."
+                  allOf:
+                    - $ref: "#/components/schemas/EmailBusinessScope"
+                  nullable: true
       responses:
         "200":
           description: Recipients enqueued.
@@ -69,6 +79,138 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: Idempotency-Key reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: SENDER_UNAVAILABLE - the sender is unknown, another tenant's, not verified, disabled, out of scope, or not one the caller may use (one answer for all).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/email/senders:
+    get:
+      tags:
+        - Email
+      operationId: emailListSenders
+      summary: The tenant's email senders with diagnostics, and the default-sender policy.
+      description: >-
+        Issue #1160 (ADR-0151 section 2). One entry per sender with a queue row in
+        the last 35 days plus the deployment sender (`senderAccountId: null`):
+        whether it may send now (a coarse reason code when not), queue counts and
+        the hourly quota. Only senders and policies the caller may see by the
+        channel-account rules. Never a credential, secret reference or recipient.
+        Requires `email.senders.read`.
+      responses:
+        "200":
+          description: Senders and policies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      routingEnabled:
+                        type: boolean
+                      senders:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EmailSenderDiagnostics"
+                      policies:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EmailSenderPolicy"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/email/sender-policy:
+    put:
+      tags:
+        - Email
+      operationId: emailSetSenderPolicy
+      summary: Set the default email sender of a business scope (prospective, high-risk).
+      description: >-
+        Issue #1160. Sets which verified Mailketing sender of THIS tenant sends
+        email when the caller names none, for one business scope or tenant-wide
+        (`businessScope: null`). `defaultSenderAccountId: null` explicitly selects
+        the deployment sender for that scope. PROSPECTIVE: queued messages keep
+        their sender and `configVersion`. Same answer (`422 SENDER_UNAVAILABLE`)
+        for an unknown, another tenant's, unverified or out-of-scope sender. A
+        no-op change bumps nothing (`changed: false`). Audited at `warning`.
+        `Idempotency-Key` required. `409 SENDER_ROUTING_DISABLED` when tenant
+        senders are off. Requires `email.sender_policy.configure`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - businessScope
+                - defaultSenderAccountId
+              properties:
+                businessScope:
+                  allOf:
+                    - $ref: "#/components/schemas/EmailBusinessScope"
+                  nullable: true
+                defaultSenderAccountId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: The policy after the change.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/EmailSenderPolicy"
+                      - type: object
+                        properties:
+                          changed:
+                            type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT or SENDER_ROUTING_DISABLED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: SENDER_UNAVAILABLE.
           content:
             application/json:
               schema:
@@ -616,3 +758,81 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+components:
+  schemas:
+    EmailBusinessScope:
+      type: object
+      description: "Issue #1160 - a business scope (brand or unit) of the caller's tenant, the generic pair of sql/027."
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+          maxLength: 64
+        id:
+          type: string
+          format: uuid
+    EmailSenderPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessScope:
+          allOf:
+            - $ref: "#/components/schemas/EmailBusinessScope"
+          nullable: true
+        defaultSenderAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: "`null` is an explicit decision to use the deployment sender."
+        configVersion:
+          type: integer
+          minimum: 1
+        effectiveFrom:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    EmailSenderDiagnostics:
+      type: object
+      properties:
+        senderAccountId:
+          type: string
+          format: uuid
+          nullable: true
+        availability:
+          type: object
+          nullable: true
+          properties:
+            usable:
+              type: boolean
+            reason:
+              type: string
+              description: A fixed reason code (for example ACCOUNT_DEGRADED, NOT_AN_EMAIL_SENDER), never provider text.
+        queue:
+          type: object
+          properties:
+            waiting:
+              type: integer
+            sending:
+              type: integer
+            failed:
+              type: integer
+            oldestPendingAt:
+              type: string
+              format: date-time
+              nullable: true
+        quota:
+          type: object
+          properties:
+            sentLastHour:
+              type: integer
+            hourlyLimit:
+              type: integer
+            throttled:
+              type: boolean

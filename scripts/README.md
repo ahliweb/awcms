@@ -103,6 +103,7 @@ scheduled, or by a specific CI workflow.
 | `email:dispatch`                          | `email-dispatch.ts`                            | —    |
 | `email:provider:health`                   | `email-provider-health.ts`                     | —    |
 | `email:queue:purge`                       | `email-queue-purge.ts`                         | —    |
+| `email:senders:verify`                    | `email-senders-verify.ts`                      | —    |
 | `email:templates:seed-defaults`           | `email-templates-seed-defaults.ts`             | —    |
 | `entitlements:backfill`                   | `identity-access-entitlement-backfill.ts`      | —    |
 | `family:conformance:check`                | `family-conformance-check.ts`                  | ✅   |

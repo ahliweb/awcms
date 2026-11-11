@@ -406,7 +406,13 @@ describe("credential and secret handling", () => {
     for (const file of files("scripts", ".ts")) {
       expect(read(file), file).not.toContain("resolvePublishCredential");
 
-      if (!file.endsWith("whatsapp-dispatch.ts")) {
+      // Issue #1160: the two email jobs that resolve a tenant's Mailketing
+      // token (ADR-0151 section 2) are the only other composers.
+      if (
+        !file.endsWith("whatsapp-dispatch.ts") &&
+        !file.endsWith("email-dispatch.ts") &&
+        !file.endsWith("email-senders-verify.ts")
+      ) {
         expect(read(file), file).not.toContain(
           "channelSenderCredentialAdapter"
         );
@@ -521,13 +527,13 @@ describe("the composition roots", () => {
 });
 
 describe("the contract versions", () => {
-  test("channel_account is 1.1.0 and social_publishing is 1.0.0, in the registry and in the family manifest", () => {
-    expect(CAPABILITY_CONTRACT_VERSIONS.channel_account).toBe("1.1.0");
+  test("channel_account is 1.2.0 (Issue #1160 added the email ports) and social_publishing is 1.0.0, in the registry and in the family manifest", () => {
+    expect(CAPABILITY_CONTRACT_VERSIONS.channel_account).toBe("1.2.0");
     expect(CAPABILITY_CONTRACT_VERSIONS.social_publishing).toBe("1.0.0");
 
     const manifest = read("awcms-family-compatibility.yaml");
 
-    expect(manifest).toContain('channel_account: "1.1.0"');
+    expect(manifest).toContain('channel_account: "1.2.0"');
     expect(manifest).toContain('social_publishing: "1.0.0"');
   });
 

@@ -131,6 +131,13 @@ export type AccessAction =
   // ADR-0056 §A / `sql/087` — they named a relation ADR-0036 moved to the
   // consumer's own FK, so nothing ever checked them.)
   | "verify"
+  // Email sender routing (Issue #1160, ADR-0151 section 2, `sql/347`): `use`
+  // sends AS a tenant-owned Mailketing sender identity (`email.senders.use`),
+  // required IN ADDITION to the announcement permissions, so a role that may
+  // mail users cannot also choose which brand and address speak. Deliberately
+  // NOT high-risk: it selects among senders an administrator already verified
+  // and mapped; the announcement route is idempotent and audited regardless.
+  | "use"
   // Tenant domain (ported from awcms-micro epic #555): `set_primary` atomically
   // makes a verified tenant domain the active primary. Deliberately NOT in
   // `HIGH_RISK_ACTIONS` (same posture as `verify` — it only flips one row's

@@ -282,6 +282,15 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 #   An operator probe used while diagnosing delivery problems, and a deploy
 #   smoke check. On a timer it would poll a third-party API for no consumer.
 
+# email:senders:verify
+#   It WRITES channel-account health and status, which only awcms_app may (a
+#   worker that could would be able to mark an unverified sender verified), and
+#   Issue #1132 keeps the app connection out of every crontab job. An operator
+#   schedules it from the deployment's full environment, like
+#   channel-accounts:secrets:rekey; until a decision admits an app-role
+#   scheduled exception (as ADR-0147 did for one job), it is not on the
+#   generated crontab.
+
 # email:templates:seed-defaults
 #   Runs once per tenant, right after that tenant is created. There is nothing
 #   periodic about it, and re-running it on a schedule would fight an operator

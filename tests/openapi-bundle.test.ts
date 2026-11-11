@@ -340,6 +340,11 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     // intentional divergences are acknowledged HERE instead. Each entry needs a
     // reason so an accidental drift can't hide behind the allow-list.
     const INTENTIONALLY_EVOLVED_PATHS: Record<string, string> = {
+      // #1160 adds OPTIONAL `senderAccountId`/`businessScope` to the request
+      // body, a 422 SENDER_UNAVAILABLE and a second 409 reason; every existing
+      // field and response is preserved.
+      "/api/v1/email/announcements":
+        "#1160 optional tenant sender routing (backward-compatible)",
       // Turnstile #186 adds an OPTIONAL `turnstileToken` to the request body.
       "/api/v1/auth/login":
         "#186 optional turnstileToken (backward-compatible)",

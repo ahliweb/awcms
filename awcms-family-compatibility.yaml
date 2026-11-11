@@ -204,8 +204,10 @@ contracts:
     # additively, the refusal reason RISK_ACKNOWLEDGEMENT_REQUIRED (#1142,
     # ADR-0148 section 7) and the exported ChannelPublisherPort and
     # ChannelPublisherCredentialPort for `social_publishing` (#1145, ADR-0157):
-    # no signature changed.
-    channel_account: "1.1.0"
+    # no signature changed. 1.2.0 (#1160, ADR-0151 section 2) adds the exported
+    # ChannelEmailSenderPort and ChannelEmailCredentialPort for `email`'s
+    # tenant-owned Mailketing senders, additively.
+    channel_account: "1.2.0"
     # social_publishing is owned (provided) by the base `social_publishing`
     # module (#1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
     # consumed (optional) by `blog_content`. First assigned number: the port

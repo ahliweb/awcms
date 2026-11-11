@@ -4220,14 +4220,15 @@ Requires Idempotency-Key. email.notification.create for every request; email.ann
 
 **Responses**
 
-| Status | Description                                      | Schema                                 |
-| ------ | ------------------------------------------------ | -------------------------------------- |
-| 200    | Recipients enqueued.                             | object                                 |
-| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                              | [`ApiError`](#standard-error-envelope) |
-| 409    | Idempotency-Key reused with a different request. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                             | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Recipients enqueued.                                                                                                                                    | object                                 |
+| 400    | Validation error.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key reused with a different request.                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 422    | SENDER_UNAVAILABLE - the sender is unknown, another tenant's, not verified, disabled, out of scope, or not one the caller may use (one answer for all). | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/email/announcements/preview` — Dry-run announcement targeting — recipient count + synthetic sample only.
 
@@ -4296,6 +4297,48 @@ Requires Idempotency-Key. email.notification.create for every request; email.ann
 | 403    | Access denied by RBAC/ABAC.              | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                      | [`ApiError`](#standard-error-envelope) |
 | 409    | The message is past a cancellable state. | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/email/sender-policy` — Set the default email sender of a business scope (prospective, high-risk).
+
+- **operationId**: `emailSetSenderPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1160. Sets which verified Mailketing sender of THIS tenant sends email when the caller names none, for one business scope or tenant-wide (`businessScope: null`). `defaultSenderAccountId: null` explicitly selects the deployment sender for that scope. PROSPECTIVE: queued messages keep their sender and `configVersion`. Same answer (`422 SENDER_UNAVAILABLE`) for an unknown, another tenant's, unverified or out-of-scope sender. A no-op change bumps nothing (`changed: false`). Audited at `warning`. `Idempotency-Key` required. `409 SENDER_ROUTING_DISABLED` when tenant senders are off. Requires `email.sender_policy.configure`.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 200    | The policy after the change.                     | object                                 |
+| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT or SENDER_ROUTING_DISABLED. | [`ApiError`](#standard-error-envelope) |
+| 413    | Body too large.                                  | [`ApiError`](#standard-error-envelope) |
+| 422    | SENDER_UNAVAILABLE.                              | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/email/senders` — The tenant's email senders with diagnostics, and the default-sender policy.
+
+- **operationId**: `emailListSenders`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1160 (ADR-0151 section 2). One entry per sender with a queue row in the last 35 days plus the deployment sender (`senderAccountId: null`): whether it may send now (a coarse reason code when not), queue counts and the hourly quota. Only senders and policies the caller may see by the channel-account rules. Never a credential, secret reference or recipient. Requires `email.senders.read`.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Senders and policies.       | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/email/suppressions` — List the email suppression list (masked recipient only).
 
@@ -21490,9 +21533,9 @@ consumer/subscriber contract in this file).
 - `awcms.crm_leads.lead.stage_changed` — A lead's stage changed: a move, a stage migration on a new revision, a conversion, a conversion reversal, a merge or its rollback (`transitionKind`), in the transaction that appended the transition row. Producer: `crm-leads/application/lead-events.ts`'s `appendLeadTransition`. Payload `CrmLeadStageChanged`; never a reason or a note.
 - `awcms.domain-event-runtime.sample.recorded` — Reference/example event used to exercise the domain-event-runtime outbox, dispatcher, ordering, retry/backoff, dead-letter, and replay mechanism end-to-end. Real producer modules publish their OWN event types the same way, via `appendDomainEvent` — this one is intentionally self-contained rather than tied to another module's business logic in this foundation module (see `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own doc comment). Producer: any caller of `application/append-domain-event.ts`'s `appendDomainEvent` for this event type; consumers: the reference consumers declared in the descriptors of `domain_event_runtime` (a same-process cross-module audit projector and a self-contained read-model activity-rollup projection) and `reporting` (an event-activity projector), ADR-0134.
 - `awcms.email.message.cancelled` — An operator cancelled a still-queued message (`POST /api/v1/email/messages/{id}/cancel`) before dispatch. Documented contract only; producer is the structured JSON logger (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled` log line).
-- `awcms.email.message.failed` — The email dispatcher exhausted retries (or hit a non-retryable failure) for a queued message. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.failed` log line).
-- `awcms.email.message.queued` — An email message was enqueued into `awcms_email_messages`. Documented contract only, same convention as `database.pool.saturated` — the concrete producer is the structured JSON logger, invoked from `email/application/announcement-directory.ts`'s `enqueueAnnouncement` (`email.message.queued` log line).
-- `awcms.email.message.sent` — The email dispatcher (`bun run email:dispatch`) delivered a message through the configured provider. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.sent` log line).
+- `awcms.email.message.failed` — The email dispatcher exhausted retries (or hit a non-retryable failure) for a queued message. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.failed` log line). Issue #1160 (additive): a tenant sender's row carries `senderAccountId`, and a row whose sender could not send fails with `SENDER_UNAVAILABLE` or `SENDER_HOLD_BUDGET_EXCEEDED` (never rerouted to another sender).
+- `awcms.email.message.queued` — An email message was enqueued into `awcms_email_messages`. Documented contract only, same convention as `database.pool.saturated` — the concrete producer is the structured JSON logger, invoked from `email/application/announcement-directory.ts`'s `enqueueAnnouncement` (`email.message.queued` log line). Issue #1160 (ADR-0151 section 7, additive): the line carries `senderAccountId` - the tenant-owned Mailketing sender identity snapshotted on the rows, or `null` for the deployment sender. Never the sender's address or credential.
+- `awcms.email.message.sent` — The email dispatcher (`bun run email:dispatch`) delivered a message through the configured provider. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.sent` log line). Issue #1160 (additive): a row of a tenant sender's lane carries `senderAccountId`; "sent" means accepted (queued) by the provider, never delivered.
 - `awcms.email.message.suppressed` — The email dispatcher found a claimed message's recipient newly present on `awcms_email_suppression_list` (added after enqueue, before dispatch) and skipped the provider call entirely. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.suppressed` log line).
 - `awcms.hr.commission.voided` — A commission accrual was voided (ADR-0132, Issue #1109), in the transaction that voided it: a pending or approved accrual, by the HTTP void route or by `CommissionAccrualPort.void` when the sale it came from was voided, refunded or cancelled. Producer: `hr-commission/application/hr-commission- accrual-ledger.ts`'s `transitionAccrual`. Payload: `accrualId`, `employmentId`, `sourceType`, `ruleKey`, `ruleVersion`, `fromStatus` (`pending` or `approved`), `reasonCode` (a code or null). Never an amount, a source reference, a payment reference or a name. A replayed void publishes nothing.
 - `awcms.inventory.movement.posted` — A stock movement was posted to the append-only inventory ledger and its balance updated, in ONE transaction (ADR-0126, Issue #887). Producer: `inventory/application/inventory-ledger.ts`'s posting core, shared by `postMovement`, `postAdjustment`, `reverseAdjustment` and `postTransfer` (a transfer publishes one event per leg). Published in the same commit as the movement, so a rolled-back posting publishes nothing; a REPLAY of an already-posted source identity publishes nothing either. Ordered per balance (`order_key` = location + item). The payload carries opaque item and source references and decimal-string quantities only — `movementId`, `locationId`, `itemType`, `itemRef`, `unitCode`, `movementType`, `operation`, `quantityDelta`, `balanceAfter`, `sourceType`, `sourceId`, `sourceLine`, `transferId`, `reversesMovementId`. Never the free-text note and never anything identifying a person.

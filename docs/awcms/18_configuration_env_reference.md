@@ -422,6 +422,18 @@ sign-off) — provider-neutral.
 | `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –         | Mailketing API version: `v1` (default) or `v2` (opt-in, fixed host, header-only token; Issue #1159)                                          |
 | `EMAIL_MAILKETING_V2_VERIFIED` | –          | unset   | –         | Stage-2 acknowledgement for Mailketing v2; production v2 is NOT approved until the live check is done (silences the UNVERIFIED warning only) |
 
+Tenant-owned Mailketing accounts and verified senders (Issue #1160, ADR-0151
+section 2). Accounts, tokens and sender identities are `channel_accounts`
+records (`CHANNEL_ACCOUNTS_ENABLED`, `CHANNEL_SECRETS_ENCRYPTION_KEYS`), never
+environment variables; tenant senders always use Mailketing v2.
+
+| Variable                              | Default | Purpose                                                                                                                                      |
+| ------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_SENDER_ROUTING_ENABLED`        | unset   | Exactly `true` switches tenant senders on. Off: a named sender is refused, the policy is unused, tenant-sender rows are never claimed        |
+| `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`   | A sender's verification or its account's credit older than this is stale and HOLDS the mail; run `email:senders:verify` more often than this |
+| `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`   | Below this reported balance every sender of the account is held (`0` holds only on an unknown balance)                                       |
+| `EMAIL_SENDER_RATE_PER_HOUR`          | `300`   | Local cap per tenant sender per trailing hour (ADR-0151 M9)                                                                                  |
+
 Concrete email provider credentials (e.g. `EMAIL_<PROVIDER>_API_TOKEN`) are
 added once that provider adapter is actually implemented — they are not
 registered up front.

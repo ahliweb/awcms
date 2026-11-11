@@ -20,6 +20,11 @@ import { renderEmailTemplate } from "../domain/email-template-render";
 import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
 import { fetchSuppressedRecipientHashes } from "./suppression-directory";
 import type { AnnouncementTarget } from "../domain/announcement-validation";
+import { purposeForEmailCategory } from "../domain/email-sender";
+import {
+  DEPLOYMENT_SENDER_SNAPSHOT,
+  type EmailSenderSnapshot
+} from "./email-sender-directory";
 
 const MODULE_KEY = "email";
 
@@ -256,8 +261,16 @@ export async function enqueueAnnouncement(
   variables: Record<string, string>,
   target: AnnouncementTarget,
   correlationId: string,
-  locale = "en"
+  locale = "en",
+  /**
+   * Issue #1160: the sender every row of this announcement is snapshotted with.
+   * Default: the deployment sender, today's behaviour. A tenant sender comes
+   * ONLY from `resolveEnqueueEmailSender` (the caller's authorised, verified
+   * choice), never from request input directly.
+   */
+  sender: EmailSenderSnapshot = DEPLOYMENT_SENDER_SNAPSHOT
 ): Promise<EnqueueAnnouncementResult | null> {
+  const purpose = purposeForEmailCategory(templateKey);
   const template = await fetchActiveEmailTemplateByKey(
     tx,
     tenantId,
@@ -310,8 +323,61 @@ export async function enqueueAnnouncement(
   // `src/pages/api/v1/sync/objects/index.ts` (Issue #435's N+1 audit).
   // A tenant-wide announcement to 5000 recipients drops from 5000
   // sequential round trips to 10.
+  // Issue #1160. The LEGACY statement is kept byte for byte for the common case
+  // (deployment sender, transactional, no scope, no policy version): it names
+  // only the ten pre-routing columns, which is all `awcms_worker` may INSERT
+  // (`sql/302`, column-scoped) when `hr_workforce` enqueues through the
+  // workflow port. Anything else (a tenant sender, a business scope, a policy
+  // snapshot, security mail) is an `awcms_app` request path and uses the
+  // routed statement that also writes the snapshot and the purpose.
+  const legacy =
+    sender.senderAccountId === null &&
+    sender.businessScope === null &&
+    sender.policyVersion === null &&
+    purpose === "transactional";
+
   for (let offset = 0; offset < rows.length; offset += INSERT_BATCH_SIZE) {
     const chunk = rows.slice(offset, offset + INSERT_BATCH_SIZE);
+
+    if (!legacy) {
+      await tx`
+        INSERT INTO awcms_email_messages
+          (tenant_id, correlation_id, category, template_key, to_address,
+           to_address_hash, to_address_masked, subject, variables, priority,
+           purpose, sender_account_id, sender_selection, sender_policy_version,
+           sender_address, sender_name, business_scope_type, business_scope_id)
+        SELECT ${tenantId}, ${correlationId}, ${templateKey}, ${templateKey},
+               t.to_address, t.to_address_hash, t.to_address_masked, t.subject,
+               t.variables::jsonb, ${priority},
+               ${purpose}, ${sender.senderAccountId}::uuid, ${sender.selection},
+               ${sender.policyVersion}::integer, ${sender.senderAddress}::text,
+               ${sender.senderName}::text, ${sender.businessScope?.type ?? null}::text,
+               ${sender.businessScope?.id ?? null}::uuid
+        FROM unnest(
+          ${tx.array(
+            chunk.map((row) => row.toAddress),
+            "text"
+          )},
+          ${tx.array(
+            chunk.map((row) => row.toAddressHash),
+            "text"
+          )},
+          ${tx.array(
+            chunk.map((row) => row.toAddressMasked),
+            "text"
+          )},
+          ${tx.array(
+            chunk.map((row) => row.subject),
+            "text"
+          )},
+          ${tx.array(
+            chunk.map((row) => row.variables),
+            "text"
+          )}
+        ) AS t(to_address, to_address_hash, to_address_masked, subject, variables)
+      `;
+      continue;
+    }
 
     await tx`
       INSERT INTO awcms_email_messages
@@ -361,7 +427,10 @@ export async function enqueueAnnouncement(
     tenantId,
     moduleKey: MODULE_KEY,
     category: templateKey,
-    count: recipients.length
+    count: recipients.length,
+    // Issue #1160 (AsyncAPI `email.message.queued`, additive): the sender key,
+    // never its address or credential. `null` is the deployment sender.
+    senderAccountId: sender.senderAccountId
   });
 
   return { recipientCount: recipients.length, correlationId, truncated };
