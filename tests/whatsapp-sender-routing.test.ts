@@ -1510,9 +1510,9 @@ describe("static contracts", () => {
   test("the port is versioned additively and registered", () => {
     expect(
       read("src/modules/_shared/capability-contract-versions.ts")
-    ).toContain('whatsapp_delivery: "1.1.0"');
+    ).toContain('whatsapp_delivery: "1.2.0"');
     expect(read("awcms-family-compatibility.yaml")).toContain(
-      'whatsapp_delivery: "1.1.0"'
+      'whatsapp_delivery: "1.2.0"'
     );
   });
 

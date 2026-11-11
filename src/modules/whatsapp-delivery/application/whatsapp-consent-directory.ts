@@ -11,6 +11,17 @@
  * recipient's still-waiting messages in the SAME transaction, and the
  * dispatcher re-checks eligibility again immediately before every send — so a
  * withdrawal lands in minutes even for a row claimed a moment earlier.
+ *
+ * ## The brand an opt-in was collected for (Issue #1231 M4, option (c))
+ *
+ * The consent stays ONE row per (tenant, recipient, purpose) and its status is
+ * the tenant-wide answer. A grant records WHAT it covers: a business scope (a
+ * brand) appended to `business_scopes`, or, with no scope, `unscoped_granted`.
+ * Marketing of brand B needs B listed; an unscoped or legacy (`NULL`, recorded
+ * before `sql/354`) opt-in covers only marketing that names no scope. A
+ * withdrawal clears both (a CHECK in `sql/354` holds it), so reinstating never
+ * resurrects a brand the person withdrew from: it records only the brand the
+ * reinstating request names. Opt-out and suppression stay tenant-wide.
  */
 import {
   buildRecipientHashes,
@@ -31,9 +42,21 @@ import {
   WHATSAPP_CONSENT_WITHDRAWN_EVENT_TYPE
 } from "../domain/whatsapp-events";
 import { resolveWhatsappDefaultCountryCode } from "../domain/whatsapp-config";
+import type { WhatsappBusinessScope } from "../domain/whatsapp-sender";
 import { emitWhatsappConsentEvent } from "./whatsapp-event-emit";
 
 export const WHATSAPP_LIST_MAX_LIMIT = 200;
+
+/** Most brands one consent row may list (the CHECK in `sql/354`). */
+export const WHATSAPP_CONSENT_MAX_SCOPES = 256;
+
+/** One brand a marketing opt-in was collected for (Issue #1231 M4). */
+export type ConsentScopeGrant = {
+  type: string;
+  id: string;
+  source: string;
+  grantedAt: string;
+};
 
 export type ConsentEntry = {
   id: string;
@@ -43,6 +66,14 @@ export type ConsentEntry = {
   source: string;
   grantedAt: string;
   withdrawnAt: string | null;
+  /** Issue #1231 M4. The brands this opt-in covers; empty when withdrawn. */
+  businessScopes: ConsentScopeGrant[];
+  /**
+   * Issue #1231 M4. `true`: an opt-in collected with no brand, covering only
+   * marketing that names no business scope. `null`: recorded before brands were
+   * recorded (legacy), read the same way. Never `true` on a withdrawn row.
+   */
+  unscopedGranted: boolean | null;
 };
 
 export type SuppressionEntry = {
@@ -60,6 +91,8 @@ type ConsentRow = {
   source: string;
   granted_at: Date | string;
   withdrawn_at: Date | string | null;
+  business_scopes: unknown;
+  unscoped_granted: boolean | null;
 };
 
 type SuppressionRow = {
@@ -72,6 +105,34 @@ type SuppressionRow = {
 const iso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 
+/** Tolerates a driver that hands jsonb back as text; anything malformed is dropped (it can only narrow what a consent covers). */
+function toScopeGrants(value: unknown): ConsentScopeGrant[] {
+  const parsed = typeof value === "string" ? safeJson(value) : value;
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((element) => {
+    if (!element || typeof element !== "object") return [];
+
+    const { type, id, source, grantedAt } = element as Record<string, unknown>;
+
+    return typeof type === "string" &&
+      typeof id === "string" &&
+      typeof source === "string" &&
+      typeof grantedAt === "string"
+      ? [{ type, id, source, grantedAt }]
+      : [];
+  });
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function toConsent(row: ConsentRow): ConsentEntry {
   return {
     id: row.id,
@@ -80,7 +141,9 @@ function toConsent(row: ConsentRow): ConsentEntry {
     status: row.status,
     source: row.source,
     grantedAt: iso(row.granted_at),
-    withdrawnAt: row.withdrawn_at ? iso(row.withdrawn_at) : null
+    withdrawnAt: row.withdrawn_at ? iso(row.withdrawn_at) : null,
+    businessScopes: toScopeGrants(row.business_scopes),
+    unscopedGranted: row.unscoped_granted
   };
 }
 
@@ -93,18 +156,30 @@ function toSuppression(row: SuppressionRow): SuppressionEntry {
   };
 }
 
-/** One round trip; the facts the pure `decideEligibility` rule needs. */
+/**
+ * One round trip; the facts the pure `decideEligibility` rule needs, for a
+ * message of business scope `scope` (`null`: the message names no scope).
+ */
 export async function readEligibilityFacts(
   tx: Bun.SQL,
   tenantId: string,
-  hashes: RecipientHashes
+  hashes: RecipientHashes,
+  scope: WhatsappBusinessScope | null
 ): Promise<EligibilityFacts> {
   const list = hashListParam(hashes);
+  const scopeType = scope?.type ?? null;
+  const scopeId = scope?.id.toLowerCase() ?? null;
   // Every ring key is matched: a row written under an older key must still be
   // found, or a rotation would silently un-suppress everyone. A suppression
   // under ANY key wins; for consent the most restrictive row wins
   // (`withdrawn` over `granted`), so a stale granted row under an old key can
   // never outvote a withdrawal under a newer one.
+  //
+  // Coverage (Issue #1231 M4) is asked of GRANTED rows only: a scoped message
+  // needs its exact (type, id) listed in `business_scopes` (containment, so the
+  // element's provenance keys do not matter); an unscoped message needs an
+  // unscoped opt-in, where a legacy NULL reads as one. Never a hierarchy, never
+  // "any brand": the most restrictive reading.
   const rows = (await tx`
     SELECT
       (SELECT reason FROM awcms_whatsapp_suppressions
@@ -117,15 +192,29 @@ export async function readEligibilityFacts(
           AND recipient_hash = ANY(string_to_array(${list}, ','))
           AND purpose = 'marketing'
         ORDER BY (status = 'withdrawn') DESC LIMIT 1
-      ) AS consent_status
+      ) AS consent_status,
+      (SELECT COALESCE(bool_or(
+          CASE WHEN ${scopeType}::text IS NULL
+            THEN unscoped_granted IS NOT FALSE
+            ELSE business_scopes @> jsonb_build_array(jsonb_build_object(
+              'type', ${scopeType}::text, 'id', ${scopeId}::text))
+          END), false)
+        FROM awcms_whatsapp_consents
+        WHERE tenant_id = ${tenantId}
+          AND recipient_hash = ANY(string_to_array(${list}, ','))
+          AND purpose = 'marketing'
+          AND status = 'granted'
+      ) AS consent_covers_scope
   `) as {
     suppression_reason: SuppressionReason | null;
     consent_status: ConsentStatus | null;
+    consent_covers_scope: boolean | null;
   }[];
 
   return {
     suppressionReason: rows[0]?.suppression_reason ?? null,
-    consentStatus: rows[0]?.consent_status ?? null
+    consentStatus: rows[0]?.consent_status ?? null,
+    consentCoversScope: rows[0]?.consent_covers_scope === true
   };
 }
 
@@ -166,6 +255,13 @@ export type GrantConsentInput = {
   phone: string;
   source: string;
   /**
+   * Issue #1231 M4. The business scope (brand) this opt-in was collected for.
+   * Omitted or `null`: collected for the tenant itself, covering only marketing
+   * that names no business scope. The ROUTE authorises the caller for the scope
+   * and resolves it against this tenant before this function runs.
+   */
+  businessScope?: WhatsappBusinessScope | null;
+  /**
    * Re-granting over a WITHDRAWN consent silently reverses an opt-out, so it is
    * never the default (security audit F3): the caller must say so explicitly,
    * hold the separate high-risk permission, and cite evidence. A plain grant
@@ -183,12 +279,15 @@ export type GrantConsentResult =
   | {
       outcome: "reinstatement_refused";
       reason: "import_source" | "evidence_required";
-    };
+    }
+  /** Issue #1231 M4. The row already lists {@link WHATSAPP_CONSENT_MAX_SCOPES} brands and this one is not among them. */
+  | { outcome: "scope_limit_reached" };
 
 type ExistingConsent = {
   id: string;
   recipient_hash: string;
   status: ConsentStatus;
+  business_scopes: unknown;
 };
 
 async function findConsents(
@@ -197,7 +296,8 @@ async function findConsents(
   hashes: RecipientHashes
 ): Promise<ExistingConsent | undefined> {
   const rows = (await tx`
-    SELECT id, recipient_hash, status FROM awcms_whatsapp_consents
+    SELECT id, recipient_hash, status, business_scopes
+    FROM awcms_whatsapp_consents
     WHERE tenant_id = ${tenantId} AND purpose = 'marketing'
       AND recipient_hash = ANY(string_to_array(${hashListParam(hashes)}, ','))
     ORDER BY (status = 'withdrawn') DESC
@@ -217,6 +317,12 @@ async function findConsents(
  * opt-out stays on the record (the route additionally audits and events it).
  * An existing row keeps the hash it was written under; only a new row is written
  * under the ring's active key.
+ *
+ * What the grant COVERS (Issue #1231 M4): a `businessScope` is added to the
+ * row's brands (a repeat for the same brand re-stamps that one element); no
+ * scope sets the unscoped opt-in. A grant never removes another brand from a
+ * granted row. A reinstatement replaces the coverage with exactly what the
+ * reinstating request names, because the withdrawal ended every earlier one.
  */
 export async function grantMarketingConsent(
   tx: Bun.SQL,
@@ -240,9 +346,13 @@ export async function grantMarketingConsent(
     return { outcome: "invalid_phone", reason: phone.reason };
   }
 
+  const scope = input.businessScope ?? null;
+  const scopeType = scope?.type ?? null;
+  const scopeId = scope ? scope.id.toLowerCase() : null;
+  const unscoped = scope === null;
   const hashes = buildRecipientHashes(tenantId, phone.e164, ring);
   const masked = maskRecipient(phone.e164);
-  const existing = await findConsents(tx, tenantId, hashes);
+  let existing = await findConsents(tx, tenantId, hashes);
   let reinstated = false;
   let row: ConsentRow | undefined;
 
@@ -251,24 +361,71 @@ export async function grantMarketingConsent(
       (await tx`
         INSERT INTO awcms_whatsapp_consents
           (tenant_id, recipient_hash, recipient_masked, purpose, status, source,
-           created_by)
+           created_by, unscoped_granted, business_scopes)
         VALUES (${tenantId}, ${hashes.primary}, ${masked}, 'marketing',
-                'granted', ${input.source}, ${actorTenantUserId})
+                'granted', ${input.source}, ${actorTenantUserId}, ${unscoped},
+                CASE WHEN ${scopeType}::text IS NULL THEN '[]'::jsonb
+                  ELSE jsonb_build_array(jsonb_build_object(
+                    'type', ${scopeType}::text, 'id', ${scopeId}::text,
+                    'source', ${input.source}::text,
+                    'grantedAt', to_char(now() AT TIME ZONE 'UTC',
+                                         'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+                END)
         ON CONFLICT ON CONSTRAINT awcms_whatsapp_consents_recipient_unique
         DO NOTHING
-        RETURNING id, recipient_masked, purpose, status, source, granted_at, withdrawn_at
+        RETURNING id, recipient_masked, purpose, status, source, granted_at,
+                  withdrawn_at, business_scopes, unscoped_granted
       `) as ConsentRow[]
     )[0];
-  } else if (existing.status === "granted") {
+
+    if (!row) {
+      // Lost an insert race to a concurrent grant or opt-out: that row is the
+      // consent (now locked), and this request is decided against it below.
+      existing = await findConsents(tx, tenantId, hashes);
+
+      if (!existing) {
+        throw new Error("WhatsApp consent grant conflicted but found no row.");
+      }
+    }
+  }
+
+  if (!row && existing && existing.status === "granted") {
+    if (scope !== null) {
+      const listed = toScopeGrants(existing.business_scopes);
+      const already = listed.some(
+        (grant) => grant.type === scopeType && grant.id === scopeId
+      );
+
+      if (!already && listed.length >= WHATSAPP_CONSENT_MAX_SCOPES) {
+        return { outcome: "scope_limit_reached" };
+      }
+    }
+
     row = (
       (await tx`
         UPDATE awcms_whatsapp_consents
-        SET source = ${input.source}, granted_at = now(), updated_at = now()
+        SET source = ${input.source}, granted_at = now(), updated_at = now(),
+            unscoped_granted = CASE WHEN ${unscoped} THEN true
+                                    ELSE unscoped_granted END,
+            business_scopes = CASE WHEN ${scopeType}::text IS NULL
+              THEN business_scopes
+              ELSE (
+                SELECT COALESCE(jsonb_agg(element), '[]'::jsonb)
+                FROM jsonb_array_elements(business_scopes) AS element
+                WHERE NOT (element->>'type' = ${scopeType}::text
+                           AND element->>'id' = ${scopeId}::text)
+              ) || jsonb_build_array(jsonb_build_object(
+                'type', ${scopeType}::text, 'id', ${scopeId}::text,
+                'source', ${input.source}::text,
+                'grantedAt', to_char(now() AT TIME ZONE 'UTC',
+                                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+            END
         WHERE tenant_id = ${tenantId} AND id = ${existing.id}
-        RETURNING id, recipient_masked, purpose, status, source, granted_at, withdrawn_at
+        RETURNING id, recipient_masked, purpose, status, source, granted_at,
+                  withdrawn_at, business_scopes, unscoped_granted
       `) as ConsentRow[]
     )[0];
-  } else {
+  } else if (!row && existing) {
     if (!input.reinstateWithdrawn) {
       return { outcome: "withdrawn_requires_reinstatement" };
     }
@@ -295,24 +452,30 @@ export async function grantMarketingConsent(
                 'reinstatedAt', now(),
                 'reinstatedBy', ${actorTenantUserId}::text,
                 'evidenceRef', ${evidence}::text,
-                'source', ${input.source}::text)),
+                'source', ${input.source}::text,
+                'businessScope', CASE WHEN ${scopeType}::text IS NULL THEN NULL
+                  ELSE jsonb_build_object('type', ${scopeType}::text,
+                                          'id', ${scopeId}::text) END)),
+            unscoped_granted = ${unscoped},
+            business_scopes = CASE WHEN ${scopeType}::text IS NULL
+              THEN '[]'::jsonb
+              ELSE jsonb_build_array(jsonb_build_object(
+                'type', ${scopeType}::text, 'id', ${scopeId}::text,
+                'source', ${input.source}::text,
+                'grantedAt', to_char(now() AT TIME ZONE 'UTC',
+                                     'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+            END,
             withdrawn_at = NULL, withdrawn_by = NULL, updated_at = now()
         WHERE tenant_id = ${tenantId} AND id = ${existing.id}
           AND status = 'withdrawn'
-        RETURNING id, recipient_masked, purpose, status, source, granted_at, withdrawn_at
+        RETURNING id, recipient_masked, purpose, status, source, granted_at,
+                  withdrawn_at, business_scopes, unscoped_granted
       `) as ConsentRow[]
     )[0];
   }
 
   if (!row) {
-    // Lost an insert race to a concurrent grant: that row is the consent.
-    const raced = await findConsents(tx, tenantId, hashes);
-    row = (
-      (await tx`
-        SELECT id, recipient_masked, purpose, status, source, granted_at, withdrawn_at FROM awcms_whatsapp_consents
-        WHERE tenant_id = ${tenantId} AND id = ${raced!.id}
-      `) as ConsentRow[]
-    )[0]!;
+    throw new Error("WhatsApp consent grant wrote no row.");
   }
 
   const entry = toConsent(row);
@@ -325,6 +488,10 @@ export async function grantMarketingConsent(
       consentId: entry.id,
       purpose: entry.purpose,
       recipientMasked: entry.recipientMasked,
+      businessScope:
+        scopeType !== null && scopeId !== null
+          ? { type: scopeType, id: scopeId }
+          : null,
       correlationId: options.correlationId ?? null,
       actorTenantUserId
     }
@@ -334,7 +501,13 @@ export async function grantMarketingConsent(
 }
 
 export type WithdrawConsentResult =
-  | { outcome: "withdrawn"; entry: ConsentEntry; cancelledMessages: number }
+  | {
+      outcome: "withdrawn";
+      entry: ConsentEntry;
+      cancelledMessages: number;
+      /** Issue #1231 M4. The brands the row covered just before this withdrawal (for the audit record); empty on a repeat. */
+      withdrawnBusinessScopes: WhatsappBusinessScope[];
+    }
   | { outcome: "not_found" };
 
 /**
@@ -396,15 +569,30 @@ export async function withdrawMarketingConsent(
   consentId: string,
   options: { correlationId?: string; env?: NodeJS.ProcessEnv } = {}
 ): Promise<WithdrawConsentResult> {
+  // Tenant-wide, every brand at once (Issue #1231 M4): the brands and the
+  // unscoped opt-in are cleared in the same statement (the `sql/354` CHECK
+  // holds it), so a later reinstatement cannot resurrect any of them. The prior
+  // coverage is returned for the audit record only.
   const rows = (await tx`
-    UPDATE awcms_whatsapp_consents
-    SET status = 'withdrawn', withdrawn_at = COALESCE(withdrawn_at, now()),
-        withdrawn_by = COALESCE(withdrawn_by, ${actorTenantUserId}),
+    WITH prior AS (
+      SELECT id, business_scopes AS prior_scopes
+      FROM awcms_whatsapp_consents
+      WHERE tenant_id = ${tenantId} AND id = ${consentId}
+      FOR UPDATE
+    )
+    UPDATE awcms_whatsapp_consents AS c
+    SET status = 'withdrawn', withdrawn_at = COALESCE(c.withdrawn_at, now()),
+        withdrawn_by = COALESCE(c.withdrawn_by, ${actorTenantUserId}),
+        business_scopes = '[]'::jsonb,
+        unscoped_granted = CASE WHEN c.unscoped_granted IS NULL THEN NULL
+                                ELSE false END,
         updated_at = now()
-    WHERE tenant_id = ${tenantId} AND id = ${consentId}
-    RETURNING id, recipient_hash, recipient_masked, purpose, status, source,
-              granted_at, withdrawn_at
-  `) as (ConsentRow & { recipient_hash: string })[];
+    FROM prior
+    WHERE c.tenant_id = ${tenantId} AND c.id = prior.id
+    RETURNING c.id, c.recipient_hash, c.recipient_masked, c.purpose, c.status,
+              c.source, c.granted_at, c.withdrawn_at, c.business_scopes,
+              c.unscoped_granted, prior.prior_scopes
+  `) as (ConsentRow & { recipient_hash: string; prior_scopes: unknown })[];
 
   const row = rows[0];
 
@@ -438,7 +626,14 @@ export async function withdrawMarketingConsent(
     }
   );
 
-  return { outcome: "withdrawn", entry, cancelledMessages };
+  return {
+    outcome: "withdrawn",
+    entry,
+    cancelledMessages,
+    withdrawnBusinessScopes: toScopeGrants(row.prior_scopes).map(
+      ({ type, id }) => ({ type, id })
+    )
+  };
 }
 
 export type ListPage<T> = { entries: T[]; hasMore: boolean };
@@ -455,7 +650,7 @@ export async function listConsents(
   const limit = clampLimit(options.limit);
   const rows = (await tx`
     SELECT id, recipient_masked, purpose, status, source, granted_at,
-           withdrawn_at
+           withdrawn_at, business_scopes, unscoped_granted
     FROM awcms_whatsapp_consents
     WHERE tenant_id = ${tenantId}
       AND (${options.status ?? null}::text IS NULL OR status = ${options.status ?? null})

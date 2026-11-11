@@ -1141,10 +1141,14 @@ suite("whatsapp_delivery against PostgreSQL", () => {
           })
         );
         const queued = await promo();
-        // A withdrawal that did NOT go through `withdrawMarketingConsent`.
+        // A withdrawal that did NOT go through `withdrawMarketingConsent`. A
+        // withdrawn row covers nothing (the `sql/354` CHECK), so the bypass
+        // clears the coverage too.
         await getAdminSql()`
           UPDATE awcms_whatsapp_consents
-          SET status = 'withdrawn', withdrawn_at = now() WHERE tenant_id = ${TENANT_A}
+          SET status = 'withdrawn', withdrawn_at = now(),
+              unscoped_granted = false, business_scopes = '[]'::jsonb
+          WHERE tenant_id = ${TENANT_A}
         `;
         const provider = fakeProvider(() => OK);
 

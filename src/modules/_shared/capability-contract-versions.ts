@@ -128,8 +128,12 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // and the refusals `SENDER_UNAVAILABLE`, `SENDER_AFFINITY_CONFLICT` and
     // `REPLY_TARGET_UNKNOWN`. No existing signature changed (a MINOR bump), so
     // booking and the commerce adapter behind `awcms-one`'s mode router compile
-    // and behave unchanged. First entry for this key.
-    whatsapp_delivery: "1.1.0",
+    // and behave unchanged. First entry for this key. `1.2.0` (Issue #1231 M4,
+    // owner decision option (c)) ADDS the refusal `CONSENT_SCOPE_REQUIRED`: a
+    // marketing opt-in now covers the brand (business scope) it was collected for
+    // only. No signature changed (a MINOR bump); a consumer that maps an unknown
+    // reason to a coarse code (booking) is unchanged.
+    whatsapp_delivery: "1.2.0",
     // channel_account is provided by the base `channel_accounts` module (Issue
     // #1141, ADR-0148 capability C1) and consumed, optionally, by
     // `whatsapp_delivery`. `1.0.0` was the first assigned number. `1.1.0` ADDS

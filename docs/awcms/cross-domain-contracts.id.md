@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:f6bcfca78a0a844fa1b1906571af4c207cfb6cf513f4662ef2a51dfa79a6abb6 -->
+<!-- i18n-source-hash: sha256:6b45b7b02b5de8841a1914b3510d44922220181618c1229f2be575dc64131e36 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -449,6 +449,15 @@ mengambil id pengirim dari pengguna harus mengotorisasi pilihan itu sendiri
 didaftarkan pada `1.1.0` dan kapabilitas baru `channel_account`
 (`ChannelAccountPort`, disediakan oleh `channel_accounts`) pada `1.1.0`
 (`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`).
+
+**Versi 1.2.0 (Issue #1231 M4) bersifat aditif.** Alasan penolakan mendapat
+`CONSENT_SCOPE_REQUIRED`: opt-in pemasaran kini hanya mencakup business scope
+(brand) tempat ia dikumpulkan, sehingga pesan pemasaran brand B yang penerimanya
+memberi opt-in untuk brand lain (atau hanya untuk tenant, tanpa brand) ditolak dan
+tidak ada yang diantrekan. Penarikan dan supresi tetap berlaku di seluruh tenant;
+pesan transaksional dan keamanan tidak berubah. Tidak ada field atau signature
+yang berubah; `booking` memetakan alasan yang tak dikenal ke kode kasar dan tidak
+terdampak. `whatsapp_delivery` didaftarkan pada `1.2.0`.
 
 ### 5.1 Port pengiriman Telegram (live, #965)
 

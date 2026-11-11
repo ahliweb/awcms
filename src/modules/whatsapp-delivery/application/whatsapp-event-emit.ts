@@ -66,6 +66,12 @@ export async function emitWhatsappConsentEvent(
     consentId: string;
     purpose: string;
     recipientMasked: string;
+    /**
+     * Issue #1231 M4, `consent.granted` only. The brand (business scope) THIS
+     * grant was collected for; absent for an unscoped grant, so that payload is
+     * byte for byte what it was. A withdrawal is tenant-wide and carries none.
+     */
+    businessScope?: { type: string; id: string } | null;
     correlationId?: string | null;
     actorTenantUserId?: string | null;
   }
@@ -81,7 +87,15 @@ export async function emitWhatsappConsentEvent(
     payload: {
       consentId: input.consentId,
       purpose: input.purpose,
-      recipientMasked: input.recipientMasked
+      recipientMasked: input.recipientMasked,
+      ...(input.businessScope
+        ? {
+            businessScope: {
+              type: input.businessScope.type,
+              id: input.businessScope.id
+            }
+          }
+        : {})
     }
   });
 }

@@ -12,6 +12,11 @@ import { isWhatsappRecordId } from "../../../../../../modules/whatsapp-delivery/
  * (withdrawing a withdrawn consent keeps the original withdrawal stamp).
  * Withdrawing is protective, so it is a separate, lower-friction permission than
  * granting.
+ *
+ * Tenant-wide by design (Issue #1231 M4, option (c)): one withdrawal ends the
+ * opt-in for EVERY brand the row listed and the unscoped one; there is no
+ * per-brand withdrawal, and none is offered, because narrowing an opt-out is the
+ * unsafe direction. The brands it ended are kept in the audit record.
  */
 export const POST = defineTenantRoute({
   workClass: "interactive",
@@ -50,7 +55,8 @@ export const POST = defineTenantRoute({
       message: "WhatsApp marketing consent withdrawn.",
       attributes: {
         recipientMasked: result.entry.recipientMasked,
-        cancelledMessages: result.cancelledMessages
+        cancelledMessages: result.cancelledMessages,
+        withdrawnBusinessScopes: result.withdrawnBusinessScopes
       },
       correlationId: locals.correlationId
     });

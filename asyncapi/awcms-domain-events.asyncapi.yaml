@@ -321,7 +321,9 @@ channels:
       A recipient's WhatsApp marketing consent was recorded (ADR-0133, Issue
       #963). Producer: `whatsapp-delivery/application/whatsapp-consent-
       directory.ts`'s `grantMarketingConsent`. Payload: `consentId`, `purpose`,
-      `recipientMasked`. Never the number.
+      `recipientMasked`, and since Issue #1231 M4 `businessScope` (`{type, id}`,
+      the brand THIS grant was collected for; absent for an unscoped grant, so
+      that payload is unchanged). Never the number.
   awcms.whatsapp.consent.withdrawn:
     address: awcms.whatsapp.consent.withdrawn
     messages:
@@ -332,7 +334,8 @@ channels:
       marketing messages were cancelled in the same transaction (ADR-0133, Issue
       #963). Producer: `whatsapp-delivery/application/whatsapp-consent-
       directory.ts`'s `withdrawMarketingConsent`. Same payload shape as
-      `consent.granted`.
+      `consent.granted`, never with `businessScope`: a withdrawal is tenant-wide
+      and ends the opt-in for every brand (Issue #1231 M4).
   awcms.whatsapp.dispatch.failed:
     address: awcms.whatsapp.dispatch.failed
     messages:

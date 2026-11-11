@@ -31,6 +31,14 @@
  * `refused: SENDER_UNAVAILABLE` and nothing is queued: never another sender,
  * never the other provider. Consent, suppression and the rate limits are keyed
  * by the RECIPIENT, never the sender, so they run unchanged for every sender.
+ *
+ * ## Marketing consent is per brand (Issue #1231 M4, option (c))
+ *
+ * A granted marketing consent must also cover the message's business scope:
+ * that brand listed on the row, or, for a message with no scope, an unscoped
+ * (or legacy) opt-in. Otherwise `refused: CONSENT_SCOPE_REQUIRED`, nothing is
+ * queued, and nothing is retried under another scope or purpose. The SAME rule
+ * runs again at dispatch.
  */
 import { log } from "../../../lib/logging/logger";
 import type { ChannelAccountPort } from "../../_shared/ports/channel-account-port";
@@ -258,15 +266,23 @@ export async function enqueueWhatsappMessage(
     return { status: "refused", reason: sender.reason };
   }
 
+  // Coverage is asked for the scope the message is SNAPSHOTTED with (the
+  // request's, or the thread's for a reply): a scoped sender can only send for
+  // its own scope (`senderScopeAllows`), so this is also the sender's brand.
   const decision = decideEligibility(
     template.purpose,
-    await readEligibilityFacts(tx, input.tenantId, hashes)
+    await readEligibilityFacts(tx, input.tenantId, hashes, sender.businessScope)
   );
 
   if (!decision.eligible) {
-    return decision.kind === "consent_required"
-      ? { status: "refused", reason: "CONSENT_REQUIRED" }
-      : { status: "suppressed", reason: decision.reason };
+    switch (decision.kind) {
+      case "consent_required":
+        return { status: "refused", reason: "CONSENT_REQUIRED" };
+      case "consent_scope_required":
+        return { status: "refused", reason: "CONSENT_SCOPE_REQUIRED" };
+      case "suppressed":
+        return { status: "suppressed", reason: decision.reason };
+    }
   }
 
   if (await isRateLimited(tx, input.tenantId, hashes, template.purpose, env)) {
