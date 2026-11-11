@@ -111,4 +111,4 @@ A database trigger enforces: the snapshot and identity never change; `published`
   - **M2, L10:** requirements of the connector's separate DB role (section 5).
   - **M-1, L-7:** a connector declares `supportsIdempotencyKey` truthfully and answers `unknown`, not `retryable`, after any request that may have been processed; an expired lease for a provider without a dedupe key is never re-sent.
 - A tenant's module-off switch is honoured by enqueue and dispatch, and by every route through the access guard, but a publication already `published` stays published (nothing recalls a post).
-- **ADR-0157 is Proposed.** The maintainer's acceptance, and a security review of the credential path and its separate DB role before any connector leaves the flag, are still needed.
+- **ADR-0157 is Accepted (2026-11-11).** A security review of the credential path and its separate DB role is still needed before any connector leaves the flag.

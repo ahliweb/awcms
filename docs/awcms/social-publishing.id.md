@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](social-publishing.md)
 
-<!-- i18n-source-hash: sha256:e9af79db517f57f4b50851deeb9ad09383393878cb642dd4931b1aa224a54e84 -->
+<!-- i18n-source-hash: sha256:ce642aad2730f8fc4797d1860d96ab5e9c735eb72c2f6c5ab120761332b3e9dd -->
 
 # Penerbitan sosial (`social_publishing`)
 
@@ -113,4 +113,4 @@ Trigger database menegakkan: snapshot dan identitas tidak pernah berubah; job `p
   - **M2, L10:** syarat role DB terpisah milik konektor (bagian 5).
   - **M-1, L-7:** konektor mendeklarasikan `supportsIdempotencyKey` dengan jujur dan menjawab `unknown`, bukan `retryable`, setelah permintaan apa pun yang mungkin sudah diproses; lease kedaluwarsa untuk provider tanpa kunci dedupe tidak pernah dikirim ulang.
 - Saklar modul-mati per tenant dihormati enqueue dan dispatch, dan setiap rute lewat guard akses, tetapi publikasi yang sudah `published` tetap terbit (tidak ada yang menarik kembali sebuah post).
-- **ADR-0157 berstatus Diusulkan.** Penerimaan maintainer, dan tinjauan keamanan jalur kredensial beserta role DB terpisahnya sebelum konektor mana pun keluar dari flag, masih dibutuhkan.
+- **ADR-0157 berstatus Diterima (2026-11-11).** Tinjauan keamanan jalur kredensial beserta role DB terpisahnya masih dibutuhkan sebelum konektor mana pun keluar dari flag.

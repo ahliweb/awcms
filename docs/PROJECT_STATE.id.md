@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:f7aa759857de025dbaa48b7cb7f0918f5520d373d88a9e0c78067fb8896c56c5 -->
+<!-- i18n-source-hash: sha256:d726fea9a0439ae60009b01703907ba4c63d48f9971ac493e0ac7b1d23bf3583 -->
 
 # AWCMS — Project State & Continuation
 
@@ -409,6 +409,21 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **KEPUTUSAN PEMILIK OMNICHANNEL — 11 November 2026.** Empat keputusan yang
+  tertunda dijawab pemilik (ahliweb): (1) **ADR-0157 Diterima** — desain
+  `social_publishing` diakui; modul tetap `experimental` dan mati, dan konektor per
+  provider (#1146-#1149, #1151) serta publikasi channel Telegram (#1157) kini boleh
+  dibangun, masing-masing tetap memerlukan persetujuan aplikasi provider dan
+  tinjauan keamanan jalur kredensial/role DB sebelum keluar dari flag; (2) **#1231
+  M4, opsi (c)** — konsen marketing tetap tenant-wide tetapi mencatat brand
+  (business scope) tempat konsen itu dikumpulkan, dan kiriman marketing dari brand
+  lain ditolak kecuali ada konsen kedua; (3) **#1215 M-c disetujui** — akun kanal
+  mendapat `access_mode` eksplisit (default fail-closed) dan penghapusan owner
+  terakhir sebuah akun ditolak; (4) **ADR-0158 (StarSender) ditunda** — tetap
+  Diusulkan, adapter tetap mati, dan teks pengakuan risiko serta uji perangkat
+  nyata di runbook tetap langkah pemilik. Tidak diputuskan di putaran ini: DPIA
+  payroll fase 3 dan sign-off counsel (#976, memblokir #957-#962, #968).
 
 - **ANTREAN INTAKE KOMISI — 28 Oktober 2026: dibangun (#1189, ADR-0147; migrasi
   `sql/316` + `sql/317`).** Consumer berbasis event (`awcms_worker`) kini dapat

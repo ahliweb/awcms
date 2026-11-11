@@ -406,6 +406,22 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **OMNICHANNEL OWNER DECISIONS — 11 November 2026.** Four pending decisions were
+  answered by the owner (ahliweb): (1) **ADR-0157 Accepted** — the
+  `social_publishing` design is admitted; the module stays `experimental` and off,
+  and the per-provider connectors (#1146-#1149, #1151) and Telegram channel
+  publishing (#1157) may now be built, each still needing its provider app approval
+  and the credential-path/DB-role security review before leaving the flag;
+  (2) **#1231 M4, option (c)** — marketing consent stays tenant-wide but records the
+  brand (business scope) it was collected for, and a marketing send from a
+  different brand is refused unless a second consent exists; (3) **#1215 M-c
+  approved** — channel accounts get an explicit `access_mode` (fail-closed default)
+  and removing an account's last owner is refused; (4) **ADR-0158 (StarSender)
+  deferred** — stays Proposed, the adapter stays off, and the risk-acknowledgement
+  text and the real-device runbook run remain owner steps. Not decided by this
+  round: the payroll phase-3 DPIA and counsel sign-off (#976, blocks #957-#962,
+  #968).
+
 - **COMMISSION INTAKE QUEUE — 28 October 2026: built (#1189, ADR-0147; migrations
   `sql/316` + `sql/317`).** An event-driven consumer (`awcms_worker`) can now report
   a sale to `hr_commission` without any privilege on the accrual ledger: it submits
