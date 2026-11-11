@@ -44,6 +44,7 @@ import {
 } from "../domain/inbox-constants";
 import { assigneeEligibility } from "./assignee-eligibility";
 import { projectEvent } from "./conversation-projector";
+import { applicableCustomerStateEvent } from "./customer-state-events";
 
 export type SlaTenantResult = {
   customerStateApplied: number;
@@ -77,10 +78,14 @@ export type SlaJobDeps = {
  *   net for a delivery that dead-lettered or ran while the module was off
  *   (#1275 audit, H-1). A withdrawal must never be lost.
  *
- * Only events NEWER than the conversation's applied state are read (a join on
- * the conversation, not a scan of the window), newest first (L-4): once one is
- * applied, every older event of that conversation drops out of the next run's
- * answer, so the bound can never starve a pending change behind applied ones.
+ * Only events that CAN change a state (`applicableCustomerStateEvent`: support
+ * consent, a withdrawal, of this aggregate) and that are NEWER than the
+ * conversation's applied state are read, newest first (L-4). Each one read
+ * therefore advances its conversation's sequence when applied, so every older
+ * event of that conversation drops out of the next run's answer. An event the
+ * reader would ignore (marketing consent, a mismatched reference) is never
+ * read at all: before the #1275 re-audit (N-2) such events counted as pending
+ * forever, and 2000 of them starved a real opt-out out of every run.
  */
 export async function applyRecentCustomerStateChanges(
   tx: Bun.SQL,
@@ -102,6 +107,7 @@ export async function applyRecentCustomerStateChanges(
          END
     WHERE e.tenant_id = ${tenantId}
       AND e.event_type = ANY(${tx.array([...CUSTOMER_STATE_EVENT_TYPES], "text")})
+      AND ${applicableCustomerStateEvent(tx)}
       AND e.event_version = '1.0'
       AND e.recorded_at >= ${since}
       AND e.event_sequence > c.customer_state_sequence

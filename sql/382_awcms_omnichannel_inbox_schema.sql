@@ -215,6 +215,14 @@ CREATE TABLE IF NOT EXISTS awcms_inbox_conversations (
   -- Nothing is owed while nothing is awaited.
   CONSTRAINT awcms_inbox_conversations_due_needs_wait_check
     CHECK (response_due_at IS NULL OR awaiting_since IS NOT NULL),
+  -- A withdrawn customer cannot be answered at all: the conversation is closed
+  -- and owes nothing, whoever writes it (the #1275 re-audit, N-1 P6: before
+  -- this, a writer could leave the state `withdrawn` and reopen the work).
+  CONSTRAINT awcms_inbox_conversations_withdrawn_closed_check
+    CHECK (
+      customer_state <> 'withdrawn'
+      OR (status = 'closed' AND awaiting_since IS NULL AND response_due_at IS NULL)
+    ),
   CONSTRAINT awcms_inbox_conversations_version_check CHECK (version >= 1),
   CONSTRAINT awcms_inbox_conversations_account_fk
     FOREIGN KEY (tenant_id, channel_account_id)

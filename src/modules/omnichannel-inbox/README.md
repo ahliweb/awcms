@@ -26,6 +26,14 @@ omnichannel-inbox:sla` is inert.
   column-level INSERT/UPDATE on exactly the columns the projector writes, an
   append-only INSERT on the activity history, and a read of the SLA policy
   terms. It cannot read or write the assignee or the response stamps.
+  Triggers in `sql/384` narrow the VALUES too, so a leaked worker credential
+  can write only what the projector writes: the business scope must be the
+  channel account's; the status moves only to `open` (reopening active
+  settled work) or to `closed` with a withdrawal; the wait is cleared only
+  when nothing is owed; a breach can be cleared, never stamped; and the only
+  history it appends is the reopen row. For every role, a customer state must
+  name the real, applicable event that set it, and a withdrawn conversation is
+  closed and owes nothing (a CHECK).
 - **Idempotent by value.** First/last inbound are LEAST/GREATEST; an inbound
   counts as unanswered only if received after `answered_through`; a
   customer-state change applies only with a newer `event_sequence`; `withdrawn`
@@ -39,6 +47,9 @@ omnichannel-inbox:sla` is inert.
   (`tests/domain-event-delivery-forbidden-subscriptions.test.ts` pins that for
   every module). The SLA job applies the consent changes and website
   withdrawals of the last 48 hours that the projection has not applied yet.
+  It reads only events that can change a state (support consent, a
+  withdrawal, of the conversation's own aggregate), so a flood of marketing
+  consent cannot fill its batch and hide an opt-out.
   For withdrawals this is a safety net behind the consumer: a withdrawal whose
   delivery dead-lettered is still applied.
 - **Rebuild.** `POST /projection/rebuild` replays the four event types inside
@@ -106,6 +117,12 @@ conversation the purge removed.
 - Q4: internal notes are not built.
 - The assignee's own ABAC deny policies cannot be evaluated for them; the
   chokepoint applies them on each of their requests.
+- What a leaked `awcms_worker` credential can still do in the inbox: start a
+  wait and a due time on an active conversation, reopen active settled work,
+  and move `version`. Each is exactly what a real inbound envelope does, and
+  telling a forged write from a real one would need the event itself, which a
+  grant or a row trigger cannot see without re-running the projector in SQL.
+  Accepted as the residual; the worker credential is an operator secret.
 
 ## Follow-ups
 

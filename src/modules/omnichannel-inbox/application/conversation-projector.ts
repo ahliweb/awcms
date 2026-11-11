@@ -34,6 +34,7 @@ import {
   type SourceKind
 } from "../domain/inbox-constants";
 import { computeDueAt } from "../domain/sla-calendar";
+import { applicableCustomerStateEvent } from "./customer-state-events";
 import { resolveSlaPolicy, type ScopeRef } from "./sla-policy-directory";
 
 export type ProjectableEvent = {
@@ -160,14 +161,18 @@ async function applyRecordedCustomerStates(
   sourceKind: SourceKind,
   sourceRef: string
 ): Promise<void> {
+  // Only events that CAN change the state (#1275 re-audit, N-2): 200 newer
+  // marketing-consent events would otherwise fill the bound and hide the
+  // support opt-out behind them.
   const events = (await tx`
-    SELECT event_type, payload, event_sequence::text AS seq
-    FROM awcms_domain_events
-    WHERE tenant_id = ${tenantId}
-      AND aggregate_type = ${aggregateTypeOf(sourceKind)}
-      AND aggregate_id = ${sourceRef}
-      AND event_type = ANY(${tx.array([...CUSTOMER_STATE_EVENT_TYPES], "text")})
-    ORDER BY event_sequence DESC
+    SELECT e.event_type, e.payload, e.event_sequence::text AS seq
+    FROM awcms_domain_events e
+    WHERE e.tenant_id = ${tenantId}
+      AND e.aggregate_type = ${aggregateTypeOf(sourceKind)}
+      AND e.aggregate_id = ${sourceRef}
+      AND e.event_type = ANY(${tx.array([...CUSTOMER_STATE_EVENT_TYPES], "text")})
+      AND ${applicableCustomerStateEvent(tx)}
+    ORDER BY e.event_sequence DESC
     LIMIT 200
   `) as {
     event_type: string;

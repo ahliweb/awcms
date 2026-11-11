@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:3857ecb54e9fd9c7dc71431a42c391b0aa1374c9dba2c5d69347e5474fd5e621 -->
+<!-- i18n-source-hash: sha256:e32363d07e1432eac58cd12a4c5ec8d502f7ee8fd8351419db53758929ef2f41 -->
 
 # `omnichannel_inbox`
 
@@ -29,7 +29,16 @@ domain-events:dispatch`) menjalankan konsumen di `WORKER_DATABASE_URL`.
   `sql/382` memberi role itu INSERT/UPDATE tingkat kolom tepat pada kolom yang
   ditulis proyektor, INSERT append-only pada riwayat aktivitas, dan baca atas
   ketentuan kebijakan SLA. Ia tidak dapat membaca atau menulis penanggung jawab
-  maupun cap waktu respons.
+  maupun cap waktu respons. Trigger di `sql/384` juga mempersempit NILAINYA,
+  sehingga kredensial worker yang bocor hanya dapat menulis apa yang ditulis
+  proyektor: business scope wajib sama dengan scope akun kanal; status hanya
+  berpindah ke `open` (membuka kembali pekerjaan aktif yang sudah selesai) atau
+  ke `closed` bersama penarikan; penantian hanya dikosongkan bila tidak ada yang
+  terutang; pelanggaran hanya dapat dihapus, tidak pernah dicap; dan riwayat
+  satu-satunya yang boleh ditambahkannya adalah baris pembukaan kembali. Untuk
+  setiap role, state pelanggan wajib menunjuk event nyata dan berlaku yang
+  menetapkannya, dan percakapan yang ditarik tertutup dan tidak berutang apa
+  pun (sebuah CHECK).
 - **Idempoten berdasarkan nilai.** Inbound pertama/terakhir adalah
   LEAST/GREATEST; inbound dihitung belum dijawab hanya bila diterima setelah
   `answered_through`; perubahan state pelanggan hanya diterapkan dengan
@@ -42,7 +51,10 @@ domain-events:dispatch`) menjalankan konsumen di `WORKER_DATABASE_URL`.
   menulis baris delivery, sehingga tidak ada konsumen yang boleh berlangganan
   (`tests/domain-event-delivery-forbidden-subscriptions.test.ts` menguncinya
   untuk setiap modul). Job SLA menerapkan perubahan consent dan penarikan
-  situs web 48 jam terakhir yang belum diterapkan proyeksi. Untuk penarikan ini
+  situs web 48 jam terakhir yang belum diterapkan proyeksi. Ia hanya membaca
+  event yang dapat mengubah state (consent support, penarikan, dari agregat
+  percakapan itu sendiri), sehingga banjir consent marketing tidak dapat
+  memenuhi batch-nya dan menyembunyikan opt-out. Untuk penarikan ini
   adalah jaring pengaman di belakang konsumen: penarikan yang delivery-nya
   dead-letter tetap diterapkan.
 - **Rebuild.** `POST /projection/rebuild` memutar ulang keempat jenis event di
@@ -112,6 +124,13 @@ menghidupkan kembali percakapan yang sudah di-purge.
 - Q4: catatan internal belum dibangun.
 - Kebijakan ABAC deny milik penanggung jawab tidak dapat dievaluasi untuknya;
   chokepoint menerapkannya pada setiap permintaannya.
+- Yang masih dapat dilakukan kredensial `awcms_worker` yang bocor di inbox:
+  memulai penantian dan waktu jatuh tempo pada percakapan aktif, membuka kembali
+  pekerjaan aktif yang sudah selesai, dan menaikkan `version`. Masing-masing
+  persis yang dilakukan envelope inbound sungguhan, dan membedakan tulisan palsu
+  dari yang asli butuh event-nya sendiri, yang tidak dapat dilihat grant maupun
+  trigger baris tanpa menjalankan ulang proyektor di SQL. Diterima sebagai
+  sisa risiko; kredensial worker adalah rahasia operator.
 
 ## Tindak lanjut
 

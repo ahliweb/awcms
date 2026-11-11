@@ -180,6 +180,34 @@ function telegramOptOut(bot: string, contact: string) {
   );
 }
 
+/**
+ * `count` marketing-consent events of one contact, straight into the log (no
+ * consumer subscribes to consent, so no delivery rows), all newer than
+ * anything before. The reader ignores every one of them.
+ */
+async function marketingNoise(
+  bot: string,
+  contact: string,
+  count: number
+): Promise<void> {
+  await getAdminSql()`
+    INSERT INTO awcms_domain_events
+      (tenant_id, event_type, event_version, aggregate_type, aggregate_id,
+       order_key, producer_module, payload)
+    SELECT ${TENANT}, 'awcms.telegram_engagement.consent.changed', '1.0',
+           'telegram_engagement_contact', ${contact}::uuid,
+           ${`telegram_engagement_contact:${contact}`}, 'telegram_engagement',
+           jsonb_build_object(
+             'contractVersion', '1', 'provider', 'telegram',
+             'channelAccountId', ${bot}::text, 'contactRef', ${contact}::text,
+             'purpose', 'marketing',
+             'action', CASE WHEN g % 2 = 0 THEN 'opt_in' ELSE 'opt_out' END,
+             'method', 'stop_command', 'noticeVersion', null,
+             'occurredAt', now()::text, 'privacyClass', 'consent')
+    FROM generate_series(1, ${count}) g
+  `;
+}
+
 const SOURCE_ID = "b1164000-0000-4000-8000-0000000000b1";
 
 function websiteReceived(submission: string) {
@@ -502,5 +530,212 @@ suite("omnichannel inbox projector as awcms_worker (#1275 H-1)", () => {
     const row = await conversation(submission);
     expect(row!.customer_state).toBe("withdrawn");
     expect(row!.status).toBe("closed");
+  });
+
+  test("N-2: 2000 newer non-support consent events cannot starve a support opt-out (sweep and creation read-back)", async () => {
+    const deps = {
+      hierarchy: officeScopeHierarchyPortAdapter,
+      notifier: { enqueueNotification: async () => ({ queued: 0 }) }
+    };
+    const bot = await seedBot();
+
+    // Sweep: the conversation exists, then a support opt-out, then 2000
+    // marketing-consent events of the same contact, all newer.
+    const victim = crypto.randomUUID();
+    await telegramInbound(bot, victim);
+    await dispatchAsWorker();
+    await telegramOptOut(bot, victim);
+    await marketingNoise(bot, victim, 2000);
+
+    const first = await runSlaForTenant(getRuntimeSql(), TENANT, deps, {
+      correlationId: "corr-n2"
+    });
+    const second = await runSlaForTenant(getRuntimeSql(), TENANT, deps, {
+      correlationId: "corr-n2"
+    });
+
+    expect(first).toMatchObject({ customerStateApplied: 1 });
+    expect(second).toMatchObject({ customerStateApplied: 0 });
+    expect((await conversation(victim))!.customer_state).toBe("opted_out");
+
+    // Creation read-back (bound 200): the opt-out and 300 newer noise events
+    // are in the log BEFORE the first message; the worker creates the
+    // conversation and must still apply the opt-out.
+    const late = crypto.randomUUID();
+    await telegramOptOut(bot, late);
+    await marketingNoise(bot, late, 300);
+    await telegramInbound(bot, late);
+    await dispatchAsWorker();
+    expect((await conversation(late))!.customer_state).toBe("opted_out");
+  });
+
+  test("N-1: a leaked worker credential cannot rewrite what the projector does not write", async () => {
+    const otherOffice = crypto.randomUUID();
+    const bot = await seedBot();
+    const contact = crypto.randomUUID();
+    await telegramInbound(bot, contact);
+    await dispatchAsWorker();
+    const active = (await conversation(contact))!;
+
+    // A withdrawn website conversation, as the projector leaves it.
+    const submission = crypto.randomUUID();
+    await websiteReceived(submission);
+    await dispatchAsWorker();
+    await websiteWithdrawn(submission);
+    await dispatchAsWorker();
+    const withdrawn = (await conversation(submission))!;
+    expect(withdrawn.customer_state).toBe("withdrawn");
+
+    // A REAL customer-state event, but of ANOTHER aggregate.
+    const stranger = crypto.randomUUID();
+    await telegramOptOut(bot, stranger);
+    const strangerSeq = (
+      (await getAdminSql()`
+        SELECT event_sequence::text AS seq FROM awcms_domain_events
+        WHERE aggregate_id = ${stranger}
+      `) as { seq: string }[]
+    )[0]!.seq;
+
+    // A plain transaction, not `withTenantOrThrow`: a dozen deliberate
+    // refusals in a row would open the database circuit breaker.
+    const asWorker = <T>(fn: (tx: Bun.TransactionSQL) => Promise<T>) =>
+      getWorkerRoleSql().begin(async (tx) => {
+        await tx`SELECT set_config('app.current_tenant_id', ${TENANT}, true)`;
+        return fn(tx);
+      });
+    const refused = async (
+      statement: Promise<unknown>,
+      what: string,
+      reason: RegExp
+    ) => {
+      const error = await assertRejected(statement, what);
+
+      expect(error.message, what).toMatch(reason);
+    };
+    const activeId = String(active.id);
+    const withdrawnId = String(withdrawn.id);
+
+    // P6 (CHECK + guard): reopen a withdrawn conversation's work.
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET status = 'open', awaiting_since = now(),
+              response_due_kind = 'first', response_due_at = now() + interval '1 minute'
+          WHERE id = ${withdrawnId}`
+      ),
+      "P6 reopen withdrawn",
+      /withdrawn_closed_check|WORKER_STATUS_ONLY_REOPEN_OR_WITHDRAW/
+    );
+    // The CHECK holds for every role, not only the worker: the runtime role
+    // (whose route already answers 409) is refused by the database too.
+    await refused(
+      getRuntimeSql().begin(async (tx) => {
+        await tx`SELECT set_config('app.current_tenant_id', ${TENANT}, true)`;
+        await tx`
+          UPDATE awcms_inbox_conversations
+          SET status = 'open', awaiting_since = now()
+          WHERE id = ${withdrawnId}`;
+      }),
+      "P6 reopen withdrawn as the runtime role",
+      /withdrawn_closed_check/
+    );
+    // P7: freeze the state sequence, or borrow another aggregate's event.
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET customer_state_sequence = 9223372036854775807
+          WHERE id = ${activeId}`
+      ),
+      "P7 freeze sequence",
+      /must name the event that set it/
+    );
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET customer_state = 'opted_out',
+              customer_state_sequence = ${strangerSeq}::bigint
+          WHERE id = ${activeId}`
+      ),
+      "P7 borrow another aggregate's event",
+      /must name the event that set it/
+    );
+    // P8: settle unanswered work without a response.
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET status = 'resolved' WHERE id = ${activeId}`
+      ),
+      "P8 settle by status",
+      /WORKER_STATUS_ONLY_REOPEN_OR_WITHDRAW/
+    );
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET answered_through = now() WHERE id = ${activeId}`
+      ),
+      "P8 settle by answered_through",
+      /WORKER_ANSWERED_ONLY_ON_WITHDRAWAL/
+    );
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET awaiting_since = NULL, response_due_kind = NULL,
+              response_due_at = NULL, sla_policy_id = NULL
+          WHERE id = ${activeId}`
+      ),
+      "P8 clear the wait",
+      /WORKER_WAIT_CLEARED_ONLY_WHEN_NOTHING_OWED/
+    );
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET sla_breached_at = now() WHERE id = ${activeId}`
+      ),
+      "stamp a breach",
+      /WORKER_CANNOT_STAMP_A_BREACH/
+    );
+    // P9: move the conversation to another brand.
+    await refused(
+      asWorker(
+        (tx) => tx`
+          UPDATE awcms_inbox_conversations
+          SET business_scope_type = 'office', business_scope_id = ${otherOffice}
+          WHERE id = ${activeId}`
+      ),
+      "P9 move brand",
+      /WORKER_SCOPE_IS_THE_ACCOUNT_SCOPE/
+    );
+    // P10: forge history.
+    for (const [kind, detail] of [
+      ["response_recorded", null],
+      ["assignee_revoked", "user_inactive"],
+      ["sla_breached", "first"],
+      ["status_changed", "resolved"]
+    ] as const) {
+      await refused(
+        asWorker(
+          (tx) => tx`
+            INSERT INTO awcms_inbox_activity
+              (tenant_id, conversation_id, kind, detail_code)
+            VALUES (${TENANT}, ${activeId}, ${kind}, ${detail})`
+        ),
+        `P10 forge ${kind}`,
+        /WORKER_ACTIVITY_ONLY_REOPEN/
+      );
+    }
+
+    // Nothing changed.
+    const after = (await conversation(contact))!;
+    expect(after.version).toBe(active.version);
+    expect(after.customer_state_sequence).toBe(active.customer_state_sequence);
+    expect(after.business_scope_id).toBeNull();
+    expect((await conversation(submission))!.status).toBe("closed");
   });
 });
