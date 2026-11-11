@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:9a904550d0bef8923b89d020f30134682c3966ff969a23bd9c3c3e4f1f6df002 -->
+<!-- i18n-source-hash: sha256:47ffb44faf03fa8f10f6557b0dfb16b6aa1bd566a6206f6e86fe43d0a27d7fb1 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-157 target menjalankan berkas di `scripts/`; 65 di antaranya
+158 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
