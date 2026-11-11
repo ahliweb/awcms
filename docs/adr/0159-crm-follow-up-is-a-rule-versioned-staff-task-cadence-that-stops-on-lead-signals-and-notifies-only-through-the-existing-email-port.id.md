@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0159-crm-follow-up-is-a-rule-versioned-staff-task-cadence-that-stops-on-lead-signals-and-notifies-only-through-the-existing-email-port.md)
 
-<!-- i18n-source-hash: sha256:eb165773dbfbb1fa0d2c588b32544a9f1ac8d091c8a55159de982b3b58400fd2 -->
+<!-- i18n-source-hash: sha256:a8659bacc24e661ae0483deb8fdbf15a2ff3778649517a3758d6f900013eb7b6 -->
 
 # ADR-0159 — `crm_follow_up` adalah kadens tugas STAF berbasis aturan berversi yang dipicu event lead; berhenti pada sinyal lead, tidak mengirim apa pun ke lead, dan memberi notifikasi staf hanya lewat port e-mail yang sudah ada
 
