@@ -835,7 +835,7 @@
           "optional": true
         }
       ],
-      "permissionCount": 15,
+      "permissionCount": 16,
       "navigationCount": 1,
       "jobCount": 2,
       "hasHealthCheck": false,

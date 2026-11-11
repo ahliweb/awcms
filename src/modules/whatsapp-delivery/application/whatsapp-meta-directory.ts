@@ -674,7 +674,8 @@ export async function applyMetaWebhookActions(
             (previous !== null && isMetaTemplateSendable(previous))
               ? "warning"
               : "info",
-          message: "A signed Meta webhook changed a template's status on a WABA.",
+          message:
+            "A signed Meta webhook changed a template's status on a WABA.",
           attributes: {
             templateName: action.name,
             language: action.language,

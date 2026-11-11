@@ -1244,9 +1244,8 @@ suite(
       });
 
       test("M-2: 300 random tenants from ONE address hit a 429 before any database work", async () => {
-        const { POST } = await import(
-          "../../src/pages/api/v1/whatsapp/webhooks/meta/[token]"
-        );
+        const { POST } =
+          await import("../../src/pages/api/v1/whatsapp/webhooks/meta/[token]");
         const previous = process.env.WHATSAPP_ENABLED;
         const previousKeys = process.env.WHATSAPP_RECIPIENT_HASH_KEYS;
 
@@ -1264,7 +1263,9 @@ suite(
                 `https://budget.example/api/v1/whatsapp/webhooks/meta/${forged}`,
                 {
                   method: "POST",
-                  headers: { "x-hub-signature-256": `sha256=${"0".repeat(64)}` },
+                  headers: {
+                    "x-hub-signature-256": `sha256=${"0".repeat(64)}`
+                  },
                   body: "{}"
                 }
               ),
@@ -1292,11 +1293,15 @@ suite(
       });
 
       test("M-3 (T5): disconnecting a number erases its webhook app-secret ciphertext", async () => {
-        const { disconnectAccount } = await import(
-          "../../src/modules/channel-accounts/application/account-directory"
-        );
+        const { disconnectAccount } =
+          await import("../../src/modules/channel-accounts/application/account-directory");
 
-        await subscribe(TENANT_A, actorA, a1, "appsecretA1appsecretA1appsecret1");
+        await subscribe(
+          TENANT_A,
+          actorA,
+          a1,
+          "appsecretA1appsecretA1appsecret1"
+        );
 
         const ciphertexts = async () =>
           (
@@ -1326,7 +1331,11 @@ suite(
         async () => {
           const secret = "appsecretA1appsecretA1appsecret1";
           const token = await subscribe(TENANT_A, actorA, a1, secret);
-          const inbound = inboundPayload(a1.wabaId!, a1.phoneNumberId, PHONE_DIGITS);
+          const inbound = inboundPayload(
+            a1.wabaId!,
+            a1.phoneNumberId,
+            PHONE_DIGITS
+          );
 
           await deliver(token, inbound, sign(secret, inbound));
 
@@ -1336,8 +1345,12 @@ suite(
             ) as Promise<unknown[]>;
 
           // Fresh rows: invisible to the worker's DELETE (no error, nothing gone).
-          expect(await workerDelete("awcms_whatsapp_service_windows")).toHaveLength(0);
-          expect(await workerDelete("awcms_whatsapp_webhook_receipts")).toHaveLength(0);
+          expect(
+            await workerDelete("awcms_whatsapp_service_windows")
+          ).toHaveLength(0);
+          expect(
+            await workerDelete("awcms_whatsapp_webhook_receipts")
+          ).toHaveLength(0);
 
           await getAdminSql()`
             UPDATE awcms_whatsapp_service_windows
@@ -1348,8 +1361,12 @@ suite(
             SET received_at = now() - interval '9 days'
           `;
 
-          expect(await workerDelete("awcms_whatsapp_service_windows")).toHaveLength(1);
-          expect(await workerDelete("awcms_whatsapp_webhook_receipts")).toHaveLength(1);
+          expect(
+            await workerDelete("awcms_whatsapp_service_windows")
+          ).toHaveLength(1);
+          expect(
+            await workerDelete("awcms_whatsapp_webhook_receipts")
+          ).toHaveLength(1);
         }
       );
 

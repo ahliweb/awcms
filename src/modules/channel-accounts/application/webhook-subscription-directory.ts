@@ -505,7 +505,9 @@ export function computeMetaSignature(
   rawBody: Uint8Array | string
 ): string {
   return createHmac("sha256", secret)
-    .update(typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody)
+    .update(
+      typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody
+    )
     .digest("hex");
 }
 
