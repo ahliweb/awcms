@@ -38,6 +38,7 @@ import {
   teardownIntegrationDatabase
 } from "./harness";
 import { countQueries } from "./query-budget";
+import { seedMetaWabaContainer } from "./meta-waba-fixture";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   readSenderChangesSince,
@@ -70,12 +71,20 @@ async function seed(): Promise<void> {
     [SENDER, "1171000001"],
     [OTHER_SENDER, "1171000002"]
   ] as const) {
+    // Issue #1143: a Meta number sends only under a live WABA container.
+    const wabaId = await seedMetaWabaContainer(
+      admin,
+      TENANT,
+      `waba-${external}`
+    );
+
     await admin`
       INSERT INTO awcms_channel_accounts
         (id, tenant_id, provider, account_kind, external_id, display_name,
-         auth_mode, status)
+         auth_mode, status, parent_account_id)
       VALUES (${id}, ${TENANT}, 'whatsapp_cloud', 'waba_phone_number',
-              ${external}, ${`n-${external}`}, 'api_token', 'connected')
+              ${external}, ${`n-${external}`}, 'api_token', 'connected',
+              ${wabaId})
     `;
   }
 
