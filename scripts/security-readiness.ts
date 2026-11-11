@@ -1448,6 +1448,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_email_delivery_attempts: ["INSERT", "DELETE", "SELECT"],
   awcms_email_templates: ["SELECT"],
   awcms_email_suppression_list: ["SELECT"],
+  // `sql/379` (Issue #1161) for `bun run email:queue:purge`: the quarantine of
+  // provider-reported events, under a RESTRICTIVE delete floor on
+  // `received_at` (a column only the table's trigger writes).
+  awcms_email_provider_events: ["SELECT", "DELETE"],
   awcms_workflow_tasks: ["SELECT", "UPDATE"],
   awcms_workflow_instances: ["SELECT"],
   awcms_workflow_definitions: ["SELECT"],
@@ -3298,6 +3302,10 @@ export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
     "integrity hash of the template variables; not a login secret",
   "awcms_email_suppression_list.recipient_hash":
     "keyed hash of a suppressed address; not a login secret",
+  "awcms_email_provider_events.recipient_hash":
+    "the same lookup hash of a recipient address as awcms_email_messages.to_address_hash, binding a quarantined provider event to our message (sql/379); not a login secret",
+  "awcms_email_provider_events.link_hash":
+    "SHA-256 of a clicked link reported by the provider, kept instead of the URL so the link is never stored, rendered or fetched (sql/379); not a secret",
   "awcms_idempotency_keys.request_hash":
     "keyed hash of the request body that binds a replay to its first request (ADR-0145); not a login secret",
   "awcms_idn_admin_regions.source_row_hash":

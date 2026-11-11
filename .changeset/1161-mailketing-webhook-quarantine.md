@@ -1,0 +1,13 @@
+---
+"awcms": minor
+---
+
+security(email): Mailketing webhook intake in ADR-0151 `strict` mode, operator-reviewed bounce/unsubscribe suppression, and purpose-aware suppression precedence (Issue #1161). **Off by default** (`EMAIL_WEBHOOK_ENABLED`).
+
+**Why a quarantine.** Mailketing's documentation (re-verified 2026-11-11) describes no way to authenticate a callback: no signature, secret header, source-IP list or event id, and no status, unsubscribe or suppression endpoint to re-verify a report. So no callback changes a message status, a suppression, a newsletter subscriber, consent or a customer. `POST /api/v1/email/webhooks/mailketing/{token}` (session-free, listed in `SESSION_FREE_BODY_ENDPOINTS`) checks a per-address bucket, the token shape and a 32 KiB cap before any database work, verifies the opaque per-account token in constant time inside the tenant it names, then records each event in `awcms_email_provider_events` (`sql/379`) only if it binds to a `sent` message of THIS tenant and THIS Mailketing account (provider message id and recipient; recipient-only for click/unsubscribe). Everything is labelled `unauthenticated`; `newsubscriber` is ignored; replay collapses on a dedupe key; bounce text and clicked URLs are never stored.
+
+**Operator review.** `GET/POST /api/v1/email/webhook-callbacks` and `.../{id}/revoke` issue, rotate and revoke the callback URL (shown once, only a hash stored, a `channel_accounts` webhook subscription). `GET /api/v1/email/provider-events` lists the quarantine with a forward-only provider-reported projection (`accepted` < `delivered` < `bounced`) that is never written onto the message. `POST /api/v1/email/provider-events/{id}/review` confirms a hard bounce (soft only after `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD`) or an unsubscribe into the suppression list with the new `source = 'provider_report'`, or dismisses it. New permissions `email.webhook.read`, `email.webhook.configure`, `email.provider_events.approve` (`sql/380`); tenants created earlier need `bun run identity-access:permissions:backfill`.
+
+**Behaviour change: security mail and suppressions.** Suppression is now checked per purpose at enqueue and again at dispatch: an `unsubscribed` entry, or any `provider_report` entry, no longer blocks `security` mail (password reset, invitation, security notice); everything still blocks `transactional` mail, and an operator's `manual`/`bounced`/`complained` entry still blocks both.
+
+**Retention.** `email:queue:purge` also deletes reviewed/informational provider events after 90 days and pending ones after 365 (own descriptor and legal hold), under a RESTRICTIVE worker delete floor on a database-stamped `received_at`; one tenant's failure no longer stops the purge for the others.

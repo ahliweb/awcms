@@ -4298,6 +4298,58 @@ Requires Idempotency-Key. email.notification.create for every request; email.ann
 | 404    | Resource not found.                      | [`ApiError`](#standard-error-envelope) |
 | 409    | The message is past a cancellable state. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/email/provider-events` — The quarantine of provider-reported, unauthenticated Mailketing events.
+
+- **operationId**: `emailListProviderEvents`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1161, ADR-0151 section 5. Newest first, keyset-paged, optionally by `reviewStatus` and `emailMessageId`. Recipients masked; a click shows the link host only. Every entry says `authenticity: unauthenticated`. With `emailMessageId`, `projection` is that message's provider-reported state (`accepted` < `delivered` < `bounced`, the maximum over its events, so it only moves forward and a replay or a late `delivered` cannot move it back); it is never written onto the message, and is `null` unless the message has events the caller may all see. Mailketing reports no complaint event, so there is no `complained` state. Only events of accounts the caller may see under the channel-account rules. Requires `email.webhook.read`.
+
+**Parameters**
+
+| Name             | In    | Required | Type                                                       | Description |
+| ---------------- | ----- | -------- | ---------------------------------------------------------- | ----------- |
+| `reviewStatus`   | query | no       | enum(`pending`, `confirmed`, `dismissed`, `informational`) |             |
+| `emailMessageId` | query | no       | string (uuid)                                              |             |
+| `cursor`         | query | no       | string                                                     |             |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | One page of quarantined events. | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/email/provider-events/{id}/review` — Confirm a quarantined bounce or unsubscribe into the suppression list, or dismiss it (high-risk).
+
+- **operationId**: `emailReviewProviderEvent`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1161, ADR-0151 section 5 `strict`. The ONLY path by which a provider report changes anything, and a human decision. `confirm` adds the recipient to the suppression list (reason `bounced` or `unsubscribed`, `source: provider_report`, which never blocks security mail); an already suppressed recipient keeps its entry. A soft or unclassified bounce may be confirmed only once the recipient bounced `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` (default 3) times in 30 days. A review is final. Requires `email.provider_events.approve`, a signed-in person, operator access to the event's account and an `Idempotency-Key`; audited at `warning` with ids and codes only.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                            | Schema                                 |
+| ------ | ---------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Reviewed.                                                              | object                                 |
+| 400    | Validation error.                                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | ALREADY_REVIEWED, BELOW_SOFT_BOUNCE_THRESHOLD or IDEMPOTENCY_CONFLICT. | [`ApiError`](#standard-error-envelope) |
+| 413    | Body too large.                                                        | [`ApiError`](#standard-error-envelope) |
+
 ### `PUT /api/v1/email/sender-policy` — Set the default email sender of a business scope (prospective, high-risk).
 
 - **operationId**: `emailSetSenderPolicy`
@@ -4560,6 +4612,107 @@ Issue #1160 (ADR-0151 section 2). One entry per sender with a queue row in the l
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/email/webhook-callbacks` — The Mailketing callback URLs of this tenant (never the token).
+
+- **operationId**: `emailListWebhookCallbacks`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1161. One entry per callback credential (live and revoked) of the Mailketing accounts the caller may see under the channel-account rules: id, account, status, last event. Neither the token nor its hash is returned. `enabled` says whether this deployment accepts callbacks at all; `mode` is always `strict` (events are quarantined, never applied). Requires `email.webhook.read`.
+
+**Responses**
+
+| Status | Description                                                  | Schema                                 |
+| ------ | ------------------------------------------------------------ | -------------------------------------- |
+| 200    | Callback credentials.                                        | object                                 |
+| 401    | Missing or invalid session.                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                  | [`ApiError`](#standard-error-envelope) |
+| 503    | The channel-accounts module cannot be loaded (default-deny). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/email/webhook-callbacks` — Issue or rotate the callback URL of one Mailketing account (token shown once, high-risk).
+
+- **operationId**: `emailIssueWebhookCallback`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1161. Any live callback of the account is revoked in the same transaction, so a leaked URL is cut off by issuing a new one. The path carrying the token is in THIS response once (`revealed: true`); a replay of the same `Idempotency-Key` answers without it (`revealed: false`). Only a hash bound to the tenant and callback id is stored. The URL locates the account; it does not authenticate Mailketing. Requires `email.webhook.configure`, operator access to the account under the channel-account rules, a signed-in person and an `Idempotency-Key`; audited at `warning` (never the token).
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key` | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | Issued (or rotated).                                                                                              | object                                 |
+| 400    | Validation error.                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 413    | Body too large.                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 422    | ACCOUNT_UNAVAILABLE - not a live Mailketing account of this tenant that the caller operates (one answer for all). | [`ApiError`](#standard-error-envelope) |
+| 503    | The channel-accounts module cannot be loaded (default-deny).                                                      | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/email/webhook-callbacks/{id}/revoke` — Revoke a Mailketing callback URL (high-risk, idempotent by state).
+
+- **operationId**: `emailRevokeWebhookCallback`
+- **Security**: bearerAuth + tenantHeader
+
+Issue #1161. The URL stops verifying at once and is never re-activated. Requires `email.webhook.configure`, operator access to the account, a signed-in person and an `Idempotency-Key`; audited at `warning` when it changed something. An unknown id, another tenant's id and an account the caller cannot operate are the same `404`.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ----------------- | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`              | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+| `Idempotency-Key` | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Responses**
+
+| Status | Description                                                  | Schema                                 |
+| ------ | ------------------------------------------------------------ | -------------------------------------- |
+| 200    | Revoked (or already revoked).                                | object                                 |
+| 400    | Validation error.                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | IDEMPOTENCY_CONFLICT.                                        | [`ApiError`](#standard-error-envelope) |
+| 503    | The channel-accounts module cannot be loaded (default-deny). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/email/webhooks/mailketing/{token}` — Mailketing delivery callbacks for one tenant Mailketing account (quarantined, unauthenticated).
+
+- **operationId**: `emailReceiveMailketingWebhook`
+- **Security**: none (public endpoint)
+
+Issue #1161, ADR-0151 section 5 (`strict` mode). Called by Mailketing, never by a person or a browser. Mailketing documents NO way to authenticate a callback (no signature, secret header, source-IP list or event id), so every event is treated as UNAUTHENTICATED and changes no message status, suppression, subscriber, consent or customer: an event bound to a message this tenant sent through this account is written to the quarantine (`GET /api/v1/email/provider-events`), where an operator may confirm a bounce or unsubscribe into the suppression list. The opaque `{token}` (`mkw1.<tenantId>.<callbackId>.<secret>`, issued by `POST /api/v1/email/webhook-callbacks`) only LOCATES the tenant and account; only its hash is stored.
+
+Order of work: (1) `404` when `EMAIL_WEBHOOK_ENABLED` is not `true`; (2) a per-address bucket counted for every request before any parsing or database work (`429`); (3) the token shape and a 32 KiB body cap, still without the database; (4) the token verified in constant time inside the tenant it names, on a live callback of a connected Mailketing account with `email` enabled (every failure the same `401`; repeated failures from one address `429`); (5) a per-callback bucket, then the events.
+
+Accepted events (one object, or an array of at most 25): `bounce`, `emailopen`, `delivered` (bound by the provider message id stored at acceptance AND the recipient), `emailclick`, `unsubscribe` (no id in the vendor payload; bound only when this account sent that recipient a message in the last 30 days). `newsubscriber` is ignored and never creates a subscriber or consent; an event for a message we did not issue (another account's or tenant's id, a mismatched recipient) is discarded; a replay collapses on a dedupe key; a report dated more than 30 days ago or in the future is discarded. A bounce's reason text is reduced to a hard/soft class and an RFC 3463 code; a clicked link to its host and a hash, never stored, rendered as a link or fetched.
+
+**Parameters**
+
+| Name    | In   | Required | Type   | Description                                         |
+| ------- | ---- | -------- | ------ | --------------------------------------------------- |
+| `token` | path | yes      | string | The opaque callback token (at most 160 characters). |
+
+**Request body** (required): [`EmailMailketingWebhookEvent`](#schema-emailmailketingwebhookevent) \| array of [`EmailMailketingWebhookEvent`](#schema-emailmailketingwebhookevent)
+
+**Responses**
+
+| Status | Description                                                                                                                                | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Received. Always the same body after proof, whatever was recorded, discarded or ignored: nothing about a recipient or a message is echoed. | object                                 |
+| 400    | The body is not JSON, not an event object, or an empty or oversized array.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | The token is malformed, unknown, revoked, or does not verify (one answer for all).                                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Mailketing callbacks are switched off on this deployment.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 413    | The body exceeds 32 KiB.                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate limited per address (before proof), per callback (after proof), or after repeated failed proofs.                                      | [`ApiError`](#standard-error-envelope) |
+| 503    | A transient failure; Mailketing retries and recording is idempotent.                                                                       | [`ApiError`](#standard-error-envelope) |
 
 ## Management Reporting
 
@@ -19266,6 +19419,38 @@ Enum values: `owner_assigned`, `contact_point_present`, `reason_required`.
 ```json
 {
   "reason": "string"
+}
+```
+
+### Schema: EmailMailketingWebhookEvent
+
+One Mailketing webhook event as the vendor documents it (https://api.mailketing.co.id/docs/webhook.html, re-verified 2026-11-11). Only the fields named here are read; anything else is ignored. `newsubscriber` is accepted and ignored.
+
+| Field          | Type                                                                                   | Required | Nullable | Description                                                                  |
+| -------------- | -------------------------------------------------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------- |
+| `type`         | enum(`emailopen`, `emailclick`, `bounce`, `newsubscriber`, `unsubscribe`, `delivered`) | yes      | no       |                                                                              |
+| `email`        | string                                                                                 | no       | no       |                                                                              |
+| `message_id`   | string                                                                                 | no       | no       |                                                                              |
+| `date`         | string                                                                                 | no       | no       |                                                                              |
+| `reason`       | string                                                                                 | no       | no       | Bounce diagnostic; reduced to a class and an RFC 3463 code, never stored.    |
+| `link_clicked` | string                                                                                 | no       | no       | Reduced to its host and a hash; never stored, rendered as a link or fetched. |
+| `rcpt`         | string                                                                                 | no       | no       |                                                                              |
+| `jobid`        | string                                                                                 | no       | no       |                                                                              |
+| `send_time`    | string                                                                                 | no       | no       |                                                                              |
+
+**Example**
+
+```json
+{
+  "type": "emailopen",
+  "email": "user@example.com",
+  "message_id": "string",
+  "date": "string",
+  "reason": "string",
+  "link_clicked": "string",
+  "rcpt": "string",
+  "jobid": "string",
+  "send_time": "string"
 }
 ```
 

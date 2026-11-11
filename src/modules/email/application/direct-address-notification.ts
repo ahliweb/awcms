@@ -77,7 +77,13 @@ export async function enqueueDirectAddressEmail(
   const normalized = normalizeIdentifierValue("email", toAddress);
   const addressHash = hashIdentifierValue(normalized);
 
-  const suppressedHashes = await fetchSuppressedRecipientHashes(tx, tenantId);
+  // Issue #1161: an invitation or security notice is `security` mail, which a
+  // marketing opt-out or an unauthenticated provider report does not hold back.
+  const suppressedHashes = await fetchSuppressedRecipientHashes(
+    tx,
+    tenantId,
+    purposeForEmailCategory(templateKey)
+  );
   if (suppressedHashes.has(addressHash)) {
     return { enqueued: false };
   }

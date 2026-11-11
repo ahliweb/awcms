@@ -98,6 +98,8 @@ async function main() {
 
     let totalAttempts = 0;
     let totalMessages = 0;
+    let totalProviderEvents = 0;
+    let failedTenants = 0;
 
     for (const tenant of tenants) {
       if (dryRun) {
@@ -112,27 +114,43 @@ async function main() {
         continue;
       }
 
-      for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const result = await purgeEmailQueue(
-          sql,
-          tenant.id,
-          legalHoldGuardPortAdapter,
-          { correlationId }
-        );
+      try {
+        for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
+          const result = await purgeEmailQueue(
+            sql,
+            tenant.id,
+            legalHoldGuardPortAdapter,
+            { correlationId }
+          );
 
-        totalAttempts += result.purgedAttempts;
-        totalMessages += result.purgedMessages;
+          totalAttempts += result.purgedAttempts;
+          totalMessages += result.purgedMessages;
+          totalProviderEvents += result.purgedProviderEvents;
 
-        if (result.purgedAttempts + result.purgedMessages === 0) {
-          break;
+          if (
+            result.purgedAttempts +
+              result.purgedMessages +
+              result.purgedProviderEvents ===
+            0
+          ) {
+            break;
+          }
         }
+      } catch (error) {
+        // tx-swallow-ok: The handle here is a pooled client, not a transaction:
+        // each `purgeEmailQueue` call opens its OWN tenant transaction, already
+        // rolled back when it throws. One tenant's failure must not stop the
+        // purge for every other tenant (Issue #1161).
+        failedTenants += 1;
+        logScriptFailure(`email:queue:purge tenant ${tenant.id} FAILED`, error);
       }
     }
 
     console.log(
       `email:queue:purge ${dryRun ? "DRY RUN" : "complete"} — ` +
         `correlationId=${correlationId} tenants=${tenants.length} ` +
-        `attempts=${totalAttempts} messages=${totalMessages}`
+        `attempts=${totalAttempts} messages=${totalMessages} ` +
+        `providerEvents=${totalProviderEvents} failedTenants=${failedTenants}`
     );
   } catch (error) {
     // tx-swallow-ok: The handle here is a pooled client, not a transaction

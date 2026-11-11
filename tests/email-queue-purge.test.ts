@@ -114,11 +114,13 @@ describe("the DELETE names the statuses — the descriptor cannot express them",
   test("each table is gated on its OWN legal hold", () => {
     for (const key of [
       "EMAIL_ATTEMPTS_LIFECYCLE_KEY",
-      "EMAIL_MESSAGES_LIFECYCLE_KEY"
+      "EMAIL_MESSAGES_LIFECYCLE_KEY",
+      // Issue #1161: the provider-event quarantine has its own hold.
+      "EMAIL_PROVIDER_EVENTS_LIFECYCLE_KEY"
     ]) {
       expect(source).toContain(key);
     }
-    expect(source.match(/isDescriptorHeld\(/g)?.length).toBe(2);
+    expect(source.match(/isDescriptorHeld\(/g)?.length).toBe(3);
   });
 });
 
@@ -153,7 +155,9 @@ describe("the descriptors and the ledger agree", () => {
   test("both tables carry a descriptor and both are delegated", () => {
     expect(descriptors.map((d) => d.tableName).sort()).toEqual([
       "awcms_email_delivery_attempts",
-      "awcms_email_messages"
+      "awcms_email_messages",
+      // Issue #1161: the provider-event quarantine, purged by the same job.
+      "awcms_email_provider_events"
     ]);
 
     for (const descriptor of descriptors) {

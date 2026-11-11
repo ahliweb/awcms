@@ -942,6 +942,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/email/provider-events/[id]/review.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/email/provider-events/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/email/sender-policy.ts",
       "workClass": "interactive",
       "source": "factory"
@@ -980,6 +990,16 @@
       "path": "src/pages/api/v1/email/templates/index.ts",
       "workClass": "interactive",
       "source": "default"
+    },
+    {
+      "path": "src/pages/api/v1/email/webhook-callbacks/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/email/webhook-callbacks/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
     },
     {
       "path": "src/pages/api/v1/form-drafts/[id].ts",

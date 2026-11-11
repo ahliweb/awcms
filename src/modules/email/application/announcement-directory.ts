@@ -21,6 +21,7 @@ import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
 import { fetchSuppressedRecipientHashes } from "./suppression-directory";
 import type { AnnouncementTarget } from "../domain/announcement-validation";
 import { purposeForEmailCategory } from "../domain/email-sender";
+import type { EmailPurposeForSuppression } from "../domain/suppression-policy";
 import {
   DEPLOYMENT_SENDER_SNAPSHOT,
   type EmailSenderSnapshot
@@ -89,7 +90,13 @@ export type BoundedTargets = {
 export async function resolveBoundedAnnouncementTargets(
   tx: Bun.SQL,
   tenantId: string,
-  target: AnnouncementTarget
+  target: AnnouncementTarget,
+  /**
+   * Issue #1161: which suppressions apply depends on the mail (ADR-0151
+   * section 4). Announcements are `transactional` unless their category is a
+   * security one, which `purposeForEmailCategory` decides.
+   */
+  purpose: EmailPurposeForSuppression = "transactional"
 ): Promise<BoundedTargets> {
   let rows: TargetRow[];
 
@@ -154,7 +161,11 @@ export async function resolveBoundedAnnouncementTargets(
     return { recipients: [], truncated };
   }
 
-  const suppressedHashes = await fetchSuppressedRecipientHashes(tx, tenantId);
+  const suppressedHashes = await fetchSuppressedRecipientHashes(
+    tx,
+    tenantId,
+    purpose
+  );
 
   const recipients = rows
     .filter((row) => {
@@ -222,7 +233,8 @@ export async function previewAnnouncement(
   const resolved = await resolveBoundedAnnouncementTargets(
     tx,
     tenantId,
-    target
+    target,
+    purposeForEmailCategory(templateKey)
   );
   const sampleVariables = {
     ...buildSyntheticSampleVariables(templateKey),
@@ -284,7 +296,8 @@ export async function enqueueAnnouncement(
   const { recipients, truncated } = await resolveBoundedAnnouncementTargets(
     tx,
     tenantId,
-    target
+    target,
+    purpose
   );
   const priority = target.type === "tenant" ? "normal" : "high";
 

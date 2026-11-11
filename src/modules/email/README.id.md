@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b5fc3fddd43d4667130060a4f9eb77d780d3641691242b76316904996de5f70b -->
+<!-- i18n-source-hash: sha256:d402f8220232405733b358a85c4651dbf3f10ac5e461a568df75c4e04266aafa -->
 
 # Email
 
@@ -336,8 +336,9 @@ token di JSON pengaturan atau di browser.
   rollback = mematikannya (tak ada data yang disalin; baris tenant yang
   mengantre menunggu, dan gagal begitu berumur satu jam).
 - **Bukan di sini:** layar admin (#1162; permission-nya sudah di-seed dan
-  ditegakkan API), webhook (#1161), purpose marketing dan gerbang
-  persetujuannya (CHECK `purpose` hanya menerima `transactional`/`security`).
+  ditegakkan API), purpose marketing dan gerbang persetujuannya (CHECK
+  `purpose` hanya menerima `transactional`/`security`). Webhook: lihat bagian
+  berikutnya (#1161).
 
 Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
 bentuk respons live `/senders` dan `/credits` belum diverifikasi (parser hanya
@@ -347,6 +348,116 @@ ber-role app diputuskan; 401/403 saat kirim tidak langsung menurunkan status aku
 health; breaker per akun menghentikan jalur dan putaran verify berikutnya
 mencatatnya); notifikasi workflow tidak memakai kebijakan default (hanya
 pengumuman).
+
+## Webhook Mailketing: karantina, presedensi suppression (Issue #1161)
+
+ADR-0151 bagian 5, **mode `strict`**. Mati secara bawaan
+(`EMAIL_WEBHOOK_ENABLED`).
+
+**Bukti vendor (diverifikasi ulang 2026-11-11).** Dokumentasi resmi
+(<https://api.mailketing.co.id/docs/webhook.html>,
+<https://api.mailketing.co.id/docs/>, v2.0.2) menjelaskan callback `POST`
+JSON, satu URL per jenis event yang diatur di dasbor Mailketing, dengan payload
+`emailopen` (`email`, `date`, `message_id`), `emailclick` (`email`,
+`link_clicked`, `date`, tanpa id), `bounce` (`email`, `reason`, `date`,
+`message_id`), `newsubscriber` (`email`, nama, `list_id`, `mobile`, `date`),
+`unsubscribe` (`email`, `date`, tanpa id) dan `delivered` khusus Business API
+(`send_time`, `orig`, `rcpt`, `jobid`, `dsndiag`). Dokumentasi itu **tidak
+menjelaskan autentikasi apa pun**: tanpa tanda tangan atau HMAC, tanpa header
+rahasia, tanpa token, tanpa daftar IP sumber, tanpa mTLS, tanpa id event; dan
+tanpa endpoint status pesan, unsubscribe, atau suppression untuk memverifikasi
+ulang laporan. Jadi tidak ada yang bisa membedakan callback asli dari yang
+dipalsukan, dan rancangan "verifikasi dengan menarik dari vendor" tidak punya
+apa pun untuk ditarik.
+
+Yang dibangun, fail-closed:
+
+- **URL callback per akun Mailketing.** `POST /api/v1/email/webhook-callbacks`
+  (`email.webhook.configure`, berisiko tinggi, idempoten, teraudit) menerbitkan
+  atau merotasi
+  `/api/v1/email/webhooks/mailketing/mkw1.<tenantId>.<callbackId>.<secret>`
+  (secret 256-bit), ditampilkan sekali. Ia adalah webhook subscription
+  `channel_accounts` (`verification_mode = 'unauthenticated'`); yang disimpan
+  hanya SHA-256 yang terikat ke tenant dan id callback. Penerbitan mencabut URL
+  sebelumnya; revoke (`.../{id}/revoke`), memutus atau menghapus akun langsung
+  menghentikannya. URL itu **menemukan** akun, bukan mengautentikasi Mailketing
+  (ADR-0150 N5).
+- **Intake.** 404 saat mati; bucket per alamat sebelum parsing atau kerja
+  database apa pun; bentuk token dan batas 32 KiB; token diverifikasi dengan
+  waktu konstan di dalam tenant yang disebutnya (tenant aktif, `email` aktif,
+  callback hidup, akun `connected`), satu `401` untuk setiap kegagalan dan `429`
+  setelah kegagalan berulang; bucket per callback
+  (`EMAIL_WEBHOOK_RATE_PER_MINUTE`). Penolakan dihitung dan diaudit agregat di
+  tenant platform. Terdaftar di `SESSION_FREE_BODY_ENDPOINTS`.
+- **Pengikatan.** Event disimpan hanya bila menyebut pesan `sent` yang dikirim
+  tenant INI lewat sender identity milik akun INI: lewat provider message id
+  yang kami simpan saat diterima DAN penerimanya (`bounce`, `emailopen`,
+  `delivered`), atau, untuk `emailclick`/`unsubscribe` (payload tanpa id), lewat
+  penerima yang dikirimi akun ini dalam 30 hari terakhir. Id milik tenant atau
+  akun lain, atau penerima yang tidak cocok, dibuang. `newsubscriber` tidak
+  pernah disimpan dan tidak pernah menciptakan subscriber atau persetujuan.
+  Laporan bertanggal lebih dari 30 hari lalu atau di masa depan dibuang; replay
+  runtuh pada kunci dedupe (akun, jenis, id provider, hash penerima, cap waktu
+  provider).
+- **Karantina, bukan state.** Event masuk ke `awcms_email_provider_events`
+  (`sql/379`), selalu `authenticity = 'unauthenticated'`, penerima sebagai hash
+  dan mask, alasan bounce diringkas menjadi hard/soft/unknown dan kode RFC 3463,
+  klik menjadi host tautan dan hash (tidak pernah disimpan, dirender sebagai
+  tautan, atau diambil). Tidak ada status pesan, suppression, subscriber,
+  persetujuan, atau pelanggan yang berubah. Imutabel kecuali satu kali review;
+  `received_at` adalah jam database.
+- **Review operator.** `GET /api/v1/email/provider-events` (`email.webhook.read`)
+  menampilkan karantina; dengan `emailMessageId` ditambah proyeksi yang
+  dilaporkan provider (`accepted` < `delivered` < `bounced`, maksimum atas
+  event pesan itu, jadi hanya maju; tidak pernah ditulis ke pesan; tidak ada
+  `complained` karena Mailketing tidak melaporkannya).
+  `POST /api/v1/email/provider-events/{id}/review`
+  (`email.provider_events.approve`, berisiko tinggi, idempoten, diaudit hanya
+  dengan id) mengonfirmasi bounce (hard; soft/unknown hanya setelah
+  `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD`, bawaan 3, dalam 30 hari) atau
+  unsubscribe ke daftar suppression dengan `source = 'provider_report'`, atau
+  mengabaikannya. Satu suppression per penerima, jadi bounce dan unsubscribe
+  untuk satu orang tidak saling berpacu.
+- **Presedensi suppression (ADR-0151 bagian 4), saat enqueue DAN dispatch**
+  (`domain/suppression-policy.ts`):
+
+  | Entri                                          | transactional | security  |
+  | ---------------------------------------------- | ------------- | --------- |
+  | `operator` `manual` / `bounced` / `complained` | diblokir      | diblokir  |
+  | `operator` `unsubscribed`                      | diblokir      | diizinkan |
+  | `provider_report` (alasan apa pun)             | diblokir      | diizinkan |
+
+  Opt-out marketing tidak pernah menghentikan reset kata sandi, undangan, atau
+  pemberitahuan keamanan, dan laporan provider yang tidak terautentikasi juga
+  tidak.
+
+- **Retensi.** `email:queue:purge` menghapus event yang sudah direview dan
+  informasional setelah 90 hari dan yang pending setelah 365 (dijaga legal
+  hold, deskriptornya sendiri); policy RESTRICTIVE menolak worker untuk apa pun
+  yang lebih muda dari 30 hari, atau baris pending yang lebih muda dari 365.
+  Tenant yang gagal tidak lagi menghentikan purge untuk tenant lain.
+
+Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
+
+- **Q1 / Q6 ADR-0151 tetap terbuka.** Hanya `strict` yang ada;
+  `restrictive-only` (suppression otomatis pada bounce atau unsubscribe yang
+  terikat pesan) dan `authenticated` butuh keputusan ADR, dan vendor belum
+  dimintai tanda tangan, daftar IP sumber, atau id event dalam perubahan ini.
+- **`unsubscribed` masih memblokir email transaksional.** Aturan 2 ADR-0151
+  membolehkan unsubscribe hanya menghentikan `marketing`, tetapi purpose
+  `marketing` belum ada, sehingga hari ini itulah satu-satunya cara seseorang
+  menghentikan pengumuman tenant. Penyempitannya milik issue kampanye yang
+  menambah `marketing` dan gerbang persetujuannya.
+- **Opt-out newsletter tidak dipropagasi.** Unsubscribe yang dikonfirmasi
+  men-suppress alamat di `email`; ia tidak mengubah subscriber `newsletter`
+  (ADR-0103 pemilik persetujuan) dan tidak ada yang dipanggil di Mailketing
+  (API-nya tidak ada).
+- **Pengirim deployment tidak mendapat callback.** Ia tidak punya akun untuk
+  diikat, dan mengikat lewat id provider lintas tenant adalah hal yang ditolak
+  di sini.
+- Layar admin adalah Issue #1162 (permission tercatat di `NOT_YET_SCREENED`).
+  Tidak ada channel AsyncAPI yang ditambah: tidak ada yang menerbitkan domain
+  event di sini.
 
 ## Perilaku saat nonaktif / offline-LAN
 
