@@ -439,11 +439,12 @@ Mailketing documents no way to authenticate a callback, so every event is
 quarantined as unauthenticated and changes no state until an operator confirms
 it.
 
-| Variable                              | Default | Purpose                                                                                           |
-| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `EMAIL_WEBHOOK_ENABLED`               | unset   | Exactly `true` opens `POST /api/v1/email/webhooks/mailketing/{token}`; otherwise it answers `404` |
-| `EMAIL_WEBHOOK_RATE_PER_MINUTE`       | `120`   | Accepted requests per minute per callback URL, after proof (10..6000)                             |
-| `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` | `3`     | Soft/unclassified bounces of one recipient in 30 days before an operator may confirm one (2..20)  |
+| Variable                              | Default | Purpose                                                                                                                                                    |
+| ------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_WEBHOOK_ENABLED`               | unset   | Exactly `true` opens `POST /api/v1/email/webhooks/mailketing/{token}`; otherwise it answers `404`                                                          |
+| `EMAIL_WEBHOOK_RATE_PER_MINUTE`       | `120`   | Accepted requests per minute per callback URL, after proof (10..6000)                                                                                      |
+| `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` | `3`     | Soft/unclassified bounces of one recipient on DISTINCT messages in 30 days before an operator may confirm one (2..20)                                      |
+| `EMAIL_WEBHOOK_MAX_PENDING`           | `5000`  | Pending (unreviewed) provider events per tenant (100..100000); past it, further bounces and unsubscribes are not recorded until operators review the queue |
 
 Concrete email provider credentials (e.g. `EMAIL_<PROVIDER>_API_TOKEN`) are
 added once that provider adapter is actually implemented — they are not

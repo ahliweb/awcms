@@ -298,7 +298,10 @@ export async function reviewProviderEvent(
 
   if (row.event_type === "bounce") {
     const counted = (await tx`
-      SELECT count(*)::int AS n FROM awcms_email_provider_events
+      -- DISTINCT messages (audit M-2 of PR #1272): repeated reports about ONE
+      -- message are one bounce, however many times they arrive.
+      SELECT count(DISTINCT email_message_id)::int AS n
+      FROM awcms_email_provider_events
       WHERE tenant_id = ${tenantId}
         AND recipient_hash = ${row.recipient_hash}
         AND event_type = 'bounce'

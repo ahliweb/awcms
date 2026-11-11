@@ -345,6 +345,11 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // field and response is preserved.
       "/api/v1/email/announcements":
         "#1160 optional tenant sender routing (backward-compatible)",
+      // #1161 adds a 422 TEMPLATE_CATEGORY_RESERVED: security templates are
+      // never previewed or sent as announcements. Every existing field and
+      // response is preserved.
+      "/api/v1/email/announcements/preview":
+        "#1161 added 422 TEMPLATE_CATEGORY_RESERVED (additive)",
       // Turnstile #186 adds an OPTIONAL `turnstileToken` to the request body.
       "/api/v1/auth/login":
         "#186 optional turnstileToken (backward-compatible)",

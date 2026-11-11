@@ -31,7 +31,7 @@ type Prepared = { idempotencyKey: string; payload: unknown };
  * list (reason `bounced` / `unsubscribed`, source `provider_report`, which
  * never blocks security mail), `{"decision": "dismiss"}` records that nothing
  * was done. A soft or unclassified bounce may be confirmed only once the
- * recipient has bounced `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` times in 30 days
+ * recipient has bounced `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` times, on distinct messages, in 30 days
  * (`409 BELOW_SOFT_BOUNCE_THRESHOLD`). A review is final (`409 ALREADY_REVIEWED`;
  * opens, clicks and delivered are never reviewable).
  *

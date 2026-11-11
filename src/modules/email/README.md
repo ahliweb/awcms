@@ -361,11 +361,16 @@ What was built, fail-closed:
   (`.../{id}/revoke`), disconnecting or deleting the account stops it at once.
   The URL **locates** the account, it does not authenticate Mailketing
   (ADR-0150 N5).
-- **Intake.** 404 when off; a per-address bucket before any parsing or database
-  work; token shape and a 32 KiB cap; the token verified in constant time inside
-  the tenant it names (tenant active, `email` enabled, callback live, account
-  `connected`), one `401` for every failure and `429` after repeated failures; a
-  per-callback bucket (`EMAIL_WEBHOOK_RATE_PER_MINUTE`). Rejections are counted
+- **Intake** (`application/mailketing-webhook-handler.ts`). 404 when off. Every
+  request is charged to a per-address bucket of FAILED proofs (30/min) before
+  any parsing or database work, and the charge is refunded once the request
+  verifies: Mailketing calls every tenant's URL from a few shared addresses, so
+  legitimate traffic never fills the shared bucket (one tenant cannot 429
+  another), while an address that keeps failing is refused without a query.
+  Then the token shape and a 32 KiB cap; the token verified in constant time
+  inside the tenant it names (tenant active, `email` enabled, callback live,
+  account `connected`), one `401` for every failure; then a per-CALLBACK bucket
+  for verified traffic (`EMAIL_WEBHOOK_RATE_PER_MINUTE`). Rejections are counted
   and audited in aggregate on the platform tenant. Listed in
   `SESSION_FREE_BODY_ENDPOINTS`.
 - **Binding.** An event is kept only if it names a `sent` message THIS tenant
@@ -374,9 +379,20 @@ What was built, fail-closed:
   or, for `emailclick`/`unsubscribe` (no id in the payload), by the recipient
   having been mailed by this account in the last 30 days. Another tenant's or
   account's id, or a mismatched recipient, is discarded. `newsubscriber` is
-  never stored and never creates a subscriber or consent. Reports dated more
-  than 30 days ago or in the future are discarded; replay collapses on a dedupe
-  key (account, type, provider id, recipient hash, provider timestamp).
+  never stored and never creates a subscriber or consent.
+- **Flood bounds.** The provider timestamp is parsed strictly: the vendor's
+  documented zone-less `YYYY-MM-DD HH:MM:SS` (read as UTC, with a 14-hour
+  future skew for WIB/WITA/WIT values) or ISO-8601 with an explicit zone;
+  anything else, a date older than 30 days or further in the future is
+  discarded as stale. Dedupe ignores that timestamp, so a valid URL cannot mint
+  rows by varying it: one row per (account, type, message) for bounce, open and
+  delivered, one per (account, type, recipient, UTC day) for click and
+  unsubscribe, and at most ONE pending unsubscribe per recipient (unique index).
+  At most `EMAIL_WEBHOOK_MAX_PENDING` (default 5000) pending events per tenant:
+  past that, further bounces and unsubscribes are NOT recorded (counted as
+  `quotaExceeded`, logged at warning) until operators review the queue. That is
+  fail-closed for this mode: strict mode acts on nothing by itself, so nothing
+  it would have done is lost, and the queue already waiting is not buried.
 - **Quarantine, not state.** Events land in `awcms_email_provider_events`
   (`sql/379`), always `authenticity = 'unauthenticated'`, recipient as hash and
   mask, bounce reason reduced to hard/soft/unknown and an RFC 3463 code, a click
@@ -390,8 +406,11 @@ What was built, fail-closed:
   there is no `complained` because Mailketing reports none).
   `POST /api/v1/email/provider-events/{id}/review`
   (`email.provider_events.approve`, high-risk, idempotent, audited with ids
-  only) confirms a bounce (hard; soft/unknown only after
-  `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD`, default 3, in 30 days) or an
+  only; a signed-in person and operator access to the event's account under
+  the `channel_accounts` rules, else the same 404) confirms a bounce (hard;
+  soft/unknown only once the recipient soft-bounced on
+  `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD`, default 3, DISTINCT messages in 30
+  days: repeats about one message count once) or an
   unsubscribe into the suppression list with `source = 'provider_report'`, or
   dismisses it. One suppression per recipient, so a bounce and an unsubscribe
   for one person do not race.
@@ -407,11 +426,25 @@ What was built, fail-closed:
   A marketing opt-out never stops a password reset, invitation or security
   notice, and an unauthenticated provider report never does either.
 
+- **Security mail is sent only by the system.** Because that exemption exists,
+  a `security` message must be one the system decided to send. The
+  announcement routes (`POST /api/v1/email/announcements`, `.../preview`) no
+  longer accept auth/security templates (`auth.*`, `system.security_notice`):
+  `422 TEMPLATE_CATEGORY_RESERVED`. As defence in depth, `enqueueAnnouncement`
+  and `enqueueDirectAddressEmail` throw `SecurityMailNotPermittedError` for a
+  security category unless the caller presents `SECURITY_MAIL_GRANT`
+  (`application/security-mail-grant.ts`), which only the internal auth
+  notification port holds (pinned by a test).
 - **Retention.** `email:queue:purge` deletes reviewed and informational events
   after 90 days and pending ones after 365 (legal-hold gated, its own
-  descriptor); a RESTRICTIVE policy refuses the worker anything younger than 30
-  days, or a pending row younger than 365. A failing tenant no longer stops the
-  purge for the others.
+  descriptor; `--dry-run` counts them too). Three layers keep anything younger:
+  `awcms_app` has no DELETE on the table; a RESTRICTIVE policy refuses the
+  worker anything younger than 30 days, or a pending row younger than 365; and
+  a BEFORE DELETE trigger refuses the same rows for EVERY role (an owner, or a
+  single-role deployment the policy does not bind). `security:readiness` pins
+  the policy and both triggers to their exact text and probes the floor as
+  `awcms_worker` on back-dated rows in a rolled-back transaction. A failing
+  tenant no longer stops the purge for the others.
 
 Open decisions (fail-closed choices taken, need maintainer confirmation):
 
@@ -428,6 +461,17 @@ Open decisions (fail-closed choices taken, need maintainer confirmation):
   (ADR-0103 owns consent) and nothing is called at Mailketing (no such API).
 - **The deployment sender gets no callback.** It has no account to bind to, and
   binding by provider id across tenants is what this refuses to do.
+- **A confirmed unsubscribe is tenant-wide.** The suppression list is keyed by
+  (tenant, recipient), so an unsubscribe reported through ONE brand's
+  Mailketing account, once an operator confirms it, stops that tenant's
+  transactional mail to the person from EVERY brand (never security mail).
+  Fail-safe in direction (it only stops mail), but broader than a per-brand
+  opt-out; the analogous decision for WhatsApp marketing consent is #1231 M4.
+  A per-brand scope needs a suppression key change and a decision.
+- **Zone-less provider timestamps are accepted.** The audit asked for ISO-8601
+  with an explicit zone; Mailketing's documented payloads carry none
+  (`2026-08-18 10:30:00`), so that exact form is accepted as UTC with a wide
+  future skew. Every other form is discarded as stale.
 - The admin screen is Issue #1162 (permissions listed in `NOT_YET_SCREENED`).
   No AsyncAPI channel is added: nothing here publishes a domain event.
 

@@ -4220,15 +4220,15 @@ Requires Idempotency-Key. email.notification.create for every request; email.ann
 
 **Responses**
 
-| Status | Description                                                                                                                                             | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | Recipients enqueued.                                                                                                                                    | object                                 |
-| 400    | Validation error.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 409    | Idempotency-Key reused with a different request.                                                                                                        | [`ApiError`](#standard-error-envelope) |
-| 422    | SENDER_UNAVAILABLE - the sender is unknown, another tenant's, not verified, disabled, out of scope, or not one the caller may use (one answer for all). | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                                                                                                                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Recipients enqueued.                                                                                                                                                                                                                                                                                                                                  | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                                                                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key reused with a different request.                                                                                                                                                                                                                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 422    | SENDER_UNAVAILABLE - the sender is unknown, another tenant's, not verified, disabled, out of scope, or not one the caller may use (one answer for all). TEMPLATE_CATEGORY_RESERVED (Issue #1161) - the `templateKey` is a security category (`auth.*`, `system.security_notice`); security mail is sent only by the system, never as an announcement. | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/email/announcements/preview` — Dry-run announcement targeting — recipient count + synthetic sample only.
 
@@ -4245,13 +4245,14 @@ Requires Idempotency-Key. email.notification.create for every request; email.ann
 
 **Responses**
 
-| Status | Description                      | Schema                                 |
-| ------ | -------------------------------- | -------------------------------------- |
-| 200    | Preview (count + sample render). | object                                 |
-| 400    | Validation error.                | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.      | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.      | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.              | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                       | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Preview (count + sample render).                                                                                                                                  | object                                 |
+| 400    | Validation error.                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 422    | TEMPLATE_CATEGORY_RESERVED (Issue #1161) - the `templateKey` is a security category (`auth.*`, `system.security_notice`), which is never sent as an announcement. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/email/messages` — Email delivery-queue diagnostics (masked recipient only, keyset-paginated).
 
@@ -4327,7 +4328,7 @@ Issue #1161, ADR-0151 section 5. Newest first, keyset-paged, optionally by `revi
 - **operationId**: `emailReviewProviderEvent`
 - **Security**: bearerAuth + tenantHeader
 
-Issue #1161, ADR-0151 section 5 `strict`. The ONLY path by which a provider report changes anything, and a human decision. `confirm` adds the recipient to the suppression list (reason `bounced` or `unsubscribed`, `source: provider_report`, which never blocks security mail); an already suppressed recipient keeps its entry. A soft or unclassified bounce may be confirmed only once the recipient bounced `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` (default 3) times in 30 days. A review is final. Requires `email.provider_events.approve`, a signed-in person, operator access to the event's account and an `Idempotency-Key`; audited at `warning` with ids and codes only.
+Issue #1161, ADR-0151 section 5 `strict`. The ONLY path by which a provider report changes anything, and a human decision. `confirm` adds the recipient to the suppression list (reason `bounced` or `unsubscribed`, `source: provider_report`, which never blocks security mail); an already suppressed recipient keeps its entry. A soft or unclassified bounce may be confirmed only once the recipient soft-bounced on `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` (default 3) DISTINCT messages in 30 days. A review is final. Requires `email.provider_events.approve`, a signed-in person, operator access to the event's account and an `Idempotency-Key`; audited at `warning` with ids and codes only.
 
 **Parameters**
 
@@ -4690,9 +4691,9 @@ Issue #1161. The URL stops verifying at once and is never re-activated. Requires
 
 Issue #1161, ADR-0151 section 5 (`strict` mode). Called by Mailketing, never by a person or a browser. Mailketing documents NO way to authenticate a callback (no signature, secret header, source-IP list or event id), so every event is treated as UNAUTHENTICATED and changes no message status, suppression, subscriber, consent or customer: an event bound to a message this tenant sent through this account is written to the quarantine (`GET /api/v1/email/provider-events`), where an operator may confirm a bounce or unsubscribe into the suppression list. The opaque `{token}` (`mkw1.<tenantId>.<callbackId>.<secret>`, issued by `POST /api/v1/email/webhook-callbacks`) only LOCATES the tenant and account; only its hash is stored.
 
-Order of work: (1) `404` when `EMAIL_WEBHOOK_ENABLED` is not `true`; (2) a per-address bucket counted for every request before any parsing or database work (`429`); (3) the token shape and a 32 KiB body cap, still without the database; (4) the token verified in constant time inside the tenant it names, on a live callback of a connected Mailketing account with `email` enabled (every failure the same `401`; repeated failures from one address `429`); (5) a per-callback bucket, then the events.
+Order of work: (1) `404` when `EMAIL_WEBHOOK_ENABLED` is not `true`; (2) every request is charged to a per-address bucket of FAILED proofs (30 per minute) before any parsing or database work, and refunded once it verifies, so legitimate traffic from shared addresses never fills it (`429` once an address has failed too often); (3) the token shape and a 32 KiB body cap, still without the database; (4) the token verified in constant time inside the tenant it names, on a live callback of a connected Mailketing account with `email` enabled (every failure the same `401`); (5) a per-callback bucket for verified traffic, then the events.
 
-Accepted events (one object, or an array of at most 25): `bounce`, `emailopen`, `delivered` (bound by the provider message id stored at acceptance AND the recipient), `emailclick`, `unsubscribe` (no id in the vendor payload; bound only when this account sent that recipient a message in the last 30 days). `newsubscriber` is ignored and never creates a subscriber or consent; an event for a message we did not issue (another account's or tenant's id, a mismatched recipient) is discarded; a replay collapses on a dedupe key; a report dated more than 30 days ago or in the future is discarded. A bounce's reason text is reduced to a hard/soft class and an RFC 3463 code; a clicked link to its host and a hash, never stored, rendered as a link or fetched.
+Accepted events (one object, or an array of at most 25): `bounce`, `emailopen`, `delivered` (bound by the provider message id stored at acceptance AND the recipient), `emailclick`, `unsubscribe` (no id in the vendor payload; bound only when this account sent that recipient a message in the last 30 days). `newsubscriber` is ignored and never creates a subscriber or consent; an event for a message we did not issue (another account's or tenant's id, a mismatched recipient) is discarded. The report time must be the vendor's `YYYY-MM-DD HH:MM:SS` (read as UTC) or ISO-8601 with an explicit zone; anything else, or a date more than 30 days old or in the future, is discarded as stale. Dedupe ignores the report time: one row per (account, type, message) for bounce, open and delivered, one per (account, type, recipient, UTC day) for click and unsubscribe, at most one pending unsubscribe per recipient, and at most `EMAIL_WEBHOOK_MAX_PENDING` pending events per tenant (further reviewable events are not recorded until operators review the queue). A bounce's reason text is reduced to a hard/soft class and an RFC 3463 code; a clicked link to its host and a hash, never stored, rendered as a link or fetched.
 
 **Parameters**
 
@@ -4711,7 +4712,7 @@ Accepted events (one object, or an array of at most 25): `bounce`, `emailopen`, 
 | 401    | The token is malformed, unknown, revoked, or does not verify (one answer for all).                                                         | [`ApiError`](#standard-error-envelope) |
 | 404    | Mailketing callbacks are switched off on this deployment.                                                                                  | [`ApiError`](#standard-error-envelope) |
 | 413    | The body exceeds 32 KiB.                                                                                                                   | [`ApiError`](#standard-error-envelope) |
-| 429    | Rate limited per address (before proof), per callback (after proof), or after repeated failed proofs.                                      | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many FAILED proofs from this address (checked before any database work), or the per-callback rate after proof.                         | [`ApiError`](#standard-error-envelope) |
 | 503    | A transient failure; Mailketing retries and recording is idempotent.                                                                       | [`ApiError`](#standard-error-envelope) |
 
 ## Management Reporting

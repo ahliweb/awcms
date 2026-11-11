@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:d402f8220232405733b358a85c4651dbf3f10ac5e461a568df75c4e04266aafa -->
+<!-- i18n-source-hash: sha256:5d1b702174900f4b8d52706026d9235d6eca775d5bb899500ab552e516766358 -->
 
 # Email
 
@@ -382,13 +382,19 @@ Yang dibangun, fail-closed:
   sebelumnya; revoke (`.../{id}/revoke`), memutus atau menghapus akun langsung
   menghentikannya. URL itu **menemukan** akun, bukan mengautentikasi Mailketing
   (ADR-0150 N5).
-- **Intake.** 404 saat mati; bucket per alamat sebelum parsing atau kerja
-  database apa pun; bentuk token dan batas 32 KiB; token diverifikasi dengan
-  waktu konstan di dalam tenant yang disebutnya (tenant aktif, `email` aktif,
-  callback hidup, akun `connected`), satu `401` untuk setiap kegagalan dan `429`
-  setelah kegagalan berulang; bucket per callback
-  (`EMAIL_WEBHOOK_RATE_PER_MINUTE`). Penolakan dihitung dan diaudit agregat di
-  tenant platform. Terdaftar di `SESSION_FREE_BODY_ENDPOINTS`.
+- **Intake** (`application/mailketing-webhook-handler.ts`). 404 saat mati.
+  Setiap permintaan dibebankan ke bucket per alamat untuk pembuktian yang GAGAL
+  (30/menit) sebelum parsing atau kerja database apa pun, dan bebannya
+  dikembalikan begitu permintaan terverifikasi: Mailketing memanggil URL semua
+  tenant dari sedikit alamat bersama, jadi trafik sah tidak pernah memenuhi
+  bucket bersama itu (satu tenant tidak bisa membuat tenant lain kena 429),
+  sementara alamat yang terus gagal ditolak tanpa query. Lalu bentuk token dan
+  batas 32 KiB; token diverifikasi dengan waktu konstan di dalam tenant yang
+  disebutnya (tenant aktif, `email` aktif, callback hidup, akun `connected`),
+  satu `401` untuk setiap kegagalan; lalu bucket per CALLBACK untuk trafik
+  terverifikasi (`EMAIL_WEBHOOK_RATE_PER_MINUTE`). Penolakan dihitung dan
+  diaudit agregat di tenant platform. Terdaftar di
+  `SESSION_FREE_BODY_ENDPOINTS`.
 - **Pengikatan.** Event disimpan hanya bila menyebut pesan `sent` yang dikirim
   tenant INI lewat sender identity milik akun INI: lewat provider message id
   yang kami simpan saat diterima DAN penerimanya (`bounce`, `emailopen`,
@@ -396,9 +402,21 @@ Yang dibangun, fail-closed:
   penerima yang dikirimi akun ini dalam 30 hari terakhir. Id milik tenant atau
   akun lain, atau penerima yang tidak cocok, dibuang. `newsubscriber` tidak
   pernah disimpan dan tidak pernah menciptakan subscriber atau persetujuan.
-  Laporan bertanggal lebih dari 30 hari lalu atau di masa depan dibuang; replay
-  runtuh pada kunci dedupe (akun, jenis, id provider, hash penerima, cap waktu
-  provider).
+- **Batas banjir.** Cap waktu provider diurai ketat: bentuk tanpa zona yang
+  didokumentasikan vendor `YYYY-MM-DD HH:MM:SS` (dibaca sebagai UTC, dengan
+  toleransi masa depan 14 jam untuk nilai WIB/WITA/WIT) atau ISO-8601 dengan
+  zona eksplisit; selain itu, tanggal lebih dari 30 hari lalu atau terlalu jauh
+  di masa depan dibuang sebagai basi. Dedupe mengabaikan cap waktu itu, jadi
+  URL yang sah tidak bisa mencetak baris dengan memvariasikannya: satu baris
+  per (akun, jenis, pesan) untuk bounce, open, dan delivered, satu per (akun,
+  jenis, penerima, hari UTC) untuk click dan unsubscribe, dan paling banyak
+  SATU unsubscribe pending per penerima (indeks unik). Paling banyak
+  `EMAIL_WEBHOOK_MAX_PENDING` (bawaan 5000) event pending per tenant: melewati
+  itu, bounce dan unsubscribe berikutnya TIDAK dicatat (dihitung sebagai
+  `quotaExceeded`, dicatat di log warning) sampai operator meninjau antrean.
+  Itu fail-closed untuk mode ini: mode strict tidak bertindak apa pun dengan
+  sendirinya, jadi tidak ada yang hilang, dan antrean yang sudah menunggu tidak
+  tertimbun.
 - **Karantina, bukan state.** Event masuk ke `awcms_email_provider_events`
   (`sql/379`), selalu `authenticity = 'unauthenticated'`, penerima sebagai hash
   dan mask, alasan bounce diringkas menjadi hard/soft/unknown dan kode RFC 3463,
@@ -413,8 +431,11 @@ Yang dibangun, fail-closed:
   `complained` karena Mailketing tidak melaporkannya).
   `POST /api/v1/email/provider-events/{id}/review`
   (`email.provider_events.approve`, berisiko tinggi, idempoten, diaudit hanya
-  dengan id) mengonfirmasi bounce (hard; soft/unknown hanya setelah
-  `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD`, bawaan 3, dalam 30 hari) atau
+  dengan id; orang yang login dan akses operator atas akun event itu menurut
+  aturan `channel_accounts`, selain itu 404 yang sama) mengonfirmasi bounce
+  (hard; soft/unknown hanya setelah penerima soft-bounce pada
+  `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD`, bawaan 3, pesan BERBEDA dalam 30 hari:
+  pengulangan tentang satu pesan dihitung sekali) atau
   unsubscribe ke daftar suppression dengan `source = 'provider_report'`, atau
   mengabaikannya. Satu suppression per penerima, jadi bounce dan unsubscribe
   untuk satu orang tidak saling berpacu.
@@ -431,11 +452,26 @@ Yang dibangun, fail-closed:
   pemberitahuan keamanan, dan laporan provider yang tidak terautentikasi juga
   tidak.
 
+- **Email keamanan hanya dikirim oleh sistem.** Karena pengecualian itu ada,
+  pesan `security` harus pesan yang diputuskan sistem untuk dikirim. Rute
+  pengumuman (`POST /api/v1/email/announcements`, `.../preview`) tidak lagi
+  menerima template auth/keamanan (`auth.*`, `system.security_notice`):
+  `422 TEMPLATE_CATEGORY_RESERVED`. Sebagai pertahanan berlapis,
+  `enqueueAnnouncement` dan `enqueueDirectAddressEmail` melempar
+  `SecurityMailNotPermittedError` untuk kategori keamanan kecuali pemanggil
+  menyerahkan `SECURITY_MAIL_GRANT` (`application/security-mail-grant.ts`), yang
+  hanya dipegang port notifikasi auth internal (dipin oleh tes).
 - **Retensi.** `email:queue:purge` menghapus event yang sudah direview dan
   informasional setelah 90 hari dan yang pending setelah 365 (dijaga legal
-  hold, deskriptornya sendiri); policy RESTRICTIVE menolak worker untuk apa pun
-  yang lebih muda dari 30 hari, atau baris pending yang lebih muda dari 365.
-  Tenant yang gagal tidak lagi menghentikan purge untuk tenant lain.
+  hold, deskriptornya sendiri; `--dry-run` ikut menghitungnya). Tiga lapis
+  menjaga sisanya: `awcms_app` tidak punya DELETE pada tabel itu; policy
+  RESTRICTIVE menolak worker untuk apa pun yang lebih muda dari 30 hari, atau
+  baris pending yang lebih muda dari 365; dan trigger BEFORE DELETE menolak
+  baris yang sama untuk SETIAP role (owner, atau deployment satu-role yang tidak
+  terikat policy). `security:readiness` mem-pin policy dan kedua trigger pada
+  teks persisnya dan memprobe lantai itu sebagai `awcms_worker` pada baris
+  bertanggal mundur dalam transaksi yang di-rollback. Tenant yang gagal tidak
+  lagi menghentikan purge untuk tenant lain.
 
 Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
 
@@ -455,6 +491,18 @@ Keputusan terbuka (pilihan fail-closed diambil, perlu konfirmasi maintainer):
 - **Pengirim deployment tidak mendapat callback.** Ia tidak punya akun untuk
   diikat, dan mengikat lewat id provider lintas tenant adalah hal yang ditolak
   di sini.
+- **Unsubscribe yang dikonfirmasi berlaku untuk seluruh tenant.** Daftar
+  suppression berkunci (tenant, penerima), jadi unsubscribe yang dilaporkan
+  lewat akun Mailketing SATU brand, setelah dikonfirmasi operator, menghentikan
+  email transaksional tenant itu ke orang tersebut dari SEMUA brand (tidak
+  pernah email keamanan). Aman-gagal arahnya (hanya menghentikan email), tetapi
+  lebih luas dari opt-out per brand; keputusan serupa untuk persetujuan
+  marketing WhatsApp adalah #1231 M4. Cakupan per brand butuh perubahan kunci
+  suppression dan sebuah keputusan.
+- **Cap waktu provider tanpa zona diterima.** Audit meminta ISO-8601 dengan zona
+  eksplisit; payload Mailketing yang didokumentasikan tidak membawanya
+  (`2026-08-18 10:30:00`), jadi bentuk persis itu diterima sebagai UTC dengan
+  toleransi masa depan yang lebar. Bentuk lain apa pun dibuang sebagai basi.
 - Layar admin adalah Issue #1162 (permission tercatat di `NOT_YET_SCREENED`).
   Tidak ada channel AsyncAPI yang ditambah: tidak ada yang menerbitkan domain
   event di sini.

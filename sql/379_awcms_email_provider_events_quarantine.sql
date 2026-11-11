@@ -36,9 +36,14 @@
 --   * `received_at` is the DATABASE clock at insert, whatever a statement asks
 --     for: the retention floor below rests on it, so no role can make a fresh
 --     row look old (the sql/357 lesson).
---   * Replay is refused by `UNIQUE (tenant_id, dedupe_key)`: the key is a hash
---     of (account, event type, provider message id, recipient hash, provider
---     timestamp) as ADR-0151 section 5 names it.
+--   * Replay and flood are refused by `UNIQUE (tenant_id, dedupe_key)`. The key
+--     deliberately leaves the provider timestamp OUT (audit M-2 of PR #1272: a
+--     holder of a valid URL could mint rows by varying it): one row per
+--     (account, type, our message) for bounce/open/delivered, one per (account,
+--     type, recipient hash, UTC day) for click/unsubscribe. A partial unique
+--     index keeps at most ONE pending unsubscribe per recipient.
+--   * `awcms_app` holds no DELETE, and a BEFORE DELETE trigger refuses, for
+--     every role, a row the retention rule would not remove (see below).
 --
 -- `email_message_id` is a REFERENCE, not a foreign key, on purpose: the queue
 -- purge (`email:queue:purge`) deletes terminal messages after their own window,
@@ -160,6 +165,13 @@ CREATE INDEX IF NOT EXISTS awcms_email_provider_events_message_idx
 CREATE INDEX IF NOT EXISTS awcms_email_provider_events_recipient_idx
   ON awcms_email_provider_events (tenant_id, recipient_hash, event_type, received_at);
 
+-- At most ONE pending unsubscribe per recipient (audit M-2 of PR #1272): a
+-- repeated report for a person already awaiting review adds nothing to decide,
+-- so it must not add a row either (the intake's ON CONFLICT DO NOTHING).
+CREATE UNIQUE INDEX IF NOT EXISTS awcms_email_provider_events_pending_unsubscribe_key
+  ON awcms_email_provider_events (tenant_id, recipient_hash)
+  WHERE event_type = 'unsubscribe' AND review_status = 'pending';
+
 -- `db:fk-index:check`: one index per composite foreign key.
 CREATE INDEX IF NOT EXISTS awcms_email_provider_events_subscription_idx
   ON awcms_email_provider_events (tenant_id, subscription_id);
@@ -253,7 +265,37 @@ CREATE TRIGGER awcms_email_provider_events_guard
 -- (`retentionMinDays`), nor a PENDING row younger than 365 days (an unreviewed
 -- unsubscribe is a person's request and outlives the ordinary window). Both
 -- rest on `received_at`, which only the trigger above writes.
+--
+-- Two layers (audit L-1 of PR #1272): the runtime role has NO delete at all
+-- (nothing in the request path deletes evidence), and a BEFORE DELETE trigger
+-- refuses, for EVERY role, a row the retention rule would not remove. The
+-- restrictive policy below filters the worker's purge silently; the trigger is
+-- what still holds on a single-role deployment where the purge connects as the
+-- same role as the app, or as an owner the policy does not bind.
+REVOKE DELETE ON awcms_email_provider_events FROM awcms_app;
 GRANT SELECT, DELETE ON awcms_email_provider_events TO awcms_worker;
+
+CREATE OR REPLACE FUNCTION awcms_email_provider_events_delete_floor()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+  IF OLD.received_at >= now() - interval '30 days'
+     OR (OLD.review_status = 'pending'
+         AND OLD.received_at >= now() - interval '365 days') THEN
+    RAISE EXCEPTION 'a provider event is deleted only by retention, past its window'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN OLD;
+END;
+$function$;
+
+CREATE TRIGGER awcms_email_provider_events_delete_floor
+  BEFORE DELETE ON awcms_email_provider_events
+  FOR EACH ROW
+  EXECUTE FUNCTION awcms_email_provider_events_delete_floor();
 
 DROP POLICY IF EXISTS awcms_email_provider_events_worker_retention_floor
   ON awcms_email_provider_events;

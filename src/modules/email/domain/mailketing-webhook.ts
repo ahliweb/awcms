@@ -50,7 +50,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  * secret half there, instead of a cross-tenant `SECURITY DEFINER` lookup. The
  * two ids select where to look; the 256-bit secret is the proof of the URL.
  */
-export const MAILKETING_CALLBACK_TOKEN_VERSION = "mkw1";
+export const MAILKETING_CALLBACK_SCHEME_TAG = "mkw1";
 
 /** Bound before any parsing: an anonymous endpoint must not split an arbitrary string. */
 export const MAX_CALLBACK_TOKEN_LENGTH = 160;
@@ -75,7 +75,7 @@ export function formatCallbackToken(
   secret: string
 ): string {
   return [
-    MAILKETING_CALLBACK_TOKEN_VERSION,
+    MAILKETING_CALLBACK_SCHEME_TAG,
     tenantId,
     subscriptionId,
     secret
@@ -94,7 +94,7 @@ export function parseCallbackToken(value: unknown): ParsedCallbackToken | null {
 
   const parts = value.split(".");
 
-  if (parts.length !== 4 || parts[0] !== MAILKETING_CALLBACK_TOKEN_VERSION) {
+  if (parts.length !== 4 || parts[0] !== MAILKETING_CALLBACK_SCHEME_TAG) {
     return null;
   }
 
@@ -468,68 +468,151 @@ export function parseMailketingWebhookBody(
 export const MAX_REPORT_AGE_DAYS = 30;
 
 /**
- * The provider's timestamp. Mailketing documents the open time as UTC and gives
- * no format; a `YYYY-MM-DD HH:MM[:SS]` value without a zone is read as UTC.
+ * Zone-less timestamps (the vendor's own documented form) may be this far in
+ * the "future": Mailketing documents only the open time as UTC, and a value in
+ * WIB (UTC+7) or another Indonesian zone read as UTC lands up to 9 hours ahead.
+ * A value WITH an explicit zone gets the ordinary 5-minute skew.
+ */
+const ZONELESS_FUTURE_SKEW_MS = 14 * 3_600_000;
+const ZONED_FUTURE_SKEW_MS = 5 * 60_000;
+
+/** The vendor's documented form, exactly: `2026-08-18 10:30:00`. */
+const VENDOR_ZONELESS = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
+/** ISO-8601 with an EXPLICIT zone: `...Z` or `...+07:00`. */
+const ISO_ZONED =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
+
+function isRealCalendarTime(parts: number[]): boolean {
+  const [y, mo, d, h, mi, se] = parts as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number
+  ];
+  const probe = new Date(Date.UTC(y, mo - 1, d, h, mi, se));
+
+  // Refuse what Date.UTC silently rolls over (2026-02-31, 25:00:00).
+  return (
+    probe.getUTCFullYear() === y &&
+    probe.getUTCMonth() === mo - 1 &&
+    probe.getUTCDate() === d &&
+    probe.getUTCHours() === h &&
+    probe.getUTCMinutes() === mi &&
+    probe.getUTCSeconds() === se
+  );
+}
+
+/**
+ * The provider's timestamp, parsed STRICTLY (audit M-2 of PR #1272). Exactly
+ * two grammars are accepted, and nothing goes through `Date`'s lenient parser:
  *
- * - `value: null, outOfWindow: false` — absent or unreadable: "unknown", never
- *   "now"; the event is still recorded (dedupe then rests on the raw text).
- * - `outOfWindow: true` — a readable date more than 5 minutes in the future or
- *   older than `MAX_REPORT_AGE_DAYS`: the event is discarded as stale.
+ * - ISO-8601 with an explicit zone (`Z` or `+HH:MM`);
+ * - the vendor's documented zone-less `YYYY-MM-DD HH:MM:SS`, read as UTC with a
+ *   wide future skew (`ZONELESS_FUTURE_SKEW_MS`). The audit asked for an
+ *   explicit zone; Mailketing's documented payloads carry none, so refusing
+ *   them would discard every real event. Recorded as an open decision.
+ *
+ * Anything else (absent, unreadable, an impossible calendar date) is
+ * `outOfWindow: true`: the event is discarded as stale, never read as "now"
+ * and never kept as "unknown". So is a date older than `MAX_REPORT_AGE_DAYS`
+ * or further in the future than the skew.
  */
 export function parseReportedAt(
   raw: string | null,
   now: Date,
   maxAgeDays = MAX_REPORT_AGE_DAYS
 ): { value: Date | null; outOfWindow: boolean } {
-  if (raw === null) return { value: null, outOfWindow: false };
+  const stale = { value: null, outOfWindow: true };
 
-  const isoLike =
-    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?$/.test(raw)
-      ? `${raw.replace(" ", "T")}Z`
-      : raw;
-  const parsed = new Date(isoLike);
+  if (raw === null) return stale;
 
-  if (Number.isNaN(parsed.getTime())) {
-    return { value: null, outOfWindow: false };
+  let parsed: Date;
+  let futureSkew: number;
+  const vendor = VENDOR_ZONELESS.exec(raw);
+  const zoned = vendor ? null : ISO_ZONED.exec(raw);
+
+  if (vendor) {
+    const parts = vendor.slice(1, 7).map(Number);
+
+    if (!isRealCalendarTime(parts)) return stale;
+
+    const [y, mo, d, h, mi, se] = parts as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number
+    ];
+
+    parsed = new Date(Date.UTC(y, mo - 1, d, h, mi, se));
+    futureSkew = ZONELESS_FUTURE_SKEW_MS;
+  } else if (zoned) {
+    if (!isRealCalendarTime(zoned.slice(1, 7).map(Number))) return stale;
+
+    parsed = new Date(raw);
+    futureSkew = ZONED_FUTURE_SKEW_MS;
+  } else {
+    return stale;
   }
 
   const ms = parsed.getTime();
 
   if (
-    ms > now.getTime() + 5 * 60_000 ||
+    Number.isNaN(ms) ||
+    ms > now.getTime() + futureSkew ||
     ms < now.getTime() - maxAgeDays * 86_400_000
   ) {
-    return { value: null, outOfWindow: true };
+    return stale;
   }
 
   return { value: parsed, outOfWindow: false };
 }
 
+/** The UTC calendar day of a parsed report (`YYYY-MM-DD`). */
+export function reportedDay(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 /**
- * ADR-0151 section 5's replay key: account, event type, provider message id,
- * recipient hash and the provider's own timestamp text. Two deliveries of the
- * same report collapse to one row; two genuinely different reports (another
- * time) do not.
+ * The replay and flood key (ADR-0151 section 5, tightened by audit M-2 of PR
+ * #1272). The provider timestamp is deliberately NOT part of it: a holder of a
+ * valid URL could otherwise mint unlimited rows by varying `date`.
+ *
+ * - An event bound to OUR message (bounce, open, delivered): one row per
+ *   (account, type, message). A second bounce of the same message is the same
+ *   fact.
+ * - A recipient-only event (click, unsubscribe): one row per (account, type,
+ *   recipient, UTC day of the report).
  */
-export function providerEventDedupeKey(input: {
-  espAccountId: string;
-  type: ProviderEventType;
-  providerMessageId: string | null;
-  recipientHash: string;
-  reportedAtRaw: string | null;
-  linkHash?: string | null;
-}): string {
+export function providerEventDedupeKey(
+  input:
+    | {
+        espAccountId: string;
+        type: "bounce" | "open" | "delivered";
+        emailMessageId: string;
+      }
+    | {
+        espAccountId: string;
+        type: "click" | "unsubscribe";
+        recipientHash: string;
+        reportedDay: string;
+      }
+): string {
+  const parts =
+    "emailMessageId" in input
+      ? ["message", input.espAccountId, input.type, input.emailMessageId]
+      : [
+          "recipient",
+          input.espAccountId,
+          input.type,
+          input.recipientHash,
+          input.reportedDay
+        ];
+
   return createHash("sha256")
-    .update(
-      [
-        "awcms:email-provider-event:v1",
-        input.espAccountId,
-        input.type,
-        input.providerMessageId ?? "",
-        input.recipientHash,
-        input.reportedAtRaw ?? "",
-        input.linkHash ?? ""
-      ].join("\u0000")
-    )
+    .update(["awcms:email-provider-event:v2", ...parts].join("\u0000"))
     .digest("hex");
 }

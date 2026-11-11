@@ -23,6 +23,10 @@ import type { AnnouncementTarget } from "../domain/announcement-validation";
 import { purposeForEmailCategory } from "../domain/email-sender";
 import type { EmailPurposeForSuppression } from "../domain/suppression-policy";
 import {
+  assertSecurityMailPermitted,
+  type SecurityMailGrant
+} from "./security-mail-grant";
+import {
   DEPLOYMENT_SENDER_SNAPSHOT,
   type EmailSenderSnapshot
 } from "./email-sender-directory";
@@ -280,9 +284,18 @@ export async function enqueueAnnouncement(
    * ONLY from `resolveEnqueueEmailSender` (the caller's authorised, verified
    * choice), never from request input directly.
    */
-  sender: EmailSenderSnapshot = DEPLOYMENT_SENDER_SNAPSHOT
+  sender: EmailSenderSnapshot = DEPLOYMENT_SENDER_SNAPSHOT,
+  /**
+   * Issue #1161 audit H-1: a security category (`auth.*`,
+   * `system.security_notice`) is enqueued ONLY by an internal security port
+   * holding this grant; anything else throws `SecurityMailNotPermittedError`.
+   */
+  securityMail?: SecurityMailGrant
 ): Promise<EnqueueAnnouncementResult | null> {
   const purpose = purposeForEmailCategory(templateKey);
+
+  assertSecurityMailPermitted(purpose, securityMail);
+
   const template = await fetchActiveEmailTemplateByKey(
     tx,
     tenantId,

@@ -49,6 +49,10 @@ import { purposeForEmailCategory } from "../domain/email-sender";
 import { renderEmailTemplate } from "../domain/email-template-render";
 import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
 import { fetchSuppressedRecipientHashes } from "./suppression-directory";
+import {
+  assertSecurityMailPermitted,
+  type SecurityMailGrant
+} from "./security-mail-grant";
 
 export type EnqueueDirectAddressResult = {
   /** `false` when the tenant has no ACTIVE template for the key, or the address is suppressed. */
@@ -62,8 +66,15 @@ export async function enqueueDirectAddressEmail(
   toAddress: string,
   variables: Record<string, string>,
   correlationId: string,
-  locale = "en"
+  locale = "en",
+  /** Issue #1161 audit H-1: required for a security category (see `security-mail-grant.ts`). */
+  securityMail?: SecurityMailGrant
 ): Promise<EnqueueDirectAddressResult> {
+  assertSecurityMailPermitted(
+    purposeForEmailCategory(templateKey),
+    securityMail
+  );
+
   const template = await fetchActiveEmailTemplateByKey(
     tx,
     tenantId,

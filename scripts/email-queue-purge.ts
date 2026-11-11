@@ -33,6 +33,8 @@ import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/applica
 import {
   EMAIL_ATTEMPT_DEFAULT_RETENTION_DAYS,
   EMAIL_MESSAGE_DEFAULT_RETENTION_DAYS,
+  EMAIL_PROVIDER_EVENT_DEFAULT_RETENTION_DAYS,
+  EMAIL_PROVIDER_EVENT_PENDING_RETENTION_DAYS,
   purgeEmailQueue,
   resolveEmailRetentionCutoff
 } from "../src/modules/email/application/email-queue-purge";
@@ -55,7 +57,7 @@ async function previewTenant(
   sql: Bun.SQL,
   tenantId: string,
   now: Date
-): Promise<{ attempts: number; messages: number }> {
+): Promise<{ attempts: number; messages: number; providerEvents: number }> {
   const messageCutoff = resolveEmailRetentionCutoff(
     now,
     EMAIL_MESSAGE_DEFAULT_RETENTION_DAYS
@@ -79,9 +81,29 @@ async function previewTenant(
       AND updated_at < ${messageCutoff}
   `) as CountRow[];
 
+  // Issue #1161 (audit L-4 of PR #1272): the same two windows the purge uses.
+  const reviewedCutoff = resolveEmailRetentionCutoff(
+    now,
+    EMAIL_PROVIDER_EVENT_DEFAULT_RETENTION_DAYS
+  );
+  const pendingCutoff = resolveEmailRetentionCutoff(
+    now,
+    EMAIL_PROVIDER_EVENT_PENDING_RETENTION_DAYS
+  );
+  const providerEvents = (await sql`
+    SELECT count(*)::int AS total
+    FROM awcms_email_provider_events
+    WHERE tenant_id = ${tenantId}
+      AND (
+        (review_status <> 'pending' AND received_at < ${reviewedCutoff})
+        OR received_at < ${pendingCutoff}
+      )
+  `) as CountRow[];
+
   return {
     attempts: attempts[0]?.total ?? 0,
-    messages: messages[0]?.total ?? 0
+    messages: messages[0]?.total ?? 0,
+    providerEvents: providerEvents[0]?.total ?? 0
   };
 }
 
@@ -111,6 +133,7 @@ async function main() {
 
         totalAttempts += preview.attempts;
         totalMessages += preview.messages;
+        totalProviderEvents += preview.providerEvents;
         continue;
       }
 

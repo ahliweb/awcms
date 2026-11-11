@@ -65,6 +65,28 @@ import {
 import { POST as revokeCallback } from "../../src/pages/api/v1/email/webhook-callbacks/[id]/revoke";
 import { GET as listEvents } from "../../src/pages/api/v1/email/provider-events/index";
 import { POST as reviewEvent } from "../../src/pages/api/v1/email/provider-events/[id]/review";
+import { POST as announceRoute } from "../../src/pages/api/v1/email/announcements/index";
+import { POST as previewRoute } from "../../src/pages/api/v1/email/announcements/preview";
+import {
+  SECURITY_MAIL_GRANT,
+  SecurityMailNotPermittedError
+} from "../../src/modules/email/application/security-mail-grant";
+import { dispatchEmailQueue } from "../../src/modules/email/application/email-dispatch";
+import { purgeEmailQueue } from "../../src/modules/email/application/email-queue-purge";
+import {
+  recordMailketingEvents,
+  verifyMailketingCallback
+} from "../../src/modules/email/application/email-webhook-intake";
+import { parseMailketingWebhookBody } from "../../src/modules/email/domain/mailketing-webhook";
+import { parseCallbackToken } from "../../src/modules/email/domain/mailketing-webhook";
+import * as subscriptionDirectory from "../../src/modules/channel-accounts/application/webhook-subscription-directory";
+import {
+  EMAIL_PROVIDER_EVENT_RETENTION_FLOOR_POLICY,
+  EMAIL_PROVIDER_EVENT_TRIGGERS,
+  pinPolicyExpression,
+  pinTriggerFunction,
+  probeEmailProviderEventRetentionFloor
+} from "../../scripts/security-readiness";
 
 const OWNER_PASSWORD = randomBytes(12).toString("hex") + "-Aa1!";
 const RECIPIENT = "reader.one@recipient.example";
@@ -93,6 +115,14 @@ let userCounter = 0;
 const savedEnv: Record<string, string | undefined> = {};
 const admin = () => getHandlerAdminSql();
 const nextKey = () => `idem-1161-${(keyCounter += 1)}-${crypto.randomUUID()}`;
+
+/** The vendor's documented zone-less form, `minutesAgo` before now (UTC). */
+function vendorNow(minutesAgo = 60, daysAgo = 0): string {
+  return new Date(Date.now() - minutesAgo * 60_000 - daysAgo * 86_400_000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+}
 
 async function bootstrap(code: string): Promise<World> {
   const loginIdentifier = `${code}-owner@example.com`;
@@ -376,6 +406,67 @@ async function seedUser(
   return token;
 }
 
+/** A tenant user whose login (and so mail) address is `address`. */
+async function seedRecipientUser(
+  tenantId: string,
+  address: string
+): Promise<string> {
+  const sql = admin();
+  const profile = (await sql`
+    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+    VALUES (${tenantId}, 'person', 'Recipient') RETURNING id
+  `) as { id: string }[];
+  const identity = (await sql`
+    INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
+    VALUES (${tenantId}, ${profile[0]!.id}, ${address}, 'x') RETURNING id
+  `) as { id: string }[];
+  const user = (await sql`
+    INSERT INTO awcms_tenant_users (tenant_id, identity_id)
+    VALUES (${tenantId}, ${identity[0]!.id}) RETURNING id
+  `) as { id: string }[];
+
+  return user[0]!.id;
+}
+
+/** Inserts quarantine rows with a back-dated `received_at` (the guard trigger would stamp now()). */
+async function seedAgedEvent(
+  w: World,
+  reviewStatus: "pending" | "dismissed",
+  ageDays: number
+): Promise<string> {
+  const subscription = (await admin()`
+    SELECT id FROM awcms_channel_webhook_subscriptions
+    WHERE tenant_id = ${w.tenantId} LIMIT 1
+  `) as { id: string }[];
+
+  return admin().begin(async (tx) => {
+    await tx`SET LOCAL session_replication_role = replica`;
+    const rows = (await tx`
+      INSERT INTO awcms_email_provider_events
+        (tenant_id, subscription_id, esp_account_id, email_message_id,
+         event_type, correlation, recipient_hash, recipient_masked,
+         dedupe_key, review_status, reviewed_at, received_at)
+      VALUES
+        (${w.tenantId}, ${subscription[0]!.id}, ${w.espAccountId},
+         ${crypto.randomUUID()}, 'unsubscribe', 'recipient_only',
+         ${crypto.randomUUID().replaceAll("-", "").repeat(2)}, 'p***',
+         ${crypto.randomUUID().replaceAll("-", "").repeat(2)}, ${reviewStatus},
+         ${reviewStatus === "pending" ? null : new Date()},
+         now() - make_interval(days => ${ageDays}))
+      RETURNING id
+    `) as { id: string }[];
+
+    return rows[0]!.id;
+  });
+}
+
+const DISPATCH_ENV = {
+  EMAIL_ENABLED: "true",
+  EMAIL_PROVIDER: "log",
+  EMAIL_FROM_ADDRESS: "noreply@deployment.test",
+  EMAIL_FROM_NAME: "Deployment"
+} as unknown as NodeJS.ProcessEnv;
+
 const suite = integrationEnabled ? describe : describe.skip;
 let handlerReady = false;
 
@@ -575,7 +666,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
       type: "bounce",
       email: RECIPIENT,
       reason: "550 5.1.1 user unknown",
-      date: "2026-11-10 10:00:00",
+      date: vendorNow(),
       message_id: "mk-msg-1"
     });
 
@@ -635,7 +726,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
       type: "bounce",
       email,
       reason: "550 5.1.1",
-      date: "2026-11-10 10:00:00",
+      date: vendorNow(),
       message_id: id
     });
 
@@ -671,7 +762,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
       email: "new@recipient.example",
       first_name: "A",
       list_id: 1,
-      date: "2026-11-10 10:00:00"
+      date: vendorNow()
     });
 
     const subscribers = (await admin()`
@@ -684,13 +775,13 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
     await post(token, {
       type: "unsubscribe",
       email: RECIPIENT,
-      date: "2026-11-10 10:05:00"
+      date: vendorNow()
     });
     // Unsubscribe for someone this account never mailed: discarded.
     await post(token, {
       type: "unsubscribe",
       email: "stranger@recipient.example",
-      date: "2026-11-10 10:05:00"
+      date: vendorNow()
     });
 
     const afterUnsub = await events(world.tenantId);
@@ -704,14 +795,14 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
       type: "bounce",
       email: RECIPIENT,
       reason: "550 5.1.1",
-      date: "2026-11-10 10:10:00",
+      date: vendorNow(),
       message_id: "mk-proj"
     });
     await post(token, {
       type: "delivered",
       rcpt: RECIPIENT,
       jobid: "mk-proj",
-      send_time: "2026-11-10 10:00:00"
+      send_time: vendorNow()
     });
 
     const listed = await authed(listEvents, world, {
@@ -737,7 +828,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
       type: "bounce",
       email: RECIPIENT,
       reason: "452 4.2.2 mailbox full",
-      date: "2026-11-10 10:00:00",
+      date: vendorNow(),
       message_id: "mk-soft"
     });
 
@@ -759,14 +850,14 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
     await post(token, {
       type: "unsubscribe",
       email: RECIPIENT,
-      date: "2026-11-10 10:20:00"
+      date: vendorNow()
     });
     await sentMessage(world, "mk-hard");
     await post(token, {
       type: "bounce",
       email: RECIPIENT,
       reason: "550 5.1.1",
-      date: "2026-11-10 10:30:00",
+      date: vendorNow(),
       message_id: "mk-hard"
     });
 
@@ -812,7 +903,9 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
           "auth.password_reset",
           RECIPIENT,
           {},
-          "corr-2"
+          "corr-2",
+          "en",
+          SECURITY_MAIL_GRANT
         )
       })
     );
@@ -832,9 +925,12 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
           templateKey,
           address,
           {},
-          crypto.randomUUID()
+          crypto.randomUUID(),
+          "en",
+          templateKey.startsWith("auth.") ? SECURITY_MAIL_GRANT : undefined
         )
       );
+    const unsubscribedUser = await seedRecipientUser(world.tenantId, RECIPIENT);
 
     await admin()`
       INSERT INTO awcms_email_suppression_list
@@ -853,22 +949,49 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
       (await enqueue("auth.password_reset", OTHER_RECIPIENT)).enqueued
     ).toBe(false);
 
-    // Announcement path: same rule.
-    const announced = await withTenantOrThrow(
-      getHandlerDatabaseClient(),
-      world.tenantId,
-      (tx) =>
+    // Announcement path (audit M-4, mutation M12): the enqueue resolves the
+    // recipients under the message's purpose.
+    const announce = (templateKey: string) =>
+      withTenantOrThrow(getHandlerDatabaseClient(), world.tenantId, (tx) =>
         enqueueAnnouncement(
           tx,
           world.tenantId,
-          "system.announcement",
+          templateKey,
           {},
-          { type: "tenant" },
-          crypto.randomUUID()
+          { type: "users", userIds: [unsubscribedUser] },
+          crypto.randomUUID(),
+          "en",
+          undefined,
+          templateKey.startsWith("auth.") ? SECURITY_MAIL_GRANT : undefined
         )
-    );
+      );
 
-    expect(announced).not.toBeNull();
+    expect((await announce("system.announcement"))?.recipientCount).toBe(0);
+    expect((await announce("auth.password_reset"))?.recipientCount).toBe(1);
+
+    // Defence in depth (audit H-1): without the internal grant, security mail
+    // is refused at enqueue whatever the caller is.
+    let refused: unknown = null;
+
+    try {
+      await withTenantOrThrow(
+        getHandlerDatabaseClient(),
+        world.tenantId,
+        (tx) =>
+          enqueueAnnouncement(
+            tx,
+            world.tenantId,
+            "auth.password_reset",
+            {},
+            { type: "users", userIds: [unsubscribedUser] },
+            crypto.randomUUID()
+          )
+      );
+    } catch (error) {
+      refused = error;
+    }
+
+    expect(refused).toBeInstanceOf(SecurityMailNotPermittedError);
   });
 
   test("revoked, rotated and disconnected callbacks stop verifying", async () => {
@@ -926,7 +1049,7 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
     await post(token, {
       type: "emailopen",
       email: RECIPIENT,
-      date: "2026-11-10 10:00:00",
+      date: vendorNow(),
       message_id: "mk-imm"
     });
 
@@ -960,5 +1083,482 @@ suite("Mailketing webhook quarantine (Issue #1161)", () => {
     })) as unknown[];
 
     expect(deleted).toHaveLength(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Audit of PR #1272
+  // ---------------------------------------------------------------------------
+
+  test("H-1: announcement routes no longer accept auth/security templates (all three shapes), and nothing is queued", async () => {
+    if (!handlerReady) return;
+
+    await seedRecipientUser(world.tenantId, RECIPIENT);
+    await admin()`
+      INSERT INTO awcms_email_templates
+        (tenant_id, template_key, name, subject_template, text_body_template,
+         created_by, updated_by)
+      VALUES (${world.tenantId}, 'system.security_notice', 'notice',
+              ${{ en: "Notice" }}::jsonb, ${{ en: "Body" }}::jsonb,
+              ${world.ownerUserId}, ${world.ownerUserId})
+      ON CONFLICT DO NOTHING
+    `;
+    await admin()`
+      INSERT INTO awcms_email_suppression_list
+        (tenant_id, recipient_hash, recipient_masked, reason)
+      VALUES (${world.tenantId}, ${hashIdentifierValue(RECIPIENT)}, 'r***', 'unsubscribed')
+    `;
+
+    const cases: [APIRoute, string, unknown][] = [
+      [
+        announceRoute,
+        "/api/v1/email/announcements",
+        {
+          templateKey: "system.security_notice",
+          variables: { userName: "Buy now" },
+          target: { type: "tenant" }
+        }
+      ],
+      [
+        announceRoute,
+        "/api/v1/email/announcements",
+        {
+          templateKey: "auth.password_reset",
+          variables: { resetUrl: "https://elsewhere.example/r" },
+          target: { type: "tenant" }
+        }
+      ],
+      [
+        previewRoute,
+        "/api/v1/email/announcements/preview",
+        { templateKey: "auth.password_reset", target: { type: "tenant" } }
+      ]
+    ];
+
+    for (const [route, path, body] of cases) {
+      const response = await authed(route, world, {
+        method: "POST",
+        path,
+        body
+      });
+
+      expect(response.status).toBe(422);
+      expect(response.body.error?.code).toBe("TEMPLATE_CATEGORY_RESERVED");
+    }
+
+    const queued = (await admin()`
+      SELECT count(*)::int AS n FROM awcms_email_messages
+      WHERE tenant_id = ${world.tenantId}
+    `) as { n: number }[];
+
+    expect(queued[0]!.n).toBe(0);
+
+    // An ordinary announcement still goes out (and still honours the opt-out).
+    const ordinary = await authed(announceRoute, world, {
+      method: "POST",
+      path: "/api/v1/email/announcements",
+      body: { templateKey: "system.announcement", target: { type: "tenant" } }
+    });
+
+    expect(ordinary.status).toBe(200);
+  });
+
+  test("M-4 (M1/M2): the dispatcher re-checks suppression added AFTER enqueue, per purpose", async () => {
+    if (!handlerReady) return;
+
+    const user = await seedRecipientUser(world.tenantId, RECIPIENT);
+    const enqueue = (templateKey: string) =>
+      withTenantOrThrow(getHandlerDatabaseClient(), world.tenantId, (tx) =>
+        enqueueAnnouncement(
+          tx,
+          world.tenantId,
+          templateKey,
+          {},
+          { type: "users", userIds: [user] },
+          crypto.randomUUID(),
+          "en",
+          undefined,
+          templateKey.startsWith("auth.") ? SECURITY_MAIL_GRANT : undefined
+        )
+      );
+
+    expect((await enqueue("system.announcement"))?.recipientCount).toBe(1);
+    expect((await enqueue("auth.password_reset"))?.recipientCount).toBe(1);
+
+    // Suppressed only now, after both rows are queued.
+    await admin()`
+      INSERT INTO awcms_email_suppression_list
+        (tenant_id, recipient_hash, recipient_masked, reason)
+      VALUES (${world.tenantId}, ${hashIdentifierValue(RECIPIENT)}, 'r***', 'unsubscribed')
+    `;
+
+    const result = await dispatchEmailQueue(
+      getHandlerDatabaseClient(),
+      world.tenantId,
+      { env: DISPATCH_ENV }
+    );
+
+    expect(result.suppressed).toBe(1);
+    expect(result.sent).toBe(1);
+
+    const rows = (await admin()`
+      SELECT category, status FROM awcms_email_messages
+      WHERE tenant_id = ${world.tenantId} ORDER BY category
+    `) as { category: string; status: string }[];
+
+    expect(rows).toEqual([
+      { category: "auth.password_reset", status: "sent" },
+      { category: "system.announcement", status: "suppressed" }
+    ]);
+  });
+
+  test("M-1: legitimate traffic from a shared address is never throttled by the failure bucket", async () => {
+    if (!handlerReady) return;
+
+    const token = tokenFromPath(
+      (await issue(world)).body.data.callbackPath as string
+    );
+    const statuses: number[] = [];
+
+    for (let i = 0; i < 40; i += 1) {
+      statuses.push(
+        (await post(token, { type: "unknown_kind" }, { ip: "192.0.2.200" }))
+          .status
+      );
+    }
+
+    expect(statuses.every((status) => status === 200)).toBe(true);
+
+    // ...while failures from that same address still are.
+    let last = 0;
+
+    for (let i = 0; i < 31; i += 1) {
+      last = (await post("garbage", { type: "x" }, { ip: "192.0.2.200" }))
+        .status;
+    }
+
+    expect(last).toBe(429);
+  });
+
+  test("M-2: one URL and one recipient cannot flood the quarantine; repeats of one message are one bounce", async () => {
+    if (!handlerReady) return;
+
+    const token = tokenFromPath(
+      (await issue(world)).body.data.callbackPath as string
+    );
+
+    await sentMessage(world, "mk-flood");
+
+    // 25 unsubscribes, each with a different time, same person, same day.
+    await post(
+      token,
+      Array.from({ length: 25 }, (_, i) => ({
+        type: "unsubscribe",
+        email: RECIPIENT,
+        date: vendorNow(60 + i)
+      }))
+    );
+    // The same person on other days: still ONE pending unsubscribe.
+    await post(token, [
+      { type: "unsubscribe", email: RECIPIENT, date: vendorNow(60, 2) },
+      { type: "unsubscribe", email: RECIPIENT, date: vendorNow(60, 3) }
+    ]);
+    // 25 soft bounces of ONE message with different times: one row.
+    await post(
+      token,
+      Array.from({ length: 25 }, (_, i) => ({
+        type: "bounce",
+        email: RECIPIENT,
+        reason: "452 4.2.2 mailbox full",
+        date: vendorNow(60 + i),
+        message_id: "mk-flood"
+      }))
+    );
+    // 25 clicks by the same person on the same day, different times: one row
+    // (clicks have no pending-unique index, so this is the dedupe key alone).
+    await post(
+      token,
+      Array.from({ length: 25 }, (_, i) => ({
+        type: "emailclick",
+        email: RECIPIENT,
+        link_clicked: `https://shop.example/p/${i}`,
+        date: vendorNow(60 + i)
+      }))
+    );
+    // Unreadable dates are stale, not "now".
+    await post(token, [
+      {
+        type: "unsubscribe",
+        email: RECIPIENT,
+        date: "yesterday"
+      },
+      { type: "emailopen", email: RECIPIENT, message_id: "mk-flood" }
+    ]);
+
+    const rows = await events(world.tenantId);
+
+    expect(rows.filter((row) => row.event_type === "unsubscribe")).toHaveLength(
+      1
+    );
+    expect(rows.filter((row) => row.event_type === "bounce")).toHaveLength(1);
+    expect(rows.filter((row) => row.event_type === "click")).toHaveLength(1);
+    expect(rows.filter((row) => row.event_type === "open")).toHaveLength(0);
+
+    // Repeats of one message never meet the soft-bounce threshold, even if
+    // rows about it got in by another key (a rotated URL, an older build):
+    // the threshold counts DISTINCT messages.
+    const bounce = rows.find((row) => row.event_type === "bounce")!;
+
+    for (let i = 0; i < 3; i += 1) {
+      await admin()`
+        INSERT INTO awcms_email_provider_events
+          (tenant_id, subscription_id, esp_account_id, email_message_id,
+           event_type, correlation, provider_message_id, recipient_hash,
+           recipient_masked, bounce_class, dedupe_key, review_status)
+        VALUES
+          (${world.tenantId}, ${bounce.subscription_id}, ${world.espAccountId},
+           ${bounce.email_message_id}, 'bounce', 'provider_message_id',
+           'mk-flood', ${bounce.recipient_hash}, 'r***', 'soft',
+           ${crypto.randomUUID().replaceAll("-", "").repeat(2)}, 'pending')
+      `;
+    }
+    const review = await authed(reviewEvent, world, {
+      method: "POST",
+      path: `/api/v1/email/provider-events/${bounce.id}/review`,
+      params: { id: bounce.id },
+      body: { decision: "confirm" }
+    });
+
+    expect(review.status).toBe(409);
+    expect(review.body.error?.code).toBe("BELOW_SOFT_BOUNCE_THRESHOLD");
+
+    // Three soft bounces of three DIFFERENT messages do.
+    for (const id of ["mk-s2", "mk-s3"]) {
+      await sentMessage(world, id);
+      await post(token, {
+        type: "bounce",
+        email: RECIPIENT,
+        reason: "452 4.2.2 mailbox full",
+        date: vendorNow(),
+        message_id: id
+      });
+    }
+
+    const third = await authed(reviewEvent, world, {
+      method: "POST",
+      path: `/api/v1/email/provider-events/${bounce.id}/review`,
+      params: { id: bounce.id },
+      body: { decision: "confirm" }
+    });
+
+    expect(third.status).toBe(200);
+  });
+
+  test("M-2: a full review queue refuses further reviewable events (fail closed, counted)", async () => {
+    if (!handlerReady) return;
+
+    const token = tokenFromPath(
+      (await issue(world)).body.data.callbackPath as string
+    );
+
+    await sentMessage(world, "mk-q1");
+    await sentMessage(world, "mk-q2", OTHER_RECIPIENT);
+
+    const parsed = parseCallbackToken(token)!;
+    const callback = await verifyMailketingCallback(
+      getHandlerDatabaseClient(),
+      parsed,
+      subscriptionDirectory
+    );
+
+    expect(callback).not.toBeNull();
+
+    const result = await recordMailketingEvents(
+      getHandlerDatabaseClient(),
+      callback!,
+      parseMailketingWebhookBody([
+        {
+          type: "bounce",
+          email: RECIPIENT,
+          reason: "550 5.1.1",
+          date: vendorNow(),
+          message_id: "mk-q1"
+        },
+        {
+          type: "bounce",
+          email: OTHER_RECIPIENT,
+          reason: "550 5.1.1",
+          date: vendorNow(),
+          message_id: "mk-q2"
+        },
+        {
+          type: "emailopen",
+          email: OTHER_RECIPIENT,
+          date: vendorNow(),
+          message_id: "mk-q2"
+        }
+      ])!,
+      subscriptionDirectory,
+      new Date(),
+      1
+    );
+
+    expect(result.recorded).toBe(2);
+    expect(result.quotaExceeded).toBe(1);
+    expect(
+      (await events(world.tenantId)).filter(
+        (row) => row.review_status === "pending"
+      )
+    ).toHaveLength(1);
+  });
+
+  test("M-4 (M7): a reviewer the account is not assigned to gets the same 404", async () => {
+    if (!handlerReady) return;
+
+    const token = tokenFromPath(
+      (await issue(world)).body.data.callbackPath as string
+    );
+
+    await sentMessage(world, "mk-assign");
+    await post(token, {
+      type: "bounce",
+      email: RECIPIENT,
+      reason: "550 5.1.1",
+      date: vendorNow(),
+      message_id: "mk-assign"
+    });
+
+    const event = (await events(world.tenantId))[0]!;
+
+    // The account is now restricted to its assignee (the owner).
+    await admin()`
+      INSERT INTO awcms_channel_account_assignments
+        (tenant_id, account_id, tenant_user_id, kind)
+      VALUES (${world.tenantId}, ${world.espAccountId}, ${world.ownerUserId}, 'owner')
+    `;
+
+    const reviewer = await seedUser(world.tenantId, [
+      "email.provider_events.approve",
+      "email.webhook.read"
+    ]);
+    const refused = await authed(reviewEvent, world, {
+      method: "POST",
+      path: `/api/v1/email/provider-events/${event.id}/review`,
+      params: { id: event.id },
+      body: { decision: "confirm" },
+      token: reviewer
+    });
+
+    expect(refused.status).toBe(404);
+
+    const listed = await authed(listEvents, world, {
+      path: "/api/v1/email/provider-events",
+      token: reviewer
+    });
+
+    expect(listed.status).toBe(200);
+    expect(listed.body.data.events).toHaveLength(0);
+    expect((await events(world.tenantId))[0]!.review_status).toBe("pending");
+  });
+
+  test("M-4 (M10) / L-1: the purge removes only rows past their window; app cannot delete; the floor holds for every role", async () => {
+    if (!handlerReady) return;
+
+    await issue(world);
+
+    const young = await seedAgedEvent(world, "dismissed", 10);
+    const old = await seedAgedEvent(world, "dismissed", 100);
+    const pendingYoung = await seedAgedEvent(world, "pending", 100);
+    const pendingOld = await seedAgedEvent(world, "pending", 400);
+
+    const result = await purgeEmailQueue(admin(), world.tenantId, {
+      isDescriptorHeld: async () => false
+    });
+
+    expect(result.purgedProviderEvents).toBe(2);
+
+    const left = (await events(world.tenantId)).map((row) => row.id).sort();
+
+    expect(left).toEqual([young, pendingYoung].sort());
+    expect(left).not.toContain(old);
+    expect(left).not.toContain(pendingOld);
+
+    const privilege = (await admin()`
+      SELECT has_table_privilege('awcms_app', 'awcms_email_provider_events', 'DELETE') AS app,
+             has_table_privilege('awcms_worker', 'awcms_email_provider_events', 'DELETE') AS worker
+    `) as { app: boolean; worker: boolean }[];
+
+    expect(privilege[0]).toEqual({ app: false, worker: true });
+
+    // Even the owner/superuser cannot delete a row inside its window.
+    let refused = false;
+
+    try {
+      await admin()`DELETE FROM awcms_email_provider_events WHERE id = ${pendingYoung}`;
+    } catch {
+      refused = true;
+    }
+
+    expect(refused).toBe(true);
+  });
+
+  test("M-3: security:readiness pins the floor and both triggers exactly, and its probe catches a widened floor", async () => {
+    if (!handlerReady) return;
+
+    const sql = admin();
+
+    expect(
+      await pinPolicyExpression(
+        sql,
+        EMAIL_PROVIDER_EVENT_RETENTION_FLOOR_POLICY
+      )
+    ).toBeNull();
+
+    for (const pin of EMAIL_PROVIDER_EVENT_TRIGGERS) {
+      expect(await pinTriggerFunction(sql, pin)).toBeNull();
+    }
+
+    expect(await probeEmailProviderEventRetentionFloor(sql)).toEqual({
+      ran: true
+    });
+
+    const policy = EMAIL_PROVIDER_EVENT_RETENTION_FLOOR_POLICY;
+    const restorePolicy = `CREATE POLICY ${policy.policy} ON ${policy.table} AS RESTRICTIVE FOR DELETE TO awcms_worker USING (received_at < now() - interval '30 days' AND (review_status <> 'pending' OR received_at < now() - interval '365 days'))`;
+    const deleteFloor = EMAIL_PROVIDER_EVENT_TRIGGERS.find(
+      (pin) => pin.events === "delete"
+    )!;
+    const original = (await sql`
+      SELECT pg_get_functiondef(to_regproc(${deleteFloor.fn})) AS def
+    `) as { def: string }[];
+
+    try {
+      // Widened: `true OR ...`.
+      await sql.unsafe(`DROP POLICY ${policy.policy} ON ${policy.table}`);
+      await sql.unsafe(
+        `CREATE POLICY ${policy.policy} ON ${policy.table} AS RESTRICTIVE FOR DELETE TO awcms_worker USING (true OR received_at < now() - interval '30 days')`
+      );
+      expect(await pinPolicyExpression(sql, policy)).not.toBeNull();
+
+      // Dropped entirely.
+      await sql.unsafe(`DROP POLICY ${policy.policy} ON ${policy.table}`);
+      expect(await pinPolicyExpression(sql, policy)).not.toBeNull();
+
+      // And with the trigger floor ALSO neutralised, the probe sees it.
+      await sql.unsafe(
+        `CREATE OR REPLACE FUNCTION ${deleteFloor.fn}() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $f$ BEGIN RETURN OLD; END; $f$`
+      );
+      expect(await pinTriggerFunction(sql, deleteFloor)).not.toBeNull();
+      expect(
+        (await probeEmailProviderEventRetentionFloor(sql)).finding
+      ).toBeDefined();
+    } finally {
+      await sql.unsafe(
+        `DROP POLICY IF EXISTS ${policy.policy} ON ${policy.table}`
+      );
+      await sql.unsafe(restorePolicy);
+      await sql.unsafe(original[0]!.def);
+    }
+
+    expect(await pinPolicyExpression(sql, policy)).toBeNull();
+    expect(await pinTriggerFunction(sql, deleteFloor)).toBeNull();
   });
 });

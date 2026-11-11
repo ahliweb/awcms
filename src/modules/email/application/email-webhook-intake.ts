@@ -53,10 +53,12 @@ import {
   hashCallbackSecret,
   parseReportedAt,
   providerEventDedupeKey,
+  reportedDay,
   type IgnoredEventReason,
   type ParsedCallbackToken,
   type ParsedProviderEvent
 } from "../domain/mailketing-webhook";
+import { resolveEmailWebhookMaxPending } from "../domain/email-webhook-config";
 import type { EmailWebhookSubscriptionDirectory } from "../infrastructure/channel-account-loaders";
 
 const EMAIL_MODULE_KEY = "email";
@@ -121,6 +123,8 @@ export type MailketingIntakeResult = {
   duplicate: number;
   unmatched: number;
   stale: number;
+  /** Pending (reviewable) events refused because the tenant's review queue is full. */
+  quotaExceeded: number;
   ignored: Record<IgnoredEventReason, number>;
 };
 
@@ -130,6 +134,7 @@ export function emptyIntakeResult(): MailketingIntakeResult {
     duplicate: 0,
     unmatched: 0,
     stale: 0,
+    quotaExceeded: 0,
     ignored: { newsubscriber_ignored: 0, unknown_type: 0, invalid_event: 0 }
   };
 }
@@ -190,11 +195,21 @@ export async function recordMailketingEvents(
   callback: VerifiedMailketingCallback,
   events: readonly ParsedProviderEvent[],
   directory: EmailWebhookSubscriptionDirectory,
-  now: Date = new Date()
+  now: Date = new Date(),
+  maxPending: number = resolveEmailWebhookMaxPending()
 ): Promise<MailketingIntakeResult> {
   const result = emptyIntakeResult();
 
   return withTenantOrThrow(sql, callback.tenantId, async (tx) => {
+    // Audit M-2 of PR #1272: the review queue is bounded per tenant. Counted
+    // once per request (a request carries at most 25 events), so the bound can
+    // be overshot by at most that many under concurrency, never unboundedly.
+    const pendingRows = (await tx`
+      SELECT count(*)::int AS n FROM awcms_email_provider_events
+      WHERE tenant_id = ${callback.tenantId} AND review_status = 'pending'
+    `) as { n: number }[];
+    let pending = pendingRows[0]?.n ?? 0;
+
     for (const parsed of events) {
       if (!parsed.ok) {
         result.ignored[parsed.reason] += 1;
@@ -235,18 +250,28 @@ export async function recordMailketingEvents(
       const linkHash = event.type === "click" ? event.linkHash : null;
       const bounceClass = event.type === "bounce" ? event.bounceClass : null;
       const statusCode = event.type === "bounce" ? event.statusCode : null;
-      const reviewStatus =
-        event.type === "bounce" || event.type === "unsubscribe"
-          ? "pending"
-          : "informational";
-      const dedupeKey = providerEventDedupeKey({
-        espAccountId: callback.espAccountId,
-        type: event.type,
-        providerMessageId,
-        recipientHash,
-        reportedAtRaw: event.reportedAtRaw,
-        linkHash
-      });
+      const reviewable =
+        event.type === "bounce" || event.type === "unsubscribe";
+      const reviewStatus = reviewable ? "pending" : "informational";
+
+      if (reviewable && pending >= maxPending) {
+        result.quotaExceeded += 1;
+        continue;
+      }
+
+      const dedupeKey =
+        event.type === "click" || event.type === "unsubscribe"
+          ? providerEventDedupeKey({
+              espAccountId: callback.espAccountId,
+              type: event.type,
+              recipientHash,
+              reportedDay: reportedDay(reported.value!)
+            })
+          : providerEventDedupeKey({
+              espAccountId: callback.espAccountId,
+              type: event.type,
+              emailMessageId: messageId
+            });
 
       const inserted = (await tx`
         INSERT INTO awcms_email_provider_events
@@ -262,14 +287,17 @@ export async function recordMailketingEvents(
            ${maskIdentifierValue(normalized)}, ${bounceClass}, ${statusCode},
            ${linkHost}, ${linkHash}, ${reported.value}, ${dedupeKey},
            ${reviewStatus})
-        ON CONFLICT (tenant_id, dedupe_key) DO NOTHING
+        ON CONFLICT DO NOTHING
         RETURNING id
       `) as { id: string }[];
 
+      // `ON CONFLICT DO NOTHING` without a target: both the dedupe key and the
+      // one-pending-unsubscribe-per-recipient key (sql/379) collapse a repeat.
       if (inserted.length === 0) {
         result.duplicate += 1;
       } else {
         result.recorded += 1;
+        if (reviewable) pending += 1;
       }
     }
 

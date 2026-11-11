@@ -25,7 +25,6 @@ const MODULE_KEY = "email";
 export type EmailWebhookRejectionReason =
   | "proof_malformed"
   | "proof_mismatch"
-  | "pre_verify_rate_limited"
   | "denied_rate_limited"
   | "callback_rate_limited"
   | "too_large"

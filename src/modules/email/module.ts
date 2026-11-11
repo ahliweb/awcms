@@ -536,7 +536,7 @@ export const emailModule = defineModule({
       partition: {
         eligible: false,
         rationale:
-          "Bounded by what Mailketing reports about OUR messages (an event that binds to no message we sent is discarded), by a per-callback rate limit, and by a 90-day window; there is no long history to range-scan."
+          "Bounded by construction, not by the rate limit alone: an event that binds to no message this account sent is discarded; dedupe ignores the provider timestamp, so there is at most one row per (account, type, message) for bounce/open/delivered and one per (account, type, recipient, UTC day) for click/unsubscribe, with at most one pending unsubscribe per recipient; pending rows are capped per tenant (EMAIL_WEBHOOK_MAX_PENDING); and a 90-day window (365 for pending). There is no long history to range-scan."
       },
       archive: {
         archivable: false,

@@ -19,6 +19,7 @@ import {
   parseMailketingWebhookBody,
   parseReportedAt,
   providerEventDedupeKey,
+  reportedDay,
   summarizeClickedLink
 } from "../src/modules/email/domain/mailketing-webhook";
 import {
@@ -28,9 +29,20 @@ import {
   suppressionBlocksPurpose
 } from "../src/modules/email/domain/suppression-policy";
 import {
+  EMAIL_WEBHOOK_DENIED_RATE_PER_MINUTE,
   isEmailWebhookEnabled,
+  resolveEmailWebhookMaxPending,
   resolveEmailWebhookRatePerMinute
 } from "../src/modules/email/domain/email-webhook-config";
+import { isRequestReservedEmailCategory } from "../src/modules/email/domain/email-sender";
+import {
+  assertSecurityMailPermitted,
+  SECURITY_MAIL_GRANT,
+  SecurityMailNotPermittedError
+} from "../src/modules/email/application/security-mail-grant";
+import { handleMailketingWebhook } from "../src/modules/email/application/mailketing-webhook-handler";
+import { personOnlyRefusal } from "../src/modules/email/application/webhook-route-support";
+import { resetRateLimitForTests } from "../src/lib/security/rate-limit";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const SUB = "22222222-2222-4222-8222-222222222222";
@@ -181,40 +193,77 @@ describe("payload parsing (vendor-documented shapes)", () => {
     expect(parseMailketingWebhookBody(null)).toBeNull();
   });
 
-  test("reported time: zone-less is UTC, stale and future are out of window, unreadable is unknown", () => {
+  test("reported time is parsed strictly: two grammars, everything else is stale", () => {
     const now = new Date("2026-11-11T00:00:00Z");
 
+    // The vendor's documented zone-less form, read as UTC.
     expect(
       parseReportedAt("2026-11-10 10:00:00", now).value?.toISOString()
     ).toBe("2026-11-10T10:00:00.000Z");
-    expect(parseReportedAt("2026-09-01 10:00:00", now).outOfWindow).toBe(true);
-    expect(parseReportedAt("2026-11-12 10:00:00", now).outOfWindow).toBe(true);
-    expect(parseReportedAt("yesterday", now)).toEqual({
-      value: null,
-      outOfWindow: false
-    });
+    // ISO-8601 with an explicit zone.
+    expect(
+      parseReportedAt("2026-11-10T17:00:00+07:00", now).value?.toISOString()
+    ).toBe("2026-11-10T10:00:00.000Z");
+    // A WIB value read as UTC lands hours "ahead": still inside the skew.
+    expect(parseReportedAt("2026-11-11 06:00:00", now).outOfWindow).toBe(false);
+
+    for (const stale of [
+      null,
+      "yesterday",
+      "2026/11/10 10:00:00",
+      "2026-11-10",
+      "2026-11-10 10:00",
+      "2026-11-10T10:00:00",
+      "Tue, 10 Nov 2026 10:00:00 GMT",
+      "2026-02-31 10:00:00",
+      "2026-11-10 25:00:00",
+      "2026-09-01 10:00:00",
+      "2026-11-12 10:00:00",
+      "2026-11-11T00:10:00Z"
+    ]) {
+      expect(parseReportedAt(stale, now)).toEqual({
+        value: null,
+        outOfWindow: true
+      });
+    }
+
+    expect(reportedDay(new Date("2026-11-10T23:59:59Z"))).toBe("2026-11-10");
   });
 
-  test("the dedupe key changes with every named part and nothing else", () => {
-    const base = {
+  test("the dedupe key ignores the provider timestamp: per message, or per recipient and day", () => {
+    const message = {
       espAccountId: SUB,
       type: "bounce" as const,
-      providerMessageId: "m1",
-      recipientHash: "h",
-      reportedAtRaw: "d"
+      emailMessageId: "m1"
     };
-    const key = providerEventDedupeKey(base);
+    const key = providerEventDedupeKey(message);
 
-    expect(providerEventDedupeKey({ ...base })).toBe(key);
+    expect(providerEventDedupeKey({ ...message })).toBe(key);
 
     for (const change of [
       { espAccountId: TENANT },
       { type: "open" as const },
-      { providerMessageId: "m2" },
-      { recipientHash: "h2" },
-      { reportedAtRaw: "e" }
+      { emailMessageId: "m2" }
     ]) {
-      expect(providerEventDedupeKey({ ...base, ...change })).not.toBe(key);
+      expect(providerEventDedupeKey({ ...message, ...change })).not.toBe(key);
+    }
+
+    const recipient = {
+      espAccountId: SUB,
+      type: "unsubscribe" as const,
+      recipientHash: "h",
+      reportedDay: "2026-11-10"
+    };
+    const rkey = providerEventDedupeKey(recipient);
+
+    for (const change of [
+      { recipientHash: "h2" },
+      { reportedDay: "2026-11-11" },
+      { type: "click" as const }
+    ]) {
+      expect(providerEventDedupeKey({ ...recipient, ...change })).not.toBe(
+        rkey
+      );
     }
   });
 });
@@ -282,6 +331,13 @@ describe("switches and the session boundary", () => {
     expect(
       resolveEmailWebhookRatePerMinute({ EMAIL_WEBHOOK_RATE_PER_MINUTE: "5" })
     ).toBe(120);
+    expect(resolveEmailWebhookMaxPending({})).toBe(5000);
+    expect(
+      resolveEmailWebhookMaxPending({ EMAIL_WEBHOOK_MAX_PENDING: "50" })
+    ).toBe(5000);
+    expect(
+      resolveEmailWebhookMaxPending({ EMAIL_WEBHOOK_MAX_PENDING: "200" })
+    ).toBe(200);
   });
 
   test("only the callback path is session-free; its neighbours are not", () => {
@@ -310,22 +366,176 @@ describe("switches and the session boundary", () => {
     ).toBe(true);
   });
 
-  test("the route does no database work before the address bucket, the token shape and the size cap", () => {
-    const source = readFileSync(
-      "src/pages/api/v1/email/webhooks/mailketing/[token].ts",
-      "utf8"
-    );
-    const order = [
-      "isEmailWebhookEnabled()",
-      "email-webhook-ip:",
-      "parseCallbackToken(",
-      "readCappedText(",
-      "verifyMailketingCallback(",
-      "email-webhook-callback:",
-      "recordMailketingEvents("
-    ].map((needle) => source.indexOf(needle));
+  const handlerDeps = () => {
+    let sqlCalls = 0;
+    let directoryCalls = 0;
 
-    for (const index of order) expect(index).toBeGreaterThan(-1);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    return {
+      deps: {
+        env: { EMAIL_WEBHOOK_ENABLED: "true" } as NodeJS.ProcessEnv,
+        getSql: () => {
+          sqlCalls += 1;
+          throw new Error("no database in this unit test");
+        },
+        loadDirectory: async () => {
+          directoryCalls += 1;
+          return null;
+        }
+      },
+      sqlCalls: () => sqlCalls,
+      directoryCalls: () => directoryCalls
+    };
+  };
+  const post = (token: string, body = "{}") =>
+    new Request(`https://x.example/api/v1/email/webhooks/mailketing/${token}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body
+    });
+
+  test("off is a 404 that reads nothing", async () => {
+    resetRateLimitForTests();
+    const h = handlerDeps();
+    const response = await handleMailketingWebhook(
+      post("garbage"),
+      "garbage",
+      "198.51.100.1",
+      { ...h.deps, env: {} }
+    );
+
+    expect(response.status).toBe(404);
+    expect(h.sqlCalls() + h.directoryCalls()).toBe(0);
+  });
+
+  test("failed proofs from one address are throttled BEFORE any database work; another address is not", async () => {
+    resetRateLimitForTests();
+    const h = handlerDeps();
+    const statuses: number[] = [];
+
+    for (let i = 0; i <= EMAIL_WEBHOOK_DENIED_RATE_PER_MINUTE; i += 1) {
+      statuses.push(
+        (
+          await handleMailketingWebhook(
+            post("garbage"),
+            "garbage",
+            "198.51.100.7",
+            h.deps
+          )
+        ).status
+      );
+    }
+
+    expect(statuses.slice(0, EMAIL_WEBHOOK_DENIED_RATE_PER_MINUTE)).toEqual(
+      Array(EMAIL_WEBHOOK_DENIED_RATE_PER_MINUTE).fill(401)
+    );
+    expect(statuses.at(-1)).toBe(429);
+    expect(h.sqlCalls() + h.directoryCalls()).toBe(0);
+
+    const elsewhere = await handleMailketingWebhook(
+      post("garbage"),
+      "garbage",
+      "198.51.100.8",
+      h.deps
+    );
+
+    expect(elsewhere.status).toBe(401);
+  });
+
+  test("an oversized body is refused before any database work", async () => {
+    resetRateLimitForTests();
+    const h = handlerDeps();
+    const token = formatCallbackToken(TENANT, SUB, generateCallbackSecret());
+    const response = await handleMailketingWebhook(
+      post(token, "x".repeat(40 * 1024)),
+      token,
+      "198.51.100.9",
+      h.deps
+    );
+
+    expect(response.status).toBe(413);
+    expect(h.sqlCalls() + h.directoryCalls()).toBe(0);
+  });
+});
+
+describe("security mail is sent only by internal ports (audit H-1)", () => {
+  test("request-facing routes may not name a security category", () => {
+    for (const category of [
+      "auth.password_reset",
+      "auth.invitation",
+      "system.security_notice"
+    ]) {
+      expect(isRequestReservedEmailCategory(category)).toBe(true);
+    }
+
+    for (const category of ["system.announcement", "workflow.task_assigned"]) {
+      expect(isRequestReservedEmailCategory(category)).toBe(false);
+    }
+  });
+
+  test("enqueue refuses security mail without the grant", () => {
+    expect(() => assertSecurityMailPermitted("security", undefined)).toThrow(
+      SecurityMailNotPermittedError
+    );
+    expect(() =>
+      assertSecurityMailPermitted("security", SECURITY_MAIL_GRANT)
+    ).not.toThrow();
+    expect(() =>
+      assertSecurityMailPermitted("transactional", undefined)
+    ).not.toThrow();
+  });
+
+  test("only the internal security port holds the grant", () => {
+    const holders = [...new Bun.Glob("src/**/*.{ts,astro}").scanSync(".")]
+      .filter((file: string) =>
+        readFileSync(file, "utf8").includes("SECURITY_MAIL_GRANT")
+      )
+      .sort();
+
+    expect(holders).toEqual([
+      "src/modules/email/application/auth-notification-port-adapter.ts",
+      "src/modules/email/application/security-mail-grant.ts"
+    ]);
+  });
+
+  test("M-4 (M9): every high-risk webhook admin route refuses a machine credential", async () => {
+    // A machine credential cannot hold `approve` or `configure` at all (its
+    // write ceiling is create/update), so this guard is defence in depth that
+    // no route-level fixture can reach; it is pinned here instead.
+    const refusal = personOnlyRefusal({
+      context: { viaMachineCredential: true }
+    });
+
+    expect(refusal?.status).toBe(403);
+    expect(
+      ((await refusal!.json()) as { error: { code: string } }).error.code
+    ).toBe("INTERACTIVE_SESSION_REQUIRED");
+    expect(personOnlyRefusal({ context: {} })).toBeNull();
+
+    for (const route of [
+      "src/pages/api/v1/email/provider-events/[id]/review.ts",
+      "src/pages/api/v1/email/webhook-callbacks/index.ts",
+      "src/pages/api/v1/email/webhook-callbacks/[id]/revoke.ts"
+    ]) {
+      const source = readFileSync(route, "utf8");
+
+      expect(source).toContain(
+        "const refused = personOnlyRefusal(context.auth);"
+      );
+      expect(source).toContain("if (refused) return refused;");
+    }
+  });
+
+  test("both announcement routes refuse reserved categories before doing anything else with them", () => {
+    for (const route of [
+      "src/pages/api/v1/email/announcements/index.ts",
+      "src/pages/api/v1/email/announcements/preview.ts"
+    ]) {
+      const source = readFileSync(route, "utf8");
+
+      expect(source).toContain(
+        "isRequestReservedEmailCategory(input.templateKey)"
+      );
+      expect(source).toContain("TEMPLATE_CATEGORY_RESERVED_CODE");
+    }
   });
 });
