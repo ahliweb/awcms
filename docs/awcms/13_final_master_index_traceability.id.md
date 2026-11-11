@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](13_final_master_index_traceability.md)
 
-<!-- i18n-source-hash: sha256:bc172631c5174df4d38254be81be8580f0c08b40ce49ca544670b5896c086b9c -->
+<!-- i18n-source-hash: sha256:af07c8e7bfae70b0594f727c57f920716088dd6272faf934431536a92781b2b2 -->
 
 # Bagian 13 — Final Master Index dan Traceability Matrix
 
@@ -144,13 +144,13 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 diproduksi `bun run repo:inventory:generate` (`scripts/repo-inventory.ts`) dari
 registry modul, `sql/`, `tests/`, `src/pages/`, dan `docs/adr/`, dan
 `bun run repo:inventory:check` ada di rantai `bun run check`. **79 file migration nyata** di
-`sql/` (`001`..`081`), dipetakan ke **37 modul terdaftar** (urutan
+`sql/` (`001`..`081`), dipetakan ke **38 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
 `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`,
 `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`,
-`comments`, `idn-admin-regions`, `push-delivery`, `omes-control`, `inventory`, `tax`, `procurement`, `hr-workforce`, `whatsapp-delivery`, `booking`, `hr-commission`, `telegram-delivery` — **37 modul**; `news-portal` dilebur ke `blog-content` oleh
+`comments`, `idn-admin-regions`, `push-delivery`, `omes-control`, `inventory`, `tax`, `procurement`, `hr-workforce`, `whatsapp-delivery`, `booking`, `hr-commission`, `telegram-delivery` — **38 modul**; `news-portal` dilebur ke `blog-content` oleh
 [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md)). Tabel ini
 menggantikan versi sebelumnya yang mengutip nama file fiktif (mis.
 `003_awcms_catalog_inventory_schema.sql`,

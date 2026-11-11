@@ -16742,6 +16742,283 @@ High-risk (`configure`), audited at warning with the previous and new values. Re
 | 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
 | 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
 
+## Telegram Engagement
+
+Customer Telegram conversations through a tenant's own bots (telegram_engagement module, Issue #1156, ADR-0152), a context SEPARATE from the staff-only Telegram Delivery operations (unchanged; nothing shared). Many bots per tenant, each an existing channel account whose token is a write-only channel secret; one verified webhook per bot (an opaque per-bot callback token proven against a stored hash and a constant-time X-Telegram-Bot-Api-Secret-Token check before the body is read, one generic 401 for every failure, idempotent on (bot, update_id)); contacts exist only after the person sent /start, keyed per bot by a keyed hash with the chat id encrypted and never returned; /start grants support only, marketing and transactional need the explicit opt-in button with a notice version, /stop, a block and a provider 403 withdraw at once; replies and opted-in notices are queued and sent by a pinned-Bun dispatcher with per-bot pacing, 429 retry_after, a breaker and a daily ceiling. No operation accepts or returns a Telegram id, a chat id, a username, a token, a secret or a callback URL. Ships inert behind TELEGRAM_ENGAGEMENT_ENABLED.
+
+### `GET /api/v1/telegram-engagement/bots` — List the tenant's customer Telegram bots
+
+- **operationId**: `listTelegramEngagementBots`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.bots.read`. Only bots whose channel account the caller may see (channel-account assignments and business scope). Never a token, a secret, a callback URL or a header value.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                           |
+| ------ | --------------------------- | ---------------------------------------------------------------- |
+| 200    | The bots.                   | [`TelegramEngagementBotList`](#schema-telegramengagementbotlist) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                           |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                           |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                           |
+
+### `POST /api/v1/telegram-engagement/bots` — Register an existing telegram bot channel account for a verified webhook
+
+- **operationId**: `registerTelegramEngagementBot`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.bots.configure`, a signed-in person and, when the person has an MFA factor, a fresh step-up. Audited at warning. The bot is an existing `channel_accounts` account (provider `telegram`, kind `bot`, `external_id` = the bot's numeric id) whose token was stored write-only through `PUT /api/v1/channel-accounts/accounts/{id}/credential`. The deployment's STAFF bot is refused (`STAFF_BOT_REFUSED`). Creates a `pending` endpoint with a fresh webhook seed; the connector job then calls `getMe` (the bot id must equal the account's external id) and `setWebhook` and only then marks it `active`. No provider call happens in this request.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`TelegramEngagementRegisterBotRequest`](#schema-telegramengagementregisterbotrequest)
+
+**Responses**
+
+| Status | Description                                                        | Schema                                                                   |
+| ------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 201    | Registered (pending until the connector job finishes).             | [`TelegramEngagementBotEnvelope`](#schema-telegramengagementbotenvelope) |
+| 400    | Validation error.                                                  | [`ApiError`](#standard-error-envelope)                                   |
+| 401    | Missing or invalid session.                                        | [`ApiError`](#standard-error-envelope)                                   |
+| 403    | Access denied by RBAC/ABAC.                                        | [`ApiError`](#standard-error-envelope)                                   |
+| 404    | Resource not found.                                                | [`ApiError`](#standard-error-envelope)                                   |
+| 409    | `ALREADY_REGISTERED` or `IDEMPOTENCY_CONFLICT`.                    | [`ApiError`](#standard-error-envelope)                                   |
+| 422    | `ACCOUNT_NOT_USABLE`, `CREDENTIAL_MISSING` or `STAFF_BOT_REFUSED`. | [`ApiError`](#standard-error-envelope)                                   |
+| 503    | `KEY_RING_UNAVAILABLE` or `CHANNEL_ACCOUNTS_UNAVAILABLE`.          | [`ApiError`](#standard-error-envelope)                                   |
+
+### `POST /api/v1/telegram-engagement/bots/{id}/revoke` — Revoke a bot's webhook
+
+- **operationId**: `revokeTelegramEngagementBot`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.bots.configure`, a signed-in person and a conditional step-up. Audited at warning. `{id}` is the bot's channel account id. Ends the webhook at once, cancels every queued message of the bot, and asks the connector job to call `deleteWebhook`. The channel account and its credential are untouched (disconnect them through `channel_accounts`). The body must be empty or `{}`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                         |
+| ------ | --------------------------- | ------------------------------------------------------------------------------ |
+| 200    | Revoked.                    | [`TelegramEngagementRevokeEnvelope`](#schema-telegramengagementrevokeenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                         |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `IDEMPOTENCY_CONFLICT`.     | [`ApiError`](#standard-error-envelope)                                         |
+
+### `POST /api/v1/telegram-engagement/bots/{id}/rotate` — Rotate a bot's webhook secret (hard cut)
+
+- **operationId**: `rotateTelegramEngagementBot`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.bots.configure`, a signed-in person and a conditional step-up. Audited at warning. `{id}` is the bot's channel account id. The live endpoint is revoked in this transaction (its callback URL and header stop working at once, no grace window) and a new `pending` one is created; the connector job registers it with Telegram. Use after a BotFather token rotation (store the new token first) or a suspected leak. The body must be empty or `{}`. Every check registration makes is made again: a revoked, disabled or non-bot-token account, one with no stored token, and the deployment's staff bot are refused (`422`), and nothing is revoked.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                                                        | Schema                                                                   |
+| ------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 200    | Rotated.                                                           | [`TelegramEngagementBotEnvelope`](#schema-telegramengagementbotenvelope) |
+| 400    | Validation error.                                                  | [`ApiError`](#standard-error-envelope)                                   |
+| 401    | Missing or invalid session.                                        | [`ApiError`](#standard-error-envelope)                                   |
+| 403    | Access denied by RBAC/ABAC.                                        | [`ApiError`](#standard-error-envelope)                                   |
+| 404    | Resource not found.                                                | [`ApiError`](#standard-error-envelope)                                   |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                            | [`ApiError`](#standard-error-envelope)                                   |
+| 422    | `ACCOUNT_NOT_USABLE`, `CREDENTIAL_MISSING` or `STAFF_BOT_REFUSED`. | [`ApiError`](#standard-error-envelope)                                   |
+| 503    | `KEY_RING_UNAVAILABLE` or `CHANNEL_ACCOUNTS_UNAVAILABLE`.          | [`ApiError`](#standard-error-envelope)                                   |
+
+### `GET /api/v1/telegram-engagement/contacts` — List the contacts of one bot
+
+- **operationId**: `listTelegramEngagementContacts`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.contacts.read`. `accountId` is required: the contacts of ONE bot the caller may see (another tenant's or an invisible bot is the same `404`). Newest first, keyset-paginated. A masked label and states only, never a Telegram id, chat id, username or message.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `accountId`        | query  | yes      | string (uuid) |             |
+| `limit`            | query  | no       | integer       |             |
+| `cursor`           | query  | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                   |
+| ------ | --------------------------- | ------------------------------------------------------------------------ |
+| 200    | One page.                   | [`TelegramEngagementContactPage`](#schema-telegramengagementcontactpage) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                   |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                   |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                   |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                   |
+
+### `GET /api/v1/telegram-engagement/contacts/{id}` — Read one contact with its per-purpose eligibility
+
+- **operationId**: `getTelegramEngagementContact`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.contacts.read`. Unknown, another tenant's and a contact of a bot the caller may not see are ONE answer (`404`). Carries the eligibility for `support`, `transactional` and `marketing` and the status of the 20 latest outbound messages (never their text).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                                       |
+| ------ | --------------------------- | -------------------------------------------------------------------------------------------- |
+| 200    | The contact.                | [`TelegramEngagementContactDetailEnvelope`](#schema-telegramengagementcontactdetailenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                                       |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                                       |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                                       |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                                       |
+
+### `POST /api/v1/telegram-engagement/contacts/{id}/consent-prompts` — Queue the explicit opt-in step for marketing or transactional
+
+- **operationId**: `queueTelegramEngagementConsentPrompt`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.messages.create` and a signed-in person. Audited. Queues the notice text the controller approved, its version and two buttons (agree / decline). The prompt is itself a `support` message in the conversation the person opened. The person's press on THIS message, for this purpose and notice version, is the consent evidence; a press on any other message or version is ignored. `/start` never grants these purposes.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`TelegramEngagementConsentPromptRequest`](#schema-telegramengagementconsentpromptrequest)
+
+**Responses**
+
+| Status | Description                                                                          | Schema                                                                         |
+| ------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| 202    | Queued.                                                                              | [`TelegramEngagementQueuedEnvelope`](#schema-telegramengagementqueuedenvelope) |
+| 400    | Validation error.                                                                    | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session.                                                          | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC.                                                          | [`ApiError`](#standard-error-envelope)                                         |
+| 404    | Resource not found.                                                                  | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                                              | [`ApiError`](#standard-error-envelope)                                         |
+| 422    | `CONTACT_NOT_STARTED`, `CONSENT_WITHDRAWN`, `BOT_NOT_ACTIVE` or `CAPABILITY_DENIED`. | [`ApiError`](#standard-error-envelope)                                         |
+| 503    | `KEY_RING_UNAVAILABLE` or `CHANNEL_ACCOUNTS_UNAVAILABLE`.                            | [`ApiError`](#standard-error-envelope)                                         |
+
+### `POST /api/v1/telegram-engagement/contacts/{id}/erase` — End a contact (data-subject request or controller decision)
+
+- **operationId**: `eraseTelegramEngagementContact`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.contacts.delete`, a signed-in person and a conditional step-up. Audited at warning. Withdraws every purpose and cancels queued messages; the encrypted chat id, the masked label and the keyed hash are erased in ONE statement, so the row can no longer be found from the person's Telegram id and a returning person starts an unrelated contact. Consent evidence is kept for its proof window. Terminal; ending an ended contact answers `alreadyEnded: true`. The body must be empty or `{}`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                       |
+| ------ | --------------------------- | ---------------------------------------------------------------------------- |
+| 200    | Ended.                      | [`TelegramEngagementEraseEnvelope`](#schema-telegramengagementeraseenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                       |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                       |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                       |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                       |
+| 409    | `IDEMPOTENCY_CONFLICT`.     | [`ApiError`](#standard-error-envelope)                                       |
+
+### `POST /api/v1/telegram-engagement/contacts/{id}/messages` — Queue a reply or an opted-in notice to one contact
+
+- **operationId**: `queueTelegramEngagementMessage`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `telegram_engagement.messages.create` and a signed-in person. Audited (ids and the purpose, never the text). The ONLY addressee is an existing contact of this tenant, i.e. a person who started the bot: there is no field for a chat id, a handle, a phone number or an imported id, and an unknown field is a `400`. Eligibility is checked here and again at dispatch: `support` needs the `/start`, `transactional` and `marketing` need the explicit opt-in; the bot needs an active verified webhook and the `dm` capability with evidence. Sent later by the dispatcher; never a fallback to another channel or bot.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`TelegramEngagementSendMessageRequest`](#schema-telegramengagementsendmessagerequest)
+
+**Responses**
+
+| Status | Description                                                                                              | Schema                                                                         |
+| ------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 202    | Queued.                                                                                                  | [`TelegramEngagementQueuedEnvelope`](#schema-telegramengagementqueuedenvelope) |
+| 400    | Validation error.                                                                                        | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session.                                                                              | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC.                                                                              | [`ApiError`](#standard-error-envelope)                                         |
+| 404    | Resource not found.                                                                                      | [`ApiError`](#standard-error-envelope)                                         |
+| 409    | `IDEMPOTENCY_CONFLICT`.                                                                                  | [`ApiError`](#standard-error-envelope)                                         |
+| 422    | `CONTACT_NOT_STARTED`, `CONSENT_REQUIRED`, `CONSENT_WITHDRAWN`, `BOT_NOT_ACTIVE` or `CAPABILITY_DENIED`. | [`ApiError`](#standard-error-envelope)                                         |
+| 503    | `KEY_RING_UNAVAILABLE` or `CHANNEL_ACCOUNTS_UNAVAILABLE`.                                                | [`ApiError`](#standard-error-envelope)                                         |
+
+### `POST /api/v1/telegram-engagement/webhooks/{callbackToken}` — Receive a Telegram update for one customer bot (called by Telegram)
+
+- **operationId**: `telegramEngagementWebhook`
+- **Security**: none (public endpoint)
+
+Called by Telegram, never by a person. One route per customer bot: the `callbackToken` (`tge1.<tenantId>.<endpointId>.<secret>`) is generated by the server, registered with Telegram through `setWebhook`, and stored only as a SHA-256. The bot, the tenant and the business scope are resolved from it, NEVER from the update body.
+
+Order: the deployment switch (`404` when off, nothing probed); the token is parsed and the named tenant's endpoint row is proven against the stored hash; the account must be a live telegram bot and the tenant's module toggle on; the `X-Telegram-Bot-Api-Secret-Token` header must equal the per-bot value (derived from the endpoint's encrypted seed) in constant time. Only then is the body read (default body cap). Every failure before that point is the SAME `401` (a missing or wrong header, an unknown, malformed, revoked or foreign token, a disabled account), so the route is not an oracle; failures are counted and audited once a minute in aggregate on the platform tenant, and repeated failures from one address are throttled to `429`.
+
+Idempotent on `(bot account, update_id)`: a replay, a Telegram retry or a concurrent duplicate has ONE effect. Private chats only; a bot sender, a group or channel update, an edited message and a forwarded `/start` change nothing. `/start` creates a contact and grants `support` only; `/stop`, a block and the opt-in buttons record append-only consent evidence. Nothing here calls Telegram: the answer is `{}` or, for a consent button, the Bot API's webhook-reply form `answerCallbackQuery`.
+
+**Parameters**
+
+| Name                              | In     | Required | Type   | Description |
+| --------------------------------- | ------ | -------- | ------ | ----------- |
+| `callbackToken`                   | path   | yes      | string |             |
+| `X-Telegram-Bot-Api-Secret-Token` | header | yes      | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                                                     |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 200    | Received (or deliberately ignored, or an over-limit chat). Either an empty object or a webhook reply. | [`TelegramEngagementWebhookReply`](#schema-telegramengagementwebhookreply) |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope)                                     |
+| 401    | `UNAUTHORIZED`: the uniform refusal (see above).                                                      | [`ApiError`](#standard-error-envelope)                                     |
+| 404    | The module is switched off on this deployment.                                                        | [`ApiError`](#standard-error-envelope)                                     |
+| 413    | The body is larger than the cap.                                                                      | [`ApiError`](#standard-error-envelope)                                     |
+| 429    | Rate limited (per address or per bot endpoint). Telegram retries.                                     | [`ApiError`](#standard-error-envelope)                                     |
+| 503    | The database is unavailable. Telegram retries; the replay key makes the retry safe.                   | [`ApiError`](#standard-error-envelope)                                     |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -21032,6 +21309,409 @@ Enum values: `pending_confirmation`, `active`, `revoked`, `suspended`.
 "pending_confirmation"
 ```
 
+### Schema: TelegramEngagementBot
+
+| Field                   | Type                                           | Required | Nullable | Description |
+| ----------------------- | ---------------------------------------------- | -------- | -------- | ----------- |
+| `endpointId`            | string (uuid)                                  | no       | no       |             |
+| `accountId`             | string (uuid)                                  | no       | no       |             |
+| `accountName`           | string                                         | no       | no       |             |
+| `accountStatus`         | string                                         | no       | no       |             |
+| `businessScope`         | object                                         | no       | yes      |             |
+| `state`                 | enum(`pending`, `active`, `failed`, `revoked`) | no       | no       |             |
+| `pendingProviderAction` | enum(`set`, `delete`)                          | no       | yes      |             |
+| `verifiedBotId`         | string                                         | no       | yes      |             |
+| `botUsername`           | string                                         | no       | yes      |             |
+| `lastErrorCode`         | string                                         | no       | yes      |             |
+| `dailySendCeiling`      | integer                                        | no       | no       |             |
+| `breakerOpenUntil`      | string (date-time)                             | no       | yes      |             |
+| `activatedAt`           | string (date-time)                             | no       | yes      |             |
+| `lastUpdateAt`          | string (date-time)                             | no       | yes      |             |
+| `createdAt`             | string (date-time)                             | no       | no       |             |
+| `revokedAt`             | string (date-time)                             | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "endpointId": "00000000-0000-0000-0000-000000000000",
+  "accountId": "00000000-0000-0000-0000-000000000000",
+  "accountName": "string",
+  "accountStatus": "string",
+  "businessScope": {
+    "type": "string",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "state": "pending",
+  "pendingProviderAction": "set",
+  "verifiedBotId": "string",
+  "botUsername": "string",
+  "lastErrorCode": "string",
+  "dailySendCeiling": 0,
+  "breakerOpenUntil": "2026-01-01T00:00:00.000Z",
+  "activatedAt": "2026-01-01T00:00:00.000Z",
+  "lastUpdateAt": "2026-01-01T00:00:00.000Z",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "revokedAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: TelegramEngagementBotEnvelope
+
+| Field     | Type                                                     | Required | Nullable | Description |
+| --------- | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `success` | enum(`true`)                                             | no       | no       |             |
+| `data`    | [`TelegramEngagementBot`](#schema-telegramengagementbot) | no       | no       |             |
+| `meta`    | object                                                   | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "endpointId": "00000000-0000-0000-0000-000000000000",
+    "accountId": "00000000-0000-0000-0000-000000000000",
+    "accountName": "string",
+    "accountStatus": "string",
+    "businessScope": {
+      "type": "string",
+      "id": "00000000-0000-0000-0000-000000000000"
+    },
+    "state": "pending",
+    "pendingProviderAction": "set",
+    "verifiedBotId": "string",
+    "botUsername": "string",
+    "lastErrorCode": "string",
+    "dailySendCeiling": 0,
+    "breakerOpenUntil": "2026-01-01T00:00:00.000Z",
+    "activatedAt": "2026-01-01T00:00:00.000Z",
+    "lastUpdateAt": "2026-01-01T00:00:00.000Z",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "revokedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementBotList
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "endpointId": "00000000-0000-0000-0000-000000000000",
+        "accountId": "00000000-0000-0000-0000-000000000000",
+        "accountName": "string",
+        "accountStatus": "string",
+        "businessScope": {
+          "type": "string",
+          "id": "00000000-0000-0000-0000-000000000000"
+        },
+        "state": "pending",
+        "pendingProviderAction": "set",
+        "verifiedBotId": "string",
+        "botUsername": "string",
+        "lastErrorCode": "string",
+        "dailySendCeiling": 0,
+        "breakerOpenUntil": "2026-01-01T00:00:00.000Z",
+        "activatedAt": "2026-01-01T00:00:00.000Z",
+        "lastUpdateAt": "2026-01-01T00:00:00.000Z",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "revokedAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementConsentPromptRequest
+
+| Field           | Type                               | Required | Nullable | Description |
+| --------------- | ---------------------------------- | -------- | -------- | ----------- |
+| `purpose`       | enum(`transactional`, `marketing`) | yes      | no       |             |
+| `noticeVersion` | string                             | yes      | no       |             |
+| `noticeText`    | string                             | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "purpose": "transactional",
+  "noticeVersion": "string",
+  "noticeText": "string"
+}
+```
+
+### Schema: TelegramEngagementContact
+
+| Field           | Type                                           | Required | Nullable | Description                                                                                                       |
+| --------------- | ---------------------------------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `id`            | string (uuid)                                  | no       | no       |                                                                                                                   |
+| `accountId`     | string (uuid)                                  | no       | no       |                                                                                                                   |
+| `label`         | string                                         | no       | yes      | A masked label derived from the keyed hash (`TG-1A2B3C`); carries no digit of the Telegram id. `null` once ended. |
+| `state`         | enum(`started`, `stopped`, `blocked`, `ended`) | no       | no       |                                                                                                                   |
+| `startParam`    | string                                         | no       | yes      | The first `/start` deep-link parameter (provenance, never consent).                                               |
+| `startedAt`     | string (date-time)                             | no       | no       |                                                                                                                   |
+| `lastInboundAt` | string (date-time)                             | no       | yes      |                                                                                                                   |
+| `stoppedAt`     | string (date-time)                             | no       | yes      |                                                                                                                   |
+| `blockedAt`     | string (date-time)                             | no       | yes      |                                                                                                                   |
+| `endedAt`       | string (date-time)                             | no       | yes      |                                                                                                                   |
+| `privacyClass`  | enum(`conversation_meta`)                      | no       | no       |                                                                                                                   |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "accountId": "00000000-0000-0000-0000-000000000000",
+  "label": "string",
+  "state": "started",
+  "startParam": "string",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "lastInboundAt": "2026-01-01T00:00:00.000Z",
+  "stoppedAt": "2026-01-01T00:00:00.000Z",
+  "blockedAt": "2026-01-01T00:00:00.000Z",
+  "endedAt": "2026-01-01T00:00:00.000Z",
+  "privacyClass": "conversation_meta"
+}
+```
+
+### Schema: TelegramEngagementContactDetailEnvelope
+
+| Field     | Type                                                                      | Required | Nullable | Description |
+| --------- | ------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `success` | enum(`true`)                                                              | no       | no       |             |
+| `data`    | [`TelegramEngagementContact`](#schema-telegramengagementcontact) & object | no       | no       |             |
+| `meta`    | object                                                                    | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "accountId": "00000000-0000-0000-0000-000000000000",
+    "label": "string",
+    "state": "started",
+    "startParam": "string",
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "lastInboundAt": "2026-01-01T00:00:00.000Z",
+    "stoppedAt": "2026-01-01T00:00:00.000Z",
+    "blockedAt": "2026-01-01T00:00:00.000Z",
+    "endedAt": "2026-01-01T00:00:00.000Z",
+    "privacyClass": "conversation_meta",
+    "eligibility": {
+      "support": {
+        "eligible": false,
+        "reason": "CONTACT_NOT_STARTED"
+      },
+      "transactional": {
+        "eligible": false,
+        "reason": "CONTACT_NOT_STARTED"
+      },
+      "marketing": {
+        "eligible": false,
+        "reason": "CONTACT_NOT_STARTED"
+      }
+    },
+    "recentMessages": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "purpose": "support",
+        "kind": "text",
+        "status": "queued",
+        "failureCode": "string",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "sentAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementContactPage
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "accountId": "00000000-0000-0000-0000-000000000000",
+        "label": "string",
+        "state": "started",
+        "startParam": "string",
+        "startedAt": "2026-01-01T00:00:00.000Z",
+        "lastInboundAt": "2026-01-01T00:00:00.000Z",
+        "stoppedAt": "2026-01-01T00:00:00.000Z",
+        "blockedAt": "2026-01-01T00:00:00.000Z",
+        "endedAt": "2026-01-01T00:00:00.000Z",
+        "privacyClass": "conversation_meta"
+      }
+    ],
+    "nextCursor": "string"
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementEligibility
+
+| Field      | Type                                                                         | Required | Nullable | Description |
+| ---------- | ---------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `eligible` | boolean                                                                      | no       | no       |             |
+| `reason`   | enum(`CONTACT_NOT_STARTED`, `CONSENT_REQUIRED`, `CONSENT_WITHDRAWN`, `null`) | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "eligible": false,
+  "reason": "CONTACT_NOT_STARTED"
+}
+```
+
+### Schema: TelegramEngagementEraseEnvelope
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "state": "ended",
+    "alreadyEnded": false,
+    "withdrawnPurposes": ["support"],
+    "cancelledMessages": 0
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementQueuedEnvelope
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "contactId": "00000000-0000-0000-0000-000000000000",
+    "status": "queued"
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementRegisterBotRequest
+
+| Field              | Type          | Required | Nullable | Description                                                                      |
+| ------------------ | ------------- | -------- | -------- | -------------------------------------------------------------------------------- |
+| `accountId`        | string (uuid) | yes      | no       | A telegram bot channel account of this tenant.                                   |
+| `dailySendCeiling` | integer       | no       | yes      | Per-bot daily outbound ceiling; never above the deployment cap. Defaults to 500. |
+
+**Example**
+
+```json
+{
+  "accountId": "00000000-0000-0000-0000-000000000000",
+  "dailySendCeiling": 1
+}
+```
+
+### Schema: TelegramEngagementRevokeEnvelope
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "accountId": "00000000-0000-0000-0000-000000000000",
+    "revoked": true,
+    "cancelledMessages": 0
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: TelegramEngagementSendMessageRequest
+
+| Field     | Type                                          | Required | Nullable | Description                                                                                          |
+| --------- | --------------------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `purpose` | enum(`support`, `transactional`, `marketing`) | yes      | no       |                                                                                                      |
+| `text`    | string                                        | yes      | no       | Plain text; control characters are refused. Encrypted at rest and cleared when the message is final. |
+
+**Example**
+
+```json
+{
+  "purpose": "support",
+  "text": "string"
+}
+```
+
+### Schema: TelegramEngagementWebhookReply
+
+`{}`, or the Bot API webhook-reply form for a consent button: `{ "method": "answerCallbackQuery", "callback_query_id": "..." }`.
+
+| Field               | Type                        | Required | Nullable | Description |
+| ------------------- | --------------------------- | -------- | -------- | ----------- |
+| `method`            | enum(`answerCallbackQuery`) | no       | no       |             |
+| `callback_query_id` | string                      | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "method": "answerCallbackQuery",
+  "callback_query_id": "string"
+}
+```
+
 ### Schema: TelegramMessageStatus
 
 Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`, `expired`.
@@ -21482,7 +22162,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (82)
+### Channels (84)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -21549,6 +22229,8 @@ consumer/subscriber contract in this file).
 - `awcms.tax.rule_version.published` — A tax rule version was published and became the rule in force from its effective date (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishRuleVersionPublishedEvent`, called by `POST /api/v1/tax/rule-versions/{id}/publish` inside the same transaction as the publish. Ordered per profile (`orderKey` `tax.profile:<code>`). The payload carries identifiers, codes and dates only — `ruleVersionId`, `profileCode`, `versionNo`, `jurisdictionCode`, `effectiveFrom`, and `closedVersionId` (the predecessor whose window this ended, or null).
 - `awcms.tax.snapshot.finalised` — A document's tax was finalised into an immutable snapshot (ADR-0127). Producer: `tax/application/tax-event-publisher.ts`'s `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots` only when a NEW snapshot is written — an idempotent replay publishes nothing. The payload carries the opaque document reference, the rule version used, the tax date and decimal-string totals; no customer data of any kind.
 - `awcms.tax.snapshot.reversed` — A finalised document's tax was reversed from its original snapshot (refund or return, ADR-0127). Producer: `publishSnapshotEvent`, called by `POST /api/v1/tax/snapshots/{id}/reverse` only when a NEW reversal is written. Same payload shape as `snapshot.finalised`; the totals are negative decimal strings and `originalSnapshotId` is set.
+- `awcms.telegram_engagement.consent.changed` — A customer Telegram contact's consent changed for one purpose (ADR-0152 section 6, Issue #1156), in the transaction that recorded the append-only evidence. Producer: `telegram-engagement/application/contact-directory.ts`'s `recordConsent`. The envelope `payload` is `TelegramEngagementConsentChanged`: the channel account id, the opaque contact reference, the purpose, the action, the method and the notice version (`privacyClass: consent`). Downstream consumers MUST honour an `opt_out` at once. Never the evidence payload or an identity.
+- `awcms.telegram_engagement.interaction.received` — A verified customer Telegram update was ingested, in the transaction that receipted it (ADR-0152, ADR-0150 section 3 envelope, Issue #1156). Producer: `telegram-engagement/application/webhook-ingest.ts`'s `ingestVerifiedUpdate`, for a `/start` (`eventKind: command`) or a message (`eventKind: message`) from a contact who started the bot. The envelope `payload` is `TelegramEngagementInteractionReceived` (contract version 1): the channel account id, the opaque ACCOUNT-SCOPED contact reference as both sender and conversation, the per-bot `providerEventId` (the update id, never compared across bots), the content KINDS, whether it was forwarded, `provenance: secret_header` and the `privacyClass`. Never a Telegram user id, chat id, username, display name, phone number, message text, token or header; the body is not kept upstream (ADR-0150 section 1). A replayed or duplicate update publishes nothing. The intended consumer is the cross-channel inbox (#1164) and the downstream CRM adapter (awcms-one #460).
 - `awcms.website_engagement.submission.received` — A website form or interaction was accepted by the public intake, in the transaction that stored it (ADR-0155, Issue #1153). Producer: `website-engagement/application/submission-intake.ts`'s `recordSubmission`. The envelope `payload` is `WebsiteEngagementSubmissionReceived` (contract version 1): the opaque `submissionId`, the `sourceId`/`sourceCode`, the client's `clientEventId`, the `kind`, the authenticated `provenance` (source authenticated, Origin host verified, which `challenge` protected it), the explicit `consent` provenance, the source `attribution`, which `identifiers` the submission holds and its `privacyClass`. Never a name, address, phone number or message: a CRM adapter reads those through `POST /api/v1/website-engagement/submissions/{id}/reveal` under its own permission. A duplicate submission publishes nothing. This event creates, matches and merges no person; linking to one is downstream, through `contact_link_evidence` (ADR-0148 section 6).
 - `awcms.website_engagement.submission.withdrawn` — A controller withdrew a website submission (ADR-0155, Issue #1153). Producer: `website-engagement/application/submission-directory.ts`'s `withdrawSubmission`. The envelope `payload` is `WebsiteEngagementSubmissionWithdrawn`. Downstream consumers MUST honour it. Idempotent: withdrawing an already withdrawn submission publishes nothing.
 - `awcms.whatsapp.consent.granted` — A recipient's WhatsApp marketing consent was recorded (ADR-0133, Issue #963). Producer: `whatsapp-delivery/application/whatsapp-consent- directory.ts`'s `grantMarketingConsent`. Payload: `consentId`, `purpose`, `recipientMasked`, and since Issue #1231 M4 `businessScope` (`{type, id}`, the brand THIS grant was collected for; absent for an unscoped grant, so that payload is unchanged). Never the number.

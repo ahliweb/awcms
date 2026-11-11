@@ -36,6 +36,7 @@ import { channelAccountsModule } from "./channel-accounts/module";
 import { websiteEngagementModule } from "./website-engagement/module";
 import { socialPublishingModule } from "./social-publishing/module";
 import { crmLeadsModule } from "./crm-leads/module";
+import { telegramEngagementModule } from "./telegram-engagement/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -272,7 +273,17 @@ const baseModules: ModuleDescriptor[] = [
   // tenant_admin/identity_access/logging/module_management/domain_event_runtime/
   // profile_identity (all above); nothing depends on it. See
   // src/modules/crm-leads/module.ts's `description`.
-  crmLeadsModule
+  crmLeadsModule,
+  // Admitted by ADR-0152 (Issue #1156): CUSTOMER Telegram conversations through
+  // a tenant's own bots, a context separate from the staff-only
+  // `telegram_delivery` (unchanged; nothing is shared). Per-bot verified
+  // webhooks, account-scoped contacts, append-only consent evidence and its own
+  // outbound queue. Depends on tenant_admin/identity_access/logging/
+  // module_management/domain_event_runtime/channel_accounts (all above), so the
+  // DAG stays acyclic; nothing depends on it. `experimental` and OFF by default
+  // (TELEGRAM_ENGAGEMENT_ENABLED). See
+  // src/modules/telegram-engagement/module.ts's `description`.
+  telegramEngagementModule
 ];
 
 /**

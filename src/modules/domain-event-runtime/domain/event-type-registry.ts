@@ -228,6 +228,18 @@ const CRM_LEADS_EVENT_DESCRIPTIONS: readonly [string, string][] = [
   ]
 ];
 
+/**
+ * `telegram_engagement` (ADR-0152, Issue #1156). Declared here -- not imported
+ * from `telegram-engagement/domain/telegram-engagement-constants.ts` -- for the
+ * same reason as `website_engagement` above. The literals are kept identical by
+ * the AsyncAPI parity gate and by `tests/telegram-engagement-contract.test.ts`.
+ */
+export const TELEGRAM_ENGAGEMENT_EVENT_VERSION = "1.0";
+export const TELEGRAM_ENGAGEMENT_INTERACTION_RECEIVED_EVENT_TYPE =
+  "awcms.telegram_engagement.interaction.received";
+export const TELEGRAM_ENGAGEMENT_CONSENT_CHANGED_EVENT_TYPE =
+  "awcms.telegram_engagement.consent.changed";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
     ...CRM_LEADS_EVENT_DESCRIPTIONS.map(([eventType, description]) => ({
@@ -235,6 +247,18 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
       eventVersion: CRM_LEADS_EVENT_VERSION,
       description
     })),
+    {
+      eventType: TELEGRAM_ENGAGEMENT_INTERACTION_RECEIVED_EVENT_TYPE,
+      eventVersion: TELEGRAM_ENGAGEMENT_EVENT_VERSION,
+      description:
+        "A verified customer Telegram update was ingested (ADR-0150 envelope), in the transaction that receipted it: a message or a command from a contact who started the bot. Carries the channel account id, the opaque account-scoped contact reference as sender and conversation, the per-bot update id, a closed event kind, the content KINDS, the provenance (secret_header) and the privacy class; never a Telegram user id, chat id, username, display name, message text, token or header."
+    },
+    {
+      eventType: TELEGRAM_ENGAGEMENT_CONSENT_CHANGED_EVENT_TYPE,
+      eventVersion: TELEGRAM_ENGAGEMENT_EVENT_VERSION,
+      description:
+        "A customer Telegram contact's consent changed for one purpose (support from /start; marketing or transactional through the explicit button; a withdrawal through /stop, the button, a block, a provider 403 or the controller), in the transaction that recorded the evidence. Carries the channel account id, the opaque contact reference, the purpose, the action, the method and the notice version; never the evidence payload or any identity."
+    },
     {
       eventType: SOCIAL_PUBLICATION_QUEUED_EVENT_TYPE,
       eventVersion: SOCIAL_PUBLISHING_EVENT_VERSION,

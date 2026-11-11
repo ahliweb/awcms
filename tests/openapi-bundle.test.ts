@@ -530,6 +530,13 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // by its secret header and individually justified in
       // ALLOWED_PUBLIC_OPERATIONS.
       "Telegram Delivery",
+      // "Telegram Engagement" (telegram_engagement, ADR-0152, Issue #1156) --
+      // genuinely new surface: customer bots, contacts, consent prompts and
+      // the outbound queue. The ONE anonymous operation is the per-bot webhook
+      // (`telegramEngagementWebhook`), authenticated by its callback token and
+      // the constant-time secret header, individually justified in
+      // ALLOWED_PUBLIC_OPERATIONS.
+      "Telegram Engagement",
       "Tenant Domains",
       "Theming",
       "Visitor Analytics",

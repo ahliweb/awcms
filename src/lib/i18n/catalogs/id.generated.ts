@@ -2381,6 +2381,7 @@ export const ID_CATALOG: CompiledCatalog = {
   "Taxable": ["Kena pajak"],
   "Telegram": ["Telegram"],
   "Telegram Delivery": ["Pengiriman Telegram"],
+  "Telegram Engagement": ["Keterlibatan Telegram"],
   "Telegram carries operational and staff alerts only. It is off unless the deployment, this tenant and the person have each turned it on.": ["Telegram hanya membawa notifikasi operasional dan staf. Telegram mati kecuali deployment, tenant ini, dan orangnya masing-masing menyalakannya."],
   "Telegram could not reach the chat": ["Telegram tidak dapat menjangkau chat"],
   "Telegram delivery": ["Pengiriman Telegram"],

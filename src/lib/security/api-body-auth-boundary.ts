@@ -279,6 +279,12 @@ export const SESSION_FREE_BODY_ENDPOINTS: readonly SessionFreeBodyEndpoint[] = [
     reason:
       "Telegram's Bot API calls it, never a person. The credential is X-Telegram-Bot-Api-Secret-Token, compared in constant time before any body read; off (TELEGRAM_ENABLED unset) it is a 404 (ADR-0140 section 7)."
   },
+  {
+    method: "POST",
+    pattern: "/api/v1/telegram-engagement/webhooks/:callbackToken",
+    reason:
+      "Telegram's Bot API calls it for one CUSTOMER bot, never a person (ADR-0152 section 4, Issue #1156). The credential is the opaque per-bot callback token in the path (proven against a stored SHA-256; it names the tenant and endpoint, nothing in the body does) plus X-Telegram-Bot-Api-Secret-Token compared in constant time before the body is read; every failure is one generic 401; off (TELEGRAM_ENGAGEMENT_ENABLED unset) it is a 404."
+  },
 
   // ---- Retired: answers 410 without reading anything ----
   {
