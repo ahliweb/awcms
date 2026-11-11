@@ -1550,8 +1550,8 @@ describe("static contracts", () => {
     );
     // Issue #1160 audit M3: no longer a substring pin. The exact normalised
     // expression (which names `whatsapp_cloud`) and a behavioural probe.
-    expect(readiness).toContain(
-      "normalizePolicyExpression(expr) !== WORKER_SECRET_POLICY_EXPRESSION"
+    expect(readiness.replace(/\s+/g, " ")).toContain(
+      "normalizeWorkerPolicyExpression(expr) !== WORKER_SECRET_POLICY_EXPRESSION"
     );
     expect(readiness).toContain("a.provider=any(array['whatsapp_cloud'");
     expect(readiness).toContain("probeWorkerSecretVisibility(sql)");

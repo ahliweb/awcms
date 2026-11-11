@@ -1888,7 +1888,7 @@ export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
  * lower-cased, so the pin is exact about every predicate, literal and operator
  * while not depending on how a server version indents its deparse.
  */
-export function normalizePolicyExpression(expression: string): string {
+export function normalizeWorkerPolicyExpression(expression: string): string {
   return expression
     .replace(/::text/g, "")
     .replace(/\s+/g, "")
@@ -2864,7 +2864,8 @@ export async function checkWorkerSetupRoleGrants(
 
       if (
         expr === null ||
-        normalizePolicyExpression(expr) !== WORKER_SECRET_POLICY_EXPRESSION
+        normalizeWorkerPolicyExpression(expr) !==
+          WORKER_SECRET_POLICY_EXPRESSION
       ) {
         findings.push(
           `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, exactly the sql/348 expression: WhatsApp sender credentials and the token of a CONNECTED Mailketing esp_account) is missing or differs from the pinned expression (a compromised dispatcher could read other tenants' social, bot, refresh or sender tokens)`
