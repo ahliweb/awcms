@@ -36,6 +36,8 @@ import { channelAccountsModule } from "./channel-accounts/module";
 import { websiteEngagementModule } from "./website-engagement/module";
 import { socialPublishingModule } from "./social-publishing/module";
 import { crmLeadsModule } from "./crm-leads/module";
+import { telegramEngagementModule } from "./telegram-engagement/module";
+import { crmFollowUpModule } from "./crm-follow-up/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -272,7 +274,24 @@ const baseModules: ModuleDescriptor[] = [
   // tenant_admin/identity_access/logging/module_management/domain_event_runtime/
   // profile_identity (all above); nothing depends on it. See
   // src/modules/crm-leads/module.ts's `description`.
-  crmLeadsModule
+  crmLeadsModule,
+  // Admitted by ADR-0152 (Issue #1156): CUSTOMER Telegram conversations through
+  // a tenant's own bots, a context separate from the staff-only
+  // `telegram_delivery` (unchanged; nothing is shared). Per-bot verified
+  // webhooks, account-scoped contacts, append-only consent evidence and its own
+  // outbound queue. Depends on tenant_admin/identity_access/logging/
+  // module_management/domain_event_runtime/channel_accounts (all above), so the
+  // DAG stays acyclic; nothing depends on it. `experimental` and OFF by default
+  // (TELEGRAM_ENGAGEMENT_ENABLED). See
+  // src/modules/telegram-engagement/module.ts's `description`.
+  telegramEngagementModule,
+  // Admission PROPOSED by ADR-0159 (Issue #1165): rule-versioned STAFF
+  // follow-up tasks keyed by crm_leads events, with stop signals that win every
+  // race. `experimental` and OFF at three levels (CRM_FOLLOW_UP_ENABLED, Module
+  // Management, its own tenant switch). Depends on crm_leads (above) for its
+  // events; consumes `email`'s workflow_notification capability optionally.
+  // See src/modules/crm-follow-up/module.ts's `description`.
+  crmFollowUpModule
 ];
 
 /**

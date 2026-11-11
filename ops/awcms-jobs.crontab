@@ -71,6 +71,16 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # retention).
 0 4 * * * /usr/bin/flock -n $AWCMS_LOCK/comments-retention.lock $AWCMS_RUN_JOB comments:retention >> $AWCMS_JOB_LOG/comments-retention.log 2>&1
 
+# crm_follow_up — Escalates open follow-up tasks whose escalation instant has
+# passed (status, action row, an escalation notice for the rule's recipient)
+# and hands due staff notices to the workflow_notification port (e-mail
+# outbox) after re-checking that the task is live, the lead has no stop
+# signal, the recipient is still the assignee and an ACTIVE user, the notice
+# is inside the rule's working hours and the recipient is under the tenant's
+# hourly cap; otherwise the notice is cancelled, suppressed or deferred. Never
+# sends anything to a lead.
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/crm-follow-up-dispatch.lock $AWCMS_RUN_JOB crm-follow-up:dispatch >> $AWCMS_JOB_LOG/crm-follow-up-dispatch.log 2>&1
+
 # data_lifecycle — Archive (where applicable) and purge rows past retention
 # for every registered generic-execution descriptor; record a dry-run backlog
 # snapshot for every delegated (existing-adopter) descriptor.
@@ -198,6 +208,13 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # sync_storage — Delete terminal object sync queue rows past their retention
 # window (legal-hold gated, bounded batches).
 35 3 * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-purge.lock $AWCMS_RUN_JOB sync:objects:purge >> $AWCMS_JOB_LOG/sync-objects-purge.log 2>&1
+
+# telegram_engagement — For every active tenant: finish bot registrations,
+# rotations and revocations with Telegram (getMe, setWebhook, deleteWebhook)
+# and drain the customer outbound queue (claim lease, re-check consent and
+# capability, per-bot and per-chat pacing, 429 retry_after, per-bot breaker
+# and daily ceiling, uncertain sends never retried).
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/telegram-engagement-dispatch.lock $AWCMS_RUN_JOB telegram-engagement:dispatch >> $AWCMS_JOB_LOG/telegram-engagement-dispatch.log 2>&1
 
 # telegram_delivery — Drain the due Telegram queue (tenant gate, binding and
 # principal re-check, per-chat spacing, global rate ceiling, retry_after

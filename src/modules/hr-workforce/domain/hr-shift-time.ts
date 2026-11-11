@@ -22,31 +22,20 @@
  * A duration is ELAPSED time: the end is the start plus the minutes, so a shift
  * that spans a clock change is 8 real hours long, whatever the wall clock says.
  */
+import {
+  canonicalTimeZone,
+  zonedPartsFormatter
+} from "../../../lib/time/zoned-formatter";
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 
-const formatters = new Map<string, Intl.DateTimeFormat>();
-
-function formatterFor(zone: string): Intl.DateTimeFormat {
-  let formatter = formatters.get(zone);
-
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: zone,
-      hourCycle: "h23",
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      second: "numeric"
-    });
-    formatters.set(zone, formatter);
-  }
-
-  return formatter;
-}
+/**
+ * Formatters come from the shared, BOUNDED cache keyed by canonical zone name
+ * (`src/lib/time/zoned-formatter.ts`, audit of PR #1266 HIGH-1): this module
+ * used to keep its own unbounded map, filled from request validation.
+ */
+const formatterFor = zonedPartsFormatter;
 
 /** An IANA-looking zone the runtime knows. The database re-checks it against `pg_timezone_names`. */
 export function isValidTimeZone(zone: unknown): zone is string {
@@ -54,12 +43,8 @@ export function isValidTimeZone(zone: unknown): zone is string {
     return false;
   }
 
-  try {
-    formatterFor(zone);
-    return true;
-  } catch {
-    return false;
-  }
+  // Validation fills no cache (a throw-away formatter, see the shared helper).
+  return canonicalTimeZone(zone) !== null;
 }
 
 /** The zone's UTC offset in minutes at an instant (positive east of Greenwich). */

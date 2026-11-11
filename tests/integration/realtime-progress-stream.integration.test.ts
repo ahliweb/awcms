@@ -187,13 +187,26 @@ async function seedOffice(code: string): Promise<string> {
   return rows[0]!.id;
 }
 
-async function holdScope(tenantUserId: string, officeId: string) {
+/**
+ * An assignment ALREADY IN FORCE when the next request starts.
+ *
+ * `effective_from` is stated, not defaulted (#1171 flake): the column defaults to
+ * the database's `now()` (microseconds), while a request compares it with its own
+ * `new Date()` (milliseconds, truncated). A request that began within the same
+ * millisecond — about 1 ms after the insert on a fast runner — saw the
+ * assignment as not yet effective. `startsIn` writes a PENDING one on purpose.
+ */
+async function holdScope(
+  tenantUserId: string,
+  officeId: string,
+  startsIn = "-1 minute"
+) {
   await admin()`
     INSERT INTO awcms_business_scope_assignments
       (tenant_id, tenant_user_id, scope_type, scope_id,
-       granted_by_tenant_user_id)
+       granted_by_tenant_user_id, effective_from)
     VALUES (${tenantId}, ${tenantUserId}, 'office', ${officeId},
-            ${ownerTenantUserId})
+            ${ownerTenantUserId}, now() + ${startsIn}::interval)
   `;
 }
 
@@ -955,6 +968,54 @@ suite("realtime progress stream: whatsapp.sender.progress (#1171)", () => {
     await resumed.waitFor((e) => e.event === "snapshot-required");
     resumed.close();
     await resumed.ended;
+  });
+
+  test("a confinement that has not STARTED yet still confines: the viewer sees no row of a tenant-wide sender, never every brand's (#1171 flake, fail-closed)", async () => {
+    // The CI flake was this case by accident: the brand-A assignment was one
+    // the request's clock judged not yet in force, so the viewer was treated as
+    // tenant-wide and was shown brand B's and unscoped rows. Here the
+    // assignment starts in an hour, so the window is deterministic.
+    const brandA = await seedOffice("brand-a");
+    const brandB = await seedOffice("brand-b");
+    const sender = await seedSender(tenantId, null);
+    const a1 = await queueRow(tenantId, sender, "queued", brandA);
+    const b1 = await queueRow(tenantId, sender, "failed", brandB);
+    const unscoped = await queueRow(tenantId, sender, "queued", null);
+    const pending = await seedUser(tenantId, "brand-a-soon", PROGRESS);
+
+    await holdScope(pending.tenantUserId, brandA, "1 hour");
+
+    const mine = await snapshot(pending.token, sender);
+
+    expect(mine.status).toBe(200);
+    expect(Object.values(mine.body.data!.counts).every((n) => n === 0)).toBe(
+      true
+    );
+    expect(mine.body.data?.recent).toEqual([]);
+    expect(parseSenderCursor(mine.body.data!.cursor)?.micros).toBe("0");
+
+    const stream = await open(testRoute({}), pending.token, sender);
+
+    expect(stream.response.status).toBe(200);
+
+    const first = await stream.waitFor((e) => e.event === "progress");
+    const counts = (first.data as { counts: Record<string, number> }).counts;
+
+    expect(Object.values(counts).every((n) => n === 0)).toBe(true);
+
+    await setStatus(b1, "sent");
+    await setStatus(a1, "sent");
+    // Two ticks past both changes: nothing may have been streamed.
+    await Bun.sleep(200);
+
+    const everything = JSON.stringify(stream.events);
+
+    for (const hidden of [a1, b1, unscoped]) {
+      expect(everything).not.toContain(hidden);
+    }
+
+    stream.close();
+    await stream.ended;
   });
 
   test("the connection slot is taken after authorize and BEFORE any topic query: a 429 costs no resource read, and a 404 returns its slot (audit M-2a)", async () => {

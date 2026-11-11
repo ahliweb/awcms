@@ -7823,6 +7823,11 @@ msgstr "Penerbitan Sosial"
 msgid "CRM Leads"
 msgstr "Prospek CRM"
 
+msgid "Telegram Engagement"
+msgstr "Keterlibatan Telegram"
+msgid "CRM Follow-up"
+msgstr "Tindak Lanjut CRM"
+
 msgid "Tenant suspended"
 msgstr "Tenant ditangguhkan"
 

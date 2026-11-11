@@ -461,6 +461,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // schedules, schedule exceptions and the availability read. Nothing here
       // is anonymous.
       "Booking",
+      // "CRM Follow-up" (crm_follow_up, ADR-0159, Issue #1165) — genuinely new
+      // surface: versioned follow-up rules, simulation, the task queue and stop
+      // signals. Nothing here is anonymous. ("CRM F" < "CRM L".)
+      "CRM Follow-up",
       // "CRM Leads" (crm_leads, ADR-0153, Issue #1166) — genuinely new surface:
       // versioned pipelines, lead intake, moves, merges with undo, conversions
       // and erasure. Nothing here is anonymous. (Code-unit order: "CR" < "Ch".)
@@ -530,6 +534,13 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // by its secret header and individually justified in
       // ALLOWED_PUBLIC_OPERATIONS.
       "Telegram Delivery",
+      // "Telegram Engagement" (telegram_engagement, ADR-0152, Issue #1156) --
+      // genuinely new surface: customer bots, contacts, consent prompts and
+      // the outbound queue. The ONE anonymous operation is the per-bot webhook
+      // (`telegramEngagementWebhook`), authenticated by its callback token and
+      // the constant-time secret header, individually justified in
+      // ALLOWED_PUBLIC_OPERATIONS.
+      "Telegram Engagement",
       "Tenant Domains",
       "Theming",
       "Visitor Analytics",

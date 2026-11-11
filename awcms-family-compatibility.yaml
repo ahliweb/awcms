@@ -159,7 +159,8 @@ contracts:
     auth_notification: "1.0.0"
     # workflow_notification is owned (provided) by the base `email` module and
     # consumed (optional) by `hr_workforce`'s attendance-correction settler (#1044).
-    workflow_notification: "1.0.0"
+    # 1.1.0 (#1165 audit, additive): enqueueNotification returns { queued }.
+    workflow_notification: "1.1.0"
     # staff_availability is owned (provided) by the base `hr_workforce` module
     # (#946) and consumed (optional) by `booking` (#949): a resource that names the
     # people who serve it is narrowed by their rostered working time.
@@ -206,8 +207,10 @@ contracts:
     # ChannelPublisherCredentialPort for `social_publishing` (#1145, ADR-0157):
     # no signature changed. 1.2.0 (#1160, ADR-0151 section 2) adds the exported
     # ChannelEmailSenderPort and ChannelEmailCredentialPort for `email`'s
-    # tenant-owned Mailketing senders, additively.
-    channel_account: "1.2.0"
+    # tenant-owned Mailketing senders, additively. 1.3.0 (#1146) adds the
+    # exported ChannelPublisherHealthPort, additively: the social dispatcher
+    # reports a credential the provider refused, which degrades the account.
+    channel_account: "1.3.0"
     # social_publishing is owned (provided) by the base `social_publishing`
     # module (#1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
     # consumed (optional) by `blog_content`. First assigned number: the port

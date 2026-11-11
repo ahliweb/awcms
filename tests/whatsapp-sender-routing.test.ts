@@ -1342,16 +1342,23 @@ describe("static contracts", () => {
       }
     }
 
-    // The #1145 audit (H1): `social-publishing:dispatch` shares the
-    // `awcms_worker` role and must NOT be handed the key ring, or a compromised
-    // WhatsApp worker could decrypt social tokens through it. Issue #1160
-    // (ADR-0151 section 2) adds exactly the two EMAIL jobs that resolve a
-    // tenant's Mailketing token: the dispatcher and the sender verifier.
+    // The #1145 audit (H1): a social dispatcher sharing `awcms_worker` must
+    // never be handed the key ring. Since Issue #1146 it does not share it: it
+    // runs ONLY as its own role `awcms_social_dispatch` (a dedicated-role job,
+    // with no worker or app login in its environment) and composes only the
+    // PUBLISH method. Issue #1160 (ADR-0151 section 2) adds exactly the two
+    // EMAIL jobs that resolve a tenant's Mailketing token.
     expect(importers.sort()).toEqual([
       "scripts/email-dispatch.ts",
       "scripts/email-senders-verify.ts",
+      "scripts/social-publishing-dispatch.ts",
       "scripts/whatsapp-dispatch.ts"
     ]);
+
+    const social = read("scripts/social-publishing-dispatch.ts");
+
+    expect(social).not.toMatch(/getWorkerDatabaseClient|getDatabaseClient\(/);
+    expect(social).not.toContain("resolveWhatsappCredential");
   });
 
   test("one queue, no dual write: the migration creates no queue table and the module owns exactly one message table", () => {

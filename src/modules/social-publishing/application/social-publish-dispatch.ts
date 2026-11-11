@@ -1,20 +1,20 @@
 /**
  * The publish dispatcher (Issue #1145, ADR-0157 section 6): claim, send,
  * finalise, one tenant per call. Run by `bun run social-publishing:dispatch`
- * as `awcms_worker`.
+ * as its OWN database role, `awcms_social_dispatch` (sql/358 + sql/373).
  *
- * ## It cannot publish yet, on purpose (the #1145 audit, H1)
+ * ## Where the credential comes from (ADR-0157 section 6, Issue #1146)
  *
- * The credential comes from a `ChannelPublisherCredentialPort`, and the script
- * that runs this (`scripts/social-publishing-dispatch.ts`) hands it
- * {@link noPublishCredentialPort}: the `awcms_worker` role cannot read a social
- * token (`sql/328` hides everything but a WhatsApp sender's credential, and this
- * module does NOT widen that), and `whatsapp:dispatch` holds the same role and the
- * same key ring, so letting this job read social tokens would let a compromised
- * WhatsApp worker decrypt them. The real credential path lands with the first
- * connector (#1146) under a separate DB role (ADR-0157 section 6). With no
- * adapter registered a claimed job fails closed as `PROVIDER_ADAPTER_UNAVAILABLE`
- * before any credential is asked for.
+ * From a `ChannelPublisherCredentialPort`. The script that runs this
+ * (`scripts/social-publishing-dispatch.ts`) composes the REAL one only when a
+ * connector is switched on (`SOCIAL_PUBLISHING_FACEBOOK_ENABLED`); otherwise it
+ * hands {@link noPublishCredentialPort}, which refuses every request. Either way
+ * the job never runs as `awcms_worker` (which `whatsapp:dispatch` shares, with
+ * the same key ring) and never holds that role's login: a compromised WhatsApp
+ * worker still cannot decrypt a social token, and a compromised social
+ * dispatcher cannot decrypt a WhatsApp one. With no adapter for a provider a
+ * claimed job fails closed as `PROVIDER_ADAPTER_UNAVAILABLE` before any
+ * credential is asked for.
  *
  * ## No network inside a transaction
  *
@@ -60,6 +60,7 @@
  */
 import type {
   ChannelPublisherCredentialPort,
+  ChannelPublisherHealthPort,
   ChannelPublisherPort,
   PublisherUnavailableReason
 } from "../../_shared/ports/channel-account-port";
@@ -124,6 +125,12 @@ function inTenantWork<T>(
 export type DispatchSocialPublishOptions = {
   publishers: ChannelPublisherPort;
   credentials: ChannelPublisherCredentialPort;
+  /**
+   * Where a credential the PROVIDER refused is reported (Issue #1146): the
+   * account goes `degraded`, so its other jobs are held, not failed one by one.
+   * Absent, the job still fails `NEEDS_REAUTH` and nothing else changes.
+   */
+  health?: ChannelPublisherHealthPort;
   registry?: SocialAdapterRegistry;
   env?: NodeJS.ProcessEnv;
   /** The dispatch clock. Tests pass a fixed one; everything time-shaped here (due, lease, cap window, backoff) uses it. */
@@ -596,6 +603,8 @@ type FinalOutcome =
       kind: "fail";
       code: string;
       outcome: "needs_reauth" | "rejected" | "retryable";
+      /** The provider itself refused the credential: degrade the account (Issue #1146). */
+      credentialRejected?: boolean;
     };
 
 async function finalise(
@@ -607,6 +616,7 @@ async function finalise(
   context: {
     correlationId: string | undefined;
     result: DispatchSocialPublishResult;
+    health?: ChannelPublisherHealthPort;
   }
 ): Promise<void> {
   await inTenantWork(sql, tenantId, async (tx) => {
@@ -782,6 +792,22 @@ async function finalise(
               ${errorCode}, ${phraseFor(errorCode)})
       ON CONFLICT (job_id, attempt_no) DO NOTHING
     `;
+
+    // The provider refused the account's credential (Issue #1146): the
+    // account itself is degraded in the same transaction, so every other job of
+    // it is HELD at its next claim instead of being sent with a dead token.
+    const accountDegraded =
+      outcome.kind === "fail" &&
+      outcome.credentialRejected === true &&
+      context.health !== undefined
+        ? (
+            await context.health.reportPublishCredentialRejected(tx, {
+              tenantId,
+              accountId: job.channel_account_id
+            })
+          ).recorded
+        : false;
+
     await emitJobFailed(tx, tenantId, {
       jobId: job.id,
       publicationId: job.publication_id,
@@ -804,7 +830,8 @@ async function finalise(
         accountId: job.channel_account_id,
         provider: job.provider,
         attemptNo: job.attemptNo,
-        failureCode: finalCode
+        failureCode: finalCode,
+        accountDegraded
       },
       correlationId: context.correlationId
     });
@@ -943,10 +970,11 @@ function ambiguous(adapter: SocialPublishAdapter, code: string): FinalOutcome {
 }
 
 /**
- * The credential port of a dispatcher that is NOT yet allowed to read a social
- * credential (the #1145 audit, H1): every request is refused, so nothing can be
- * published through it. The real port is composed by the first connector, under a
- * separate DB role (ADR-0157 section 6).
+ * The credential port of a dispatcher that may NOT read a social credential
+ * (the #1145 audit, H1): every request is refused, so nothing can be published
+ * through it. The default composition while no connector is switched on; the
+ * real port is composed only behind `SOCIAL_PUBLISHING_FACEBOOK_ENABLED`, on the
+ * separate DB role (ADR-0157 section 6, Issue #1146).
  */
 export const noPublishCredentialPort: ChannelPublisherCredentialPort = {
   async resolvePublishCredential() {
@@ -1007,7 +1035,11 @@ export async function dispatchSocialPublishQueue(
 
   result.claimed = claimed.length;
 
-  const ctx = { correlationId: options.correlationId, result };
+  const ctx = {
+    correlationId: options.correlationId,
+    result,
+    health: options.health
+  };
 
   for (const job of claimed) {
     const breaker = getProviderCircuitBreaker(
@@ -1216,7 +1248,12 @@ export async function dispatchSocialPublishQueue(
           sql,
           tenantId,
           job,
-          { kind: "fail", code: "NEEDS_REAUTH", outcome: "needs_reauth" },
+          {
+            kind: "fail",
+            code: "NEEDS_REAUTH",
+            outcome: "needs_reauth",
+            credentialRejected: true
+          },
           clock(),
           ctx
         );

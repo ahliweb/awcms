@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:47ffb44faf03fa8f10f6557b0dfb16b6aa1bd566a6206f6e86fe43d0a27d7fb1 -->
+<!-- i18n-source-hash: sha256:088d54ba7ed7a9da00dc4dbb2aa302e6b9f5197e3e2848943bc571cb2ada7739 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-158 target menjalankan berkas di `scripts/`; 65 di antaranya
+160 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -79,6 +79,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `config:validate`                         | `validate-env.ts`                              | —    |
 | `contracts:omes:sync`                     | `sync-omes-contracts.ts`                       | —    |
 | `contracts:omes:sync:check`               | `sync-omes-contracts.ts`                       | ✅   |
+| `crm-follow-up:dispatch`                  | `crm-follow-up-dispatch.ts`                    | —    |
 | `data-lifecycle:archive-purge`            | `data-lifecycle-archive-purge.ts`              | —    |
 | `data-lifecycle:registry:check`           | `data-lifecycle-registry-check.ts`             | ✅   |
 | `data-lifecycle:table-coverage:check`     | `data-lifecycle-table-coverage-check.ts`       | ✅   |
@@ -180,6 +181,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `subject-data:registry:check`             | `subject-data-registry-check.ts`               | ✅   |
 | `sync:objects:dispatch`                   | `object-sync-dispatch.ts`                      | —    |
 | `sync:objects:purge`                      | `object-queue-purge.ts`                        | —    |
+| `telegram-engagement:dispatch`            | `telegram-engagement-dispatch.ts`              | —    |
 | `telegram:chat:rekey`                     | `telegram-chat-rekey.ts`                       | —    |
 | `telegram:dispatch`                       | `telegram-dispatch.ts`                         | —    |
 | `telegram:queue:purge`                    | `telegram-queue-purge.ts`                      | —    |

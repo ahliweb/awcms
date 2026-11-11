@@ -140,5 +140,41 @@ export const DEFAULT_EMAIL_TEMPLATES: readonly DefaultEmailTemplate[] = [
       en: "Hi {{userName}},\n\nThe approval of the attendance correction you requested for {{employeeName}} on {{correctionDate}} (UTC) was cancelled before a decision. The attendance record was not changed.",
       id: "Halo {{userName}},\n\nPersetujuan koreksi absensi yang Anda ajukan untuk {{employeeName}} pada {{correctionDate}} (UTC) dibatalkan sebelum ada keputusan. Catatan absensi tidak diubah."
     }
+  },
+  {
+    templateKey: "crm.follow_up_assigned",
+    name: "Follow-up task assigned",
+    subjectTemplate: {
+      en: "New follow-up task: {{taskTitle}}",
+      id: "Tugas tindak lanjut baru: {{taskTitle}}"
+    },
+    textBodyTemplate: {
+      en: "Hi {{userName}},\n\nA follow-up task was assigned to you: {{taskTitle}} (reference {{taskReference}}). It is due at {{dueAt}} (UTC).",
+      id: "Halo {{userName}},\n\nSebuah tugas tindak lanjut ditugaskan kepada Anda: {{taskTitle}} (referensi {{taskReference}}). Jatuh tempo pada {{dueAt}} (UTC)."
+    }
+  },
+  {
+    templateKey: "crm.follow_up_due",
+    name: "Follow-up task due",
+    subjectTemplate: {
+      en: "Follow-up task due: {{taskTitle}}",
+      id: "Tugas tindak lanjut jatuh tempo: {{taskTitle}}"
+    },
+    textBodyTemplate: {
+      en: "Hi {{userName}},\n\nThe follow-up task {{taskTitle}} (reference {{taskReference}}) assigned to you is due at {{dueAt}} (UTC).",
+      id: "Halo {{userName}},\n\nTugas tindak lanjut {{taskTitle}} (referensi {{taskReference}}) yang ditugaskan kepada Anda jatuh tempo pada {{dueAt}} (UTC)."
+    }
+  },
+  {
+    templateKey: "crm.follow_up_escalated",
+    name: "Follow-up task escalated",
+    subjectTemplate: {
+      en: "Follow-up task escalated: {{taskTitle}}",
+      id: "Tugas tindak lanjut dieskalasi: {{taskTitle}}"
+    },
+    textBodyTemplate: {
+      en: "Hi {{userName}},\n\nThe follow-up task {{taskTitle}} (reference {{taskReference}}) was not completed by {{dueAt}} (UTC) and has been escalated to you.",
+      id: "Halo {{userName}},\n\nTugas tindak lanjut {{taskTitle}} (referensi {{taskReference}}) belum diselesaikan sampai {{dueAt}} (UTC) dan dieskalasi kepada Anda."
+    }
   }
 ];

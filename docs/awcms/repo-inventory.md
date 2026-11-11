@@ -7,14 +7,14 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 37    |
-| Migrations                          | 259   |
-| `awcms_*` tables                    | 255   |
-| Tables with `FORCE` RLS             | 237   |
+| Registered modules                  | 39    |
+| Migrations                          | 268   |
+| `awcms_*` tables                    | 267   |
+| Tables with `FORCE` RLS             | 249   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 803   |
-| Route files                         | 641   |
-| ADR                                 | 318   |
+| Test files                          | 815   |
+| Route files                         | 661   |
+| ADR                                 | 320   |
 
 ### Modules
 
@@ -57,6 +57,8 @@
 | `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
 | `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 | `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
+| `telegram_engagement`  | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
+| `crm_follow_up`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
 
 ### Migrations
 
@@ -316,11 +318,20 @@
 | 252 | `sql/346_awcms_email_sender_routing.sql`                               |
 | 253 | `sql/347_awcms_email_sender_routing_permissions.sql`                   |
 | 254 | `sql/348_awcms_email_sender_worker_visibility.sql`                     |
-| 255 | `sql/354_awcms_whatsapp_consent_business_scope.sql`                    |
-| 256 | `sql/357_awcms_social_publishing_retention.sql`                        |
-| 257 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
-| 258 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
-| 259 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
+| 255 | `sql/350_awcms_telegram_engagement_schema.sql`                         |
+| 256 | `sql/351_awcms_telegram_engagement_permissions.sql`                    |
+| 257 | `sql/352_awcms_telegram_engagement_integrity_guards.sql`               |
+| 258 | `sql/353_awcms_telegram_engagement_dispatch_role.sql`                  |
+| 259 | `sql/354_awcms_whatsapp_consent_business_scope.sql`                    |
+| 260 | `sql/357_awcms_social_publishing_retention.sql`                        |
+| 261 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
+| 262 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
+| 263 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
+| 264 | `sql/369_awcms_crm_follow_up_schema.sql`                               |
+| 265 | `sql/370_awcms_crm_follow_up_permissions.sql`                          |
+| 266 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
+| 267 | `sql/373_awcms_social_dispatch_runtime_grants.sql`                     |
+| 268 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
 
 ### Tables & Row-Level Security
 
@@ -383,6 +394,13 @@
 | `awcms_comments_reports`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
 | `awcms_comments_settings`                      | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
 | `awcms_comments_threads`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_crm_follow_up_notifications`            | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_rule_revisions`           | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_rules`                    | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_settings`                 | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_stop_signals`             | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_task_actions`             | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_tasks`                    | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
 | `awcms_crm_lead_assignments`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
 | `awcms_crm_lead_contact_points`                | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
 | `awcms_crm_lead_conversions`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
@@ -548,6 +566,11 @@
 | `awcms_tax_snapshots`                          | `sql/172_awcms_tax_snapshots_schema.sql`                   | yes | yes   |
 | `awcms_telegram_bindings`                      | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
 | `awcms_telegram_delivery_attempts`             | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
+| `awcms_telegram_engagement_consents`           | `sql/350_awcms_telegram_engagement_schema.sql`             | yes | yes   |
+| `awcms_telegram_engagement_contacts`           | `sql/350_awcms_telegram_engagement_schema.sql`             | yes | yes   |
+| `awcms_telegram_engagement_endpoints`          | `sql/350_awcms_telegram_engagement_schema.sql`             | yes | yes   |
+| `awcms_telegram_engagement_inbound`            | `sql/350_awcms_telegram_engagement_schema.sql`             | yes | yes   |
+| `awcms_telegram_engagement_messages`           | `sql/350_awcms_telegram_engagement_schema.sql`             | yes | yes   |
 | `awcms_telegram_link_codes`                    | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
 | `awcms_telegram_messages`                      | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
 | `awcms_telegram_settings`                      | `sql/216_awcms_telegram_delivery_schema.sql`               | yes | yes   |
@@ -586,16 +609,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 601        |
+| `(root)`      | 608        |
 | `e2e`         | 30         |
-| `integration` | 171        |
+| `integration` | 176        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 527   |
+| `/api/v1/**`    | 547   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

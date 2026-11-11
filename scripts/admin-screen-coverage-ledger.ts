@@ -323,5 +323,28 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // removes them from this ledger in the same change.
   "email.sender_policy.configure",
   "email.senders.read",
-  "email.senders.use"
+  "email.senders.use",
+  // telegram_engagement (5) — ADR-0152 / Issue #1156. API-first and
+  // `experimental`: the operator screen (the bot list with webhook state and
+  // health, register/rotate/revoke behind step-up, the per-bot contact list with
+  // masked labels and per-purpose eligibility, the reply composer and the
+  // explicit opt-in prompt, the audited erase) is the recorded follow-up that
+  // flips the module to `active` and adds its navigation entry in the same
+  // change (a nav entry without a page is a permanent 404).
+  "telegram_engagement.bots.configure",
+  "telegram_engagement.bots.read",
+  "telegram_engagement.contacts.delete",
+  "telegram_engagement.contacts.read",
+  "telegram_engagement.messages.create",
+  // crm_follow_up (5) — ADR-0159 (Proposed) / Issue #1165. API-first and
+  // `experimental`: the operator screens (the worklist and overdue queue with
+  // complete/cancel, the rule editor with its revision history and simulation,
+  // a lead's stop signals, the tenant switch) are the recorded follow-up that
+  // flips the module to `active` and adds its navigation entry in the same
+  // change. SYSTEM admin, built here.
+  "crm_follow_up.rules.configure",
+  "crm_follow_up.rules.read",
+  "crm_follow_up.stop_signals.create",
+  "crm_follow_up.tasks.read",
+  "crm_follow_up.tasks.update"
 ];

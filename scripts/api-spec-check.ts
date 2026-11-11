@@ -4,6 +4,10 @@ import { parse as parseYaml } from "yaml";
 
 import { listModules } from "../src/modules";
 import {
+  SESSION_FREE_BODY_ENDPOINTS,
+  type SessionFreeBodyEndpoint
+} from "../src/lib/security/api-body-auth-boundary";
+import {
   bundleOpenApi,
   BUNDLED_PATH,
   listModuleFragmentFiles,
@@ -80,6 +84,13 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // submission, a duplicate and a honeypot catch. (The route's OPTIONS preflight
   // is not a documented operation, as for the newsletter.)
   "websiteEngagementSubmit",
+  // telegram_engagement (Issue #1156, ADR-0152) — the per-bot webhook is called
+  // by Telegram, never by a person. Authenticated by the opaque per-bot callback
+  // token in the PATH (stored only as a SHA-256; it names the tenant and the
+  // endpoint, never trusted from the body) AND the constant-time
+  // X-Telegram-Bot-Api-Secret-Token header, both checked before the body is
+  // read; one generic 401 for every failure; idempotent on (bot, update_id).
+  "telegramEngagementWebhook",
   // site_search (ADR-0040, ported from awcms-micro Issue #270) — the public
   // search + typeahead endpoints are anonymous by design: a site visitor has no
   // session. Both resolve the tenant from the request HOST (never a
@@ -295,6 +306,109 @@ export function collectOperationIdProblems(doc: OpenApiDocument): string[] {
           `${label}: must declare a security requirement, or security: [] plus an allow-list entry.`
         );
       }
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * Session-free body endpoints that are NOT `security: []` in OpenAPI, each with
+ * the reason: their credential is something other than a session (an HMAC, a
+ * machine credential, an enrolment token, a cookie-only effect) or they are
+ * retired. Everything else on either side must match exactly.
+ */
+export const SESSION_FREE_NON_PUBLIC_OPERATIONS: Readonly<
+  Record<string, string>
+> = {
+  "POST /api/v1/auth/mfa/totp/enroll/start":
+    "an enrolment token is accepted INSTEAD of a session; OpenAPI declares the bearer requirement",
+  "POST /api/v1/auth/mfa/totp/enroll/verify":
+    "same enrolment-token alternative as enroll/start",
+  "POST /api/v1/auth/session-handoff/redeem":
+    "authenticated by a machine credential (ADR-0049 section 4), declared in OpenAPI",
+  "POST /api/v1/auth/preferences/locale":
+    "its whole effect is a cookie (ADR-0095); documented with the default security",
+  "POST /api/v1/sync/push": "authenticated by the sync HMAC scheme (syncHmac)",
+  "POST /api/v1/sync/pull": "same sync HMAC scheme",
+  "POST /api/v1/sync/objects": "same sync HMAC scheme",
+  "POST /api/v1/blog/ads":
+    "retired (410), kept exempt so a caller learns it is gone",
+  "PATCH /api/v1/blog/ads/:_": "retired (410), same reason"
+};
+
+const BODY_METHOD_NAMES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** `{name}` and `:name` are one wildcard segment: the parameter NAME is not part of the route. */
+function normaliseRouteKey(method: string, route: string): string {
+  return `${method.toUpperCase()} ${route
+    .replace(/\{[^}]+\}/g, ":_")
+    .replace(/:[A-Za-z][A-Za-z0-9_]*/g, ":_")}`;
+}
+
+/**
+ * Issue #1156 audit H-1: a public (`security: []`) operation that carries a body
+ * is unreachable in production unless the middleware's
+ * `SESSION_FREE_BODY_ENDPOINTS` exempts it: the boundary answers
+ * `400 TENANT_REQUIRED` / `401` before the route runs, and a test that calls the
+ * handler directly never notices. Both directions are enforced: every public
+ * body operation is exempt, and every exemption is either a public operation or
+ * a reviewed non-public entry above (a stale exemption is a bypass waiting for
+ * a route to appear at that path).
+ */
+export function collectSessionFreeBodyParityProblems(
+  doc: OpenApiDocument,
+  endpoints: readonly SessionFreeBodyEndpoint[] = SESSION_FREE_BODY_ENDPOINTS,
+  nonPublic: Readonly<
+    Record<string, string>
+  > = SESSION_FREE_NON_PUBLIC_OPERATIONS
+): string[] {
+  const problems: string[] = [];
+  const publicBodyOps = new Map<string, string>();
+
+  for (const [routePath, operations] of Object.entries(doc.paths ?? {})) {
+    for (const [method, operation] of Object.entries(operations)) {
+      if (!BODY_METHOD_NAMES.has(method.toUpperCase())) continue;
+
+      if (
+        Array.isArray(operation.security) &&
+        operation.security.length === 0
+      ) {
+        publicBodyOps.set(
+          normaliseRouteKey(method, routePath),
+          `${method.toUpperCase()} ${routePath}`
+        );
+      }
+    }
+  }
+
+  const exempt = new Set(
+    endpoints.map((endpoint) =>
+      normaliseRouteKey(endpoint.method, endpoint.pattern)
+    )
+  );
+
+  for (const [key, label] of publicBodyOps) {
+    if (!exempt.has(key)) {
+      problems.push(
+        `${label}: declares security: [] and takes a body, but SESSION_FREE_BODY_ENDPOINTS (src/lib/security/api-body-auth-boundary.ts) does not exempt it, so the middleware refuses every real caller before the route runs.`
+      );
+    }
+  }
+
+  for (const key of exempt) {
+    if (!publicBodyOps.has(key) && !Object.hasOwn(nonPublic, key)) {
+      problems.push(
+        `SESSION_FREE_BODY_ENDPOINTS exempts "${key}" but no OpenAPI operation there declares security: [] (add the operation, remove the exemption, or record it in SESSION_FREE_NON_PUBLIC_OPERATIONS with its reason).`
+      );
+    }
+  }
+
+  for (const key of Object.keys(nonPublic)) {
+    if (!exempt.has(key)) {
+      problems.push(
+        `SESSION_FREE_NON_PUBLIC_OPERATIONS lists "${key}" but SESSION_FREE_BODY_ENDPOINTS no longer exempts it (stale entry).`
+      );
     }
   }
 
@@ -741,6 +855,9 @@ async function main() {
     fail(problem);
   }
   checkPublicAllowListUsed(openApiDoc);
+  for (const problem of collectSessionFreeBodyParityProblems(openApiDoc)) {
+    fail(problem);
+  }
   for (const problem of collectPathParameterProblems(openApiDoc)) fail(problem);
   for (const problem of collectStandardErrorSchemaProblems(openApiDoc)) {
     fail(problem);

@@ -1,0 +1,5 @@
+---
+"awcms": patch
+---
+
+fix(channel_accounts): a business-scope confinement that has not started yet now confines (Issue #1171, fail-closed). `callerIsScopeConfined` compared the database-stamped `effective_from` (microseconds, the database's clock) with the request's `new Date()` (milliseconds, the application host's clock), so a request made within a millisecond of a confinement being granted, or on a host whose clock lags the database's, treated the caller as tenant-wide: the `whatsapp.sender.progress` snapshot and stream then showed a brand-confined viewer the counts and rows of every brand on a tenant-wide sender. Now any active, non-tenant assignment that has not ended confines; which scopes cover rows is still decided at the access chokepoint, so until a pending confinement starts the caller sees no brand's rows instead of every brand's. Every reader of the answer (sender lists, account creation, connection binding, the progress topic) only shows or allows less. No migration, no API change.

@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8acc6579ddc25c2bf8af07c75e8fda9883b6fac6ec2b82f7b6ed05b82e4f41d7 -->
+<!-- i18n-source-hash: sha256:f9bd9f3f37eb0ae1e88659ce74076e7ab654d93e25205f0b6f8e7902600b456d -->
 
 # `channel_accounts`
 
@@ -111,6 +111,8 @@ Sebuah akun meminjamkan token connection-nya kepada siapa pun yang dapat bertind
 "Tercakup" berarti **kesamaan persis `(type, id)`** untuk connection ber-scope; hierarki business-scope (ADR-0060) tidak dipakai (pembacaan paling ketat, gagal tertutup; lihat pertanyaan terbuka). Penolakan dijawab seperti connection yang tidak ada (`422 CONNECTION_NOT_FOUND`). Pemeriksaan ini berjalan sebelum setiap pemeriksaan wewenang, jadi administrator tenant juga terikat. Wewenang datang setelah cakupan: connection yang belum punya akun hanya dapat diikat oleh pembuatnya atau pemegang break-glass (wewenang yang sama dengan mencabutnya); yang sudah punya akun membutuhkan wewenang `owner` atas semuanya, yang hanya dilewati administrator tenant. Baris audit `account.create` membawa `connectionId` internal (UUID).
 
 `canSeeAllAccounts` (bypass administrator) mensyaratkan `assignments.assign` lewat **grant tenant-wide** (`scope_type = 'tenant'`) selain izin chokepoint: ADR-0080 membiarkan kunci grant ber-scope tetap tingkat tenant di chokepoint, sehingga tanpa ini grant yang dikurung ke satu office bertindak sebagai administrator semua office. Penulis grant hari ini hanya menulis `tenant`; ini adalah **syarat mengikat untuk PR yang menambah penulis grant ber-scope** (`holdsTenantWidePermissionKey`, dipaku oleh `tests/integration/channel-accounts-api.integration.test.ts`, LOW-1).
+
+Pemanggil **terkurung scope** (`callerIsScopeConfined`) selama ia memegang assignment business scope non-tenant yang aktif dan belum berakhir, **termasuk yang belum dimulai** (Issue #1171, fail-closed). Setiap pembaca jawaban itu menampilkan atau mengizinkan lebih sedikit bila `true`. `effective_from` assignment dicap jam database dalam mikrodetik dan dulu dibandingkan dengan `new Date()` request yang bermilidetik, sehingga request dalam satu milidetik setelah pemberian (atau di host yang jamnya tertinggal dari database) memperlakukan pemanggil yang baru dikurung sebagai tenant-wide dan menampilkan baris semua brand dari sender tenant-wide. Scope mana yang benar-benar MENCAKUP baris tetap diputuskan chokepoint, yang menghormati `effective_from`: sampai kurungan tertunda dimulai, pemanggil tidak melihat baris brand mana pun, bukan baris semua brand.
 
 Break-glass connection menanyakan pertanyaan tingkat tenant lebih dulu (satu keputusan termemo per permintaan); hanya pemanggil yang bukan administrator membayar keputusan per scope, dan hanya untuk scope berbeda yang ditanyakan, bukan per connection.
 

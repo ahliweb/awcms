@@ -121,6 +121,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // must cover every registered module so its first screen lands in
   // `engagement`.
   social_publishing: "engagement",
+  // ADR-0152 (Issue #1156). Audience engagement: customer conversations through
+  // the tenant's own Telegram bots. Placed even though the module declares NO
+  // navigation yet (the operator screen is a follow-up): this map must cover
+  // every registered module so its first screen lands in `engagement`.
+  telegram_engagement: "engagement",
   // ADR-0127. Placed even though the module declares NO navigation yet (the
   // rule-authoring screens are a recorded follow-up): this map must cover every
   // registered module, so its first screen lands in `commerce` rather than
@@ -169,6 +174,10 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   // (the operator screen is a recorded follow-up): this map must cover every
   // registered module so its first screen lands in the commerce section.
   crm_leads: "commerce",
+  // ADR-0159 (Issue #1165). The follow-up worklist sits beside the lead
+  // pipeline it serves. Placed even though the module declares NO navigation
+  // yet (the worklist screen is a recorded follow-up).
+  crm_follow_up: "commerce",
   // ADR-0132 (Issue #945). Placed even though the module declares NO navigation
   // yet (`experimental`, no admin screen): this map must cover every registered
   // module so its first screen lands with the people/identity screens rather

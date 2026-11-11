@@ -162,6 +162,45 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "`awcms_worker` to measure the worker's real secret visibility. Nothing is " +
       "ever committed: it is a behavioural probe of a row policy, not a second " +
       "writer of tenant or channel-account data. Confined to that one function."
+  })),
+  ...[
+    "awcms_tenants",
+    "awcms_channel_secrets",
+    "awcms_channel_accounts",
+    "awcms_telegram_engagement_endpoints",
+    "awcms_telegram_engagement_contacts"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/lib/telegram-engagement-dispatch-probe.ts` (used by " +
+      "`security:readiness`, Issue #1156, M-A/M-B of the PR #1260 re-audit) seeds " +
+      "two throwaway tenants, channel secrets, customer bot accounts, webhook " +
+      "endpoints and contacts INSIDE one transaction it always rolls back (it " +
+      "throws a sentinel), then assumes `awcms_telegram_engagement_dispatch` to " +
+      "prove what the role can see and that its forbidden writes are refused. " +
+      "Nothing is ever committed: it is a behavioural probe of row policies, not " +
+      "a second writer. Its attempted writes as the role (consents, domain " +
+      "events) are expected to FAIL and are not seeds, so they are not excused."
+  })),
+  ...[
+    "awcms_social_publications",
+    "awcms_social_publish_jobs",
+    "awcms_channel_account_health",
+    "awcms_audit_events",
+    "awcms_domain_events",
+    "awcms_domain_event_deliveries"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/security-readiness.ts` `probeSocialDispatchWriteBoundary` " +
+      "(Issue #1146, sql/373) seeds a throwaway tenant, a publication and jobs, " +
+      "then, as `awcms_social_dispatch`, attempts the legitimate and the " +
+      "forbidden writes (each in a savepoint) inside ONE transaction that it " +
+      "ALWAYS rolls back (it throws a sentinel). Nothing it writes is ever " +
+      "committed: a behavioural probe of the role's RESTRICTIVE write " +
+      "policies, not a second writer of these tables."
   }))
 ];
 

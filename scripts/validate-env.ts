@@ -38,6 +38,7 @@ import {
   resolveCrmLeadsEncryptionRingUnchecked,
   resolveCrmLeadsHashRingUnchecked
 } from "../src/modules/crm-leads/domain/crm-leads-config";
+import { resolveTelegramEngagementRing } from "../src/modules/telegram-engagement/domain/telegram-engagement-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -484,6 +485,16 @@ const RULES: readonly Rule[] = [
   // needs CHANNEL_ACCOUNTS_ENABLED (checked below): an account registry that is
   // off refuses every account, so nothing could publish.
   { name: "SOCIAL_PUBLISHING_ENABLED", required: false, type: "bool" },
+  {
+    name: "SOCIAL_PUBLISHING_FACEBOOK_ENABLED",
+    required: false,
+    type: "bool"
+  },
+  {
+    name: "SOCIAL_PUBLISHING_DATABASE_URL",
+    required: false,
+    type: "url-postgres"
+  },
 
   // crm_leads (ADR-0153, Issue #1166). Deployment switch, OFF by default: every
   // route answers 503 after authorization. TWO secret rings (ADR-0137 section
@@ -563,6 +574,39 @@ const RULES: readonly Rule[] = [
   },
   {
     name: "WEBSITE_ENGAGEMENT_SOURCE_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
+
+  // telegram_engagement (ADR-0152, Issue #1156): CUSTOMER bots, separate from
+  // telegram_delivery. Off by default; the ring is a secret and never echoed.
+  { name: "TELEGRAM_ENGAGEMENT_ENABLED", required: false, type: "bool" },
+  {
+    name: "TELEGRAM_ENGAGEMENT_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "TELEGRAM_ENGAGEMENT_DATABASE_URL",
+    required: false,
+    type: "url-postgres"
+  },
+  {
+    name: "TELEGRAM_ENGAGEMENT_DAILY_CAP",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "TELEGRAM_ENGAGEMENT_WEBHOOK_RATE_PER_MINUTE",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "TELEGRAM_ENGAGEMENT_ENDPOINT_RATE_PER_MINUTE",
     required: false,
     type: "int",
     min: 1
@@ -1067,6 +1111,68 @@ export function crmLeadsKeyProblems(env: EnvBag): string[] {
  * Non-fatal advisories printed by `config:validate` (never change its exit
  * code). Today: Mailketing v2 selected without the stage-2 acknowledgement.
  */
+/**
+ * Issue #1156, audit H-A of PR #1260: the customer Telegram dispatcher's login
+ * must be its OWN role. The same user as the app or worker connection would
+ * put the channel key ring next to a login that reads every channel secret
+ * (awcms_app) or the WhatsApp sender credentials (awcms_worker). No value is
+ * echoed, only the variable names.
+ */
+export function telegramDispatchLoginProblems(env: EnvBag): string[] {
+  return dedicatedLoginProblems(
+    env,
+    "TELEGRAM_ENGAGEMENT_DATABASE_URL",
+    "TELEGRAM_ENGAGEMENT_DATABASE_URL harus berupa URL postgres dengan user (role awcms_telegram_engagement_dispatch).",
+    (name) =>
+      `TELEGRAM_ENGAGEMENT_DATABASE_URL memakai user yang sama dengan ${name}; dispatcher pelanggan Telegram wajib login sebagai role-nya sendiri (awcms_telegram_engagement_dispatch).`
+  );
+}
+
+/**
+ * Issue #1146 (ADR-0157 section 6): the social dispatcher's login must be its
+ * OWN role, for the same reason as the Telegram one above.
+ */
+export function socialDispatchLoginProblems(env: EnvBag): string[] {
+  return dedicatedLoginProblems(
+    env,
+    "SOCIAL_PUBLISHING_DATABASE_URL",
+    "SOCIAL_PUBLISHING_ENABLED=true membutuhkan SOCIAL_PUBLISHING_DATABASE_URL berupa URL postgres dengan user (role awcms_social_dispatch, sql/358 dan sql/373); job dispatcher tidak pernah jatuh balik ke DATABASE_URL atau WORKER_DATABASE_URL.",
+    (name) =>
+      `SOCIAL_PUBLISHING_DATABASE_URL memakai user yang sama dengan ${name}; dispatcher penerbitan sosial wajib login sebagai role-nya sendiri (awcms_social_dispatch).`
+  );
+}
+
+/**
+ * The shared rule of a dedicated-role job's login: present with a user, and
+ * that user is none of the shared logins (app, worker, and since the #1271
+ * audit L2 the setup one as well). No value is echoed.
+ */
+function dedicatedLoginProblems(
+  env: EnvBag,
+  name: string,
+  missing: string,
+  shared: (sharedName: string) => string
+): string[] {
+  const userOf = (variable: string): string | null => {
+    const raw = (env[variable] ?? "").trim();
+
+    if (raw === "") return null;
+
+    try {
+      return decodeURIComponent(new URL(raw).username) || null;
+    } catch {
+      return null;
+    }
+  };
+  const dispatchUser = userOf(name);
+
+  if (dispatchUser === null) return [missing];
+
+  return ["DATABASE_URL", "WORKER_DATABASE_URL", "SETUP_DATABASE_URL"]
+    .filter((sharedName) => userOf(sharedName) === dispatchUser)
+    .map(shared);
+}
+
 export function collectEnvWarnings(env: EnvBag): string[] {
   const warnings: string[] = [];
 
@@ -1387,6 +1493,23 @@ export function validateEnv(env: EnvBag): string[] {
     );
   }
 
+  // Issue #1146 (ADR-0157 section 6): the dispatcher runs ONLY as its own role
+  // awcms_social_dispatch, with no fallback. Enabling the module without that
+  // login is a job that refuses every run; the same user as the app or worker
+  // login would put the channel key ring next to a broader credential.
+  if (env.SOCIAL_PUBLISHING_ENABLED === "true") {
+    problems.push(...socialDispatchLoginProblems(env));
+  }
+
+  if (
+    env.SOCIAL_PUBLISHING_FACEBOOK_ENABLED === "true" &&
+    env.SOCIAL_PUBLISHING_ENABLED !== "true"
+  ) {
+    problems.push(
+      "SOCIAL_PUBLISHING_FACEBOOK_ENABLED=true memerlukan SOCIAL_PUBLISHING_ENABLED=true (konektor Facebook Pages adalah bagian dari modul social_publishing)."
+    );
+  }
+
   if (env.CHANNEL_ACCOUNTS_ENABLED === "true") {
     const channelRing = resolveChannelSecretsRing(env as NodeJS.ProcessEnv);
 
@@ -1456,6 +1579,71 @@ export function validateEnv(env: EnvBag): string[] {
   // one base64 value, not a ring, and used to escape this check). No value is
   // echoed.
   problems.push(...crmLeadsKeyProblems(env));
+  // telegram_engagement (ADR-0152, Issue #1156): enabling the CUSTOMER bot
+  // module requires its own ring (parsed by the runtime's helper), the
+  // channel-account registry and its ring (a bot IS a channel account, its token
+  // a channel secret), and APP_URL as an https origin (the per-bot webhook URL).
+  // The ring must not share a key with any other ring. No value is echoed.
+  if (env.TELEGRAM_ENGAGEMENT_ENABLED === "true") {
+    const ring = resolveTelegramEngagementRing(env as NodeJS.ProcessEnv);
+
+    if (!ring.ok) {
+      problems.push(
+        `${ring.reason} TELEGRAM_ENGAGEMENT_KEYS wajib berisi cincin kunci yang sah saat TELEGRAM_ENGAGEMENT_ENABLED=true (tanpa fallback plaintext).`
+      );
+    } else {
+      for (const other of [
+        "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+        "TELEGRAM_CHAT_HASH_KEYS",
+        "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+        "WHATSAPP_RECIPIENT_HASH_KEYS",
+        "WEBSITE_ENGAGEMENT_KEYS"
+      ]) {
+        const sharesKey = (env[other] ?? "").split(",").some((entry) => {
+          const separator = entry.indexOf(":");
+
+          if (separator < 1) return false;
+
+          const decoded = Buffer.from(
+            entry.slice(separator + 1).trim(),
+            "base64"
+          );
+
+          return (
+            decoded.length > 0 &&
+            ring.keys.some((key) => key.key.equals(decoded))
+          );
+        });
+
+        if (sharesKey) {
+          problems.push(
+            `TELEGRAM_ENGAGEMENT_KEYS dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai cincin kunci terpisah.`
+          );
+        }
+      }
+    }
+
+    if ((env.TELEGRAM_ENGAGEMENT_DATABASE_URL ?? "").trim() === "") {
+      problems.push(
+        "TELEGRAM_ENGAGEMENT_ENABLED=true membutuhkan TELEGRAM_ENGAGEMENT_DATABASE_URL (role awcms_telegram_engagement_dispatch, sql/353); job dispatcher tidak pernah jatuh balik ke DATABASE_URL."
+      );
+    } else {
+      problems.push(...telegramDispatchLoginProblems(env));
+    }
+
+    if (env.CHANNEL_ACCOUNTS_ENABLED !== "true") {
+      problems.push(
+        "TELEGRAM_ENGAGEMENT_ENABLED=true membutuhkan CHANNEL_ACCOUNTS_ENABLED=true: bot pelanggan adalah akun channel_accounts."
+      );
+    }
+
+    if (!/^https:\/\/[^/@\s]+/.test((env.APP_URL ?? "").trim())) {
+      problems.push(
+        "TELEGRAM_ENGAGEMENT_ENABLED=true membutuhkan APP_URL berupa origin https (URL webhook per bot dibangun darinya)."
+      );
+    }
+  }
 
   // telegram_delivery (ADR-0140): enabling Telegram REQUIRES the bot token, its
   // public username, the webhook secret and both key rings. Without any one of

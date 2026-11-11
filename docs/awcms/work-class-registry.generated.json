@@ -692,6 +692,61 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/crm-follow-up/leads/[leadId]/stop-signals.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/[id]/archive.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/[id]/revisions.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/simulate.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/[id]/complete.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/crm-leads/conversions/[id]/reverse.ts",
       "workClass": "interactive",
       "source": "factory"
@@ -2052,6 +2107,46 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/telegram-engagement/bots/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/bots/[id]/rotate.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/bots/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/consent-prompts.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/erase.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/messages.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/telegram/bindings/[id]/revoke.ts",
       "workClass": "interactive",
       "source": "factory"
@@ -2457,6 +2552,12 @@
       "rationale": "Scheduled retention sweep (comments:retention, ADR-0041) — tolerant of delay, never latency-sensitive; same profile as audit-log-purge/form-draft-purge."
     },
     {
+      "path": "scripts/crm-follow-up-dispatch.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled follow-up dispatcher (crm-follow-up:dispatch, Issue #1165, ADR-0159), every minute — database-only: each tenant pass escalates overdue tasks and settles due staff notices (sql/369), handing a notice to the e-mail outbox through the workflow_notification port (one row; the provider is called by email:dispatch, another process). A late pass delays a staff reminder by a minute and never touches a lead. Both its pass and its --dry-run count pass workClass: \"maintenance\" explicitly."
+    },
+    {
       "path": "scripts/data-lifecycle-archive-purge.ts",
       "workClass": "maintenance",
       "source": "registry",
@@ -2593,12 +2694,6 @@
       "workClass": "background_sync",
       "source": "registry",
       "rationale": "Recurring per-tenant search index reconciliation (site-search:reconcile, ADR-0040) — drives user-visible public search freshness, same dispatcher profile as domain-events-dispatch rather than a maintenance purge."
-    },
-    {
-      "path": "scripts/social-publishing-dispatch.ts",
-      "workClass": "background_sync",
-      "source": "registry",
-      "rationale": "Outbox dispatcher (social-publishing:dispatch, ADR-0157), recommended every 2 minutes — the same profile as push/email/whatsapp dispatch, and every transaction inside social-publish-dispatch.ts goes through inTenantWork, which passes workClass: \"background_sync\" explicitly."
     },
     {
       "path": "scripts/social-publishing-retention-purge.ts",

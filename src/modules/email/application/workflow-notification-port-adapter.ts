@@ -27,6 +27,7 @@
  */
 import { enqueueAnnouncement } from "./announcement-directory";
 import type {
+  WorkflowNotificationOutcome,
   WorkflowNotificationPort,
   WorkflowNotificationRequest
 } from "../../_shared/ports/workflow-notification-port";
@@ -38,13 +39,13 @@ export function createEmailWorkflowNotificationAdapter(): WorkflowNotificationPo
     async enqueueNotification(
       tx: Bun.SQL,
       request: WorkflowNotificationRequest
-    ): Promise<void> {
+    ): Promise<WorkflowNotificationOutcome> {
       // `awcms_tenants` has no RLS (the root table), as in `email-dispatch.ts`.
       const locales = (await tx`
         SELECT default_locale FROM awcms_tenants WHERE id = ${request.tenantId}
       `) as { default_locale: string }[];
 
-      await enqueueAnnouncement(
+      const result = await enqueueAnnouncement(
         tx,
         request.tenantId,
         request.templateKey,
@@ -53,6 +54,9 @@ export function createEmailWorkflowNotificationAdapter(): WorkflowNotificationPo
         request.correlationId ?? crypto.randomUUID(),
         locales[0]?.default_locale ?? DEFAULT_RENDER_LOCALE
       );
+
+      // `null` = no active template for this tenant: nothing was queued.
+      return { queued: result?.recipientCount ?? 0 };
     }
   };
 }
