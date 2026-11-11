@@ -7,14 +7,14 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 38    |
-| Migrations                          | 263   |
-| `awcms_*` tables                    | 260   |
-| Tables with `FORCE` RLS             | 242   |
+| Registered modules                  | 39    |
+| Migrations                          | 266   |
+| `awcms_*` tables                    | 267   |
+| Tables with `FORCE` RLS             | 249   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 809   |
-| Route files                         | 650   |
-| ADR                                 | 318   |
+| Test files                          | 812   |
+| Route files                         | 661   |
+| ADR                                 | 320   |
 
 ### Modules
 
@@ -58,6 +58,7 @@
 | `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
 | `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
 | `telegram_engagement`  | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `channel_accounts`                  |
+| `crm_follow_up`        | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `crm_leads`                         |
 
 ### Migrations
 
@@ -326,6 +327,9 @@
 | 261 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
 | 262 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
 | 263 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
+| 264 | `sql/369_awcms_crm_follow_up_schema.sql`                               |
+| 265 | `sql/370_awcms_crm_follow_up_permissions.sql`                          |
+| 266 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
 
 ### Tables & Row-Level Security
 
@@ -603,16 +607,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 605        |
+| `(root)`      | 606        |
 | `e2e`         | 30         |
-| `integration` | 173        |
+| `integration` | 175        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 536   |
+| `/api/v1/**`    | 547   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

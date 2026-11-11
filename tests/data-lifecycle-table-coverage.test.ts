@@ -636,7 +636,7 @@ describe("the real repository", () => {
       // their retention window is ADR-0159 O4, decided with ADR-0153 O4: the
       // status-aware sweep is the recorded follow-up in
       // src/modules/crm-follow-up/README.md, which replaces those four entries.
-            expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(56);
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(56);
     });
 
     test("every entry names a table that really exists in sql/", () => {

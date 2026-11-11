@@ -284,7 +284,7 @@ const baseModules: ModuleDescriptor[] = [
   // DAG stays acyclic; nothing depends on it. `experimental` and OFF by default
   // (TELEGRAM_ENGAGEMENT_ENABLED). See
   // src/modules/telegram-engagement/module.ts's `description`.
-  telegramEngagementModule
+  telegramEngagementModule,
   // Admission PROPOSED by ADR-0159 (Issue #1165): rule-versioned STAFF
   // follow-up tasks keyed by crm_leads events, with stop signals that win every
   // race. `experimental` and OFF at three levels (CRM_FOLLOW_UP_ENABLED, Module

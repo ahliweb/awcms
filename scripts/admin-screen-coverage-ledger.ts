@@ -335,7 +335,7 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "telegram_engagement.bots.read",
   "telegram_engagement.contacts.delete",
   "telegram_engagement.contacts.read",
-  "telegram_engagement.messages.create"
+  "telegram_engagement.messages.create",
   // crm_follow_up (5) — ADR-0159 (Proposed) / Issue #1165. API-first and
   // `experimental`: the operator screens (the worklist and overdue queue with
   // complete/cancel, the rule editor with its revision history and simulation,
