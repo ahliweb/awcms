@@ -607,7 +607,21 @@ describe("the real repository", () => {
       //   follow-up is a delegated, legal-hold-aware purge of terminal jobs and
       //   attempts (docs/awcms/social-publishing.md, remaining limitations), which
       //   replaces three of these five entries with a real descriptor.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(36);
+      //
+      // **48 since `crm_leads` (Issue #1166, ADR-0153).** Twelve tables, in the
+      // same two classes. Five are authored configuration or immutable catalog
+      // (`awcms_crm_leads_settings`, `awcms_crm_pipelines` and the per-revision
+      // `_pipeline_revisions`, `_pipeline_stages`, `_pipeline_transitions`,
+      // bounded by administrator edits and the 50-stage / 400-edge caps). Seven
+      // (the lead, its contact points, touches, transitions, assignments,
+      // conversions and merges) are the hr_commission/social_publishing case:
+      // they grow with intake, the retention windows are ADR-0153 open question
+      // O4 awaiting the controller, and the generic age-only engine would delete
+      // CONVERTED leads (evidence) and cannot delete a lead before its
+      // append-only children. Anonymising erasure exists today; the delegated,
+      // status-aware sweep is the recorded follow-up in
+      // src/modules/crm-leads/README.md, which replaces those seven entries.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(48);
     });
 
     test("every entry names a table that really exists in sql/", () => {

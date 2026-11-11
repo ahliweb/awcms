@@ -26,6 +26,11 @@ import {
   resolveMailketingV2BaseUrl
 } from "../src/modules/email/domain/mailketing-v2-contract";
 import { resolveWebsiteEngagementRing } from "../src/modules/website-engagement/domain/engagement-config";
+import {
+  crmLeadsRingsShareAKey,
+  resolveCrmLeadsEncryptionRingUnchecked,
+  resolveCrmLeadsHashRingUnchecked
+} from "../src/modules/crm-leads/domain/crm-leads-config";
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
 import { resolvePushAuthSecretRing } from "../src/modules/push-delivery/domain/push-auth-secret";
 import {
@@ -440,6 +445,25 @@ const RULES: readonly Rule[] = [
   // off refuses every account, so nothing could publish.
   { name: "SOCIAL_PUBLISHING_ENABLED", required: false, type: "bool" },
 
+  // crm_leads (ADR-0153, Issue #1166). Deployment switch, OFF by default: every
+  // route answers 503 after authorization. TWO secret rings (ADR-0137 section
+  // 3): one encrypts every lead contact point, the other keys every per-tenant
+  // contact-point hash; never echoed. Absent means intake with contact points
+  // and lookup fail closed; present they are validated below.
+  { name: "CRM_LEADS_ENABLED", required: false, type: "bool" },
+  {
+    name: "CRM_LEADS_ENCRYPTION_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "CRM_LEADS_HASH_KEYS",
+    required: false,
+    type: "string",
+    secret: true
+  },
+
   // website_engagement (ADR-0155, Issue #1153). No deployment switch: the module
   // is inert until a tenant creates a source. The ring encrypts every submission's
   // contact details and keys every source-token and identifier hash, and is a
@@ -759,6 +783,106 @@ function isValidUrl(value: string, protocols: readonly string[]): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * The decoded key bytes an environment variable carries, whatever its shape:
+ * a ring (`keyId:base64,keyId:base64`) or a single base64 key (the AUTH_* and
+ * COMMENTS_* secrets). Unparseable entries contribute nothing; the variable's
+ * own validator reports them.
+ */
+export function keyMaterialOf(env: EnvBag, name: string): Buffer[] {
+  const raw = (env[name] ?? "").trim();
+
+  if (raw === "") return [];
+
+  const entries = raw.includes(":") ? raw.split(",") : [raw];
+  const keys: Buffer[] = [];
+
+  for (const entry of entries) {
+    const separator = entry.indexOf(":");
+    const encoded = separator >= 1 ? entry.slice(separator + 1) : entry;
+    const decoded = Buffer.from(encoded.trim(), "base64");
+
+    if (decoded.length > 0) keys.push(decoded);
+  }
+
+  return keys;
+}
+
+/** Every OTHER secret key a crm_leads ring must not share material with. */
+export const CRM_LEADS_FOREIGN_KEY_VARIABLES = [
+  "WEBSITE_ENGAGEMENT_KEYS",
+  "CHANNEL_SECRETS_ENCRYPTION_KEYS",
+  "TELEGRAM_CHAT_ENCRYPTION_KEYS",
+  "TELEGRAM_CHAT_HASH_KEYS",
+  "PUSH_AUTH_SECRET_ENCRYPTION_KEYS",
+  "WHATSAPP_RECIPIENT_HASH_KEYS",
+  // Single-key secrets (one base64 value, not a ring).
+  "AUTH_MFA_SECRET_ENCRYPTION_KEY",
+  "AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY",
+  "AUTH_URL_PARAM_ENCRYPTION_KEY",
+  "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY"
+] as const;
+
+/** The crm_leads key-ring problems (ADR-0153, ADR-0137 section 3). No value is ever echoed. */
+export function crmLeadsKeyProblems(env: EnvBag): string[] {
+  const problems: string[] = [];
+  const encryptionSet = (env.CRM_LEADS_ENCRYPTION_KEYS ?? "").trim() !== "";
+  const hashSet = (env.CRM_LEADS_HASH_KEYS ?? "").trim() !== "";
+
+  if (!encryptionSet && !hashSet) return problems;
+
+  if (encryptionSet !== hashSet) {
+    problems.push(
+      "CRM_LEADS_ENCRYPTION_KEYS dan CRM_LEADS_HASH_KEYS harus diisi bersama (titik kontak lead dienkripsi dengan yang satu dan di-hash dengan yang lain)."
+    );
+    return problems;
+  }
+
+  const encryption = resolveCrmLeadsEncryptionRingUnchecked(
+    env as NodeJS.ProcessEnv
+  );
+  const hash = resolveCrmLeadsHashRingUnchecked(env as NodeJS.ProcessEnv);
+
+  if (!encryption.ok) {
+    problems.push(
+      `${encryption.reason} Cincin kunci enkripsi crm_leads tidak valid (tanpa kunci yang sah, titik kontak lead tidak dapat disimpan; tidak ada fallback plaintext).`
+    );
+  }
+
+  if (!hash.ok) {
+    problems.push(
+      `${hash.reason} Cincin kunci hash crm_leads tidak valid (tanpa kunci yang sah, titik kontak lead tidak dapat dicari).`
+    );
+  }
+
+  if (!encryption.ok || !hash.ok) return problems;
+
+  if (crmLeadsRingsShareAKey(encryption, hash)) {
+    problems.push(
+      "CRM_LEADS_ENCRYPTION_KEYS dan CRM_LEADS_HASH_KEYS tidak boleh berbagi kunci yang sama (ADR-0137 bagian 3: kunci HMAC tidak pernah melindungi ciphertext)."
+    );
+  }
+
+  for (const [name, ring] of [
+    ["CRM_LEADS_ENCRYPTION_KEYS", encryption],
+    ["CRM_LEADS_HASH_KEYS", hash]
+  ] as const) {
+    for (const other of CRM_LEADS_FOREIGN_KEY_VARIABLES) {
+      const shares = keyMaterialOf(env, other).some((material) =>
+        ring.keys.some((key) => key.key.equals(material))
+      );
+
+      if (shares) {
+        problems.push(
+          `${name} dan ${other} tidak boleh berbagi kunci yang sama; tiap modul memakai kunci terpisah.`
+        );
+      }
+    }
+  }
+
+  return problems;
 }
 
 /**
@@ -1186,6 +1310,15 @@ export function validateEnv(env: EnvBag): string[] {
       }
     }
   }
+
+  // crm_leads (ADR-0153, ADR-0137 section 3): TWO rings, an encryption ring and
+  // an HMAC ring. Optional (the module ships off), but a PRESENT ring must
+  // parse, the pair must be set together, the two must share no key with each
+  // other, and neither may share a key with any other module's ring OR any
+  // single-key secret of the deployment (the AUTH_* and COMMENTS_* keys are
+  // one base64 value, not a ring, and used to escape this check). No value is
+  // echoed.
+  problems.push(...crmLeadsKeyProblems(env));
 
   // telegram_delivery (ADR-0140): enabling Telegram REQUIRES the bot token, its
   // public username, the webhook secret and both key rings. Without any one of

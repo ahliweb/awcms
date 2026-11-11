@@ -7,13 +7,13 @@
 
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
-| Registered modules                  | 36    |
-| Migrations                          | 248   |
-| `awcms_*` tables                    | 242   |
-| Tables with `FORCE` RLS             | 224   |
+| Registered modules                  | 37    |
+| Migrations                          | 251   |
+| `awcms_*` tables                    | 254   |
+| Tables with `FORCE` RLS             | 236   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 789   |
-| Route files                         | 619   |
+| Test files                          | 791   |
+| Route files                         | 637   |
 | ADR                                 | 318   |
 
 ### Modules
@@ -56,6 +56,7 @@
 | `channel_accounts`     | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `website_engagement`   | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `tenant_domain`, `domain_event_runtime`, `profile_identity` |
 | `social_publishing`    | 0.1.0   | experimental | system | no   | `tenant_admin`, `identity_access`, `logging`, `domain_event_runtime`                                                           |
+| `crm_leads`            | 0.1.0   | experimental | domain | no   | `tenant_admin`, `identity_access`, `logging`, `module_management`, `domain_event_runtime`, `profile_identity`                  |
 
 ### Migrations
 
@@ -309,6 +310,9 @@
 | 246 | `sql/331_awcms_social_publishing_permissions.sql`                      |
 | 247 | `sql/340_awcms_channel_provider_risk_acknowledgements.sql`             |
 | 248 | `sql/341_awcms_channel_provider_risk_acknowledgements_permissions.sql` |
+| 249 | `sql/342_awcms_crm_leads_schema.sql`                                   |
+| 250 | `sql/343_awcms_crm_leads_permissions.sql`                              |
+| 251 | `sql/344_awcms_crm_leads_integrity_guards.sql`                         |
 
 ### Tables & Row-Level Security
 
@@ -371,6 +375,18 @@
 | `awcms_comments_reports`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
 | `awcms_comments_settings`                      | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
 | `awcms_comments_threads`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_crm_lead_assignments`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_lead_contact_points`                | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_lead_conversions`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_lead_merges`                        | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_lead_source_touches`                | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_lead_transitions`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_leads`                              | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_leads_settings`                     | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_pipeline_revisions`                 | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_pipeline_stages`                    | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_pipeline_transitions`               | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
+| `awcms_crm_pipelines`                          | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
 | `awcms_data_lifecycle_archive_manifests`       | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
 | `awcms_data_lifecycle_cursors`                 | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
 | `awcms_data_lifecycle_legal_holds`             | `sql/055_awcms_data_lifecycle_schema.sql`                  | yes | yes   |
@@ -561,16 +577,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 593        |
+| `(root)`      | 594        |
 | `e2e`         | 30         |
-| `integration` | 165        |
+| `integration` | 166        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 505   |
+| `/api/v1/**`    | 523   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

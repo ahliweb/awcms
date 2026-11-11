@@ -66,6 +66,16 @@ import { deriveTableRlsStates } from "./lib/table-rls-states";
  */
 export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
   {
+    table: "awcms_crm_pipeline_stages",
+    reason:
+      "ADR-0153 / Issue #1166. A stage of a pipeline revision: a tenant-chosen key, name, position and closed category. It describes a step of a process; there is no actor stamp on the row (the revision carries `published_by`) and nothing about a person."
+  },
+  {
+    table: "awcms_crm_pipeline_transitions",
+    reason:
+      "ADR-0153 / Issue #1166. An allowed edge between two stages of a revision with its closed guard codes. It describes a process rule; there is no actor stamp on the row and nothing about a person."
+  },
+  {
     table: "awcms_channel_account_health",
     reason:
       "ADR-0148 / Issue #1140. One row per ACCOUNT holding the latest health report: a state, a fixed reason code, a token expiry and quota figures. It records how an external account is doing, not anything about a person, and there is no actor stamp on the row at all."

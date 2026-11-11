@@ -730,6 +730,24 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   awcms_social_publications: ["SELECT", "INSERT", "UPDATE"],
   awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
   awcms_social_publish_attempts: ["SELECT", "INSERT"],
+  // ADR-0153 / `sql/342` (Issue #1166). NOT retired -- the lead pipeline, all
+  // actively written. DELETE is removed everywhere: a lead is soft-deleted or
+  // anonymised, a conversion is reversed, a merge rolled back, never removed by
+  // the runtime. UPDATE is ALSO removed from the immutable catalog (revisions,
+  // stages, edges) and the append-only touches and assignments; the triggers of
+  // sql/344 bind the owner as well.
+  awcms_crm_leads_settings: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_pipelines: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_pipeline_revisions: ["SELECT", "INSERT"],
+  awcms_crm_pipeline_stages: ["SELECT", "INSERT"],
+  awcms_crm_pipeline_transitions: ["SELECT", "INSERT"],
+  awcms_crm_leads: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_lead_contact_points: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_lead_source_touches: ["SELECT", "INSERT"],
+  awcms_crm_lead_transitions: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_lead_assignments: ["SELECT", "INSERT"],
+  awcms_crm_lead_conversions: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_lead_merges: ["SELECT", "INSERT", "UPDATE"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
@@ -2580,6 +2598,10 @@ export const CREDENTIAL_COLUMNS: readonly string[] = [
   "awcms_engagement_submissions.contact_encrypted",
   "awcms_engagement_submissions.email_hash",
   "awcms_engagement_submissions.phone_hash",
+  // crm_leads (sql/342, ADR-0153): a lead contact point's envelope ciphertext and
+  // its per-tenant keyed hash (an offline guessing oracle for an email or phone).
+  "awcms_crm_lead_contact_points.value_encrypted",
+  "awcms_crm_lead_contact_points.value_hash",
   "awcms_comments_reply_subscriptions.unsubscribe_token_hash",
   "awcms_telegram_link_codes.code_hash",
   "awcms_telegram_bindings.pin_hash",
@@ -2641,6 +2663,8 @@ export const CREDENTIAL_LOOKING_COLUMN_PATTERN =
  * reason, so the scan does not need a human to re-judge them every run.
  */
 export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
+  "awcms_crm_pipeline_revisions.definition_hash":
+    "SHA-256 over a pipeline revision's own stage catalog (stage keys, names, categories, edges, guard codes), kept to prove a published revision unchanged and to refuse an identical republish; it is not keyed, holds nothing about a person and unlocks nothing (sql/342)",
   "awcms_auth_providers.client_secret_env_var":
     "the NAME of an environment variable, not its value (sql/025)",
   "awcms_social_publications.content_hash":

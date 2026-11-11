@@ -296,5 +296,23 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "social_publishing.publications.schedule",
   "social_publishing.rules.configure",
   "social_publishing.rules.read",
-  "social_publishing.settings.configure"
+  "social_publishing.settings.configure",
+  // crm_leads (11) — ADR-0153 / Issue #1166. API-first and `experimental`: the
+  // operator screen (pipeline and revision editor with stage categories and
+  // edge guards, the lead list with masked contact points, the lead detail with
+  // its transition history, candidates, merge review with undo, conversions and
+  // the tenant switch) is the recorded follow-up that flips the module to
+  // `active` and adds its navigation entry in the same change (a nav entry
+  // without a page is a permanent 404). SYSTEM admin, built here.
+  "crm_leads.conversions.approve",
+  "crm_leads.leads.assign",
+  "crm_leads.leads.create",
+  "crm_leads.leads.delete",
+  "crm_leads.leads.read",
+  "crm_leads.leads.restore",
+  "crm_leads.leads.update",
+  "crm_leads.manual_conversions.create",
+  "crm_leads.merges.manage",
+  "crm_leads.pipelines.configure",
+  "crm_leads.stages.update"
 ];

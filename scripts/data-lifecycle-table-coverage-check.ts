@@ -139,6 +139,66 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0157 / Issue #1145. At most one row per attempt of a job, and a job's attempts are bounded by its max_attempts (at most 50, default 5, a manual retry grants 3 more), unique on (job, attempt number). Holds an outcome word, a fixed code and a fixed phrase: no content and no credential. Not bounded in time; see awcms_social_publications for the recorded retention follow-up."
   },
   {
+    table: "awcms_crm_leads_settings",
+    reason:
+      "ADR-0153 / Issue #1166. One row per tenant (primary key tenant_id), written only by a holder of `pipelines.configure`: the ceiling is the number of tenants. It holds a switch and a window length."
+  },
+  {
+    table: "awcms_crm_pipelines",
+    reason:
+      "ADR-0153 / Issue #1166. AUTHORED by an administrator holding `pipelines.configure`, unique per (tenant, code) and listed at most 200 per tenant; nothing in a request path or a job inserts one. A pipeline is the definition of a process, not traffic."
+  },
+  {
+    table: "awcms_crm_pipeline_revisions",
+    reason:
+      "ADR-0153 / Issue #1166. One row per PUBLISHED revision of an authored pipeline, written only by `pipelines.configure` and only when the definition changes (an identical definition is refused): the ceiling is administrator edits. Immutable by trigger, and must not be purged by age: every lead transition names the revision it happened under (L10)."
+  },
+  {
+    table: "awcms_crm_pipeline_stages",
+    reason:
+      "ADR-0153 / Issue #1166. At most 50 rows per revision (validator and CHECK), written only in the transaction that publishes the revision; bounded by revisions times 50. Immutable by trigger."
+  },
+  {
+    table: "awcms_crm_pipeline_transitions",
+    reason:
+      "ADR-0153 / Issue #1166. At most 400 edges per revision (validator), written only in the transaction that publishes the revision; bounded by revisions times 400. Immutable by trigger."
+  },
+  {
+    table: "awcms_crm_leads",
+    reason:
+      "ADR-0153 / Issue #1166. NOT bounded in time, and deliberately so FOR NOW: the retention windows for unconverted, lost and disqualified leads are open question O4 of ADR-0153 and need the controller's decision. A `generic` age-based descriptor would be wrong here: it deletes by age with no status predicate, so it would remove CONVERTED leads whose conversion record is evidence, and it cannot delete a lead before its append-only children. Growth is bounded by intake (one lead per distinct source key; replays write nothing), each lead can be anonymised on a subject's request today, and the retention sweep is the recorded follow-up in src/modules/crm-leads/README.md."
+  },
+  {
+    table: "awcms_crm_lead_contact_points",
+    reason:
+      "ADR-0153 / Issue #1166. At most 10 per intake or edit request and one live copy of a value per lead (unique index), so bounded by leads times edits; erased in place by anonymisation. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_lead_source_touches",
+    reason:
+      "ADR-0153 / Issue #1166. One row per DISTINCT source event (unique intake key; a replay writes nothing) attributed to a lead: bounded by intake. Append-only by trigger and a non-personal funnel fact. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_lead_transitions",
+    reason:
+      "ADR-0153 / Issue #1166. One row per stage change of a lead, each a deliberate act (a move, a revision migration, a conversion, a reversal, a merge or its rollback), unique on (lead, sequence). Append-only by trigger: funnel counts are reproduced from it (L10), so an age-based purge would change published figures. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_lead_assignments",
+    reason:
+      "ADR-0153 / Issue #1166. One row per owner change, each a deliberate act by a holder of `leads.assign`; append-only by trigger and staff stamps only. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_lead_conversions",
+    reason:
+      "ADR-0153 / Issue #1166. At most one LIVE conversion per lead (unique index), each a deliberate confirmation by the customer authority or a flagged manual act, unique on its evidence reference. It is evidence of a commercial fact and is never purged by age. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_lead_merges",
+    reason:
+      "ADR-0153 / Issue #1166. One row per human-reviewed merge (at most one live merge per absorbed lead, unique index), written only by a holder of `merges.manage`. It is the undo record and is never purged by age. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
+  },
+  {
     table: "awcms_channel_provider_connections",
     reason:
       "ADR-0148 / Issue #1140. One row per authorisation an administrator granted a provider, written only through the authenticated OAuth callback or the connector that completes it. Abandoned `pending` hand-offs are failed and their authorisation-code ciphertext erased by the bounded sweep on the next authorisation start (`sweepExpiredOAuthStates`); a revoked row keeps no credential reference, so it is an inert few-hundred-byte record of the fact."
