@@ -151,7 +151,7 @@ export const websiteEngagementModule = defineModule({
       ],
       batchLimit: 500,
       backupRestoreNotes:
-        "A restore without the WEBSITE_ENGAGEMENT_KEYS ring keeps the rows but cannot decrypt contact details (fail closed; masked reads still work). Back the ring up OUTSIDE the database. A restore must not resurrect rows past their retention window: run the retention purge after restoring.",
+        "A restore without the WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS ring (every key id the restored rows carry) keeps the rows but cannot decrypt contact details (fail closed; masked reads still work); without the WEBSITE_ENGAGEMENT_HASH_KEYS ring (or, for tokens hashed before Issue #1262, WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS) no source token verifies. Back both rings up OUTSIDE the database. A restore must not resurrect rows past their retention window: run the retention purge after restoring.",
       executionMode: "generic"
     }
   ],

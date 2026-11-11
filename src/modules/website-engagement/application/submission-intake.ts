@@ -33,10 +33,8 @@ import { randomUUID } from "node:crypto";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   encryptField,
-  keyedHashCandidates,
   keyedHashPrimary,
-  matchesAnyHash,
-  type KeyRing
+  matchesAnyHash
 } from "../../../lib/security/field-encryption";
 import {
   isTurnstileRequired,
@@ -47,6 +45,11 @@ import {
 import { appendDomainEvent } from "../../domain-event-runtime/application/append-domain-event";
 import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
 import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
+import {
+  lookupHashCandidates,
+  needsRehash,
+  type WebsiteEngagementRings
+} from "../domain/engagement-config";
 import {
   buildSubmissionReceivedPayload,
   type SubmissionReceivedFacts
@@ -111,7 +114,7 @@ export async function verifyIntake(
   sql: Sql,
   token: ParsedSourceToken,
   request: Request,
-  ring: KeyRing
+  rings: WebsiteEngagementRings
 ): Promise<VerifiedSource | null> {
   const origin = classifySubmissionOrigin(request);
 
@@ -135,12 +138,13 @@ export async function verifyIntake(
     const source = sourceRows[0];
 
     // Always computed, always compared: the work does not depend on whether the
-    // source exists.
-    const candidates = keyedHashCandidates(
-      token.secret,
-      { purpose: SOURCE_TOKEN_HASH_PURPOSE, tenantId: token.tenantId },
-      ring
-    );
+    // source exists, nor on which key its hash was written under (the legacy
+    // keys of the #1262 transition are always part of the candidate list).
+    const tokenDomain = {
+      purpose: SOURCE_TOKEN_HASH_PURPOSE,
+      tenantId: token.tenantId
+    };
+    const candidates = lookupHashCandidates(token.secret, tokenDomain, rings);
     const secretMatches = matchesAnyHash(
       source?.token_hash ?? DUMMY_TOKEN_HASH,
       candidates
@@ -171,6 +175,25 @@ export async function verifyIntake(
       );
 
     if (!accepted || !source || !origin) return null;
+
+    // Upgrade on use (Issue #1262, #1269 L-2): a token verified under any key
+    // other than the hash ring's ACTIVE one (a legacy key of the transition, or
+    // an older hash-ring key after an ordinary rotation) has its stored hash
+    // re-written under the active key, so the old key can be retired.
+    // Compare-and-swap on the very hash that just matched: a rotation that
+    // landed meanwhile has changed it, and is never overwritten with a hash of
+    // the superseded secret. Only reached AFTER every check above (token,
+    // status, tenant, module, Origin), so it reveals nothing to anyone else.
+    if (needsRehash(source.token_hash, rings)) {
+      await tx`
+        UPDATE awcms_engagement_sources
+        SET token_hash = ${keyedHashPrimary(token.secret, tokenDomain, rings.hash)}
+        WHERE tenant_id = ${token.tenantId}
+          AND id = ${source.id}
+          AND token_hash = ${source.token_hash}
+          AND deleted_at IS NULL
+      `;
+    }
 
     return {
       tenantId: token.tenantId,
@@ -274,7 +297,7 @@ export async function recordSubmission(
   source: VerifiedSource,
   request: SubmissionRequest,
   challenge: ChallengeOutcome,
-  ring: KeyRing,
+  rings: WebsiteEngagementRings,
   correlationId: string | undefined,
   now: Date = new Date()
 ): Promise<RecordResult> {
@@ -312,7 +335,7 @@ export async function recordSubmission(
               tenantId: source.tenantId,
               rowId: submissionId
             },
-            ring
+            rings.encryption
           )
         : null;
     const emailHash =
@@ -323,7 +346,7 @@ export async function recordSubmission(
               purpose: SUBMISSION_EMAIL_HASH_PURPOSE,
               tenantId: source.tenantId
             },
-            ring
+            rings.hash
           )
         : null;
     const phoneHash =
@@ -334,7 +357,7 @@ export async function recordSubmission(
               purpose: SUBMISSION_PHONE_HASH_PURPOSE,
               tenantId: source.tenantId
             },
-            ring
+            rings.hash
           )
         : null;
     const emailMasked =

@@ -1,15 +1,24 @@
 /**
  * The provider-adapter registry (Issue #1145, ADR-0157 section 3).
  *
- * One adapter per provider key, process-local, EMPTY in this slice: every real
- * provider (#1146 to #1151) registers its own adapter here when it is admitted,
- * and until it does a provider cannot publish (`PROVIDER_ADAPTER_UNAVAILABLE`),
- * which is the fail-closed default. Nothing in this module registers an adapter
- * on its own. The only adapter written in this slice is an in-memory fake that
- * tests register explicitly.
+ * One adapter per provider key, process-local. A provider without an adapter
+ * cannot publish (`PROVIDER_ADAPTER_UNAVAILABLE`), which is the fail-closed
+ * default.
+ *
+ * ## Built-in connectors (Issue #1146 onwards)
+ *
+ * A real connector is not REGISTERED by import order: the default registry
+ * answers it from {@link builtInAdapter}, which reads its deployment switch on
+ * every call (`SOCIAL_PUBLISHING_FACEBOOK_ENABLED`, default off). So the enqueue
+ * path (app process) and the dispatcher (job process) agree without either
+ * composition root having to remember to register it, and switching the flag
+ * off withdraws the adapter from both at once. Today the only built-in is
+ * Facebook Pages. An explicitly registered adapter (tests) takes precedence.
  */
 import type { SocialPublishAdapter } from "../domain/social-publish-adapter";
 import { isAnchoredPattern } from "../domain/social-publish-post-reference";
+import { isSocialPublishingFacebookEnabled } from "../domain/social-publishing-constants";
+import { facebookPagesAdapter } from "./facebook-pages-adapter";
 
 const PROVIDER_KEY = /^[a-z][a-z0-9_]{1,31}$/;
 
@@ -74,10 +83,32 @@ export function resetSocialPublishAdaptersForTests(): void {
   adapters.clear();
 }
 
+/** The connector that ships in this repository for `provider`, when its switch is on. */
+export function builtInAdapter(
+  provider: string,
+  env: NodeJS.ProcessEnv = process.env
+): SocialPublishAdapter | null {
+  if (provider === "facebook" && isSocialPublishingFacebookEnabled(env)) {
+    return facebookPagesAdapter;
+  }
+
+  return null;
+}
+
 export const socialAdapterRegistry: SocialAdapterRegistry = {
-  get: (provider) => adapters.get(provider) ?? null,
-  list: () => [...adapters.values()]
+  get: (provider) => adapters.get(provider) ?? builtInAdapter(provider),
+  list: () => {
+    const listed = [...adapters.values()];
+    const facebook = builtInAdapter("facebook");
+
+    if (facebook && !adapters.has("facebook")) listed.push(facebook);
+
+    return listed;
+  }
 };
+
+// The built-in connectors pass the same admission as a registered adapter.
+assertAdmissible(facebookPagesAdapter);
 
 /** A fixed registry, for tests and for a composition root that wants one explicit set. */
 export function createSocialAdapterRegistry(

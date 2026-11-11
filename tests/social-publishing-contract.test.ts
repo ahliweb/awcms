@@ -354,19 +354,28 @@ describe("the migrations", () => {
     expect(policy).toContain("a.provider IN ('whatsapp_cloud', 'starsender')");
     expect(policy).not.toMatch(/facebook|instagram|threads|linkedin|youtube/);
 
-    // The dispatch job holds no key ring: no scoped grant, and its script is
-    // handed a credential port that refuses everything.
-    expect(read("scripts/jobs-env-allowlist.ts")).not.toContain(
-      'target: "social-publishing:dispatch"'
+    // Issue #1146: the dispatch job holds the key ring ONLY as a dedicated-role
+    // job: it never opens the worker or app connection (so the ring never sits
+    // next to a login that reads WhatsApp credentials), and the runner withholds
+    // both from it.
+    expect(read("ops/awcms-jobs.env-scoped")).toContain(
+      "social-publishing:dispatch CHANNEL_SECRETS_ENCRYPTION_KEYS"
     );
-    expect(read("ops/awcms-jobs.env-scoped")).not.toContain(
-      "social-publishing:dispatch"
+    expect(read("ops/awcms-jobs.env-scoped")).toContain(
+      "social-publishing:dispatch SOCIAL_PUBLISHING_DATABASE_URL"
     );
 
     const script = read("scripts/social-publishing-dispatch.ts");
 
+    expect(script).toContain("getSocialPublishingDispatchDatabaseClient");
+    expect(script).toContain("assertConnectedAsSocialDispatchRole");
+    expect(script).toContain("assertNoSharedLogins");
+    expect(script).not.toMatch(
+      /getWorkerDatabaseClient|getDatabaseClient|getSetupDatabaseClient/
+    );
+    // The real credential path is composed only behind the connector switch.
     expect(script).toContain("noPublishCredentialPort");
-    expect(script).not.toContain("channel-sender-credential-adapter");
+    expect(script).toContain("isSocialPublishCredentialPathEnabled(env)");
     expect(script).not.toContain("secret-store");
   });
 
@@ -401,14 +410,20 @@ describe("credential and secret handling", () => {
       expect(source, file).not.toContain("resolvePublishCredential");
     }
 
-    // No script composes the publish credential adapter until the first
-    // connector brings its own DB role (ADR-0157 section 6).
+    // Only the social dispatch script composes the publish credential, on its
+    // own DB role and behind the connector switch (ADR-0157 section 6, #1146);
+    // only the two dispatch scripts touch the credential adapter at all.
     for (const file of files("scripts", ".ts")) {
-      expect(read(file), file).not.toContain("resolvePublishCredential");
+      const social = file.endsWith("social-publishing-dispatch.ts");
+
+      if (!social) {
+        expect(read(file), file).not.toContain("resolvePublishCredential");
+      }
 
       // Issue #1160: the two email jobs that resolve a tenant's Mailketing
-      // token (ADR-0151 section 2) are the only other composers.
+      // token (ADR-0151 section 2) are the other composers.
       if (
+        !social &&
         !file.endsWith("whatsapp-dispatch.ts") &&
         !file.endsWith("email-dispatch.ts") &&
         !file.endsWith("email-senders-verify.ts")
@@ -418,6 +433,11 @@ describe("credential and secret handling", () => {
         );
       }
     }
+
+    // The social script exposes ONLY the publish method of that adapter.
+    const social = read("scripts/social-publishing-dispatch.ts");
+
+    expect(social).not.toContain("resolveWhatsappCredential");
   });
 
   test("application and domain code never import channel_accounts directly (the lazy loaders are the seam)", () => {
@@ -449,7 +469,7 @@ describe("credential and secret handling", () => {
     expect(adapterContract).not.toMatch(/fetch\??:/);
   });
 
-  test("the fake adapter lives under tests/ and nothing in src or scripts registers an adapter", () => {
+  test("the fake adapter lives under tests/ and nothing in src or scripts registers an adapter (built-in connectors are flag-gated in the registry)", () => {
     for (const file of [...files("src", ".ts"), ...files("scripts", ".ts")]) {
       const source = read(file);
 
@@ -460,13 +480,19 @@ describe("credential and secret handling", () => {
       }
     }
 
-    const script = read("scripts/social-publishing-dispatch.ts");
-    const body = script.match(
-      /function registerSocialAdapters\(\): void \{([\s\S]*?)\n\}/
-    )?.[1];
+    // Issue #1146: a connector is not registered by a composition root; the
+    // default registry answers it from `builtInAdapter`, which reads the
+    // connector's switch on every call (default off).
+    const registry = read(
+      "src/modules/social-publishing/infrastructure/social-adapter-registry.ts"
+    );
 
-    // Connectors register here (#1146 to #1151); this slice ships none.
-    expect(body?.replace(/\/\/[^\n]*/g, "").trim()).toBe("");
+    expect(registry).toContain(
+      'provider === "facebook" && isSocialPublishingFacebookEnabled(env)'
+    );
+    expect(read("scripts/social-publishing-dispatch.ts")).not.toContain(
+      "registerSocialAdapters"
+    );
   });
 });
 
@@ -527,13 +553,13 @@ describe("the composition roots", () => {
 });
 
 describe("the contract versions", () => {
-  test("channel_account is 1.2.0 (Issue #1160 added the email ports) and social_publishing is 1.0.0, in the registry and in the family manifest", () => {
-    expect(CAPABILITY_CONTRACT_VERSIONS.channel_account).toBe("1.2.0");
+  test("channel_account is 1.3.0 (Issue #1160 added the email ports at 1.2.0, Issue #1146 the publisher health port) and social_publishing is 1.0.0, in the registry and in the family manifest", () => {
+    expect(CAPABILITY_CONTRACT_VERSIONS.channel_account).toBe("1.3.0");
     expect(CAPABILITY_CONTRACT_VERSIONS.social_publishing).toBe("1.0.0");
 
     const manifest = read("awcms-family-compatibility.yaml");
 
-    expect(manifest).toContain('channel_account: "1.2.0"');
+    expect(manifest).toContain('channel_account: "1.3.0"');
     expect(manifest).toContain('social_publishing: "1.0.0"');
   });
 

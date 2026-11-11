@@ -99,7 +99,7 @@ No public withdrawal channel; no server-to-server signed mode; no widget; no liv
 
 ## Operating
 
-Set `WEBSITE_ENGAGEMENT_KEYS` (see `.env.example`), enable the module for the tenant in Module Management (enabled by default), create a source with `POST /sources` listing the tenant's domain ids, give the website the one-time token, the consent copy version it shows and a generated `eventId` per form render. Rotate by `POST /sources/{id}/rotate`; stop a site with `POST /sources/{id}/revoke`.
+Set the two key rings `WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS` and `WEBSITE_ENGAGEMENT_HASH_KEYS`, sharing no key (see `.env.example`; a deployment that used the retired single ring `WEBSITE_ENGAGEMENT_KEYS` follows the transition runbook in the module README, Issue #1262), enable the module for the tenant in Module Management (enabled by default), create a source with `POST /sources` listing the tenant's domain ids, give the website the one-time token, the consent copy version it shows and a generated `eventId` per form render. Rotate by `POST /sources/{id}/rotate`; stop a site with `POST /sources/{id}/revoke`.
 
 ## Further audit decisions
 

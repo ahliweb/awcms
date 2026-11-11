@@ -361,7 +361,9 @@ export const RUNNER_DEDICATED_END = "# END GENERATED: dedicated-role jobs";
  */
 export const DEDICATED_ROLE_CLIENT_FILES: Readonly<Record<string, string>> = {
   "src/lib/database/telegram-engagement-dispatch-client.ts":
-    "TELEGRAM_ENGAGEMENT_DATABASE_URL"
+    "TELEGRAM_ENGAGEMENT_DATABASE_URL",
+  "src/lib/database/social-publishing-dispatch-client.ts":
+    "SOCIAL_PUBLISHING_DATABASE_URL"
 };
 
 /** The shared-role client calls a dedicated-role job must not reach. */
@@ -571,6 +573,11 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "telegram-engagement:dispatch",
         reason:
           "decrypts a customer bot's token and webhook seed in memory, per claimed endpoint or message, for that row's tenant (#1156, ADR-0152 section 10). It connects ONLY as its own role awcms_telegram_engagement_dispatch (sql/353), whose RESTRICTIVE policy shows it only live customer bot tokens and webhook seeds; the runner withholds DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL from it unconditionally (dedicatedRoleTargets), and the job refuses to start if either is present or if it is not connected as that role, so the ring meets no login that could read a WhatsApp, Mailketing or social secret (audits H-2 and H-A of PR #1260)"
+      },
+      {
+        target: "social-publishing:dispatch",
+        reason:
+          "decrypts a social account's publishing access token in memory, per claimed job, for that job's tenant, and only while a connector is switched on (#1146, ADR-0157 section 6). It connects ONLY as its own role awcms_social_dispatch (sql/358, sql/373), whose RESTRICTIVE policy shows it only the access token of a live, publish-granted facebook/instagram/threads/tiktok/youtube/linkedin account; the runner withholds DATABASE_URL, WORKER_DATABASE_URL and SETUP_DATABASE_URL from it unconditionally (dedicatedRoleTargets), and the job refuses to start if one is present or if it is not connected as that role, so the ring meets no login that could read a WhatsApp, Mailketing or Telegram secret"
       }
     ]
   },
@@ -595,6 +602,18 @@ export const JOB_SCOPED: readonly JobScopedSecret[] = [
         target: "telegram-engagement:dispatch",
         reason:
           "decrypts the chat id and the text of each message it delivers (#1156)"
+      }
+    ]
+  },
+  {
+    name: "SOCIAL_PUBLISHING_DATABASE_URL",
+    reason:
+      "the login of the awcms_social_dispatch role (sql/358, sql/373); whoever holds it can read the publishing access tokens of every tenant's social accounts, and nothing else of the channel secrets",
+    jobs: [
+      {
+        target: "social-publishing:dispatch",
+        reason:
+          "its only database connection, with no fallback to another one (#1146, ADR-0157 section 6)"
       }
     ]
   },
@@ -1041,9 +1060,24 @@ export const WEB_ONLY: readonly { name: string; reason: string }[] = [
       "verified by the webhook route; the registration script is run by an operator, not scheduled"
   },
   {
+    name: "WEBSITE_ENGAGEMENT_ENCRYPTION_KEYS",
+    reason:
+      "a secret: the ring that encrypts website submissions' contact details (ADR-0155, ADR-0137 section 3, Issue #1262); read only by the public intake and the admin routes. The retention purge deletes aged rows by id under column-only grants and never decrypts, so no cron job reads it"
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_HASH_KEYS",
+    reason:
+      "a secret: the HMAC ring that keys every website source-token and identifier hash (ADR-0155, ADR-0137 section 3, Issue #1262); read only by the public intake and the admin routes. No cron job hashes or looks up a token"
+  },
+  {
+    name: "WEBSITE_ENGAGEMENT_LEGACY_HASH_KEYS",
+    reason:
+      "a secret: verify-only keys of the retired single ring, accepted only when the public intake checks a source token during the Issue #1262 transition; never used by a job"
+  },
+  {
     name: "WEBSITE_ENGAGEMENT_KEYS",
     reason:
-      "a secret: the ring that encrypts website submissions' contact details and keys every source-token and identifier hash (ADR-0155); read only by the public intake and the admin routes. The retention purge deletes aged rows by id under column-only grants and never decrypts, so no cron job reads it"
+      "the RETIRED single ring (Issue #1262), read only so a stale value makes the website_engagement routes refuse by name; no job reads it"
   },
   {
     name: "CRM_LEADS_ENCRYPTION_KEYS",

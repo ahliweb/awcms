@@ -330,7 +330,7 @@ esac
 # Source: dedicatedRoleTargets() in scripts/jobs-env-allowlist.ts, derived from each
 # target's import closure. Do not edit between the markers; regenerate.
 case "$JOB" in
-  telegram-engagement:dispatch)
+  social-publishing:dispatch | telegram-engagement:dispatch)
     WITHHOLD_ALL_DATABASE_URLS=1
     ;;
   *)
