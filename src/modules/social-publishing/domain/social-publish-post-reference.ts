@@ -18,20 +18,54 @@
  *   (`SocialPublishAdapter.postUrlHosts`, exact match). A URL that fails is
  *   DROPPED (stored as NULL): the id is the post's identity, the URL is a
  *   convenience, and a post that really exists must not be re-sent because of
- *   an odd link.
+ *   an odd link. A kept URL is reduced to its origin and path: the query and
+ *   the fragment, where a token could ride, are never stored (L-2 of the #1261
+ *   audit). A pattern with a top-level `|` is not anchored (L-1).
  */
 import { isSafeLinkUrl } from "./social-publish-content";
 
 /** The database's floor (`sql/359`): every supported provider's ids fit it. */
 export const EXTERNAL_POST_ID_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
-/** Whether a pattern is anchored at both ends, so it cannot match a substring of a longer string. */
+/**
+ * Whether `source` has an alternation (`|`) at the TOP level, outside every
+ * group and character class. `^a|b$` is "starts with a" OR "ends with b": its
+ * `^` and `$` anchor only one alternative each (L-1 of the #1261 audit).
+ */
+export function hasTopLevelAlternation(source: string): boolean {
+  let depth = 0;
+  let inClass = false;
+
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+
+    if (ch === "\\") {
+      i += 1;
+      continue;
+    }
+
+    if (inClass) {
+      if (ch === "]") inClass = false;
+      continue;
+    }
+
+    if (ch === "[") inClass = true;
+    else if (ch === "(") depth += 1;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (ch === "|" && depth === 0) return true;
+  }
+
+  return false;
+}
+
+/** Whether a pattern is anchored at both ends AS A WHOLE, so it cannot match a substring of a longer string. */
 export function isAnchoredPattern(pattern: RegExp): boolean {
   return (
     pattern.source.startsWith("^") &&
     pattern.source.endsWith("$") &&
     !pattern.source.endsWith("\\$") &&
-    !pattern.flags.includes("m")
+    !pattern.flags.includes("m") &&
+    !hasTopLevelAlternation(pattern.source)
   );
 }
 
@@ -44,8 +78,12 @@ export function acceptExternalPostId(
   if (!isAnchoredPattern(pattern)) return null;
   if (!EXTERNAL_POST_ID_SHAPE.test(raw)) return null;
 
-  // A fresh RegExp: a `g` or `y` flag would make `test` stateful.
-  const own = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ""));
+  // A fresh RegExp, wrapped so the anchors apply to the whole pattern whatever
+  // it contains, and without `g`/`y` (they would make `test` stateful).
+  const own = new RegExp(
+    `^(?:${pattern.source})$`,
+    pattern.flags.replace(/[gym]/g, "")
+  );
 
   return own.test(raw) ? raw : null;
 }
@@ -57,13 +95,24 @@ export function acceptExternalPostUrl(
 ): string | null {
   if (typeof raw !== "string" || !isSafeLinkUrl(raw)) return null;
 
-  let host: string;
+  let url: URL;
 
   try {
-    host = new URL(raw).hostname.toLowerCase();
+    url = new URL(raw);
   } catch {
     return null;
   }
 
-  return hosts.some((allowed) => allowed.toLowerCase() === host) ? raw : null;
+  const host = url.hostname.toLowerCase();
+
+  if (!hosts.some((allowed) => allowed.toLowerCase() === host)) return null;
+
+  // L-2 of the #1261 audit: the query and the fragment are DROPPED. A provider
+  // (or a buggy adapter) can put an `access_token=` or any other secret there,
+  // and this URL reaches responses, events and audit rows. A post's address is
+  // its origin and path.
+  url.search = "";
+  url.hash = "";
+
+  return url.toString();
 }

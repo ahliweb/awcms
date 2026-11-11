@@ -12,4 +12,14 @@ security(social_publishing): the admission conditions ADR-0157 sets before the f
 
 **L6 closed.** `SocialPublishAdapter` gains two required fields, `externalPostIdPattern` (anchored) and `postUrlHosts`, and the registry refuses an adapter without them. A `published` answer whose post id does not match it, or the identifier alphabet `sql/359` now enforces in the database (`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`), is recorded as UNKNOWN (`INVALID_POST_ID`) and the id is never stored; a post URL on an undeclared host is dropped.
 
+**Hardening after the security audit of PR #1261.**
+
+- `security:readiness` pins the social dispatch policies and the retention floors to their EXACT canonical expressions (`pinPolicyExpression`). It also pins the `terminal_at` triggers' bodies (`pinTriggerFunction`).
+- For the role, it runs a behavioural probe. In a rolled-back transaction the probe seeds negative rows, assumes `awcms_social_dispatch`, and requires that exactly one secret is visible. Connections that cannot assume the role skip the probe.
+- The retention floors rest on `terminal_at`, which only database triggers write, not on `updated_at`.
+- Two more restrictive policies hide every non-social account and connection from the role.
+- `resolvePublishCredential` re-checks the requested account's own `publish` capability (`CAPABILITY_DENIED`).
+- A top-level `|` no longer counts as an anchored post-id pattern.
+- A stored post URL loses its query and fragment.
+
 Operator action: run `bun run db:migrate` (applies `sql/357` to `sql/359`, forward-only) and schedule the regenerated `ops/awcms-jobs.crontab` (one new daily line). No new environment variable.

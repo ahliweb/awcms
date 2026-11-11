@@ -731,6 +731,36 @@ describe("L6 of the #1145 audit: the provider's post id and URL are checked, not
     expect(acceptExternalPostUrl([], "https://www.facebook.com/1")).toBeNull();
   });
 
+  test("L-2 of the #1261 audit: the query and fragment are dropped, so a token in them never reaches a row", () => {
+    expect(
+      acceptExternalPostUrl(
+        ["www.facebook.com"],
+        "https://www.facebook.com/1234_5678?access_token=SECRET&x=1#frag"
+      )
+    ).toBe("https://www.facebook.com/1234_5678");
+  });
+
+  test("L-1 of the #1261 audit: a top-level alternation is not anchored, whatever its first and last characters", () => {
+    const evil = /^[0-9]+_[0-9]+|.*$/;
+
+    expect(isAnchoredPattern(evil)).toBe(false);
+    expect(acceptExternalPostId(evil, "anything-at-all")).toBeNull();
+    expect(() =>
+      createSocialAdapterRegistry([
+        createFakeSocialAdapter("facebook", undefined, undefined, {
+          externalPostIdPattern: evil
+        })
+      ])
+    ).toThrow(/anchored/);
+
+    // Alternation INSIDE a group, or a `|` inside a class or escaped, is fine.
+    expect(isAnchoredPattern(/^(?:[0-9]+|urn:li:share:[0-9]+)$/)).toBe(true);
+    expect(isAnchoredPattern(/^[0-9|]+$/)).toBe(true);
+    expect(isAnchoredPattern(/^[0-9]+\|[0-9]+$/)).toBe(true);
+    expect(acceptExternalPostId(/^(?:[0-9]+|abc)$/, "abc")).toBe("abc");
+    expect(acceptExternalPostId(/^(?:[0-9]+|abc)$/, "abcd")).toBeNull();
+  });
+
   test("the registry refuses an adapter that cannot say what its ids look like", () => {
     expect(() =>
       createSocialAdapterRegistry([

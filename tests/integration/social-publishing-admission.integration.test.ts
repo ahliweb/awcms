@@ -47,7 +47,13 @@ import { resolveChannelSecretsRing } from "../../src/modules/channel-accounts/do
 import { PROVIDER_MATRIX_VERSION } from "../../src/modules/channel-accounts/domain/provider-matrix";
 import { purgeSocialPublishing } from "../../src/modules/social-publishing/application/social-publishing-retention-purge";
 import { SOCIAL_PUBLISH_ATTEMPTS_LIFECYCLE_KEY } from "../../src/modules/social-publishing/domain/social-publishing-lifecycle";
-import { checkWorkerSetupRoleGrants } from "../../scripts/security-readiness";
+import {
+  SOCIAL_DISPATCH_PINNED_POLICIES,
+  SOCIAL_RETENTION_FLOOR_POLICIES,
+  checkWorkerSetupRoleGrants,
+  pinPolicyExpression,
+  probeSocialDispatchSecretVisibility
+} from "../../scripts/security-readiness";
 
 const TENANT_A = "a1145a00-0000-4000-8000-00000000000a";
 const TENANT_B = "a1145a00-0000-4000-8000-00000000000b";
@@ -477,6 +483,80 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
       expect(ids).toContain(wa.secretId);
     });
 
+    test("L-6: the role sees only the accounts and connections of the six social providers", async () => {
+      const fb = await seedSocial(TENANT_A);
+      const wa = await seedWhatsapp(TENANT_A);
+      const admin = getAdminSql();
+
+      // A Mailketing sender and a Telegram bot, with their own connections.
+      for (const [provider, kind, mode] of [
+        ["mailketing", "esp_account", "api_token"],
+        ["telegram", "bot", "bot_token"]
+      ] as const) {
+        const connection = (await admin`
+          INSERT INTO awcms_channel_provider_connections
+            (tenant_id, provider, auth_mode, grant_state)
+          VALUES (${TENANT_A}, ${provider}, ${mode}, 'active')
+          RETURNING id
+        `) as { id: string }[];
+
+        await admin`
+          INSERT INTO awcms_channel_accounts
+            (tenant_id, provider, account_kind, external_id, display_name,
+             auth_mode, status, connection_id)
+          VALUES (${TENANT_A}, ${provider}, ${kind},
+                  ${String((externalSeq += 1))}, 'x', ${mode}, 'connected',
+                  ${connection[0]!.id})
+        `;
+      }
+
+      const seen = await asRole(SOCIAL_ROLE, TENANT_A, async (tx) => ({
+        accounts: (
+          (await tx`SELECT id, provider FROM awcms_channel_accounts`) as {
+            id: string;
+            provider: string;
+          }[]
+        ).map((row) => row.provider),
+        connections: (
+          (await tx`
+            SELECT provider FROM awcms_channel_provider_connections
+          `) as { provider: string }[]
+        ).map((row) => row.provider)
+      }));
+
+      expect(seen.accounts).toEqual(["facebook"]);
+      expect(seen.connections).toEqual(["facebook"]);
+      expect(wa.accountId).not.toBe(fb.accountId);
+    });
+
+    test("L-5: a second account on the same connection WITHOUT its own publish capability is refused before any secret is read", async () => {
+      const fb = await seedSocial(TENANT_A);
+      const sibling = (await getAdminSql()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, status, connection_id)
+        VALUES (${TENANT_A}, 'facebook', 'page', ${String((externalSeq += 1))},
+                'sibling', 'oauth2', 'connected', ${fb.connectionId})
+        RETURNING id
+      `) as { id: string }[];
+
+      // The token IS visible to the role (the policy is keyed on the
+      // connection, which a publish-granted account uses) ...
+      expect(await visibleSecretIds(SOCIAL_ROLE, TENANT_A)).toEqual([
+        fb.secretId
+      ]);
+
+      // ... but the adapter asks about THE requested account.
+      const result = await asRole(SOCIAL_ROLE, TENANT_A, (tx) =>
+        credentials.resolvePublishCredential(tx, {
+          tenantId: TENANT_A,
+          accountId: sibling[0]!.id
+        })
+      );
+
+      expect(result).toEqual({ ok: false, reason: "CAPABILITY_DENIED" });
+    });
+
     test("L10: a social account that would borrow its parent's connection is refused, not resolved through the parent", async () => {
       const parent = await seedSocial(TENANT_A, { capabilityState: null });
       // A child with NO connection of its own pointing at the parent. None of
@@ -608,10 +688,6 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
             (tenant_id, job_id, attempt_no, outcome, error_code, created_at)
           VALUES (${tenantId}, ${id}, 1, 'retryable', 'UPSTREAM_5XX', ${stamp})
         `;
-        await admin`
-          UPDATE awcms_social_publish_jobs SET updated_at = ${stamp}
-          WHERE id = ${id}
-        `;
         jobIds.push(id);
       }
 
@@ -623,10 +699,31 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
         `;
       }
 
-      await admin`
-        UPDATE awcms_social_publications SET updated_at = ${stamp}
-        WHERE id = ${publication[0]!.id}
-      `;
+      // `terminal_at` is written only by the sql/357 triggers, from the
+      // database clock: a fixture can back-date it only with triggers off
+      // (superuser, `session_replication_role = replica`), which is exactly
+      // what no runtime role can do.
+      await admin.begin(async (tx) => {
+        await tx.unsafe("SET LOCAL session_replication_role = replica");
+        await tx`
+          UPDATE awcms_social_publish_jobs
+          SET updated_at = ${stamp},
+              terminal_at = CASE
+                WHEN status IN ('published', 'failed', 'cancelled')
+                  THEN ${stamp}::timestamptz
+              END
+          WHERE publication_id = ${publication[0]!.id}
+        `;
+        await tx`
+          UPDATE awcms_social_publications
+          SET updated_at = ${stamp},
+              terminal_at = CASE
+                WHEN state IN ('ready', 'cancelled', 'refused')
+                  THEN ${stamp}::timestamptz
+              END
+          WHERE id = ${publication[0]!.id}
+        `;
+      });
 
       return { publicationId: publication[0]!.id, jobIds };
     }
@@ -840,85 +937,389 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
         "awcms_app DELETE attempts"
       );
     });
+
+    test("M-2: moving updated_at (or terminal_at) back as the app or the worker does not make fresh evidence deletable", async () => {
+      const worker = await requireWorker();
+      const fresh = await seedPublication({
+        jobStatuses: ["published", "failed"],
+        ageDays: 0
+      });
+      const LONG_AGO = "2000-01-01T00:00:00Z";
+
+      // The auditor's scenario: a compromised worker back-dates the jobs, a
+      // compromised app back-dates the publication, then the worker deletes.
+      await asRole(
+        "awcms_worker",
+        TENANT_A,
+        (tx) =>
+          tx`
+          UPDATE awcms_social_publish_jobs
+          SET updated_at = ${LONG_AGO}, terminal_at = ${LONG_AGO}
+          WHERE publication_id = ${fresh.publicationId}
+        `
+      );
+      await inTenant(
+        TENANT_A,
+        (tx) =>
+          tx`
+          UPDATE awcms_social_publications
+          SET updated_at = ${LONG_AGO}, terminal_at = ${LONG_AGO}
+          WHERE id = ${fresh.publicationId}
+        `
+      );
+
+      const stamps = (await getAdminSql()`
+        SELECT terminal_at FROM awcms_social_publish_jobs
+        WHERE publication_id = ${fresh.publicationId}
+        UNION ALL
+        SELECT terminal_at FROM awcms_social_publications
+        WHERE id = ${fresh.publicationId}
+      `) as { terminal_at: Date }[];
+
+      for (const row of stamps) {
+        expect(new Date(row.terminal_at).getFullYear()).toBeGreaterThan(2000);
+      }
+
+      const deleted = await asRole("awcms_worker", TENANT_A, async (tx) => {
+        const attempts = (await tx`
+          DELETE FROM awcms_social_publish_attempts
+          WHERE job_id = ANY(${tx.array(fresh.jobIds, "uuid")}) RETURNING id
+        `) as unknown[];
+        const jobs = (await tx`
+          DELETE FROM awcms_social_publish_jobs
+          WHERE publication_id = ${fresh.publicationId} RETURNING id
+        `) as unknown[];
+        const publications = (await tx`
+          DELETE FROM awcms_social_publications
+          WHERE id = ${fresh.publicationId} RETURNING id
+        `) as unknown[];
+
+        return [attempts.length, jobs.length, publications.length];
+      });
+
+      expect(deleted).toEqual([0, 0, 0]);
+      expect(
+        await purgeSocialPublishing(worker, TENANT_A, noHold, {
+          now: new Date(Date.now() + 5000 * DAY)
+        })
+      ).toMatchObject({ purgedPublications: 0, purgedJobs: 0 });
+      expect(
+        await exists("awcms_social_publications", fresh.publicationId)
+      ).toBe(true);
+    });
+
+    test("terminal_at follows the status: a retried job loses it, and its next terminal state is a fresh stamp", async () => {
+      const old = await seedPublication({
+        jobStatuses: ["failed"],
+        ageDays: 800
+      });
+      const id = old.jobIds[0]!;
+
+      await getAdminSql()`
+        UPDATE awcms_social_publish_jobs SET status = 'queued' WHERE id = ${id}
+      `;
+
+      const queued = (await getAdminSql()`
+        SELECT terminal_at FROM awcms_social_publish_jobs WHERE id = ${id}
+      `) as { terminal_at: Date | null }[];
+
+      expect(queued[0]!.terminal_at).toBeNull();
+
+      await getAdminSql()`
+        UPDATE awcms_social_publish_jobs SET status = 'failed' WHERE id = ${id}
+      `;
+
+      const failed = (await getAdminSql()`
+        SELECT terminal_at FROM awcms_social_publish_jobs WHERE id = ${id}
+      `) as { terminal_at: Date }[];
+
+      expect(
+        Date.now() - new Date(failed[0]!.terminal_at).getTime()
+      ).toBeLessThan(60_000);
+    });
   });
 
-  describe("security:readiness pins both boundaries", () => {
-    async function dropAndRestore(
-      file: string,
-      createMarker: string,
-      dropStatement: string,
-      readUntil?: string
-    ): Promise<{ failed: string; restored: string; evidence: string }> {
-      const original = readFileSync(file, "utf8");
-      const from = original.indexOf(createMarker);
-      const to = readUntil ? original.indexOf(readUntil, from) : -1;
-      const create =
-        to > from ? original.slice(from, to) : original.slice(from);
+  describe("security:readiness pins both boundaries exactly (M-1, M-3 of the #1261 audit)", () => {
+    /** The `CREATE POLICY <name> ... );` statement of `name` in a migration file. */
+    function policyStatement(file: string, name: string): string {
+      const text = readFileSync(file, "utf8");
+      const from = text.indexOf(`CREATE POLICY ${name}\n`);
+      const to = text.indexOf("\n  );", from);
+
+      if (from < 0 || to < 0) throw new Error(`no CREATE POLICY ${name}`);
+
+      return text.slice(from, to + "\n  );".length);
+    }
+
+    /** Replace `name` on `table` by `mutated`, run readiness, restore it, and return both verdicts. */
+    async function withPolicy(
+      table: string,
+      name: string,
+      original: string,
+      mutated: string
+    ): Promise<{ status: string; evidence: string; restored: string }> {
+      expect(mutated).not.toBe(original);
+
       const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
 
       try {
-        await admin.unsafe(dropStatement);
+        await admin.unsafe(`DROP POLICY ${name} ON ${table}`);
 
         let result;
 
         try {
+          await admin.unsafe(mutated);
           result = await checkWorkerSetupRoleGrants();
         } finally {
-          await admin.unsafe(create);
+          await admin.unsafe(`DROP POLICY IF EXISTS ${name} ON ${table}`);
+          await admin.unsafe(original);
         }
 
-        const restored = await checkWorkerSetupRoleGrants();
-
         return {
-          failed: result.status,
-          restored: restored.status,
-          evidence: result.evidence
+          status: result.status,
+          evidence: result.evidence,
+          restored: (await checkWorkerSetupRoleGrants()).status
         };
       } finally {
         await admin.close({ timeout: 1 });
       }
     }
 
-    test("readiness passes on the migrated database, FAILS when the social dispatch policy is dropped, and passes again once restored", async () => {
-      expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+    const SECRETS_FILE = "sql/358_awcms_social_dispatch_credential_role.sql";
+    const SECRETS_POLICY = "awcms_channel_secrets_social_dispatch_publish";
+    const FLOOR_FILE = "sql/357_awcms_social_publishing_retention.sql";
 
-      const outcome = await dropAndRestore(
-        "sql/358_awcms_social_dispatch_credential_role.sql",
-        "CREATE POLICY awcms_channel_secrets_social_dispatch_publish",
-        "DROP POLICY awcms_channel_secrets_social_dispatch_publish ON awcms_channel_secrets"
-      );
+    test("readiness passes on the migrated database, and its probe really ran", async () => {
+      const result = await checkWorkerSetupRoleGrants();
 
-      expect(outcome.failed).toBe("fail");
-      expect(outcome.evidence).toContain(
-        "awcms_channel_secrets_social_dispatch_publish"
-      );
-      expect(outcome.restored).toBe("pass");
+      expect(result.status, result.evidence).toBe("pass");
+      expect(
+        (await probeSocialDispatchSecretVisibility(getAdminSql())).ran
+      ).toBe(true);
     });
 
-    test("readiness FAILS when the social dispatch policy is WIDENED to a WhatsApp provider", async () => {
-      const original = readFileSync(
-        "sql/358_awcms_social_dispatch_credential_role.sql",
-        "utf8"
-      );
-      const create = original.slice(
-        original.indexOf(
-          "CREATE POLICY awcms_channel_secrets_social_dispatch_publish"
-        )
-      );
-      const widened = create.replace(
-        "'facebook', 'instagram'",
-        "'whatsapp_cloud', 'facebook', 'instagram'"
-      );
+    test("the pinned expressions are the ones the migrations create", async () => {
+      for (const pin of [
+        ...SOCIAL_DISPATCH_PINNED_POLICIES,
+        ...SOCIAL_RETENTION_FLOOR_POLICIES
+      ]) {
+        expect(await pinPolicyExpression(getAdminSql(), pin)).toBeNull();
+      }
+    });
 
-      expect(widened).not.toBe(create);
-
+    test("dropping the secret policy FAILS, restoring it passes", async () => {
+      const original = policyStatement(SECRETS_FILE, SECRETS_POLICY);
       const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
 
       try {
         await admin.unsafe(
-          "DROP POLICY awcms_channel_secrets_social_dispatch_publish ON awcms_channel_secrets"
+          `DROP POLICY ${SECRETS_POLICY} ON awcms_channel_secrets`
         );
-        await admin.unsafe(widened);
+
+        let result;
+
+        try {
+          result = await checkWorkerSetupRoleGrants();
+        } finally {
+          await admin.unsafe(original);
+        }
+
+        expect(result.status).toBe("fail");
+        expect(result.evidence).toContain(SECRETS_POLICY);
+        expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
+      } finally {
+        await admin.close({ timeout: 1 });
+      }
+    });
+
+    // The four widenings the auditor ran against the LIKE pin, each of which
+    // used to PASS. Every one must now fail (exact pin) and the probe must see
+    // more than the one legitimate secret.
+    const secretMutations: [string, (sql: string) => string][] = [
+      [
+        "the correlation to the secret row removed",
+        (s) =>
+          s.replace("AND c.access_secret_id = awcms_channel_secrets.id\n", "\n")
+      ],
+      [
+        "`true OR` in front of the purpose",
+        (s) =>
+          s.replace(
+            "purpose = 'provider_access_token'",
+            "true OR purpose = 'provider_access_token'"
+          )
+      ],
+      [
+        "`k.state <> 'granted'`",
+        (s) => s.replace("k.state = 'granted'", "k.state <> 'granted'")
+      ],
+      [
+        "an inverted status list",
+        (s) =>
+          s.replace(
+            "a.status IN ('connected', 'degraded')",
+            "a.status NOT IN ('disconnected')"
+          )
+      ],
+      [
+        "a WhatsApp provider added",
+        (s) =>
+          s.replace(
+            "'facebook', 'instagram'",
+            "'whatsapp_cloud', 'facebook', 'instagram'"
+          )
+      ]
+    ];
+
+    for (const [label, mutate] of secretMutations) {
+      test(`the secret policy with ${label} FAILS readiness (pin and probe)`, async () => {
+        const original = policyStatement(SECRETS_FILE, SECRETS_POLICY);
+        const mutated = mutate(original);
+        const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+        let probe: Awaited<
+          ReturnType<typeof probeSocialDispatchSecretVisibility>
+        >;
+
+        const outcome = await withPolicy(
+          "awcms_channel_secrets",
+          SECRETS_POLICY,
+          original,
+          mutated
+        );
+
+        expect(outcome.status, label).toBe("fail");
+        expect(outcome.evidence).toContain(SECRETS_POLICY);
+        expect(outcome.restored, `${label} restored`).toBe("pass");
+
+        // The behavioural probe, on its own, also sees the widening.
+        try {
+          await admin.unsafe(
+            `DROP POLICY ${SECRETS_POLICY} ON awcms_channel_secrets`
+          );
+          await admin.unsafe(mutated);
+          probe = await probeSocialDispatchSecretVisibility(admin);
+        } finally {
+          await admin.unsafe(
+            `DROP POLICY IF EXISTS ${SECRETS_POLICY} ON awcms_channel_secrets`
+          );
+          await admin.unsafe(original);
+          await admin.close({ timeout: 1 });
+        }
+
+        expect(probe.ran).toBe(true);
+
+        if (label === "a WhatsApp provider added") {
+          // Defence in depth: the account and connection policies (L-6) still
+          // hide every WhatsApp row from the role, so the widened secret policy
+          // finds nothing extra to admit. The exact pin above is what catches
+          // it; the probe correctly reports no exposure.
+          expect(probe.finding).toBeUndefined();
+          return;
+        }
+
+        expect(probe.finding, `${label}: the probe must see it`).toContain(
+          "awcms_social_dispatch saw"
+        );
+      });
+    }
+
+    test("the account and connection provider policies are pinned too (a WhatsApp provider added FAILS)", async () => {
+      for (const [table, name] of [
+        [
+          "awcms_channel_accounts",
+          "awcms_channel_accounts_social_dispatch_providers"
+        ],
+        [
+          "awcms_channel_provider_connections",
+          "awcms_channel_provider_connections_social_dispatch_providers"
+        ]
+      ] as const) {
+        const original = policyStatement(SECRETS_FILE, name);
+        const outcome = await withPolicy(
+          table,
+          name,
+          original,
+          original.replace("'facebook',", "'whatsapp_cloud', 'facebook',")
+        );
+
+        expect(outcome.status, name).toBe("fail");
+        expect(outcome.evidence).toContain(name);
+        expect(outcome.restored).toBe("pass");
+      }
+    });
+
+    const floorMutations: [string, string, string, (s: string) => string][] = [
+      [
+        "awcms_social_publish_jobs",
+        "awcms_social_publish_jobs_worker_retention_floor",
+        "`OR true`",
+        (s) =>
+          s.replace(
+            "AND terminal_at < now() - interval '365 days'",
+            "AND terminal_at < now() - interval '365 days' OR true"
+          )
+      ],
+      [
+        "awcms_social_publish_jobs",
+        "awcms_social_publish_jobs_worker_retention_floor",
+        "the comparison reversed",
+        (s) =>
+          s.replace(
+            "terminal_at < now() - interval '365 days'",
+            "terminal_at > now() - interval '365 days'"
+          )
+      ],
+      [
+        "awcms_social_publish_jobs",
+        "awcms_social_publish_jobs_worker_retention_floor",
+        "the status condition removed",
+        (s) =>
+          s.replace(
+            "status IN ('published', 'failed', 'cancelled')\n    AND ",
+            ""
+          )
+      ],
+      [
+        "awcms_social_publications",
+        "awcms_social_publications_worker_retention_floor",
+        "the floor moved back onto updated_at",
+        (s) => s.replace("AND terminal_at < now()", "AND updated_at < now()")
+      ],
+      [
+        "awcms_social_publish_attempts",
+        "awcms_social_publish_attempts_worker_retention_floor",
+        "the job condition removed",
+        (s) =>
+          s.replace(
+            "created_at < now() - interval '365 days'\n    AND EXISTS",
+            "created_at < now() - interval '365 days'\n    OR EXISTS"
+          )
+      ]
+    ];
+
+    for (const [table, name, label, mutate] of floorMutations) {
+      test(`${name} with ${label} FAILS readiness`, async () => {
+        const original = policyStatement(FLOOR_FILE, name);
+        const outcome = await withPolicy(
+          table,
+          name,
+          original,
+          mutate(original)
+        );
+
+        expect(outcome.status, label).toBe("fail");
+        expect(outcome.evidence).toContain(name);
+        expect(outcome.restored).toBe("pass");
+      });
+    }
+
+    test("a disabled terminal_at trigger FAILS readiness (the floor's stamp could be forged)", async () => {
+      const admin = new Bun.SQL(process.env.DATABASE_URL!, { max: 1 });
+
+      try {
+        await admin.unsafe(
+          "ALTER TABLE awcms_social_publish_jobs DISABLE TRIGGER awcms_social_publish_jobs_terminal_stamp"
+        );
 
         let result;
 
@@ -926,31 +1327,18 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
           result = await checkWorkerSetupRoleGrants();
         } finally {
           await admin.unsafe(
-            "DROP POLICY awcms_channel_secrets_social_dispatch_publish ON awcms_channel_secrets"
+            "ALTER TABLE awcms_social_publish_jobs ENABLE TRIGGER awcms_social_publish_jobs_terminal_stamp"
           );
-          await admin.unsafe(create);
         }
 
         expect(result.status).toBe("fail");
+        expect(result.evidence).toContain(
+          "awcms_social_publish_jobs_terminal_stamp"
+        );
         expect((await checkWorkerSetupRoleGrants()).status).toBe("pass");
       } finally {
         await admin.close({ timeout: 1 });
       }
-    });
-
-    test("readiness FAILS when a worker retention floor is dropped, and passes again once restored", async () => {
-      const outcome = await dropAndRestore(
-        "sql/357_awcms_social_publishing_retention.sql",
-        "CREATE POLICY awcms_social_publish_jobs_worker_retention_floor",
-        "DROP POLICY awcms_social_publish_jobs_worker_retention_floor ON awcms_social_publish_jobs",
-        "DROP POLICY IF EXISTS awcms_social_publications_worker_retention_floor"
-      );
-
-      expect(outcome.failed).toBe("fail");
-      expect(outcome.evidence).toContain(
-        "awcms_social_publish_jobs_worker_retention_floor"
-      );
-      expect(outcome.restored).toBe("pass");
     });
 
     test("readiness FAILS when the social dispatch role gains a table-level privilege", async () => {

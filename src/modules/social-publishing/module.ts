@@ -43,7 +43,7 @@ function lifecycle(input: {
     tableName: input.tableName,
     ownerModuleKey: SOCIAL_PUBLISHING_MODULE_KEY,
     scope: "tenant",
-    cursorColumn: input.cursorColumn ?? "updated_at",
+    cursorColumn: input.cursorColumn ?? "terminal_at",
     retentionClass: "communication_log",
     retentionMinDays: SOCIAL_PUBLISHING_RETENTION_MIN_DAYS,
     retentionMaxDays: SOCIAL_PUBLISHING_RETENTION_MAX_DAYS,
@@ -253,7 +253,7 @@ export const socialPublishingModule = defineModule({
       deletionRationale:
         "Only a publication that is ready, cancelled or refused, older than the window, and whose EVERY job is terminal and older than the window is eligible, and only after its jobs and attempts went in the same transaction. A pending_approval publication waits for a person. sql/357 refuses the worker anything younger than 365 days.",
       index: {
-        columns: ["tenant_id", "updated_at"],
+        columns: ["tenant_id", "terminal_at"],
         purpose:
           "awcms_social_publications_retention_idx (sql/357) -- the purge's own path over the states it may remove."
       },
@@ -267,9 +267,9 @@ export const socialPublishingModule = defineModule({
       deletionRationale:
         "Deleted only as part of a whole eligible publication, and only when terminal (published, failed, cancelled). A queued, retrying, in-flight or needs_reconciliation job is pending work or an open question about whether a post exists, never history. sql/357 refuses the worker a non-terminal or younger job.",
       index: {
-        columns: ["tenant_id", "publication_id"],
+        columns: ["tenant_id", "terminal_at"],
         purpose:
-          "awcms_social_publish_jobs_publication_idx (sql/330) -- jobs are found and deleted by their publication."
+          "awcms_social_publish_jobs_retention_idx (sql/357) -- (tenant, terminal_at) over terminal jobs; jobs are deleted with their publication through awcms_social_publish_jobs_publication_idx (sql/330)."
       },
       batchLimit: 5000
     }),

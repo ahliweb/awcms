@@ -110,6 +110,22 @@ describe("findSharedTableWrites", () => {
     // re-permitted the exact write this change removed. The first test in this
     // file failed on it, which is why the shape is `excusedOwner` now.
     for (const entry of DOCUMENTED_EXCEPTIONS) {
+      // The one non-module exception (Issue #1145, PR #1261 audit M-1): the
+      // security:readiness probe writes INSIDE a transaction it always rolls
+      // back. It may forgive only the tooling writer, only on the five tables
+      // the probe seeds, and only with the reason that says so.
+      if (entry.excusedOwner === "(scripts tooling)") {
+        expect([
+          "awcms_tenants",
+          "awcms_channel_secrets",
+          "awcms_channel_provider_connections",
+          "awcms_channel_accounts",
+          "awcms_channel_account_capabilities"
+        ]).toContain(entry.table);
+        expect(entry.reason).toContain("ALWAYS rolls");
+        continue;
+      }
+
       expect(entry.excusedOwner).toBe("tenant_admin");
     }
   });

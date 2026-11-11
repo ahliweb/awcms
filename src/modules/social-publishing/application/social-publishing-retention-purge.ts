@@ -114,14 +114,14 @@ export async function purgeSocialPublishing(
         FROM awcms_social_publications p
         WHERE p.tenant_id = ${tenantId}
           AND p.state IN ('ready', 'cancelled', 'refused')
-          AND p.updated_at < ${cutoff}
+          AND p.terminal_at < ${cutoff}
           AND NOT EXISTS (
             SELECT 1 FROM awcms_social_publish_jobs j
             WHERE j.tenant_id = p.tenant_id AND j.publication_id = p.id
               AND (j.status NOT IN ('published', 'failed', 'cancelled')
-                   OR j.updated_at >= ${cutoff})
+                   OR j.terminal_at IS NULL OR j.terminal_at >= ${cutoff})
           )
-        ORDER BY p.updated_at ASC, p.id ASC
+        ORDER BY p.terminal_at ASC, p.id ASC
         LIMIT ${batchLimit}
       `) as { id: string }[];
 
@@ -134,7 +134,7 @@ export async function purgeSocialPublishing(
       // publication, or waits for this transaction. SKIP LOCKED: a job held by
       // a live transaction is not history yet.
       const locked = (await tx`
-        SELECT j.id, j.publication_id, j.status, j.updated_at
+        SELECT j.id, j.publication_id, j.status, j.terminal_at
         FROM awcms_social_publish_jobs j
         WHERE j.tenant_id = ${tenantId}
           AND j.publication_id = ANY(${tx.array(publicationIds, "uuid")})
@@ -143,7 +143,7 @@ export async function purgeSocialPublishing(
         id: string;
         publication_id: string;
         status: string;
-        updated_at: Date;
+        terminal_at: Date | null;
       }[];
 
       const lockedByPublication = new Map<string, typeof locked>();
@@ -176,7 +176,8 @@ export async function purgeSocialPublishing(
           jobs.every(
             (job) =>
               ["published", "failed", "cancelled"].includes(job.status) &&
-              new Date(job.updated_at).getTime() < cutoff.getTime()
+              job.terminal_at !== null &&
+              new Date(job.terminal_at).getTime() < cutoff.getTime()
           )
         );
       });

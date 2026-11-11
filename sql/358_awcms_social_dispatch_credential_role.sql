@@ -89,6 +89,42 @@ GRANT SELECT (
 GRANT SELECT (id, tenant_id, purpose, ciphertext)
   ON awcms_channel_secrets TO awcms_social_dispatch;
 
+-- The role sees only the ACCOUNTS and CONNECTIONS of the six social publishing
+-- providers (L-6 of the #1261 audit): not a WhatsApp number, a StarSender device,
+-- a Mailketing sender or a Telegram bot, not even their ids and statuses.
+DROP POLICY IF EXISTS awcms_channel_accounts_social_dispatch_providers
+  ON awcms_channel_accounts;
+
+CREATE POLICY awcms_channel_accounts_social_dispatch_providers
+  ON awcms_channel_accounts
+  AS RESTRICTIVE
+  FOR SELECT
+  TO awcms_social_dispatch
+  USING (
+    provider IN (
+      'facebook', 'instagram', 'threads', 'tiktok', 'youtube', 'linkedin'
+    )
+  );
+
+DROP POLICY IF EXISTS awcms_channel_provider_connections_social_dispatch_providers
+  ON awcms_channel_provider_connections;
+
+CREATE POLICY awcms_channel_provider_connections_social_dispatch_providers
+  ON awcms_channel_provider_connections
+  AS RESTRICTIVE
+  FOR SELECT
+  TO awcms_social_dispatch
+  USING (
+    provider IN (
+      'facebook', 'instagram', 'threads', 'tiktok', 'youtube', 'linkedin'
+    )
+  );
+
+-- The secret policy is keyed on the CONNECTION: a token is visible when some
+-- live, publish-granted account uses that connection. Which account a request
+-- is for is re-checked by the credential adapter (`resolvePublishCredential`
+-- asks for a granted `publish` capability of THAT account before any secret is
+-- read; L-5 of the #1261 audit).
 DROP POLICY IF EXISTS awcms_channel_secrets_social_dispatch_publish
   ON awcms_channel_secrets;
 
