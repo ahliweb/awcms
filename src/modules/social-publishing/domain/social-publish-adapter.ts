@@ -157,6 +157,20 @@ export interface SocialPublishAdapter {
    */
   readonly supportsIdempotencyKey: boolean;
   /**
+   * The shape of a post id THIS provider returns, anchored at both ends
+   * (`^...$`), e.g. `/^[0-9]{1,32}_[0-9]{1,32}$/` (residual L6 of the #1145
+   * audit). A `published` outcome whose id does not match it (or the generic
+   * identifier alphabet of `sql/359`) is recorded as UNKNOWN (`INVALID_POST_ID`)
+   * and the id is never stored. An unanchored pattern matches nothing.
+   */
+  readonly externalPostIdPattern: RegExp;
+  /**
+   * The hostnames a post URL from this provider may point at, exact match (e.g.
+   * `["www.facebook.com"]`). A URL on any other host is dropped (stored as
+   * NULL); an empty list means no URL is ever stored.
+   */
+  readonly postUrlHosts: readonly string[];
+  /**
    * Performs the provider call. Never throws for an ordinary provider outcome
    * (those are values); throwing is reserved for a bug or an unexpected
    * condition, which the dispatcher treats as a retryable failure with a

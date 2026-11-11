@@ -61,6 +61,7 @@
     "whatsapp:dispatch": "bun scripts/whatsapp-dispatch.ts",
     "whatsapp:queue:purge": "bun scripts/whatsapp-queue-purge.ts",
     "social-publishing:dispatch": "bun scripts/social-publishing-dispatch.ts",
+    "social-publishing:retention:purge": "bun scripts/social-publishing-retention-purge.ts",
     "telegram:dispatch": "bun scripts/telegram-dispatch.ts",
     "telegram:queue:purge": "bun scripts/telegram-queue-purge.ts",
     "telegram:webhook:register": "bun scripts/telegram-webhook-register.ts",

@@ -1490,15 +1490,17 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // ADR-0157 / `sql/330` (Issue #1145). The article path enqueues from
   // `blog:publish:scheduled` (reads the two tenant switches and the rules, inserts
   // a publication and its jobs); `social-publishing:dispatch` claims and finalises
-  // jobs (UPDATE) and writes the attempt ledger. Neither deletes anything, neither
-  // updates a publication (its snapshot is immutable and its approval is an
-  // operator's act), and neither writes the switches or the rules: a worker that
-  // could would decide which accounts publish what.
+  // jobs (UPDATE) and writes the attempt ledger. Neither updates a publication
+  // (its snapshot is immutable and its approval is an operator's act), and
+  // neither writes the switches or the rules: a worker that could would decide
+  // which accounts publish what. DELETE added by `sql/357` (Issue #1145) for
+  // `social-publishing:retention:purge`, bounded by RESTRICTIVE row policies to
+  // terminal evidence older than 365 days (pinned below).
   awcms_social_publishing_settings: ["SELECT"],
   awcms_social_publish_rules: ["SELECT"],
-  awcms_social_publications: ["SELECT", "INSERT"],
-  awcms_social_publish_jobs: ["SELECT", "INSERT", "UPDATE"],
-  awcms_social_publish_attempts: ["SELECT", "INSERT"],
+  awcms_social_publications: ["DELETE", "SELECT", "INSERT"],
+  awcms_social_publish_jobs: ["DELETE", "SELECT", "INSERT", "UPDATE"],
+  awcms_social_publish_attempts: ["DELETE", "SELECT", "INSERT"],
   // ADR-0140 (sql/216) — `telegram:dispatch` claims/updates queue rows, writes
   // attempts, and ends (revokes/suspends) a binding whose principal is gone or
   // whose chat Telegram reports unreachable, nulling its ciphertext; it reads the
@@ -2153,6 +2155,55 @@ export const SETUP_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
   }
 };
 
+/**
+ * `awcms_social_dispatch` (sql/358, Issue #1145, ADR-0157 section 6): the
+ * SEPARATE role through which the social dispatcher may read a publishing
+ * token. It holds NO table-level privilege anywhere and exactly these column
+ * reads, so the matrix below is empty and every awcms_% table must be fully
+ * ungranted at table level. The rows it may see of `awcms_channel_secrets` are
+ * bounded by the RESTRICTIVE policy `awcms_channel_secrets_social_dispatch_publish`,
+ * pinned in `checkWorkerSetupRoleGrants`.
+ */
+export const SOCIAL_DISPATCH_ROLE = "awcms_social_dispatch";
+
+export const SOCIAL_DISPATCH_ROLE_GRANTS: Record<string, string[]> = {};
+
+export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
+  awcms_channel_accounts: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "business_scope_type",
+      "business_scope_id",
+      "provider",
+      "account_kind",
+      "external_id",
+      "auth_mode",
+      "connection_id",
+      "parent_account_id",
+      "secret_id",
+      "status",
+      "deleted_at"
+    ]
+  },
+  awcms_channel_account_capabilities: {
+    SELECT: ["tenant_id", "account_id", "capability", "state"]
+  },
+  awcms_channel_provider_connections: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "provider",
+      "grant_state",
+      "access_secret_id",
+      "expires_at"
+    ]
+  },
+  awcms_channel_secrets: {
+    SELECT: ["id", "tenant_id", "purpose", "ciphertext"]
+  }
+};
+
 export type WorkerSetupRoleGrantsPolicy = {
   worker: Record<string, string[]>;
   setup: Record<string, string[]>;
@@ -2160,6 +2211,10 @@ export type WorkerSetupRoleGrantsPolicy = {
   workerColumns?: typeof WORKER_COLUMN_GRANTS;
   /** Optional: defaults to `SETUP_COLUMN_GRANTS`. */
   setupColumns?: typeof WORKER_COLUMN_GRANTS;
+  /** Optional: defaults to `SOCIAL_DISPATCH_ROLE_GRANTS` (empty). */
+  socialDispatch?: Record<string, string[]>;
+  /** Optional: defaults to `SOCIAL_DISPATCH_COLUMN_GRANTS`. */
+  socialDispatchColumns?: typeof WORKER_COLUMN_GRANTS;
 };
 
 /**
@@ -2174,7 +2229,9 @@ export function defaultWorkerSetupRoleGrantsPolicy(): WorkerSetupRoleGrantsPolic
     worker: WORKER_ROLE_GRANTS,
     setup: SETUP_ROLE_GRANTS,
     workerColumns: WORKER_COLUMN_GRANTS,
-    setupColumns: SETUP_COLUMN_GRANTS
+    setupColumns: SETUP_COLUMN_GRANTS,
+    socialDispatch: SOCIAL_DISPATCH_ROLE_GRANTS,
+    socialDispatchColumns: SOCIAL_DISPATCH_COLUMN_GRANTS
   };
 }
 
@@ -2217,7 +2274,11 @@ export async function checkWorkerSetupRoleGrants(
   const severity: CheckSeverity = "critical";
   const matrices: { role: string; grants: Record<string, string[]> }[] = [
     { role: WORKER_ROLE, grants: policy?.worker ?? WORKER_ROLE_GRANTS },
-    { role: SETUP_ROLE, grants: policy?.setup ?? SETUP_ROLE_GRANTS }
+    { role: SETUP_ROLE, grants: policy?.setup ?? SETUP_ROLE_GRANTS },
+    {
+      role: SOCIAL_DISPATCH_ROLE,
+      grants: policy?.socialDispatch ?? SOCIAL_DISPATCH_ROLE_GRANTS
+    }
   ];
 
   try {
@@ -2313,6 +2374,10 @@ export async function checkWorkerSetupRoleGrants(
       {
         role: SETUP_ROLE,
         columns: policy?.setupColumns ?? SETUP_COLUMN_GRANTS
+      },
+      {
+        role: SOCIAL_DISPATCH_ROLE,
+        columns: policy?.socialDispatchColumns ?? SOCIAL_DISPATCH_COLUMN_GRANTS
       }
     ]) {
       if (!present.includes(role)) {
@@ -2435,6 +2500,80 @@ export async function checkWorkerSetupRoleGrants(
           `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
         );
       }
+
+      // sql/357 (Issue #1145): the worker may DELETE publication evidence only
+      // through three RESTRICTIVE floors (terminal, older than 365 days, the
+      // publication last). Without them the DELETE granted for the retention
+      // purge would let any compromised job erase every tenant's history.
+      const floors = (await sql`
+        SELECT c.relname,
+          EXISTS (
+            SELECT 1 FROM pg_policy p
+            WHERE p.polrelid = c.oid
+              AND p.polname = c.relname || '_worker_retention_floor'
+              AND NOT p.polpermissive AND p.polcmd = 'd'
+              AND p.polroles = ARRAY[to_regrole('awcms_worker')::oid]
+              AND p.polqual IS NOT NULL
+              AND pg_get_expr(p.polqual, p.polrelid) LIKE '%365 days%'
+          ) AS has_floor
+        FROM pg_class c
+        WHERE c.relname IN (
+          'awcms_social_publications', 'awcms_social_publish_jobs',
+          'awcms_social_publish_attempts'
+        )
+        ORDER BY c.relname
+      `) as { relname: string; has_floor: boolean }[];
+
+      for (const floor of floors) {
+        if (!floor.has_floor) {
+          findings.push(
+            `${floor.relname} restrictive policy ${floor.relname}_worker_retention_floor (FOR DELETE TO awcms_worker, terminal and older than 365 days) is missing or weakened (the retention DELETE grant would let a compromised job erase every tenant's publication evidence)`
+          );
+        }
+      }
+    }
+
+    // sql/358 (Issue #1145, ADR-0157 section 6): the social dispatcher's own
+    // role sees ONLY the access token of a social account that may publish right
+    // now. Its column grant on awcms_channel_secrets.ciphertext is column-wide,
+    // so this RESTRICTIVE row policy is the whole boundary: pinned by name,
+    // kind, command, role and by what the expression must name (the publish
+    // capability, the grant state, the account status, the purpose) and must
+    // NOT name (a WhatsApp, email or bot provider, another purpose, a revoked
+    // state). Dropping or widening it is a finding, not a silent loss.
+    if (present.includes(SOCIAL_DISPATCH_ROLE)) {
+      const policy = (await sql`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_policy p
+          WHERE p.polrelid = to_regclass('awcms_channel_secrets')
+            AND p.polname = 'awcms_channel_secrets_social_dispatch_publish'
+            AND NOT p.polpermissive AND p.polcmd = 'r'
+            AND p.polroles = ARRAY[to_regrole('awcms_social_dispatch')::oid]
+            AND p.polqual IS NOT NULL
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%provider_access_token%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%awcms_channel_account_capabilities%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%publish%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%granted%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%grant_state%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%deleted_at IS NULL%'
+            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%connected%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%whatsapp%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%starsender%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%mailketing%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%telegram%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%api_token%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%device_key%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%bot_token%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%refresh%'
+            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%revoked%'
+        ) AS has_policy
+      `) as { has_policy: boolean }[];
+
+      if (!policy[0]?.has_policy) {
+        findings.push(
+          `awcms_channel_secrets restrictive policy awcms_channel_secrets_social_dispatch_publish (FOR SELECT TO awcms_social_dispatch, limited to the access token of a live social account with a granted publish capability) is missing or widened (the social dispatch role could read every tenant's WhatsApp, email and refresh tokens)`
+        );
+      }
     }
 
     // The two triggers that make an UNOFFICIAL provider's risk acknowledgement
@@ -2528,7 +2667,12 @@ export async function checkWorkerSetupRoleGrants(
  * (`awcms_delegated_expiry`, `awcms_telegram_bootstrap`, ...) are NOT job roles:
  * nothing connects as them, they are reachable only through one narrow EXECUTE.
  */
-export const WORKER_JOB_ROLES: readonly string[] = [WORKER_ROLE];
+export const WORKER_JOB_ROLES: readonly string[] = [
+  WORKER_ROLE,
+  // sql/358 (Issue #1145): the social dispatcher's own role. A job role (an
+  // operator activates LOGIN for it), so it is checked like the worker.
+  SOCIAL_DISPATCH_ROLE
+];
 
 /**
  * Every role the credential-column check covers: the job roles plus the one-time
@@ -2645,7 +2789,7 @@ export const WORKER_CREDENTIAL_COLUMN_EXCEPTIONS: Readonly<
   "awcms_telegram_bindings.chat_ciphertext":
     "telegram:dispatch decrypts the chat id in-process to send; it is ciphertext under a key ring the worker already holds (sql/216)",
   "awcms_channel_secrets.ciphertext":
-    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts)."
+    "whatsapp:dispatch decrypts a TENANT-OWNED sender's credential in-process, in memory, for the claimed row's tenant, to call the provider (Issue #1141, sql/322). ADR-0148 section 5 ACCEPTS this residual risk. What bounds it: the grant is column-only and read-only (id, tenant_id, purpose, ciphertext); since sql/324 and sql/328 a RESTRICTIVE policy limits the rows the worker can see to provider_access_token, api_token and device_key (never a refresh token, bot token, webhook secret, PKCE verifier or authorisation code) AND to rows a whatsapp_cloud or starsender account or a whatsapp_cloud connection references (never a Facebook, Instagram, Threads, TikTok, YouTube, LinkedIn or Mailketing token; security:readiness pins the policy); the key ring (CHANNEL_SECRETS_ENCRYPTION_KEYS) is outside the database and its backups and granted to this job alone. What does NOT bound it: the in-process decrypt counter (telemetry in the worker's own process, which a compromised process can skip or reset); AES-GCM associated data (purpose, tenant, row) stops a ciphertext being re-labelled or moved, but the grant exposes those inputs, so a compromised worker that sets the tenant can still read and decrypt every tenant's WhatsApp sender credentials (access tokens, API tokens and device keys of whatsapp_cloud and starsender accounts). The SAME column is read by the separate role awcms_social_dispatch (sql/358, Issue #1145, ADR-0157 section 6), under its OWN restrictive policy (awcms_channel_secrets_social_dispatch_publish: only the provider_access_token of a facebook, instagram, threads, tiktok, youtube or linkedin connection whose grant is active or expired and that a connected or degraded account with a granted publish capability uses; security:readiness pins it). That role ships NOLOGIN, no job holds its connection string or the key ring for it yet, and awcms_worker's view does not widen."
 };
 
 /**

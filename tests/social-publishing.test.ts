@@ -7,6 +7,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildAdapterHttp } from "../src/modules/social-publishing/application/social-publish-dispatch";
+import {
+  acceptExternalPostId,
+  acceptExternalPostUrl,
+  isAnchoredPattern
+} from "../src/modules/social-publishing/domain/social-publish-post-reference";
+import {
+  SOCIAL_PUBLISHING_DEFAULT_RETENTION_DAYS,
+  clampSocialPublishingRetentionDays
+} from "../src/modules/social-publishing/domain/social-publishing-lifecycle";
 import { isPublisherShape } from "../src/modules/channel-accounts/application/channel-account-port-adapter";
 import {
   buildContentSnapshot,
@@ -657,5 +666,95 @@ describe("the fake adapter", () => {
     expect(outcome.outcome).toBe("published");
     expect(fake.calls).toHaveLength(1);
     expect(fake.calls[0]!.credential).toBe("c");
+  });
+});
+
+describe("L6 of the #1145 audit: the provider's post id and URL are checked, not stored as given", () => {
+  const FB_ID = /^[0-9]{1,32}_[0-9]{1,32}$/;
+
+  test("an id matching the adapter's anchored pattern and the sql/359 shape is accepted", () => {
+    expect(acceptExternalPostId(FB_ID, "1234_5678")).toBe("1234_5678");
+    expect(
+      acceptExternalPostId(/^urn:li:share:[0-9]{1,32}$/, "urn:li:share:42")
+    ).toBe("urn:li:share:42");
+  });
+
+  test("anything else is refused: wrong shape, whitespace, a body, an over-long or non-string value", () => {
+    for (const raw of [
+      "",
+      "12 34",
+      "1234_5678 Bearer abc",
+      '{"error":"x"}',
+      "https://evil.example/x",
+      "a".repeat(129),
+      null,
+      42,
+      undefined
+    ]) {
+      expect(acceptExternalPostId(/^[A-Za-z0-9._:-]{1,200}$/, raw)).toBeNull();
+    }
+
+    expect(acceptExternalPostId(FB_ID, "abc")).toBeNull();
+  });
+
+  test("an unanchored or multiline pattern matches nothing (it could match a substring of a longer value)", () => {
+    expect(isAnchoredPattern(/[0-9]+/)).toBe(false);
+    expect(isAnchoredPattern(/^[0-9]+/)).toBe(false);
+    expect(isAnchoredPattern(/^[0-9]+$/m)).toBe(false);
+    expect(acceptExternalPostId(/[0-9]+/, "123")).toBeNull();
+
+    // A global flag must not make the check stateful.
+    const g = /^[0-9]+$/g;
+
+    expect(acceptExternalPostId(g, "123")).toBe("123");
+    expect(acceptExternalPostId(g, "123")).toBe("123");
+  });
+
+  test("a post URL is kept only on a declared host, https, with no credentials", () => {
+    const hosts = ["www.facebook.com"];
+
+    expect(
+      acceptExternalPostUrl(hosts, "https://www.facebook.com/1234_5678")
+    ).toBe("https://www.facebook.com/1234_5678");
+
+    for (const raw of [
+      "https://evil.example/1234",
+      "http://www.facebook.com/1234",
+      "https://user:pass@www.facebook.com/1",
+      "https://www.facebook.com.evil.example/1",
+      "javascript:alert(1)",
+      null
+    ]) {
+      expect(acceptExternalPostUrl(hosts, raw)).toBeNull();
+    }
+
+    expect(acceptExternalPostUrl([], "https://www.facebook.com/1")).toBeNull();
+  });
+
+  test("the registry refuses an adapter that cannot say what its ids look like", () => {
+    expect(() =>
+      createSocialAdapterRegistry([
+        createFakeSocialAdapter("facebook", undefined, undefined, {
+          externalPostIdPattern: /[0-9]+/
+        })
+      ])
+    ).toThrow(/anchored/);
+    expect(() =>
+      createSocialAdapterRegistry([
+        createFakeSocialAdapter("facebook", undefined, undefined, {
+          postUrlHosts: ["https://www.facebook.com"]
+        })
+      ])
+    ).toThrow(/hostnames/);
+  });
+});
+
+describe("retention window (Issue #1145)", () => {
+  test("defaults to 730 days and is clamped into 365..3650", () => {
+    expect(SOCIAL_PUBLISHING_DEFAULT_RETENTION_DAYS).toBe(730);
+    expect(clampSocialPublishingRetentionDays(30)).toBe(365);
+    expect(clampSocialPublishingRetentionDays(100_000)).toBe(3650);
+    expect(clampSocialPublishingRetentionDays(Number.NaN)).toBe(730);
+    expect(clampSocialPublishingRetentionDays(900.7)).toBe(900);
   });
 });

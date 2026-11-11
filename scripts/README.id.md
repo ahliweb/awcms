@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:38010016eb552ccb11cb7ba56e2209b43edaa517ab729a094a6f9bc38096bccc -->
+<!-- i18n-source-hash: sha256:171cbfb9ee9f8cb75c4f5a2f7c3de0454c23f581c6dc75c891e902afb77e10ca -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-156 target menjalankan berkas di `scripts/`; 65 di antaranya
+157 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -174,6 +174,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `site-search:sources:check`               | `site-search-sources-check.ts`                 | ✅   |
 | `skills:check`                            | `skills-check.ts`                              | ✅   |
 | `social-publishing:dispatch`              | `social-publishing-dispatch.ts`                | —    |
+| `social-publishing:retention:purge`       | `social-publishing-retention-purge.ts`         | —    |
 | `subject-data:coverage:check`             | `subject-data-coverage-check.ts`               | ✅   |
 | `subject-data:registry:check`             | `subject-data-registry-check.ts`               | ✅   |
 | `sync:objects:dispatch`                   | `object-sync-dispatch.ts`                      | —    |

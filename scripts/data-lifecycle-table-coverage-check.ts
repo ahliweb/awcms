@@ -124,21 +124,6 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0157 / Issue #1145. Authored by an administrator holding `rules.configure`, unique per (trigger, account) and capped at 200 per tenant by the route and the list bound; a rule is disabled, never deleted. Nothing in a request path or a job inserts one."
   },
   {
-    table: "awcms_social_publications",
-    reason:
-      "ADR-0157 / Issue #1145. Authored by editorial action, not by traffic: one row per article event (unique per article and trigger) or per manual publication an operator composed, so the ceiling is editorial throughput, not request volume. It is NOT bounded in time: the retention sweep for the published-content snapshots, jobs and attempts is a recorded follow-up that needs the owner's decision on how long the evidence of what was published under the tenant's name is kept (docs/awcms/social-publishing.md, remaining limitations). Content is the tenant's own public communication, not data about a person."
-  },
-  {
-    table: "awcms_social_publish_jobs",
-    reason:
-      "ADR-0157 / Issue #1145. One row per (publication, account), so at most the publications' count times the accounts a tenant connected (at most 20 per manual publication, at most 200 rules), written only by the enqueue path in the same transaction as the publication. A retry reuses the row. Not bounded in time; see awcms_social_publications for the recorded retention follow-up."
-  },
-  {
-    table: "awcms_social_publish_attempts",
-    reason:
-      "ADR-0157 / Issue #1145. At most one row per attempt of a job, and a job's attempts are bounded by its max_attempts (at most 50, default 5, a manual retry grants 3 more), unique on (job, attempt number). Holds an outcome word, a fixed code and a fixed phrase: no content and no credential. Not bounded in time; see awcms_social_publications for the recorded retention follow-up."
-  },
-  {
     table: "awcms_crm_leads_settings",
     reason:
       "ADR-0153 / Issue #1166. One row per tenant (primary key tenant_id), written only by a holder of `pipelines.configure`: the ceiling is the number of tenants. It holds a switch and a window length."

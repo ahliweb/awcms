@@ -554,7 +554,7 @@
       ],
       "permissionCount": 9,
       "navigationCount": 0,
-      "jobCount": 1,
+      "jobCount": 2,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

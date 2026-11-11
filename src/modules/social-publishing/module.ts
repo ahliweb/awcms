@@ -4,7 +4,11 @@
  * ADR-0157, ADR-0148 capability C3).
  */
 import { defineModule } from "../_shared/module-contract";
-import type { SubjectDataDescriptor } from "../_shared/module-contract";
+import type {
+  HighVolumeTableDescriptor,
+  LifecycleIndexRequirement,
+  SubjectDataDescriptor
+} from "../_shared/module-contract";
 import {
   SOCIAL_JOB_FAILED_EVENT_TYPE,
   SOCIAL_JOB_PUBLISHED_EVENT_TYPE,
@@ -12,6 +16,60 @@ import {
   SOCIAL_PUBLICATION_QUEUED_EVENT_TYPE,
   SOCIAL_PUBLISHING_MODULE_KEY
 } from "./domain/social-publishing-constants";
+import {
+  SOCIAL_PUBLICATIONS_LIFECYCLE_KEY,
+  SOCIAL_PUBLISHING_DEFAULT_RETENTION_DAYS,
+  SOCIAL_PUBLISHING_RETENTION_MAX_DAYS,
+  SOCIAL_PUBLISHING_RETENTION_MIN_DAYS,
+  SOCIAL_PUBLISH_ATTEMPTS_LIFECYCLE_KEY,
+  SOCIAL_PUBLISH_JOBS_LIFECYCLE_KEY
+} from "./domain/social-publishing-lifecycle";
+
+/**
+ * One retention descriptor of the publication evidence. All three share the
+ * window, the delegated adopter and the reasons that are not per-table.
+ */
+function lifecycle(input: {
+  key: string;
+  tableName: string;
+  cursorColumn?: string;
+  partitionRationale: string;
+  deletionRationale: string;
+  index: LifecycleIndexRequirement;
+  batchLimit: number;
+}): HighVolumeTableDescriptor {
+  return {
+    key: input.key,
+    tableName: input.tableName,
+    ownerModuleKey: SOCIAL_PUBLISHING_MODULE_KEY,
+    scope: "tenant",
+    cursorColumn: input.cursorColumn ?? "updated_at",
+    retentionClass: "communication_log",
+    retentionMinDays: SOCIAL_PUBLISHING_RETENTION_MIN_DAYS,
+    retentionMaxDays: SOCIAL_PUBLISHING_RETENTION_MAX_DAYS,
+    defaultRetentionDays: SOCIAL_PUBLISHING_DEFAULT_RETENTION_DAYS,
+    partition: { eligible: false, rationale: input.partitionRationale },
+    archive: {
+      archivable: false,
+      rationale:
+        "The content is the tenant's own public communication and the provider holds the post itself; a second archived copy of a caption and a link, kept past the window the tenant's evidence needs, protects nothing. A legal hold, not an archive, is how a dispute keeps it."
+    },
+    deletion: { mode: "hard_delete", rationale: input.deletionRationale },
+    legalHold: { applicable: true, precedence: "overrides_retention" },
+    requiredIndexes: [input.index],
+    batchLimit: input.batchLimit,
+    backupRestoreNotes:
+      "Included in ordinary full-database backup/restore; no standalone archive artifact exists. A restore can bring back publications past the window: run the retention purge after restoring. A job restored in a non-terminal state is pending work again, exactly as it was, and is never deleted by the purge.",
+    executionMode: "delegated",
+    existingAdopter: {
+      jobCommand: "bun run social-publishing:retention:purge",
+      purgeFunctionRef:
+        "src/modules/social-publishing/application/social-publishing-retention-purge.ts#purgeSocialPublishing",
+      description:
+        "Deletes whole publications (attempts, then jobs, then the publication) whose every job is terminal and older than the window, in bounded batches, in one transaction per batch. Skips the tenant when a legal hold covers any of social_publishing.publications, .jobs or .attempts."
+    }
+  };
+}
 
 /** Tenant-user stamps only: the row says nothing ABOUT a person, so anonymising the identity makes each stamp resolve to nobody (ADR-0094). */
 function stamps(input: {
@@ -163,7 +221,73 @@ export const socialPublishingModule = defineModule({
       environmentNotes:
         'No-op when SOCIAL_PUBLISHING_ENABLED is not "true" and publishes nothing until a provider adapter is registered. Holds NO key ring and is composed with a credential port that refuses every request until the first connector brings the credential path under a separate DB role (ADR-0157 section 6). Requires outbound HTTPS to the providers; on an offline/LAN deployment it stays a no-op.',
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run social-publishing:retention:purge",
+      schedule: {
+        mode: "cron",
+        expression: "35 4 * * *",
+        backlog: "bounded"
+      },
+      purpose:
+        "Delete whole social publications (attempts, then jobs, then the publication) whose every job is terminal and older than the retention window (default 730 days, never under 365), for every tenant (legal-hold gated, bounded batches). Never deletes a waiting job, a job awaiting reconciliation or a publication awaiting approval.",
+      recommendedSchedule: "Daily, off-peak.",
+      environmentNotes:
+        "Runs regardless of SOCIAL_PUBLISHING_ENABLED: a deployment that switched the module off still holds rows from when it was on. Runs as awcms_worker; sql/357 refuses that role a DELETE of anything younger than 365 days or not terminal.",
+      safeInOfflineLan: true
     }
+  ],
+  /**
+   * Publication evidence retention (Issue #1145, an admission condition of
+   * ADR-0157). The three tables are ONE record (a publication, its jobs, their
+   * attempts) and are purged together by one delegated adopter; a legal hold on
+   * any of the three keys stops it. Default 730 days, bounded 365..3650: a
+   * proposed default for the owner to confirm (docs/awcms/social-publishing.md).
+   */
+  dataLifecycle: [
+    lifecycle({
+      key: SOCIAL_PUBLICATIONS_LIFECYCLE_KEY,
+      tableName: "awcms_social_publications",
+      partitionRationale:
+        "Authored by editorial action, not by traffic: one row per article event or manual publication, so the live set is small and the tail is deleted rather than kept.",
+      deletionRationale:
+        "Only a publication that is ready, cancelled or refused, older than the window, and whose EVERY job is terminal and older than the window is eligible, and only after its jobs and attempts went in the same transaction. A pending_approval publication waits for a person. sql/357 refuses the worker anything younger than 365 days.",
+      index: {
+        columns: ["tenant_id", "updated_at"],
+        purpose:
+          "awcms_social_publications_retention_idx (sql/357) -- the purge's own path over the states it may remove."
+      },
+      batchLimit: 200
+    }),
+    lifecycle({
+      key: SOCIAL_PUBLISH_JOBS_LIFECYCLE_KEY,
+      tableName: "awcms_social_publish_jobs",
+      partitionRationale:
+        "One row per (publication, account): bounded by the publications' count times the accounts a tenant connected, deleted with its publication.",
+      deletionRationale:
+        "Deleted only as part of a whole eligible publication, and only when terminal (published, failed, cancelled). A queued, retrying, in-flight or needs_reconciliation job is pending work or an open question about whether a post exists, never history. sql/357 refuses the worker a non-terminal or younger job.",
+      index: {
+        columns: ["tenant_id", "publication_id"],
+        purpose:
+          "awcms_social_publish_jobs_publication_idx (sql/330) -- jobs are found and deleted by their publication."
+      },
+      batchLimit: 5000
+    }),
+    lifecycle({
+      key: SOCIAL_PUBLISH_ATTEMPTS_LIFECYCLE_KEY,
+      tableName: "awcms_social_publish_attempts",
+      cursorColumn: "created_at",
+      partitionRationale:
+        "At most one row per attempt of a job (bounded by max_attempts), deleted with its job.",
+      deletionRationale:
+        "Deleted before its job (foreign key order), only for a job that is itself being purged. An attempt row holds an outcome word, a fixed code and a fixed phrase, never content or a credential.",
+      index: {
+        columns: ["tenant_id", "job_id"],
+        purpose:
+          "awcms_social_publish_attempts_job_idx (sql/330) -- attempts are found and deleted by their job."
+      },
+      batchLimit: 50000
+    })
   ],
   /**
    * ADR-0094. The module records WHO composed, approved or cancelled a

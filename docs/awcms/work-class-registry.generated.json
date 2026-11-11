@@ -2591,6 +2591,12 @@
       "rationale": "Outbox dispatcher (social-publishing:dispatch, ADR-0157), recommended every 2 minutes — the same profile as push/email/whatsapp dispatch, and every transaction inside social-publish-dispatch.ts goes through inTenantWork, which passes workClass: \"background_sync\" explicitly."
     },
     {
+      "path": "scripts/social-publishing-retention-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge (social-publishing:retention:purge, ADR-0157, Issue #1145) — same tolerant-of-delay profile as whatsapp:queue:purge; purgeSocialPublishing passes workClass: \"maintenance\" explicitly."
+    },
+    {
       "path": "scripts/telegram-dispatch.ts",
       "workClass": "background_sync",
       "source": "registry",

@@ -127,13 +127,47 @@ describe("the descriptor", () => {
     }
   });
 
-  test("the non-core module declares the dispatcher job", () => {
+  test("the non-core module declares the dispatcher and the retention purge jobs", () => {
     expect(socialPublishingModule.jobs?.map((job) => job.command)).toEqual([
-      "bun run social-publishing:dispatch"
+      "bun run social-publishing:dispatch",
+      "bun run social-publishing:retention:purge"
     ]);
     expect(read("package.json")).toContain(
       '"social-publishing:dispatch": "bun scripts/social-publishing-dispatch.ts"'
     );
+    expect(read("package.json")).toContain(
+      '"social-publishing:retention:purge": "bun scripts/social-publishing-retention-purge.ts"'
+    );
+  });
+
+  test("Issue #1145: the three evidence tables have real retention descriptors, one delegated adopter, and are no longer BOUNDED_BY_DESIGN", () => {
+    const descriptors = socialPublishingModule.dataLifecycle ?? [];
+
+    expect(descriptors.map((d) => d.tableName).sort()).toEqual([
+      "awcms_social_publications",
+      "awcms_social_publish_attempts",
+      "awcms_social_publish_jobs"
+    ]);
+
+    for (const descriptor of descriptors) {
+      expect(descriptor.executionMode).toBe("delegated");
+      expect(descriptor.retentionMinDays).toBe(365);
+      expect(descriptor.defaultRetentionDays).toBe(730);
+      expect(descriptor.legalHold.applicable).toBe(true);
+      expect(descriptor.existingAdopter?.jobCommand).toBe(
+        "bun run social-publishing:retention:purge"
+      );
+    }
+
+    const coverage = read("scripts/data-lifecycle-table-coverage-check.ts");
+
+    for (const table of [
+      "awcms_social_publications",
+      "awcms_social_publish_jobs",
+      "awcms_social_publish_attempts"
+    ]) {
+      expect(coverage).not.toContain(`table: "${table}"`);
+    }
   });
 });
 
@@ -341,8 +375,10 @@ describe("the migrations", () => {
       if (file.includes("social_publishing")) {
         const number = Number(file.slice(0, 3));
 
-        expect(number).toBeGreaterThanOrEqual(330);
-        expect(number).toBeLessThanOrEqual(339);
+        // 330-339: the module slice (#1145); 357-359: its admission conditions.
+        expect(
+          (number >= 330 && number <= 339) || (number >= 357 && number <= 359)
+        ).toBe(true);
       }
     }
   });
