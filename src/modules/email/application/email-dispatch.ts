@@ -65,15 +65,20 @@ import {
   emailSenderBreakerKey,
   emailSenderScopeAllows,
   evaluateEmailSenderHealth,
+  purposeForEmailCategory,
   type EmailPurpose
 } from "../domain/email-sender";
+import {
+  suppressionBlocksPurpose,
+  type SuppressionFacts
+} from "../domain/suppression-policy";
 import {
   MAILKETING_V2_UNVERIFIED_WARNING,
   isMailketingTokenHeaderSafe,
   isMailketingV2Verified
 } from "../domain/mailketing-v2-contract";
 import { createMailketingV2Provider } from "../infrastructure/mailketing-v2-provider";
-import { fetchSuppressedRecipientHashes } from "./suppression-directory";
+import { fetchSuppressionIndex } from "./suppression-directory";
 import {
   renderEmailTemplate,
   type EmailTemplateSource
@@ -108,6 +113,12 @@ type ClaimedRow = {
   reclaimed: boolean;
   /** Anchors the credit-hold budget; absent only in fakes. */
   created_at?: Date | string;
+  /**
+   * Issue #1161: the row's immutable purpose, which decides which suppressions
+   * apply (ADR-0151 section 4). Absent only in fakes, where the category
+   * decides it exactly as enqueue did.
+   */
+  purpose?: EmailPurpose;
 };
 
 /** Issue #1160: a row of a tenant sender's lane carries its immutable sender snapshot. */
@@ -267,7 +278,7 @@ async function claimEligibleEntries(
         WHERE t.id = due.id
         RETURNING t.id, t.correlation_id, t.category, t.template_key,
                   t.to_address, t.to_address_hash, t.subject, t.variables,
-                  t.retry_count, t.created_at, due.reclaimed
+                  t.retry_count, t.created_at, due.reclaimed, t.purpose
       `;
 
       return rows as unknown as ClaimedRow[];
@@ -721,17 +732,17 @@ export async function dispatchEmailQueue(
   let loadTemplate:
     ((templateKey: string) => Promise<EmailTemplateSource | null>) | null =
     null;
-  let suppressedHashes: Set<string> | null = null;
+  let suppressionIndex: Map<string, SuppressionFacts> | null = null;
 
   /** Loaded once per pass, on first need, for every lane alike. */
   async function prepareRendering(): Promise<void> {
     if (renderLocale === null) {
       renderLocale = await fetchTenantDefaultLocale(sql, tenantId);
       loadTemplate = createTemplateLoader(sql, tenantId);
-      suppressedHashes = await withTenantOrThrow(
+      suppressionIndex = await withTenantOrThrow(
         sql,
         tenantId,
-        (tx) => fetchSuppressedRecipientHashes(tx, tenantId),
+        (tx) => fetchSuppressionIndex(tx, tenantId),
         { workClass: "background_sync" }
       );
     }
@@ -754,7 +765,15 @@ export async function dispatchEmailQueue(
   ): Promise<void> {
     await prepareRendering();
 
-    if (suppressedHashes!.has(entry.to_address_hash)) {
+    // Issue #1161: the suppression applies only to the purposes it covers
+    // (ADR-0151 section 4); a marketing opt-out or a provider report never
+    // holds back security mail.
+    if (
+      suppressionBlocksPurpose(
+        suppressionIndex!.get(entry.to_address_hash),
+        entry.purpose ?? purposeForEmailCategory(entry.category)
+      )
+    ) {
       await finalizeSuppressed(sql, tenantId, entry.id);
       log("info", "email.dispatch.suppressed", {
         correlationId: entry.correlation_id ?? correlationId,

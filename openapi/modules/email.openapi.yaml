@@ -84,7 +84,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "422":
-          description: SENDER_UNAVAILABLE - the sender is unknown, another tenant's, not verified, disabled, out of scope, or not one the caller may use (one answer for all).
+          description: >-
+            SENDER_UNAVAILABLE - the sender is unknown, another tenant's, not
+            verified, disabled, out of scope, or not one the caller may use (one
+            answer for all). TEMPLATE_CATEGORY_RESERVED (Issue #1161) - the
+            `templateKey` is a security category (`auth.*`,
+            `system.security_notice`); security mail is sent only by the system,
+            never as an announcement.
           content:
             application/json:
               schema:
@@ -269,6 +275,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          description: "TEMPLATE_CATEGORY_RESERVED (Issue #1161) - the `templateKey` is a security category (`auth.*`, `system.security_notice`), which is never sent as an announcement."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/email/messages:
     get:
       tags:
@@ -758,8 +770,666 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/email/webhooks/mailketing/{token}:
+    post:
+      tags:
+        - Email
+      operationId: emailReceiveMailketingWebhook
+      security: []
+      summary: Mailketing delivery callbacks for one tenant Mailketing account (quarantined, unauthenticated).
+      description: >-
+        Issue #1161, ADR-0151 section 5 (`strict` mode). Called by Mailketing,
+        never by a person or a browser. Mailketing documents NO way to
+        authenticate a callback (no signature, secret header, source-IP list or
+        event id), so every event is treated as UNAUTHENTICATED and changes no
+        message status, suppression, subscriber, consent or customer: an event
+        bound to a message this tenant sent through this account is written to
+        the quarantine (`GET /api/v1/email/provider-events`), where an operator
+        may confirm a bounce or unsubscribe into the suppression list. The
+        opaque `{token}` (`mkw1.<tenantId>.<callbackId>.<secret>`, issued by
+        `POST /api/v1/email/webhook-callbacks`) only LOCATES the tenant and
+        account; only its hash is stored.
+
+
+        Order of work: (1) `404` when `EMAIL_WEBHOOK_ENABLED` is not `true`;
+        (2) every request is charged to a per-address bucket of FAILED proofs
+        (30 per minute) before any parsing or database work, and refunded once
+        it verifies, so legitimate traffic from shared addresses never fills it
+        (`429` once an address has failed too often); (3) the token shape and a
+        32 KiB body cap, still without the database; (4) the token verified in
+        constant time inside the tenant it names, on a live callback of a
+        connected Mailketing account with `email` enabled (every failure the
+        same `401`); (5) a per-callback bucket for verified traffic, then the
+        events.
+
+
+        Accepted events (one object, or an array of at most 25): `bounce`,
+        `emailopen`, `delivered` (bound by the provider message id stored at
+        acceptance AND the recipient), `emailclick`, `unsubscribe` (no id in the
+        vendor payload; bound only when this account sent that recipient a
+        message in the last 30 days). `newsubscriber` is ignored and never
+        creates a subscriber or consent; an event for a message we did not issue
+        (another account's or tenant's id, a mismatched recipient) is discarded.
+        The report time must be the vendor's `YYYY-MM-DD HH:MM:SS` (read as UTC)
+        or ISO-8601 with an explicit zone; anything else, or a date more than 30
+        days old or in the future, is discarded as stale. Dedupe ignores the
+        report time: one row per (account, type, message) for bounce, open and
+        delivered, one per (account, type, recipient, UTC day) for click and
+        unsubscribe, at most one pending unsubscribe per recipient, and at most
+        `EMAIL_WEBHOOK_MAX_PENDING` pending events per tenant (further
+        reviewable events are not recorded until operators review the queue).
+        A bounce's reason text is reduced to a
+        hard/soft class and an RFC 3463 code; a clicked link to its host and a
+        hash, never stored, rendered as a link or fetched.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: The opaque callback token (at most 160 characters).
+          schema:
+            type: string
+            maxLength: 160
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/EmailMailketingWebhookEvent"
+                - type: array
+                  minItems: 1
+                  maxItems: 25
+                  items:
+                    $ref: "#/components/schemas/EmailMailketingWebhookEvent"
+      responses:
+        "200":
+          description: >-
+            Received. Always the same body after proof, whatever was recorded,
+            discarded or ignored: nothing about a recipient or a message is
+            echoed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    enum:
+                      - true
+        "400":
+          description: The body is not JSON, not an event object, or an empty or oversized array.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: The token is malformed, unknown, revoked, or does not verify (one answer for all).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Mailketing callbacks are switched off on this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: The body exceeds 32 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many FAILED proofs from this address (checked before any database work), or the per-callback rate after proof.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: A transient failure; Mailketing retries and recording is idempotent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/email/webhook-callbacks:
+    get:
+      tags:
+        - Email
+      operationId: emailListWebhookCallbacks
+      summary: The Mailketing callback URLs of this tenant (never the token).
+      description: >-
+        Issue #1161. One entry per callback credential (live and revoked) of the
+        Mailketing accounts the caller may see under the channel-account rules:
+        id, account, status, last event. Neither the token nor its hash is
+        returned. `enabled` says whether this deployment accepts callbacks at
+        all; `mode` is always `strict` (events are quarantined, never applied).
+        Requires `email.webhook.read`.
+      responses:
+        "200":
+          description: Callback credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                      mode:
+                        type: string
+                        enum:
+                          - strict
+                      authenticity:
+                        type: string
+                        enum:
+                          - unauthenticated
+                      callbacks:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EmailWebhookCallback"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: The channel-accounts module cannot be loaded (default-deny).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      tags:
+        - Email
+      operationId: emailIssueWebhookCallback
+      summary: Issue or rotate the callback URL of one Mailketing account (token shown once, high-risk).
+      description: >-
+        Issue #1161. Any live callback of the account is revoked in the same
+        transaction, so a leaked URL is cut off by issuing a new one. The path
+        carrying the token is in THIS response once (`revealed: true`); a replay
+        of the same `Idempotency-Key` answers without it (`revealed: false`).
+        Only a hash bound to the tenant and callback id is stored. The URL
+        locates the account; it does not authenticate Mailketing. Requires
+        `email.webhook.configure`, operator access to the account under the
+        channel-account rules, a signed-in person and an `Idempotency-Key`;
+        audited at `warning` (never the token).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - espAccountId
+              properties:
+                espAccountId:
+                  type: string
+                  format: uuid
+                  description: A live Mailketing `esp_account` channel account of this tenant.
+      responses:
+        "201":
+          description: Issued (or rotated).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      callback:
+                        $ref: "#/components/schemas/EmailWebhookCallback"
+                      rotatedCallbackIds:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+                      mode:
+                        type: string
+                        enum:
+                          - strict
+                      callbackPath:
+                        type: string
+                        description: Present only when `revealed` is true. Prefix it with this deployment's public origin and paste it into Mailketing (Integrations, Webhook) for each event type.
+                      revealed:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: ACCOUNT_UNAVAILABLE - not a live Mailketing account of this tenant that the caller operates (one answer for all).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The channel-accounts module cannot be loaded (default-deny).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/email/webhook-callbacks/{id}/revoke:
+    post:
+      tags:
+        - Email
+      operationId: emailRevokeWebhookCallback
+      summary: Revoke a Mailketing callback URL (high-risk, idempotent by state).
+      description: >-
+        Issue #1161. The URL stops verifying at once and is never re-activated.
+        Requires `email.webhook.configure`, operator access to the account, a
+        signed-in person and an `Idempotency-Key`; audited at `warning` when it
+        changed something. An unknown id, another tenant's id and an account the
+        caller cannot operate are the same `404`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Revoked (or already revoked).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      callback:
+                        $ref: "#/components/schemas/EmailWebhookCallback"
+                      changed:
+                        type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: The channel-accounts module cannot be loaded (default-deny).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/email/provider-events:
+    get:
+      tags:
+        - Email
+      operationId: emailListProviderEvents
+      summary: The quarantine of provider-reported, unauthenticated Mailketing events.
+      description: >-
+        Issue #1161, ADR-0151 section 5. Newest first, keyset-paged, optionally
+        by `reviewStatus` and `emailMessageId`. Recipients masked; a click shows
+        the link host only. Every entry says `authenticity: unauthenticated`.
+        With `emailMessageId`, `projection` is that message's provider-reported
+        state (`accepted` < `delivered` < `bounced`, the maximum over its events,
+        so it only moves forward and a replay or a late `delivered` cannot move
+        it back); it is never written onto the message, and is `null` unless the
+        message has events the caller may all see. Mailketing reports no
+        complaint event, so there is no `complained` state. Only events of
+        accounts the caller may see under the channel-account rules. Requires
+        `email.webhook.read`.
+      parameters:
+        - name: reviewStatus
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - confirmed
+              - dismissed
+              - informational
+        - name: emailMessageId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: One page of quarantined events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      events:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EmailProviderEvent"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                      projection:
+                        nullable: true
+                        type: object
+                        properties:
+                          emailMessageId:
+                            type: string
+                            format: uuid
+                          messageStatus:
+                            type: string
+                          providerReportedStatus:
+                            type: string
+                            nullable: true
+                            enum:
+                              - accepted
+                              - delivered
+                              - bounced
+                          authenticity:
+                            type: string
+                            enum:
+                              - unauthenticated
+                      softBounceThreshold:
+                        type: integer
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/email/provider-events/{id}/review:
+    post:
+      tags:
+        - Email
+      operationId: emailReviewProviderEvent
+      summary: Confirm a quarantined bounce or unsubscribe into the suppression list, or dismiss it (high-risk).
+      description: >-
+        Issue #1161, ADR-0151 section 5 `strict`. The ONLY path by which a
+        provider report changes anything, and a human decision. `confirm` adds
+        the recipient to the suppression list (reason `bounced` or
+        `unsubscribed`, `source: provider_report`, which never blocks security
+        mail); an already suppressed recipient keeps its entry. A soft or
+        unclassified bounce may be confirmed only once the recipient soft-bounced on
+        `EMAIL_WEBHOOK_SOFT_BOUNCE_THRESHOLD` (default 3) DISTINCT messages in 30 days. A
+        review is final. Requires `email.provider_events.approve`, a signed-in
+        person, operator access to the event's account and an
+        `Idempotency-Key`; audited at `warning` with ids and codes only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+              properties:
+                decision:
+                  type: string
+                  enum:
+                    - confirm
+                    - dismiss
+      responses:
+        "200":
+          description: Reviewed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      event:
+                        $ref: "#/components/schemas/EmailProviderEvent"
+                      suppression:
+                        nullable: true
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          created:
+                            type: boolean
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: ALREADY_REVIEWED, BELOW_SOFT_BOUNCE_THRESHOLD or IDEMPOTENCY_CONFLICT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Body too large.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    EmailMailketingWebhookEvent:
+      type: object
+      description: >-
+        One Mailketing webhook event as the vendor documents it
+        (https://api.mailketing.co.id/docs/webhook.html, re-verified
+        2026-11-11). Only the fields named here are read; anything else is
+        ignored. `newsubscriber` is accepted and ignored.
+      required:
+        - type
+      additionalProperties: true
+      properties:
+        type:
+          type: string
+          enum:
+            - emailopen
+            - emailclick
+            - bounce
+            - newsubscriber
+            - unsubscribe
+            - delivered
+        email:
+          type: string
+        message_id:
+          type: string
+        date:
+          type: string
+        reason:
+          type: string
+          description: Bounce diagnostic; reduced to a class and an RFC 3463 code, never stored.
+        link_clicked:
+          type: string
+          description: Reduced to its host and a hash; never stored, rendered as a link or fetched.
+        rcpt:
+          type: string
+        jobid:
+          type: string
+        send_time:
+          type: string
+    EmailWebhookCallback:
+      type: object
+      description: "Issue #1161 - a Mailketing callback credential (a channel-accounts webhook subscription). Never the token or its hash."
+      properties:
+        id:
+          type: string
+          format: uuid
+        accountId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum:
+            - mailketing
+        verificationMode:
+          type: string
+          enum:
+            - unauthenticated
+        status:
+          type: string
+          enum:
+            - pending
+            - active
+            - paused
+            - revoked
+        lastEventAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    EmailProviderEvent:
+      type: object
+      description: "Issue #1161 - one quarantined, provider-reported, UNAUTHENTICATED Mailketing event bound to a message of this tenant."
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          enum:
+            - bounce
+            - open
+            - click
+            - unsubscribe
+            - delivered
+        correlation:
+          type: string
+          enum:
+            - provider_message_id
+            - recipient_only
+        emailMessageId:
+          type: string
+          format: uuid
+        espAccountId:
+          type: string
+          format: uuid
+        recipientMasked:
+          type: string
+        bounceClass:
+          type: string
+          nullable: true
+          enum:
+            - hard
+            - soft
+            - unknown
+        statusCode:
+          type: string
+          nullable: true
+        linkHost:
+          type: string
+          nullable: true
+        providerReportedAt:
+          type: string
+          format: date-time
+          nullable: true
+        receivedAt:
+          type: string
+          format: date-time
+        reviewStatus:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - dismissed
+            - informational
+        reviewedBy:
+          type: string
+          format: uuid
+          nullable: true
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        suppressionId:
+          type: string
+          format: uuid
+          nullable: true
+        authenticity:
+          type: string
+          enum:
+            - unauthenticated
     EmailBusinessScope:
       type: object
       description: "Issue #1160 - a business scope (brand or unit) of the caller's tenant, the generic pair of sql/027."

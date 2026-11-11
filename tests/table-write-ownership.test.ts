@@ -120,6 +120,9 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_account_capabilities",
       "awcms_telegram_engagement_endpoints",
       "awcms_telegram_engagement_contacts",
+      // #1161 M-3 of the PR #1272 audit: the rolled-back retention-floor probe.
+      "awcms_channel_webhook_subscriptions",
+      "awcms_email_provider_events",
       // #1146: the social dispatch write-boundary probe.
       "awcms_social_publications",
       "awcms_social_publish_jobs",

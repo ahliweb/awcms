@@ -98,6 +98,18 @@ export function purposeForEmailCategory(category: string): EmailPurpose {
     : "transactional";
 }
 
+/**
+ * Issue #1161 audit H-1: a template category a REQUEST may not name. Security
+ * mail (`auth.*`, `system.security_notice`) is sent only by internal ports
+ * (`application/security-mail-grant.ts`); a route that takes `templateKey`
+ * from a body answers `422 TEMPLATE_CATEGORY_RESERVED` for these.
+ */
+export function isRequestReservedEmailCategory(category: string): boolean {
+  return purposeForEmailCategory(category) === "security";
+}
+
+export const TEMPLATE_CATEGORY_RESERVED_CODE = "TEMPLATE_CATEGORY_RESERVED";
+
 /** The provider-matrix capability a send of `purpose` needs. */
 export function capabilityForEmailPurpose(
   purpose: EmailPurpose

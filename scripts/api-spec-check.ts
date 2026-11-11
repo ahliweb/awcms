@@ -58,6 +58,12 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // idempotent things (`/start <code>`, `/stop`) from a private chat and answers
   // 404 when TELEGRAM_ENABLED is not true.
   "receiveTelegramWebhook",
+  // email (Issue #1161, ADR-0151 section 5): Mailketing's delivery callbacks.
+  // Mailketing holds no session and documents no signature; the opaque
+  // per-account token in the path only LOCATES the tenant and account, every
+  // event is quarantined as unauthenticated and changes no state, and the route
+  // answers 404 when EMAIL_WEBHOOK_ENABLED is not true.
+  "emailReceiveMailketingWebhook",
   // visitor_analytics (ported from awcms-micro epic #617-#624) — the public
   // visit-ingest beacon is anonymous by design: it carries no session, resolves
   // the tenant from a public tenant code, records only privacy-preserving,
