@@ -82,7 +82,10 @@ export function capabilityRowDisplay(
 export function providerAvailability(input: {
   registrable: boolean;
   hasOAuthAdapter: boolean;
+  /** A phase-gated provider (Issue #1152): documented, not admitted. */
+  phaseGated?: boolean;
 }): ProviderAvailability {
+  if (input.phaseGated) return "phase_gated";
   if (!input.registrable) return "policy_boundary";
 
   return input.hasOAuthAdapter ? "connector_available" : "no_connector";

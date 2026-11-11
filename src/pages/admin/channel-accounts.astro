@@ -692,6 +692,7 @@ function scopeText(scope: { type: string; id: string } | null): string {
                       t,
                       providerAvailability({
                         registrable: row.registrable,
+                        phaseGated: row.phase !== undefined,
                         hasOAuthAdapter:
                           getChannelOAuthAdapter(provider) !== null
                       })

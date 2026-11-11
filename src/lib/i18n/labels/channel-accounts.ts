@@ -268,6 +268,24 @@ export function channelProviderLabel(t: T, provider: string): string {
       return t("Website forms");
     case "mailketing":
       return t("Mailketing email");
+    case "x":
+      return t("X account");
+    case "line":
+      return t("LINE Official Account");
+    case "pinterest":
+      return t("Pinterest");
+    case "google_business_profile":
+      return t("Google Business Profile");
+    case "discord":
+      return t("Discord");
+    case "bluesky":
+      return t("Bluesky");
+    case "mastodon":
+      return t("Mastodon");
+    case "snapchat":
+      return t("Snapchat");
+    case "reddit":
+      return t("Reddit");
     default:
       return provider;
   }
@@ -306,7 +324,7 @@ export function channelAccountKindLabel(t: T, kind: string): string {
 
 /** Reasons a provider is shown without a Connect action. */
 export type ProviderAvailability =
-  "policy_boundary" | "connector_available" | "no_connector";
+  "policy_boundary" | "phase_gated" | "connector_available" | "no_connector";
 
 export function providerAvailabilityLabel(
   t: T,
@@ -315,6 +333,10 @@ export function providerAvailabilityLabel(
   switch (availability) {
     case "policy_boundary":
       return t("Not connectable: a policy boundary, not an account");
+    case "phase_gated":
+      return t(
+        "Not connectable: phase-gated, documented only; needs a business case and the provider's approval"
+      );
     case "connector_available":
       return t("Connector installed");
     case "no_connector":

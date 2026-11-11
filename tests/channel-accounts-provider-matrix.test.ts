@@ -72,9 +72,20 @@ function documentedMatrix(): Map<string, MatrixCell[]> {
 describe("provider matrix mirror equals the documentation", () => {
   const documented = documentedMatrix();
 
-  test("the documentation table has the twelve rows the mirror declares", () => {
+  test("the documentation table has the twenty-one rows the mirror declares", () => {
     expect(documented.size).toBe(Object.keys(PROVIDER_MATRIX).length);
-    expect(documented.size).toBe(12);
+    // Twelve admitted or policy rows (Issue #1140) and nine phase-gated rows
+    // (Issue #1152): X, LINE, Pinterest, Google Business Profile, Discord,
+    // Bluesky, Mastodon, Snapchat, Reddit.
+    expect(documented.size).toBe(21);
+  });
+
+  test("a documented row names its phase exactly when the mirror does", () => {
+    for (const row of Object.values(PROVIDER_MATRIX)) {
+      const phaseInLabel = /\((P[34])\)$/.exec(row.docLabel)?.[1];
+
+      expect(phaseInLabel, row.docLabel).toBe(row.phase);
+    }
   });
 
   test("the documented capability columns are exactly the code's nine, in order", () => {
@@ -177,6 +188,78 @@ describe("matrix policy invariants", () => {
         ) {
           expect(verdict.allowed, `${provider}.${capability}`).toBe(false);
         }
+      }
+    }
+  });
+
+  test("a phase-gated provider (Issue #1152) is documented, never registrable, never grantable", () => {
+    const phaseGated = Object.entries(PROVIDER_MATRIX).filter(
+      ([, row]) => row.phase !== undefined
+    );
+
+    expect(phaseGated.map(([provider]) => provider).sort()).toEqual(
+      [
+        "bluesky",
+        "discord",
+        "google_business_profile",
+        "line",
+        "mastodon",
+        "pinterest",
+        "reddit",
+        "snapchat",
+        "x"
+      ].sort()
+    );
+
+    const contract: CapabilityRowFacts = {
+      state: "granted",
+      evidenceKind: "contract_reference",
+      evidenceRef: "contract-1",
+      matrixVersion: PROVIDER_MATRIX_VERSION
+    };
+
+    for (const [provider, row] of phaseGated) {
+      expect(row.registrable, provider).toBe(false);
+      expect(row.authModes, provider).toEqual([]);
+      expect(Object.keys(row.kinds), provider).toEqual([]);
+      expect(registrableProviders()).not.toContain(provider);
+      expect(checkAccountShape(provider, "account", "oauth2")).toEqual({
+        ok: false,
+        code: "PROVIDER_NOT_REGISTRABLE"
+      });
+
+      for (const capability of CHANNEL_CAPABILITIES) {
+        // Even a `candidate` (LINE reply, LINE inbound) or a `restricted` cell
+        // with contract evidence is refused until the admission ADR.
+        expect(
+          cellGrantability(provider, "account", capability),
+          `${provider}.${capability}`
+        ).toEqual({ grantable: false, code: "PROVIDER_UNVERIFIED" });
+        expect(
+          evaluateCapability({
+            account: {
+              provider,
+              accountKind: "account",
+              status: "connected",
+              connectionGrantState: "active"
+            },
+            capability,
+            row: contract
+          }),
+          `${provider}.${capability}`
+        ).toEqual({ allowed: false, code: "PROVIDER_UNVERIFIED" });
+      }
+    }
+  });
+
+  test("a P4 row promotes no cell to candidate", () => {
+    for (const [provider, row] of Object.entries(PROVIDER_MATRIX)) {
+      if (row.phase !== "P4") continue;
+
+      for (const capability of CHANNEL_CAPABILITIES) {
+        expect(row.cells[capability], `${provider}.${capability}`).not.toBe(
+          "candidate"
+        );
       }
     }
   });

@@ -1939,6 +1939,19 @@ components:
                 type: string
               registrable:
                 type: boolean
+              phase:
+                type: string
+                nullable: true
+                enum:
+                  - P3
+                  - P4
+                  - null
+                description: >-
+                  Set for a phase-gated provider (Issue #1152): its cells record
+                  what the official documentation was read to say on a dated
+                  pass, the provider is not registrable, and every capability is
+                  refused (`PROVIDER_UNVERIFIED`) until its own admission ADR.
+                  `null` for an admitted provider or a policy row.
               authModes:
                 type: array
                 items:

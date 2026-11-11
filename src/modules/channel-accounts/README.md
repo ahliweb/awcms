@@ -32,6 +32,8 @@ Status: `active` and **off by default** (`CHANNEL_ACCOUNTS_ENABLED`; the screen 
 
 `domain/provider-matrix.ts` is the code mirror of section 3 of the readiness pack (v1). `tests/channel-accounts-provider-matrix.test.ts` parses the documentation table and fails if any cell differs. A cell is `candidate`, `restricted` (usable only with `contract_reference` or `written_authorization` evidence), `not_offered`, `unverified`, `not_applicable` or `barred`. `GET /api/v1/channel-accounts/providers` serves it.
 
+Nine rows are **phase-gated** (Issue #1152, pack §3.1): X, LINE Official Account, Pinterest and Google Business Profile (P3), Discord, Bluesky, Mastodon, Snapchat and Reddit (P4). They record what each provider's official documentation was read to say on 11 November 2026; they carry a `phase`, are not registrable, declare no account kind or authentication mode, and `cellGrantability` refuses every one of their cells (`PROVIDER_UNVERIFIED`) whatever the cell reads. The API returns the `phase` and the screen shows them as phase-gated, never with a Connect action. A provider leaves its phase only through its own admission ADR. Adding them changed no existing cell, so `PROVIDER_MATRIX_VERSION` stays 1.
+
 ## API (`/api/v1/channel-accounts`, OpenAPI `openapi/modules/channel-accounts.openapi.yaml`)
 
 | Route                                                             | Permission                                         | Notes                                                                                                              |

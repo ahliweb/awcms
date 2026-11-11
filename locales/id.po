@@ -9143,6 +9143,36 @@ msgstr "Konektor terpasang"
 msgid "Unsupported on this deployment: no connector installed, requires approval"
 msgstr "Tidak didukung pada deployment ini: tidak ada konektor terpasang, memerlukan persetujuan"
 
+msgid "Not connectable: phase-gated, documented only; needs a business case and the provider's approval"
+msgstr "Tidak dapat dihubungkan: ditahan fase, hanya terdokumentasi; memerlukan kasus bisnis dan persetujuan penyedia"
+
+msgid "X account"
+msgstr "Akun X"
+
+msgid "LINE Official Account"
+msgstr "LINE Official Account"
+
+msgid "Pinterest"
+msgstr "Pinterest"
+
+msgid "Google Business Profile"
+msgstr "Google Business Profile"
+
+msgid "Discord"
+msgstr "Discord"
+
+msgid "Bluesky"
+msgstr "Bluesky"
+
+msgid "Mastodon"
+msgstr "Mastodon"
+
+msgid "Snapchat"
+msgstr "Snapchat"
+
+msgid "Reddit"
+msgstr "Reddit"
+
 msgid "Provider: {value}"
 msgstr "Penyedia: {value}"
 
