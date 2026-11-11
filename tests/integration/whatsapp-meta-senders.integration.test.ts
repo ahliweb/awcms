@@ -180,15 +180,15 @@ async function seedWaba(tenantId: string, wabaId: string): Promise<string> {
 
 async function approve(
   tenantId: string,
-  wabaAccountId: string,
+  wabaId: string,
   name = "it1143_reminder",
   category = "UTILITY"
 ): Promise<void> {
   await getAdminSql()`
     INSERT INTO awcms_whatsapp_meta_templates
-      (tenant_id, container_account_id, template_name, language, category,
+      (tenant_id, waba_external_id, template_name, language, category,
        provider_status, evidence_ref, source, last_event_at)
-    VALUES (${tenantId}, ${wabaAccountId}, ${name}, 'id', ${category},
+    VALUES (${tenantId}, ${wabaId}, ${name}, 'id', ${category},
             'APPROVED', 'fixture', 'operator', now() - interval '1 hour')
   `;
 }
@@ -496,7 +496,7 @@ suite(
         [TENANT_A, a2],
         [TENANT_B, b1]
       ] as const) {
-        await approve(tenant, number.wabaAccountId!);
+        await approve(tenant, number.wabaId!);
       }
     }, 30_000);
 
@@ -626,7 +626,7 @@ suite(
       test("a template approved on WABA 1 authorises nothing on WABA 2", async () => {
         await getAdminSql()`
         DELETE FROM awcms_whatsapp_meta_templates
-        WHERE container_account_id = ${a2.wabaAccountId}
+        WHERE waba_external_id = ${a2.wabaId}
       `;
 
         expect(
@@ -648,7 +648,7 @@ suite(
           await getAdminSql()`
           UPDATE awcms_whatsapp_meta_templates
           SET provider_status = ${status}, category = ${category}
-          WHERE container_account_id = ${a1.wabaAccountId}
+          WHERE waba_external_id = ${a1.wabaId}
         `;
 
           expect(
@@ -660,9 +660,9 @@ suite(
         const error = (await assertRejected(
           getAdminSql()`
           INSERT INTO awcms_whatsapp_meta_templates
-            (tenant_id, container_account_id, template_name, language,
+            (tenant_id, waba_external_id, template_name, language,
              category, provider_status, source, last_event_at)
-          VALUES (${TENANT_A}, ${a1.wabaAccountId}, 'no_evidence', 'id',
+          VALUES (${TENANT_A}, ${a1.wabaId}, 'no_evidence', 'id',
                   'UTILITY', 'APPROVED', 'operator', now())
         `,
           "approval without evidence"
@@ -1075,7 +1075,7 @@ suite(
         ).toBe("refused");
         expect(
           await inTenant(TENANT_A, (tx) =>
-            clearMetaRestriction(tx, TENANT_A, actorA, a1.wabaAccountId!)
+            clearMetaRestriction(tx, TENANT_A, actorA, a1.wabaId!)
           )
         ).toEqual({
           outcome: "cleared",
@@ -1135,8 +1135,8 @@ suite(
               "worker writes a signal",
               (tx: Bun.SQL) => tx`
               INSERT INTO awcms_whatsapp_meta_sender_signals
-                (tenant_id, container_account_id)
-              VALUES (${TENANT_A}, ${a1.wabaAccountId})
+                (tenant_id, waba_external_id)
+              VALUES (${TENANT_A}, ${a1.wabaId})
             `
             ],
             [
@@ -1169,6 +1169,259 @@ suite(
           }
         }
       );
+    });
+
+    describe("security review fixes", () => {
+      test("M-1 b: every WABA-level change a webhook makes is audited, with ids and codes only", async () => {
+        const secret = "appsecretA1appsecretA1appsecret1";
+        const token = await subscribe(TENANT_A, actorA, a1, secret);
+        const now = Math.floor(Date.now() / 1000);
+        const send = (body: string) => deliver(token, body, sign(secret, body));
+
+        await send(
+          wabaEvent(
+            a1.wabaId!,
+            "message_template_status_update",
+            {
+              event: "APPROVED",
+              message_template_name: "it1143_new",
+              message_template_language: "id",
+              message_template_category: "MARKETING"
+            },
+            now
+          )
+        );
+        await send(
+          wabaEvent(
+            a1.wabaId!,
+            "account_update",
+            { event: "ACCOUNT_DELETED" },
+            now
+          )
+        );
+        await send(
+          wabaEvent(
+            a1.wabaId!,
+            "account_update",
+            {
+              event: "DISABLED_UPDATE",
+              ban_info: { waba_ban_state: "REINSTATE" }
+            },
+            now + 10
+          )
+        );
+        await send(inboundPayload(a1.wabaId!, a1.phoneNumberId, PHONE_DIGITS));
+
+        const audits = (await getAdminSql()`
+          SELECT action, severity, attributes FROM awcms_audit_events
+          WHERE tenant_id = ${TENANT_A}
+            AND action LIKE 'whatsapp_meta_webhook.%'
+          ORDER BY created_at
+        `) as {
+          action: string;
+          severity: string;
+          attributes: Record<string, unknown>;
+        }[];
+
+        expect(audits.map((a) => a.action)).toEqual([
+          "whatsapp_meta_webhook.template_status",
+          "whatsapp_meta_webhook.restriction_set",
+          "whatsapp_meta_webhook.window_opened"
+        ]);
+        // A REINSTATE does not lift ACCOUNT_DELETED, so nothing was cleared.
+        expect(audits[0]!.severity).toBe("warning");
+        expect(audits[0]!.attributes).toMatchObject({
+          source: "meta_webhook",
+          senderAccountId: a1.id,
+          providerStatus: "APPROVED"
+        });
+
+        const text = JSON.stringify(audits);
+
+        expect(text).not.toContain(PHONE_DIGITS);
+        expect(text).not.toContain(secret);
+        expect(text).not.toContain(token);
+      });
+
+      test("M-2: 300 random tenants from ONE address hit a 429 before any database work", async () => {
+        const { POST } = await import(
+          "../../src/pages/api/v1/whatsapp/webhooks/meta/[token]"
+        );
+        const previous = process.env.WHATSAPP_ENABLED;
+        const previousKeys = process.env.WHATSAPP_RECIPIENT_HASH_KEYS;
+
+        process.env.WHATSAPP_ENABLED = "true";
+        process.env.WHATSAPP_RECIPIENT_HASH_KEYS =
+          ENV.WHATSAPP_RECIPIENT_HASH_KEYS;
+
+        try {
+          const statuses: number[] = [];
+
+          for (let i = 0; i < 300; i += 1) {
+            const forged = `wcb1.${crypto.randomUUID()}.${crypto.randomUUID()}.${"B".repeat(43)}`;
+            const response = await POST({
+              request: new Request(
+                `https://budget.example/api/v1/whatsapp/webhooks/meta/${forged}`,
+                {
+                  method: "POST",
+                  headers: { "x-hub-signature-256": `sha256=${"0".repeat(64)}` },
+                  body: "{}"
+                }
+              ),
+              params: { token: forged },
+              clientAddress: "203.0.113.7"
+            } as never);
+
+            statuses.push(response.status);
+          }
+
+          const refused401 = statuses.filter((s) => s === 401).length;
+          const limited429 = statuses.filter((s) => s === 429).length;
+
+          expect(limited429).toBeGreaterThan(0);
+          // At most the per-address allowance ever reached the database.
+          expect(refused401).toBeLessThanOrEqual(120);
+          expect(refused401 + limited429).toBe(300);
+        } finally {
+          if (previous === undefined) delete process.env.WHATSAPP_ENABLED;
+          else process.env.WHATSAPP_ENABLED = previous;
+          if (previousKeys === undefined) {
+            delete process.env.WHATSAPP_RECIPIENT_HASH_KEYS;
+          } else process.env.WHATSAPP_RECIPIENT_HASH_KEYS = previousKeys;
+        }
+      });
+
+      test("M-3 (T5): disconnecting a number erases its webhook app-secret ciphertext", async () => {
+        const { disconnectAccount } = await import(
+          "../../src/modules/channel-accounts/application/account-directory"
+        );
+
+        await subscribe(TENANT_A, actorA, a1, "appsecretA1appsecretA1appsecret1");
+
+        const ciphertexts = async () =>
+          (
+            (await getAdminSql()`
+              SELECT count(*)::int AS n FROM awcms_channel_secrets
+              WHERE tenant_id = ${TENANT_A} AND purpose = 'webhook_signing_secret'
+            `) as { n: number }[]
+          )[0]!.n;
+
+        expect(await ciphertexts()).toBe(1);
+
+        await inTenant(TENANT_A, (tx) =>
+          disconnectAccount(tx, store, TENANT_A, actorA, a1.id)
+        );
+
+        expect(await ciphertexts()).toBe(0);
+        expect(
+          (await getAdminSql()`
+            SELECT status, signing_secret_id FROM awcms_channel_webhook_subscriptions
+            WHERE tenant_id = ${TENANT_A}
+          `) as unknown[]
+        ).toEqual([{ status: "revoked", signing_secret_id: null }]);
+      });
+
+      workerTest(
+        "L-2: the worker may delete only windows and receipts past the purge's retention",
+        async () => {
+          const secret = "appsecretA1appsecretA1appsecret1";
+          const token = await subscribe(TENANT_A, actorA, a1, secret);
+          const inbound = inboundPayload(a1.wabaId!, a1.phoneNumberId, PHONE_DIGITS);
+
+          await deliver(token, inbound, sign(secret, inbound));
+
+          const workerDelete = (table: string) =>
+            withTenantOrThrow(getWorkerRoleSql(), TENANT_A, (tx) =>
+              tx.unsafe(`DELETE FROM ${table} RETURNING tenant_id`)
+            ) as Promise<unknown[]>;
+
+          // Fresh rows: invisible to the worker's DELETE (no error, nothing gone).
+          expect(await workerDelete("awcms_whatsapp_service_windows")).toHaveLength(0);
+          expect(await workerDelete("awcms_whatsapp_webhook_receipts")).toHaveLength(0);
+
+          await getAdminSql()`
+            UPDATE awcms_whatsapp_service_windows
+            SET last_inbound_at = now() - interval '3 days'
+          `;
+          await getAdminSql()`
+            UPDATE awcms_whatsapp_webhook_receipts
+            SET received_at = now() - interval '9 days'
+          `;
+
+          expect(await workerDelete("awcms_whatsapp_service_windows")).toHaveLength(1);
+          expect(await workerDelete("awcms_whatsapp_webhook_receipts")).toHaveLength(1);
+        }
+      );
+
+      test("L-3: a restriction survives the WABA container being deleted and re-registered", async () => {
+        const secret = "appsecretA1appsecretA1appsecret1";
+        const token = await subscribe(TENANT_A, actorA, a1, secret);
+        const body = wabaEvent(
+          a1.wabaId!,
+          "account_update",
+          { event: "ACCOUNT_RESTRICTION" },
+          Math.floor(Date.now() / 1000)
+        );
+
+        await deliver(token, body, sign(secret, body));
+
+        // Re-onboarding: the old container record goes, a new one with the
+        // SAME WABA id arrives, and the number is re-parented under it.
+        await getAdminSql()`
+          UPDATE awcms_channel_accounts
+          SET status = 'deleted', deleted_at = now()
+          WHERE id = ${a1.wabaAccountId}
+        `;
+
+        const fresh = await seedWaba(TENANT_A, a1.wabaId!);
+
+        await getAdminSql()`
+          UPDATE awcms_channel_accounts SET parent_account_id = ${fresh}
+          WHERE id = ${a1.id}
+        `;
+
+        expect(await enqueue(TENANT_A, { senderAccountId: a1.id })).toEqual({
+          status: "refused",
+          reason: "SENDER_UNAVAILABLE"
+        });
+      });
+
+      test("L-5: the HMAC is over the raw bytes, and a signed body that is not UTF-8 is malformed, not refused", async () => {
+        const secret = "appsecretA1appsecretA1appsecret1";
+        const token = await subscribe(TENANT_A, actorA, a1, secret);
+        const bytes = new Uint8Array([0x7b, 0x22, 0xff, 0x22, 0x7d]);
+        const signature = `sha256=${createHmac("sha256", secret).update(bytes).digest("hex")}`;
+        const parsed = parseChannelCallbackToken(token)!;
+        const outcome = await handleMetaWebhook(
+          runtime(),
+          parsed,
+          { rawBody: bytes, signatureHeader: signature },
+          {
+            verifier,
+            ring: recipientRing as Extract<typeof recipientRing, { ok: true }>
+          }
+        );
+
+        expect(outcome).toMatchObject({
+          kind: "accepted",
+          result: { malformed: true }
+        });
+
+        // The same bytes decoded and re-encoded are NOT what was signed.
+        const lossy = new TextDecoder().decode(bytes);
+
+        expect(
+          await handleMetaWebhook(
+            runtime(),
+            parsed,
+            { rawBody: lossy, signatureHeader: signature },
+            {
+              verifier,
+              ring: recipientRing as Extract<typeof recipientRing, { ok: true }>
+            }
+          )
+        ).toEqual({ kind: "refused", reason: "SIGNATURE_INVALID" });
+      });
     });
   }
 );

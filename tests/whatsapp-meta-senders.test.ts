@@ -23,6 +23,10 @@ import {
 } from "../src/modules/whatsapp-delivery/domain/meta-cloud-policy";
 import { validateMetaTemplateRecord } from "../src/modules/whatsapp-delivery/domain/whatsapp-validation";
 import { createMetaCloudWhatsappProvider } from "../src/modules/whatsapp-delivery/infrastructure/meta-cloud-provider";
+import {
+  WORKER_PURGE_POLICIES,
+  evaluateWorkerPurgePolicies
+} from "../scripts/security-readiness";
 
 const TENANT = "a1143000-0000-4000-8000-00000000000a";
 const SUB = "b1143000-0000-4000-8000-00000000000b";
@@ -424,5 +428,42 @@ describe("validation and the adapter", () => {
       providerTemplate: { name: "t", language: "id" }
     });
     expect(bodies[1]).toMatchObject({ type: "template" });
+  });
+});
+
+describe("security:readiness pins the worker's purge-only DELETE (review L-2)", () => {
+  const exact = Object.entries(WORKER_PURGE_POLICIES).map(
+    ([name, expression]) => ({
+      name,
+      restrictive: true,
+      command: "d",
+      worker_only: true,
+      expression
+    })
+  );
+
+  test("the exact policies pass", () => {
+    expect(evaluateWorkerPurgePolicies(exact)).toEqual([]);
+  });
+
+  test("every widening, weakening or loss is a finding (mutations go red)", () => {
+    const mutations: ((rows: typeof exact) => typeof exact)[] = [
+      (rows) => rows.slice(1),
+      (rows) => [{ ...rows[0]!, restrictive: false }, rows[1]!],
+      (rows) => [{ ...rows[0]!, command: "*" }, rows[1]!],
+      (rows) => [{ ...rows[0]!, worker_only: false }, rows[1]!],
+      (rows) => [
+        {
+          ...rows[0]!,
+          expression: "(last_inbound_at < (now() - '00:00:00'::interval))"
+        },
+        rows[1]!
+      ],
+      (rows) => [rows[0]!, { ...rows[1]!, expression: "true" }]
+    ];
+
+    for (const mutate of mutations) {
+      expect(evaluateWorkerPurgePolicies(mutate(exact)).length).toBe(1);
+    }
   });
 });

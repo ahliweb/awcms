@@ -395,6 +395,12 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/WhatsappMetaSignal"
+                      itemsTruncated:
+                        type: boolean
+                        description: The tenant has more than 500 template rows; this answer holds the first 500.
+                      signalsTruncated:
+                        type: boolean
+                        description: The tenant has more than 500 WABA signal rows; this answer holds the first 500.
                   meta:
                     type: object
         "401":
@@ -605,10 +611,15 @@ paths:
         facts, both compared in constant time: the callback token in the path
         and `X-Hub-Signature-256`, the HMAC-SHA256 of the exact request body
         under that number's Meta app secret (stored write-only). Order: (1)
-        `404` when `WHATSAPP_ENABLED` is not `true`; (2) a per-(tenant of the
-        token, address) attempt bucket BEFORE any database work, `429` with
-        `retry-after` when exhausted (Meta retries a non-200, so nothing is
-        dropped, only delayed); (3) the body, capped at 128 KiB; (4) in the
+        `404` when `WHATSAPP_ENABLED` is not `true`; (2) BEFORE any database
+        work, a per-ADDRESS bucket of unverified requests (refunded when a
+        request verifies, so forged tokens naming random tenants cannot evade
+        it) and a per-(tenant of the token, address) attempt bucket, `429` with
+        `retry-after` when either is exhausted (Meta retries a non-200, so
+        nothing is dropped, only delayed); (3) the body, capped at 128 KiB, as
+        raw bytes: the HMAC is computed over them before anything is decoded,
+        and a signed body that is not UTF-8 JSON is accepted and applied
+        nowhere; (4) in the
         token's tenant transaction, verification (a bad token, an inactive or
         rotated subscription, a number without a live WABA, a missing app
         secret, or a wrong or missing signature are ONE `401`, counted against a

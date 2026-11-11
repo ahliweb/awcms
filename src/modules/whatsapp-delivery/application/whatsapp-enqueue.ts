@@ -327,7 +327,7 @@ export async function enqueueWhatsappMessage(
     const meta = await decideMetaSendForMessage(tx, {
       tenantId: input.tenantId,
       senderAccountId: sender.senderAccountId,
-      containerAccountId: sender.resolved.containerAccountId!,
+      wabaId: sender.resolved.containerExternalId!,
       purpose: template.purpose,
       providerTemplate: template.providerTemplate,
       hashes,

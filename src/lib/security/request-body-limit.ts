@@ -56,6 +56,23 @@ export async function readCappedText(
   request: Request,
   limitBytes: number
 ): Promise<{ tooLarge: false; text: string } | { tooLarge: true }> {
+  const bytes = await readCappedBytes(request, limitBytes);
+
+  return bytes.tooLarge
+    ? { tooLarge: true }
+    : { tooLarge: false, text: new TextDecoder().decode(bytes.bytes) };
+}
+
+/**
+ * The RAW body bytes under the same streaming size cap (Issue #1143, security
+ * review L-5): a signature computed over decoded-then-re-encoded text is not a
+ * signature over what the provider sent (an invalid UTF-8 sequence decodes to
+ * U+FFFD and re-encodes differently), so an HMAC check must see these bytes.
+ */
+export async function readCappedBytes(
+  request: Request,
+  limitBytes: number
+): Promise<{ tooLarge: false; bytes: Uint8Array } | { tooLarge: true }> {
   const declaredLength = parseDeclaredLength(request);
 
   if (declaredLength !== null && declaredLength > limitBytes) {
@@ -65,7 +82,7 @@ export async function readCappedText(
   const body = request.body;
 
   if (!body) {
-    return { tooLarge: false, text: "" };
+    return { tooLarge: false, bytes: new Uint8Array(0) };
   }
 
   const reader = body.getReader();
@@ -95,7 +112,7 @@ export async function readCappedText(
     offset += chunk.byteLength;
   }
 
-  return { tooLarge: false, text: new TextDecoder().decode(combined) };
+  return { tooLarge: false, bytes: combined };
 }
 
 export async function readJsonBody<T = unknown>(

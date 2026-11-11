@@ -3149,6 +3149,107 @@ export async function probeEmailProviderEventRetentionFloor(
 }
 
 /**
+ * Issue #1143 review L-2, the BEHAVIOURAL half of the purge-only DELETE pin:
+ * in a transaction that is always rolled back, one fresh and one aged row of
+ * each table are seeded, the session becomes `awcms_worker`, and it deletes
+ * everything it can. Exactly the two aged rows may go; a fresh row deleted (a
+ * re-opened replay gap or an erased open window) or an aged row kept (a purge
+ * that silently stopped working) is a finding. Skipped (`ran: false`) when the
+ * connecting role cannot `SET ROLE awcms_worker`.
+ */
+export async function probeWorkerPurgeDeleteFloors(
+  db: Bun.SQL
+): Promise<{ ran: boolean; finding?: string }> {
+  const can = (await db`
+    SELECT rolsuper OR pg_has_role(current_user, 'awcms_worker', 'SET') AS can
+    FROM pg_roles WHERE rolname = current_user
+  `) as { can: boolean }[];
+
+  if (!can[0]?.can) return { ran: false };
+
+  let deleted: string[] = [];
+
+  try {
+    await db.begin(async (tx) => {
+      const tenant = crypto.randomUUID();
+      const code = `probe-${tenant.slice(0, 8)}`;
+
+      await tx`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenant}, ${code}, ${code})
+      `;
+      await tx`SELECT set_config('app.current_tenant_id', ${tenant}, true)`;
+
+      const account = (await tx`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, status)
+        VALUES (${tenant}, 'whatsapp_cloud', 'waba_phone_number',
+                ${`probe-${tenant}`}, 'probe', 'api_token', 'pending')
+        RETURNING id
+      `) as { id: string }[];
+      const subscription = (await tx`
+        INSERT INTO awcms_channel_webhook_subscriptions
+          (tenant_id, account_id, provider, callback_token_hash,
+           verification_mode, status)
+        VALUES (${tenant}, ${account[0]!.id}, 'whatsapp_cloud',
+                ${`sha256:${crypto.randomUUID().replace(/-/g, "").padEnd(64, "0")}`},
+                'hmac_signature', 'revoked')
+        RETURNING id
+      `) as { id: string }[];
+
+      await tx`
+        INSERT INTO awcms_whatsapp_service_windows
+          (tenant_id, sender_account_id, recipient_hash, last_inbound_at)
+        VALUES (${tenant}, ${account[0]!.id}, 'k1:fresh', now()),
+               (${tenant}, ${account[0]!.id}, 'k1:aged', now() - interval '3 days')
+      `;
+      await tx`
+        INSERT INTO awcms_whatsapp_webhook_receipts
+          (tenant_id, subscription_id, payload_sha256, received_at)
+        VALUES (${tenant}, ${subscription[0]!.id}, ${"a".repeat(64)}, now()),
+               (${tenant}, ${subscription[0]!.id}, ${"b".repeat(64)},
+                now() - interval '9 days')
+      `;
+
+      await tx.unsafe("SET LOCAL ROLE awcms_worker");
+
+      const windows = (await tx`
+        DELETE FROM awcms_whatsapp_service_windows RETURNING recipient_hash
+      `) as { recipient_hash: string }[];
+      const receipts = (await tx`
+        DELETE FROM awcms_whatsapp_webhook_receipts RETURNING payload_sha256
+      `) as { payload_sha256: string }[];
+
+      deleted = [
+        ...windows.map((row) => `window:${row.recipient_hash}`),
+        ...receipts.map((row) => `receipt:${row.payload_sha256.slice(0, 1)}`)
+      ].sort();
+
+      throw new RollbackProbe();
+    });
+  } catch (error) {
+    if (!(error instanceof RollbackProbe)) {
+      return {
+        ran: true,
+        finding: `the awcms_worker purge-floor probe could not run: ${errorMessage(error)}`
+      };
+    }
+  }
+
+  const expected = ["receipt:b", "window:k1:aged"];
+
+  if (JSON.stringify(deleted) !== JSON.stringify(expected)) {
+    return {
+      ran: true,
+      finding: `awcms_worker deleted [${deleted.join(", ")}] where exactly the aged window and the aged webhook receipt were expected (the purge-only DELETE floors of sql/365 are missing or wrong)`
+    };
+  }
+
+  return { ran: true };
+}
+
+/**
  * The behavioural half of the sql/373 write pins (Issue #1146): in ONE
  * transaction that is always rolled back, seed a throwaway tenant with a live
  * Facebook account, a WhatsApp account, a revoked Facebook account and three
@@ -4357,6 +4458,29 @@ export async function checkWorkerSetupRoleGrants(
         if (probe !== null) findings.push(probe);
       }
 
+      // Issue #1143 review L-2 (sql/365): the worker's DELETE on the 24-hour
+      // windows and the webhook receipts is for the purge only. Pinned by the
+      // EXACT canonical expression, so a policy loosened to `interval '0
+      // days'` or `true` (a compromised worker re-opening the dedupe gap for a
+      // fresh webhook) is a finding.
+      const purgePolicies = (await sql`
+        SELECT p.polname AS name, NOT p.polpermissive AS restrictive,
+               p.polcmd AS command,
+               p.polroles = ARRAY[to_regrole('awcms_worker')::oid] AS worker_only,
+               pg_get_expr(p.polqual, p.polrelid) AS expression
+        FROM pg_policy p
+        WHERE p.polname IN (
+          'awcms_whatsapp_service_windows_worker_purge_only',
+          'awcms_whatsapp_webhook_receipts_worker_purge_only'
+        )
+      `) as WorkerPurgePolicyRow[];
+
+      findings.push(...evaluateWorkerPurgePolicies(purgePolicies));
+
+      const purgeProbe = await probeWorkerPurgeDeleteFloors(sql);
+
+      if (purgeProbe.finding) findings.push(purgeProbe.finding);
+
       // sql/357 (Issue #1145): the worker may DELETE publication evidence only
       // through three RESTRICTIVE floors, each pinned to its EXACT canonical
       // expression (M-3 of the #1261 audit: a substring pin let `OR true`, a
@@ -4872,6 +4996,52 @@ export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
   "awcms_whatsapp_service_windows.recipient_hash":
     "keyed hash of the number that wrote to a Meta sender, for the 24-hour window (Issue #1143); not a login secret"
 };
+
+export type WorkerPurgePolicyRow = {
+  name: string;
+  restrictive: boolean;
+  command: string;
+  worker_only: boolean;
+  expression: string | null;
+};
+
+/**
+ * Issue #1143 review L-2: the canonical (deparsed) expressions of the two
+ * RESTRICTIVE `FOR DELETE TO awcms_worker` policies of `sql/365`, matched
+ * EXACTLY. They mirror the purge's own retention (two days for a window, eight
+ * for a receipt); any other text, a missing policy, a permissive one or one for
+ * another command or role is a finding.
+ */
+export const WORKER_PURGE_POLICIES: Readonly<Record<string, string>> = {
+  awcms_whatsapp_service_windows_worker_purge_only:
+    "(last_inbound_at < (now() - '2 days'::interval))",
+  awcms_whatsapp_webhook_receipts_worker_purge_only:
+    "(received_at < (now() - '8 days'::interval))"
+};
+
+export function evaluateWorkerPurgePolicies(
+  rows: readonly WorkerPurgePolicyRow[]
+): string[] {
+  const findings: string[] = [];
+
+  for (const [name, expected] of Object.entries(WORKER_PURGE_POLICIES)) {
+    const row = rows.find((candidate) => candidate.name === name);
+
+    if (
+      !row ||
+      !row.restrictive ||
+      row.command !== "d" ||
+      !row.worker_only ||
+      row.expression !== expected
+    ) {
+      findings.push(
+        `${name} (RESTRICTIVE FOR DELETE TO awcms_worker USING ${expected}) is missing or no longer exact: a compromised worker could delete fresh webhook receipts (re-opening replay) or open service windows`
+      );
+    }
+  }
+
+  return findings;
+}
 
 export type WorkerCredentialColumnPolicy = {
   credentialColumns?: readonly string[];

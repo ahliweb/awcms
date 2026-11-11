@@ -5,6 +5,7 @@ import {
   asUuid,
   auditChannelAccounts,
   badId,
+  callerAlsoHolds,
   commonRefusal,
   loadAuthorizedAccount,
   readIdempotencyKey,
@@ -27,6 +28,24 @@ type Prepared = {
   input: CreateWebhookSubscriptionInput;
 };
 
+/**
+ * The WABA-level state a subscription can change is governed by these two
+ * `whatsapp_delivery` permissions; the subscription is only as strong as the
+ * weaker of them (Issue #1143 review M-1).
+ */
+const META_STATE_GUARDS = [
+  {
+    moduleKey: "whatsapp_delivery",
+    activityCode: "meta_templates",
+    action: "configure"
+  },
+  {
+    moduleKey: "whatsapp_delivery",
+    activityCode: "meta_signals",
+    action: "configure"
+  }
+] as const;
+
 /** Where Meta must deliver: the token is the last path segment (`whatsapp_delivery` owns the route). */
 const CALLBACK_PATH_PREFIX = "/api/v1/whatsapp/webhooks/meta/";
 
@@ -46,8 +65,17 @@ const CALLBACK_PATH_PREFIX = "/api/v1/whatsapp/webhooks/meta/";
  *
  * HIGH-RISK: `webhooks.configure`, `Idempotency-Key`, a conditional step-up
  * (a person with an MFA factor must present a fresh one), the `owner`
- * assignment on the account, and a `warning` audit row with no secret, token
- * or external identifier.
+ * assignment on the account AND on its WABA container, BOTH
+ * `whatsapp_delivery.meta_templates.configure` and
+ * `whatsapp_delivery.meta_signals.configure` (the subscription can write that
+ * WABA-level state; review M-1), and a `warning` audit row with no secret,
+ * token or external identifier.
+ *
+ * The app secret is NOT verified with Meta here (it is the operator's
+ * statement of which secret signs this number's webhooks); a wrong secret only
+ * makes every delivery refuse. What a holder of these permissions can do with a
+ * secret of their own choosing is bounded by the permissions above, and every
+ * WABA-level change a webhook makes is audited (review M-1 c).
  */
 export const POST = defineTenantRoute<Prepared>({
   workClass: "interactive",
@@ -87,6 +115,33 @@ export const POST = defineTenantRoute<Prepared>({
     );
 
     if ("denied" in loaded) return loaded.denied;
+
+    // Security review M-1: a signed subscription can write WABA-LEVEL state
+    // (template approvals, restrictions affecting every sibling number, 24-hour
+    // windows). So the caller must (1) also hold the two permissions that
+    // govern that state directly, and (2) hold the OWNER assignment on the
+    // WABA container itself, not only on this one number. Refused as 403 /
+    // the same 404 as an invisible account; never a weaker path.
+    for (const guard of META_STATE_GUARDS) {
+      if (!(await callerAlsoHolds(context, guard, "whatsapp_meta_waba"))) {
+        return fail(
+          403,
+          "ACCESS_DENIED",
+          "Creating a signed Meta webhook also needs whatsapp_delivery.meta_templates.configure and whatsapp_delivery.meta_signals.configure."
+        );
+      }
+    }
+
+    if (loaded.account.parentAccountId) {
+      const container = await loadAuthorizedAccount(
+        context,
+        loaded.account.parentAccountId,
+        CHANNEL_ACCOUNTS_GUARDS.manageWebhooks,
+        "owner"
+      );
+
+      if ("denied" in container) return container.denied;
+    }
 
     const stepUp = await requireConditionalStepUp(context);
 

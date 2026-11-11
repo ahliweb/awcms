@@ -177,7 +177,7 @@ async function approveFixtureTemplates(
 ): Promise<void> {
   await getAdminSql()`
     INSERT INTO awcms_whatsapp_meta_templates
-      (tenant_id, container_account_id, template_name, language, category,
+      (tenant_id, waba_external_id, template_name, language, category,
        provider_status, evidence_ref, source, last_event_at)
     VALUES
       (${tenantId}, ${containerId}, 'it1141_reminder', 'id', 'UTILITY',
@@ -199,7 +199,7 @@ async function seedWaba(tenantId: string, externalId: string): Promise<string> {
     RETURNING id
   `) as { id: string }[];
 
-  await approveFixtureTemplates(tenantId, rows[0]!.id);
+  await approveFixtureTemplates(tenantId, `waba-${externalId}`);
 
   return rows[0]!.id;
 }
@@ -420,7 +420,7 @@ async function seedOauthChild(
     RETURNING id
   `) as { id: string }[];
 
-  await approveFixtureTemplates(tenantId, parent[0]!.id);
+  await approveFixtureTemplates(tenantId, `waba-${externalId}`);
   const child = (await admin`
     INSERT INTO awcms_channel_accounts
       (tenant_id, provider, account_kind, external_id, display_name,
@@ -995,13 +995,19 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
   });
 
   describe("the snapshot is immutable", () => {
-    test("no role can re-point a queued message at another sender, change how it was chosen, or move its scope", async () => {
+    workerTest("no role can re-point a queued message at another sender, change how it was chosen, or move its scope", async () => {
       const first = await seedAccount(TENANT_A);
       const second = await seedAccount(TENANT_A);
       const queued = await enqueue(TENANT_A, { senderAccountId: first.id });
       const id = queuedId(queued);
 
       for (const change of [
+        // Issue #1143 review L-1: the verified identity snapshot (phone number
+        // id and WABA id) is part of the same immutable snapshot.
+        (sql: Bun.SQL) =>
+          sql`UPDATE awcms_whatsapp_messages SET sender_external_id = ${second.externalId} WHERE id = ${id}`,
+        (sql: Bun.SQL) =>
+          sql`UPDATE awcms_whatsapp_messages SET sender_container_external_id = ${`waba-${second.externalId}`} WHERE id = ${id}`,
         (sql: Bun.SQL) =>
           sql`UPDATE awcms_whatsapp_messages SET sender_account_id = ${second.id} WHERE id = ${id}`,
         (sql: Bun.SQL) =>
@@ -1022,9 +1028,24 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
           "an UPDATE of the sender snapshot as the runtime role",
           { errno: "23514", message: "sender snapshot is immutable" }
         );
+        // The worker holds UPDATE on the queue (it finalises rows) and is
+        // bound by the same trigger.
+        await assertPgRejected(
+          withTenantOrThrow(getWorkerRoleSql(), TENANT_A, (tx) =>
+            Promise.resolve(change(tx))
+          ),
+          "an UPDATE of the sender snapshot as the worker role",
+          { errno: "23514", message: "sender snapshot is immutable" }
+        );
       }
 
-      expect((await row(id)).sender_account_id).toBe(first.id);
+      const after = await row(id);
+
+      expect(after.sender_account_id).toBe(first.id);
+      expect(after.sender_external_id).toBe(first.externalId);
+      expect(after.sender_container_external_id).toBe(
+        `waba-${first.externalId}`
+      );
     });
 
     test("an ordinary state change of the row is still allowed", async () => {

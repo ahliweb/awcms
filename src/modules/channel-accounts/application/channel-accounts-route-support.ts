@@ -432,6 +432,33 @@ type AccountGuard = Pick<
 >;
 
 /**
+ * Whether the caller ALSO holds `guard`, decided through the same chokepoint
+ * (and written to the decision log like every guard). For an action whose
+ * effect reaches another surface's authority: a signed Meta webhook
+ * subscription can change WABA-level template approvals and restrictions, so
+ * creating one also needs those permissions (Issue #1143 review M-1).
+ */
+export async function callerAlsoHolds(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  resourceType: string
+): Promise<boolean> {
+  const decision = await authorizeInTransaction(
+    context.tx,
+    context.tenantId,
+    context.tokenHash,
+    context.now,
+    { ...guard, resourceType },
+    {
+      clientIp: resolveClientIp(context.request, context.clientAddress),
+      readCache: readCacheFor(context)
+    }
+  );
+
+  return decision.allowed;
+}
+
+/**
  * Whether the caller holds `scope`, re-evaluated through the SAME chokepoint
  * with the route's own guard, so a deny policy and the decision log both apply.
  *

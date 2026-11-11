@@ -68,19 +68,28 @@ export const GET = defineTenantRoute({
 
       return known;
     };
+    const templates = await listMetaTemplates(tx, tenantId);
+    const signalRows = await listMetaSignals(tx, tenantId);
     const items = [];
 
-    for (const item of await listMetaTemplates(tx, tenantId)) {
+    for (const item of templates.items) {
       if (await canSee(item.containerAccountId)) items.push(item);
     }
 
     const signals = [];
 
-    for (const signal of await listMetaSignals(tx, tenantId)) {
+    for (const signal of signalRows.items) {
       if (await canSee(signal.containerAccountId)) signals.push(signal);
     }
 
-    return ok({ items, signals });
+    // `truncated`: the tenant has more rows than one answer returns; never a
+    // silent cut (security review L-6).
+    return ok({
+      items,
+      signals,
+      itemsTruncated: templates.truncated,
+      signalsTruncated: signalRows.truncated
+    });
   }
 });
 

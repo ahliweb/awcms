@@ -3,6 +3,11 @@
  * per WABA, 24-hour service windows, WABA restriction and messaging-limit
  * signals, and the application of a VERIFIED Meta webhook.
  *
+ * Approvals and signals are keyed by the WABA id (Meta's id, the `external_id`
+ * of the `waba` container account), never by the container's record id, so
+ * deleting and re-registering a container neither loses nor resets them
+ * (security review L-3).
+ *
  * Runs as `awcms_app` (enqueue, the routes, the webhook) and, for the READS
  * only, as `awcms_worker` (the dispatcher re-checks immediately before each
  * send). Every query is `WHERE tenant_id = $1` inside a tenant-scoped
@@ -10,8 +15,11 @@
  */
 import type { VerifiedMetaWebhookBinding } from "../../_shared/ports/channel-account-port";
 import type { WhatsappPurpose } from "../../_shared/ports/whatsapp-delivery-port";
+import { appendDomainEvent } from "../../domain-event-runtime/application/append-domain-event";
+import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   decideMetaSend,
+  isMetaTemplateSendable,
   isServiceWindowOpen,
   nextProviderStatus,
   templateChangeWins,
@@ -24,22 +32,24 @@ import {
   type MetaWebhookAction,
   META_DELIVERY_STATUS_RANK
 } from "../domain/meta-cloud-policy";
-import { WHATSAPP_MESSAGE_PROVIDER_STATUS_CHANGED_EVENT_TYPE } from "../domain/whatsapp-events";
+import {
+  WHATSAPP_EVENT_VERSION,
+  WHATSAPP_MESSAGE_AGGREGATE_TYPE,
+  WHATSAPP_MESSAGE_PROVIDER_STATUS_CHANGED_EVENT_TYPE,
+  WHATSAPP_MODULE_KEY
+} from "../domain/whatsapp-events";
 import {
   buildRecipientHashes,
   hashListParam,
   type RecipientHashes,
   type RecipientKeyRing
 } from "../domain/whatsapp-recipient";
-import { appendDomainEvent } from "../../domain-event-runtime/application/append-domain-event";
-import {
-  WHATSAPP_EVENT_VERSION,
-  WHATSAPP_MESSAGE_AGGREGATE_TYPE,
-  WHATSAPP_MODULE_KEY
-} from "../domain/whatsapp-events";
 
 const iso = (value: Date | string): string =>
   value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+
+/** Most rows a list returns; one more is read to say `truncated` instead of silently cutting (security review L-6). */
+export const META_LIST_LIMIT = 500;
 
 // ---------------------------------------------------------------------------
 // Reads used at enqueue AND at dispatch
@@ -48,7 +58,7 @@ const iso = (value: Date | string): string =>
 export async function readMetaTemplateApproval(
   tx: Bun.SQL,
   tenantId: string,
-  containerAccountId: string,
+  wabaId: string,
   name: string,
   language: string
 ): Promise<{
@@ -59,7 +69,7 @@ export async function readMetaTemplateApproval(
     SELECT provider_status, category
     FROM awcms_whatsapp_meta_templates
     WHERE tenant_id = ${tenantId}
-      AND container_account_id = ${containerAccountId}
+      AND waba_external_id = ${wabaId}
       AND template_name = ${name} AND language = ${language}
   `) as {
     provider_status: MetaTemplateStatus;
@@ -93,13 +103,12 @@ export async function readServiceWindow(
 export async function readMetaRestriction(
   tx: Bun.SQL,
   tenantId: string,
-  containerAccountId: string
+  wabaId: string
 ): Promise<MetaRestrictionReason | null> {
   const rows = (await tx`
     SELECT restriction_reason
     FROM awcms_whatsapp_meta_sender_signals
-    WHERE tenant_id = ${tenantId}
-      AND container_account_id = ${containerAccountId}
+    WHERE tenant_id = ${tenantId} AND waba_external_id = ${wabaId}
   `) as { restriction_reason: MetaRestrictionReason | null }[];
 
   return rows[0]?.restriction_reason ?? null;
@@ -116,7 +125,7 @@ export async function decideMetaSendForMessage(
   input: {
     tenantId: string;
     senderAccountId: string;
-    containerAccountId: string;
+    wabaId: string;
     purpose: WhatsappPurpose;
     providerTemplate: { name: string; language: string } | undefined;
     hashes: RecipientHashes;
@@ -130,7 +139,7 @@ export async function decideMetaSendForMessage(
       approval: await readMetaTemplateApproval(
         tx,
         input.tenantId,
-        input.containerAccountId,
+        input.wabaId,
         input.providerTemplate.name,
         input.providerTemplate.language
       ),
@@ -162,6 +171,7 @@ export async function decideMetaSendForMessage(
 
 export type MetaTemplateView = {
   id: string;
+  /** The live `waba` account of this WABA id (the API never returns the WABA id itself). */
   containerAccountId: string;
   name: string;
   language: string;
@@ -201,20 +211,33 @@ function toTemplateView(row: TemplateRow): MetaTemplateView {
   };
 }
 
+/**
+ * Template rows of the WABAs that have a LIVE container account of this tenant
+ * (a row whose container is gone is not listed: there is no account to decide
+ * visibility against). `truncated` says there were more than {@link META_LIST_LIMIT}.
+ */
 export async function listMetaTemplates(
   tx: Bun.SQL,
   tenantId: string
-): Promise<MetaTemplateView[]> {
+): Promise<{ items: MetaTemplateView[]; truncated: boolean }> {
   const rows = (await tx`
-    SELECT id, container_account_id, template_name, language, category,
-           provider_status, source, evidence_ref, last_event_at, updated_at
-    FROM awcms_whatsapp_meta_templates
-    WHERE tenant_id = ${tenantId}
-    ORDER BY container_account_id, template_name, language
-    LIMIT 500
+    SELECT t.id, a.id AS container_account_id, t.template_name, t.language,
+           t.category, t.provider_status, t.source, t.evidence_ref,
+           t.last_event_at, t.updated_at
+    FROM awcms_whatsapp_meta_templates t
+    JOIN awcms_channel_accounts a
+      ON a.tenant_id = t.tenant_id AND a.external_id = t.waba_external_id
+     AND a.provider = 'whatsapp_cloud' AND a.account_kind = 'waba'
+     AND a.deleted_at IS NULL
+    WHERE t.tenant_id = ${tenantId}
+    ORDER BY a.id, t.template_name, t.language
+    LIMIT ${META_LIST_LIMIT + 1}
   `) as TemplateRow[];
 
-  return rows.map(toTemplateView);
+  return {
+    items: rows.slice(0, META_LIST_LIMIT).map(toTemplateView),
+    truncated: rows.length > META_LIST_LIMIT
+  };
 }
 
 export type MetaSignalView = {
@@ -228,14 +251,18 @@ export type MetaSignalView = {
 export async function listMetaSignals(
   tx: Bun.SQL,
   tenantId: string
-): Promise<MetaSignalView[]> {
+): Promise<{ items: MetaSignalView[]; truncated: boolean }> {
   const rows = (await tx`
-    SELECT container_account_id, restriction_reason, restricted_at,
-           messaging_limit_tier, updated_at
-    FROM awcms_whatsapp_meta_sender_signals
-    WHERE tenant_id = ${tenantId}
-    ORDER BY container_account_id
-    LIMIT 500
+    SELECT a.id AS container_account_id, s.restriction_reason, s.restricted_at,
+           s.messaging_limit_tier, s.updated_at
+    FROM awcms_whatsapp_meta_sender_signals s
+    JOIN awcms_channel_accounts a
+      ON a.tenant_id = s.tenant_id AND a.external_id = s.waba_external_id
+     AND a.provider = 'whatsapp_cloud' AND a.account_kind = 'waba'
+     AND a.deleted_at IS NULL
+    WHERE s.tenant_id = ${tenantId}
+    ORDER BY a.id
+    LIMIT ${META_LIST_LIMIT + 1}
   `) as {
     container_account_id: string;
     restriction_reason: MetaRestrictionReason | null;
@@ -244,29 +271,32 @@ export async function listMetaSignals(
     updated_at: Date | string;
   }[];
 
-  return rows.map((row) => ({
-    containerAccountId: row.container_account_id,
-    restrictionReason: row.restriction_reason,
-    restrictedAt: row.restricted_at ? iso(row.restricted_at) : null,
-    messagingLimitTier: row.messaging_limit_tier,
-    updatedAt: iso(row.updated_at)
-  }));
+  return {
+    items: rows.slice(0, META_LIST_LIMIT).map((row) => ({
+      containerAccountId: row.container_account_id,
+      restrictionReason: row.restriction_reason,
+      restrictedAt: row.restricted_at ? iso(row.restricted_at) : null,
+      messagingLimitTier: row.messaging_limit_tier,
+      updatedAt: iso(row.updated_at)
+    })),
+    truncated: rows.length > META_LIST_LIMIT
+  };
 }
 
-/** Is `accountId` a live `waba` container of THIS tenant? (Another tenant's id and an unknown one are one answer.) */
-export async function isLiveWabaContainer(
+/** The WABA id of a live `waba` container of THIS tenant, or `null` (another tenant's id and an unknown one are one answer). */
+export async function resolveWabaExternalId(
   tx: Bun.SQL,
   tenantId: string,
   accountId: string
-): Promise<boolean> {
+): Promise<string | null> {
   const rows = (await tx`
-    SELECT 1 FROM awcms_channel_accounts
+    SELECT external_id FROM awcms_channel_accounts
     WHERE tenant_id = ${tenantId} AND id = ${accountId}
       AND provider = 'whatsapp_cloud' AND account_kind = 'waba'
       AND deleted_at IS NULL
-  `) as unknown[];
+  `) as { external_id: string }[];
 
-  return rows.length > 0;
+  return rows[0]?.external_id ?? null;
 }
 
 export type RecordMetaTemplateInput = {
@@ -297,23 +327,26 @@ export async function recordMetaTemplate(
   actor: string,
   input: RecordMetaTemplateInput
 ): Promise<RecordMetaTemplateOutcome> {
-  if (!(await isLiveWabaContainer(tx, tenantId, input.containerAccountId))) {
-    return { outcome: "container_not_found" };
-  }
+  const wabaId = await resolveWabaExternalId(
+    tx,
+    tenantId,
+    input.containerAccountId
+  );
+
+  if (!wabaId) return { outcome: "container_not_found" };
 
   const previous = (await tx`
     SELECT provider_status FROM awcms_whatsapp_meta_templates
-    WHERE tenant_id = ${tenantId}
-      AND container_account_id = ${input.containerAccountId}
+    WHERE tenant_id = ${tenantId} AND waba_external_id = ${wabaId}
       AND template_name = ${input.name} AND language = ${input.language}
     FOR UPDATE
   `) as { provider_status: MetaTemplateStatus }[];
 
   const rows = (await tx`
     INSERT INTO awcms_whatsapp_meta_templates
-      (tenant_id, container_account_id, template_name, language, category,
+      (tenant_id, waba_external_id, template_name, language, category,
        provider_status, evidence_ref, source, last_event_at, updated_by)
-    VALUES (${tenantId}, ${input.containerAccountId}, ${input.name},
+    VALUES (${tenantId}, ${wabaId}, ${input.name},
             ${input.language}, ${input.category}, ${input.status},
             ${input.evidenceRef}, 'operator', clock_timestamp(), ${actor})
     ON CONFLICT ON CONSTRAINT awcms_whatsapp_meta_templates_identity_key
@@ -326,8 +359,9 @@ export async function recordMetaTemplate(
                     EXCLUDED.last_event_at),
                   updated_by = EXCLUDED.updated_by,
                   updated_at = now()
-    RETURNING id, container_account_id, template_name, language, category,
-              provider_status, source, evidence_ref, last_event_at, updated_at
+    RETURNING id, ${input.containerAccountId}::uuid AS container_account_id,
+              template_name, language, category, provider_status, source,
+              evidence_ref, last_event_at, updated_at
   `) as TemplateRow[];
 
   return {
@@ -345,12 +379,11 @@ export async function clearMetaRestriction(
   tx: Bun.SQL,
   tenantId: string,
   actor: string,
-  containerAccountId: string
+  wabaId: string
 ): Promise<ClearRestrictionOutcome> {
   const previous = (await tx`
     SELECT restriction_reason FROM awcms_whatsapp_meta_sender_signals
-    WHERE tenant_id = ${tenantId}
-      AND container_account_id = ${containerAccountId}
+    WHERE tenant_id = ${tenantId} AND waba_external_id = ${wabaId}
       AND restriction_reason IS NOT NULL
     FOR UPDATE
   `) as { restriction_reason: MetaRestrictionReason }[];
@@ -361,8 +394,7 @@ export async function clearMetaRestriction(
     UPDATE awcms_whatsapp_meta_sender_signals
     SET restriction_reason = NULL, restricted_at = NULL,
         cleared_by = ${actor}, cleared_at = now(), updated_at = now()
-    WHERE tenant_id = ${tenantId}
-      AND container_account_id = ${containerAccountId}
+    WHERE tenant_id = ${tenantId} AND waba_external_id = ${wabaId}
   `;
 
   return { outcome: "cleared", previousReason: previous[0].restriction_reason };
@@ -410,6 +442,40 @@ type StatusTarget = {
 };
 
 /**
+ * Audits a WABA-level change a signed webhook made (security review M-1 b): ids
+ * and fixed codes only, never a number, a hash, provider text or a secret. No
+ * person acted, so there is no actor; the subscription and the number it was
+ * minted for say where it came from.
+ */
+async function auditWebhookChange(
+  tx: Bun.SQL,
+  tenantId: string,
+  binding: VerifiedMetaWebhookBinding,
+  input: {
+    action: string;
+    severity: "info" | "warning";
+    message: string;
+    attributes: Record<string, unknown>;
+  }
+): Promise<void> {
+  await recordAuditEvent(tx, {
+    tenantId,
+    moduleKey: WHATSAPP_MODULE_KEY,
+    action: input.action,
+    resourceType: "channel_account",
+    resourceId: binding.containerAccountId,
+    severity: input.severity,
+    message: input.message,
+    attributes: {
+      source: "meta_webhook",
+      subscriptionId: binding.subscriptionId,
+      senderAccountId: binding.accountId,
+      ...input.attributes
+    }
+  });
+}
+
+/**
  * Applies the actions of a verified, deduplicated webhook. Tenant and binding
  * come from the callback token (`binding`), never from the payload; the parser
  * has already dropped everything naming another WABA or number.
@@ -419,7 +485,8 @@ export async function applyMetaWebhookActions(
   tenantId: string,
   binding: VerifiedMetaWebhookBinding,
   actions: readonly MetaWebhookAction[],
-  ring: Extract<RecipientKeyRing, { ok: true }>
+  ring: Extract<RecipientKeyRing, { ok: true }>,
+  now: Date = new Date()
 ): Promise<Omit<ApplyMetaWebhookResult, "duplicate">> {
   const result = {
     statusesApplied: 0,
@@ -514,6 +581,12 @@ export async function applyMetaWebhookActions(
           `+${action.fromDigits}`,
           ring
         );
+        const before = await readServiceWindow(
+          tx,
+          tenantId,
+          binding.accountId,
+          hashes
+        );
 
         await tx`
           INSERT INTO awcms_whatsapp_service_windows
@@ -527,6 +600,22 @@ export async function applyMetaWebhookActions(
                         updated_at = now()
         `;
         result.windowsOpened += 1;
+
+        // A window that was CLOSED and is now open lets free text go out to
+        // that person: audited. Extending an open window is not a new decision.
+        if (
+          !isServiceWindowOpen(before, now) &&
+          isServiceWindowOpen(action.at, now)
+        ) {
+          await auditWebhookChange(tx, tenantId, binding, {
+            action: "whatsapp_meta_webhook.window_opened",
+            severity: "info",
+            message:
+              "A verified inbound message opened a 24-hour service window (content not stored).",
+            attributes: {}
+          });
+        }
+
         break;
       }
 
@@ -535,7 +624,7 @@ export async function applyMetaWebhookActions(
           SELECT provider_status, last_event_at
           FROM awcms_whatsapp_meta_templates
           WHERE tenant_id = ${tenantId}
-            AND container_account_id = ${binding.containerAccountId}
+            AND waba_external_id = ${binding.wabaId}
             AND template_name = ${action.name}
             AND language = ${action.language}
           FOR UPDATE
@@ -560,9 +649,9 @@ export async function applyMetaWebhookActions(
 
         await tx`
           INSERT INTO awcms_whatsapp_meta_templates
-            (tenant_id, container_account_id, template_name, language,
+            (tenant_id, waba_external_id, template_name, language,
              category, provider_status, source, last_event_at)
-          VALUES (${tenantId}, ${binding.containerAccountId}, ${action.name},
+          VALUES (${tenantId}, ${binding.wabaId}, ${action.name},
                   ${action.language}, ${action.category}, ${action.status},
                   'webhook', ${action.eventAt})
           ON CONFLICT ON CONSTRAINT awcms_whatsapp_meta_templates_identity_key
@@ -575,17 +664,35 @@ export async function applyMetaWebhookActions(
                         updated_at = now()
         `;
         result.templatesUpdated += 1;
+
+        const previous = current[0]?.provider_status ?? null;
+
+        await auditWebhookChange(tx, tenantId, binding, {
+          action: "whatsapp_meta_webhook.template_status",
+          severity:
+            isMetaTemplateSendable(action.status) ||
+            (previous !== null && isMetaTemplateSendable(previous))
+              ? "warning"
+              : "info",
+          message: "A signed Meta webhook changed a template's status on a WABA.",
+          attributes: {
+            templateName: action.name,
+            language: action.language,
+            category: action.category,
+            providerStatus: action.status,
+            previousStatus: previous
+          }
+        });
         break;
       }
 
       case "limit": {
         await tx`
           INSERT INTO awcms_whatsapp_meta_sender_signals
-            (tenant_id, container_account_id, messaging_limit_tier,
-             limit_event_at)
-          VALUES (${tenantId}, ${binding.containerAccountId}, ${action.tier},
+            (tenant_id, waba_external_id, messaging_limit_tier, limit_event_at)
+          VALUES (${tenantId}, ${binding.wabaId}, ${action.tier},
                   ${action.eventAt})
-          ON CONFLICT (tenant_id, container_account_id)
+          ON CONFLICT (tenant_id, waba_external_id)
           DO UPDATE SET messaging_limit_tier = EXCLUDED.messaging_limit_tier,
                         limit_event_at = EXCLUDED.limit_event_at,
                         updated_at = now()
@@ -601,13 +708,13 @@ export async function applyMetaWebhookActions(
         if (action.signal.kind === "restrict") {
           // A restriction applies unless a STRICTLY newer event already moved
           // the WABA; on a tie the restriction wins.
-          await tx`
+          const applied = (await tx`
             INSERT INTO awcms_whatsapp_meta_sender_signals
-              (tenant_id, container_account_id, restriction_reason,
+              (tenant_id, waba_external_id, restriction_reason,
                restricted_at, restriction_event_at)
-            VALUES (${tenantId}, ${binding.containerAccountId},
+            VALUES (${tenantId}, ${binding.wabaId},
                     ${action.signal.reason}, now(), ${action.eventAt})
-            ON CONFLICT (tenant_id, container_account_id)
+            ON CONFLICT (tenant_id, waba_external_id)
             DO UPDATE SET restriction_reason = EXCLUDED.restriction_reason,
                           restricted_at = now(),
                           restriction_event_at = EXCLUDED.restriction_event_at,
@@ -615,20 +722,42 @@ export async function applyMetaWebhookActions(
             WHERE awcms_whatsapp_meta_sender_signals.restriction_event_at IS NULL
                OR awcms_whatsapp_meta_sender_signals.restriction_event_at
                     <= EXCLUDED.restriction_event_at
-          `;
+            RETURNING tenant_id
+          `) as unknown[];
+
+          if (applied.length > 0) {
+            await auditWebhookChange(tx, tenantId, binding, {
+              action: "whatsapp_meta_webhook.restriction_set",
+              severity: "warning",
+              message:
+                "A signed Meta webhook restricted a WABA: its numbers stop sending.",
+              attributes: { reason: action.signal.reason }
+            });
+          }
         } else if (action.signal.kind === "clear") {
           // Lifts ONLY the restriction it reverses, and only when strictly
           // newer than the event that set it.
-          await tx`
+          const cleared = (await tx`
             UPDATE awcms_whatsapp_meta_sender_signals
             SET restriction_reason = NULL, restricted_at = NULL,
                 restriction_event_at = ${action.eventAt}, updated_at = now()
             WHERE tenant_id = ${tenantId}
-              AND container_account_id = ${binding.containerAccountId}
+              AND waba_external_id = ${binding.wabaId}
               AND restriction_reason = ${action.signal.reason}
               AND (restriction_event_at IS NULL
                    OR restriction_event_at < ${action.eventAt})
-          `;
+            RETURNING tenant_id
+          `) as unknown[];
+
+          if (cleared.length > 0) {
+            await auditWebhookChange(tx, tenantId, binding, {
+              action: "whatsapp_meta_webhook.restriction_cleared",
+              severity: "warning",
+              message:
+                "A signed Meta webhook lifted a WABA restriction: its numbers may send again.",
+              attributes: { reason: action.signal.reason }
+            });
+          }
         }
 
         result.signalsUpdated += 1;

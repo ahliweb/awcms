@@ -72,7 +72,8 @@ export async function handleMetaHandshake(
 export async function handleMetaWebhook(
   sql: Bun.SQL,
   token: ParsedChannelCallbackToken,
-  input: { rawBody: string; signatureHeader: string | null },
+  /** `rawBody`: the EXACT bytes received; verified first, decoded after. */
+  input: { rawBody: Uint8Array | string; signatureHeader: string | null },
   deps: {
     verifier: ChannelWebhookVerifierPort;
     ring: Extract<RecipientKeyRing, { ok: true }>;
@@ -80,6 +81,10 @@ export async function handleMetaWebhook(
   }
 ): Promise<MetaWebhookOutcome> {
   const now = deps.now ?? new Date();
+  const bytes =
+    typeof input.rawBody === "string"
+      ? new Uint8Array(Buffer.from(input.rawBody, "utf8"))
+      : input.rawBody;
 
   return withTenantOrThrow(
     sql,
@@ -89,7 +94,7 @@ export async function handleMetaWebhook(
         tenantId: token.tenantId,
         subscriptionId: token.subscriptionId,
         token: token.raw,
-        rawBody: input.rawBody,
+        rawBody: bytes,
         signatureHeader: input.signatureHeader
       });
 
@@ -108,7 +113,7 @@ export async function handleMetaWebhook(
         tx,
         token.tenantId,
         verdict.binding.subscriptionId,
-        createHash("sha256").update(input.rawBody, "utf8").digest("hex")
+        createHash("sha256").update(bytes).digest("hex")
       );
 
       if (!fresh) {
@@ -121,9 +126,13 @@ export async function handleMetaWebhook(
       let payload: unknown;
 
       try {
-        payload = JSON.parse(input.rawBody);
+        // Decoded only AFTER the signature over the raw bytes held; invalid
+        // UTF-8 is malformed, never replaced characters.
+        payload = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+        );
       } catch {
-        // Signed by Meta but not JSON: nothing to apply. Answered 200 so the
+        // Signed by Meta but not UTF-8 JSON: nothing to apply. Answered 200 so the
         // provider does not retry it for a week.
         return {
           kind: "accepted",
@@ -144,7 +153,8 @@ export async function handleMetaWebhook(
         token.tenantId,
         verdict.binding,
         parsed.actions,
-        deps.ring
+        deps.ring,
+        now
       );
 
       return {

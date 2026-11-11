@@ -418,7 +418,8 @@ export interface ChannelWebhookVerifierPort {
       tenantId: string;
       subscriptionId: string;
       token: string;
-      rawBody: string;
+      /** The EXACT request bytes Meta signed (never decoded and re-encoded). */
+      rawBody: Uint8Array;
       signatureHeader: string | null;
     }
   ): Promise<VerifyMetaWebhookResult>;

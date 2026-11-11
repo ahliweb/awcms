@@ -737,7 +737,7 @@ type LaneState = {
 };
 
 type RowGate =
-  | ({ ok: true; metaContainerAccountId: string | null } & LaneProvider)
+  | ({ ok: true; metaWabaId: string | null } & LaneProvider)
   | {
       ok: false;
       kind: "terminal" | "hold";
@@ -1070,7 +1070,7 @@ export async function dispatchWhatsappQueue(
    */
   async function gateRow(lane: LaneState, entry: ClaimedRow): Promise<RowGate> {
     if (lane.senderAccountId === null) {
-      return { ok: true, metaContainerAccountId: null, ...lane.deployment! };
+      return { ok: true, metaWabaId: null, ...lane.deployment! };
     }
 
     const accountId = lane.senderAccountId;
@@ -1143,12 +1143,12 @@ export async function dispatchWhatsappQueue(
       return { ok: false, kind: "terminal", reason: "SENDER_BINDING_CHANGED" };
     }
 
-    let metaContainerAccountId: string | null = null;
+    let metaWabaId: string | null = null;
 
     if (verdict.sender.provider === "whatsapp_cloud") {
-      metaContainerAccountId = verdict.sender.containerAccountId ?? null;
+      metaWabaId = verdict.sender.containerExternalId ?? null;
 
-      if (!metaContainerAccountId || !verdict.sender.containerExternalId) {
+      if (!metaWabaId || !verdict.sender.containerAccountId) {
         return {
           ok: false,
           kind: "terminal",
@@ -1169,12 +1169,12 @@ export async function dispatchWhatsappQueue(
       }
 
       if (lane.restriction === undefined) {
-        const containerId = metaContainerAccountId;
+        const wabaId = metaWabaId;
 
         lane.restriction = await withTenantOrThrow(
           sql,
           tenantId,
-          (tx) => readMetaRestriction(tx, tenantId, containerId),
+          (tx) => readMetaRestriction(tx, tenantId, wabaId),
           { workClass: "background_sync" }
         );
       }
@@ -1279,7 +1279,7 @@ export async function dispatchWhatsappQueue(
       };
     }
 
-    return { ok: true, metaContainerAccountId, ...lane.provider };
+    return { ok: true, metaWabaId, ...lane.provider };
   }
 
   /**
@@ -1445,7 +1445,7 @@ export async function dispatchWhatsappQueue(
       return;
     }
 
-    const { provider, providerName, metaContainerAccountId } = gate;
+    const { provider, providerName, metaWabaId } = gate;
 
     // 3. Eligibility, read again immediately before the send, under EVERY ring key.
     //    Keyed by the recipient, never by the sender (ADR-0148 section 4); a
@@ -1526,7 +1526,7 @@ export async function dispatchWhatsappQueue(
     //     never another number.
     let serviceWindowOpen = false;
 
-    if (metaContainerAccountId !== null && lane.senderAccountId !== null) {
+    if (metaWabaId !== null && lane.senderAccountId !== null) {
       const senderAccountId = lane.senderAccountId;
       const meta = await withTenantOrThrow(
         sql,
@@ -1535,7 +1535,7 @@ export async function dispatchWhatsappQueue(
           decideMetaSendForMessage(tx, {
             tenantId,
             senderAccountId,
-            containerAccountId: metaContainerAccountId,
+            wabaId: metaWabaId,
             purpose: entry.purpose as
               "transactional" | "security" | "marketing",
             providerTemplate: template.providerTemplate,

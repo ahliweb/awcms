@@ -525,10 +525,16 @@ paths:
         transaction (rotation). A number that is not a live Meta number is
         `409 NOT_A_META_NUMBER`; one with no live WABA container is `409
         CONTAINER_BINDING_INVALID`. HIGH-RISK: the `owner` assignment on the
-        account, a conditional step-up (a person with an MFA factor must
+        account AND on its WABA container (an invisible container is the same
+        `404`), a conditional step-up (a person with an MFA factor must
         present a fresh one), `Idempotency-Key`, audited at `warning` with no
-        secret, token or external identifier. Requires
-        `channel_accounts.webhooks.configure`.
+        secret, token or external identifier. Disconnecting or deleting the
+        account also revokes its subscriptions and erases their secrets. The
+        app secret is NOT verified with Meta. Requires
+        `channel_accounts.webhooks.configure` AND, because a subscription can
+        feed WABA-level template approvals, restrictions and 24-hour windows,
+        `whatsapp_delivery.meta_templates.configure` and
+        `whatsapp_delivery.meta_signals.configure` (`403` without them).
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:

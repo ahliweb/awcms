@@ -422,24 +422,12 @@ export async function createMetaWebhookSubscription(
   // Rotation: every earlier subscription of this number stops verifying NOW,
   // and its app-secret ciphertext is erased (a revoked subscription must not
   // keep a recoverable credential alive).
-  const previous = (await tx`
-    SELECT id, signing_secret_id FROM awcms_channel_webhook_subscriptions
-    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
-      AND (status <> 'revoked' OR signing_secret_id IS NOT NULL)
-    FOR UPDATE
-  `) as { id: string; signing_secret_id: string | null }[];
-
-  for (const row of previous) {
-    await tx`
-      UPDATE awcms_channel_webhook_subscriptions
-      SET status = 'revoked', signing_secret_id = NULL, updated_at = now()
-      WHERE tenant_id = ${tenantId} AND id = ${row.id}
-    `;
-
-    if (row.signing_secret_id) {
-      await store.remove(tx, tenantId, row.signing_secret_id);
-    }
-  }
+  const rotated = await revokeAccountWebhookSubscriptions(
+    tx,
+    store,
+    tenantId,
+    accountId
+  );
 
   const secret = await store.put(tx, {
     tenantId,
@@ -464,8 +452,44 @@ export async function createMetaWebhookSubscription(
     outcome: "created",
     subscriptionId,
     callbackToken,
-    rotated: previous.length
+    rotated
   };
+}
+
+/**
+ * Revokes every subscription of an account that is still live or still holds
+ * a signing secret, and HARD-DELETES those secrets (the rule of `sql/318`: a
+ * revoked credential is not kept recoverable). Used by rotation AND by
+ * `disconnectAccount`/`deleteAccount` (security review M-3: they used to revoke
+ * the subscription but leave the app-secret ciphertext behind). Returns how many
+ * subscriptions it touched.
+ */
+export async function revokeAccountWebhookSubscriptions(
+  tx: Bun.SQL,
+  store: SecretStorePort,
+  tenantId: string,
+  accountId: string
+): Promise<number> {
+  const previous = (await tx`
+    SELECT id, signing_secret_id FROM awcms_channel_webhook_subscriptions
+    WHERE tenant_id = ${tenantId} AND account_id = ${accountId}
+      AND (status <> 'revoked' OR signing_secret_id IS NOT NULL)
+    FOR UPDATE
+  `) as { id: string; signing_secret_id: string | null }[];
+
+  for (const row of previous) {
+    await tx`
+      UPDATE awcms_channel_webhook_subscriptions
+      SET status = 'revoked', signing_secret_id = NULL, updated_at = now()
+      WHERE tenant_id = ${tenantId} AND id = ${row.id}
+    `;
+
+    if (row.signing_secret_id) {
+      await store.remove(tx, tenantId, row.signing_secret_id);
+    }
+  }
+
+  return previous.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -475,8 +499,14 @@ export async function createMetaWebhookSubscription(
 /** `sha256=<64 lower-case hex>`, exactly as Meta documents `X-Hub-Signature-256`. */
 const SIGNATURE_HEADER = /^sha256=([0-9a-f]{64})$/;
 
-export function computeMetaSignature(secret: string, rawBody: string): string {
-  return createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+/** HMAC-SHA256 over the EXACT bytes received (security review L-5): a string argument is encoded as UTF-8 for callers that hold text. */
+export function computeMetaSignature(
+  secret: string,
+  rawBody: Uint8Array | string
+): string {
+  return createHmac("sha256", secret)
+    .update(typeof rawBody === "string" ? Buffer.from(rawBody, "utf8") : rawBody)
+    .digest("hex");
 }
 
 async function loadSubscription(

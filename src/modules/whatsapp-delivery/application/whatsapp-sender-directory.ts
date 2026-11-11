@@ -327,13 +327,13 @@ export async function resolveEnqueueSender(
   // not while Meta reports that WABA restricted (banned, restricted, deleted,
   // offboarded, app uninstalled). Never another number instead.
   if (verdict.sender.provider === "whatsapp_cloud") {
-    const containerAccountId = verdict.sender.containerAccountId ?? null;
+    const wabaId = verdict.sender.containerExternalId ?? null;
 
-    if (!containerAccountId || !verdict.sender.containerExternalId) {
+    if (!wabaId || !verdict.sender.containerAccountId) {
       return refuse("SENDER_UNAVAILABLE", "meta_container_binding_missing");
     }
 
-    if (await readMetaRestriction(tx, tenantId, containerAccountId)) {
+    if (await readMetaRestriction(tx, tenantId, wabaId)) {
       return refuse("SENDER_UNAVAILABLE", "meta_waba_restricted");
     }
   }

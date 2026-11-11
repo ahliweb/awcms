@@ -12,7 +12,7 @@ import { defineTenantRoute } from "../../../../../../modules/_shared/tenant-rout
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
 import {
   clearMetaRestriction,
-  isLiveWabaContainer
+  resolveWabaExternalId
 } from "../../../../../../modules/whatsapp-delivery/application/whatsapp-meta-directory";
 import { isWhatsappRecordUuid } from "../../../../../../modules/whatsapp-delivery/domain/whatsapp-sender";
 import { loadSenderAccess } from "../../../../../../modules/whatsapp-delivery/infrastructure/channel-account-access-loader";
@@ -65,8 +65,10 @@ export const POST = defineTenantRoute<Prepared>({
 
     if (!access) return fail(403, "ACCESS_DENIED", "Access denied.");
 
+    const wabaId = await resolveWabaExternalId(tx, tenantId, prepared.id);
+
     if (
-      !(await isLiveWabaContainer(tx, tenantId, prepared.id)) ||
+      !wabaId ||
       !(await access.canUseAccount(context, GUARD, prepared.id, "operator"))
     ) {
       return notFound();
@@ -99,7 +101,7 @@ export const POST = defineTenantRoute<Prepared>({
       });
     }
 
-    const result = await clearMetaRestriction(tx, tenantId, actor, prepared.id);
+    const result = await clearMetaRestriction(tx, tenantId, actor, wabaId);
 
     if (result.outcome === "not_restricted") {
       return fail(

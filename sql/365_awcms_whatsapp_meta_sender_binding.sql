@@ -219,8 +219,12 @@ $function$;
 CREATE TABLE IF NOT EXISTS awcms_whatsapp_meta_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES awcms_tenants (id),
-  -- The `waba` container account the template is registered on.
-  container_account_id uuid NOT NULL,
+  -- The WABA id (the `external_id` of the `waba` container account) the
+  -- template is registered on. Keyed by Meta's id, NOT by the container's
+  -- record id, so deleting and re-registering the container (a new record id)
+  -- neither loses nor resets an approval or a restriction (security review
+  -- L-3). Deliberately no FK: the container record may be re-created.
+  waba_external_id text NOT NULL,
   template_name text NOT NULL,
   language text NOT NULL,
   category text NOT NULL,
@@ -242,7 +246,12 @@ CREATE TABLE IF NOT EXISTS awcms_whatsapp_meta_templates (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT awcms_whatsapp_meta_templates_tenant_id_key UNIQUE (tenant_id, id),
   CONSTRAINT awcms_whatsapp_meta_templates_identity_key
-    UNIQUE (tenant_id, container_account_id, template_name, language),
+    UNIQUE (tenant_id, waba_external_id, template_name, language),
+  CONSTRAINT awcms_whatsapp_meta_templates_waba_check
+    CHECK (
+      char_length(waba_external_id) BETWEEN 1 AND 256
+      AND waba_external_id = btrim(waba_external_id)
+    ),
   CONSTRAINT awcms_whatsapp_meta_templates_name_check
     CHECK (
       template_name ~ '^[a-z0-9_]+$'
@@ -269,9 +278,6 @@ CREATE TABLE IF NOT EXISTS awcms_whatsapp_meta_templates (
         OR evidence_ref IS NOT NULL
       )
     ),
-  CONSTRAINT awcms_whatsapp_meta_templates_container_fk
-    FOREIGN KEY (tenant_id, container_account_id)
-    REFERENCES awcms_channel_accounts (tenant_id, id),
   CONSTRAINT awcms_whatsapp_meta_templates_updated_by_fk
     FOREIGN KEY (tenant_id, updated_by)
     REFERENCES awcms_tenant_users (tenant_id, id)
@@ -329,7 +335,9 @@ CREATE POLICY awcms_whatsapp_service_windows_tenant_isolation
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS awcms_whatsapp_meta_sender_signals (
   tenant_id uuid NOT NULL REFERENCES awcms_tenants (id),
-  container_account_id uuid NOT NULL,
+  -- The WABA id, not the container's record id (security review L-3): a
+  -- restriction survives the container being deleted and re-registered.
+  waba_external_id text NOT NULL,
   -- NULL = not restricted.
   restriction_reason text,
   restricted_at timestamptz,
@@ -340,7 +348,12 @@ CREATE TABLE IF NOT EXISTS awcms_whatsapp_meta_sender_signals (
   cleared_by uuid,
   cleared_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (tenant_id, container_account_id),
+  PRIMARY KEY (tenant_id, waba_external_id),
+  CONSTRAINT awcms_whatsapp_meta_sender_signals_waba_check
+    CHECK (
+      char_length(waba_external_id) BETWEEN 1 AND 256
+      AND waba_external_id = btrim(waba_external_id)
+    ),
   CONSTRAINT awcms_whatsapp_meta_sender_signals_reason_check
     CHECK (restriction_reason IS NULL OR restriction_reason IN (
       'ACCOUNT_DELETED', 'ACCOUNT_RESTRICTION', 'DISABLED', 'OFFBOARDED',
@@ -353,9 +366,6 @@ CREATE TABLE IF NOT EXISTS awcms_whatsapp_meta_sender_signals (
       'TIER_50', 'TIER_250', 'TIER_1K', 'TIER_2K', 'TIER_10K', 'TIER_100K',
       'TIER_NOT_SET', 'TIER_UNLIMITED'
     )),
-  CONSTRAINT awcms_whatsapp_meta_sender_signals_container_fk
-    FOREIGN KEY (tenant_id, container_account_id)
-    REFERENCES awcms_channel_accounts (tenant_id, id),
   CONSTRAINT awcms_whatsapp_meta_sender_signals_cleared_by_fk
     FOREIGN KEY (tenant_id, cleared_by)
     REFERENCES awcms_tenant_users (tenant_id, id)
@@ -423,3 +433,24 @@ GRANT SELECT ON awcms_whatsapp_meta_templates TO awcms_worker;
 GRANT SELECT ON awcms_whatsapp_meta_sender_signals TO awcms_worker;
 GRANT SELECT, DELETE ON awcms_whatsapp_service_windows TO awcms_worker;
 GRANT SELECT, DELETE ON awcms_whatsapp_webhook_receipts TO awcms_worker;
+
+-- The worker's DELETE is for the PURGE only, so it may delete only what the
+-- purge's retention already allows (security review L-2): a closed window two
+-- days old and a receipt past Meta's seven-day retry period plus a day. A
+-- compromised worker can therefore neither re-open a dedupe gap for a fresh
+-- webhook (deleting its receipt lets a replay apply again) nor erase an open
+-- window. RESTRICTIVE, so it narrows the tenant-isolation policy and cannot
+-- widen it. `security:readiness` pins both expressions exactly.
+CREATE POLICY awcms_whatsapp_service_windows_worker_purge_only
+  ON awcms_whatsapp_service_windows
+  AS RESTRICTIVE
+  FOR DELETE
+  TO awcms_worker
+  USING (last_inbound_at < now() - interval '2 days');
+
+CREATE POLICY awcms_whatsapp_webhook_receipts_worker_purge_only
+  ON awcms_whatsapp_webhook_receipts
+  AS RESTRICTIVE
+  FOR DELETE
+  TO awcms_worker
+  USING (received_at < now() - interval '8 days');

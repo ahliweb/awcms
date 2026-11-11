@@ -7,10 +7,11 @@ import { log } from "../../../../../../lib/logging/logger";
 import {
   BODY_SIZE_TIER_BYTES,
   bodyTooLargeResponse,
-  readCappedText
+  readCappedBytes
 } from "../../../../../../lib/security/request-body-limit";
 import {
   checkSharedRateLimit,
+  refundSharedRateLimit,
   resolveClientIp
 } from "../../../../../../lib/security/rate-limit";
 import {
@@ -37,12 +38,15 @@ import { loadChannelWebhookVerifier } from "../../../../../../modules/whatsapp-d
  *
  * 1. **Off means 404.** Without `WHATSAPP_ENABLED=true` the route does not
  *    exist (nothing read, nothing compared).
- * 2. **A per-(tenant, address) attempt bucket**, BEFORE any database work. The
- *    tenant is the token's (or `malformed`), so one tenant's noise never spends
- *    another tenant's allowance. Over it: `429` with `retry-after` — Meta
- *    retries a non-200, so a status or an inbound message (which may matter for
- *    an opt-out handled downstream) is DELAYED, never dropped.
- * 3. **The body**, capped (`128 KiB`), read as the exact bytes Meta signed.
+ * 2. **Two buckets BEFORE any database work.** A per-ADDRESS bucket of
+ *    unverified requests (a verified request is refunded), which a caller
+ *    cannot dodge by choosing tenant uuids (security review M-2); then a
+ *    per-(tenant, address) attempt bucket, so one tenant's genuine volume never
+ *    spends another tenant's allowance. Over either: `429` with `retry-after` —
+ *    Meta retries a non-200, so a status or an inbound message is DELAYED,
+ *    never dropped.
+ * 3. **The body**, capped (`128 KiB`), read as the raw bytes Meta signed: the
+ *    HMAC is computed over these bytes, and they are decoded only afterwards.
  * 4. **Verification** in the token's tenant transaction. Every refusal (bad
  *    token, unknown or revoked subscription, number without a live WABA,
  *    missing app secret, wrong or missing signature) is the same `401`, and is
@@ -108,12 +112,38 @@ async function denied(tenant: string, client: string): Promise<Response> {
       });
 }
 
+/**
+ * Security review M-2: the per-(tenant, address) buckets are keyed by a tenant
+ * the CALLER chooses (it is in the token), so 300 random tenant uuids from one
+ * address were 300 fresh buckets, 300 x `401`, no `429`, and a database
+ * transaction each. This bucket is keyed by the ADDRESS ALONE and is charged
+ * BEFORE the transaction; a request that then verifies gets its unit back, so
+ * only refusals (and requests in flight) spend it. Exhausted: `429` with no
+ * database work. A burst of genuine deliveries from one Meta address larger
+ * than this, all in flight at once, can see a transient `429`; Meta retries it.
+ */
+const IP_PENDING_PER_MINUTE = 120;
+const IP_BUCKET = {
+  maxAttempts: IP_PENDING_PER_MINUTE,
+  windowMs: 60_000
+} as const;
+const ipBucketKey = (client: string) =>
+  `whatsapp-meta-webhook-unverified:${client}`;
+
 export const POST: APIRoute = async ({ request, params, clientAddress }) => {
   if (!isWhatsappEnabled()) return refuse(404, "NOT_FOUND", "Not found.");
 
   const client = resolveClientIp(request, clientAddress);
   const token = parseChannelCallbackToken(params.token);
   const tenant = bucketTenant(token);
+  const ipGate = await checkSharedRateLimit(ipBucketKey(client), IP_BUCKET);
+
+  if (!ipGate.allowed) {
+    return refuse(429, "RATE_LIMITED", "Too many requests.", {
+      "retry-after": String(ipGate.retryAfterSec)
+    });
+  }
+
   const attempt = await attemptAllowed(tenant, client);
 
   if (!attempt.allowed) {
@@ -122,7 +152,7 @@ export const POST: APIRoute = async ({ request, params, clientAddress }) => {
     });
   }
 
-  const body = await readCappedText(request, BODY_SIZE_TIER_BYTES.default);
+  const body = await readCappedBytes(request, BODY_SIZE_TIER_BYTES.default);
 
   if (body.tooLarge) return bodyTooLargeResponse(BODY_SIZE_TIER_BYTES.default);
 
@@ -147,7 +177,7 @@ export const POST: APIRoute = async ({ request, params, clientAddress }) => {
       getDatabaseClient(),
       token,
       {
-        rawBody: body.text,
+        rawBody: body.bytes,
         signatureHeader: request.headers.get(SIGNATURE_HEADER)
       },
       { verifier, ring }
@@ -161,6 +191,10 @@ export const POST: APIRoute = async ({ request, params, clientAddress }) => {
 
       return denied(tenant, client);
     }
+
+    // Verified: this request does not count against the address's
+    // unverified allowance (M-2).
+    await refundSharedRateLimit(ipBucketKey(client), IP_BUCKET);
 
     log("info", "whatsapp.meta_webhook.accepted", {
       moduleKey: WHATSAPP_MODULE_KEY,
@@ -200,6 +234,14 @@ export const GET: APIRoute = async ({
   const client = resolveClientIp(request, clientAddress);
   const token = parseChannelCallbackToken(params.token);
   const tenant = bucketTenant(token);
+  const ipGate = await checkSharedRateLimit(ipBucketKey(client), IP_BUCKET);
+
+  if (!ipGate.allowed) {
+    return refuse(429, "RATE_LIMITED", "Too many requests.", {
+      "retry-after": String(ipGate.retryAfterSec)
+    });
+  }
+
   const attempt = await attemptAllowed(tenant, client);
 
   if (!attempt.allowed) {
@@ -235,6 +277,8 @@ export const GET: APIRoute = async ({
 
       return refuse(403, "FORBIDDEN", "Forbidden.");
     }
+
+    await refundSharedRateLimit(ipBucketKey(client), IP_BUCKET);
 
     return new Response(challenge, {
       status: 200,
