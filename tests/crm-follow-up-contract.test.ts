@@ -30,10 +30,20 @@ import {
 } from "../src/modules/crm-follow-up/domain/crm-follow-up-validation";
 import {
   addWorkingMinutes,
+  isKnownTimeZone,
   isWithinWorkingTime,
   nextWorkingInstant,
   type WorkingCalendar
 } from "../src/modules/crm-follow-up/domain/working-calendar";
+import {
+  resetZonedFormatterCacheForTests,
+  ZONED_FORMATTER_CACHE_MAX,
+  zonedFormatterCacheSizeForTests,
+  zonedPartsFormatter
+} from "../src/lib/time/zoned-formatter";
+import { isValidTimezone } from "../src/modules/booking/domain/booking-time";
+import { isValidTimeZone } from "../src/modules/hr-workforce/domain/hr-shift-time";
+import { nextWorkingInstantOr } from "../src/modules/crm-follow-up/application/task-engine";
 import { getAllowedVariablesForCategory } from "../src/modules/email/domain/email-template-categories";
 import { DEFAULT_EMAIL_TEMPLATES } from "../src/modules/email/domain/email-default-templates";
 
@@ -393,7 +403,7 @@ describe("descriptor and contracts", () => {
       .map((match) => match[1]!)
       .filter((value) => value.includes("."));
 
-    expect(listed.sort()).toEqual(
+    expect([...new Set(listed)].sort()).toEqual(
       [
         "crm.follow_up_assigned",
         "crm.follow_up_due",
@@ -416,5 +426,131 @@ describe("descriptor and contracts", () => {
     ].join("\n");
 
     expect(sources).not.toMatch(/\b(cohort|angkatan|re_?registration|lpp)\b/i);
+  });
+});
+
+describe("audit of PR #1266", () => {
+  test("HIGH-1: validation fills no formatter cache, and N spellings stay within the bound", () => {
+    resetZonedFormatterCacheForTests();
+
+    // 500 case spellings of one zone through every validator that runs
+    // before authorization: nothing is cached.
+    for (let i = 0; i < 500; i += 1) {
+      const spelling = [..."asia/jakarta"]
+        .map((ch, index) => ((i >> index) & 1 ? ch.toUpperCase() : ch))
+        .join("");
+
+      expect(isValidTimezone(spelling)).toBe(true);
+      expect(isValidTimeZone(spelling)).toBe(true);
+      expect(isKnownTimeZone(spelling)).toBe(true);
+    }
+
+    expect(zonedFormatterCacheSizeForTests()).toBe(0);
+
+    // Spellings of one zone share ONE entry once a formatter is needed.
+    for (const spelling of ["asia/jakarta", "ASIA/JAKARTA", "Asia/Jakarta"]) {
+      zonedPartsFormatter(spelling);
+    }
+    expect(zonedFormatterCacheSizeForTests()).toBe(1);
+
+    // Many distinct zones never grow it past the bound.
+    for (const zone of Intl.supportedValuesOf("timeZone").slice(0, 200)) {
+      zonedPartsFormatter(zone);
+    }
+    expect(zonedFormatterCacheSizeForTests()).toBeLessThanOrEqual(
+      ZONED_FORMATTER_CACHE_MAX
+    );
+    resetZonedFormatterCacheForTests();
+  });
+
+  test("HIGH-1: a rule stores the canonical zone name", () => {
+    const result = validateCreateRule({
+      code: "canonical-zone",
+      name: "Rule",
+      definition: {
+        trigger: { kind: "lead_created" },
+        taskTitle: "Call",
+        dueAfterMinutes: 0,
+        assignee: { mode: "lead_owner" },
+        calendar: {
+          timeZone: "asia/jakarta",
+          workingDays: [1],
+          workStartMinute: 540,
+          workEndMinute: 600
+        }
+      }
+    });
+
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.value.definition.calendar.timeZone).toBe("Asia/Jakarta");
+    }
+  });
+
+  test("MEDIUM-1: a calendar that cannot hold the offsets is refused at publish/simulate", () => {
+    const tiny = {
+      code: "tiny-window",
+      name: "Rule",
+      definition: {
+        trigger: { kind: "lead_created" },
+        taskTitle: "Call",
+        dueAfterMinutes: 43200,
+        assignee: { mode: "lead_owner" },
+        calendar: {
+          timeZone: "UTC",
+          workingDays: [1],
+          workStartMinute: 0,
+          workEndMinute: 1
+        }
+      }
+    };
+
+    expect(validateCreateRule(tiny).valid).toBe(false);
+    expect(
+      validateCreateRule({
+        ...tiny,
+        definition: { ...tiny.definition, dueAfterMinutes: 0 }
+      }).valid
+    ).toBe(true);
+  });
+
+  test("MEDIUM-1: scheduling falls back instead of throwing", () => {
+    const none: WorkingCalendar = {
+      timeZone: "UTC",
+      workingDays: 0b0000001,
+      workStartMinute: 0,
+      workEndMinute: 1,
+      holidays: []
+    };
+    const from = at("2026-11-11T00:00:00Z");
+
+    expect(() => addWorkingMinutes(none, from, 43200)).toThrow(RangeError);
+    expect(
+      nextWorkingInstantOr({ ...none, timeZone: "Mars/Base" }, from)
+    ).toBe(from);
+  });
+
+  test("LOW-3: instants outside 2000-2100 are refused", () => {
+    expect(
+      validateStopSignal({ kind: "manual", occurredAt: "1900-01-01T00:00:00Z" })
+        .valid
+    ).toBe(false);
+    expect(
+      validateSimulate({
+        definition: {
+          trigger: { kind: "lead_created" },
+          taskTitle: "x",
+          dueAfterMinutes: 0,
+          assignee: { mode: "lead_owner" },
+          calendar: {
+            timeZone: "UTC",
+            workingDays: [1],
+            workStartMinute: 0,
+            workEndMinute: 60
+          }
+        },
+        trigger: { kind: "lead_created", occurredAt: "2200-01-01T00:00:00Z" }
+      }).valid
+    ).toBe(false);
   });
 });

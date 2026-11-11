@@ -84,4 +84,5 @@ Mengadmisi `crm_follow_up` (`experimental`): namespace permission sendiri, sakla
 - **O2.** Port sinyal berhenti untuk #1144/#1164 dan modul consent kanal: bentuknya dan event mana yang mengisinya. Rekomendasi: `CrmFollowUpStopPort` diadmisi bersama produsen pertamanya.
 - **O3.** Haruskah konversi yang dibalik atau merge yang dibatalkan mencabut sinyal berhenti? Rekomendasi: tidak di v1; staf memulai ulang pekerjaan secara manual.
 - **O4.** Jendela retensi untuk tugas tertutup dan notifikasi yang selesai (bersama ADR-0153 O4).
-- **O5.** Haruskah `tasks.read` dipersempit menjadi "tugas saya sendiri" lewat ownership grant (ADR-0063) bagi agen yang tidak boleh melihat seluruh antrean?
+- **O5.** Haruskah `tasks.read` dipersempit menjadi "tugas saya sendiri" lewat ownership grant (ADR-0063) bagi agen yang tidak boleh melihat seluruh antrean? Pertanyaan yang sama berlaku untuk `tasks.update`, yang saat ini membolehkan pemegangnya menyelesaikan atau membatalkan tugas mana pun di tenant.
+- **O6.** Notifikasi yang dibatalkan sebagai `recipient_changed` tidak dijadwalkan ulang ketika lead dikembalikan ke orang yang sama (kunci `(task, kind, recipient)` sudah ada). Apakah itu dapat diterima, atau pengembalian harus mengaktifkan ulang notifikasi?

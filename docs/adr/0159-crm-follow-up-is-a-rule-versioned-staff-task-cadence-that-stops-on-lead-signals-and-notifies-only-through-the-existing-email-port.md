@@ -82,4 +82,5 @@ Admit `crm_follow_up` (`experimental`): its own permission namespace, the deploy
 - **O2.** The stop-signal port for #1144/#1164 and the channel consent modules: its shape and which events feed it. Recommended: a `CrmFollowUpStopPort` admitted with the first producer.
 - **O3.** Should a reversed conversion or a reverted merge lift a stop? Recommended: no in v1; staff restart work manually.
 - **O4.** Retention windows for closed tasks and settled notifications (with ADR-0153 O4).
-- **O5.** Should `tasks.read` be narrowed to "my own tasks" through an ownership grant (ADR-0063) for agents who must not see the whole queue?
+- **O5.** Should `tasks.read` be narrowed to "my own tasks" through an ownership grant (ADR-0063) for agents who must not see the whole queue? The same question applies to `tasks.update`, which today lets any holder complete or cancel any task of the tenant.
+- **O6.** A notice cancelled as `recipient_changed` is not re-scheduled when the lead is handed back to the same person (the `(task, kind, recipient)` key already exists). Is that acceptable, or should a hand-back re-arm the notice?

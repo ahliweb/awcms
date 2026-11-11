@@ -33,7 +33,10 @@ It **never sends anything to the lead**, stores **no lead copy** (a task carries
 ## Open decisions (owner)
 
 - ADR-0159 is **Proposed**: O1 (automated outbound to the lead), O2 (the stop-signal port for #1144/#1164 and channel consent), O3 (does a reversal lift a stop), O4 (retention of closed tasks and settled notices), O5 (narrow `tasks.read` to own tasks).
-- Events for a tenant where the module is not active are ignored and **not replayed** when it is switched on (fail closed: no burst of stale tasks).
+- TRIGGER events for a tenant where the module is not active are ignored and **not replayed** when it is switched on (fail closed: no burst of stale tasks). STOP events (`converted`, `lost`, `merged`) are recorded whenever the deployment switch is on, even while Module Management or the tenant switch is off, so a stop still wins after the module is switched back on.
+- `tasks.update` has no ownership bound: any holder may complete or cancel any task of the tenant (O5 covers narrowing it with `tasks.read`).
+- A notice cancelled as `recipient_changed` is not re-scheduled if the lead is later handed back to the same person (the `(task, kind, recipient)` key already exists); the task stays in that person's worklist.
+- Security hardening from the PR #1266 audit: time zones are stored canonical and the formatter cache is bounded (shared `src/lib/time/zoned-formatter.ts`, also used by `booking` and `hr_workforce`); a calendar that cannot hold the offsets is refused; one bad rule or tenant never fails the others; a notice with no template is `suppressed` (`not_queued`) and uses no quota; the hourly cap is counted under a per-recipient lock; a staff stop needs a real lead and is recorded once per (lead, kind); the worker may queue the three `crm.follow_up_*` categories only to an active staff address of the tenant and only with allow-listed variables (`sql/371`).
 - A notice already handed to the e-mail outbox before a stop is reported by the stop (`alreadyEnqueuedNotifications`) and not recalled.
 
 ## Recorded follow-ups

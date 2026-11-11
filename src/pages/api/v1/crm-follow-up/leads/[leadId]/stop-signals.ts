@@ -6,10 +6,12 @@ import {
   badId,
   disabledResponse,
   mutationRefusal,
+  notFound,
   prepareMutation,
   runIdempotent,
   tenantDisabledResponse
 } from "../../../../../../modules/crm-follow-up/application/route-support";
+import { createCrmLeadPortAdapter } from "../../../../../../modules/crm-leads/application/crm-lead-port-adapter";
 import { listStopSignals } from "../../../../../../modules/crm-follow-up/application/task-directory";
 import { recordStopSignal } from "../../../../../../modules/crm-follow-up/application/task-engine";
 import { CRM_FOLLOW_UP_GUARDS } from "../../../../../../modules/crm-follow-up/domain/crm-follow-up-constants";
@@ -50,7 +52,9 @@ export const GET = defineTenantRoute({
  * every open or escalated task of the lead and their pending notices, and no
  * task is created for the lead afterwards. The answer reports how many notices
  * had ALREADY been handed to the e-mail outbox (never claimed to be recalled).
- * High-risk: `Idempotency-Key`, audited at warning.
+ * The lead must exist in this tenant (`404`). A kind already recorded for the
+ * lead adds nothing (`replayed: true`). High-risk: `Idempotency-Key`, audited
+ * at warning.
  */
 export const POST = defineTenantRoute<{
   idempotencyKey: string;
@@ -72,6 +76,13 @@ export const POST = defineTenantRoute<{
     const tenantOff = await tenantDisabledResponse(tx, tenantId);
 
     if (tenantOff) return tenantOff;
+
+    // The lead must exist in THIS tenant (audit of PR #1266, LOW-4); an id
+    // from another tenant or no lead at all answers the same uniform 404.
+    // Read through crm_leads' own port (ids and a status only, no PII).
+    if (!(await createCrmLeadPortAdapter().readLeadState(tx, tenantId, leadId))) {
+      return notFound("Lead");
+    }
 
     const actor = auth.context.tenantUserId;
 
@@ -114,6 +125,7 @@ export const POST = defineTenantRoute<{
           status: 201,
           body: {
             signalId: result.signalId,
+            replayed: result.replayed,
             leadId,
             kind: prepared.input.kind,
             cancelledTaskIds: result.cancelledTaskIds,

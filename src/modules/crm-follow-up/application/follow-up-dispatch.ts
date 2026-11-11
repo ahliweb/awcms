@@ -47,15 +47,13 @@ import {
   type RevisionRow,
   type RuleDefinition
 } from "../domain/rule-definition";
-import {
-  isWithinWorkingTime,
-  nextWorkingInstant
-} from "../domain/working-calendar";
+import { nextWorkingInstant } from "../domain/working-calendar";
 import { fetchSettings, isActiveForTenant } from "./settings-directory";
 import {
   isActiveTenantUser,
   leadHasStopSignal,
   lockLead,
+  nextWorkingInstantOr,
   scheduleNotification
 } from "./task-engine";
 
@@ -154,7 +152,9 @@ async function escalateDueTasks(
         taskId: task.id,
         kind: "escalated",
         recipient,
-        scheduledAt: nextWorkingInstant(calendarOf(definition), now)
+        // An unschedulable calendar never stops the pass (audit MEDIUM-1):
+        // the notice is due now, and the quiet-hours check below suppresses it.
+        scheduledAt: nextWorkingInstantOr(calendarOf(definition), now)
       });
     }
 
@@ -302,13 +302,42 @@ async function dispatchDueNotices(
 
     if (definition) {
       const calendar = calendarOf(definition);
+      let next: Date;
 
-      if (!isWithinWorkingTime(calendar, now)) {
-        await defer(tx, tenantId, notice.id, nextWorkingInstant(calendar, now));
+      try {
+        next = nextWorkingInstant(calendar, now);
+      } catch (error) {
+        if (!(error instanceof RangeError)) throw error;
+        // A calendar with no working time ahead: the notice can never be
+        // inside working hours. Settle it instead of failing the tenant pass
+        // (audit of PR #1266, MEDIUM-1).
+        await settle(
+          tx,
+          tenantId,
+          notice.id,
+          "suppressed",
+          "calendar_unschedulable"
+        );
+        pass.suppressed += 1;
+        continue;
+      }
+
+      if (next.getTime() !== now.getTime()) {
+        await defer(tx, tenantId, notice.id, next);
         pass.deferred += 1;
         continue;
       }
     }
+
+    // The hourly cap is counted and consumed under a per-(tenant, recipient)
+    // lock, so two dispatchers on two hosts cannot both see "one left" and
+    // both send (audit of PR #1266, LOW-6). Taken after the lead lock, the
+    // order every dispatcher uses.
+    await tx`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${`crm_follow_up:recipient:${tenantId}:${recipient}`}, 0)
+      )
+    `;
 
     if (
       (await recentlyEnqueuedFor(tx, tenantId, recipient, now)) >=
@@ -324,11 +353,13 @@ async function dispatchDueNotices(
       continue;
     }
 
+    let queued = 0;
+
     try {
       // A savepoint: a failing enqueue rolls back the outbox row alone, and
       // the notice waits for the next run instead of failing the pass.
       await tx.savepoint(async (savepoint) => {
-        await port.enqueueNotification(savepoint as unknown as Bun.SQL, {
+        const outcome = await port.enqueueNotification(savepoint as unknown as Bun.SQL, {
           tenantId,
           templateKey: NOTIFICATION_TEMPLATE_KEYS[notice.kind],
           recipientTenantUserIds: [recipient],
@@ -341,6 +372,8 @@ async function dispatchDueNotices(
           },
           correlationId: `${CRM_FOLLOW_UP_MODULE_KEY}.notice:${notice.id}`
         });
+
+        queued = outcome.queued;
       });
     } catch (error) {
       // Class and code only: a database error's message can carry a value.
@@ -361,6 +394,15 @@ async function dispatchDueNotices(
         new Date(now.getTime() + DEFER_MINUTES * 60_000)
       );
       pass.failed += 1;
+      continue;
+    }
+
+    if (queued === 0) {
+      // No active template for the tenant (or no reachable address): nothing
+      // was queued, so it is not recorded as sent and does not use up the
+      // recipient's hourly quota (audit of PR #1266, LOW-5).
+      await settle(tx, tenantId, notice.id, "suppressed", "not_queued");
+      pass.suppressed += 1;
       continue;
     }
 
@@ -416,6 +458,8 @@ export type FollowUpDispatchJobResult = {
   tenantsChecked: number;
   totals: Omit<DispatchPass, "count">;
   tenantsHitPassLimit: string[];
+  /** Tenants whose pass threw (rolled back, logged); the others still ran. */
+  failedTenants: string[];
   aborted: boolean;
 };
 
@@ -445,6 +489,7 @@ export async function runCrmFollowUpDispatch(
       tenantsChecked: 0,
       totals: zeroTotals(),
       tenantsHitPassLimit: [],
+      failedTenants: [],
       aborted: false
     };
   }
@@ -466,28 +511,46 @@ export async function runCrmFollowUpDispatch(
       tenantsChecked: tenants.length,
       totals,
       tenantsHitPassLimit: [],
+      failedTenants: [],
       aborted: false
     };
   }
 
   const totals = zeroTotals();
+  const failedTenants: string[] = [];
   const outcome = await iterateTenantsInBatches(
     sql,
-    (tenantId) =>
-      withTenantOrThrow(
-        sql,
-        tenantId,
-        async (tx) => {
-          const pass = await runFollowUpDispatchPass(tx, tenantId, port, now());
+    async (tenantId) => {
+      try {
+        const pass = await withTenantOrThrow(
+          sql,
+          tenantId,
+          (tx) => runFollowUpDispatchPass(tx, tenantId, port, now()),
+          { workClass: "maintenance" }
+        );
 
-          for (const key of Object.keys(totals) as (keyof typeof totals)[]) {
-            totals[key] += pass[key];
-          }
+        for (const key of Object.keys(totals) as (keyof typeof totals)[]) {
+          totals[key] += pass[key];
+        }
 
-          return pass;
-        },
-        { workClass: "maintenance" }
-      ),
+        return pass;
+      } catch (error) {
+        // One tenant's failure rolls back that tenant's pass only and never
+        // stops the others (audit of PR #1266, MEDIUM-1). Class and code only.
+        const code = (error as { code?: unknown } | null)?.code;
+
+        log("error", "crm_follow_up.dispatch_tenant_failed", {
+          tenantId,
+          moduleKey: CRM_FOLLOW_UP_MODULE_KEY,
+          errorClass:
+            error instanceof Error ? error.constructor.name : typeof error,
+          ...(typeof code === "string" ? { errorCode: code } : {})
+        });
+        failedTenants.push(tenantId);
+
+        return { ...EMPTY_PASS };
+      }
+    },
     { ...(ctx.signal ? { signal: ctx.signal } : {}), maxPasses: 50 }
   );
 
@@ -497,6 +560,7 @@ export async function runCrmFollowUpDispatch(
     tenantsHitPassLimit: [...outcome.perTenant.entries()]
       .filter(([, value]) => value.hitPassLimit)
       .map(([tenantId]) => tenantId),
+    failedTenants,
     aborted: outcome.aborted
   };
 }

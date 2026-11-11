@@ -74,6 +74,9 @@ export const crmFollowUpModule = defineModule({
    */
   capabilities: {
     consumes: [
+      // A staff stop signal is accepted only for a lead that exists in the
+      // tenant (audit of PR #1266, LOW-4), read through `CrmLeadPort`.
+      { capability: "crm_lead", providedBy: "crm_leads" },
       {
         capability: "workflow_notification",
         providedBy: "email",
@@ -85,7 +88,7 @@ export const crmFollowUpModule = defineModule({
     {
       name: "crm_follow_up.lead_signals",
       description:
-        "crm_follow_up consumer — turns crm_leads events into follow-up work: lead.created, lead.stage_changed and lead.assigned create the tasks matching active rules (at most one per rule and source event) and lead.assigned moves live lead-owner tasks to the new owner; lead.converted, lead.lost and lead.merged record a stop signal that cancels the lead's live tasks and pending notices. Ignores every event for a tenant where the module is not active.",
+        "crm_follow_up consumer — turns crm_leads events into follow-up work: lead.created, lead.stage_changed and lead.assigned create the tasks matching active rules (at most one per rule and source event) and lead.assigned moves live lead-owner tasks to the new owner; lead.converted, lead.lost and lead.merged record a stop signal that cancels the lead's live tasks and pending notices. Trigger events for a tenant where the module is not active are ignored; stop events are recorded whenever the deployment switch is on, so a stop still wins after the module is switched back on.",
       eventTypes: [...CONSUMED_LEAD_EVENT_TYPES],
       eventVersions: ["1.0"],
       handle: async (tx, event, ctx) => {

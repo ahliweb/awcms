@@ -211,7 +211,7 @@ export const BOUNDED_BY_DESIGN: readonly {
   {
     table: "awcms_crm_follow_up_stop_signals",
     reason:
-      "ADR-0159 / Issue #1165. Append-only; one row per distinct stopping lead event (unique on source event and kind) or per deliberate staff act holding `stop_signals.create` behind an Idempotency-Key. A stop is permanent, so the table holds at most a handful of rows per lead. Not bounded in time; see awcms_crm_follow_up_tasks for the recorded retention follow-up (O4)."
+      "ADR-0159 / Issue #1165. Append-only. A staff stop is unique per (lead, kind) (partial unique index; four staff kinds, so at most four staff rows per lead whatever the Idempotency-Key), and a lead-event stop is unique per (source event, kind), so its rows are bounded by the lead's converted, lost and merged events. Not bounded in time; see awcms_crm_follow_up_tasks for the recorded retention follow-up (O4)."
   },
   {
     table: "awcms_crm_follow_up_notifications",

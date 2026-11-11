@@ -47,7 +47,10 @@ import { dispatchDomainEventsForTenant } from "../../src/modules/domain-event-ru
 import { buildDomainEventConsumerRegistry } from "../../src/modules/domain-event-runtime/infrastructure/consumer-registry";
 import { createEmailWorkflowNotificationAdapter } from "../../src/modules/email/application/workflow-notification-port-adapter";
 import { DEFAULT_EMAIL_TEMPLATES } from "../../src/modules/email/domain/email-default-templates";
-import { runFollowUpDispatchPass } from "../../src/modules/crm-follow-up/application/follow-up-dispatch";
+import {
+  runCrmFollowUpDispatch,
+  runFollowUpDispatchPass
+} from "../../src/modules/crm-follow-up/application/follow-up-dispatch";
 import { handleLeadSignal } from "../../src/modules/crm-follow-up/application/lead-event-consumer";
 import { createRule } from "../../src/modules/crm-follow-up/application/rule-directory";
 import { simulateRevision } from "../../src/modules/crm-follow-up/application/simulation";
@@ -852,5 +855,262 @@ suite("crm_follow_up engine on the least-privilege roles (#1165)", () => {
     await dispatchEvents(TENANT_A);
 
     expect(await tasksOf(TENANT_A, lead)).toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Audit of PR #1266
+  // -------------------------------------------------------------------------
+
+  /** A revision with a calendar validation would refuse, written past it. */
+  async function brokenRule(): Promise<string> {
+    const ruleId = await newRule(TENANT_A, owner, definition(), "zz-broken");
+
+    await getAdminSql().begin(async (tx) => {
+      await tx.unsafe("SET LOCAL session_replication_role = replica");
+      await tx`
+        UPDATE awcms_crm_follow_up_rule_revisions
+        SET working_days = 1, work_start_minute = 0, work_end_minute = 1,
+            due_after_minutes = 43200
+        WHERE rule_id = ${ruleId}
+      `;
+    });
+
+    return ruleId;
+  }
+
+  test("MEDIUM-1 (P2): a rule that cannot be planned is skipped; the healthy rule still creates its task and the delivery is not dead-lettered", async () => {
+    const healthy = await newRule(TENANT_A, owner, definition(), "aa-healthy");
+    await brokenRule();
+    const lead = crypto.randomUUID();
+
+    await leadCreated(TENANT_A, lead, owner);
+    const pass = await dispatchEvents(TENANT_A);
+
+    const tasks = (await getAdminSql()`
+      SELECT rule_id FROM awcms_crm_follow_up_tasks WHERE lead_id = ${lead}
+    `) as { rule_id: string }[];
+    expect(tasks.map((t) => t.rule_id)).toEqual([healthy]);
+    expect(pass.deadLettered).toBe(0);
+    const statuses = (await getAdminSql()`
+      SELECT status FROM awcms_domain_event_deliveries
+      WHERE tenant_id = ${TENANT_A} AND consumer_name = ${CONSUMER}
+    `) as { status: string }[];
+    expect(statuses.every((row) => row.status === "delivered")).toBe(true);
+  });
+
+  test("MEDIUM-1 (P3): a notice whose calendar has no working time is suppressed, and a failing tenant never stops the others", async () => {
+    const ruleId = await newRule(TENANT_A, owner);
+    const lead = crypto.randomUUID();
+
+    await leadCreated(TENANT_A, lead, owner);
+    await dispatchEvents(TENANT_A);
+    await getAdminSql().begin(async (tx) => {
+      await tx.unsafe("SET LOCAL session_replication_role = replica");
+      await tx`
+        UPDATE awcms_crm_follow_up_rule_revisions
+        SET time_zone = 'Mars/Base' WHERE rule_id = ${ruleId}
+      `;
+    });
+
+    const pass = await dispatchNotices(TENANT_A, inAMinute());
+    expect(pass.suppressed).toBe(1);
+    const task = (await tasksOf(TENANT_A, lead))[0]!;
+    expect((await noticesOf(task.id))[0]!.settle_reason).toBe(
+      "calendar_unschedulable"
+    );
+
+    // Tenant isolation of the job: the first tenant visited fails, the
+    // second still dispatches.
+    await seedTemplates(TENANT_B, ownerB);
+    await newRule(TENANT_A, owner, definition(), "second-a");
+    await newRule(TENANT_B, ownerB);
+    await leadCreated(TENANT_A, crypto.randomUUID(), owner);
+    await leadCreated(TENANT_B, crypto.randomUUID(), ownerB);
+    await dispatchEvents(TENANT_A);
+    await dispatchEvents(TENANT_B);
+    let calls = 0;
+    const run = await runCrmFollowUpDispatch(
+      worker(),
+      { dryRun: false },
+      port,
+      () => {
+        calls += 1;
+        if (calls === 1) throw new Error("injected tenant failure");
+        return inAMinute();
+      }
+    );
+
+    expect(run.failedTenants).toHaveLength(1);
+    expect(run.tenantsChecked).toBe(2);
+    expect(run.totals.enqueued).toBe(1);
+  });
+
+  test("MEDIUM-2: Module Management's per-tenant switch stops the consumer and the dispatcher", async () => {
+    await newRule(TENANT_A, owner);
+    const lead = crypto.randomUUID();
+
+    await leadCreated(TENANT_A, lead, owner);
+    await dispatchEvents(TENANT_A);
+    await getAdminSql()`
+      INSERT INTO awcms_modules (module_key, module_name)
+      VALUES ('crm_follow_up', 'CRM Follow-up')
+      ON CONFLICT (module_key) DO NOTHING
+    `;
+    await getAdminSql()`
+      INSERT INTO awcms_tenant_modules (tenant_id, module_key, enabled)
+      VALUES (${TENANT_A}, 'crm_follow_up', false)
+    `;
+
+    const pass = await dispatchNotices(TENANT_A, inAMinute());
+    expect(pass.enqueued).toBe(0);
+    expect(await queuedMails(TENANT_A)).toHaveLength(0);
+
+    const lead2 = crypto.randomUUID();
+    await leadCreated(TENANT_A, lead2, owner);
+    await dispatchEvents(TENANT_A);
+    expect(await tasksOf(TENANT_A, lead2)).toHaveLength(0);
+  });
+
+  test("MEDIUM-2: the deployment switch off means no task and no notice", async () => {
+    await newRule(TENANT_A, owner);
+    const lead = crypto.randomUUID();
+
+    await leadCreated(TENANT_A, lead, owner);
+    await dispatchEvents(TENANT_A);
+    process.env.CRM_FOLLOW_UP_ENABLED = "false";
+
+    try {
+      expect((await dispatchNotices(TENANT_A, inAMinute())).enqueued).toBe(0);
+      const lead2 = crypto.randomUUID();
+      await leadCreated(TENANT_A, lead2, owner);
+      await dispatchEvents(TENANT_A);
+      expect(await tasksOf(TENANT_A, lead2)).toHaveLength(0);
+    } finally {
+      process.env.CRM_FOLLOW_UP_ENABLED = "true";
+    }
+
+    expect(await queuedMails(TENANT_A)).toHaveLength(0);
+  });
+
+  test("MEDIUM-2: the hourly cap per recipient defers the notice over the cap", async () => {
+    await getAdminSql()`
+      UPDATE awcms_crm_follow_up_settings SET max_notices_per_recipient_hour = 1
+      WHERE tenant_id = ${TENANT_A}
+    `;
+    await newRule(TENANT_A, owner);
+    await leadCreated(TENANT_A, crypto.randomUUID(), owner);
+    await leadCreated(TENANT_A, crypto.randomUUID(), owner);
+    await dispatchEvents(TENANT_A);
+
+    const pass = await dispatchNotices(TENANT_A, inAMinute());
+
+    expect(pass.enqueued).toBe(1);
+    expect(pass.deferred).toBe(1);
+    expect(await queuedMails(TENANT_A)).toHaveLength(1);
+  });
+
+  test("LOW-5: no template means suppressed (not_queued), and the quota is not used", async () => {
+    await getAdminSql()`DELETE FROM awcms_email_templates WHERE tenant_id = ${TENANT_A}`;
+    await getAdminSql()`
+      UPDATE awcms_crm_follow_up_settings SET max_notices_per_recipient_hour = 1
+      WHERE tenant_id = ${TENANT_A}
+    `;
+    await newRule(TENANT_A, owner);
+    await leadCreated(TENANT_A, crypto.randomUUID(), owner);
+    await leadCreated(TENANT_A, crypto.randomUUID(), owner);
+    await dispatchEvents(TENANT_A);
+
+    const pass = await dispatchNotices(TENANT_A, inAMinute());
+
+    expect(pass.enqueued).toBe(0);
+    expect(pass.suppressed).toBe(2);
+    expect(pass.deferred).toBe(0);
+    const reasons = (await getAdminSql()`
+      SELECT settle_reason FROM awcms_crm_follow_up_notifications
+      WHERE tenant_id = ${TENANT_A}
+    `) as { settle_reason: string }[];
+    expect(reasons.every((row) => row.settle_reason === "not_queued")).toBe(true);
+  });
+
+  test("LOW-2: a stop event is recorded while the tenant switch is off, and still wins after it is switched on", async () => {
+    await newRule(TENANT_A, owner);
+    const lead = crypto.randomUUID();
+    await getAdminSql()`
+      UPDATE awcms_crm_follow_up_settings SET enabled = false WHERE tenant_id = ${TENANT_A}
+    `;
+
+    await publish(TENANT_A, "awcms.crm_leads.lead.lost", lead, {
+      leadId: lead,
+      pipelineId: crypto.randomUUID(),
+      transitionId: crypto.randomUUID(),
+      toStageKey: "lost",
+      toCategory: "lost",
+      occurredAt: new Date().toISOString()
+    });
+    await dispatchEvents(TENANT_A);
+    await enable(TENANT_A);
+    await leadCreated(TENANT_A, lead, owner);
+    await dispatchEvents(TENANT_A);
+
+    expect(await tasksOf(TENANT_A, lead)).toHaveLength(0);
+    const stops = (await getAdminSql()`
+      SELECT kind FROM awcms_crm_follow_up_stop_signals WHERE lead_id = ${lead}
+    `) as { kind: string }[];
+    expect(stops.map((row) => row.kind)).toEqual(["lost"]);
+  });
+
+  test("LOW-4: a staff stop is recorded once per (lead, kind)", async () => {
+    const lead = crypto.randomUUID();
+    const stop = () =>
+      inTenant(TENANT_A, (tx) =>
+        recordStopSignal(tx, TENANT_A, {
+          leadId: lead,
+          kind: "manual",
+          source: "staff",
+          sourceEventId: null,
+          recordedBy: owner,
+          occurredAt: new Date()
+        })
+      );
+
+    expect((await stop()).replayed).toBe(false);
+    expect((await stop()).replayed).toBe(true);
+    const rows = (await getAdminSql()`
+      SELECT id FROM awcms_crm_follow_up_stop_signals WHERE lead_id = ${lead}
+    `) as { id: string }[];
+    expect(rows).toHaveLength(1);
+  });
+
+  test("LOW-1: the worker cannot queue a crm notice to an outside address or with an unknown variable", async () => {
+    if (!workerRoleActivated) return;
+    const ownerAddress = (await getAdminSql()`
+      SELECT lower(i.login_identifier) AS address
+      FROM awcms_tenant_users tu JOIN awcms_identities i ON i.id = tu.identity_id
+      WHERE tu.id = ${owner}
+    `) as { address: string }[];
+    const insert = (to: string, variables: Record<string, string>) =>
+      withTenantOrThrow(
+        getWorkerRoleSql(),
+        TENANT_A,
+        (tx) => tx`
+          INSERT INTO awcms_email_messages
+            (tenant_id, category, template_key, to_address, to_address_hash,
+             to_address_masked, subject, variables)
+          VALUES (${TENANT_A}, 'crm.follow_up_due', 'crm.follow_up_due', ${to},
+                  'h', 'm', 's', ${variables}::jsonb)`
+      );
+
+    const outside = await assertRejected(
+      insert("attacker@evil.test", { taskTitle: "x" }),
+      "a crm notice to an outside address"
+    );
+    expect(outside.message).toContain("EMAIL_WORKER_RECIPIENT_NOT_STAFF");
+    const variable = await assertRejected(
+      insert(ownerAddress[0]!.address, { leadName: "Jane Prospect" }),
+      "a crm notice with an unknown variable"
+    );
+    expect(variable.message).toContain("EMAIL_WORKER_VARIABLE_NOT_ALLOWED");
+    await insert(ownerAddress[0]!.address, { taskTitle: "x", dueAt: "y" });
+    expect(await queuedMails(TENANT_A)).toHaveLength(1);
   });
 });

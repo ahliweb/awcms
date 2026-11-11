@@ -59,6 +59,9 @@ import { GET as listTasks } from "../../src/pages/api/v1/crm-follow-up/tasks/ind
 import { GET as getTask } from "../../src/pages/api/v1/crm-follow-up/tasks/[id]/index";
 import { POST as completeTask } from "../../src/pages/api/v1/crm-follow-up/tasks/[id]/complete";
 import { POST as cancelTask } from "../../src/pages/api/v1/crm-follow-up/tasks/[id]/cancel";
+import { PATCH as patchLeadSettings } from "../../src/pages/api/v1/crm-leads/settings";
+import { POST as createPipeline } from "../../src/pages/api/v1/crm-leads/pipelines/index";
+import { POST as createLead } from "../../src/pages/api/v1/crm-leads/leads/index";
 import {
   GET as listStops,
   POST as createStop
@@ -297,16 +300,109 @@ const suite = integrationEnabled ? describe : describe.skip;
 suite("crm_follow_up HTTP surface (#1165)", () => {
   let ready = false;
 
+  const LEAD_ENV = [
+    "CRM_LEADS_ENABLED",
+    "CRM_LEADS_ENCRYPTION_KEYS",
+    "CRM_LEADS_HASH_KEYS"
+  ] as const;
+  const savedLeadEnv: Record<string, string | undefined> = {};
+
   beforeAll(async () => {
     savedEnabled = process.env.CRM_FOLLOW_UP_ENABLED;
     process.env.CRM_FOLLOW_UP_ENABLED = "true";
+    // A real crm_leads lead is needed for a staff stop (LOW-4).
+    for (const name of LEAD_ENV) savedLeadEnv[name] = process.env[name];
+    process.env.CRM_LEADS_ENABLED = "true";
+    process.env.CRM_LEADS_ENCRYPTION_KEYS = `k1:${Buffer.from(
+      Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 251)
+    ).toString("base64")}`;
+    process.env.CRM_LEADS_HASH_KEYS = `h1:${Buffer.from(
+      Array.from({ length: 32 }, (_, i) => (i * 13 + 17) % 251)
+    ).toString("base64")}`;
     ready = await ensureHandlerDatabaseReady();
   });
 
   afterAll(async () => {
     if (savedEnabled === undefined) delete process.env.CRM_FOLLOW_UP_ENABLED;
     else process.env.CRM_FOLLOW_UP_ENABLED = savedEnabled;
+    for (const name of LEAD_ENV) {
+      if (savedLeadEnv[name] === undefined) delete process.env[name];
+      else process.env[name] = savedLeadEnv[name];
+    }
     if (ready) await teardownHandlerDatabase();
+  });
+
+  /** A real lead of this tenant, through crm_leads' own routes. */
+  async function realLead(): Promise<string> {
+    const enabled = await call(patchLeadSettings, {
+      method: "PATCH",
+      path: "/api/v1/crm-leads/settings",
+      body: { enabled: true }
+    });
+    expect(enabled.status).toBe(200);
+    const pipeline = await call(createPipeline, {
+      method: "POST",
+      path: "/api/v1/crm-leads/pipelines",
+      body: {
+        code: `p-${(keyCounter += 1)}`,
+        name: "Sales",
+        timeZone: "Asia/Jakarta",
+        definition: {
+          initialStageKey: "new",
+          stages: [
+            { key: "new", name: "New", category: "new" },
+            { key: "won", name: "Won", category: "converted" }
+          ],
+          transitions: [{ from: "new", to: "won" }]
+        }
+      }
+    });
+    expect(pipeline.status).toBe(201);
+    const lead = await call(createLead, {
+      method: "POST",
+      path: "/api/v1/crm-leads/leads",
+      body: {
+        pipelineId: pipeline.body.data.id,
+        displayName: "Prospect",
+        contactPoints: [{ kind: "email", value: "prospect@example.test" }],
+        source: { kind: "manual" }
+      }
+    });
+    expect([200, 201]).toContain(lead.status);
+    return lead.body.data.id;
+  }
+
+  test("LOW-4: a staff stop for a lead that is not in this tenant is a uniform 404; a repeat adds nothing", async () => {
+    if (!ready) return;
+    await enableTenant();
+    const unknown = crypto.randomUUID();
+    const missing = await call(createStop, {
+      method: "POST",
+      path: `${BASE}/leads/${unknown}/stop-signals`,
+      params: { leadId: unknown },
+      body: { kind: "manual" }
+    });
+    expect(missing.status).toBe(404);
+
+    const lead = await realLead();
+    const first = await call(createStop, {
+      method: "POST",
+      path: `${BASE}/leads/${lead}/stop-signals`,
+      params: { leadId: lead },
+      body: { kind: "manual" }
+    });
+    const second = await call(createStop, {
+      method: "POST",
+      path: `${BASE}/leads/${lead}/stop-signals`,
+      params: { leadId: lead },
+      body: { kind: "manual" }
+    });
+    expect(first.body.data.replayed).toBe(false);
+    expect(second.body.data.replayed).toBe(true);
+    const rows = (await admin()`
+      SELECT id FROM awcms_crm_follow_up_stop_signals WHERE lead_id = ${lead}
+    `) as { id: string }[];
+    expect(rows).toHaveLength(1);
   });
 
   beforeEach(async () => {
@@ -610,12 +706,13 @@ suite("crm_follow_up HTTP surface (#1165)", () => {
     expect(off.body.error?.code).toBe("CRM_FOLLOW_UP_TENANT_DISABLED");
 
     await enableTenant();
-    const taskId = await seedTask(lead);
+    const real = await realLead();
+    const taskId = await seedTask(real);
     const key = nextKey();
     const stop = await call(createStop, {
       method: "POST",
-      path: `${BASE}/leads/${lead}/stop-signals`,
-      params: { leadId: lead },
+      path: `${BASE}/leads/${real}/stop-signals`,
+      params: { leadId: real },
       body: { kind: "reply_received" },
       idempotencyKey: key
     });
@@ -624,15 +721,15 @@ suite("crm_follow_up HTTP surface (#1165)", () => {
 
     const replay = await call(createStop, {
       method: "POST",
-      path: `${BASE}/leads/${lead}/stop-signals`,
-      params: { leadId: lead },
+      path: `${BASE}/leads/${real}/stop-signals`,
+      params: { leadId: real },
       body: { kind: "reply_received" },
       idempotencyKey: key
     });
     expect(replay.body).toEqual(stop.body);
     const stops = await call(listStops, {
-      path: `${BASE}/leads/${lead}/stop-signals`,
-      params: { leadId: lead }
+      path: `${BASE}/leads/${real}/stop-signals`,
+      params: { leadId: real }
     });
     expect(stops.body.data.items).toHaveLength(1);
 

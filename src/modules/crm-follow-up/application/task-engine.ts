@@ -19,7 +19,9 @@
  * `ON CONFLICT DO NOTHING` and creates nothing. A notification is unique on
  * (task, kind, recipient). A lead-event stop is unique on (source event, kind).
  */
+import { log } from "../../../lib/logging/logger";
 import {
+  CRM_FOLLOW_UP_MODULE_KEY,
   LIVE_TASK_STATUSES,
   type NotificationKind,
   type StopKind,
@@ -140,6 +142,23 @@ export async function scheduleNotification(
   `;
 }
 
+/**
+ * The next working instant, or `from` itself when the calendar has no working
+ * time ahead (audit of PR #1266, MEDIUM-1): scheduling never throws; the
+ * dispatcher then finds the notice outside working time and suppresses it.
+ */
+export function nextWorkingInstantOr(
+  calendar: ReturnType<typeof calendarOf>,
+  from: Date
+): Date {
+  try {
+    return nextWorkingInstant(calendar, from);
+  } catch (error) {
+    if (error instanceof RangeError) return from;
+    throw error;
+  }
+}
+
 /** The assignee's notices a definition asks for, in working time. */
 async function scheduleAssigneeNotices(
   tx: Sql,
@@ -157,7 +176,7 @@ async function scheduleAssigneeNotices(
       taskId,
       kind: "assigned",
       recipient: assignee,
-      scheduledAt: nextWorkingInstant(calendar, now)
+      scheduledAt: nextWorkingInstantOr(calendar, now)
     });
   }
 
@@ -166,7 +185,7 @@ async function scheduleAssigneeNotices(
       taskId,
       kind: "due",
       recipient: assignee,
-      scheduledAt: nextWorkingInstant(
+      scheduledAt: nextWorkingInstantOr(
         calendar,
         dueAt.getTime() > now.getTime() ? dueAt : now
       )
@@ -177,7 +196,10 @@ async function scheduleAssigneeNotices(
 export type TriggerOutcome = {
   stopped: boolean;
   created: string[];
-  skipped: { ruleId: string; reason: "not_matched" | "capped" | "duplicate" }[];
+  skipped: {
+    ruleId: string;
+    reason: "not_matched" | "capped" | "duplicate" | "failed";
+  }[];
 };
 
 /**
@@ -185,7 +207,7 @@ export type TriggerOutcome = {
  * event. The caller has already decided the module is active for the tenant.
  */
 export async function createTasksForTrigger(
-  tx: Sql,
+  tx: Bun.TransactionSQL,
   tenantId: string,
   facts: TriggerFacts,
   sourceEventId: string,
@@ -210,69 +232,111 @@ export async function createTasksForTrigger(
       continue;
     }
 
-    if (
-      (await countLiveTasks(tx, tenantId, facts.leadId, revision.ruleId)) >=
-      revision.definition.maxOpenPerLead
-    ) {
-      outcome.skipped.push({ ruleId: revision.ruleId, reason: "capped" });
-      continue;
-    }
-
-    const plan = planTask(revision.definition, facts);
-    const candidate = plan.assigneeTenantUserId;
-    const assignee =
-      candidate !== null && (await isActiveTenantUser(tx, tenantId, candidate))
-        ? candidate
-        : null;
-    const inserted = (await tx`
-      INSERT INTO awcms_crm_follow_up_tasks
-        (tenant_id, lead_id, rule_id, rule_revision_id, source_event_id,
-         trigger_kind, title, assignee_mode, assignee_tenant_user_id, due_at,
-         escalate_at)
-      VALUES (${tenantId}, ${facts.leadId}, ${revision.ruleId},
-              ${revision.revisionId}, ${sourceEventId}, ${facts.kind},
-              ${revision.definition.taskTitle},
-              ${revision.definition.assignee.mode}, ${assignee}, ${plan.dueAt},
-              ${plan.escalateAt})
-      ON CONFLICT (tenant_id, rule_id, source_event_id) DO NOTHING
-      RETURNING id
-    `) as { id: string }[];
-    const taskId = inserted[0]?.id;
-
-    if (!taskId) {
-      outcome.skipped.push({ ruleId: revision.ruleId, reason: "duplicate" });
-      continue;
-    }
-
-    await appendAction(tx, tenantId, {
-      taskId,
-      action: "created",
-      fromStatus: null,
-      toStatus: "open",
-      actor: null,
-      assignee,
-      reason:
-        candidate !== null && assignee === null
-          ? "assignee_inactive"
-          : "rule_trigger"
-    });
-
-    if (assignee !== null) {
-      await scheduleAssigneeNotices(
-        tx,
-        tenantId,
-        taskId,
-        revision.definition,
-        assignee,
-        plan.dueAt,
-        now
+    // Each rule in its own savepoint (audit of PR #1266, MEDIUM-1): a rule
+    // that cannot be planned (a calendar with no working time ahead) or whose
+    // write fails is skipped and logged, and never fails the other rules or
+    // dead-letters the delivery.
+    try {
+      const result = await tx.savepoint((savepoint) =>
+        createTaskForRule(
+          savepoint as unknown as Bun.SQL,
+          tenantId,
+          facts,
+          sourceEventId,
+          revision,
+          now
+        )
       );
-    }
 
-    outcome.created.push(taskId);
+      if (result.taskId) {
+        outcome.created.push(result.taskId);
+      } else {
+        outcome.skipped.push({ ruleId: revision.ruleId, reason: result.reason! });
+      }
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+
+      log("warning", "crm_follow_up.rule_trigger_failed", {
+        tenantId,
+        moduleKey: CRM_FOLLOW_UP_MODULE_KEY,
+        ruleId: revision.ruleId,
+        errorClass:
+          error instanceof Error ? error.constructor.name : typeof error,
+        ...(typeof code === "string" ? { errorCode: code } : {})
+      });
+      outcome.skipped.push({ ruleId: revision.ruleId, reason: "failed" });
+    }
   }
 
   return outcome;
+}
+
+async function createTaskForRule(
+  tx: Sql,
+  tenantId: string,
+  facts: TriggerFacts,
+  sourceEventId: string,
+  revision: { ruleId: string; revisionId: string; definition: RuleDefinition },
+  now: Date
+): Promise<
+  { taskId: string; reason?: never } | { taskId: null; reason: "capped" | "duplicate" }
+> {
+  if (
+    (await countLiveTasks(tx, tenantId, facts.leadId, revision.ruleId)) >=
+    revision.definition.maxOpenPerLead
+  ) {
+    return { taskId: null, reason: "capped" };
+  }
+
+  const plan = planTask(revision.definition, facts);
+  const candidate = plan.assigneeTenantUserId;
+  const assignee =
+    candidate !== null && (await isActiveTenantUser(tx, tenantId, candidate))
+      ? candidate
+      : null;
+  const inserted = (await tx`
+    INSERT INTO awcms_crm_follow_up_tasks
+      (tenant_id, lead_id, rule_id, rule_revision_id, source_event_id,
+       trigger_kind, title, assignee_mode, assignee_tenant_user_id, due_at,
+       escalate_at)
+    VALUES (${tenantId}, ${facts.leadId}, ${revision.ruleId},
+            ${revision.revisionId}, ${sourceEventId}, ${facts.kind},
+            ${revision.definition.taskTitle},
+            ${revision.definition.assignee.mode}, ${assignee}, ${plan.dueAt},
+            ${plan.escalateAt})
+    ON CONFLICT (tenant_id, rule_id, source_event_id) DO NOTHING
+    RETURNING id
+  `) as { id: string }[];
+  const taskId = inserted[0]?.id;
+
+  if (!taskId) return { taskId: null, reason: "duplicate" };
+
+  await appendAction(tx, tenantId, {
+    taskId,
+    action: "created",
+    fromStatus: null,
+    toStatus: "open",
+    actor: null,
+    assignee,
+    reason:
+      candidate !== null && assignee === null
+        ? "assignee_inactive"
+        : "rule_trigger"
+  });
+
+  if (assignee !== null) {
+    await scheduleAssigneeNotices(
+      tx,
+      tenantId,
+      taskId,
+      revision.definition,
+      assignee,
+      plan.dueAt,
+      now
+    );
+  }
+
+  return { taskId };
 }
 
 async function cancelPendingNotifications(
@@ -306,7 +370,11 @@ export type StopInput = {
 
 export type StopOutcome = {
   signalId: string | null;
-  /** A lead-event stop already recorded for the same event: nothing changed. */
+  /**
+   * Nothing changed: a lead-event stop already recorded for the same event, or
+   * a staff stop of the same kind already recorded for the lead (at most one
+   * per (lead, kind); a stop is permanent, so a second one adds nothing).
+   */
   replayed: boolean;
   cancelledTaskIds: string[];
   cancelledNotifications: number;
@@ -346,6 +414,8 @@ export async function recordStopSignal(
              occurred_at)
           VALUES (${tenantId}, ${input.leadId}, ${input.kind}, ${input.source},
                   NULL, ${input.recordedBy}, ${input.occurredAt})
+          ON CONFLICT (tenant_id, lead_id, kind) WHERE source = 'staff'
+            DO NOTHING
           RETURNING id`
   ) as { id: string }[];
   const signalId = inserted[0]?.id ?? null;

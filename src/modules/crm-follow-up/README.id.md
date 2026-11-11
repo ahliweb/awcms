@@ -35,7 +35,10 @@ Ia **tidak pernah mengirim apa pun ke lead**, **tidak menyimpan salinan lead** (
 ## Keputusan terbuka (pemilik)
 
 - ADR-0159 masih **Diusulkan**: O1 (pesan keluar otomatis ke lead), O2 (port sinyal berhenti untuk #1144/#1164 dan consent kanal), O3 (apakah pembalikan mencabut sinyal berhenti), O4 (retensi tugas tertutup dan notifikasi selesai), O5 (mempersempit `tasks.read` ke tugas sendiri).
-- Event untuk tenant yang modulnya tidak aktif diabaikan dan **tidak diputar ulang** saat diaktifkan (gagal-tertutup: tidak ada lonjakan tugas basi).
+- Event PEMICU untuk tenant yang modulnya tidak aktif diabaikan dan **tidak diputar ulang** saat diaktifkan (gagal-tertutup: tidak ada lonjakan tugas basi). Event BERHENTI (`converted`, `lost`, `merged`) dicatat selama saklar deployment menyala, bahkan saat Module Management atau saklar tenant mati, sehingga sinyal berhenti tetap menang setelah modul dinyalakan kembali.
+- `tasks.update` tidak dibatasi kepemilikan: pemegangnya dapat menyelesaikan atau membatalkan tugas mana pun di tenant (O5 mencakup penyempitannya bersama `tasks.read`).
+- Notifikasi yang dibatalkan sebagai `recipient_changed` tidak dijadwalkan ulang bila lead kemudian dikembalikan ke orang yang sama (kunci `(task, kind, recipient)` sudah ada); tugasnya tetap ada di daftar kerja orang itu.
+- Pengerasan keamanan dari audit PR #1266: zona waktu disimpan kanonik dan cache formatter dibatasi (`src/lib/time/zoned-formatter.ts` bersama, juga dipakai `booking` dan `hr_workforce`); kalender yang tidak dapat menampung offset ditolak; satu aturan atau tenant yang bermasalah tidak pernah menggagalkan yang lain; notifikasi tanpa template menjadi `suppressed` (`not_queued`) dan tidak memakai kuota; batas per jam dihitung di bawah lock per penerima; sinyal berhenti staf butuh lead yang nyata dan dicatat sekali per (lead, jenis); worker hanya boleh mengantrekan tiga kategori `crm.follow_up_*` ke alamat staf aktif tenant itu dan hanya dengan variabel yang ada di allow-list (`sql/371`).
 - Notifikasi yang sudah diserahkan ke outbox e-mail sebelum sinyal berhenti dilaporkan oleh sinyal berhenti (`alreadyEnqueuedNotifications`) dan tidak ditarik kembali.
 
 ## Tindak lanjut tercatat

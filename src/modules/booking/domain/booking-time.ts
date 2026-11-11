@@ -27,6 +27,10 @@
  * arithmetic on `YYYY-MM-DD` (proleptic Gregorian, via UTC midnights), so a 23-
  * or 25-hour day, or a skipped or repeated hour, can never change a night count.
  */
+import {
+  canonicalTimeZone,
+  zonedPartsFormatter
+} from "../../../lib/time/zoned-formatter";
 
 /** An IANA zone name as the database CHECK spells it: `UTC` or `Area/Location`. */
 const IANA_SHAPE = /^(UTC|[A-Za-z_]+(\/[A-Za-z0-9_+-]+)+)$/;
@@ -45,27 +49,12 @@ export const WEEKDAY_KEYS = [
 ] as const;
 export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
 
-const formatterCache = new Map<string, Intl.DateTimeFormat>();
-
-function formatterFor(timezone: string): Intl.DateTimeFormat {
-  let formatter = formatterCache.get(timezone);
-
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hourCycle: "h23",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    });
-    formatterCache.set(timezone, formatter);
-  }
-
-  return formatter;
-}
+/**
+ * Formatters come from the shared, BOUNDED cache keyed by canonical zone name
+ * (`src/lib/time/zoned-formatter.ts`, audit of PR #1266 HIGH-1): this module
+ * used to keep its own unbounded map, filled from request validation.
+ */
+const formatterFor = zonedPartsFormatter;
 
 /**
  * Whether `timezone` is an acceptable zone name: the database's shape (an IANA
@@ -79,12 +68,8 @@ export function isValidTimezone(timezone: unknown): timezone is string {
     return false;
   }
 
-  try {
-    formatterFor(timezone);
-    return true;
-  } catch {
-    return false;
-  }
+  // Validation fills no cache (a throw-away formatter, see the shared helper).
+  return canonicalTimeZone(timezone) !== null;
 }
 
 export type LocalDateParts = { year: number; month: number; day: number };

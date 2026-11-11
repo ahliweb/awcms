@@ -409,6 +409,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS awcms_crm_follow_up_stop_signals_event_key
   ON awcms_crm_follow_up_stop_signals (tenant_id, source_event_id, kind)
   WHERE source_event_id IS NOT NULL;
 
+-- A staff stop is recorded at most once per (lead, kind): a stop is permanent,
+-- so a repeated request (even under a new Idempotency-Key) adds no row.
+CREATE UNIQUE INDEX IF NOT EXISTS awcms_crm_follow_up_stop_signals_staff_key
+  ON awcms_crm_follow_up_stop_signals (tenant_id, lead_id, kind)
+  WHERE source = 'staff';
+
 CREATE INDEX IF NOT EXISTS awcms_crm_follow_up_stop_signals_lead_idx
   ON awcms_crm_follow_up_stop_signals (tenant_id, lead_id);
 
@@ -450,7 +456,8 @@ CREATE TABLE IF NOT EXISTS awcms_crm_follow_up_notifications (
       (status IN ('pending', 'enqueued') AND settle_reason IS NULL)
       OR (status IN ('cancelled', 'suppressed')
           AND settle_reason IN ('task_closed', 'lead_stopped',
-                                'recipient_inactive', 'recipient_changed'))
+                                'recipient_inactive', 'recipient_changed',
+                                'calendar_unschedulable', 'not_queued'))
     ),
   CONSTRAINT awcms_crm_follow_up_notifications_deferrals_check
     CHECK (deferrals BETWEEN 0 AND 1000)

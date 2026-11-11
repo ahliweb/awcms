@@ -53,7 +53,7 @@ async function main() {
               `tenants=${run.tenantsChecked} escalated=${run.totals.escalated} ` +
               `enqueued=${run.totals.enqueued} cancelled=${run.totals.cancelled} ` +
               `suppressed=${run.totals.suppressed} deferred=${run.totals.deferred} ` +
-              `failed=${run.totals.failed}` +
+              `failed=${run.totals.failed} failedTenants=${run.failedTenants.length}` +
               (ctx.dryRun ? " (dry-run: nothing was settled)" : "") +
               (hitPassLimit
                 ? ` (WARNING: ${run.tenantsHitPassLimit.length} tenant(s) still had backlog remaining after the pass-count safety bound)`
@@ -61,11 +61,15 @@ async function main() {
           );
 
           return {
-            status: hitPassLimit || run.aborted ? "partial" : "success",
+            status:
+              hitPassLimit || run.aborted || run.failedTenants.length > 0
+                ? "partial"
+                : "success",
             itemCounts: {
               tenantsChecked: run.tenantsChecked,
               ...run.totals,
-              tenantsHitPassLimit: run.tenantsHitPassLimit.length
+              tenantsHitPassLimit: run.tenantsHitPassLimit.length,
+              failedTenants: run.failedTenants.length
             },
             detail: hitPassLimit
               ? `Backlog not fully drained for: ${run.tenantsHitPassLimit.join(", ")}`

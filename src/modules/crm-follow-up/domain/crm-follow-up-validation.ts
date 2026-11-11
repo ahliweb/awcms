@@ -23,7 +23,7 @@ import {
   type TaskStatus
 } from "./crm-follow-up-constants";
 import type { RuleDefinition, TriggerFacts } from "./rule-definition";
-import { isKnownTimeZone } from "./working-calendar";
+import { canonicalZone } from "./working-calendar";
 
 export type FieldError = { field: string; message: string };
 export type Validated<T> =
@@ -35,6 +35,8 @@ const CODE_PATTERN = /^[a-z][a-z0-9_-]{1,39}$/;
 const STAGE_KEY_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
 const DATE_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+const MIN_INSTANT_MS = Date.UTC(2000, 0, 1);
+const MAX_INSTANT_MS = Date.UTC(2100, 0, 1);
 
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value);
@@ -210,6 +212,16 @@ class Reader {
       return null;
     }
 
+    // A bounded range (audit of PR #1266, LOW-3): an instant far outside it is
+    // a mistake, and it would make the calendar walk meaningless.
+    if (
+      parsed.getTime() < MIN_INSTANT_MS ||
+      parsed.getTime() >= MAX_INSTANT_MS
+    ) {
+      this.error(name, `${name} must be between 2000 and 2100.`);
+      return null;
+    }
+
     return parsed;
   }
 }
@@ -231,6 +243,30 @@ function done<T>(errors: FieldError[], value: () => T): Validated<T> {
   return errors.length > 0
     ? { valid: false, errors }
     : { valid: true, value: value() };
+}
+
+/**
+ * Whether ANY start instant can be scheduled (audit of PR #1266, MEDIUM-1).
+ * The calendar walk looks `MAX_DAYS_SCANNED` (800) days ahead and at most 366
+ * of those can be holidays, so at least 61 whole weeks of the weekly pattern
+ * remain; a revision whose offsets need more working time than that could
+ * throw at run time, so it is refused at publish and simulate time instead.
+ * Run-time paths still survive a `RangeError` (dispatch suppresses the notice,
+ * the consumer isolates the rule), so this is the first line, not the only one.
+ */
+function calendarCanAlwaysSchedule(
+  workingDays: number[],
+  workStartMinute: number,
+  workEndMinute: number,
+  totalMinutes: number
+): boolean {
+  const weekly = workingDays.length * (workEndMinute - workStartMinute);
+
+  // Margin: at most four daylight-saving shifts in 800 days, each costing at
+  // most an hour of the daily window.
+  const margin = 4 * Math.min(60, workEndMinute - workStartMinute);
+
+  return weekly * 61 >= totalMinutes + margin;
 }
 
 /** Reads `definition` (a revision) from a reader that holds it. */
@@ -355,8 +391,17 @@ function readDefinition(reader: Reader): RuleDefinition | null {
     ]);
     timeZone = calendar.text("timeZone", { required: true, max: 64 });
 
-    if (timeZone !== null && !isKnownTimeZone(timeZone)) {
-      calendar.error("timeZone", "timeZone must be an IANA time zone.");
+    if (timeZone !== null) {
+      // Stored CANONICAL (audit of PR #1266, HIGH-1): `asia/jakarta` is kept as
+      // `Asia/Jakarta`, and validation fills no formatter cache.
+      const canonical = canonicalZone(timeZone);
+
+      if (canonical === null) {
+        calendar.error("timeZone", "timeZone must be an IANA time zone.");
+        timeZone = null;
+      } else {
+        timeZone = canonical;
+      }
     }
 
     const days = calendar.raw.workingDays;
@@ -421,6 +466,21 @@ function readDefinition(reader: Reader): RuleDefinition | null {
         holidays = [...(rawHolidays as string[])].sort();
       }
     }
+  }
+
+  if (
+    reader.errors.length === before &&
+    !calendarCanAlwaysSchedule(
+      workingDays,
+      workStartMinute!,
+      workEndMinute!,
+      dueAfterMinutes! + (escalation?.afterMinutes ?? 0)
+    )
+  ) {
+    reader.error(
+      "calendar",
+      "The calendar does not hold enough working time for the due and escalation offsets."
+    );
   }
 
   if (reader.errors.length > before) return null;

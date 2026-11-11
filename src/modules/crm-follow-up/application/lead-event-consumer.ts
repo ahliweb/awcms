@@ -13,7 +13,11 @@
  * Runs as `awcms_worker` inside the dispatcher's tenant transaction. It reads
  * ids and closed codes from the payload only (ADR-0153 L6: the payload holds
  * nothing else) and never reads a `crm_leads` table. An event for a tenant
- * where the module is not active is ignored: it is not replayed later.
+ * where the module is not active creates no task and moves no task, and is
+ * not replayed later. STOP events are the exception (audit of PR #1266,
+ * LOW-2): `converted`, `lost` and `merged` are recorded whenever the deployment
+ * switch is on, even while Module Management or the tenant switch is off, so
+ * that a stop still wins after the module is switched back on.
  *
  * Idempotent twice over: the runtime's per-(consumer, event) effect ledger,
  * and the natural keys (a task per (rule, source event), a lead-event stop per
@@ -27,6 +31,7 @@ import {
   LEAD_LOST_EVENT,
   LEAD_MERGED_EVENT,
   LEAD_STAGE_CHANGED_EVENT,
+  isCrmFollowUpEnabled,
   STAGE_CATEGORIES,
   type StageCategory
 } from "../domain/crm-follow-up-constants";
@@ -76,7 +81,16 @@ export async function handleLeadSignal(
   event: DomainEventForHandler,
   now: Date = new Date()
 ): Promise<LeadSignalResult> {
-  if (!(await isActiveForTenant(tx, tenantId))) {
+  const isStop =
+    event.eventType === LEAD_CONVERTED_EVENT ||
+    event.eventType === LEAD_LOST_EVENT ||
+    event.eventType === LEAD_MERGED_EVENT;
+
+  if (
+    isStop
+      ? !isCrmFollowUpEnabled()
+      : !(await isActiveForTenant(tx, tenantId))
+  ) {
     return { handled: false, reason: "inactive" };
   }
 
@@ -105,7 +119,13 @@ export async function handleLeadSignal(
         occurredAt: instant(payload.occurredAt, event.occurredAt)
       };
 
-      await createTasksForTrigger(tx, tenantId, facts, eventId, now);
+      await createTasksForTrigger(
+        tx as Bun.TransactionSQL,
+        tenantId,
+        facts,
+        eventId,
+        now
+      );
       return { handled: true, kind: facts.kind };
     }
     case LEAD_ASSIGNED_EVENT: {
@@ -119,7 +139,7 @@ export async function handleLeadSignal(
 
       if (owner !== null) {
         await createTasksForTrigger(
-          tx,
+          tx as Bun.TransactionSQL,
           tenantId,
           {
             kind: "lead_assigned",

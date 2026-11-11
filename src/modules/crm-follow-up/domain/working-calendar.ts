@@ -14,6 +14,10 @@
  * window collapses because of a daylight-saving gap simply contributes less
  * working time; nothing is invented.
  */
+import {
+  canonicalTimeZone,
+  zonedPartsFormatter
+} from "../../../lib/time/zoned-formatter";
 
 export type WorkingCalendar = {
   timeZone: string;
@@ -32,35 +36,46 @@ const DAY_MS = 86_400_000;
 /** How far ahead a search may walk before it is a configuration error. */
 const MAX_DAYS_SCANNED = 800;
 
-const formatterCache = new Map<string, Intl.DateTimeFormat>();
+/** The shared BOUNDED formatter cache, keyed by canonical zone name (audit of PR #1266, HIGH-1). */
+const formatter = zonedPartsFormatter;
 
-function formatter(timeZone: string): Intl.DateTimeFormat {
-  let cached = formatterCache.get(timeZone);
-
-  if (!cached) {
-    cached = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hourCycle: "h23",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    });
-    formatterCache.set(timeZone, cached);
-  }
-
-  return cached;
+/**
+ * The canonical IANA name of `timeZone`, or `null` when the runtime does not
+ * know it. Fills no cache: validation runs before authorization.
+ */
+export function canonicalZone(timeZone: string): string | null {
+  return canonicalTimeZone(timeZone);
 }
 
-/** True when the runtime's zone database knows `timeZone`. */
+/** True when the runtime's zone database knows `timeZone`. Fills no cache. */
 export function isKnownTimeZone(timeZone: string): boolean {
+  return canonicalTimeZone(timeZone) !== null;
+}
+
+/** Raised when a calendar has no working time inside the search horizon. */
+export class NoWorkingTimeError extends RangeError {
+  constructor() {
+    super("The working calendar has no working time ahead.");
+    this.name = "NoWorkingTimeError";
+  }
+}
+
+/**
+ * Whether `addWorkingMinutes(calendar, from, minutes)` can be answered: the
+ * calendar has enough working time inside the search horizon. Used to refuse
+ * a revision at publish and simulate time (audit of PR #1266, MEDIUM-1).
+ */
+export function canSchedule(
+  calendar: WorkingCalendar,
+  from: Date,
+  minutes: number
+): boolean {
   try {
-    formatter(timeZone);
+    addWorkingMinutes(calendar, from, minutes);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof RangeError) return false;
+    throw error;
   }
 }
 
@@ -204,7 +219,7 @@ export function nextWorkingInstant(
     return new Date(Math.max(window.startMs, fromMs));
   }
 
-  throw new RangeError("The working calendar has no working time ahead.");
+  throw new NoWorkingTimeError();
 }
 
 /** True when `at` is inside a working window. */
@@ -245,7 +260,7 @@ export function addWorkingMinutes(
     remainingMs -= available;
   }
 
-  throw new RangeError("The working calendar has no working time ahead.");
+  throw new NoWorkingTimeError();
 }
 
 /** Weekday bitmask from ISO weekday numbers (1 = Monday .. 7 = Sunday). */

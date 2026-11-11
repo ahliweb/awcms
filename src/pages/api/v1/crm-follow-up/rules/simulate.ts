@@ -1,4 +1,4 @@
-import { ok } from "../../../../../modules/_shared/api-response";
+import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import {
   disabledResponse,
@@ -29,13 +29,26 @@ export const POST = defineTenantRoute<SimulateInput>({
 
     if (disabled) return disabled;
 
-    return ok(
-      await simulateRevision(
-        context.tx,
-        context.tenantId,
-        context.prepared,
-        context.now
-      )
-    );
+    try {
+      return ok(
+        await simulateRevision(
+          context.tx,
+          context.tenantId,
+          context.prepared,
+          context.now
+        )
+      );
+    } catch (error) {
+      // A calendar that cannot place the instants (audit of PR #1266, LOW-3).
+      if (error instanceof RangeError) {
+        return fail(
+          422,
+          "CALENDAR_UNSCHEDULABLE",
+          "The calendar has no working time for these offsets."
+        );
+      }
+
+      throw error;
+    }
   }
 });
