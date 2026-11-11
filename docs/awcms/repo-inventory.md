@@ -28,7 +28,7 @@
 | `domain_event_runtime` | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `sync_storage`         | 1.0.0   | active       | system | no   | `tenant_admin`                                                                                                                 |
 | `workflow`             | 2.0.0   | active       | system | no   | `tenant_admin`, `identity_access`, `domain_event_runtime`                                                                      |
-| `email`                | 0.5.0   | active       | —      | no   | `tenant_admin`, `profile_identity`, `identity_access`                                                                          |
+| `email`                | 0.6.0   | active       | —      | no   | `tenant_admin`, `profile_identity`, `identity_access`                                                                          |
 | `reporting`            | 1.2.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `sync_storage`, `email`, `domain_event_runtime`                                             |
 | `theming`              | 1.0.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `module_management`                                                                         |
 | `media_library`        | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`                                                                                              |
@@ -406,6 +406,7 @@
 | `awcms_edge_cache_purges`                      | `sql/068_awcms_edge_cache_purge_queue.sql`                 | yes | yes   |
 | `awcms_email_delivery_attempts`                | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_messages`                         | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_sender_policies`                  | `sql/346_awcms_email_sender_routing.sql`                   | yes | yes   |
 | `awcms_email_suppression_list`                 | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_templates`                        | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_engagement_source_domains`              | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
