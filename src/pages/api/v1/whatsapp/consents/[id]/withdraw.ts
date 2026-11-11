@@ -17,6 +17,13 @@ import { isWhatsappRecordId } from "../../../../../../modules/whatsapp-delivery/
  * opt-in for EVERY brand the row listed and the unscoped one; there is no
  * per-brand withdrawal, and none is offered, because narrowing an opt-out is the
  * unsafe direction. The brands it ended are kept in the audit record.
+ *
+ * NOT business-scope confined, on purpose (#1231 audit L-2): a caller confined
+ * to brand A may record the opt-out of a person who also opted in for brand B,
+ * because an opt-out is the person's decision about the whole tenant and
+ * honouring it can only stop messages. The permission `consents.withdraw` is
+ * still required, and the route-level `authorize` goes through the access
+ * chokepoint, which writes the allow/deny row to `awcms_abac_decision_logs`.
  */
 export const POST = defineTenantRoute({
   workClass: "interactive",

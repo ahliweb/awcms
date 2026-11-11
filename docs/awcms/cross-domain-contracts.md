@@ -439,7 +439,11 @@ capability (`ChannelAccountPort`, provided by `channel_accounts`) at `1.1.0`
 `CONSENT_SCOPE_REQUIRED`: a marketing opt-in now covers only the business scope
 (brand) it was collected for, so a marketing message of brand B whose recipient
 opted in for another brand (or only for the tenant, with no brand) is refused and
-nothing is queued. Withdrawal and suppression stay tenant-wide; transactional and
+nothing is queued. They also gain `BUSINESS_SCOPE_UNRESOLVED`: the
+`businessScope` of a marketing message must resolve to a real scope of the tenant
+(only `office` resolves today). That scope is what the CALLER declares: it is
+bound to the sending number only when the sender itself is scoped. Withdrawal and
+suppression stay tenant-wide; transactional and
 security messages are unchanged. No field or signature changed; `booking` maps an
 unknown reason to a coarse code and is unaffected. `whatsapp_delivery` is
 registered at `1.2.0`.

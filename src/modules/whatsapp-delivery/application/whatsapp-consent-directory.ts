@@ -401,10 +401,18 @@ export async function grantMarketingConsent(
       }
     }
 
+    // Row-level `source`/`granted_at` describe the tenant-level opt-in (the
+    // first recording, or the latest unscoped grant): a BRAND grant leaves them
+    // as they are and carries its own provenance inside `business_scopes`
+    // (#1231 audit L-3). `status = 'granted'` in the WHERE: a withdrawal that
+    // commits first makes this a clean "withdrawn" answer below, never the
+    // `sql/354` CHECK.
     row = (
       (await tx`
         UPDATE awcms_whatsapp_consents
-        SET source = ${input.source}, granted_at = now(), updated_at = now(),
+        SET source = CASE WHEN ${unscoped} THEN ${input.source} ELSE source END,
+            granted_at = CASE WHEN ${unscoped} THEN now() ELSE granted_at END,
+            updated_at = now(),
             unscoped_granted = CASE WHEN ${unscoped} THEN true
                                     ELSE unscoped_granted END,
             business_scopes = CASE WHEN ${scopeType}::text IS NULL
@@ -421,10 +429,16 @@ export async function grantMarketingConsent(
                                      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
             END
         WHERE tenant_id = ${tenantId} AND id = ${existing.id}
+          AND status = 'granted'
         RETURNING id, recipient_masked, purpose, status, source, granted_at,
                   withdrawn_at, business_scopes, unscoped_granted
       `) as ConsentRow[]
     )[0];
+
+    if (!row) {
+      // Withdrawn under us: an opt-out is never granted over implicitly.
+      return { outcome: "withdrawn_requires_reinstatement" };
+    }
   } else if (!row && existing) {
     if (!input.reinstateWithdrawn) {
       return { outcome: "withdrawn_requires_reinstatement" };
@@ -472,6 +486,18 @@ export async function grantMarketingConsent(
                   withdrawn_at, business_scopes, unscoped_granted
       `) as ConsentRow[]
     )[0];
+
+    if (!row) {
+      // Reinstated by a concurrent request first: the row is granted now, so
+      // this request is decided as an ordinary grant against it.
+      return grantMarketingConsent(
+        tx,
+        tenantId,
+        actorTenantUserId,
+        { ...input, reinstateWithdrawn: false },
+        options
+      );
+    }
   }
 
   if (!row) {

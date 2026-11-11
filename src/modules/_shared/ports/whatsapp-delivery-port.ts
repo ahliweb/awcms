@@ -42,7 +42,9 @@
  *
  * ## Port version 1.2.0 — brand-scoped marketing consent (Issue #1231 M4)
  *
- * ADDITIVE: one new refusal reason, `CONSENT_SCOPE_REQUIRED`. A marketing
+ * ADDITIVE: two new refusal reasons, `CONSENT_SCOPE_REQUIRED` and
+ * `BUSINESS_SCOPE_UNRESOLVED` (a marketing message's scope must resolve in the
+ * tenant). A marketing
  * opt-in covers only the business scope (brand) it was collected for; an
  * unscoped or legacy opt-in covers only marketing that names no scope. Opt-out
  * and suppression stay tenant-wide. Transactional and security messages are
@@ -129,7 +131,13 @@ export type EnqueueWhatsappRefusalReason =
    * brands while the message names none. Nothing is queued; record a consent
    * for that brand first. Never downgraded to another purpose.
    */
-  | "CONSENT_SCOPE_REQUIRED";
+  | "CONSENT_SCOPE_REQUIRED"
+  /**
+   * Issue #1231 M4. A MARKETING message names a `businessScope` that is not a
+   * real scope of the tenant (unknown type, unknown, foreign, deleted or
+   * inactive id; only `office` resolves today). Nothing is queued.
+   */
+  | "BUSINESS_SCOPE_UNRESOLVED";
 
 export type EnqueueWhatsappResult =
   | { status: "queued"; messageId: string }

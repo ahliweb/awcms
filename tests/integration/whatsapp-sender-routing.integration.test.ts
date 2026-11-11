@@ -99,6 +99,19 @@ const SCOPE_Y = {
   type: "brand",
   id: "b1141000-0000-4000-8000-0000000000a2"
 };
+/** Real `awcms_offices` rows, seeded by the M4 suite: the only resolvable scope type (#1231 audit M-1, L-4). */
+const OFFICE_X = {
+  type: "office",
+  id: "c1231000-0000-4000-8000-0000000000a1"
+};
+const OFFICE_Y = {
+  type: "office",
+  id: "c1231000-0000-4000-8000-0000000000a2"
+};
+const OFFICE_BX = {
+  type: "office",
+  id: "c1231000-0000-4000-8000-0000000000b1"
+};
 const PHONE = "+6281234567890";
 const OTHER_PHONE = "+6289876543210";
 
@@ -2647,6 +2660,21 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         ...(sender ? { senderAccountId: sender.id } : {}),
         ...(scope ? { businessScope: scope } : {})
       });
+    beforeEach(async () => {
+      const admin = getAdminSql();
+
+      for (const [tenantId, office, code] of [
+        [TENANT_A, OFFICE_X, "m4-x"],
+        [TENANT_A, OFFICE_Y, "m4-y"],
+        [TENANT_B, OFFICE_BX, "m4-bx"]
+      ] as const) {
+        await admin`
+          INSERT INTO awcms_offices (id, tenant_id, office_code, office_name)
+          VALUES (${office.id}, ${tenantId}, ${code}, ${code})
+        `;
+      }
+    });
+
     const consentRow = async (tenantId: string) =>
       (
         (await getAdminSql()`
@@ -2662,22 +2690,22 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       )[0]!;
 
     test("an opt-in for brand X authorises brand X only: brand Y's sender is refused with a stable code, and nothing is queued", async () => {
-      const senderX = await seedAccount(TENANT_A, { scope: SCOPE_X });
-      const senderY = await seedAccount(TENANT_A, { scope: SCOPE_Y });
+      const senderX = await seedAccount(TENANT_A, { scope: OFFICE_X });
+      const senderY = await seedAccount(TENANT_A, { scope: OFFICE_Y });
 
-      expect((await grant(TENANT_A, SCOPE_X)).outcome).toBe("granted");
+      expect((await grant(TENANT_A, OFFICE_X)).outcome).toBe("granted");
 
-      expect((await promoFrom(TENANT_A, senderX, SCOPE_X)).status).toBe(
+      expect((await promoFrom(TENANT_A, senderX, OFFICE_X)).status).toBe(
         "queued"
       );
       const before = await count("awcms_whatsapp_messages");
 
-      expect(await promoFrom(TENANT_A, senderY, SCOPE_Y)).toEqual({
+      expect(await promoFrom(TENANT_A, senderY, OFFICE_Y)).toEqual({
         status: "refused",
         reason: "CONSENT_SCOPE_REQUIRED"
       });
       // The deployment sender for brand Y is brand Y too: same refusal.
-      expect(await promoFrom(TENANT_A, null, SCOPE_Y)).toEqual({
+      expect(await promoFrom(TENANT_A, null, OFFICE_Y)).toEqual({
         status: "refused",
         reason: "CONSENT_SCOPE_REQUIRED"
       });
@@ -2689,11 +2717,11 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       expect(await count("awcms_whatsapp_messages")).toBe(before);
 
       // A second, explicit opt-in for brand Y appends; brand X is kept.
-      expect((await grant(TENANT_A, SCOPE_Y)).outcome).toBe("granted");
-      expect((await promoFrom(TENANT_A, senderY, SCOPE_Y)).status).toBe(
+      expect((await grant(TENANT_A, OFFICE_Y)).outcome).toBe("granted");
+      expect((await promoFrom(TENANT_A, senderY, OFFICE_Y)).status).toBe(
         "queued"
       );
-      expect((await promoFrom(TENANT_A, senderX, SCOPE_X)).status).toBe(
+      expect((await promoFrom(TENANT_A, senderX, OFFICE_X)).status).toBe(
         "queued"
       );
 
@@ -2702,7 +2730,7 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       expect(stored.unscoped_granted).toBe(false);
       expect(
         stored.business_scopes.map((s) => `${s.type}:${s.id}`).sort()
-      ).toEqual([`brand:${SCOPE_X.id}`, `brand:${SCOPE_Y.id}`].sort());
+      ).toEqual([`office:${OFFICE_X.id}`, `office:${OFFICE_Y.id}`].sort());
 
       // The grant event names the brand of THAT grant; an unscoped grant's
       // payload keeps its old shape (no `businessScope` key).
@@ -2714,34 +2742,191 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       `) as { payload: Record<string, unknown> }[];
 
       expect(payloads.map((p) => p.payload.businessScope)).toEqual([
-        SCOPE_X,
-        SCOPE_Y
+        OFFICE_X,
+        OFFICE_Y
       ]);
       expect(JSON.stringify(payloads)).not.toContain("81234567890");
     });
 
-    test("two tenants: a brand opt-in in one tenant authorises nothing in the other", async () => {
-      const senderA = await seedAccount(TENANT_A, { scope: SCOPE_X });
-      const senderB = await seedAccount(TENANT_B, { scope: SCOPE_X });
+    test("audit M-1: the brand of a marketing message must be a real scope of the tenant, and with a tenant-wide sender it is only the scope the caller declares", async () => {
+      const tenantWide = await seedAccount(TENANT_A);
 
-      expect((await grant(TENANT_B, SCOPE_X)).outcome).toBe("granted");
-      expect(await promoFrom(TENANT_A, senderA, SCOPE_X)).toEqual({
+      await grant(TENANT_A, OFFICE_X);
+
+      // A tenant-wide number sending for office X is eligible on office X's
+      // opt-in: nothing ties the DECLARED brand to that number (README).
+      expect((await promoFrom(TENANT_A, tenantWide, OFFICE_X)).status).toBe(
+        "queued"
+      );
+
+      const before = await count("awcms_whatsapp_messages");
+
+      // An unknown type, an unknown id and an inactive office do not resolve.
+      for (const scope of [
+        SCOPE_X,
+        { type: "office", id: "c1231000-0000-4000-8000-0000000000ff" }
+      ]) {
+        expect(await promoFrom(TENANT_A, tenantWide, scope)).toEqual({
+          status: "refused",
+          reason: "BUSINESS_SCOPE_UNRESOLVED"
+        });
+      }
+
+      await getAdminSql()`
+        UPDATE awcms_offices SET status = 'inactive' WHERE id = ${OFFICE_X.id}
+      `;
+      expect(await promoFrom(TENANT_A, tenantWide, OFFICE_X)).toEqual({
+        status: "refused",
+        reason: "BUSINESS_SCOPE_UNRESOLVED"
+      });
+      expect(await count("awcms_whatsapp_messages")).toBe(before);
+
+      // Transactional messages are not consent-scoped and are not resolved.
+      expect(
+        (
+          await enqueue(TENANT_A, {
+            senderAccountId: tenantWide.id,
+            businessScope: SCOPE_X
+          })
+        ).status
+      ).toBe("queued");
+    });
+
+    test("audit L-3: a brand grant keeps the row-level source and time of the tenant-level opt-in", async () => {
+      await grant(TENANT_A, null, { source: "admin" });
+
+      const before = (await getAdminSql()`
+        SELECT source, granted_at FROM awcms_whatsapp_consents
+        WHERE tenant_id = ${TENANT_A}
+      `) as { source: string; granted_at: Date }[];
+
+      await grant(TENANT_A, OFFICE_X, { source: "import" });
+
+      const after = (await getAdminSql()`
+        SELECT source, granted_at, business_scopes FROM awcms_whatsapp_consents
+        WHERE tenant_id = ${TENANT_A}
+      `) as {
+        source: string;
+        granted_at: Date;
+        business_scopes: { source: string }[];
+      }[];
+
+      expect(after[0]!.source).toBe("admin");
+      expect(after[0]!.granted_at.getTime()).toBe(
+        before[0]!.granted_at.getTime()
+      );
+      expect(after[0]!.business_scopes[0]!.source).toBe("import");
+    });
+
+    test("race: a grant blocked behind a withdrawal answers withdrawn (409 path), never the CHECK", async () => {
+      const granted = await grant(TENANT_A, OFFICE_X);
+      const consentId = granted.outcome === "granted" ? granted.entry.id : "";
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let locked!: () => void;
+      const lockedYet = new Promise<void>((resolve) => (locked = resolve));
+
+      const withdrawal = inTenant(TENANT_A, async (tx) => {
+        const result = await withdrawMarketingConsent(
+          tx,
+          TENANT_A,
+          null,
+          consentId
+        );
+
+        locked();
+        await gate;
+
+        return result;
+      });
+
+      await lockedYet;
+
+      const racing = grant(TENANT_A, OFFICE_Y);
+
+      // Let the grant reach its row lock, then commit the withdrawal.
+      await Bun.sleep(200);
+      release();
+
+      expect((await withdrawal).outcome).toBe("withdrawn");
+      expect((await racing).outcome).toBe("withdrawn_requires_reinstatement");
+      expect((await consentRow(TENANT_A)).business_scopes).toEqual([]);
+    });
+
+    test("race: a withdrawal blocked behind a brand grant still ends every brand", async () => {
+      const granted = await grant(TENANT_A, OFFICE_X);
+      const consentId = granted.outcome === "granted" ? granted.entry.id : "";
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let locked!: () => void;
+      const lockedYet = new Promise<void>((resolve) => (locked = resolve));
+
+      const granting = inTenant(TENANT_A, async (tx) => {
+        const result = await grantMarketingConsent(tx, TENANT_A, null, {
+          phone: PHONE,
+          source: "form",
+          businessScope: OFFICE_Y
+        });
+
+        locked();
+        await gate;
+
+        return result;
+      });
+
+      await lockedYet;
+
+      const withdrawing = inTenant(TENANT_A, (tx) =>
+        withdrawMarketingConsent(tx, TENANT_A, null, consentId)
+      );
+
+      await Bun.sleep(200);
+      release();
+
+      expect((await granting).outcome).toBe("granted");
+
+      const withdrawn = await withdrawing;
+
+      expect(withdrawn.outcome).toBe("withdrawn");
+      expect(
+        withdrawn.outcome === "withdrawn"
+          ? withdrawn.withdrawnBusinessScopes.map((s) => s.id).sort()
+          : []
+      ).toEqual([OFFICE_X.id, OFFICE_Y.id].sort());
+
+      const row = await consentRow(TENANT_A);
+
+      expect(row.status).toBe("withdrawn");
+      expect(row.business_scopes).toEqual([]);
+    });
+
+    test("two tenants: a brand opt-in in one tenant authorises nothing in the other", async () => {
+      const senderA = await seedAccount(TENANT_A, { scope: OFFICE_X });
+      const senderB = await seedAccount(TENANT_B, { scope: OFFICE_BX });
+
+      expect((await grant(TENANT_B, OFFICE_BX)).outcome).toBe("granted");
+      expect(await promoFrom(TENANT_A, senderA, OFFICE_X)).toEqual({
         status: "refused",
         reason: "CONSENT_REQUIRED"
       });
-      expect((await promoFrom(TENANT_B, senderB, SCOPE_X)).status).toBe(
+      expect((await promoFrom(TENANT_B, senderB, OFFICE_BX)).status).toBe(
         "queued"
       );
+      // Tenant B's office is not a scope of tenant A: refused before consent.
+      expect(await promoFrom(TENANT_A, null, OFFICE_BX)).toEqual({
+        status: "refused",
+        reason: "BUSINESS_SCOPE_UNRESOLVED"
+      });
     });
 
     test("an opt-out recorded under brand X stops every brand, cancels every waiting row, and a reinstatement covers only the brand it names", async () => {
-      const senderX = await seedAccount(TENANT_A, { scope: SCOPE_X });
-      const senderY = await seedAccount(TENANT_A, { scope: SCOPE_Y });
+      const senderX = await seedAccount(TENANT_A, { scope: OFFICE_X });
+      const senderY = await seedAccount(TENANT_A, { scope: OFFICE_Y });
 
-      await grant(TENANT_A, SCOPE_X);
-      const granted = await grant(TENANT_A, SCOPE_Y);
-      const x = await promoFrom(TENANT_A, senderX, SCOPE_X);
-      const y = await promoFrom(TENANT_A, senderY, SCOPE_Y);
+      await grant(TENANT_A, OFFICE_X);
+      const granted = await grant(TENANT_A, OFFICE_Y);
+      const x = await promoFrom(TENANT_A, senderX, OFFICE_X);
+      const y = await promoFrom(TENANT_A, senderY, OFFICE_Y);
 
       const withdrawn = await inTenant(TENANT_A, (tx) =>
         withdrawMarketingConsent(
@@ -2760,13 +2945,13 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         withdrawn.outcome === "withdrawn"
           ? withdrawn.withdrawnBusinessScopes.map((s) => s.id).sort()
           : []
-      ).toEqual([SCOPE_X.id, SCOPE_Y.id].sort());
+      ).toEqual([OFFICE_X.id, OFFICE_Y.id].sort());
       expect((await row(queuedId(x))).status).toBe("cancelled");
       expect((await row(queuedId(y))).status).toBe("cancelled");
 
       for (const [sender, scope] of [
-        [senderX, SCOPE_X],
-        [senderY, SCOPE_Y]
+        [senderX, OFFICE_X],
+        [senderY, OFFICE_Y]
       ] as const) {
         expect(await promoFrom(TENANT_A, sender, scope)).toEqual({
           status: "suppressed",
@@ -2781,12 +2966,12 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       expect(cleared.unscoped_granted).toBe(false);
 
       // A plain grant for either brand cannot reverse the opt-out.
-      expect((await grant(TENANT_A, SCOPE_Y)).outcome).toBe(
+      expect((await grant(TENANT_A, OFFICE_Y)).outcome).toBe(
         "withdrawn_requires_reinstatement"
       );
 
       // Reinstating for brand Y does NOT resurrect brand X.
-      const reinstated = await grant(TENANT_A, SCOPE_Y, {
+      const reinstated = await grant(TENANT_A, OFFICE_Y, {
         reinstateWithdrawn: true,
         evidenceRef: "ticket-1231"
       });
@@ -2795,10 +2980,10 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
         outcome: "granted",
         reinstated: true
       });
-      expect((await promoFrom(TENANT_A, senderY, SCOPE_Y)).status).toBe(
+      expect((await promoFrom(TENANT_A, senderY, OFFICE_Y)).status).toBe(
         "queued"
       );
-      expect(await promoFrom(TENANT_A, senderX, SCOPE_X)).toEqual({
+      expect(await promoFrom(TENANT_A, senderX, OFFICE_X)).toEqual({
         status: "refused",
         reason: "CONSENT_SCOPE_REQUIRED"
       });
@@ -2806,11 +2991,11 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     });
 
     test("a suppression stays tenant-wide: it stops every brand even with every brand opted in", async () => {
-      const senderX = await seedAccount(TENANT_A, { scope: SCOPE_X });
-      const senderY = await seedAccount(TENANT_A, { scope: SCOPE_Y });
+      const senderX = await seedAccount(TENANT_A, { scope: OFFICE_X });
+      const senderY = await seedAccount(TENANT_A, { scope: OFFICE_Y });
 
-      await grant(TENANT_A, SCOPE_X);
-      await grant(TENANT_A, SCOPE_Y);
+      await grant(TENANT_A, OFFICE_X);
+      await grant(TENANT_A, OFFICE_Y);
       await inTenant(TENANT_A, (tx) =>
         createSuppression(tx, TENANT_A, null, {
           phone: PHONE,
@@ -2819,8 +3004,8 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       );
 
       for (const [sender, scope] of [
-        [senderX, SCOPE_X],
-        [senderY, SCOPE_Y]
+        [senderX, OFFICE_X],
+        [senderY, OFFICE_Y]
       ] as const) {
         expect(await promoFrom(TENANT_A, sender, scope)).toEqual({
           status: "suppressed",
@@ -2830,21 +3015,21 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     });
 
     test("transactional messages are unchanged: brand Y's sender sends a reminder with no consent at all, and with only brand X's", async () => {
-      const senderY = await seedAccount(TENANT_A, { scope: SCOPE_Y });
+      const senderY = await seedAccount(TENANT_A, { scope: OFFICE_Y });
       const reminder = () =>
         enqueue(TENANT_A, {
           senderAccountId: senderY.id,
-          businessScope: SCOPE_Y
+          businessScope: OFFICE_Y
         });
 
       expect((await reminder()).status).toBe("queued");
-      await grant(TENANT_A, SCOPE_X);
+      await grant(TENANT_A, OFFICE_X);
       expect((await reminder()).status).toBe("queued");
     });
 
     test("a legacy row (recorded before sql/354, no brand) still covers marketing that names no brand, and NO brand until one is granted", async () => {
       const tenantWide = await seedAccount(TENANT_A);
-      const senderX = await seedAccount(TENANT_A, { scope: SCOPE_X });
+      const senderX = await seedAccount(TENANT_A, { scope: OFFICE_X });
 
       await grant(TENANT_A, null);
       // What a pre-sql/354 row looks like: the column added NULL, no brand.
@@ -2859,25 +3044,25 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
       expect((await promoFrom(TENANT_A, null, null)).status).toBe("queued");
       // Never a brand: neither through brand X's own sender nor through the
       // tenant-wide one sending for brand X.
-      expect(await promoFrom(TENANT_A, senderX, SCOPE_X)).toEqual({
+      expect(await promoFrom(TENANT_A, senderX, OFFICE_X)).toEqual({
         status: "refused",
         reason: "CONSENT_SCOPE_REQUIRED"
       });
-      expect(await promoFrom(TENANT_A, tenantWide, SCOPE_X)).toEqual({
+      expect(await promoFrom(TENANT_A, tenantWide, OFFICE_X)).toEqual({
         status: "refused",
         reason: "CONSENT_SCOPE_REQUIRED"
       });
 
       // Collecting brand X's opt-in adds it, and leaves the legacy marker as is.
-      await grant(TENANT_A, SCOPE_X);
-      expect((await promoFrom(TENANT_A, senderX, SCOPE_X)).status).toBe(
+      await grant(TENANT_A, OFFICE_X);
+      expect((await promoFrom(TENANT_A, senderX, OFFICE_X)).status).toBe(
         "queued"
       );
       expect((await consentRow(TENANT_A)).unscoped_granted).toBeNull();
     });
 
     test("the database refuses a withdrawn consent that still covers a brand or the unscoped opt-in", async () => {
-      await grant(TENANT_A, SCOPE_X);
+      await grant(TENANT_A, OFFICE_X);
       await assertPgRejected(
         getAdminSql()`
           UPDATE awcms_whatsapp_consents
@@ -2920,16 +3105,16 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     workerTest(
       "dispatch re-checks the brand: coverage narrowed after enqueue (bypassing the cancel path) cancels the row and never calls the provider",
       async () => {
-        const senderX = await seedAccount(TENANT_A, { scope: SCOPE_X });
+        const senderX = await seedAccount(TENANT_A, { scope: OFFICE_X });
 
-        await grant(TENANT_A, SCOPE_X);
-        const queued = await promoFrom(TENANT_A, senderX, SCOPE_X);
+        await grant(TENANT_A, OFFICE_X);
+        const queued = await promoFrom(TENANT_A, senderX, OFFICE_X);
 
         expect(queued.status).toBe("queued");
         await getAdminSql()`
           UPDATE awcms_whatsapp_consents
           SET business_scopes = jsonb_build_array(jsonb_build_object(
-            'type', 'brand', 'id', ${SCOPE_Y.id}::text, 'source', 'form',
+            'type', 'office', 'id', ${OFFICE_Y.id}::text, 'source', 'form',
             'grantedAt', '2026-11-11T00:00:00.000Z'))
           WHERE tenant_id = ${TENANT_A}
         `;
@@ -2950,8 +3135,8 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
     workerTest(
       "race: an opt-out that commits while a brand-X enqueue is still open is caught at dispatch",
       async () => {
-        const senderX = await seedAccount(TENANT_A, { scope: SCOPE_X });
-        const granted = await grant(TENANT_A, SCOPE_X);
+        const senderX = await seedAccount(TENANT_A, { scope: OFFICE_X });
+        const granted = await grant(TENANT_A, OFFICE_X);
         const consentId = granted.outcome === "granted" ? granted.entry.id : "";
 
         // The enqueue reads the consent as granted inside its own open
@@ -2967,7 +3152,7 @@ suite("whatsapp_delivery sender routing against PostgreSQL", () => {
               recipient: { kind: "address", phone: PHONE },
               idempotencyKey: nextKey(),
               senderAccountId: senderX.id,
-              businessScope: SCOPE_X
+              businessScope: OFFICE_X
             },
             { env: ENV, senders }
           );

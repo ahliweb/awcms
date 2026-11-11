@@ -477,7 +477,9 @@ paths:
         Per-recipient consent records (masked). Consent is never inferred from
         segment, list or campaign-audience membership; only this record decides who
         may receive a marketing message. Bounded: `hasMore` says whether the list
-        was cut. Requires `whatsapp_delivery.consents.read`.
+        was cut. Requires `whatsapp_delivery.consents.read`. Each entry's
+        `businessScopes` lists only the brands the caller holds (business-scope
+        confinement; Issue #1231 M4).
       parameters:
         - name: status
           in: query
@@ -536,7 +538,7 @@ paths:
         is a new, deliberate act; history lives in the audit log and the
         `whatsapp.consent.*` events. The body is validated after authorization.
         Re-granting over a WITHDRAWN consent reverses an opt-out, so it is never implicit: it is refused with 409 unless the body sets `reinstateWithdrawn` with an `evidenceRef`, it is refused for `source` `import` (422), it needs `whatsapp_delivery.consents.restore` (high-risk) instead, and the withdrawal is kept in the row's history. Requires `whatsapp_delivery.consents.create` (or `consents.restore` when reinstating). 503 when the deployment has no recipient-hash key ring.
-        Since Issue #1231 M4 (owner decision, option (c)) the opt-in records the business scope (brand) it was collected for: `businessScope` appends that brand to the consent, and marketing of a brand is eligible only when the consent lists it (enqueue refuses `CONSENT_SCOPE_REQUIRED` otherwise, and the dispatcher re-checks before every send). Omitted or `null` records an opt-in for the tenant itself, which covers only marketing that names no business scope. The scope must be one the caller holds (business-scope confinement, 403) and must exist in this tenant (422 `SCOPE_UNRESOLVED`); a caller confined to business scopes cannot record the unscoped opt-in (403). A reinstatement covers only the brand it names. The consent stays one record per recipient, and a withdrawal stays tenant-wide.
+        Since Issue #1231 M4 (owner decision, option (c)) the opt-in records the business scope (brand) it was collected for: `businessScope` appends that brand to the consent, and marketing of a brand is eligible only when the consent lists it (enqueue refuses `CONSENT_SCOPE_REQUIRED` otherwise, and the dispatcher re-checks before every send). Omitted or `null` records an opt-in for the tenant itself, which covers only marketing that names no business scope. The scope must be one the caller holds (business-scope confinement, 403; an unknown scope is not held, so it is 403 too) and must exist in this tenant (422 `SCOPE_UNRESOLVED`); a caller confined to business scopes cannot record the unscoped opt-in (403). Only `office` scopes resolve today. A reinstatement covers only the brand it names. A brand grant does not change the consent's own `source`/`grantedAt`. The response lists only the brands the caller holds. The consent stays one record per recipient, and a withdrawal stays tenant-wide. Note that a message's brand is the scope its CALLER declares: it is tied to the sending number only when that sender is itself scoped.
       requestBody:
         required: true
         content:
@@ -566,7 +568,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          description: The recipient opted out and the request did not ask to reinstate (`CONSENT_WITHDRAWN`).
+          description: The recipient opted out and the request did not ask to reinstate, including when a concurrent withdrawal committed first (`CONSENT_WITHDRAWN`).
           content:
             application/json:
               schema:
@@ -605,7 +607,10 @@ paths:
         re-checks consent again right before every send. Naturally idempotent
         (withdrawing a withdrawn consent keeps the original stamp). Withdrawing is
         protective, so it is a separate, lower-friction permission than granting.
-        Requires `whatsapp_delivery.consents.withdraw`.
+        Requires `whatsapp_delivery.consents.withdraw`. Tenant-wide and NOT
+        business-scope confined (Issue #1231 M4, owner decision): it ends the
+        opt-in for every brand the consent covered, whichever brands the caller
+        holds; the response's `businessScopes` is therefore empty.
       parameters:
         - name: id
           in: path
@@ -898,8 +903,9 @@ components:
           maxItems: 256
           description: >-
             Issue #1231 M4. The business scopes (brands) this opt-in was collected
-            for; marketing of a brand is eligible only when it is listed here.
-            Empty on a withdrawn consent (a withdrawal is tenant-wide).
+            for that the CALLER holds; marketing of a brand is eligible only when
+            it is listed on the stored consent. Empty on a withdrawn consent (a
+            withdrawal is tenant-wide).
           items:
             $ref: "#/components/schemas/WhatsappConsentScopeGrant"
         unscopedGranted:
@@ -963,7 +969,7 @@ components:
             Issue #1231 M4. The business scope (brand) this opt-in was collected
             for. Omitted or `null`: an opt-in for the tenant itself, covering only
             marketing that names no business scope. Must be held by the caller and
-            exist in this tenant.
+            exist in this tenant; only `office` resolves today.
           properties:
             type:
               type: string

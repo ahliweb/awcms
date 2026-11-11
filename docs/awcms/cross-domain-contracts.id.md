@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](cross-domain-contracts.md)
 
-<!-- i18n-source-hash: sha256:6b45b7b02b5de8841a1914b3510d44922220181618c1229f2be575dc64131e36 -->
+<!-- i18n-source-hash: sha256:decb7cd62381e6ce5de62420354f49fc92444ef16870fcfae66883c9665a1895 -->
 
 # Kontrak lintas-domain — capability port, event provisional, dan idempotensi consumer
 
@@ -454,7 +454,11 @@ didaftarkan pada `1.1.0` dan kapabilitas baru `channel_account`
 `CONSENT_SCOPE_REQUIRED`: opt-in pemasaran kini hanya mencakup business scope
 (brand) tempat ia dikumpulkan, sehingga pesan pemasaran brand B yang penerimanya
 memberi opt-in untuk brand lain (atau hanya untuk tenant, tanpa brand) ditolak dan
-tidak ada yang diantrekan. Penarikan dan supresi tetap berlaku di seluruh tenant;
+tidak ada yang diantrekan. Juga ditambah `BUSINESS_SCOPE_UNRESOLVED`:
+`businessScope` pesan pemasaran wajib me-resolve ke scope nyata tenant (hanya
+`office` yang dapat di-resolve hari ini). Scope itu adalah yang DINYATAKAN
+pemanggil: terikat ke nomor pengirim hanya bila pengirimnya sendiri ber-scope.
+Penarikan dan supresi tetap berlaku di seluruh tenant;
 pesan transaksional dan keamanan tidak berubah. Tidak ada field atau signature
 yang berubah; `booking` memetakan alasan yang tak dikenal ke kode kasar dan tidak
 terdampak. `whatsapp_delivery` didaftarkan pada `1.2.0`.

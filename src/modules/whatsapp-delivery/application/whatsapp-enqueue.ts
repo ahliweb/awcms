@@ -70,6 +70,8 @@ import {
   getWhatsappTemplate,
   renderWhatsappTemplate
 } from "../domain/whatsapp-templates";
+import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-scope-hierarchy-port";
+import { whatsappBusinessScopeResolver } from "../infrastructure/business-scope-resolver";
 import { loadChannelAccountPort } from "../infrastructure/channel-account-port-loader";
 import { readEligibilityFacts } from "./whatsapp-consent-directory";
 import { emitWhatsappMessageEvent } from "./whatsapp-event-emit";
@@ -89,6 +91,12 @@ export type EnqueueWhatsappOptions = {
    * A test seam and the composition roots' override; never a request input.
    */
   senders?: ChannelAccountPort;
+  /**
+   * Issue #1231 M4 (audit M-1). Resolves the business scope of a MARKETING
+   * message against the tenant. Omitted: `tenant_admin`'s office hierarchy. A
+   * test seam, never a request input.
+   */
+  scopes?: BusinessScopeHierarchyPort;
 };
 
 type ResolvedRecipient =
@@ -266,9 +274,30 @@ export async function enqueueWhatsappMessage(
     return { status: "refused", reason: sender.reason };
   }
 
+  // The brand of a MARKETING message decides which opt-in covers it, so it must
+  // be a REAL scope of this tenant (#1231 audit M-1): an unknown type, an id
+  // that does not exist, another tenant's, a deleted or inactive office is
+  // `BUSINESS_SCOPE_UNRESOLVED`, nothing queued. It is still the scope the
+  // CALLER declares: with a scoped sender it is bound to that sender's own
+  // scope (`senderScopeAllows`); with a tenant-wide or deployment sender
+  // nothing ties the declared brand to the number that sends it (README).
+  if (template.purpose === "marketing" && sender.businessScope !== null) {
+    const resolution = await (
+      options.scopes ?? whatsappBusinessScopeResolver
+    ).resolveScope(
+      tx,
+      input.tenantId,
+      sender.businessScope.type,
+      sender.businessScope.id
+    );
+
+    if (!resolution.resolved) {
+      return { status: "refused", reason: "BUSINESS_SCOPE_UNRESOLVED" };
+    }
+  }
+
   // Coverage is asked for the scope the message is SNAPSHOTTED with (the
-  // request's, or the thread's for a reply): a scoped sender can only send for
-  // its own scope (`senderScopeAllows`), so this is also the sender's brand.
+  // request's, or the thread's for a reply).
   const decision = decideEligibility(
     template.purpose,
     await readEligibilityFacts(tx, input.tenantId, hashes, sender.businessScope)

@@ -129,7 +129,8 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // `REPLY_TARGET_UNKNOWN`. No existing signature changed (a MINOR bump), so
     // booking and the commerce adapter behind `awcms-one`'s mode router compile
     // and behave unchanged. First entry for this key. `1.2.0` (Issue #1231 M4,
-    // owner decision option (c)) ADDS the refusal `CONSENT_SCOPE_REQUIRED`: a
+    // owner decision option (c)) ADDS the refusals `CONSENT_SCOPE_REQUIRED` and
+    // `BUSINESS_SCOPE_UNRESOLVED` (a marketing message's scope must resolve): a
     // marketing opt-in now covers the brand (business scope) it was collected for
     // only. No signature changed (a MINOR bump); a consumer that maps an unknown
     // reason to a coarse code (booking) is unchanged.

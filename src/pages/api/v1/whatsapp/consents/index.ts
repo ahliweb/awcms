@@ -9,16 +9,61 @@ import {
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import {
   grantMarketingConsent,
-  listConsents
+  listConsents,
+  type ConsentEntry
 } from "../../../../../modules/whatsapp-delivery/application/whatsapp-consent-directory";
 import { resolveWhatsappDefaultCountryCode } from "../../../../../modules/whatsapp-delivery/domain/whatsapp-config";
 import { validateConsentGrantInput } from "../../../../../modules/whatsapp-delivery/domain/whatsapp-validation";
-import { loadSenderAccess } from "../../../../../modules/whatsapp-delivery/infrastructure/channel-account-access-loader";
+import {
+  loadSenderAccess,
+  type SenderAccess,
+  type SenderAccessContext,
+  type SenderAccessGuard
+} from "../../../../../modules/whatsapp-delivery/infrastructure/channel-account-access-loader";
+
+/**
+ * Issue #1231 audit L-1: a consent row may list several brands, and which
+ * brands a person opted in for is itself information about another brand's
+ * customers. A caller sees only the brands they HOLD (the business-scope rule of
+ * `channel_accounts`, decided once per scope per request through the access
+ * chokepoint). With the channel module unavailable, no brand is shown (default
+ * deny); the rest of the entry (masked number, status) is unchanged.
+ */
+async function onlyHeldScopes(
+  context: SenderAccessContext,
+  access: SenderAccess | null,
+  guard: SenderAccessGuard,
+  entries: ConsentEntry[]
+): Promise<ConsentEntry[]> {
+  const filtered: ConsentEntry[] = [];
+
+  for (const entry of entries) {
+    const kept: ConsentEntry["businessScopes"] = [];
+
+    if (access) {
+      for (const grant of entry.businessScopes) {
+        if (
+          await access.scopeCovered(context, guard, {
+            type: grant.type,
+            id: grant.id
+          })
+        ) {
+          kept.push(grant);
+        }
+      }
+    }
+
+    filtered.push({ ...entry, businessScopes: kept });
+  }
+
+  return filtered;
+}
 
 /**
  * `GET /api/v1/whatsapp/consents` (Issue #963) — recorded marketing consents,
  * masked recipients only. Consent is a per-recipient record; nothing about
- * segments or campaign audiences is stored or returned here.
+ * segments or campaign audiences is stored or returned here. `businessScopes`
+ * lists only the brands the caller holds (Issue #1231 audit L-1).
  */
 export const GET = defineTenantRoute<{
   status?: "granted" | "withdrawn";
@@ -54,13 +99,24 @@ export const GET = defineTenantRoute<{
     activityCode: "consents",
     action: "read"
   },
-  handler: async ({ tx, tenantId, prepared }) => {
+  handler: async (context) => {
+    const { tx, tenantId, prepared } = context;
     const page = await listConsents(tx, tenantId, {
       ...(prepared.status ? { status: prepared.status } : {}),
       limit: prepared.limit
     });
+    const entries = await onlyHeldScopes(
+      context,
+      await loadSenderAccess(),
+      {
+        moduleKey: "whatsapp_delivery",
+        activityCode: "consents",
+        action: "read"
+      },
+      page.entries
+    );
 
-    return ok({ entries: page.entries, hasMore: page.hasMore });
+    return ok({ entries, hasMore: page.hasMore });
   }
 });
 
@@ -253,6 +309,17 @@ export const POST = defineTenantRoute<{ payload: unknown }>({
       correlationId: locals.correlationId
     });
 
-    return ok(result.entry);
+    const [entry] = await onlyHeldScopes(
+      context,
+      access,
+      {
+        moduleKey: "whatsapp_delivery",
+        activityCode: "consents",
+        action: reinstating ? "restore" : "create"
+      },
+      [result.entry]
+    );
+
+    return ok(entry);
   }
 });
