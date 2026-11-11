@@ -1,13 +1,13 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0157-social-publishing-is-an-account-scoped-publication-intent-and-per-account-job-module.md)
 
-<!-- i18n-source-hash: sha256:177d8564fddef510cb411b16ca255e205dc21a6b6b0b3b641cd66d79181ec3f0 -->
+<!-- i18n-source-hash: sha256:0ab8461f2c92441cbeb9a1041bb84b1d48cd67a6a2b8b9c5417b15b60185f872 -->
 
 # ADR-0157 — `social_publishing` adalah modul intent-publikasi berbasis akun dan job per akun; provider adalah plug-in yang tidak dapat melebarkan apa yang boleh dilakukan sebuah akun
 
-- **Status:** Diusulkan
+- **Status:** Diterima
 - **Tanggal:** 2026-11-03
-- **Pengambil keputusan:** ahliweb (pemilik). Belum ditinjau; sampai diterima, tidak ada isi ADR ini yang merupakan keputusan maintainer dan modul tetap `experimental` dan mati secara default.
-- **Menyelesaikan (bila diterima):** detail admisi modul yang disyaratkan Issue #1145 "di PR-nya sendiri menurut `21_module_admission_governance.md`" (tabel, permission, versi port, gerbang peluncuran). ADR-0148 sudah menerima kapabilitas C3 dan syarat-syaratnya; ADR ini hanya menambahkan apa yang sengaja diserahkan ADR-0148 kepada issue implementasi.
+- **Pengambil keputusan:** ahliweb (pemilik), diterima 2026-11-11. Penerimaan ini mengakui desain modul; ia tidak menyalakan apa pun: modul tetap `experimental` dan mati secara default sampai syarat di §6 dan persetujuan manusia di bawah terpenuhi.
+- **Menyelesaikan:** detail admisi modul yang disyaratkan Issue #1145 "di PR-nya sendiri menurut `21_module_admission_governance.md`" (tabel, permission, versi port, gerbang peluncuran). ADR-0148 sudah menerima kapabilitas C3 dan syarat-syaratnya; ADR ini hanya menambahkan apa yang sengaja diserahkan ADR-0148 kepada issue implementasi.
 - **Memperluas:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.id.md) (§1 C3, §2 invarian I1 sampai I3, I5, I10, I12; §10 Fase D), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.id.md), [ADR-0006](0006-offline-first-sync-outbox.id.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.id.md), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.id.md)
 - **Terkait:** Issue #1145 (irisan ini), #1140 (akun), #1146 sampai #1151 (konektor per provider, masing-masing issue sendiri dan persetujuan provider sendiri), #1139; `docs/awcms/omnichannel-foundation.id.md` bagian 2.3
 
@@ -111,7 +111,7 @@ Konektor per provider dan persetujuan providernya (#1146 sampai #1151), layar ad
 - **Positif:** fondasi yang ditinjau yang dicolok setiap konektor; kegagalan sebagian dan replay mustahil secara konstruksi; kredensial hanya sampai ke dispatcher; konten yang tak didukung ditolak secara terlihat.
 - **Negatif / trade-off:** satu modul baru dan satu job baru; port `channel_account` bertambah; sampai jalur kredensial hadir bersama konektor pertama di bawah role DB sendiri (§6) tidak ada job yang dapat diterbitkan sama sekali; sampai konektor mendaftar, mengaktifkan modul tidak menerbitkan apa pun (disengaja); jendela crash antara provider menerima post dan job difinalisasi dibatasi oleh dukungan idempotensi provider sendiri, tidak dihilangkan.
 - **Keterbatasan tercatat:** tanpa layar admin; tanpa template caption; satu adapter fake dalam memori untuk tes; unggah media per provider, header batas laju, dan pemetaan kebijakan konten milik konektor.
-- **Persetujuan manusia yang masih dibutuhkan:** penerimaan maintainer atas ADR ini; untuk tiap konektor, persetujuan aplikasi provider atau bukti audit (langkah bisnis); tinjauan keamanan jalur kredensial dan role DB terpisahnya sebelum konektor mana pun keluar dari flag.
+- **Persetujuan manusia yang masih dibutuhkan:** (penerimaan maintainer atas ADR ini diberikan 2026-11-11) untuk tiap konektor, persetujuan aplikasi provider atau bukti audit (langkah bisnis); tinjauan keamanan jalur kredensial dan role DB terpisahnya sebelum konektor mana pun keluar dari flag.
 
 ## Alternatif yang ditolak
 

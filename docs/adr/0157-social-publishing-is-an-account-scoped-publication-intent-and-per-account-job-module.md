@@ -2,10 +2,10 @@
 
 # ADR-0157 — `social_publishing` is an account-scoped publication-intent and per-account-job module; providers are plug-ins that cannot widen what an account may do
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
-- **Decision maker:** ahliweb (owner). Not yet reviewed; until accepted, nothing in this ADR is a maintainer decision and the module stays `experimental` and off by default.
-- **Resolves (when accepted):** the module-admission details Issue #1145 requires "in its own PR per `21_module_admission_governance.md`" (tables, permissions, port version, rollout gate). ADR-0148 already accepted capability C3 and its conditions; this ADR adds only what ADR-0148 deliberately left to the implementing issue.
+- **Decision maker:** ahliweb (owner), accepted 2026-11-11. Acceptance admits the module design; it does not switch anything on: the module stays `experimental` and off by default until the conditions in §6 and the human sign-offs below are met.
+- **Resolves:** the module-admission details Issue #1145 requires "in its own PR per `21_module_admission_governance.md`" (tables, permissions, port version, rollout gate). ADR-0148 already accepted capability C3 and its conditions; this ADR adds only what ADR-0148 deliberately left to the implementing issue.
 - **Extends:** [ADR-0148](0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) (§1 C3, §2 invariants I1 to I3, I5, I10, I12; §10 Phase D), [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md), [ADR-0006](0006-offline-first-sync-outbox.md), [ADR-0134](0134-descriptor-declared-domain-event-consumers.md), [ADR-0094](0094-a-data-subject-is-answered-per-tenant.md)
 - **Related:** Issues #1145 (this slice), #1140 (accounts), #1146 to #1151 (per-provider connectors, each its own issue and its own provider approval), #1139; `docs/awcms/omnichannel-foundation.md` section 2.3
 
@@ -109,7 +109,7 @@ Per-provider connectors and their provider approvals (#1146 to #1151), the admin
 - **Positive:** a reviewed foundation every connector plugs into; partial failure and replay are impossible by construction; the credential reaches only the dispatcher; unsupported content is refused visibly.
 - **Negative / trade-off:** a new module and a new job; the `channel_account` port grows; until the credential path lands with the first connector under its own DB role (§6) no job can be published at all; until a connector registers, enabling the module publishes nothing (by design); the crash window between a provider accepting a post and the job being finalised is bounded by the provider's own idempotency support, not eliminated.
 - **Limitations recorded:** no admin screen; no caption templates; one in-memory fake adapter for tests; per-provider media upload, rate-limit headers and content-policy mapping belong to the connectors.
-- **Human sign-off still needed:** maintainer acceptance of this ADR; for each connector, the provider app approval or audit evidence (a business step); a security review of the credential path and its separate DB role before any connector leaves the flag.
+- **Human sign-off still needed:** (maintainer acceptance of this ADR was given on 2026-11-11) for each connector, the provider app approval or audit evidence (a business step); a security review of the credential path and its separate DB role before any connector leaves the flag.
 
 ## Alternatives rejected
 
