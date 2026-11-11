@@ -80,7 +80,9 @@ export const POST = defineTenantRoute<{
     // The lead must exist in THIS tenant (audit of PR #1266, LOW-4); an id
     // from another tenant or no lead at all answers the same uniform 404.
     // Read through crm_leads' own port (ids and a status only, no PII).
-    if (!(await createCrmLeadPortAdapter().readLeadState(tx, tenantId, leadId))) {
+    if (
+      !(await createCrmLeadPortAdapter().readLeadState(tx, tenantId, leadId))
+    ) {
       return notFound("Lead");
     }
 

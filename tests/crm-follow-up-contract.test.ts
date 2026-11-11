@@ -525,9 +525,9 @@ describe("audit of PR #1266", () => {
     const from = at("2026-11-11T00:00:00Z");
 
     expect(() => addWorkingMinutes(none, from, 43200)).toThrow(RangeError);
-    expect(
-      nextWorkingInstantOr({ ...none, timeZone: "Mars/Base" }, from)
-    ).toBe(from);
+    expect(nextWorkingInstantOr({ ...none, timeZone: "Mars/Base" }, from)).toBe(
+      from
+    );
   });
 
   test("LOW-3: instants outside 2000-2100 are refused", () => {

@@ -1029,7 +1029,9 @@ suite("crm_follow_up engine on the least-privilege roles (#1165)", () => {
       SELECT settle_reason FROM awcms_crm_follow_up_notifications
       WHERE tenant_id = ${TENANT_A}
     `) as { settle_reason: string }[];
-    expect(reasons.every((row) => row.settle_reason === "not_queued")).toBe(true);
+    expect(reasons.every((row) => row.settle_reason === "not_queued")).toBe(
+      true
+    );
   });
 
   test("LOW-2: a stop event is recorded while the tenant switch is off, and still wins after it is switched on", async () => {

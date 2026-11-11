@@ -359,19 +359,22 @@ async function dispatchDueNotices(
       // A savepoint: a failing enqueue rolls back the outbox row alone, and
       // the notice waits for the next run instead of failing the pass.
       await tx.savepoint(async (savepoint) => {
-        const outcome = await port.enqueueNotification(savepoint as unknown as Bun.SQL, {
-          tenantId,
-          templateKey: NOTIFICATION_TEMPLATE_KEYS[notice.kind],
-          recipientTenantUserIds: [recipient],
-          // The task title (tenant configuration), its due instant and a
-          // short opaque reference. Never anything about the lead.
-          variables: {
-            taskTitle: task.title,
-            dueAt: task.due_at.toISOString(),
-            taskReference: task.id.slice(0, 8)
-          },
-          correlationId: `${CRM_FOLLOW_UP_MODULE_KEY}.notice:${notice.id}`
-        });
+        const outcome = await port.enqueueNotification(
+          savepoint as unknown as Bun.SQL,
+          {
+            tenantId,
+            templateKey: NOTIFICATION_TEMPLATE_KEYS[notice.kind],
+            recipientTenantUserIds: [recipient],
+            // The task title (tenant configuration), its due instant and a
+            // short opaque reference. Never anything about the lead.
+            variables: {
+              taskTitle: task.title,
+              dueAt: task.due_at.toISOString(),
+              taskReference: task.id.slice(0, 8)
+            },
+            correlationId: `${CRM_FOLLOW_UP_MODULE_KEY}.notice:${notice.id}`
+          }
+        );
 
         queued = outcome.queued;
       });

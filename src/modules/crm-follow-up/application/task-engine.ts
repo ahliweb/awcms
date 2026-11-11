@@ -251,7 +251,10 @@ export async function createTasksForTrigger(
       if (result.taskId) {
         outcome.created.push(result.taskId);
       } else {
-        outcome.skipped.push({ ruleId: revision.ruleId, reason: result.reason! });
+        outcome.skipped.push({
+          ruleId: revision.ruleId,
+          reason: result.reason!
+        });
       }
     } catch (error) {
       const code = (error as { code?: unknown } | null)?.code;
@@ -279,7 +282,8 @@ async function createTaskForRule(
   revision: { ruleId: string; revisionId: string; definition: RuleDefinition },
   now: Date
 ): Promise<
-  { taskId: string; reason?: never } | { taskId: null; reason: "capped" | "duplicate" }
+  | { taskId: string; reason?: never }
+  | { taskId: null; reason: "capped" | "duplicate" }
 > {
   if (
     (await countLiveTasks(tx, tenantId, facts.leadId, revision.ruleId)) >=

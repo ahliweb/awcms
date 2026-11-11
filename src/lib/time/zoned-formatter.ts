@@ -54,8 +54,9 @@ export function canonicalTimeZone(zone: unknown): string | null {
   }
 
   try {
-    return new Intl.DateTimeFormat("en-US", { timeZone: zone }).resolvedOptions()
-      .timeZone;
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: zone
+    }).resolvedOptions().timeZone;
   } catch {
     return null;
   }

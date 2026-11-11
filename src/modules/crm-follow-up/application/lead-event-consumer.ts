@@ -87,9 +87,7 @@ export async function handleLeadSignal(
     event.eventType === LEAD_MERGED_EVENT;
 
   if (
-    isStop
-      ? !isCrmFollowUpEnabled()
-      : !(await isActiveForTenant(tx, tenantId))
+    isStop ? !isCrmFollowUpEnabled() : !(await isActiveForTenant(tx, tenantId))
   ) {
     return { handled: false, reason: "inactive" };
   }

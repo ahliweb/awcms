@@ -122,6 +122,11 @@
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [
         {
+          "capability": "crm_lead",
+          "providedBy": "crm_leads",
+          "optional": false
+        },
+        {
           "capability": "workflow_notification",
           "providedBy": "email",
           "optional": true
