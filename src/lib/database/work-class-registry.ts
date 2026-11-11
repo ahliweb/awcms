@@ -135,6 +135,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Outbox dispatcher (social-publishing:dispatch, ADR-0157), recommended every 2 minutes — the same profile as push/email/whatsapp dispatch, and every transaction inside social-publish-dispatch.ts goes through inTenantWork, which passes workClass: "background_sync" explicitly.'
   },
+  "scripts/social-publishing-retention-purge.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled retention purge (social-publishing:retention:purge, ADR-0157, Issue #1145) — same tolerant-of-delay profile as whatsapp:queue:purge; purgeSocialPublishing passes workClass: "maintenance" explicitly.'
+  },
   "scripts/whatsapp-queue-purge.ts": {
     workClass: "maintenance",
     rationale:

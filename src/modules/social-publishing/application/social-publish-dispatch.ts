@@ -75,10 +75,11 @@ import type {
   SocialPublishHttp,
   SocialPublishOutcome
 } from "../domain/social-publish-adapter";
+import type { MediaSnapshot } from "../domain/social-publish-content";
 import {
-  isSafeLinkUrl,
-  type MediaSnapshot
-} from "../domain/social-publish-content";
+  acceptExternalPostId,
+  acceptExternalPostUrl
+} from "../domain/social-publish-post-reference";
 import {
   classifyAccountReason,
   decideRetry,
@@ -150,6 +151,8 @@ export type DispatchSocialPublishResult = {
   superseded: number;
   skippedBreaker: number;
   skippedQuota: number;
+  /** Another dispatcher held the account's lock: not claimed in this pass, taken by the next. */
+  skippedBusy: number;
 };
 
 type Candidate = {
@@ -187,7 +190,8 @@ function zero(): DispatchSocialPublishResult {
     unknown: 0,
     superseded: 0,
     skippedBreaker: 0,
-    skippedQuota: 0
+    skippedQuota: 0,
+    skippedBusy: 0
   };
 }
 
@@ -197,6 +201,8 @@ const PHRASES: Record<string, string> = {
   PROVIDER_ADAPTER_UNAVAILABLE: "No adapter is registered for this provider.",
   ADAPTER_ERROR: "The provider adapter failed unexpectedly.",
   PROVIDER_TIMEOUT: "The provider did not answer in time.",
+  INVALID_POST_ID:
+    "The provider reported a post this adapter cannot identify: the post may exist. An operator must check before it is sent again.",
   UNKNOWN_OUTCOME:
     "The outcome is unknown: the post may already exist. An operator must check before it is sent again.",
   CIRCUIT_OPEN: "The provider was failing; the attempt was not made.",
@@ -320,9 +326,22 @@ async function claim(
 
       // The cap is decided under a per-account lock so two dispatchers cannot
       // each see room for the same last slot.
-      await tx`
-        SELECT pg_advisory_xact_lock(hashtextextended(${`social_publishing:${tenantId}:${accountId}`}, 0))
-      `;
+      //
+      // TRY, never wait (PR #1261 follow-up, a real 40P01 in CI): the work
+      // order above is fairness order (first appearance), and two dispatchers
+      // can meet the same accounts in OPPOSITE orders, so a blocking lock per
+      // account can deadlock. An account another dispatcher holds right now is
+      // skipped for this pass (`skippedBusy`) and taken by the next one; its
+      // rows were never claimed, so nothing is lost. The quota semantics are
+      // unchanged: the cap is still decided only while this lock is held.
+      const locked = (await tx`
+        SELECT pg_try_advisory_xact_lock(hashtextextended(${`social_publishing:${tenantId}:${accountId}`}, 0)) AS ok
+      `) as { ok: boolean }[];
+
+      if (locked[0]?.ok !== true) {
+        result.skippedBusy += rows.length;
+        continue;
+      }
 
       const usedRows = (await tx`
         SELECT count(*)::int AS used FROM awcms_social_publish_jobs
@@ -1094,8 +1113,30 @@ export async function dispatchSocialPublishQueue(
       case "published": {
         breaker.recordSuccess(clock(), durationMs);
 
-        const rawId = String(providerOutcome.externalPostId ?? "").trim();
-        const rawUrl = providerOutcome.externalPostUrl;
+        // L6 of the #1145 audit: the id must be an identifier of the shape this
+        // provider declares, or it is not stored at all. An id that is not one
+        // means "the provider said published and we cannot name the post": the
+        // post may exist and cannot be reconciled from the row, which is the
+        // definition of an UNKNOWN outcome (never a second automatic post for a
+        // provider that does not dedupe). Rejecting it here also keeps the
+        // finalise statement from violating a CHECK (`sql/330`, `sql/359`),
+        // which would leave the job `publishing` and let its lease expire.
+        const postId = acceptExternalPostId(
+          adapter.externalPostIdPattern,
+          providerOutcome.externalPostId
+        );
+
+        if (postId === null) {
+          await finalise(
+            sql,
+            tenantId,
+            job,
+            ambiguous(adapter, "INVALID_POST_ID"),
+            clock(),
+            ctx
+          );
+          break;
+        }
 
         await finalise(
           sql,
@@ -1103,14 +1144,13 @@ export async function dispatchSocialPublishQueue(
           job,
           {
             kind: "published",
-            // An adapter bug (an empty id, a non-https URL) must not make the
-            // finalise statement violate a CHECK: that would leave the job
-            // `publishing`, and its lease would expire into a SECOND post.
-            externalPostId: rawId.length > 0 ? rawId.slice(0, 255) : "unknown",
-            externalPostUrl:
-              typeof rawUrl === "string" && isSafeLinkUrl(rawUrl)
-                ? rawUrl
-                : null
+            externalPostId: postId,
+            // A URL on a host the adapter did not declare is DROPPED, not a
+            // failure: the post exists, and the id is its identity.
+            externalPostUrl: acceptExternalPostUrl(
+              adapter.postUrlHosts,
+              providerOutcome.externalPostUrl
+            )
           },
           clock(),
           ctx

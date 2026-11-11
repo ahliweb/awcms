@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 37    |
-| Migrations                          | 253   |
+| Migrations                          | 256   |
 | `awcms_*` tables                    | 254   |
 | Tables with `FORCE` RLS             | 236   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 799   |
+| Test files                          | 800   |
 | Route files                         | 639   |
 | ADR                                 | 318   |
 
@@ -314,7 +314,10 @@
 | 250 | `sql/343_awcms_crm_leads_permissions.sql`                              |
 | 251 | `sql/344_awcms_crm_leads_integrity_guards.sql`                         |
 | 252 | `sql/354_awcms_whatsapp_consent_business_scope.sql`                    |
-| 253 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
+| 253 | `sql/357_awcms_social_publishing_retention.sql`                        |
+| 254 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
+| 255 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
+| 256 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
 
 ### Tables & Row-Level Security
 
@@ -581,7 +584,7 @@
 | ------------- | ---------- |
 | `(root)`      | 599        |
 | `e2e`         | 30         |
-| `integration` | 169        |
+| `integration` | 170        |
 | `unit`        | 1          |
 
 ### Routes

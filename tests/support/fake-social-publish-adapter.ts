@@ -64,7 +64,11 @@ export function createFakeSocialAdapter(
   provider: string,
   capabilities: SocialPublishCapabilities = FULL_CAPABILITIES,
   initial?: FakeBehavior,
-  options: { supportsIdempotencyKey?: boolean } = {}
+  options: {
+    supportsIdempotencyKey?: boolean;
+    externalPostIdPattern?: RegExp;
+    postUrlHosts?: readonly string[];
+  } = {}
 ): FakeSocialAdapter {
   const calls: FakeCall[] = [];
   const providerPosts: string[] = [];
@@ -91,6 +95,11 @@ export function createFakeSocialAdapter(
       "NEEDS_REAUTH"
     ],
     supportsIdempotencyKey: dedupes,
+    // L6 of the #1145 audit: an adapter declares the shape of its post ids and
+    // the hosts of its post URLs. The fake's defaults accept what it returns.
+    externalPostIdPattern:
+      options.externalPostIdPattern ?? /^[A-Za-z0-9._:-]{1,128}$/,
+    postUrlHosts: options.postUrlHosts ?? [`${provider}.example`],
     calls,
     providerPosts,
     setBehavior(next) {

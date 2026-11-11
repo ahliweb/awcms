@@ -1,0 +1,25 @@
+---
+"awcms": minor
+---
+
+security(social_publishing): the admission conditions ADR-0157 sets before the first connector (Issue #1145). **Nothing publishes yet and no flag changes**: no provider adapter exists, `SOCIAL_PUBLISHING_ENABLED` stays off by default, and `social-publishing:dispatch` still holds no key ring and is still composed with a credential port that refuses every request.
+
+**Retention of publication evidence** (`sql/357`). Publications, jobs and attempts now have real `data_lifecycle` descriptors instead of `BOUNDED_BY_DESIGN` entries, executed by a new daily job `bun run social-publishing:retention:purge` (as `awcms_worker`). It removes a whole publication (attempts, then jobs, then the publication, in one transaction) only when it is `ready`, `cancelled` or `refused` and it and every job are terminal and older than the window. A waiting job, a `needs_reconciliation` job and a `pending_approval` publication are never removed; a legal hold on any of the three descriptors stops it. **Default 730 days, bounded 365 to 3650: a proposed default the owner may change.** The worker gains DELETE on the three tables only under RESTRICTIVE row policies that refuse anything younger than 365 days or not terminal; `awcms_app` still cannot delete any of them.
+
+**The separate DB role for the social dispatcher's credential** (`sql/358`, ADR-0157 section 6). `awcms_social_dispatch` (NOLOGIN, not superuser, not BYPASSRLS) holds no table privilege anywhere, only column-only reads of the four channel tables, and a RESTRICTIVE policy on `awcms_channel_secrets` that admits only the `provider_access_token` of a facebook, instagram, threads, tiktok, youtube or linkedin connection whose grant is `active` or `expired`, used directly by a `connected` or `degraded` account holding a `granted` `publish` capability (audit M2); an account borrowing a parent's credential is refused as `CREDENTIAL_UNAVAILABLE` (L10). `awcms_worker` and its `sql/328` policy are unchanged, so `whatsapp:dispatch` still cannot see a social token. Nothing connects as the new role yet: the first connector (#1146) activates it together with a job-scoped connection string and key ring, after the human review of the credential path.
+
+**`security:readiness`** now pins the new role's grants (no table privilege, exact columns), fails when `awcms_channel_secrets_social_dispatch_publish` is dropped or widened to a WhatsApp, email or bot provider, another purpose or a revoked state, and fails when any of the three worker retention floors is dropped. The worker grant matrix gains DELETE on the three social tables.
+
+**L6 closed.** `SocialPublishAdapter` gains two required fields, `externalPostIdPattern` (anchored) and `postUrlHosts`, and the registry refuses an adapter without them. A `published` answer whose post id does not match it, or the identifier alphabet `sql/359` now enforces in the database (`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`), is recorded as UNKNOWN (`INVALID_POST_ID`) and the id is never stored; a post URL on an undeclared host is dropped.
+
+**Hardening after the security audit of PR #1261.**
+
+- `security:readiness` pins the social dispatch policies and the retention floors to their EXACT canonical expressions (`pinPolicyExpression`). It also pins the `terminal_at` triggers' bodies (`pinTriggerFunction`).
+- For the role, it runs a behavioural probe. In a rolled-back transaction the probe seeds negative rows, assumes `awcms_social_dispatch`, and requires that exactly one secret is visible. Connections that cannot assume the role skip the probe.
+- The retention floors rest on `terminal_at`, which only database triggers write, not on `updated_at`.
+- Two more restrictive policies hide every non-social account and connection from the role.
+- `resolvePublishCredential` re-checks the requested account's own `publish` capability (`CAPABILITY_DENIED`).
+- A top-level `|` no longer counts as an anchored post-id pattern.
+- A stored post URL loses its query and fragment.
+
+Operator action: run `bun run db:migrate` (applies `sql/357` to `sql/359`, forward-only) and schedule the regenerated `ops/awcms-jobs.crontab` (one new daily line). No new environment variable.

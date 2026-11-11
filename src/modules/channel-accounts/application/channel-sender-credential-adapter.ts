@@ -310,7 +310,21 @@ export function createChannelSenderCredentialAdapter(
         tx,
         input,
         (account) => isPublisherShape(account.provider, account.account_kind),
-        "NOT_A_PUBLISHER"
+        "NOT_A_PUBLISHER",
+        async () => {
+          // L-5 of the #1261 audit: the DB row policy of
+          // `awcms_social_dispatch` (sql/358) is keyed on the CONNECTION (a
+          // token is visible when SOME publish-granted account uses it). Which
+          // account this request is for is checked here, before any secret is
+          // read: THAT account must hold a granted `publish` capability.
+          const rows = (await tx`
+            SELECT 1 FROM awcms_channel_account_capabilities
+            WHERE tenant_id = ${input.tenantId} AND account_id = ${input.accountId}
+              AND capability = 'publish' AND state = 'granted'
+          `) as unknown[];
+
+          return rows.length === 1 ? null : "CAPABILITY_DENIED";
+        }
       );
     }
   };

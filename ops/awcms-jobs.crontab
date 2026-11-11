@@ -184,6 +184,13 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # every active tenant.
 */2 * * * * /usr/bin/flock -n $AWCMS_LOCK/social-publishing-dispatch.lock $AWCMS_RUN_JOB social-publishing:dispatch >> $AWCMS_JOB_LOG/social-publishing-dispatch.log 2>&1
 
+# social_publishing — Delete whole social publications (attempts, then jobs,
+# then the publication) whose every job is terminal and older than the
+# retention window (default 730 days, never under 365), for every tenant
+# (legal-hold gated, bounded batches). Never deletes a waiting job, a job
+# awaiting reconciliation or a publication awaiting approval.
+35 4 * * * /usr/bin/flock -n $AWCMS_LOCK/social-publishing-retention-purge.lock $AWCMS_RUN_JOB social-publishing:retention:purge >> $AWCMS_JOB_LOG/social-publishing-retention-purge.log 2>&1
+
 # sync_storage — Drain the due object sync upload queue (claim-lease,
 # retry/backoff, circuit breaker) for every active tenant.
 */2 * * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-dispatch.lock $AWCMS_RUN_JOB sync:objects:dispatch >> $AWCMS_JOB_LOG/sync-objects-dispatch.log 2>&1

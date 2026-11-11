@@ -128,6 +128,24 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "edge: declaring one would wrongly imply `tenant_admin` cannot function " +
       "without the other two enabled. Confined to that ONE file — a second " +
       "bootstrap-shaped writer is a finding, not a precedent."
+  })),
+  ...[
+    "awcms_tenants",
+    "awcms_channel_secrets",
+    "awcms_channel_provider_connections",
+    "awcms_channel_accounts",
+    "awcms_channel_account_capabilities"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/security-readiness.ts` `probeSocialDispatchSecretVisibility` " +
+      "(Issue #1145, M-1 of the PR #1261 audit) seeds a throwaway tenant and " +
+      "negative channel rows inside ONE transaction that it ALWAYS rolls back " +
+      "(it throws a sentinel), assumes `awcms_social_dispatch`, and proves the " +
+      "role sees exactly one secret. Nothing it writes is ever committed, so it " +
+      "is a behavioural probe of the row policy, not a second writer of these " +
+      "tables."
   }))
 ];
 

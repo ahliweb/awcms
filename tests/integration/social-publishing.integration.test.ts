@@ -1111,6 +1111,85 @@ suite("social_publishing against PostgreSQL", () => {
       });
     });
 
+    test("L6: a 'published' answer whose post id is not of the adapter's declared shape is UNKNOWN, stores no id, and a URL on an undeclared host is dropped", async () => {
+      const odd = createFakeSocialAdapter(
+        "facebook",
+        FULL_CAPABILITIES,
+        () => ({
+          outcome: "published",
+          externalPostId: "123 Bearer leaked-token",
+          externalPostUrl: "https://facebook.example/p/1"
+        }),
+        { externalPostIdPattern: /^[0-9]{1,32}_[0-9]{1,32}$/ }
+      );
+      const strictHost = createFakeSocialAdapter(
+        "linkedin",
+        FULL_CAPABILITIES,
+        () => ({
+          outcome: "published",
+          externalPostId: "urn:li:share:42",
+          externalPostUrl: "https://evil.example/p/42"
+        }),
+        { postUrlHosts: ["www.linkedin.com"] }
+      );
+      const fbAccount = await seedAccount(TENANT_A, { provider: "facebook" });
+      const liAccount = await seedAccount(TENANT_A, { provider: "linkedin" });
+      const fbPub = await enqueue(TENANT_A, enqueueInput([fbAccount.id]));
+      const liPub = await enqueue(TENANT_A, enqueueInput([liAccount.id]));
+
+      await dispatch(TENANT_A, {
+        registry: createSocialAdapterRegistry([odd, strictHost])
+      });
+
+      const [fbJob] = await jobs(fbPub.publicationId!);
+      const [liJob] = await jobs(liPub.publicationId!);
+
+      expect(fbJob).toMatchObject({
+        status: "needs_reconciliation",
+        failure_code: "INVALID_POST_ID",
+        external_post_id: null
+      });
+      expect(liJob).toMatchObject({
+        status: "published",
+        external_post_id: "urn:li:share:42"
+      });
+
+      const url = (await getAdminSql()`
+        SELECT external_post_url FROM awcms_social_publish_jobs
+        WHERE id = ${liJob!.id}
+      `) as { external_post_url: string | null }[];
+
+      expect(url[0]!.external_post_url).toBeNull();
+
+      const leaked = (await getAdminSql()`
+        SELECT 1 FROM awcms_social_publish_jobs
+        WHERE external_post_id LIKE '%leaked%' OR last_error LIKE '%leaked%'
+      `) as unknown[];
+
+      expect(leaked).toEqual([]);
+    });
+
+    test("L6: the database refuses a post id outside the identifier alphabet (sql/359)", async () => {
+      const account = await seedAccount(TENANT_A, { provider: "facebook" });
+      const result = await enqueue(TENANT_A, enqueueInput([account.id]));
+      const [job] = await jobs(result.publicationId!);
+
+      await getAdminSql()`
+        UPDATE awcms_social_publish_jobs
+        SET status = 'publishing', attempt_count = 1 WHERE id = ${job!.id}
+      `;
+      await expectDbRefusal(
+        getAdminSql()`
+          UPDATE awcms_social_publish_jobs
+          SET status = 'published', published_at = now(),
+              external_post_id = 'id with spaces'
+          WHERE id = ${job!.id}
+        `,
+        "a post id with whitespace",
+        "23514"
+      );
+    });
+
     test("M1: an unknown outcome leaves only to an operator or a cancel (database trigger), and cancel stops it", async () => {
       const unsure = createFakeSocialAdapter(
         "facebook",
@@ -2127,6 +2206,61 @@ suite("social_publishing against PostgreSQL", () => {
       expect(states).toEqual([{ status: "published", n: 12 }]);
     });
 
+    test("two dispatchers meeting accounts in OPPOSITE orders never deadlock: a busy account is skipped and taken by the next pass (PR #1261 40P01)", async () => {
+      const first = await seedAccount(TENANT_A, { provider: "facebook" });
+      const second = await seedAccount(TENANT_A, { provider: "linkedin" });
+
+      // `first` is due before `second`, so the dispatcher works first -> second.
+      await enqueue(TENANT_A, enqueueInput([first.id]));
+      await enqueue(TENANT_A, enqueueInput([second.id]));
+
+      const key = (accountId: string) =>
+        `social_publishing:${TENANT_A}:${accountId}`;
+      let resolveOther!: () => void;
+      const otherMayFinish = new Promise<void>((resolve) => {
+        resolveOther = resolve;
+      });
+      let otherHolds!: () => void;
+      const otherHolding = new Promise<void>((resolve) => {
+        otherHolds = resolve;
+      });
+
+      // The "other dispatcher", working in the REVERSED order: it holds
+      // `second` and will ask for `first` once our dispatcher holds it. With a
+      // blocking per-account lock this is a textbook cycle (40P01).
+      const other = getAdminSql().begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(hashtextextended(${key(second.id)}, 0))`;
+        otherHolds();
+        await otherMayFinish;
+        await tx`SELECT pg_advisory_xact_lock(hashtextextended(${key(first.id)}, 0))`;
+      });
+
+      await otherHolding;
+
+      const timeout = new Promise<"blocked">((resolve) =>
+        setTimeout(() => resolve("blocked"), 10_000)
+      );
+      const pass = await Promise.race([dispatch(TENANT_A), timeout]);
+
+      resolveOther();
+      await other;
+
+      expect(pass).not.toBe("blocked");
+
+      const result = pass as Awaited<ReturnType<typeof dispatch>>;
+
+      expect(result.skippedBusy).toBe(1);
+      expect(result.published).toBe(1);
+      expect(fb.calls).toHaveLength(1);
+      expect(li.calls).toHaveLength(0);
+
+      // The next pass takes the account that was busy.
+      const next = await dispatch(TENANT_A);
+
+      expect(next.published).toBe(1);
+      expect(li.calls).toHaveLength(1);
+    });
+
     test("one account's backlog cannot starve another's", async () => {
       const busy = await seedAccount(TENANT_A, { provider: "facebook" });
       const quiet = await seedAccount(TENANT_A, { provider: "linkedin" });
@@ -2566,7 +2700,7 @@ suite("social_publishing against PostgreSQL", () => {
       expect(new Set(seen).size).toBe(5);
     });
 
-    test("neither the runtime role nor the worker role can DELETE a publication, a job or an attempt", async () => {
+    test("the runtime role cannot DELETE a publication, a job or an attempt; the worker deletes nothing younger than the sql/357 floor", async () => {
       const a = await seedAccount(TENANT_A, { provider: "facebook" });
 
       await enqueue(TENANT_A, enqueueInput([a.id]));
@@ -2581,14 +2715,24 @@ suite("social_publishing against PostgreSQL", () => {
           `runtime DELETE on ${table}`,
           "42501"
         );
-        await expectDbRefusal(
-          withTenantOrThrow(worker(), TENANT_A, (tx) =>
-            tx.unsafe(`DELETE FROM ${table}`)
-          ),
-          `worker DELETE on ${table}`,
-          "42501"
-        );
+
+        // Issue #1145: the worker holds DELETE for the retention purge, but a
+        // RESTRICTIVE floor admits only terminal evidence older than 365 days,
+        // so a fresh queue deletes NOTHING (retention itself is covered by
+        // social-publishing-admission.integration.test.ts).
+        const deleted = (await withTenantOrThrow(worker(), TENANT_A, (tx) =>
+          tx.unsafe(`DELETE FROM ${table} RETURNING id`)
+        )) as unknown[];
+
+        expect(deleted, `worker DELETE on ${table}`).toHaveLength(0);
       }
+
+      const left = (await getAdminSql()`
+        SELECT count(*)::int AS n FROM awcms_social_publish_jobs
+        WHERE tenant_id = ${TENANT_A}
+      `) as { n: number }[];
+
+      expect(left[0]!.n).toBe(1);
     });
 
     test("the worker role can never touch the rules or settings it only reads", async () => {
