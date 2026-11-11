@@ -40,6 +40,16 @@
  * (none in this repository does; booking maps an unknown reason to a coarse
  * code) must add the three new members before it passes a sender.
  *
+ * ## Port version 1.2.0 — brand-scoped marketing consent (Issue #1231 M4)
+ *
+ * ADDITIVE: two new refusal reasons, `CONSENT_SCOPE_REQUIRED` and
+ * `BUSINESS_SCOPE_UNRESOLVED` (a marketing message's scope must resolve in the
+ * tenant). A marketing
+ * opt-in covers only the business scope (brand) it was collected for; an
+ * unscoped or legacy opt-in covers only marketing that names no scope. Opt-out
+ * and suppression stay tenant-wide. Transactional and security messages are
+ * unchanged.
+ *
  * - The sender is `senderAccountId`, else the prospective default of the
  *   message's business scope, else the deployment sender, and is SNAPSHOTTED on
  *   the queue row. It is never a token, a phone number id or a device id: the
@@ -113,7 +123,21 @@ export type EnqueueWhatsappRefusalReason =
   /** Port 1.1.0. `senderAccountId` names a different sender than the thread's. A reroute is a separate, authorised request. */
   | "SENDER_AFFINITY_CONFLICT"
   /** Port 1.1.0. `inReplyToMessageId` is unknown, foreign, or addressed to another recipient. */
-  | "REPLY_TARGET_UNKNOWN";
+  | "REPLY_TARGET_UNKNOWN"
+  /**
+   * Issue #1231 M4. A marketing message whose recipient HAS a granted opt-in,
+   * but not for this message's business scope (brand): the opt-in lists other
+   * brands, or it is unscoped while the message names a brand, or it names
+   * brands while the message names none. Nothing is queued; record a consent
+   * for that brand first. Never downgraded to another purpose.
+   */
+  | "CONSENT_SCOPE_REQUIRED"
+  /**
+   * Issue #1231 M4. A MARKETING message names a `businessScope` that is not a
+   * real scope of the tenant (unknown type, unknown, foreign, deleted or
+   * inactive id; only `office` resolves today). Nothing is queued.
+   */
+  | "BUSINESS_SCOPE_UNRESOLVED";
 
 export type EnqueueWhatsappResult =
   | { status: "queued"; messageId: string }

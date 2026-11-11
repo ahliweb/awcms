@@ -20,7 +20,8 @@ export type SenderAccessContext = Pick<
 export type SenderAccessGuard = {
   moduleKey: string;
   activityCode: string;
-  action: "read" | "configure";
+  /** `create`/`restore`: the consent grant route (Issue #1231 M4) names a brand too. */
+  action: "read" | "configure" | "create" | "restore";
 };
 
 export type SenderAccess = {

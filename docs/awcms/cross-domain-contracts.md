@@ -435,6 +435,19 @@ authorise that choice itself (the port performs no access check). The capability
 capability (`ChannelAccountPort`, provided by `channel_accounts`) at `1.1.0`
 (`capability-contract-versions.ts`, `awcms-family-compatibility.yaml`).
 
+**Version 1.2.0 (Issue #1231 M4) is additive.** The refusal reasons gain
+`CONSENT_SCOPE_REQUIRED`: a marketing opt-in now covers only the business scope
+(brand) it was collected for, so a marketing message of brand B whose recipient
+opted in for another brand (or only for the tenant, with no brand) is refused and
+nothing is queued. They also gain `BUSINESS_SCOPE_UNRESOLVED`: the
+`businessScope` of a marketing message must resolve to a real scope of the tenant
+(only `office` resolves today). That scope is what the CALLER declares: it is
+bound to the sending number only when the sender itself is scoped. Withdrawal and
+suppression stay tenant-wide; transactional and
+security messages are unchanged. No field or signature changed; `booking` maps an
+unknown reason to a coarse code and is unaffected. `whatsapp_delivery` is
+registered at `1.2.0`.
+
 ### 5.1 Telegram delivery port (live, #965)
 
 - **Status:** **live since Issue #965** (ADR-0140, inert behind `TELEGRAM_ENABLED`). Unlike §5 it carries **operational and staff alerts only**, to a member of staff who bound their own private chat; it is never a fallback for WhatsApp or e-mail and no other channel falls back to it (ADR-0139).

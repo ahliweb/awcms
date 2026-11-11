@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](omnichannel-foundation.md)
 
-<!-- i18n-source-hash: sha256:aa618d0a65ce227ef6c4e4e3d80a853ded1910f4b98f5e395783664953576b98 -->
+<!-- i18n-source-hash: sha256:d658890c9e7e273989d15bd0b9053f765b9560291c6ad4a4b6a344e34e7765be -->
 
 # Fondasi omnichannel — paket kesiapan (v1, 24 Oktober 2026)
 
@@ -177,7 +177,7 @@ Sel `candidate` di sini hanya berarti halaman resmi yang dikutip mendokumentasik
 3. **Afinitas.** Balasan atas pesan masuk memakai akun yang menerimanya. Jendela layanan provider berlaku per pengirim dan penerima; mengirim balasan dari nomor lain adalah percakapan berbeda dan tidak ditawarkan.
 4. **Kegagalan.** `disabled`, `revoked`, `disconnected`, `unapproved`, `wrong tenant`, atau breaker per pengirim terbuka membuat baris menunggu (breaker) atau gagal terminal (dicabut, tenant salah) dengan alasan yang disanitasi. Tidak ada pengirim, nomor, atau provider lain yang dicoba. Merotasi nomor untuk menghindari rating kualitas atau batas spam dilarang oleh desain.
 5. **Kuota dan kesehatan.** Batas per jam dan per hari per pengirim (dapat dikonfigurasi), batas tenant di atasnya, throttling ke batas terdokumentasi provider, dan status kesehatan yang dibaca dispatcher sebelum klaim.
-6. **Consent dan supresi** diperiksa terhadap penerima dan **business scope**, bukan pengirim: mengganti pengirim tidak mengubah siapa yang telah setuju.
+6. **Consent dan supresi** diperiksa terhadap penerima dan **business scope**, bukan pengirim: mengganti pengirim tidak mengubah siapa yang telah setuju. Untuk pemasaran WhatsApp (Issue #1231 M4, keputusan pemilik 2026-11-11, opsi (c)) consent tetap satu catatan per tenant dan penerima, setiap opt-in mencatat business scope (brand) tempat ia dikumpulkan, dan pemasaran sebuah brand membutuhkan opt-in untuk brand itu (`CONSENT_SCOPE_REQUIRED` bila tidak, saat enqueue dan saat dispatch); opt-in tanpa lingkup atau yang sudah ada sebelumnya hanya mencakup pemasaran yang tidak menyebut business scope. Penarikan dan supresi tetap berlaku di seluruh tenant. Rincian: [README `whatsapp-delivery`](../../src/modules/whatsapp-delivery/README.id.md#persetujuan-pemasaran-per-brand-issue-1231-m4-keputusan-pemilik-2026-11-11-opsi-c).
 7. **Provider tidak resmi.** StarSender: flag fitur mati secara default; pengakuan risiko per operator; tanpa klaim otorisasi Meta; "diterima" tidak pernah "terkirim"; status dan kontak hanya lewat jalur terautentikasi atau tidak sama sekali.
 8. **Default per produk.** Produk turunan boleh memilih StarSender sebagai pengirim defaultnya (keputusan pemilik, 24 Oktober 2026) dengan mengonfigurasi kebijakan, tidak pernah lewat default kode; provider lain tetap dapat dipilih secara independen.
 

@@ -32656,7 +32656,7 @@ paths:
       tags:
         - WhatsApp Delivery
       summary: List recorded marketing consents.
-      description: "Per-recipient consent records (masked). Consent is never inferred from segment, list or campaign-audience membership; only this record decides who may receive a marketing message. Bounded: `hasMore` says whether the list was cut. Requires `whatsapp_delivery.consents.read`."
+      description: "Per-recipient consent records (masked). Consent is never inferred from segment, list or campaign-audience membership; only this record decides who may receive a marketing message. Bounded: `hasMore` says whether the list was cut. Requires `whatsapp_delivery.consents.read`. Each entry's `businessScopes` lists only the brands the caller holds (business-scope confinement; Issue #1231 M4)."
       parameters:
         - name: status
           in: query
@@ -32705,7 +32705,7 @@ paths:
       tags:
         - WhatsApp Delivery
       summary: Record an explicit marketing opt-in.
-      description: "Explicit, per recipient, per channel, recorded with its source and time (ADR-0133 section 4). Naturally idempotent: the unique key is (tenant, recipient, purpose), so a retry re-stamps the same row instead of adding one, which is why no Idempotency-Key is taken. A re-grant after a withdrawal is a new, deliberate act; history lives in the audit log and the `whatsapp.consent.*` events. The body is validated after authorization. Re-granting over a WITHDRAWN consent reverses an opt-out, so it is never implicit: it is refused with 409 unless the body sets `reinstateWithdrawn` with an `evidenceRef`, it is refused for `source` `import` (422), it needs `whatsapp_delivery.consents.restore` (high-risk) instead, and the withdrawal is kept in the row's history. Requires `whatsapp_delivery.consents.create` (or `consents.restore` when reinstating). 503 when the deployment has no recipient-hash key ring."
+      description: "Explicit, per recipient, per channel, recorded with its source and time (ADR-0133 section 4). Naturally idempotent: the unique key is (tenant, recipient, purpose), so a retry re-stamps the same row instead of adding one, which is why no Idempotency-Key is taken. A re-grant after a withdrawal is a new, deliberate act; history lives in the audit log and the `whatsapp.consent.*` events. The body is validated after authorization. Re-granting over a WITHDRAWN consent reverses an opt-out, so it is never implicit: it is refused with 409 unless the body sets `reinstateWithdrawn` with an `evidenceRef`, it is refused for `source` `import` (422), it needs `whatsapp_delivery.consents.restore` (high-risk) instead, and the withdrawal is kept in the row's history. Requires `whatsapp_delivery.consents.create` (or `consents.restore` when reinstating). 503 when the deployment has no recipient-hash key ring. Since Issue #1231 M4 (owner decision, option (c)) the opt-in records the business scope (brand) it was collected for: `businessScope` appends that brand to the consent, and marketing of a brand is eligible only when the consent lists it (enqueue refuses `CONSENT_SCOPE_REQUIRED` otherwise, and the dispatcher re-checks before every send). Omitted or `null` records an opt-in for the tenant itself, which covers only marketing that names no business scope. The scope must be one the caller holds (business-scope confinement, 403; an unknown scope is not held, so it is 403 too) and must exist in this tenant (422 `SCOPE_UNRESOLVED`); a caller confined to business scopes cannot record the unscoped opt-in (403). Only `office` scopes resolve today. A reinstatement covers only the brand it names. A brand grant does not change the consent's own `source`/`grantedAt`. The response lists only the brands the caller holds. The consent stays one record per recipient, and a withdrawal stays tenant-wide. Note that a message's brand is the scope its CALLER declares: it is tied to the sending number only when that sender is itself scoped."
       requestBody:
         required: true
         content:
@@ -32735,7 +32735,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          description: The recipient opted out and the request did not ask to reinstate (`CONSENT_WITHDRAWN`).
+          description: The recipient opted out and the request did not ask to reinstate, including when a concurrent withdrawal committed first (`CONSENT_WITHDRAWN`).
           content:
             application/json:
               schema:
@@ -32747,7 +32747,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "422":
-          description: Reinstatement refused (`REINSTATEMENT_REFUSED`) - an import cannot reverse an opt-out, and evidence is required.
+          description: Reinstatement refused (`REINSTATEMENT_REFUSED`) - an import cannot reverse an opt-out, and evidence is required; the business scope does not exist in this tenant (`SCOPE_UNRESOLVED`); or the consent already lists the maximum of 256 brands (`CONSENT_SCOPE_LIMIT`).
           content:
             application/json:
               schema:
@@ -32764,7 +32764,7 @@ paths:
       tags:
         - WhatsApp Delivery
       summary: Record a marketing opt-out.
-      description: "Immediate, and wins over everything queued: the recipient's waiting marketing messages are cancelled in the same transaction, and the dispatcher re-checks consent again right before every send. Naturally idempotent (withdrawing a withdrawn consent keeps the original stamp). Withdrawing is protective, so it is a separate, lower-friction permission than granting. Requires `whatsapp_delivery.consents.withdraw`."
+      description: "Immediate, and wins over everything queued: the recipient's waiting marketing messages are cancelled in the same transaction, and the dispatcher re-checks consent again right before every send. Naturally idempotent (withdrawing a withdrawn consent keeps the original stamp). Withdrawing is protective, so it is a separate, lower-friction permission than granting. Requires `whatsapp_delivery.consents.withdraw`. Tenant-wide and NOT business-scope confined (Issue #1231 M4, owner decision): it ends the opt-in for every brand the consent covered, whichever brands the caller holds; the response's `businessScopes` is therefore empty."
       parameters:
         - name: id
           in: path
@@ -47239,6 +47239,16 @@ components:
           type: string
           format: date-time
           nullable: true
+        businessScopes:
+          type: array
+          maxItems: 256
+          description: "Issue #1231 M4. The business scopes (brands) this opt-in was collected for that the CALLER holds; marketing of a brand is eligible only when it is listed on the stored consent. Empty on a withdrawn consent (a withdrawal is tenant-wide)."
+          items:
+            $ref: "#/components/schemas/WhatsappConsentScopeGrant"
+        unscopedGranted:
+          type: boolean
+          nullable: true
+          description: "Issue #1231 M4. `true`: an opt-in collected for the tenant itself, with no brand; it covers only marketing that names no business scope. `null`: recorded before brands were recorded (legacy), read the same way and never as any brand. Never `true` on a withdrawn consent."
     WhatsappConsentGrantRequest:
       type: object
       additionalProperties: false
@@ -47249,6 +47259,22 @@ components:
         phone:
           type: string
           description: Same forms as the suppression request. Never echoed back.
+        businessScope:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required:
+            - type
+            - id
+          description: "Issue #1231 M4. The business scope (brand) this opt-in was collected for. Omitted or `null`: an opt-in for the tenant itself, covering only marketing that names no business scope. Must be held by the caller and exist in this tenant; only `office` resolves today."
+          properties:
+            type:
+              type: string
+              maxLength: 64
+              pattern: ^[a-z][a-z0-9_]*$
+            id:
+              type: string
+              format: uuid
         reinstateWithdrawn:
           type: boolean
           description: Must be true to grant over a recorded opt-out; needs `consents.restore` and `evidenceRef`.
@@ -47270,6 +47296,21 @@ components:
             $ref: "#/components/schemas/WhatsappConsent"
         hasMore:
           type: boolean
+    WhatsappConsentScopeGrant:
+      type: object
+      properties:
+        type:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          description: Where this brand's opt-in came from.
+        grantedAt:
+          type: string
+          format: date-time
     WhatsappConsentStatus:
       type: string
       enum:

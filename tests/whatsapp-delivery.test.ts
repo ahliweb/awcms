@@ -402,7 +402,11 @@ describe("the template registry enforces purpose and the variable allow-list", (
 });
 
 describe("the consent rule (ADR-0133 section 4)", () => {
-  const none = { suppressionReason: null, consentStatus: null } as const;
+  const none = {
+    suppressionReason: null,
+    consentStatus: null,
+    consentCoversScope: false
+  } as const;
 
   test("transactional needs no consent", () => {
     expect(decideEligibility("transactional", none)).toEqual({
@@ -421,7 +425,8 @@ describe("the consent rule (ADR-0133 section 4)", () => {
     expect(
       decideEligibility("marketing", {
         suppressionReason: null,
-        consentStatus: "granted"
+        consentStatus: "granted",
+        consentCoversScope: true
       })
     ).toEqual({ eligible: true });
   });
@@ -430,7 +435,8 @@ describe("the consent rule (ADR-0133 section 4)", () => {
     expect(
       decideEligibility("marketing", {
         suppressionReason: null,
-        consentStatus: "withdrawn"
+        consentStatus: "withdrawn",
+        consentCoversScope: false
       })
     ).toEqual({ eligible: false, kind: "suppressed", reason: "opt_out" });
   });
@@ -439,7 +445,8 @@ describe("the consent rule (ADR-0133 section 4)", () => {
     expect(
       decideEligibility("marketing", {
         suppressionReason: "stop_reply",
-        consentStatus: "granted"
+        consentStatus: "granted",
+        consentCoversScope: true
       })
     ).toEqual({ eligible: false, kind: "suppressed", reason: "opt_out" });
   });
@@ -448,14 +455,16 @@ describe("the consent rule (ADR-0133 section 4)", () => {
     expect(
       decideEligibility("security", {
         suppressionReason: "hard_failure",
-        consentStatus: null
+        consentStatus: null,
+        consentCoversScope: false
       })
     ).toEqual({ eligible: false, kind: "suppressed", reason: "hard_failure" });
     for (const reason of ["stop_reply", "manual"] as const) {
       expect(
         decideEligibility("security", {
           suppressionReason: reason,
-          consentStatus: "withdrawn"
+          consentStatus: "withdrawn",
+          consentCoversScope: false
         })
       ).toEqual({ eligible: true });
     }
@@ -465,15 +474,54 @@ describe("the consent rule (ADR-0133 section 4)", () => {
     expect(
       decideEligibility("transactional", {
         suppressionReason: "manual",
-        consentStatus: null
+        consentStatus: null,
+        consentCoversScope: false
       })
     ).toEqual({ eligible: false, kind: "suppressed", reason: "opt_out" });
     expect(
       decideEligibility("transactional", {
         suppressionReason: null,
-        consentStatus: "withdrawn"
+        consentStatus: "withdrawn",
+        consentCoversScope: false
       })
     ).toEqual({ eligible: true });
+  });
+
+  test("#1231 M4: a granted opt-in that does not cover the message's brand is its own refusal, never a send", () => {
+    expect(
+      decideEligibility("marketing", {
+        suppressionReason: null,
+        consentStatus: "granted",
+        consentCoversScope: false
+      })
+    ).toEqual({ eligible: false, kind: "consent_scope_required" });
+    // A withdrawal still wins over coverage, and a suppression over both.
+    expect(
+      decideEligibility("marketing", {
+        suppressionReason: null,
+        consentStatus: "withdrawn",
+        consentCoversScope: true
+      })
+    ).toEqual({ eligible: false, kind: "suppressed", reason: "opt_out" });
+    expect(
+      decideEligibility("marketing", {
+        suppressionReason: "manual",
+        consentStatus: "granted",
+        consentCoversScope: true
+      })
+    ).toEqual({ eligible: false, kind: "suppressed", reason: "opt_out" });
+  });
+
+  test("#1231 M4: brand coverage never touches transactional or security messages", () => {
+    for (const purpose of ["transactional", "security"] as const) {
+      expect(
+        decideEligibility(purpose, {
+          suppressionReason: null,
+          consentStatus: "granted",
+          consentCoversScope: false
+        })
+      ).toEqual({ eligible: true });
+    }
   });
 
   test("the rule takes no segment, list or audience input", () => {

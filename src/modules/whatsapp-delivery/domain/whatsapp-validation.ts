@@ -36,6 +36,12 @@ function phoneErrors(phone: NormalizedPhone): string[] {
 export type ConsentGrantInput = {
   phone: string;
   source: string;
+  /**
+   * Issue #1231 M4. The brand the opt-in was collected for; `null` (or absent)
+   * is an opt-in for the tenant itself, which covers only marketing that names
+   * no business scope.
+   */
+  businessScope: { type: string; id: string } | null;
   reinstateWithdrawn?: boolean;
   evidenceRef?: string;
 };
@@ -47,6 +53,7 @@ export function validateConsentGrantInput(
   const shape = checkShape(raw, [
     "phone",
     "source",
+    "businessScope",
     "reinstateWithdrawn",
     "evidenceRef"
   ]);
@@ -56,7 +63,15 @@ export function validateConsentGrantInput(
   }
 
   const errors: string[] = [];
-  const { phone, source, reinstateWithdrawn, evidenceRef } = shape.record;
+  const { phone, source, businessScope, reinstateWithdrawn, evidenceRef } =
+    shape.record;
+  const scope = parseBusinessScope(businessScope);
+
+  if (scope === "invalid") {
+    errors.push(
+      "businessScope must be null or { type: lowercase snake_case, id: uuid }."
+    );
+  }
 
   if (
     reinstateWithdrawn !== undefined &&
@@ -95,6 +110,7 @@ export function validateConsentGrantInput(
         value: {
           phone: phone as string,
           source: source as string,
+          businessScope: scope as ConsentGrantInput["businessScope"],
           ...(reinstateWithdrawn === true ? { reinstateWithdrawn: true } : {}),
           ...(typeof evidenceRef === "string"
             ? { evidenceRef: evidenceRef.trim() }

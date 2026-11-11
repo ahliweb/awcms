@@ -1357,18 +1357,25 @@ export async function dispatchWhatsappQueue(
     const { provider, providerName } = gate;
 
     // 3. Eligibility, read again immediately before the send, under EVERY ring key.
-    //    Keyed by the recipient, never by the sender (ADR-0148 section 4).
+    //    Keyed by the recipient, never by the sender (ADR-0148 section 4); a
+    //    marketing consent must still cover the row's SNAPSHOTTED business
+    //    scope (Issue #1231 M4): coverage can only have narrowed since enqueue
+    //    (a withdrawal clears every brand), never be widened for this row.
     const hashes = buildRecipientHashes(
       tenantId,
       entry.recipient,
       ring as Extract<RecipientKeyRing, { ok: true }>
     );
+    const messageScope =
+      entry.business_scope_type && entry.business_scope_id
+        ? { type: entry.business_scope_type, id: entry.business_scope_id }
+        : null;
     const decision = decideEligibility(
       entry.purpose as "transactional" | "security" | "marketing",
       await withTenantOrThrow(
         sql,
         tenantId,
-        (tx) => readEligibilityFacts(tx, tenantId, hashes),
+        (tx) => readEligibilityFacts(tx, tenantId, hashes, messageScope),
         { workClass: "background_sync" }
       )
     );
@@ -1377,9 +1384,11 @@ export async function dispatchWhatsappQueue(
       const code =
         decision.kind === "consent_required"
           ? "consent_required"
-          : decision.reason === "hard_failure"
-            ? "suppressed"
-            : "consent_withdrawn";
+          : decision.kind === "consent_scope_required"
+            ? "consent_scope_required"
+            : decision.reason === "hard_failure"
+              ? "suppressed"
+              : "consent_withdrawn";
 
       await terminal(
         "cancelled",
