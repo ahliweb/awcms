@@ -160,6 +160,13 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # tenant with no repository configured.
 */15 * * * * /usr/bin/flock -n $AWCMS_LOCK/omes-repository-progress-poll.lock $AWCMS_RUN_JOB omes:repository-progress:poll >> $AWCMS_JOB_LOG/omes-repository-progress-poll.log 2>&1
 
+# omnichannel_inbox — For every active tenant with the inbox on: unassign
+# assignees who are no longer eligible (deactivated, permission lost,
+# confinement no longer covering the conversation), stamp SLA breaches once
+# and notify each affected assignee through the e-mail outbox. Database-only:
+# no provider call.
+*/5 * * * * /usr/bin/flock -n $AWCMS_LOCK/omnichannel-inbox-sla.lock $AWCMS_RUN_JOB omnichannel-inbox:sla >> $AWCMS_JOB_LOG/omnichannel-inbox-sla.log 2>&1
+
 # push_delivery — Drain the due push delivery queue (claim-lease,
 # retry/backoff, circuit breaker, dead-subscription disabling) for every
 # active tenant.

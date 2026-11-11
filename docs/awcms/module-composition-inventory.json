@@ -1,5 +1,5 @@
 {
-  "moduleCount": 39,
+  "moduleCount": 40,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -424,6 +424,35 @@
       "capabilitiesConsumed": [],
       "permissionCount": 18,
       "navigationCount": 15,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "omnichannel_inbox",
+      "name": "Omnichannel Inbox",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "system",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "module_management",
+        "domain_event_runtime",
+        "channel_accounts"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "workflow_notification",
+          "providedBy": "email",
+          "optional": true
+        }
+      ],
+      "permissionCount": 7,
+      "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

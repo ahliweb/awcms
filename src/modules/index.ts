@@ -38,6 +38,7 @@ import { socialPublishingModule } from "./social-publishing/module";
 import { crmLeadsModule } from "./crm-leads/module";
 import { telegramEngagementModule } from "./telegram-engagement/module";
 import { crmFollowUpModule } from "./crm-follow-up/module";
+import { omnichannelInboxModule } from "./omnichannel-inbox/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -291,7 +292,14 @@ const baseModules: ModuleDescriptor[] = [
   // Management, its own tenant switch). Depends on crm_leads (above) for its
   // events; consumes `email`'s workflow_notification capability optionally.
   // See src/modules/crm-follow-up/module.ts's `description`.
-  crmFollowUpModule
+  crmFollowUpModule,
+  // ADR-0160 (Proposed, Issue #1164): a body-free staff work projection over the
+  // verified Telegram and website envelopes (assignment, tags, status, SLA).
+  // Depends on tenant_admin/identity_access/logging/module_management/
+  // domain_event_runtime/channel_accounts (all above); it imports nothing from
+  // the channel modules (it reads their published events). Ships INERT:
+  // OMNICHANNEL_INBOX_ENABLED is off by default.
+  omnichannelInboxModule
 ];
 
 /**

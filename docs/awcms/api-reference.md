@@ -15929,6 +15929,353 @@ Requires `website_engagement.submissions.withdraw` and a signed-in person (a mac
 | 404    | Resource not found.                                                | [`ApiError`](#standard-error-envelope) |
 | 409    | `IDEMPOTENCY_CONFLICT`: the key was used with a different request. | [`ApiError`](#standard-error-envelope) |
 
+## Omnichannel Inbox
+
+Tenant-scoped staff work queue over verified inbound envelopes (omnichannel_inbox module, Issue #1164, ADR-0160, Proposed). A projection of the Telegram and website inbound events into body-free conversation rows (opaque references, states, the channel account's business scope), plus authored staff work state: status, assignment with history, tags and first/next-response SLA in business minutes on a working calendar. Visibility follows the channel_accounts confinement rule (a confined caller sees only the business scopes they cover and never a tenant-wide conversation). The inbox SENDS NOTHING to a customer and has no send facade: a reply goes through the arrival channel's own route. Ships inert behind OMNICHANNEL_INBOX_ENABLED.
+
+### `GET /api/v1/omnichannel-inbox/conversations` — List the inbox conversations the caller may see
+
+- **operationId**: `listOmnichannelInboxConversations`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.read`. A scope-confined caller (any active, non-tenant business-scope assignment that has not ended, including one that has not started yet) sees only conversations of the business scopes they cover, and never a tenant-wide one. Newest inbound first, keyset-paginated. Opaque references and states only: never a message body or a customer identifier.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                          | Description                              |
+| ------------------ | ------ | -------- | --------------------------------------------- | ---------------------------------------- |
+| `X-Correlation-ID` | header | no       | string                                        |                                          |
+| `status`           | query  | no       | enum(`open`, `pending`, `resolved`, `closed`) |                                          |
+| `assignee`         | query  | no       | string                                        | `me`, `unassigned`, or a tenant user id. |
+| `slaState`         | query  | no       | enum(`breached`)                              |                                          |
+| `tagId`            | query  | no       | string (uuid)                                 |                                          |
+| `sourceKind`       | query  | no       | enum(`telegram`, `website`)                   |                                          |
+| `limit`            | query  | no       | integer                                       |                                          |
+| `cursor`           | query  | no       | string                                        |                                          |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                         |
+| ------ | --------------------------- | ------------------------------------------------------------------------------ |
+| 200    | One page of conversations.  | [`OmnichannelInboxConversationList`](#schema-omnichannelinboxconversationlist) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                         |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                         |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                         |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                         |
+
+### `GET /api/v1/omnichannel-inbox/conversations/{id}` — Read one conversation with its tags and latest activity
+
+- **operationId**: `getOmnichannelInboxConversation`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.read` and visibility (business scope). Unknown, foreign and invisible are the same `404`. The activity history carries ids and closed codes only.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                                             |
+| ------ | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| 200    | The conversation.           | [`OmnichannelInboxConversationDetailEnvelope`](#schema-omnichannelinboxconversationdetailenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                                             |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                                             |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                                             |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                                             |
+
+### `POST /api/v1/omnichannel-inbox/conversations/{id}/assignment` — Assign or unassign a conversation
+
+- **operationId**: `assignOmnichannelInboxConversation`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.assign`, a signed-in person, `Idempotency-Key` and visibility; audited. The assignee must be an active user holding `conversations.update` on a tenant-wide grant and, if they are scope-confined, cover the conversation's business scope (or an ancestor); otherwise `422 ASSIGNEE_NOT_ELIGIBLE` with a reason code (`user_inactive`, `permission_missing`, `scope_confined`, `scope_not_covered`). `expectedVersion` guards concurrent reassignment: exactly one writer wins, the other gets `409 VERSION_CONFLICT`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                   | Schema                                                                                           |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 200    | Assigned, unassigned or unchanged.            | [`OmnichannelInboxConversationWriteEnvelope`](#schema-omnichannelinboxconversationwriteenvelope) |
+| 400    | Validation error.                             | [`ApiError`](#standard-error-envelope)                                                           |
+| 401    | Missing or invalid session.                   | [`ApiError`](#standard-error-envelope)                                                           |
+| 403    | Access denied by RBAC/ABAC.                   | [`ApiError`](#standard-error-envelope)                                                           |
+| 404    | Resource not found.                           | [`ApiError`](#standard-error-envelope)                                                           |
+| 409    | `VERSION_CONFLICT` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope)                                                           |
+| 422    | `ASSIGNEE_NOT_ELIGIBLE`.                      | [`ApiError`](#standard-error-envelope)                                                           |
+
+### `POST /api/v1/omnichannel-inbox/conversations/{id}/responses` — Record that the customer was answered through the arrival channel
+
+- **operationId**: `recordOmnichannelInboxResponse`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibility; audited. The inbox SENDS NOTHING: the reply goes through the arrival channel's own route, queue and consent checks; this records that it happened, settles everything received up to now and stops the SLA clock. Refused (`409 CUSTOMER_UNREACHABLE`) when the customer opted out or withdrew.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                   | Schema                                                                                           |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 200    | Recorded.                                     | [`OmnichannelInboxConversationWriteEnvelope`](#schema-omnichannelinboxconversationwriteenvelope) |
+| 400    | Validation error.                             | [`ApiError`](#standard-error-envelope)                                                           |
+| 401    | Missing or invalid session.                   | [`ApiError`](#standard-error-envelope)                                                           |
+| 403    | Access denied by RBAC/ABAC.                   | [`ApiError`](#standard-error-envelope)                                                           |
+| 404    | Resource not found.                           | [`ApiError`](#standard-error-envelope)                                                           |
+| 409    | `VERSION_CONFLICT` or `CUSTOMER_UNREACHABLE`. | [`ApiError`](#standard-error-envelope)                                                           |
+
+### `POST /api/v1/omnichannel-inbox/conversations/{id}/status` — Change a conversation's status
+
+- **operationId**: `setOmnichannelInboxConversationStatus`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibility; audited. `resolved` and `closed` settle everything received so far (the SLA clock stops; only a NEW inbound reopens it). A withdrawn customer's conversation cannot be reopened (`409 CUSTOMER_UNREACHABLE`).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                   | Schema                                                                                           |
+| ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 200    | Changed or unchanged.                         | [`OmnichannelInboxConversationWriteEnvelope`](#schema-omnichannelinboxconversationwriteenvelope) |
+| 400    | Validation error.                             | [`ApiError`](#standard-error-envelope)                                                           |
+| 401    | Missing or invalid session.                   | [`ApiError`](#standard-error-envelope)                                                           |
+| 403    | Access denied by RBAC/ABAC.                   | [`ApiError`](#standard-error-envelope)                                                           |
+| 404    | Resource not found.                           | [`ApiError`](#standard-error-envelope)                                                           |
+| 409    | `VERSION_CONFLICT` or `CUSTOMER_UNREACHABLE`. | [`ApiError`](#standard-error-envelope)                                                           |
+
+### `PUT /api/v1/omnichannel-inbox/conversations/{id}/tags` — Replace a conversation's tags
+
+- **operationId**: `setOmnichannelInboxConversationTags`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.update`, a signed-in person and visibility; audited. At most 20 live tags of this tenant (`422 TAG_UNKNOWN` otherwise). Each added or removed tag is an activity row.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                                                                           |
+| ------ | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| 200    | Changed or unchanged.       | [`OmnichannelInboxConversationWriteEnvelope`](#schema-omnichannelinboxconversationwriteenvelope) |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope)                                                           |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                                           |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                                           |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                                           |
+| 409    | `VERSION_CONFLICT`.         | [`ApiError`](#standard-error-envelope)                                                           |
+| 422    | `TAG_UNKNOWN`.              | [`ApiError`](#standard-error-envelope)                                                           |
+
+### `POST /api/v1/omnichannel-inbox/projection/rebuild` — Replay the verified inbound events into the projection (one batch)
+
+- **operationId**: `rebuildOmnichannelInboxProjection`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.projection.configure`, a signed-in person and `Idempotency-Key`; audited at warning. Replays this tenant's `awcms.telegram_engagement.*` and `awcms.website_engagement.*` inbound events recorded inside `windowDays` (at most the default conversation retention, 365) in event-sequence order, at most 2000 per call; call again with `afterSequence: nextAfterSequence` until `complete`. Idempotent by value; staff work state is never reset.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | One batch replayed.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.     | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omnichannel-inbox/sla-policies` — List the tenant's inbox SLA policies
+
+- **operationId**: `listOmnichannelInboxSlaPolicies`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.sla_policies.read`. Newest first, at most 200.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                                   |
+| ------ | --------------------------- | ------------------------------------------------------------------------ |
+| 200    | The policies.               | [`OmnichannelInboxSlaPolicyList`](#schema-omnichannelinboxslapolicylist) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                                   |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                                   |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                                   |
+
+### `POST /api/v1/omnichannel-inbox/sla-policies` — Create an SLA policy (and retire the active one of the same scope)
+
+- **operationId**: `createOmnichannelInboxSlaPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.sla_policies.configure`, a signed-in person and `Idempotency-Key`; audited at warning. Budgets are BUSINESS minutes on a working calendar: an IANA timezone, seven weekday windows (Monday first; `null` = closed; at least one open) and local holiday dates. A scope-confined caller may name only a business scope they cover, never the tenant default. Terms are immutable; a change is a new policy.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`OmnichannelInboxSlaPolicyCreateRequest`](#schema-omnichannelinboxslapolicycreaterequest)
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 201    | Created.                                         | object                                 |
+| 400    | Validation error.                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                              | [`ApiError`](#standard-error-envelope) |
+| 409    | `SLA_POLICY_CONFLICT` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 422    | `SCOPE_UNRESOLVED`.                              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/omnichannel-inbox/sla-policies/{id}/retire` — Retire an SLA policy
+
+- **operationId**: `retireOmnichannelInboxSlaPolicy`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.sla_policies.configure`, a signed-in person and `Idempotency-Key`; audited at warning. Conversations already waiting keep their due time. The body must be empty or `{}`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | Retired (or already retired). | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.       | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/omnichannel-inbox/tags` — List the tenant's live inbox tags
+
+- **operationId**: `listOmnichannelInboxTags`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.conversations.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                                       |
+| ------ | --------------------------- | ------------------------------------------------------------ |
+| 200    | The tags.                   | [`OmnichannelInboxTagList`](#schema-omnichannelinboxtaglist) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope)                       |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope)                       |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope)                       |
+
+### `POST /api/v1/omnichannel-inbox/tags` — Create an inbox tag
+
+- **operationId**: `createOmnichannelInboxTag`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.tags.configure`, a signed-in person and `Idempotency-Key`; audited. A live duplicate code is `409 TAG_CODE_TAKEN`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                 | Schema                                                               |
+| ------ | ------------------------------------------- | -------------------------------------------------------------------- |
+| 201    | Created.                                    | [`OmnichannelInboxTagEnvelope`](#schema-omnichannelinboxtagenvelope) |
+| 400    | Validation error.                           | [`ApiError`](#standard-error-envelope)                               |
+| 401    | Missing or invalid session.                 | [`ApiError`](#standard-error-envelope)                               |
+| 403    | Access denied by RBAC/ABAC.                 | [`ApiError`](#standard-error-envelope)                               |
+| 404    | Resource not found.                         | [`ApiError`](#standard-error-envelope)                               |
+| 409    | `TAG_CODE_TAKEN` or `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope)                               |
+
+### `DELETE /api/v1/omnichannel-inbox/tags/{id}` — Delete an inbox tag
+
+- **operationId**: `deleteOmnichannelInboxTag`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `omnichannel_inbox.tags.configure`, a signed-in person and `Idempotency-Key`; audited. Soft-deletes the tag and unlinks it from every conversation in the same transaction.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Deleted.                    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDEMPOTENCY_CONFLICT`.     | [`ApiError`](#standard-error-envelope) |
+
 ## Social Publishing
 
 Account-scoped social publishing (social_publishing module, Issue #1145, ADR-0157, ADR-0148 capability C3) behind the existing SocialPublishingPort that blog_content calls when an article is published. One PUBLICATION (an immutable content snapshot: text, link and a media object verified for type, size and rights) fans out to ONE JOB PER TARGET channel account, idempotent per article, trigger and account; a job names the account and holds no token and no secret reference, because the dispatcher resolves the credential for that account at dispatch time. Approval (required by default; a creator cannot approve their own publication), a schedule, per-account retry and cancel. Provider adapters are plug-ins whose capability map is a CEILING and never a grant: content a provider cannot carry is REFUSED, never downgraded, and an account still needs a granted publish capability with evidence, re-checked at enqueue and at dispatch. A job that was published is terminal, so a partial failure never replays a sibling and never alters the source article. No operation accepts or returns a token, a secret reference, a provider-side id or an account label. One connector ships, Facebook Pages (Issue #1146, Graph API v27.0), behind its own switch SOCIAL_PUBLISHING_FACEBOOK_ENABLED (default off); the other providers are separate issues, and until a connector is on, enabling the module publishes nothing. Ships inert behind SOCIAL_PUBLISHING_ENABLED and a per-tenant switch.
@@ -20729,6 +21076,441 @@ There is deliberately no consent field. PRD §30 forbids a pre-ticked consent, a
     ],
     "nextCursor": "string"
   }
+}
+```
+
+### Schema: OmnichannelInboxActivity
+
+| Field                 | Type                                                                                                                                  | Required | Nullable | Description |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `id`                  | string (uuid)                                                                                                                         | no       | no       |             |
+| `kind`                | enum(`assigned`, `unassigned`, `assignee_revoked`, `status_changed`, `response_recorded`, `tag_added`, `tag_removed`, `sla_breached`) | no       | no       |             |
+| `actorTenantUserId`   | string (uuid)                                                                                                                         | no       | yes      |             |
+| `subjectTenantUserId` | string (uuid)                                                                                                                         | no       | yes      |             |
+| `detailCode`          | string                                                                                                                                | no       | yes      |             |
+| `createdAt`           | string (date-time)                                                                                                                    | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "kind": "assigned",
+  "actorTenantUserId": "00000000-0000-0000-0000-000000000000",
+  "subjectTenantUserId": "00000000-0000-0000-0000-000000000000",
+  "detailCode": "string",
+  "createdAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: OmnichannelInboxConversation
+
+A conversation: opaque references (the account-scoped Telegram contact id or the website submission id), states and staff work state. Never a message body, a sender address or an external identifier.
+
+| Field                  | Type                                          | Required | Nullable | Description |
+| ---------------------- | --------------------------------------------- | -------- | -------- | ----------- |
+| `id`                   | string (uuid)                                 | no       | no       |             |
+| `sourceKind`           | enum(`telegram`, `website`)                   | no       | no       |             |
+| `sourceRef`            | string (uuid)                                 | no       | no       |             |
+| `channelAccountId`     | string (uuid)                                 | no       | yes      |             |
+| `businessScope`        | object                                        | no       | yes      |             |
+| `status`               | enum(`open`, `pending`, `resolved`, `closed`) | no       | no       |             |
+| `customerState`        | enum(`active`, `opted_out`, `withdrawn`)      | no       | no       |             |
+| `assigneeTenantUserId` | string (uuid)                                 | no       | yes      |             |
+| `assignedAt`           | string (date-time)                            | no       | yes      |             |
+| `firstInboundAt`       | string (date-time)                            | no       | no       |             |
+| `lastInboundAt`        | string (date-time)                            | no       | no       |             |
+| `awaitingSince`        | string (date-time)                            | no       | yes      |             |
+| `firstRespondedAt`     | string (date-time)                            | no       | yes      |             |
+| `lastRespondedAt`      | string (date-time)                            | no       | yes      |             |
+| `sla`                  | object                                        | no       | no       |             |
+| `tagIds`               | array of string (uuid)                        | no       | no       |             |
+| `version`              | integer                                       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "sourceKind": "telegram",
+  "sourceRef": "00000000-0000-0000-0000-000000000000",
+  "channelAccountId": "00000000-0000-0000-0000-000000000000",
+  "businessScope": {
+    "type": "string",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "status": "open",
+  "customerState": "active",
+  "assigneeTenantUserId": "00000000-0000-0000-0000-000000000000",
+  "assignedAt": "2026-01-01T00:00:00.000Z",
+  "firstInboundAt": "2026-01-01T00:00:00.000Z",
+  "lastInboundAt": "2026-01-01T00:00:00.000Z",
+  "awaitingSince": "2026-01-01T00:00:00.000Z",
+  "firstRespondedAt": "2026-01-01T00:00:00.000Z",
+  "lastRespondedAt": "2026-01-01T00:00:00.000Z",
+  "sla": {
+    "state": "none",
+    "policyId": "00000000-0000-0000-0000-000000000000",
+    "dueKind": "first",
+    "dueAt": "2026-01-01T00:00:00.000Z",
+    "breachedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "tagIds": ["00000000-0000-0000-0000-000000000000"],
+  "version": 0
+}
+```
+
+### Schema: OmnichannelInboxConversationDetailEnvelope
+
+| Field     | Type                                                                            | Required | Nullable | Description |
+| --------- | ------------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `success` | enum(`true`)                                                                    | no       | no       |             |
+| `data`    | [`OmnichannelInboxConversation`](#schema-omnichannelinboxconversation) & object | no       | no       |             |
+| `meta`    | object                                                                          | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "sourceKind": "telegram",
+    "sourceRef": "00000000-0000-0000-0000-000000000000",
+    "channelAccountId": "00000000-0000-0000-0000-000000000000",
+    "businessScope": {
+      "type": "string",
+      "id": "00000000-0000-0000-0000-000000000000"
+    },
+    "status": "open",
+    "customerState": "active",
+    "assigneeTenantUserId": "00000000-0000-0000-0000-000000000000",
+    "assignedAt": "2026-01-01T00:00:00.000Z",
+    "firstInboundAt": "2026-01-01T00:00:00.000Z",
+    "lastInboundAt": "2026-01-01T00:00:00.000Z",
+    "awaitingSince": "2026-01-01T00:00:00.000Z",
+    "firstRespondedAt": "2026-01-01T00:00:00.000Z",
+    "lastRespondedAt": "2026-01-01T00:00:00.000Z",
+    "sla": {
+      "state": "none",
+      "policyId": "00000000-0000-0000-0000-000000000000",
+      "dueKind": "first",
+      "dueAt": "2026-01-01T00:00:00.000Z",
+      "breachedAt": "2026-01-01T00:00:00.000Z"
+    },
+    "tagIds": ["00000000-0000-0000-0000-000000000000"],
+    "version": 0,
+    "activity": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "kind": "assigned",
+        "actorTenantUserId": "00000000-0000-0000-0000-000000000000",
+        "subjectTenantUserId": "00000000-0000-0000-0000-000000000000",
+        "detailCode": "string",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxConversationList
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "sourceKind": "telegram",
+        "sourceRef": "00000000-0000-0000-0000-000000000000",
+        "channelAccountId": "00000000-0000-0000-0000-000000000000",
+        "businessScope": {
+          "type": "string",
+          "id": "00000000-0000-0000-0000-000000000000"
+        },
+        "status": "open",
+        "customerState": "active",
+        "assigneeTenantUserId": "00000000-0000-0000-0000-000000000000",
+        "assignedAt": "2026-01-01T00:00:00.000Z",
+        "firstInboundAt": "2026-01-01T00:00:00.000Z",
+        "lastInboundAt": "2026-01-01T00:00:00.000Z",
+        "awaitingSince": "2026-01-01T00:00:00.000Z",
+        "firstRespondedAt": "2026-01-01T00:00:00.000Z",
+        "lastRespondedAt": "2026-01-01T00:00:00.000Z",
+        "sla": {
+          "state": "none",
+          "policyId": "00000000-0000-0000-0000-000000000000",
+          "dueKind": "first",
+          "dueAt": "2026-01-01T00:00:00.000Z",
+          "breachedAt": "2026-01-01T00:00:00.000Z"
+        },
+        "tagIds": [],
+        "version": 0
+      }
+    ],
+    "nextCursor": "string"
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxConversationWriteEnvelope
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "outcome": "assigned",
+    "conversation": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "sourceKind": "telegram",
+      "sourceRef": "00000000-0000-0000-0000-000000000000",
+      "channelAccountId": "00000000-0000-0000-0000-000000000000",
+      "businessScope": {
+        "type": "string",
+        "id": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": "open",
+      "customerState": "active",
+      "assigneeTenantUserId": "00000000-0000-0000-0000-000000000000",
+      "assignedAt": "2026-01-01T00:00:00.000Z",
+      "firstInboundAt": "2026-01-01T00:00:00.000Z",
+      "lastInboundAt": "2026-01-01T00:00:00.000Z",
+      "awaitingSince": "2026-01-01T00:00:00.000Z",
+      "firstRespondedAt": "2026-01-01T00:00:00.000Z",
+      "lastRespondedAt": "2026-01-01T00:00:00.000Z",
+      "sla": {
+        "state": "none",
+        "policyId": "00000000-0000-0000-0000-000000000000",
+        "dueKind": "first",
+        "dueAt": "2026-01-01T00:00:00.000Z",
+        "breachedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "tagIds": [],
+      "version": 0
+    }
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxSlaPolicy
+
+| Field                  | Type                                                                              | Required | Nullable | Description |
+| ---------------------- | --------------------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `id`                   | string (uuid)                                                                     | no       | no       |             |
+| `businessScope`        | object                                                                            | no       | yes      |             |
+| `name`                 | string                                                                            | no       | no       |             |
+| `timezone`             | string                                                                            | no       | no       |             |
+| `firstResponseMinutes` | integer                                                                           | no       | no       |             |
+| `nextResponseMinutes`  | integer                                                                           | no       | no       |             |
+| `workingHours`         | array of [`OmnichannelInboxWorkingWindow`](#schema-omnichannelinboxworkingwindow) | no       | no       |             |
+| `holidays`             | array of string (date)                                                            | no       | no       |             |
+| `status`               | enum(`active`, `retired`)                                                         | no       | no       |             |
+| `createdAt`            | string (date-time)                                                                | no       | no       |             |
+| `retiredAt`            | string (date-time)                                                                | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "businessScope": {
+    "type": "string",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "name": "string",
+  "timezone": "string",
+  "firstResponseMinutes": 0,
+  "nextResponseMinutes": 0,
+  "workingHours": [
+    {
+      "start": 0,
+      "end": 1
+    }
+  ],
+  "holidays": ["2026-01-01"],
+  "status": "active",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "retiredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: OmnichannelInboxSlaPolicyCreateRequest
+
+| Field                  | Type                                                                              | Required | Nullable | Description                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------- |
+| `businessScope`        | object                                                                            | no       | yes      |                                                                                  |
+| `name`                 | string                                                                            | yes      | no       |                                                                                  |
+| `timezone`             | string                                                                            | yes      | no       | An IANA zone name.                                                               |
+| `firstResponseMinutes` | integer                                                                           | yes      | no       |                                                                                  |
+| `nextResponseMinutes`  | integer                                                                           | yes      | no       |                                                                                  |
+| `workingHours`         | array of [`OmnichannelInboxWorkingWindow`](#schema-omnichannelinboxworkingwindow) | yes      | no       | Monday first; each a {start, end} in minutes of the local day, or null (closed). |
+| `holidays`             | array of string (date)                                                            | no       | no       |                                                                                  |
+
+**Example**
+
+```json
+{
+  "businessScope": {
+    "type": "string",
+    "id": "00000000-0000-0000-0000-000000000000"
+  },
+  "name": "string",
+  "timezone": "string",
+  "firstResponseMinutes": 1,
+  "nextResponseMinutes": 1,
+  "workingHours": [
+    {
+      "start": 0,
+      "end": 1
+    }
+  ],
+  "holidays": ["2026-01-01"]
+}
+```
+
+### Schema: OmnichannelInboxSlaPolicyList
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "businessScope": {
+          "type": "string",
+          "id": "00000000-0000-0000-0000-000000000000"
+        },
+        "name": "string",
+        "timezone": "string",
+        "firstResponseMinutes": 0,
+        "nextResponseMinutes": 0,
+        "workingHours": [],
+        "holidays": [],
+        "status": "active",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "retiredAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxTag
+
+| Field       | Type               | Required | Nullable | Description |
+| ----------- | ------------------ | -------- | -------- | ----------- |
+| `id`        | string (uuid)      | no       | no       |             |
+| `code`      | string             | no       | no       |             |
+| `label`     | string             | no       | no       |             |
+| `createdAt` | string (date-time) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "code": "string",
+  "label": "string",
+  "createdAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: OmnichannelInboxTagEnvelope
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "tag": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "code": "string",
+      "label": "string",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxTagList
+
+| Field     | Type         | Required | Nullable | Description |
+| --------- | ------------ | -------- | -------- | ----------- |
+| `success` | enum(`true`) | no       | no       |             |
+| `data`    | object       | no       | no       |             |
+| `meta`    | object       | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "code": "string",
+        "label": "string",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "meta": "(operation-specific payload)"
+}
+```
+
+### Schema: OmnichannelInboxWorkingWindow
+
+| Field   | Type    | Required | Nullable | Description |
+| ------- | ------- | -------- | -------- | ----------- |
+| `start` | integer | yes      | no       |             |
+| `end`   | integer | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "start": 0,
+  "end": 1
 }
 ```
 

@@ -791,6 +791,16 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   awcms_crm_follow_up_task_actions: ["SELECT", "INSERT"],
   awcms_crm_follow_up_stop_signals: ["SELECT", "INSERT"],
   awcms_crm_follow_up_notifications: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0160 / `sql/382` (Issue #1164). NOT retired -- the omnichannel inbox.
+  // Narrowed by removing DELETE from the conversation projection (only the
+  // retention job, awcms_worker, purges it), from the tag catalogue (soft
+  // delete) and from SLA policies (retired, never deleted); and both UPDATE and
+  // DELETE from the append-only activity ledger (history is evidence; it goes
+  // with its conversation by ON DELETE CASCADE, never by the runtime).
+  awcms_inbox_conversations: ["SELECT", "INSERT", "UPDATE"],
+  awcms_inbox_activity: ["SELECT", "INSERT"],
+  awcms_inbox_tags: ["SELECT", "INSERT", "UPDATE"],
+  awcms_inbox_sla_policies: ["SELECT", "INSERT", "UPDATE"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
@@ -1717,6 +1727,11 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // checkTelegramEngagementDispatchRole.
   awcms_telegram_engagement_inbound: ["DELETE"],
   awcms_telegram_engagement_messages: ["DELETE"],
+  // ADR-0160 (Issue #1164) -- data-lifecycle:archive-purge (sql/382): the
+  // retention sweep over inbox conversations. DELETE only; SELECT is
+  // COLUMN-ONLY (id, tenant_id, last_inbound_at): see WORKER_COLUMN_GRANTS. The
+  // activity history and tag links go with a conversation by ON DELETE CASCADE.
+  awcms_inbox_conversations: ["DELETE"],
   // ADR-0127 — data-lifecycle:archive-purge (sql/172): SELECT to find aged tax
   // snapshots, DELETE to remove them. No UPDATE — a snapshot is never edited,
   // and the immutability trigger refuses to delete anything younger than 1826
@@ -2113,6 +2128,17 @@ export const WORKER_COLUMN_GRANTS: Record<
   awcms_telegram_engagement_messages: {
     SELECT: ["id", "tenant_id", "created_at"]
   },
+  // sql/382 (Issue #1164): the generic purge's key, tenant and cursor only.
+  awcms_inbox_conversations: {
+    SELECT: ["id", "tenant_id", "last_inbound_at"]
+  },
+  // sql/382: the delegated descriptors' dry-run snapshot (tenant, cursor).
+  awcms_inbox_activity: { SELECT: ["id", "tenant_id", "created_at"] },
+  awcms_inbox_conversation_tags: {
+    SELECT: ["tenant_id", "conversation_id", "created_at"]
+  },
+  awcms_inbox_tags: { SELECT: ["id", "tenant_id", "created_at"] },
+  awcms_inbox_sla_policies: { SELECT: ["id", "tenant_id", "created_at"] },
   // `confirmed` too: comments:retention filters `confirmed = false`.
   awcms_comments_reply_subscriptions: {
     SELECT: ["id", "tenant_id", "created_at", "confirmed"]

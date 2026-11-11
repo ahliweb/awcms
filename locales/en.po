@@ -7839,6 +7839,9 @@ msgid "Telegram Engagement"
 msgid "CRM Follow-up"
 msgstr ""
 
+msgid "Omnichannel Inbox"
+msgstr ""
+
 msgid "Tenant suspended"
 msgstr ""
 

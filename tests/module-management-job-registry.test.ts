@@ -121,6 +121,7 @@ describe("fetchModuleJobs", () => {
         "bun run logs:audit:purge",
         "bun run news-media:reconcile",
         "bun run omes:repository-progress:poll",
+        "bun run omnichannel-inbox:sla",
         "bun run push:auth-secret:backfill",
         "bun run push:auth-secret:rekey",
         "bun run push:dispatch",

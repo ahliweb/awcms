@@ -507,6 +507,10 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       // safe-operation submission, worker jobs, health/backup/audit
       // projections. Genuinely new surface.
       "OMES Control Center",
+      // "Omnichannel Inbox" (omnichannel_inbox, ADR-0160, Issue #1164) --
+      // genuinely new surface: conversations, assignment, tags, SLA policies
+      // and the projection rebuild. Nothing here is anonymous.
+      "Omnichannel Inbox",
       // "Push Delivery" (push_delivery, ADR-0074, Issue #466) — the device
       // registration/revocation self-service plus the operator's queue
       // diagnostics, cancel and delivery probe. Genuinely new surface, unlike
