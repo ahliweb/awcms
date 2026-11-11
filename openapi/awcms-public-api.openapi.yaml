@@ -33439,7 +33439,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "503":
-          description: The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`).
+          description: The deployment refused its key configuration (`KEY_RING_UNAVAILABLE`) because a ring is missing or malformed, the two rings share a key or reuse a key id, or the retired `WEBSITE_ENGAGEMENT_KEYS` is still set.
           content:
             application/json:
               schema:
@@ -33660,7 +33660,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "503":
-          description: The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`).
+          description: The deployment refused its key configuration (`KEY_RING_UNAVAILABLE`) because a ring is missing or malformed, the two rings share a key or reuse a key id, or the retired `WEBSITE_ENGAGEMENT_KEYS` is still set.
           content:
             application/json:
               schema:
@@ -33906,7 +33906,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "503":
-          description: The deployment has no key ring configured (`KEY_RING_UNAVAILABLE`).
+          description: The deployment refused its key configuration (`KEY_RING_UNAVAILABLE`) because a ring is missing or malformed, the two rings share a key or reuse a key id, or the retired `WEBSITE_ENGAGEMENT_KEYS` is still set.
           content:
             application/json:
               schema:

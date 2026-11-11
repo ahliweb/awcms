@@ -14,7 +14,7 @@ import {
   runIdempotent,
   withEffectiveChallenge
 } from "../../../../../modules/website-engagement/application/route-support";
-import { resolveWebsiteEngagementRing } from "../../../../../modules/website-engagement/domain/engagement-config";
+import { resolveWebsiteEngagementRings } from "../../../../../modules/website-engagement/domain/engagement-config";
 import {
   validateCreateSource,
   type CreateSourceInput
@@ -64,9 +64,11 @@ export const POST = defineTenantRoute<Prepared>({
 
     if (refused) return refused;
 
-    const ring = resolveWebsiteEngagementRing();
+    const keys = resolveWebsiteEngagementRings();
 
-    if (!ring.ok) return ringUnavailable()!;
+    if (!keys.ok) return ringUnavailable()!;
+
+    const ring = keys.rings.hash;
 
     const { tx, tenantId, auth, prepared } = context;
     const actor = auth.context.tenantUserId;

@@ -13,7 +13,7 @@ import {
   notFound,
   ringUnavailable
 } from "../../../../../../modules/website-engagement/application/route-support";
-import { resolveWebsiteEngagementRing } from "../../../../../../modules/website-engagement/domain/engagement-config";
+import { resolveWebsiteEngagementRings } from "../../../../../../modules/website-engagement/domain/engagement-config";
 import { WEBSITE_ENGAGEMENT_GUARDS } from "../../../../../../modules/website-engagement/domain/website-engagement-constants";
 
 /**
@@ -36,9 +36,11 @@ export const POST = defineTenantRoute({
 
     if (unavailable) return unavailable;
 
-    const ring = resolveWebsiteEngagementRing();
+    const keys = resolveWebsiteEngagementRings();
 
-    if (!ring.ok) return ringUnavailable()!;
+    if (!keys.ok) return ringUnavailable()!;
+
+    const ring = keys.rings.encryption;
 
     const id = asUuid(context.params.id);
 
