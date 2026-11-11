@@ -1816,6 +1816,15 @@ components:
             type: string,
             enum: [new, working, qualified, converted, lost, disqualified]
           }
+        ownerTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            The staff owner set at intake (the same kind of value
+            `lead.assigned` carries), or null. Additive since Issue #1165
+            (ADR-0159): an intake with an owner publishes no `lead.assigned`,
+            and `crm_follow_up` needs the owner to assign a follow-up task.
         source:
           type: object
           properties:

@@ -17019,6 +17019,383 @@ Idempotent on `(bot account, update_id)`: a replay, a Telegram retry or a concur
 | 429    | Rate limited (per address or per bot endpoint). Telegram retries.                                     | [`ApiError`](#standard-error-envelope)                                     |
 | 503    | The database is unavailable. Telegram retries; the replay key makes the retry safe.                   | [`ApiError`](#standard-error-envelope)                                     |
 
+## CRM Follow-up
+
+Rule-versioned follow-up tasks for STAFF keyed by crm_leads events (crm_follow_up module, Issue #1165, ADR-0159): tenant rules with IMMUTABLE revisions (a closed trigger, offsets in working minutes over the revision's own calendar, an assignee mode, staff notices, a per-lead cap; no expression language), a read-only simulation of a draft revision, the task queue (worklist, overdue, per lead) with optimistic-concurrency completion and cancellation, and stop signals that cancel a lead's open tasks and pending notices and win every race. Nothing is ever sent to the lead; staff notices go through the existing e-mail workflow_notification port after a dispatch-time re-check. Ships inert behind CRM_FOLLOW_UP_ENABLED, Module Management and a per-tenant switch.
+
+### `GET /api/v1/crm-follow-up/leads/{leadId}/stop-signals` — A lead's stop signals
+
+- **operationId**: `listCrmFollowUpStopSignals`
+- **Security**: bearerAuth + tenantHeader
+
+Oldest first. An unknown lead answers an empty list (this module holds no lead copy and is no existence oracle). Requires `crm_follow_up.tasks.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `leadId`           | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The stop signals.                                                               | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/leads/{leadId}/stop-signals` — Stop all follow-up for a lead
+
+- **operationId**: `createCrmFollowUpStopSignal`
+- **Security**: bearerAuth + tenantHeader
+
+Cancels every open or escalated task of the lead and their pending notices; no task is created for the lead afterwards (a database trigger refuses one). The answer reports notices ALREADY handed to the e-mail outbox, never claimed to be recalled. `409 CRM_FOLLOW_UP_TENANT_DISABLED` while the tenant switch is off. High-risk, audited at warning. Requires `crm_follow_up.stop_signals.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `leadId`           | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmFollowUpStopSignalCreate`](#schema-crmfollowupstopsignalcreate)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The stop and what it cancelled.                                                 | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_FOLLOW_UP_TENANT_DISABLED`, `IDEMPOTENCY_CONFLICT`.              | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-follow-up/rules` — The tenant's follow-up rules
+
+- **operationId**: `listCrmFollowUpRules`
+- **Security**: bearerAuth + tenantHeader
+
+At most 200, ordered by code, each with its current immutable revision. Requires `crm_follow_up.rules.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The rules.                                                                      | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/rules` — Create a rule with its first immutable revision
+
+- **operationId**: `createCrmFollowUpRule`
+- **Security**: bearerAuth + tenantHeader
+
+A fixed assignee or escalation recipient must be an ACTIVE user of this tenant (`422 USER_NOT_FOUND`). High-risk (`configure`), audited at warning. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`CrmFollowUpRuleCreate`](#schema-crmfollowuprulecreate)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The rule.                                                                       | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `RULE_CODE_TAKEN`, `IDEMPOTENCY_CONFLICT`.                            | [`ApiError`](#standard-error-envelope) |
+| 422    | `USER_NOT_FOUND`.                                                               | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-follow-up/rules/{id}` — One rule with every revision
+
+- **operationId**: `getCrmFollowUpRule`
+- **Security**: bearerAuth + tenantHeader
+
+Revisions newest first, at most 200. Requires `crm_follow_up.rules.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The rule and its revisions.                                                     | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/rules/{id}/archive` — Archive a rule
+
+- **operationId**: `archiveCrmFollowUpRule`
+- **Security**: bearerAuth + tenantHeader
+
+The rule creates no new task from now on; tasks it created keep running. A rule is never deleted. High-risk (`configure`), audited at warning. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmFollowUpVersioned`](#schema-crmfollowupversioned)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The archived rule.                                                              | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `VERSION_CONFLICT`, `RULE_ARCHIVED`, `IDEMPOTENCY_CONFLICT`.          | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/rules/{id}/revisions` — Publish the next immutable revision of a rule
+
+- **operationId**: `publishCrmFollowUpRevision`
+- **Security**: bearerAuth + tenantHeader
+
+Tasks already created keep the revision that created them. An identical definition is `409 REVISION_UNCHANGED`; an archived rule `409 RULE_ARCHIVED`; a stale `expectedVersion` `409 VERSION_CONFLICT`. High-risk (`configure`), audited at warning. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmFollowUpRevisionPublish`](#schema-crmfollowuprevisionpublish)
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The rule with its new current revision.                                                      | object                                 |
+| 400    | Validation error.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `VERSION_CONFLICT`, `RULE_ARCHIVED`, `REVISION_UNCHANGED`, `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 422    | `USER_NOT_FOUND`.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization).              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/rules/simulate` — Dry-run a draft revision against a sample trigger
+
+- **operationId**: `simulateCrmFollowUpRule`
+- **Security**: bearerAuth + tenantHeader
+
+READ-ONLY: evaluates the draft exactly as the consumer would (trigger match, due and escalation instants over the draft's calendar, assignee, notices) and, with `leadId`, whether that lead's stop signals or live tasks would block it. Writes no task, action, notice, audit row or event; needs no `Idempotency-Key`; works while the tenant switch is off. Requires `crm_follow_up.rules.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`CrmFollowUpSimulateRequest`](#schema-crmfollowupsimulaterequest)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | What would happen.                                                              | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-follow-up/settings` — The tenant switch and the hourly notice cap
+
+- **operationId**: `getCrmFollowUpSettings`
+- **Security**: bearerAuth + tenantHeader
+
+A tenant that never set them is OFF (`enabled: false`, `maxNoticesPerRecipientHour: 20`). Requires `crm_follow_up.rules.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The settings.                                                                   | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/crm-follow-up/settings` — Switch follow-up on or off for this tenant
+
+- **operationId**: `updateCrmFollowUpSettings`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk (`configure`), audited at warning with the previous and new values. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+
+**Request body** (required): [`CrmFollowUpSettingsPatch`](#schema-crmfollowupsettingspatch)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The settings.                                                                   | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-follow-up/tasks` — The follow-up queue
+
+- **operationId**: `listCrmFollowUpTasks`
+- **Security**: bearerAuth + tenantHeader
+
+Ordered by due instant, keyset-paginated. The daily worklist is `assignee=me`, the overdue queue `overdue=true`, a lead's work `leadId=...`. Requires `crm_follow_up.tasks.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                | Description                            |
+| ------------------ | ------ | -------- | --------------------------------------------------- | -------------------------------------- |
+| `X-Correlation-ID` | header | no       | string                                              |                                        |
+| `status`           | query  | no       | enum(`open`, `escalated`, `completed`, `cancelled`) |                                        |
+| `assignee`         | query  | no       | string                                              | `me` or a tenant-user id.              |
+| `leadId`           | query  | no       | string (uuid)                                       |                                        |
+| `overdue`          | query  | no       | enum(`true`, `false`)                               |                                        |
+| `limit`            | query  | no       | integer                                             |                                        |
+| `cursor`           | query  | no       | string                                              | The `nextCursor` of the previous page. |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | A page of tasks.                                                                | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/crm-follow-up/tasks/{id}` — One task with its actions and notices
+
+- **operationId**: `getCrmFollowUpTask`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `crm_follow_up.tasks.read`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The task.                                                                       | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/tasks/{id}/cancel` — Cancel one task
+
+- **operationId**: `cancelCrmFollowUpTask`
+- **Security**: bearerAuth + tenantHeader
+
+`manual_cancel`; its pending notices are cancelled. To stop all work on a lead, record a stop signal. Audited. Requires `crm_follow_up.tasks.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmFollowUpVersioned`](#schema-crmfollowupversioned)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The cancelled task.                                                                                   | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_FOLLOW_UP_TENANT_DISABLED`, `VERSION_CONFLICT`, `TASK_CLOSED`, `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization).                       | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/crm-follow-up/tasks/{id}/complete` — Complete a task with a closed outcome
+
+- **operationId**: `completeCrmFollowUpTask`
+- **Security**: bearerAuth + tenantHeader
+
+Its pending notices are cancelled. `409 CRM_FOLLOW_UP_TENANT_DISABLED` while the tenant switch is off. Audited. Requires `crm_follow_up.tasks.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description                                                                                                                                                                                                     |
+| ------------------ | ------ | -------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string        |                                                                                                                                                                                                                 |
+| `Idempotency-Key`  | header | yes      | string        | Deduplicates a retried HTTP request. 1 to 255 visible ASCII characters (0x21-0x7E); any other value is refused at the edge with `400 IDEMPOTENCY_KEY_INVALID` before the route runs, on every route (ADR-0129). |
+| `id`               | path   | yes      | string (uuid) |                                                                                                                                                                                                                 |
+
+**Request body** (required): [`CrmFollowUpTaskComplete`](#schema-crmfollowuptaskcomplete)
+
+**Responses**
+
+| Status | Description                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The completed task.                                                                                   | object                                 |
+| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_FOLLOW_UP_TENANT_DISABLED`, `VERSION_CONFLICT`, `TASK_CLOSED`, `IDEMPOTENCY_CONFLICT`. | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization).                       | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -18259,6 +18636,264 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
 ```
 
 ### Schema: CrmExpectedVersion
+
+| Field             | Type    | Required | Nullable | Description |
+| ----------------- | ------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1
+}
+```
+
+### Schema: CrmFollowUpDefinition
+
+A CLOSED, declarative revision definition: no expression, script or callback. Offsets are WORKING minutes over the calendar.
+
+| Field             | Type    | Required | Nullable | Description                                                  |
+| ----------------- | ------- | -------- | -------- | ------------------------------------------------------------ |
+| `trigger`         | object  | yes      | no       | A `lead_assigned` trigger takes no pipeline or stage filter. |
+| `taskTitle`       | string  | yes      | no       |                                                              |
+| `dueAfterMinutes` | integer | yes      | no       |                                                              |
+| `escalation`      | object  | no       | yes      |                                                              |
+| `assignee`        | object  | yes      | no       |                                                              |
+| `notify`          | object  | no       | no       |                                                              |
+| `maxOpenPerLead`  | integer | no       | no       |                                                              |
+| `calendar`        | object  | yes      | no       |                                                              |
+
+**Example**
+
+```json
+{
+  "trigger": {
+    "kind": "lead_created",
+    "pipelineId": "00000000-0000-0000-0000-000000000000",
+    "stageCategory": "new",
+    "stageKey": "string"
+  },
+  "taskTitle": "string",
+  "dueAfterMinutes": 0,
+  "escalation": {
+    "afterMinutes": 1,
+    "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+  },
+  "assignee": {
+    "mode": "lead_owner",
+    "tenantUserId": "00000000-0000-0000-0000-000000000000"
+  },
+  "notify": {
+    "onAssign": false,
+    "onDue": false
+  },
+  "maxOpenPerLead": 1,
+  "calendar": {
+    "timeZone": "string",
+    "workingDays": [1],
+    "workStartMinute": 0,
+    "workEndMinute": 1,
+    "holidays": ["2026-01-01"]
+  }
+}
+```
+
+### Schema: CrmFollowUpRevisionPublish
+
+| Field             | Type                                                     | Required | Nullable | Description |
+| ----------------- | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer                                                  | yes      | no       |             |
+| `definition`      | [`CrmFollowUpDefinition`](#schema-crmfollowupdefinition) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "definition": {
+    "trigger": {
+      "kind": "lead_created",
+      "pipelineId": "00000000-0000-0000-0000-000000000000",
+      "stageCategory": "new",
+      "stageKey": "string"
+    },
+    "taskTitle": "string",
+    "dueAfterMinutes": 0,
+    "escalation": {
+      "afterMinutes": 1,
+      "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "assignee": {
+      "mode": "lead_owner",
+      "tenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "notify": {
+      "onAssign": false,
+      "onDue": false
+    },
+    "maxOpenPerLead": 1,
+    "calendar": {
+      "timeZone": "string",
+      "workingDays": [],
+      "workStartMinute": 0,
+      "workEndMinute": 1,
+      "holidays": []
+    }
+  }
+}
+```
+
+### Schema: CrmFollowUpRuleCreate
+
+| Field        | Type                                                     | Required | Nullable | Description |
+| ------------ | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `code`       | string                                                   | yes      | no       |             |
+| `name`       | string                                                   | yes      | no       |             |
+| `definition` | [`CrmFollowUpDefinition`](#schema-crmfollowupdefinition) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "definition": {
+    "trigger": {
+      "kind": "lead_created",
+      "pipelineId": "00000000-0000-0000-0000-000000000000",
+      "stageCategory": "new",
+      "stageKey": "string"
+    },
+    "taskTitle": "string",
+    "dueAfterMinutes": 0,
+    "escalation": {
+      "afterMinutes": 1,
+      "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "assignee": {
+      "mode": "lead_owner",
+      "tenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "notify": {
+      "onAssign": false,
+      "onDue": false
+    },
+    "maxOpenPerLead": 1,
+    "calendar": {
+      "timeZone": "string",
+      "workingDays": [],
+      "workStartMinute": 0,
+      "workEndMinute": 1,
+      "holidays": []
+    }
+  }
+}
+```
+
+### Schema: CrmFollowUpSettingsPatch
+
+| Field                        | Type    | Required | Nullable | Description |
+| ---------------------------- | ------- | -------- | -------- | ----------- |
+| `enabled`                    | boolean | no       | no       |             |
+| `maxNoticesPerRecipientHour` | integer | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "enabled": false,
+  "maxNoticesPerRecipientHour": 1
+}
+```
+
+### Schema: CrmFollowUpSimulateRequest
+
+| Field        | Type                                                     | Required | Nullable | Description |
+| ------------ | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `definition` | [`CrmFollowUpDefinition`](#schema-crmfollowupdefinition) | yes      | no       |             |
+| `trigger`    | object                                                   | yes      | no       |             |
+| `leadId`     | string (uuid)                                            | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "definition": {
+    "trigger": {
+      "kind": "lead_created",
+      "pipelineId": "00000000-0000-0000-0000-000000000000",
+      "stageCategory": "new",
+      "stageKey": "string"
+    },
+    "taskTitle": "string",
+    "dueAfterMinutes": 0,
+    "escalation": {
+      "afterMinutes": 1,
+      "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "assignee": {
+      "mode": "lead_owner",
+      "tenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "notify": {
+      "onAssign": false,
+      "onDue": false
+    },
+    "maxOpenPerLead": 1,
+    "calendar": {
+      "timeZone": "string",
+      "workingDays": [],
+      "workStartMinute": 0,
+      "workEndMinute": 1,
+      "holidays": []
+    }
+  },
+  "trigger": {
+    "kind": "lead_created",
+    "pipelineId": "00000000-0000-0000-0000-000000000000",
+    "stageCategory": "new",
+    "stageKey": "string",
+    "ownerTenantUserId": "00000000-0000-0000-0000-000000000000",
+    "occurredAt": "2026-01-01T00:00:00.000Z"
+  },
+  "leadId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: CrmFollowUpStopSignalCreate
+
+| Field        | Type                                                                    | Required | Nullable | Description                           |
+| ------------ | ----------------------------------------------------------------------- | -------- | -------- | ------------------------------------- |
+| `kind`       | enum(`reply_received`, `consent_withdrawn`, `sender_blocked`, `manual`) | yes      | no       |                                       |
+| `occurredAt` | string (date-time)                                                      | no       | no       | Defaults to now; never in the future. |
+
+**Example**
+
+```json
+{
+  "kind": "reply_received",
+  "occurredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CrmFollowUpTaskComplete
+
+| Field             | Type                                                                   | Required | Nullable | Description |
+| ----------------- | ---------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer                                                                | yes      | no       |             |
+| `outcome`         | enum(`reached`, `no_answer`, `rescheduled`, `not_interested`, `other`) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "outcome": "reached"
+}
+```
+
+### Schema: CrmFollowUpVersioned
 
 | Field             | Type    | Required | Nullable | Description |
 | ----------------- | ------- | -------- | -------- | ----------- |

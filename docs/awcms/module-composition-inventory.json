@@ -1,5 +1,5 @@
 {
-  "moduleCount": 38,
+  "moduleCount": 39,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -100,6 +100,40 @@
       "capabilitiesConsumed": [],
       "permissionCount": 8,
       "navigationCount": 1,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "crm_follow_up",
+      "name": "CRM Follow-up",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "module_management",
+        "domain_event_runtime",
+        "crm_leads"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "crm_lead",
+          "providedBy": "crm_leads",
+          "optional": false
+        },
+        {
+          "capability": "workflow_notification",
+          "providedBy": "email",
+          "optional": true
+        }
+      ],
+      "permissionCount": 5,
+      "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

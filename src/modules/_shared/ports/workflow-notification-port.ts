@@ -28,6 +28,15 @@ export type WorkflowNotificationRequest = {
   correlationId?: string;
 };
 
+/**
+ * What `enqueueNotification` did (contract 1.1.0, additive; Issue #1165 audit
+ * LOW-5): `queued` is the number of outbox rows written. `0` means nothing was
+ * queued (no active template for the tenant, or no reachable recipient), so a
+ * caller that tracks delivery (crm_follow_up) must not record it as sent.
+ * Callers written against 1.0.0 ignore the value and are unaffected.
+ */
+export type WorkflowNotificationOutcome = { queued: number };
+
 export type WorkflowNotificationPort = {
   /**
    * Enqueues (never sends synchronously) a notification for the given
@@ -39,5 +48,5 @@ export type WorkflowNotificationPort = {
   enqueueNotification(
     tx: Bun.SQL,
     request: WorkflowNotificationRequest
-  ): Promise<void>;
+  ): Promise<WorkflowNotificationOutcome>;
 };

@@ -91,7 +91,9 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // (the workflow `notify` node's seam); it is listed now because
     // `hr_workforce` is the first module to consume it, telling a correction's
     // requester the outcome. First assigned number, not a stability milestone.
-    workflow_notification: "1.0.0",
+    // 1.1.0 (#1165 audit, additive): `enqueueNotification` returns
+    // `{ queued }` so a caller can tell "no template, nothing queued" from sent.
+    workflow_notification: "1.1.0",
     // staff_availability is provided by `hr_workforce` (Issue #946, ADR-0132) and
     // consumed, optionally, by `booking` (Issue #949). First assigned number.
     staff_availability: "1.0.0",

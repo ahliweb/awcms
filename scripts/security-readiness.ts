@@ -760,6 +760,18 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   awcms_telegram_engagement_consents: ["SELECT", "INSERT"],
   awcms_telegram_engagement_inbound: ["SELECT", "INSERT"],
   awcms_telegram_engagement_messages: ["SELECT", "INSERT", "UPDATE"],
+  // ADR-0159 / `sql/369` (Issue #1165). NOT retired -- the follow-up rules,
+  // tasks, stops and notices, all actively written. DELETE is removed
+  // everywhere (a rule is archived, a task cancelled, a stop permanent); UPDATE
+  // is ALSO removed from the immutable revisions and the append-only actions
+  // and stop signals, whose triggers bind the owner as well.
+  awcms_crm_follow_up_settings: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_follow_up_rules: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_follow_up_rule_revisions: ["SELECT", "INSERT"],
+  awcms_crm_follow_up_tasks: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_follow_up_task_actions: ["SELECT", "INSERT"],
+  awcms_crm_follow_up_stop_signals: ["SELECT", "INSERT"],
+  awcms_crm_follow_up_notifications: ["SELECT", "INSERT", "UPDATE"],
   // ADR-0126 / `sql/169`. NOT retired — the append-only stock ledger and its
   // low-stock signals. A finalised movement is corrected by a compensating
   // movement, never edited, so the runtime keeps exactly the two verbs posting
@@ -1850,7 +1862,21 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // drained by `hr-commission:intents:post` as `awcms_app`. The insert carries a
   // bare `ON CONFLICT DO NOTHING` (no arbiter), which is why INSERT alone is
   // enough here, unlike the `ON CONFLICT ON CONSTRAINT` rows sql/127 repaired.
-  awcms_hr_commission_intents: ["INSERT"]
+  awcms_hr_commission_intents: ["INSERT"],
+  // ADR-0159 / `sql/369` (Issue #1165). The `crm_follow_up.lead_signals`
+  // consumer (in `domain-events:dispatch`) and `crm-follow-up:dispatch` both run
+  // as `awcms_worker`: they READ the configuration (settings, rules, revisions;
+  // never written by the worker), create and settle tasks and notices, and
+  // append actions and stop signals. No DELETE anywhere; the triggers of
+  // sql/369 keep actions and stop signals append-only and a closed task or a
+  // settled notice frozen.
+  awcms_crm_follow_up_settings: ["SELECT"],
+  awcms_crm_follow_up_rules: ["SELECT"],
+  awcms_crm_follow_up_rule_revisions: ["SELECT"],
+  awcms_crm_follow_up_tasks: ["SELECT", "INSERT", "UPDATE"],
+  awcms_crm_follow_up_task_actions: ["SELECT", "INSERT"],
+  awcms_crm_follow_up_stop_signals: ["SELECT", "INSERT"],
+  awcms_crm_follow_up_notifications: ["SELECT", "INSERT", "UPDATE"]
   // `awcms_hr_commission_intake_settings` is deliberately absent: the worker
   // holds only a COLUMN-level SELECT on (tenant_id, commission_intake_enabled)
   // (see WORKER_COLUMN_GRANTS), which the port and the intake insert trigger read.
@@ -3234,6 +3260,8 @@ export const CREDENTIAL_LOOKING_COLUMN_PATTERN =
  * reason, so the scan does not need a human to re-judge them every run.
  */
 export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
+  "awcms_crm_follow_up_rule_revisions.definition_hash":
+    "SHA-256 over a follow-up rule revision's own declarative definition (trigger, offsets, assignee mode, calendar), kept to prove a published revision unchanged and to refuse an identical republish; it is not keyed, holds nothing about a person and unlocks nothing (sql/369)",
   "awcms_crm_pipeline_revisions.definition_hash":
     "SHA-256 over a pipeline revision's own stage catalog (stage keys, names, categories, edges, guard codes), kept to prove a published revision unchanged and to refuse an identical republish; it is not keyed, holds nothing about a person and unlocks nothing (sql/342)",
   "awcms_auth_providers.client_secret_env_var":

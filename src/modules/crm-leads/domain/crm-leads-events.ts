@@ -39,6 +39,13 @@ export function buildLeadCreatedPayload(facts: {
   channelAccountId: string | null;
   campaignRef: string | null;
   contactPointKinds: ContactPointKind[];
+  /**
+   * The owner set at intake (a staff tenant-user id, the same value
+   * `lead.assigned` carries), or null. Added for #1165 (ADR-0159): an intake
+   * with an owner writes an assignment row but publishes no `lead.assigned`,
+   * so without it a follow-up rule could not find the lead's owner.
+   */
+  ownerTenantUserId: string | null;
   occurredAt: Date;
   recordedAt: Date;
 }): Record<string, unknown> {
@@ -48,6 +55,7 @@ export function buildLeadCreatedPayload(facts: {
     revisionId: facts.revisionId,
     stageKey: facts.stageKey,
     stageCategory: facts.stageCategory,
+    ownerTenantUserId: facts.ownerTenantUserId,
     source: {
       touchId: facts.touchId,
       kind: facts.sourceKind,

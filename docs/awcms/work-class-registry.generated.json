@@ -692,6 +692,61 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/crm-follow-up/leads/[leadId]/stop-signals.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/[id]/archive.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/[id]/revisions.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/rules/simulate.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/settings.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/[id]/complete.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/crm-follow-up/tasks/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/crm-leads/conversions/[id]/reverse.ts",
       "workClass": "interactive",
       "source": "factory"
@@ -2495,6 +2550,12 @@
       "workClass": "maintenance",
       "source": "registry",
       "rationale": "Scheduled retention sweep (comments:retention, ADR-0041) — tolerant of delay, never latency-sensitive; same profile as audit-log-purge/form-draft-purge."
+    },
+    {
+      "path": "scripts/crm-follow-up-dispatch.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled follow-up dispatcher (crm-follow-up:dispatch, Issue #1165, ADR-0159), every minute — database-only: each tenant pass escalates overdue tasks and settles due staff notices (sql/369), handing a notice to the e-mail outbox through the workflow_notification port (one row; the provider is called by email:dispatch, another process). A late pass delays a staff reminder by a minute and never touches a lead. Both its pass and its --dry-run count pass workClass: \"maintenance\" explicitly."
     },
     {
       "path": "scripts/data-lifecycle-archive-purge.ts",

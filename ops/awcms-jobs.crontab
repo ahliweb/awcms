@@ -71,6 +71,16 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # retention).
 0 4 * * * /usr/bin/flock -n $AWCMS_LOCK/comments-retention.lock $AWCMS_RUN_JOB comments:retention >> $AWCMS_JOB_LOG/comments-retention.log 2>&1
 
+# crm_follow_up — Escalates open follow-up tasks whose escalation instant has
+# passed (status, action row, an escalation notice for the rule's recipient)
+# and hands due staff notices to the workflow_notification port (e-mail
+# outbox) after re-checking that the task is live, the lead has no stop
+# signal, the recipient is still the assignee and an ACTIVE user, the notice
+# is inside the rule's working hours and the recipient is under the tenant's
+# hourly cap; otherwise the notice is cancelled, suppressed or deferred. Never
+# sends anything to a lead.
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/crm-follow-up-dispatch.lock $AWCMS_RUN_JOB crm-follow-up:dispatch >> $AWCMS_JOB_LOG/crm-follow-up-dispatch.log 2>&1
+
 # data_lifecycle — Archive (where applicable) and purge rows past retention
 # for every registered generic-execution descriptor; record a dry-run backlog
 # snapshot for every delegated (existing-adopter) descriptor.

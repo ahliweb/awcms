@@ -780,7 +780,12 @@ suite("hr_workforce automatic settlement of corrections (#998)", () => {
             seeded.instanceId,
             undefined,
             new Date(),
-            { enqueueNotification: (sp) => enqueue(sp) }
+            {
+              enqueueNotification: async (sp) => {
+                await enqueue(sp);
+                return { queued: 0 };
+              }
+            }
           )
         );
 

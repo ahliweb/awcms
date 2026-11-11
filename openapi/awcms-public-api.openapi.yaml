@@ -103,6 +103,8 @@ tags:
     description: "The reusable lead/prospect pipeline (crm_leads module, Issue #1166, ADR-0153): a PRE-CUSTOMER context that never owns the customer, the identity or the consent. Tenant-defined pipelines with a VERSIONED, immutable stage catalog (closed stage categories, edges with closed declarative guards), idempotent intake on the source key, an immutable first source touch, masked contact points (ciphertext plus per-tenant keyed hash), append-only transition history decided under a row lock with optimistic concurrency, identity candidates by exact hash inside one tenant, human-verified undoable merges, conversions recorded from the customer authority (an opaque external reference) or a flagged manual path and reversed by event, soft delete and anonymising erasure that keeps funnel counts. Ships inert behind CRM_LEADS_ENABLED, Module Management and a per-tenant switch."
   - name: Telegram Engagement
     description: "Customer Telegram conversations through a tenant's own bots (telegram_engagement module, Issue #1156, ADR-0152), a context SEPARATE from the staff-only Telegram Delivery operations (unchanged; nothing shared). Many bots per tenant, each an existing channel account whose token is a write-only channel secret; one verified webhook per bot (an opaque per-bot callback token proven against a stored hash and a constant-time X-Telegram-Bot-Api-Secret-Token check before the body is read, one generic 401 for every failure, idempotent on (bot, update_id)); contacts exist only after the person sent /start, keyed per bot by a keyed hash with the chat id encrypted and never returned; /start grants support only, marketing and transactional need the explicit opt-in button with a notice version, /stop, a block and a provider 403 withdraw at once; replies and opted-in notices are queued and sent by a pinned-Bun dispatcher with per-bot pacing, 429 retry_after, a breaker and a daily ceiling. No operation accepts or returns a Telegram id, a chat id, a username, a token, a secret or a callback URL. Ships inert behind TELEGRAM_ENGAGEMENT_ENABLED."
+  - name: CRM Follow-up
+    description: "Rule-versioned follow-up tasks for STAFF keyed by crm_leads events (crm_follow_up module, Issue #1165, ADR-0159): tenant rules with IMMUTABLE revisions (a closed trigger, offsets in working minutes over the revision's own calendar, an assignee mode, staff notices, a per-lead cap; no expression language), a read-only simulation of a draft revision, the task queue (worklist, overdue, per lead) with optimistic-concurrency completion and cancellation, and stop signals that cancel a lead's open tasks and pending notices and win every race. Nothing is ever sent to the lead; staff notices go through the existing e-mail workflow_notification port after a dispatch-time re-check. Ships inert behind CRM_FOLLOW_UP_ENABLED, Module Management and a per-tenant switch."
 paths:
   /api/v1/abac/policies:
     get:
@@ -11303,6 +11305,747 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           description: The Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/leads/{leadId}/stop-signals:
+    get:
+      operationId: listCrmFollowUpStopSignals
+      tags:
+        - CRM Follow-up
+      summary: A lead's stop signals
+      description: Oldest first. An unknown lead answers an empty list (this module holds no lead copy and is no existence oracle). Requires `crm_follow_up.tasks.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The stop signals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmFollowUpStopSignal"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createCrmFollowUpStopSignal
+      tags:
+        - CRM Follow-up
+      summary: Stop all follow-up for a lead
+      description: Cancels every open or escalated task of the lead and their pending notices; no task is created for the lead afterwards (a database trigger refuses one). The answer reports notices ALREADY handed to the e-mail outbox, never claimed to be recalled. `409 CRM_FOLLOW_UP_TENANT_DISABLED` while the tenant switch is off. High-risk, audited at warning. Requires `crm_follow_up.stop_signals.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpStopSignalCreate"
+      responses:
+        "201":
+          description: The stop and what it cancelled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpStopResult"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Conflict: `CRM_FOLLOW_UP_TENANT_DISABLED`, `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/rules:
+    get:
+      operationId: listCrmFollowUpRules
+      tags:
+        - CRM Follow-up
+      summary: The tenant's follow-up rules
+      description: At most 200, ordered by code, each with its current immutable revision. Requires `crm_follow_up.rules.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The rules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmFollowUpRule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createCrmFollowUpRule
+      tags:
+        - CRM Follow-up
+      summary: Create a rule with its first immutable revision
+      description: A fixed assignee or escalation recipient must be an ACTIVE user of this tenant (`422 USER_NOT_FOUND`). High-risk (`configure`), audited at warning. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpRuleCreate"
+      responses:
+        "201":
+          description: The rule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpRule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "Conflict: `RULE_CODE_TAKEN`, `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`USER_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/rules/{id}:
+    get:
+      operationId: getCrmFollowUpRule
+      tags:
+        - CRM Follow-up
+      summary: One rule with every revision
+      description: Revisions newest first, at most 200. Requires `crm_follow_up.rules.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The rule and its revisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      rule:
+                        $ref: "#/components/schemas/CrmFollowUpRule"
+                      revisions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmFollowUpRevision"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/rules/{id}/archive:
+    post:
+      operationId: archiveCrmFollowUpRule
+      tags:
+        - CRM Follow-up
+      summary: Archive a rule
+      description: The rule creates no new task from now on; tasks it created keep running. A rule is never deleted. High-risk (`configure`), audited at warning. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpVersioned"
+      responses:
+        "200":
+          description: The archived rule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpRule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "Conflict: `VERSION_CONFLICT`, `RULE_ARCHIVED`, `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/rules/{id}/revisions:
+    post:
+      operationId: publishCrmFollowUpRevision
+      tags:
+        - CRM Follow-up
+      summary: Publish the next immutable revision of a rule
+      description: Tasks already created keep the revision that created them. An identical definition is `409 REVISION_UNCHANGED`; an archived rule `409 RULE_ARCHIVED`; a stale `expectedVersion` `409 VERSION_CONFLICT`. High-risk (`configure`), audited at warning. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpRevisionPublish"
+      responses:
+        "201":
+          description: The rule with its new current revision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpRule"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "Conflict: `VERSION_CONFLICT`, `RULE_ARCHIVED`, `REVISION_UNCHANGED`, `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: "`USER_NOT_FOUND`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/rules/simulate:
+    post:
+      operationId: simulateCrmFollowUpRule
+      tags:
+        - CRM Follow-up
+      summary: Dry-run a draft revision against a sample trigger
+      description: "READ-ONLY: evaluates the draft exactly as the consumer would (trigger match, due and escalation instants over the draft's calendar, assignee, notices) and, with `leadId`, whether that lead's stop signals or live tasks would block it. Writes no task, action, notice, audit row or event; needs no `Idempotency-Key`; works while the tenant switch is off. Requires `crm_follow_up.rules.read`."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpSimulateRequest"
+      responses:
+        "200":
+          description: What would happen.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpSimulation"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/settings:
+    get:
+      operationId: getCrmFollowUpSettings
+      tags:
+        - CRM Follow-up
+      summary: The tenant switch and the hourly notice cap
+      description: "A tenant that never set them is OFF (`enabled: false`, `maxNoticesPerRecipientHour: 20`). Requires `crm_follow_up.rules.read`."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpSettings"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateCrmFollowUpSettings
+      tags:
+        - CRM Follow-up
+      summary: Switch follow-up on or off for this tenant
+      description: High-risk (`configure`), audited at warning with the previous and new values. Requires `crm_follow_up.rules.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpSettingsPatch"
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpSettings"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/tasks:
+    get:
+      operationId: listCrmFollowUpTasks
+      tags:
+        - CRM Follow-up
+      summary: The follow-up queue
+      description: Ordered by due instant, keyset-paginated. The daily worklist is `assignee=me`, the overdue queue `overdue=true`, a lead's work `leadId=...`. Requires `crm_follow_up.tasks.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum:
+              - open
+              - escalated
+              - completed
+              - cancelled
+        - name: assignee
+          in: query
+          description: "`me` or a tenant-user id."
+          schema:
+            type: string
+        - name: leadId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: overdue
+          in: query
+          schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          description: The `nextCursor` of the previous page.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of tasks.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CrmFollowUpTask"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/tasks/{id}:
+    get:
+      operationId: getCrmFollowUpTask
+      tags:
+        - CRM Follow-up
+      summary: One task with its actions and notices
+      description: Requires `crm_follow_up.tasks.read`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The task.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpTaskDetail"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/tasks/{id}/cancel:
+    post:
+      operationId: cancelCrmFollowUpTask
+      tags:
+        - CRM Follow-up
+      summary: Cancel one task
+      description: "`manual_cancel`; its pending notices are cancelled. To stop all work on a lead, record a stop signal. Audited. Requires `crm_follow_up.tasks.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpVersioned"
+      responses:
+        "200":
+          description: The cancelled task.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpTask"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "Conflict: `CRM_FOLLOW_UP_TENANT_DISABLED`, `VERSION_CONFLICT`, `TASK_CLOSED`, `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/crm-follow-up/tasks/{id}/complete:
+    post:
+      operationId: completeCrmFollowUpTask
+      tags:
+        - CRM Follow-up
+      summary: Complete a task with a closed outcome
+      description: Its pending notices are cancelled. `409 CRM_FOLLOW_UP_TENANT_DISABLED` while the tenant switch is off. Audited. Requires `crm_follow_up.tasks.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Bodies above 16 KiB are `413 PAYLOAD_TOO_LARGE`.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrmFollowUpTaskComplete"
+      responses:
+        "200":
+          description: The completed task.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CrmFollowUpTask"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "Conflict: `CRM_FOLLOW_UP_TENANT_DISABLED`, `VERSION_CONFLICT`, `TASK_CLOSED`, `IDEMPOTENCY_CONFLICT`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: "`CRM_FOLLOW_UP_DISABLED` (deployment switch off, answered after authorization)."
           content:
             application/json:
               schema:
@@ -38942,6 +39685,592 @@ components:
         definition:
           $ref: "#/components/schemas/CrmPipelineDefinition"
     CrmExpectedVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+    CrmFollowUpDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - trigger
+        - taskTitle
+        - dueAfterMinutes
+        - assignee
+        - calendar
+      description: "A CLOSED, declarative revision definition: no expression, script or callback. Offsets are WORKING minutes over the calendar."
+      properties:
+        trigger:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+          properties:
+            kind:
+              type: string
+              enum:
+                - lead_created
+                - stage_entered
+                - lead_assigned
+            pipelineId:
+              type: string
+              format: uuid
+              nullable: true
+            stageCategory:
+              type: string
+              nullable: true
+              enum:
+                - new
+                - working
+                - qualified
+                - converted
+                - lost
+                - disqualified
+            stageKey:
+              type: string
+              nullable: true
+              pattern: ^[a-z][a-z0-9_]{0,39}$
+          description: A `lead_assigned` trigger takes no pipeline or stage filter.
+        taskTitle:
+          type: string
+          minLength: 1
+          maxLength: 120
+        dueAfterMinutes:
+          type: integer
+          minimum: 0
+          maximum: 43200
+        escalation:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required:
+            - afterMinutes
+          properties:
+            afterMinutes:
+              type: integer
+              minimum: 1
+              maximum: 43200
+            recipientTenantUserId:
+              type: string
+              format: uuid
+              nullable: true
+        assignee:
+          type: object
+          additionalProperties: false
+          required:
+            - mode
+          properties:
+            mode:
+              type: string
+              enum:
+                - lead_owner
+                - fixed_user
+            tenantUserId:
+              type: string
+              format: uuid
+              nullable: true
+        notify:
+          type: object
+          additionalProperties: false
+          properties:
+            onAssign:
+              type: boolean
+            onDue:
+              type: boolean
+        maxOpenPerLead:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 1
+        calendar:
+          type: object
+          additionalProperties: false
+          required:
+            - timeZone
+            - workingDays
+            - workStartMinute
+            - workEndMinute
+          properties:
+            timeZone:
+              type: string
+              description: An IANA time zone.
+            workingDays:
+              type: array
+              minItems: 1
+              maxItems: 7
+              items:
+                type: integer
+                minimum: 1
+                maximum: 7
+              description: ISO weekdays, 1 = Monday .. 7 = Sunday.
+            workStartMinute:
+              type: integer
+              minimum: 0
+              maximum: 1439
+            workEndMinute:
+              type: integer
+              minimum: 1
+              maximum: 1440
+            holidays:
+              type: array
+              maxItems: 366
+              items:
+                type: string
+                format: date
+              description: Local dates on which no work happens.
+    CrmFollowUpRevision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        revisionNumber:
+          type: integer
+        definition:
+          $ref: "#/components/schemas/CrmFollowUpDefinition"
+        definitionHash:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        publishedBy:
+          type: string
+          format: uuid
+          nullable: true
+    CrmFollowUpRevisionPublish:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+        - definition
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        definition:
+          $ref: "#/components/schemas/CrmFollowUpDefinition"
+    CrmFollowUpRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        currentRevisionNumber:
+          type: integer
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        currentRevision:
+          $ref: "#/components/schemas/CrmFollowUpRevision"
+          nullable: true
+    CrmFollowUpRuleCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - definition
+      properties:
+        code:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{1,39}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        definition:
+          $ref: "#/components/schemas/CrmFollowUpDefinition"
+    CrmFollowUpSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        maxNoticesPerRecipientHour:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CrmFollowUpSettingsPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        enabled:
+          type: boolean
+        maxNoticesPerRecipientHour:
+          type: integer
+          minimum: 1
+          maximum: 200
+    CrmFollowUpSimulateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - definition
+        - trigger
+      properties:
+        definition:
+          $ref: "#/components/schemas/CrmFollowUpDefinition"
+        trigger:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - occurredAt
+          properties:
+            kind:
+              type: string
+              enum:
+                - lead_created
+                - stage_entered
+                - lead_assigned
+            pipelineId:
+              type: string
+              format: uuid
+              nullable: true
+            stageCategory:
+              type: string
+              nullable: true
+              enum:
+                - new
+                - working
+                - qualified
+                - converted
+                - lost
+                - disqualified
+            stageKey:
+              type: string
+              nullable: true
+            ownerTenantUserId:
+              type: string
+              format: uuid
+              nullable: true
+            occurredAt:
+              type: string
+              format: date-time
+        leadId:
+          type: string
+          format: uuid
+          nullable: true
+    CrmFollowUpSimulation:
+      type: object
+      properties:
+        matches:
+          type: boolean
+        wouldCreateTask:
+          type: boolean
+        blockedBy:
+          type: array
+          items:
+            type: string
+            enum:
+              - not_matched
+              - lead_stopped
+              - capped
+        dueAt:
+          type: string
+          format: date-time
+        escalateAt:
+          type: string
+          format: date-time
+          nullable: true
+        assigneeTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        candidateAssigneeInactive:
+          type: boolean
+        notices:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - assigned
+                  - due
+              scheduledAt:
+                type: string
+                format: date-time
+        lead:
+          type: object
+          nullable: true
+          properties:
+            stopped:
+              type: boolean
+            liveTasks:
+              type: integer
+    CrmFollowUpStopResult:
+      type: object
+      properties:
+        signalId:
+          type: string
+          format: uuid
+          nullable: true
+        leadId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        cancelledTaskIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        cancelledNotifications:
+          type: integer
+        alreadyEnqueuedNotifications:
+          type: integer
+    CrmFollowUpStopSignal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        leadId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - converted
+            - lost
+            - merged
+            - reply_received
+            - consent_withdrawn
+            - sender_blocked
+            - manual
+        source:
+          type: string
+          enum:
+            - lead_event
+            - staff
+        sourceEventId:
+          type: string
+          format: uuid
+          nullable: true
+        recordedBy:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        recordedAt:
+          type: string
+          format: date-time
+    CrmFollowUpStopSignalCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - reply_received
+            - consent_withdrawn
+            - sender_blocked
+            - manual
+        occurredAt:
+          type: string
+          format: date-time
+          description: Defaults to now; never in the future.
+    CrmFollowUpTask:
+      type: object
+      description: A follow-up task for a member of staff. Carries the opaque lead id and nothing else about the lead.
+      properties:
+        id:
+          type: string
+          format: uuid
+        leadId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        ruleRevisionId:
+          type: string
+          format: uuid
+        triggerKind:
+          type: string
+          enum:
+            - lead_created
+            - stage_entered
+            - lead_assigned
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+            - open
+            - escalated
+            - completed
+            - cancelled
+        overdue:
+          type: boolean
+        assigneeMode:
+          type: string
+          enum:
+            - lead_owner
+            - fixed_user
+        assigneeTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
+        dueAt:
+          type: string
+          format: date-time
+        escalateAt:
+          type: string
+          format: date-time
+          nullable: true
+        escalatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        outcome:
+          type: string
+          nullable: true
+          enum:
+            - reached
+            - no_answer
+            - rescheduled
+            - not_interested
+            - other
+        cancelReason:
+          type: string
+          nullable: true
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        closedBy:
+          type: string
+          format: uuid
+          nullable: true
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CrmFollowUpTaskComplete:
+      type: object
+      additionalProperties: false
+      required:
+        - expectedVersion
+        - outcome
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        outcome:
+          type: string
+          enum:
+            - reached
+            - no_answer
+            - rescheduled
+            - not_interested
+            - other
+    CrmFollowUpTaskDetail:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/CrmFollowUpTask"
+        actions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              action:
+                type: string
+                enum:
+                  - created
+                  - reassigned
+                  - escalated
+                  - completed
+                  - cancelled
+              fromStatus:
+                type: string
+                nullable: true
+              toStatus:
+                type: string
+              actorTenantUserId:
+                type: string
+                format: uuid
+                nullable: true
+              assigneeTenantUserId:
+                type: string
+                format: uuid
+                nullable: true
+              reason:
+                type: string
+                nullable: true
+              occurredAt:
+                type: string
+                format: date-time
+        notifications:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              kind:
+                type: string
+                enum:
+                  - assigned
+                  - due
+                  - escalated
+              recipientTenantUserId:
+                type: string
+                format: uuid
+              scheduledAt:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum:
+                  - pending
+                  - enqueued
+                  - cancelled
+                  - suppressed
+              settleReason:
+                type: string
+                nullable: true
+              deferrals:
+                type: integer
+              settledAt:
+                type: string
+                format: date-time
+                nullable: true
+    CrmFollowUpVersioned:
       type: object
       additionalProperties: false
       required:
