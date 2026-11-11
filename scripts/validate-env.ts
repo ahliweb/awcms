@@ -330,6 +330,39 @@ const RULES: readonly Rule[] = [
   // the adapters that EXIST — `fcm`/`web_push` join it in Issue #466, and
   // listing them early would let a deployment pass validation here and then
   // fail at resolve time, which is the worst place to learn it.
+  // Issue #1171, ADR-0154 section 5 — realtime progress stream caps and the
+  // slow-consumer threshold. Optional; unset means the conservative default in
+  // `_shared/sse-progress.ts`. The caps are PER INSTANCE.
+  {
+    name: "REALTIME_SSE_MAX_CONNECTIONS_PER_ACTOR",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "REALTIME_SSE_MAX_CONNECTIONS_PER_TENANT",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "REALTIME_SSE_MAX_CONNECTIONS_PER_INSTANCE",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "REALTIME_SSE_SLOW_CONSUMER_BYTES",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "REALTIME_SSE_SLOW_CONSUMER_GRACE_MS",
+    required: false,
+    type: "int",
+    min: 1
+  },
   { name: "PUSH_ENABLED", required: false, type: "bool" },
   {
     name: "PUSH_PROVIDER",

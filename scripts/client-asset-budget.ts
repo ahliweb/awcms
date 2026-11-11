@@ -1177,8 +1177,19 @@ export const READER_BUDGET_BYTES = 24_000;
  * `formatByteSizeAgainstCap` in `media-image-compression-plan.ts`, and the two
  * lines in `describeCompressionFailure` that call it; both ship only in
  * `/admin/media`'s script, which already carried the formatter they refine.
+ *
+ * **Raised for Issue #1171** (ADR-0154 realtime progress): +2,720 B (362,880 ->
+ * 365,600), measured 365,563 locally with this change (`main` sat about 30 B
+ * under its budget), with about 37 B of margin for the local/CI build
+ * difference. It is ONE module, `src/lib/ui/delivery-progress-client.ts`, which
+ * ADR-0154 R11 requires to ship in the same change as the stream: the
+ * `EventSource` wiring with its four terminal events, the polling fallback, the
+ * manual refresh, the text connection state and the rate-limited `aria-live`
+ * announcement. It loads only on `/admin/channel-accounts/[id]`, which already
+ * carried a script, and duplicates nothing: no other screen consumes a cursor
+ * stream (the push console's counters are a dozen lines with no fallback).
  */
-export const APP_BUDGET_BYTES = 362_880;
+export const APP_BUDGET_BYTES = 365_600;
 
 /**
  * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.

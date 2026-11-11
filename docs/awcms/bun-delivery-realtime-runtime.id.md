@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](bun-delivery-realtime-runtime.md)
 
-<!-- i18n-source-hash: sha256:dca82705a2f681c3ccd6daf859b087a0fae91567668584b27d6b4ababeaf5d11 -->
+<!-- i18n-source-hash: sha256:349c44dba325c89f8d77095273db781e8be02dcf7f348bb0f133b2ef32ec8fcc -->
 
 # Standar runtime pengiriman dan real-time AWCMS — Bun-only (usulan)
 
@@ -45,5 +45,5 @@
 ## Issue implementasi konkret (2026-10-24)
 
 - [#1170](https://github.com/ahliweb/awcms/issues/1170): audit dan tes manifest/job/kontainer memakai binary Bun yang dipin, tanpa salah menolak import `node:*` yang dijalankan Bun.
-- [#1171](https://github.com/ahliweb/awcms/issues/1171): implementasi SSE-first/WebSocket native Bun **setelah** ADR [#1168](https://github.com/ahliweb/awcms/issues/1168) disetujui; jangan mengklaim gateway sudah berjalan.
+- [#1171](https://github.com/ahliweb/awcms/issues/1171): **diimplementasikan sebagai SSE saja**, sesuai [ADR-0154](../adr/0154-realtime-progress-is-sse-first-on-the-existing-bun-process-reading-durable-state-websocket-not-admitted.id.md) (diterima). Topik pertama yang diadmisi adalah progres pengiriman satu pengirim WhatsApp (`GET /api/v1/whatsapp/senders/{id}/progress/stream`), dilayani proses Bun yang sudah ada dan diproyeksikan dari baris antrean. **Tidak ada gateway WebSocket** dan tidak ada yang diadmisi; belum ada topik inbox atau kampanye. Operasional: [realtime-progress-streams.id.md](realtime-progress-streams.id.md).
 - [AWCMS-One #469](https://github.com/ahliweb/awcms-one/issues/469): pengujian runtime template/deployment/commerce, tanpa fork `apps/cms` upstream.

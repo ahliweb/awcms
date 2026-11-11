@@ -478,6 +478,101 @@ async function queryScopeConfined(
   return rows.length > 0;
 }
 
+/** At most this many scopes are considered for one caller; past it the answer is truncated, which only ever HIDES rows (fail-closed). */
+const MAX_COVERED_SCOPE_CANDIDATES = 200;
+
+/**
+ * The business scopes a scope-confined caller holds for `guard`, as concrete
+ * `(type, id)` pairs a query can filter on (Issue #1171 audit M-1).
+ *
+ * Candidates are the caller's own active, non-tenant assignments plus their
+ * descendants through the same hierarchy port the chokepoint uses; each
+ * candidate is then decided by `scopeCoveredFor` (the chokepoint), so an ABAC
+ * deny or an expired assignment removes it exactly as it would for a single
+ * request. Bounded and fail-closed: a truncated candidate list hides rows, it
+ * never shows more. Memoised per `context.request`, like every decision here.
+ */
+export function coveredScopesFor(
+  context: AccountRouteContext,
+  guard: AccountGuard
+): Promise<ScopeRef[]> {
+  const memoKey = `covered:${guard.moduleKey}.${guard.activityCode}.${guard.action}`;
+  let memo = coveredScopesMemo.get(context.request);
+
+  if (!memo) {
+    memo = new Map();
+    coveredScopesMemo.set(context.request, memo);
+  }
+
+  let pending = memo.get(memoKey);
+
+  if (!pending) {
+    pending = decideCoveredScopes(context, guard);
+    memo.set(memoKey, pending);
+  }
+
+  return pending;
+}
+
+const coveredScopesMemo = new WeakMap<
+  Request,
+  Map<string, Promise<ScopeRef[]>>
+>();
+
+async function decideCoveredScopes(
+  context: AccountRouteContext,
+  guard: AccountGuard
+): Promise<ScopeRef[]> {
+  const held = (await context.tx`
+    SELECT scope_type, scope_id::text AS scope_id
+    FROM awcms_business_scope_assignments
+    WHERE tenant_id = ${context.tenantId}
+      AND tenant_user_id = ${context.auth.context.tenantUserId}
+      AND status = 'active'
+      AND scope_type <> 'tenant'
+      AND effective_from <= ${context.now}
+      AND (effective_to IS NULL OR effective_to > ${context.now})
+    ORDER BY scope_type, scope_id
+    LIMIT ${MAX_COVERED_SCOPE_CANDIDATES}
+  `) as { scope_type: string; scope_id: string }[];
+  const candidates = new Map<string, ScopeRef>();
+
+  for (const row of held) {
+    if (candidates.size >= MAX_COVERED_SCOPE_CANDIDATES) break;
+
+    candidates.set(`${row.scope_type}:${row.scope_id}`, {
+      type: row.scope_type,
+      id: row.scope_id
+    });
+
+    // Sequential: `tx` is one connection.
+    const resolution = await HIERARCHY_PORT.resolveScope(
+      context.tx,
+      context.tenantId,
+      row.scope_type,
+      row.scope_id
+    );
+
+    for (const descendant of resolution.descendantScopes) {
+      if (candidates.size >= MAX_COVERED_SCOPE_CANDIDATES) break;
+
+      candidates.set(`${descendant.scopeType}:${descendant.scopeId}`, {
+        type: descendant.scopeType,
+        id: descendant.scopeId
+      });
+    }
+  }
+
+  const covered: ScopeRef[] = [];
+
+  for (const candidate of candidates.values()) {
+    if (await scopeCoveredFor(context, guard, candidate))
+      covered.push(candidate);
+  }
+
+  return covered;
+}
+
 /**
  * The business scope a CLIENT asks an account to carry is not a fact: it is
  * authorised as the required scope (the caller must hold it), and it must

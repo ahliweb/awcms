@@ -105,7 +105,7 @@ export const METRIC_DEFINITIONS = {
       "Current in-flight request count per database work class (src/lib/database/work-class.ts).",
     allowedLabelKeys: ["workClass"],
     approxCardinality:
-      "Exactly 5 — the fixed WorkClass enum (critical_transaction, interactive, reporting, background_sync, maintenance).",
+      "Exactly 6 — the fixed WorkClass enum (critical_transaction, interactive, reporting, background_sync, maintenance, realtime_stream).",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
   db_pool_work_class_queued: {
@@ -114,7 +114,7 @@ export const METRIC_DEFINITIONS = {
     description:
       "Current FIFO-queued waiter count per database work class (backpressure signal).",
     allowedLabelKeys: ["workClass"],
-    approxCardinality: "Exactly 5 — same fixed WorkClass enum.",
+    approxCardinality: "Exactly 6 — same fixed WorkClass enum.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
   db_pool_work_class_rejected_total: {
@@ -123,7 +123,7 @@ export const METRIC_DEFINITIONS = {
     description:
       "Count of database work-class acquisitions rejected immediately (Issue #743) because the bounded FIFO queue for that class was already full — distinct from a queued caller that later timed out (see db_pool_work_class_wait_ms's outcome label).",
     allowedLabelKeys: ["workClass"],
-    approxCardinality: "Exactly 5 — same fixed WorkClass enum.",
+    approxCardinality: "Exactly 6 — same fixed WorkClass enum.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   },
   db_pool_work_class_wait_ms: {
@@ -572,6 +572,73 @@ export const METRIC_DEFINITIONS = {
     allowedLabelKeys: ["outcome"],
     approxCardinality:
       "Exactly 2 — the code-defined anonymized/skipped_legal_hold outcomes.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  // Realtime progress streams (Issue #1171, ADR-0154 section 8): tenant-
+  // AGGREGATE only. `topic` is a code-defined constant of an admitted topic
+  // (`src/modules/_shared/realtime-topics.ts`), never a resource id; no tenant,
+  // actor or resource id is ever a label.
+  realtime_stream_open: {
+    name: "realtime_stream_open",
+    type: "gauge",
+    description:
+      "Progress streams currently open on this instance (all topics, all tenants).",
+    allowedLabelKeys: [],
+    approxCardinality: "Exactly 1 — unlabeled, per instance.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_stream_opened_total: {
+    name: "realtime_stream_opened_total",
+    type: "counter",
+    description: "Progress streams opened, by topic.",
+    allowedLabelKeys: ["topic"],
+    approxCardinality:
+      "One series per admitted topic (a handful; the registry is code-defined).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_stream_refused_total: {
+    name: "realtime_stream_refused_total",
+    type: "counter",
+    description:
+      "Progress stream requests refused before a stream opened, by topic and reason (origin, auth_denied, not_found, capped_actor, capped_tenant, capped_instance, unavailable).",
+    allowedLabelKeys: ["topic", "reason"],
+    approxCardinality: "Topics x 7 code-defined reasons.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_stream_closed_total: {
+    name: "realtime_stream_closed_total",
+    type: "counter",
+    description:
+      "Progress streams closed, by topic and reason (revoked, expired, slow_consumer, error, client).",
+    allowedLabelKeys: ["topic", "reason"],
+    approxCardinality: "Topics x 5 code-defined reasons.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_stream_frames_total: {
+    name: "realtime_stream_frames_total",
+    type: "counter",
+    description:
+      "Frames written by progress streams, by topic and kind (progress, snapshot_required, heartbeat, skipped_pressure).",
+    allowedLabelKeys: ["topic", "kind"],
+    approxCardinality: "Topics x 4 code-defined kinds.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_stream_tick_duration_ms: {
+    name: "realtime_stream_tick_duration_ms",
+    type: "histogram",
+    description:
+      "Duration of one progress-stream tick (one transaction: authorize, re-check the resource, read).",
+    allowedLabelKeys: ["topic"],
+    approxCardinality: "One series per admitted topic.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  realtime_stream_frame_lag_ms: {
+    name: "realtime_stream_frame_lag_ms",
+    type: "histogram",
+    description:
+      "Time between the newest committed change a frame reports (its cursor timestamp) and the frame being written.",
+    allowedLabelKeys: ["topic"],
+    approxCardinality: "One series per admitted topic.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   }
 } as const satisfies Record<string, MetricDefinition>;

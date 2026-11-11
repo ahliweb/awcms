@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:016ee5e51124e861afd820d2a62949b9040c335511d87142114ae4f218e5326e -->
+<!-- i18n-source-hash: sha256:c9211ba81d5a143909da9669fc26052037f8dfb5cf3704b73c3d67af4a141a65 -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -214,3 +214,16 @@ Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q
 ## Runtime Bun WhatsApp / status UI terencana
 
 `bun run whatsapp:dispatch` sudah mengirim melalui API provider dari antrean Bun tunggal. Perutean Meta multi-pengirim ([#1141](https://github.com/ahliweb/awcms/issues/1141)) memakainya, dan pekerjaan StarSender serta webhook [#1142–#1143](https://github.com/ahliweb/awcms/issues/1142) wajib memakainya juga, tanpa worker Node.js/Socket.IO. SSE/WS Bun nanti hanya menampilkan status; diterima provider bukan delivered. [Standar runtime](../../../docs/awcms/bun-delivery-realtime-runtime.id.md).
+
+## Progres pengirim real-time (Issue #1171, ADR-0154)
+
+Progres pengiriman satu pengirim, secara langsung, sebagai Server-Sent Events dari proses Bun yang sudah ada: `GET /api/v1/whatsapp/senders/{id}/progress/stream`, dengan snapshot REST dan fallback polling `GET /api/v1/whatsapp/senders/{id}/progress`, di bawah permission yang dapat diberikan terpisah `whatsapp_delivery.progress.read` (`sql/360`, yang juga menambah indeks keyset `(tenant_id, sender_account_id, updated_at, id)`). Implementasi: `application/whatsapp-sender-progress.ts` (topik) di atas `_shared/progress-sse-route.ts` (factory).
+
+- **Proyeksi, bukan jalur kirim.** Frame dibaca dari `awcms_whatsapp_messages`; tidak ada yang di stream mengantrekan, mengirim, atau mengubah status (ADR-0148 I10). "Terkirim" berarti provider menerima pesan, sama seperti di bagian lain modul ini.
+- **Visibilitas sama dengan `GET /senders`.** Pengirim harus akun `channel_accounts` yang boleh dilihat pemanggil (penugasan, business scope); akun tak dikenal, milik tenant lain, dan tersembunyi adalah satu `404`. Diputuskan ulang setiap tick 5 dtk bersama permission: peran, penugasan, atau brand yang dicabut saat stream berjalan mengakhiri stream dengan `authorization-revoked` dan baris audit `realtime_stream.revoked`.
+- **Baris, bukan hanya akun (audit keamanan M-1).** Pengirim seluruh tenant membawa pesan setiap brand. Pemanggil yang terkurung business scope hanya melihat lewatnya pesan yang business scope-nya SENDIRI ia pegang (diputuskan per tick lewat chokepoint, termasuk turunan): jumlah, daftar perubahan, daftar terbaru, dan cursor sekaligus, di snapshot maupun stream. Pesan tanpa scope tidak terlihat oleh pemanggil terkurung; cursor yang menunjuk baris yang tak boleh ia lihat mendapat `snapshot-required`. Pemanggil tak terkurung melihat semua baris.
+- **Biaya terbatas (audit M-2).** Jumlah mencakup pesan yang DIBUAT dalam 7 hari terakhir (`countWindowDays`), dilayani `awcms_whatsapp_messages_sender_window_idx`; setiap pembacaan satu statement (`tests/integration/whatsapp-sender-progress-query-budget.integration.test.ts`). Tick berjalan di work class kecilnya sendiri `realtime_stream`, dan slot koneksi diambil sebelum query topik apa pun, sehingga `429` hanya membayar satu rantai guard.
+- **Teredaksi.** Jumlah per status, dan per pesan yang berubah hanya id, status, dan waktunya. Tidak pernah nomor (mentah, masked, atau hash), isi, variabel, template, respons provider, atau teks error.
+- **Cursor.** `wsp1.<akun>.<updated_at µs>.<id pesan>`, dihitung PostgreSQL; `Last-Event-ID` melanjutkan; cursor asing, salah bentuk, atau sudah dipurge, atau lebih dari 50 perubahan sekaligus, menghasilkan `snapshot-required`.
+- **Layar.** Panel progres di `/admin/channel-accounts/{id}` merender jumlah di server, punya tombol muat ulang manual, melakukan polling saat stream tak tersedia, menyatakan koneksi sebagai teks, dan mengumumkan secara sopan dengan laju terbatas.
+- **Keputusan terbuka (fail-closed untuk sekarang):** pengirim deployment (`sender_account_id` NULL) tidak punya stream: ia tidak punya id akun untuk diputuskan visibilitasnya. **Catatan deploy:** `sql/360` membangun dua indeks tanpa `CONCURRENTLY` (runner membungkus tiap migrasi dalam transaksi), yang menahan tulisan ke `awcms_whatsapp_messages` sampai selesai; jalankan di jendela sepi untuk antrean besar. **Sudah ada sebelumnya, di luar cakupan:** `POST /whatsapp/messages/{id}/cancel` tidak menerapkan pengurungan business scope; dilacak terpisah. Operasional: [stream progres real-time](../../../docs/awcms/realtime-progress-streams.id.md).

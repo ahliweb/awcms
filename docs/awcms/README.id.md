@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:b43dcad2dc1cee26726f46db7a8b883a66a2a7d9bd7a33117c9c4b26fd635521 -->
+<!-- i18n-source-hash: sha256:ce0f5f82eee3d4b23eae20e92151a54535a1797f0165e4a8c0ec606a4168af48 -->
 
 # Paket Dokumen Teknis AWCMS
 
@@ -130,7 +130,7 @@ Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, da
 
 ## Paket dokumen AWCMS
 
-[Standar worker kanal dan real-time Bun-only](bun-delivery-realtime-runtime.id.md) (issue #1167 dan ADR #1168) mencakup pengiriman email/WhatsApp/Web Push Bun yang sudah ada dan SSE/WebSocket Bun yang masih direncanakan.
+[Standar worker kanal dan real-time Bun-only](bun-delivery-realtime-runtime.id.md) (issue #1167 dan ADR #1168) mencakup pengiriman email/WhatsApp/Web Push Bun yang sudah ada. Progres real-time hanya SSE (ADR-0154, issue #1171): [stream progres real-time](realtime-progress-streams.id.md) mendokumentasikan satu topik yang diadmisi dan operasionalnya. Tidak ada gateway WebSocket.
 
 ## Fondasi omnichannel (desain, Diterima)
 

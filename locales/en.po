@@ -9516,3 +9516,27 @@ msgstr[1] ""
 
 msgid "Only a connected account can be the default sender. This one is not connected yet."
 msgstr ""
+
+msgid "Delivery progress"
+msgstr ""
+
+msgid "Messages queued through this sender in the last {days} days that you may see, by status. It updates while this page is open; it is not a delivery receipt and it stops when the tab is closed."
+msgstr ""
+
+msgid "Connection"
+msgstr ""
+
+msgid "Reconnecting…"
+msgstr ""
+
+msgid "Not live — showing the state as of {time}"
+msgstr ""
+
+msgid "Your access to this progress ended. Reload the page to see what you can still view."
+msgstr ""
+
+msgid "{sent} sent, {failed} failed, {waiting} waiting"
+msgstr ""
+
+msgid "Refresh progress"
+msgstr ""

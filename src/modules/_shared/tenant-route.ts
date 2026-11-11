@@ -25,6 +25,12 @@ import {
 } from "../identity-access/domain/suspended-tenant-allowlist";
 import { resolvePlatformTenantIdIgnoringStatus } from "../../lib/tenant/platform-tenant";
 import { runSseLoop, type SseTickOutcome } from "./sse-stream";
+import {
+  declaredAppOrigin,
+  isStreamFetchMetadataAllowed,
+  isStreamOriginAllowed
+} from "./sse-progress";
+import { resolveRequestOrigin } from "../../lib/http/site-origin";
 
 /**
  * `defineTenantRoute` (Issue #255) — the ONE place the auth/tenant opening that
@@ -610,7 +616,28 @@ export type SseTenantRouteConfig<TSnapshot> = {
 export function defineSseTenantRoute<TSnapshot>(
   config: SseTenantRouteConfig<TSnapshot>
 ): APIRoute {
-  return async ({ request, cookies, clientAddress }) => {
+  return async ({ request, cookies, clientAddress, url }) => {
+    // ADR-0154 section 3 (Issue #1171): a stream request with a PRESENT,
+    // foreign `Origin` is refused before any work — the read-side equivalent of
+    // the CSWSH check, applied to every stream this seam serves.
+    const appOrigin = declaredAppOrigin();
+    const allowedOrigins = [resolveRequestOrigin(url, request)];
+
+    if (appOrigin) allowedOrigins.push(appOrigin);
+
+    if (!isStreamOriginAllowed(request.headers.get("origin"), allowedOrigins)) {
+      return fail(403, "ORIGIN_REFUSED", "Stream origin is not allowed.");
+    }
+
+    // Audit L-2: a cross-site or navigation request never opens a stream.
+    if (!isStreamFetchMetadataAllowed(request.headers)) {
+      return fail(
+        403,
+        "ORIGIN_REFUSED",
+        "Stream request context is not allowed."
+      );
+    }
+
     const { tenantId, token } = resolveAuthInputs(request, cookies);
 
     if (!tenantId) {
@@ -706,16 +733,22 @@ export function defineSseTenantRoute<TSnapshot>(
             },
             waitForNextTick: () =>
               new Promise<void>((resolve) => {
-                const timer = setTimeout(resolve, config.tickIntervalMs);
+                // The abort listener is REMOVED when the timer fires (Issue
+                // #1171): a `{ once: true }` listener only removes itself when
+                // it runs, so one per tick used to accumulate for the whole
+                // connection (120 per ten-minute push stream).
+                const onTickAbort = () => {
+                  clearTimeout(timer);
+                  resolve();
+                };
+                const timer = setTimeout(() => {
+                  request.signal.removeEventListener("abort", onTickAbort);
+                  resolve();
+                }, config.tickIntervalMs);
 
-                request.signal.addEventListener(
-                  "abort",
-                  () => {
-                    clearTimeout(timer);
-                    resolve();
-                  },
-                  { once: true }
-                );
+                request.signal.addEventListener("abort", onTickAbort, {
+                  once: true
+                });
               }),
             isFinished: () =>
               closed || request.signal.aborted || Date.now() >= deadline,
