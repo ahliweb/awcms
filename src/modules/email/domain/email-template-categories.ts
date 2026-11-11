@@ -27,6 +27,11 @@ export const BASE_EMAIL_TEMPLATE_CATEGORIES = [
   "hr.attendance_correction_applied",
   "hr.attendance_correction_rejected",
   "hr.attendance_correction_cancelled",
+  // #1165 (ADR-0159) — `crm_follow_up` tells a member of STAFF about a follow-up
+  // task (never the lead). One category per kind, so each is translated whole.
+  "crm.follow_up_assigned",
+  "crm.follow_up_due",
+  "crm.follow_up_escalated",
   "derived.transactional"
 ] as const;
 
@@ -86,6 +91,17 @@ const BASE_CATEGORY_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = {
     "userName",
     "employeeName",
     "correctionDate"
+  ],
+  // The task title (tenant-authored configuration), its due instant and a short
+  // opaque reference. NEVER the lead's name, contact value or a note: there is
+  // deliberately no variable for any of them (ADR-0159 section 2).
+  "crm.follow_up_assigned": ["userName", "taskTitle", "dueAt", "taskReference"],
+  "crm.follow_up_due": ["userName", "taskTitle", "dueAt", "taskReference"],
+  "crm.follow_up_escalated": [
+    "userName",
+    "taskTitle",
+    "dueAt",
+    "taskReference"
   ],
   "derived.transactional": ["userName", "subject", "body", "actionUrl"]
 };

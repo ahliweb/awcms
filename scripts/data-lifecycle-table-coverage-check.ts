@@ -184,6 +184,41 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0153 / Issue #1166. One row per human-reviewed merge (at most one live merge per absorbed lead, unique index), written only by a holder of `merges.manage`. It is the undo record and is never purged by age. Not bounded in time; see awcms_crm_leads for the recorded retention follow-up (O4)."
   },
   {
+    table: "awcms_crm_follow_up_settings",
+    reason:
+      "ADR-0159 / Issue #1165. One row per tenant (primary key tenant_id), written only by a holder of `rules.configure`: the ceiling is the number of tenants. It holds a switch and a cap."
+  },
+  {
+    table: "awcms_crm_follow_up_rules",
+    reason:
+      "ADR-0159 / Issue #1165. AUTHORED by an administrator holding `rules.configure`, unique per (tenant, code) and listed at most 200 per tenant; nothing in a request path or a job inserts one. Never deleted: its revisions are what its tasks point at."
+  },
+  {
+    table: "awcms_crm_follow_up_rule_revisions",
+    reason:
+      "ADR-0159 / Issue #1165. One row per PUBLISHED revision of an authored rule, written only by `rules.configure` and only when the definition changes (an identical definition is refused): the ceiling is administrator edits. Immutable by trigger, and must not be purged while a task names it."
+  },
+  {
+    table: "awcms_crm_follow_up_tasks",
+    reason:
+      "ADR-0159 / Issue #1165. At most one task per (rule, source lead event) (unique key) and at most `max_open_per_lead` (1-5) LIVE tasks per lead and rule: bounded by lead events times active rules. Not bounded in time FOR NOW: the retention window for closed tasks is ADR-0159 open question O4, decided together with crm_leads' own (ADR-0153 O4); the status-aware sweep is the recorded follow-up in src/modules/crm-follow-up/README.md."
+  },
+  {
+    table: "awcms_crm_follow_up_task_actions",
+    reason:
+      "ADR-0159 / Issue #1165. Append-only by trigger; a task's status can change at most three times (open -> escalated -> closed) plus one row per owner change of its lead: bounded by tasks times lead reassignments. Not bounded in time; see awcms_crm_follow_up_tasks for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_follow_up_stop_signals",
+    reason:
+      "ADR-0159 / Issue #1165. Append-only; one row per distinct stopping lead event (unique on source event and kind) or per deliberate staff act holding `stop_signals.create` behind an Idempotency-Key. A stop is permanent, so the table holds at most a handful of rows per lead. Not bounded in time; see awcms_crm_follow_up_tasks for the recorded retention follow-up (O4)."
+  },
+  {
+    table: "awcms_crm_follow_up_notifications",
+    reason:
+      "ADR-0159 / Issue #1165. At most one row per (task, kind, recipient) (unique key) and three kinds, so bounded by tasks times their assignees. Holds ids, a kind, instants and a closed reason: no content. Not bounded in time; see awcms_crm_follow_up_tasks for the recorded retention follow-up (O4)."
+  },
+  {
     table: "awcms_channel_provider_connections",
     reason:
       "ADR-0148 / Issue #1140. One row per authorisation an administrator granted a provider, written only through the authenticated OAuth callback or the connector that completes it. Abandoned `pending` hand-offs are failed and their authorisation-code ciphertext erased by the bounded sweep on the next authorisation start (`sweepExpiredOAuthStates`); a revoked row keeps no credential reference, so it is an inert few-hundred-byte record of the fact."

@@ -77,6 +77,7 @@ scheduled, or by a specific CI workflow.
 | `config:validate`                         | `validate-env.ts`                              | —    |
 | `contracts:omes:sync`                     | `sync-omes-contracts.ts`                       | —    |
 | `contracts:omes:sync:check`               | `sync-omes-contracts.ts`                       | ✅   |
+| `crm-follow-up:dispatch`                  | `crm-follow-up-dispatch.ts`                    | —    |
 | `data-lifecycle:archive-purge`            | `data-lifecycle-archive-purge.ts`              | —    |
 | `data-lifecycle:registry:check`           | `data-lifecycle-registry-check.ts`             | ✅   |
 | `data-lifecycle:table-coverage:check`     | `data-lifecycle-table-coverage-check.ts`       | ✅   |

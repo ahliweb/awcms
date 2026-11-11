@@ -388,6 +388,13 @@
 | `awcms_comments_reports`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
 | `awcms_comments_settings`                      | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
 | `awcms_comments_threads`                       | `sql/066_awcms_comments_schema.sql`                        | yes | yes   |
+| `awcms_crm_follow_up_notifications`            | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_rule_revisions`           | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_rules`                    | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_settings`                 | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_stop_signals`             | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_task_actions`             | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
+| `awcms_crm_follow_up_tasks`                    | `sql/369_awcms_crm_follow_up_schema.sql`                   | yes | yes   |
 | `awcms_crm_lead_assignments`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
 | `awcms_crm_lead_contact_points`                | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |
 | `awcms_crm_lead_conversions`                   | `sql/342_awcms_crm_leads_schema.sql`                       | yes | yes   |

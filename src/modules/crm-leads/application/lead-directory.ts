@@ -467,6 +467,7 @@ export async function createLead(
       channelAccountId: input.source.channelAccountId,
       campaignRef: input.source.campaignRef,
       contactPointKinds: kinds,
+      ownerTenantUserId: input.ownerTenantUserId ?? null,
       occurredAt: input.source.occurredAt,
       recordedAt: now
     })

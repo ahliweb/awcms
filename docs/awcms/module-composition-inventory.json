@@ -106,6 +106,35 @@
       "deploymentProfiles": null
     },
     {
+      "key": "crm_follow_up",
+      "name": "CRM Follow-up",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": "domain",
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "module_management",
+        "domain_event_runtime",
+        "crm_leads"
+      ],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "workflow_notification",
+          "providedBy": "email",
+          "optional": true
+        }
+      ],
+      "permissionCount": 5,
+      "navigationCount": 0,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
       "key": "crm_leads",
       "name": "CRM Leads",
       "version": "0.1.0",

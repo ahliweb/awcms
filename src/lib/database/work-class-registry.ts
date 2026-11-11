@@ -85,6 +85,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Scheduled reminder/confirmation dispatcher (booking:reminders:dispatch, Issue #943, ADR-0131/ADR-0133), every minute — database-only: each tenant pass reads through three narrow SECURITY DEFINER functions (sql/285), settles intents (sql/284) and writes the delivery module\'s queue row through its port (one INSERT; the provider is called by whatsapp:dispatch, another process). A late pass delays a notice by a minute and never touches a booking. Both its pass and its --dry-run count pass workClass: "maintenance" explicitly.'
   },
+  "scripts/crm-follow-up-dispatch.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled follow-up dispatcher (crm-follow-up:dispatch, Issue #1165, ADR-0159), every minute — database-only: each tenant pass escalates overdue tasks and settles due staff notices (sql/369), handing a notice to the e-mail outbox through the workflow_notification port (one row; the provider is called by email:dispatch, another process). A late pass delays a staff reminder by a minute and never touches a lead. Both its pass and its --dry-run count pass workClass: "maintenance" explicitly.'
+  },
   "scripts/form-draft-purge.ts": {
     workClass: "maintenance",
     rationale:

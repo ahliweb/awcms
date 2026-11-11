@@ -7836,6 +7836,7 @@ msgid "CRM Leads"
 msgstr ""
 
 msgid "Telegram Engagement"
+msgid "CRM Follow-up"
 msgstr ""
 
 msgid "Tenant suspended"

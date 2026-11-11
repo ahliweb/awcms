@@ -37,6 +37,7 @@ import { websiteEngagementModule } from "./website-engagement/module";
 import { socialPublishingModule } from "./social-publishing/module";
 import { crmLeadsModule } from "./crm-leads/module";
 import { telegramEngagementModule } from "./telegram-engagement/module";
+import { crmFollowUpModule } from "./crm-follow-up/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -284,6 +285,13 @@ const baseModules: ModuleDescriptor[] = [
   // (TELEGRAM_ENGAGEMENT_ENABLED). See
   // src/modules/telegram-engagement/module.ts's `description`.
   telegramEngagementModule
+  // Admission PROPOSED by ADR-0159 (Issue #1165): rule-versioned STAFF
+  // follow-up tasks keyed by crm_leads events, with stop signals that win every
+  // race. `experimental` and OFF at three levels (CRM_FOLLOW_UP_ENABLED, Module
+  // Management, its own tenant switch). Depends on crm_leads (above) for its
+  // events; consumes `email`'s workflow_notification capability optionally.
+  // See src/modules/crm-follow-up/module.ts's `description`.
+  crmFollowUpModule
 ];
 
 /**

@@ -248,6 +248,8 @@ describe("buildDomainEventConsumerRegistry", () => {
       (c) => c.name
     );
     expect(names).toEqual([
+      // Issue #1165 (ADR-0159): crm_leads events -> follow-up tasks and stops.
+      "crm_follow_up.lead_signals",
       "domain_event_runtime.activity_rollup_projector",
       "hr_workforce.attendance_correction_settler",
       "logging.sample_event_audit_projector",

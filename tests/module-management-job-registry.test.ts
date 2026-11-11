@@ -99,6 +99,8 @@ describe("fetchModuleJobs", () => {
         "bun run channel-accounts:secrets:rekey",
         "bun run comments:retention",
         "bun run config:validate",
+        // Issue #1165 (ADR-0159): escalations and staff notices of crm_follow_up.
+        "bun run crm-follow-up:dispatch",
         "bun run data-lifecycle:archive-purge",
         "bun run domain-events:deliveries:purge",
         "bun run domain-events:dispatch",

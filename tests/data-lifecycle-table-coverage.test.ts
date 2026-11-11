@@ -622,14 +622,21 @@ describe("the real repository", () => {
       // status-aware sweep is the recorded follow-up in
       // src/modules/crm-leads/README.md, which replaces those seven entries.
       //
-      // **49 since email sender routing (Issue #1160, ADR-0151 section 2), and
+      // **56 since crm_follow_up (Issue #1165, ADR-0159): +7, see below.** Earlier: **49 since email sender routing (Issue #1160, ADR-0151 section 2), and
       // this raise does not clear the bar either.** One table:
       // `awcms_email_sender_policies`, the email twin of
       // `awcms_whatsapp_sender_policies` already on this list, for the same
       // reason: authored configuration, one row per business scope, changed in
       // place and never deleted (trigger). An age-based purge would silently
       // reset a brand's sender to the deployment sender.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(49);
+      // **+7 (cap 56) since `crm_follow_up` (Issue #1165, ADR-0159).** Seven tables in
+      // the same two classes. Three are authored configuration (`_settings`,
+      // `_rules`, the immutable `_rule_revisions`). Four (tasks, actions, stop
+      // signals, notifications) grow with lead events under unique keys, and
+      // their retention window is ADR-0159 O4, decided with ADR-0153 O4: the
+      // status-aware sweep is the recorded follow-up in
+      // src/modules/crm-follow-up/README.md, which replaces those four entries.
+            expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(56);
     });
 
     test("every entry names a table that really exists in sql/", () => {

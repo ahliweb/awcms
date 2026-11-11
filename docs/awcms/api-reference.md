@@ -18272,6 +18272,264 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
 }
 ```
 
+### Schema: CrmFollowUpDefinition
+
+A CLOSED, declarative revision definition: no expression, script or callback. Offsets are WORKING minutes over the calendar.
+
+| Field             | Type    | Required | Nullable | Description                                                  |
+| ----------------- | ------- | -------- | -------- | ------------------------------------------------------------ |
+| `trigger`         | object  | yes      | no       | A `lead_assigned` trigger takes no pipeline or stage filter. |
+| `taskTitle`       | string  | yes      | no       |                                                              |
+| `dueAfterMinutes` | integer | yes      | no       |                                                              |
+| `escalation`      | object  | no       | yes      |                                                              |
+| `assignee`        | object  | yes      | no       |                                                              |
+| `notify`          | object  | no       | no       |                                                              |
+| `maxOpenPerLead`  | integer | no       | no       |                                                              |
+| `calendar`        | object  | yes      | no       |                                                              |
+
+**Example**
+
+```json
+{
+  "trigger": {
+    "kind": "lead_created",
+    "pipelineId": "00000000-0000-0000-0000-000000000000",
+    "stageCategory": "new",
+    "stageKey": "string"
+  },
+  "taskTitle": "string",
+  "dueAfterMinutes": 0,
+  "escalation": {
+    "afterMinutes": 1,
+    "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+  },
+  "assignee": {
+    "mode": "lead_owner",
+    "tenantUserId": "00000000-0000-0000-0000-000000000000"
+  },
+  "notify": {
+    "onAssign": false,
+    "onDue": false
+  },
+  "maxOpenPerLead": 1,
+  "calendar": {
+    "timeZone": "string",
+    "workingDays": [1],
+    "workStartMinute": 0,
+    "workEndMinute": 1,
+    "holidays": ["2026-01-01"]
+  }
+}
+```
+
+### Schema: CrmFollowUpRevisionPublish
+
+| Field             | Type                                                     | Required | Nullable | Description |
+| ----------------- | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer                                                  | yes      | no       |             |
+| `definition`      | [`CrmFollowUpDefinition`](#schema-crmfollowupdefinition) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "definition": {
+    "trigger": {
+      "kind": "lead_created",
+      "pipelineId": "00000000-0000-0000-0000-000000000000",
+      "stageCategory": "new",
+      "stageKey": "string"
+    },
+    "taskTitle": "string",
+    "dueAfterMinutes": 0,
+    "escalation": {
+      "afterMinutes": 1,
+      "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "assignee": {
+      "mode": "lead_owner",
+      "tenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "notify": {
+      "onAssign": false,
+      "onDue": false
+    },
+    "maxOpenPerLead": 1,
+    "calendar": {
+      "timeZone": "string",
+      "workingDays": [],
+      "workStartMinute": 0,
+      "workEndMinute": 1,
+      "holidays": []
+    }
+  }
+}
+```
+
+### Schema: CrmFollowUpRuleCreate
+
+| Field        | Type                                                     | Required | Nullable | Description |
+| ------------ | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `code`       | string                                                   | yes      | no       |             |
+| `name`       | string                                                   | yes      | no       |             |
+| `definition` | [`CrmFollowUpDefinition`](#schema-crmfollowupdefinition) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "code": "string",
+  "name": "string",
+  "definition": {
+    "trigger": {
+      "kind": "lead_created",
+      "pipelineId": "00000000-0000-0000-0000-000000000000",
+      "stageCategory": "new",
+      "stageKey": "string"
+    },
+    "taskTitle": "string",
+    "dueAfterMinutes": 0,
+    "escalation": {
+      "afterMinutes": 1,
+      "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "assignee": {
+      "mode": "lead_owner",
+      "tenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "notify": {
+      "onAssign": false,
+      "onDue": false
+    },
+    "maxOpenPerLead": 1,
+    "calendar": {
+      "timeZone": "string",
+      "workingDays": [],
+      "workStartMinute": 0,
+      "workEndMinute": 1,
+      "holidays": []
+    }
+  }
+}
+```
+
+### Schema: CrmFollowUpSettingsPatch
+
+| Field                        | Type    | Required | Nullable | Description |
+| ---------------------------- | ------- | -------- | -------- | ----------- |
+| `enabled`                    | boolean | no       | no       |             |
+| `maxNoticesPerRecipientHour` | integer | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "enabled": false,
+  "maxNoticesPerRecipientHour": 1
+}
+```
+
+### Schema: CrmFollowUpSimulateRequest
+
+| Field        | Type                                                     | Required | Nullable | Description |
+| ------------ | -------------------------------------------------------- | -------- | -------- | ----------- |
+| `definition` | [`CrmFollowUpDefinition`](#schema-crmfollowupdefinition) | yes      | no       |             |
+| `trigger`    | object                                                   | yes      | no       |             |
+| `leadId`     | string (uuid)                                            | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "definition": {
+    "trigger": {
+      "kind": "lead_created",
+      "pipelineId": "00000000-0000-0000-0000-000000000000",
+      "stageCategory": "new",
+      "stageKey": "string"
+    },
+    "taskTitle": "string",
+    "dueAfterMinutes": 0,
+    "escalation": {
+      "afterMinutes": 1,
+      "recipientTenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "assignee": {
+      "mode": "lead_owner",
+      "tenantUserId": "00000000-0000-0000-0000-000000000000"
+    },
+    "notify": {
+      "onAssign": false,
+      "onDue": false
+    },
+    "maxOpenPerLead": 1,
+    "calendar": {
+      "timeZone": "string",
+      "workingDays": [],
+      "workStartMinute": 0,
+      "workEndMinute": 1,
+      "holidays": []
+    }
+  },
+  "trigger": {
+    "kind": "lead_created",
+    "pipelineId": "00000000-0000-0000-0000-000000000000",
+    "stageCategory": "new",
+    "stageKey": "string",
+    "ownerTenantUserId": "00000000-0000-0000-0000-000000000000",
+    "occurredAt": "2026-01-01T00:00:00.000Z"
+  },
+  "leadId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+### Schema: CrmFollowUpStopSignalCreate
+
+| Field        | Type                                                                    | Required | Nullable | Description                           |
+| ------------ | ----------------------------------------------------------------------- | -------- | -------- | ------------------------------------- |
+| `kind`       | enum(`reply_received`, `consent_withdrawn`, `sender_blocked`, `manual`) | yes      | no       |                                       |
+| `occurredAt` | string (date-time)                                                      | no       | no       | Defaults to now; never in the future. |
+
+**Example**
+
+```json
+{
+  "kind": "reply_received",
+  "occurredAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CrmFollowUpTaskComplete
+
+| Field             | Type                                                                   | Required | Nullable | Description |
+| ----------------- | ---------------------------------------------------------------------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer                                                                | yes      | no       |             |
+| `outcome`         | enum(`reached`, `no_answer`, `rescheduled`, `not_interested`, `other`) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1,
+  "outcome": "reached"
+}
+```
+
+### Schema: CrmFollowUpVersioned
+
+| Field             | Type    | Required | Nullable | Description |
+| ----------------- | ------- | -------- | -------- | ----------- |
+| `expectedVersion` | integer | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "expectedVersion": 1
+}
+```
+
 ### Schema: CrmLeadsSettingsPatch
 
 | Field            | Type    | Required | Nullable | Description |
