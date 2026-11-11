@@ -5,7 +5,11 @@
  * transaction per tenant (a failure in one tenant is logged and counted, and
  * never stops the others):
  *
- * 1. Assignee re-check: every current assignee is re-run through
+ * 0. Customer-state sweep: Telegram consent changes and website withdrawals of
+ *    the last 48 hours that the projection has not applied yet (see
+ *    `applyRecentCustomerStateChanges`).
+ * 1. Assignee re-check: current assignees (bounded, least recently checked
+ *    first) are re-run through
  *    `assigneeEligibility`. Somebody who is no longer eligible (deactivated,
  *    lost the permission, confinement no longer covers the conversation) is
  *    UNASSIGNED from those conversations, each with an `assignee_revoked`
@@ -29,10 +33,12 @@ import type { WorkflowNotificationPort } from "../../_shared/ports/workflow-noti
 import { resolveModuleEnabled } from "../../identity-access/application/auth-context";
 import { isOmnichannelInboxEnabled } from "../domain/inbox-config";
 import {
-  CONSENT_SWEEP_BATCH,
-  CONSENT_SWEEP_WINDOW_HOURS,
-  TELEGRAM_CONSENT_CHANGED_EVENT_TYPE,
+  CUSTOMER_STATE_EVENT_TYPES,
+  CUSTOMER_STATE_SWEEP_BATCH,
+  CUSTOMER_STATE_SWEEP_WINDOW_HOURS,
   OMNICHANNEL_INBOX_MODULE_KEY,
+  TELEGRAM_CONTACT_AGGREGATE_TYPE,
+  WEBSITE_SUBMISSION_AGGREGATE_TYPE,
   SLA_BREACH_TEMPLATE_KEY,
   SLA_SWEEP_BATCH
 } from "../domain/inbox-constants";
@@ -40,7 +46,7 @@ import { assigneeEligibility } from "./assignee-eligibility";
 import { projectEvent } from "./conversation-projector";
 
 export type SlaTenantResult = {
-  consentApplied: number;
+  customerStateApplied: number;
   revoked: number;
   breached: number;
   notified: number;
@@ -61,28 +67,47 @@ export type SlaJobDeps = {
 };
 
 /**
- * Applies the Telegram consent changes recorded in the last
- * `CONSENT_SWEEP_WINDOW_HOURS` (bounded) to the projection. Idempotent: a
- * change older than the one already applied is ignored by its sequence, so
- * sweeping the same window every run has one effect.
+ * Applies the customer-state changes recorded in the last
+ * `CUSTOMER_STATE_SWEEP_WINDOW_HOURS` that the projection has NOT applied yet:
+ *
+ * - Telegram consent, which no consumer subscribes to (its dispatcher role may
+ *   not write delivery rows, sql/374), so this is how a later opt-out of an
+ *   existing conversation arrives;
+ * - website withdrawals, which the consumer does receive: this is the safety
+ *   net for a delivery that dead-lettered or ran while the module was off
+ *   (#1275 audit, H-1). A withdrawal must never be lost.
+ *
+ * Only events NEWER than the conversation's applied state are read (a join on
+ * the conversation, not a scan of the window), newest first (L-4): once one is
+ * applied, every older event of that conversation drops out of the next run's
+ * answer, so the bound can never starve a pending change behind applied ones.
  */
-export async function applyRecentConsentChanges(
+export async function applyRecentCustomerStateChanges(
   tx: Bun.SQL,
   tenantId: string,
   now: Date
 ): Promise<number> {
   const since = new Date(
-    now.getTime() - CONSENT_SWEEP_WINDOW_HOURS * 3_600_000
+    now.getTime() - CUSTOMER_STATE_SWEEP_WINDOW_HOURS * 3_600_000
   );
   const events = (await tx`
-    SELECT id, event_type, payload, event_sequence::text AS seq
-    FROM awcms_domain_events
-    WHERE tenant_id = ${tenantId}
-      AND event_type = ${TELEGRAM_CONSENT_CHANGED_EVENT_TYPE}
-      AND event_version = '1.0'
-      AND recorded_at >= ${since}
-    ORDER BY event_sequence
-    LIMIT ${CONSENT_SWEEP_BATCH}
+    SELECT e.id, e.event_type, e.payload, e.event_sequence::text AS seq
+    FROM awcms_domain_events e
+    JOIN awcms_inbox_conversations c
+      ON c.tenant_id = e.tenant_id
+     AND c.source_ref = e.aggregate_id
+     AND c.source_kind = CASE e.aggregate_type
+           WHEN ${TELEGRAM_CONTACT_AGGREGATE_TYPE} THEN 'telegram'
+           WHEN ${WEBSITE_SUBMISSION_AGGREGATE_TYPE} THEN 'website'
+         END
+    WHERE e.tenant_id = ${tenantId}
+      AND e.event_type = ANY(${tx.array([...CUSTOMER_STATE_EVENT_TYPES], "text")})
+      AND e.event_version = '1.0'
+      AND e.recorded_at >= ${since}
+      AND e.event_sequence > c.customer_state_sequence
+      AND c.customer_state <> 'withdrawn'
+    ORDER BY e.event_sequence DESC
+    LIMIT ${CUSTOMER_STATE_SWEEP_BATCH}
   `) as {
     id: string;
     event_type: string;
@@ -105,7 +130,16 @@ export async function applyRecentConsentChanges(
   return applied;
 }
 
-/** Re-checks every current assignee of the tenant; unassigns the ineligible. */
+/**
+ * Re-checks current assignees, one (assignee, scope) pair at a time, and
+ * unassigns the ineligible.
+ *
+ * At most `SLA_SWEEP_BATCH` pairs per run, LEAST RECENTLY CHECKED first (#1275
+ * audit, M-2): a checked pair's `assignee_checked_at` moves to `now`, so the
+ * next run starts where this one stopped. With a fixed order and a LIMIT, the
+ * pairs past the limit would never be checked at all, and a revoked person
+ * would stay assigned there forever.
+ */
 export async function revokeIneligibleAssignees(
   tx: Bun.SQL,
   tenantId: string,
@@ -113,11 +147,12 @@ export async function revokeIneligibleAssignees(
   hierarchy: BusinessScopeHierarchyPort
 ): Promise<number> {
   const pairs = (await tx`
-    SELECT DISTINCT assignee_tenant_user_id AS user_id,
+    SELECT assignee_tenant_user_id AS user_id,
            business_scope_type, business_scope_id
     FROM awcms_inbox_conversations
     WHERE tenant_id = ${tenantId} AND assignee_tenant_user_id IS NOT NULL
-    ORDER BY 1, 2, 3
+    GROUP BY 1, 2, 3
+    ORDER BY min(COALESCE(assignee_checked_at, '-infinity'::timestamptz)), 1, 2, 3
     LIMIT ${SLA_SWEEP_BATCH}
   `) as {
     user_id: string;
@@ -140,11 +175,23 @@ export async function revokeIneligibleAssignees(
       hierarchy
     );
 
-    if (eligibility.eligible) continue;
+    if (eligibility.eligible) {
+      // Bookkeeping only: no version move, so no staff edit is conflicted.
+      await tx`
+        UPDATE awcms_inbox_conversations
+        SET assignee_checked_at = ${now}
+        WHERE tenant_id = ${tenantId}
+          AND assignee_tenant_user_id = ${pair.user_id}
+          AND business_scope_type IS NOT DISTINCT FROM ${pair.business_scope_type}
+          AND business_scope_id IS NOT DISTINCT FROM ${pair.business_scope_id}::uuid
+      `;
+      continue;
+    }
 
     const rows = (await tx`
       UPDATE awcms_inbox_conversations
       SET assignee_tenant_user_id = NULL, assigned_at = NULL,
+          assignee_checked_at = NULL,
           version = version + 1, updated_at = now()
       WHERE tenant_id = ${tenantId}
         AND assignee_tenant_user_id = ${pair.user_id}
@@ -263,14 +310,18 @@ export async function runSlaForTenant(
         `) as { total: number }[];
 
         return {
-          consentApplied: 0,
+          customerStateApplied: 0,
           revoked: 0,
           breached: rows[0]?.total ?? 0,
           notified: 0
         };
       }
 
-      const consentApplied = await applyRecentConsentChanges(tx, tenantId, now);
+      const customerStateApplied = await applyRecentCustomerStateChanges(
+        tx,
+        tenantId,
+        now
+      );
       const revoked = await revokeIneligibleAssignees(
         tx,
         tenantId,
@@ -285,7 +336,7 @@ export async function runSlaForTenant(
         options.correlationId
       );
 
-      return { consentApplied, revoked, ...stamped };
+      return { customerStateApplied, revoked, ...stamped };
     },
     { workClass: "maintenance" }
   );
@@ -308,7 +359,7 @@ export async function runSlaJob(
     tenantsSkipped: 0,
     tenantsErrored: 0,
     aborted: false,
-    totals: { consentApplied: 0, revoked: 0, breached: 0, notified: 0 }
+    totals: { customerStateApplied: 0, revoked: 0, breached: 0, notified: 0 }
   };
 
   if (!isOmnichannelInboxEnabled(options.env)) {
@@ -332,7 +383,7 @@ export async function runSlaJob(
         continue;
       }
 
-      summary.totals.consentApplied += result.consentApplied;
+      summary.totals.customerStateApplied += result.customerStateApplied;
       summary.totals.revoked += result.revoked;
       summary.totals.breached += result.breached;
       summary.totals.notified += result.notified;

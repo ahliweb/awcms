@@ -1,6 +1,6 @@
 /**
  * Closed vocabularies and fixed names for `omnichannel_inbox` (Issue #1164,
- * ADR-0160 `Proposed`).
+ * ADR-0160 `Accepted`).
  */
 export const OMNICHANNEL_INBOX_MODULE_KEY = "omnichannel_inbox";
 
@@ -82,8 +82,9 @@ export const PROJECTED_EVENT_VERSIONS = ["1.0"] as const;
  * / `provider_forbidden` consent fail with "permission denied" in the
  * dispatcher. Consent changes reach the projection instead (a) when a
  * conversation is created (the log is read back), (b) through the SLA job's
- * bounded sweep of recent consent events, and (c) through a rebuild; all three
- * are idempotent by event sequence.
+ * bounded sweep of recent customer-state events, and (c) through a rebuild; all
+ * three are idempotent by event sequence. The sweep also covers withdrawals, as
+ * a safety net for a delivery that dead-lettered.
  */
 export const CONSUMED_EVENT_TYPES = [
   TELEGRAM_INTERACTION_RECEIVED_EVENT_TYPE,
@@ -91,9 +92,9 @@ export const CONSUMED_EVENT_TYPES = [
   WEBSITE_SUBMISSION_WITHDRAWN_EVENT_TYPE
 ] as const;
 
-/** The SLA job re-applies consent events recorded within this window (idempotent). */
-export const CONSENT_SWEEP_WINDOW_HOURS = 48;
-export const CONSENT_SWEEP_BATCH = 2000;
+/** The SLA job re-applies pending customer-state events recorded within this window (idempotent). */
+export const CUSTOMER_STATE_SWEEP_WINDOW_HOURS = 48;
+export const CUSTOMER_STATE_SWEEP_BATCH = 2000;
 
 /** The events that change a customer's state (applied in event-sequence order). */
 export const CUSTOMER_STATE_EVENT_TYPES = [

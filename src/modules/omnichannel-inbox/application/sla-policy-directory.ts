@@ -83,10 +83,18 @@ function toView(row: PolicyRow): SlaPolicyView {
   };
 }
 
+/**
+ * The policies the caller may see (#1275 audit, L-1): everything when acting
+ * tenant-wide; otherwise the tenant default (it governs their conversations
+ * too) plus the policies of the scopes they cover, never another brand's.
+ */
 export async function listSlaPolicies(
   tx: Bun.SQL,
-  tenantId: string
+  tenantId: string,
+  visibility: { unconfined: true } | { unconfined: false; scopeKeys: string[] }
 ): Promise<SlaPolicyView[]> {
+  const unconfined = visibility.unconfined;
+  const keys = visibility.unconfined ? [] : visibility.scopeKeys;
   // Bounded: one active policy per scope plus their retired predecessors; the
   // newest 200 are more than any screen shows.
   const rows = (await tx`
@@ -95,6 +103,12 @@ export async function listSlaPolicies(
            holidays::text[] AS holidays, status, created_at, retired_at
     FROM awcms_inbox_sla_policies
     WHERE tenant_id = ${tenantId}
+      AND (
+        ${unconfined}::boolean
+        OR business_scope_type IS NULL
+        OR (business_scope_type || ':' || business_scope_id::text)
+             = ANY(${tx.array(keys, "text")}::text[])
+      )
     ORDER BY created_at DESC, id DESC
     LIMIT 200
   `) as PolicyRow[];

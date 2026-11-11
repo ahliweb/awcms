@@ -15931,7 +15931,7 @@ Requires `website_engagement.submissions.withdraw` and a signed-in person (a mac
 
 ## Omnichannel Inbox
 
-Tenant-scoped staff work queue over verified inbound envelopes (omnichannel_inbox module, Issue #1164, ADR-0160, Proposed). A projection of the Telegram and website inbound events into body-free conversation rows (opaque references, states, the channel account's business scope), plus authored staff work state: status, assignment with history, tags and first/next-response SLA in business minutes on a working calendar. Visibility follows the channel_accounts confinement rule (a confined caller sees only the business scopes they cover and never a tenant-wide conversation). The inbox SENDS NOTHING to a customer and has no send facade: a reply goes through the arrival channel's own route. Ships inert behind OMNICHANNEL_INBOX_ENABLED.
+Tenant-scoped staff work queue over verified inbound envelopes (omnichannel_inbox module, Issue #1164, ADR-0160, Accepted). A projection of the Telegram and website inbound events into body-free conversation rows (opaque references, states, the channel account's business scope), plus authored staff work state: status, assignment with history, tags and first/next-response SLA in business minutes on a working calendar. Visibility follows the channel_accounts confinement rule: only a caller who is not scope-confined and holds the route's permission on a tenant-wide grant sees everything; anyone else sees only the business scopes they cover and never a tenant-wide conversation. The inbox SENDS NOTHING to a customer and has no send facade: a reply goes through the arrival channel's own route. Ships inert behind OMNICHANNEL_INBOX_ENABLED.
 
 ### `GET /api/v1/omnichannel-inbox/conversations` — List the inbox conversations the caller may see
 
@@ -15992,7 +15992,7 @@ Requires `omnichannel_inbox.conversations.read` and visibility (business scope).
 - **operationId**: `assignOmnichannelInboxConversation`
 - **Security**: bearerAuth + tenantHeader
 
-Requires `omnichannel_inbox.conversations.assign`, a signed-in person, `Idempotency-Key` and visibility; audited. The assignee must be an active user holding `conversations.update` on a tenant-wide grant and, if they are scope-confined, cover the conversation's business scope (or an ancestor); otherwise `422 ASSIGNEE_NOT_ELIGIBLE` with a reason code (`user_inactive`, `permission_missing`, `scope_confined`, `scope_not_covered`). `expectedVersion` guards concurrent reassignment: exactly one writer wins, the other gets `409 VERSION_CONFLICT`.
+Requires `omnichannel_inbox.conversations.assign`, a signed-in person, `Idempotency-Key` and visibility; audited. The assignee must be an active user holding `conversations.update` on a tenant-wide grant and, if they are scope-confined, cover the conversation's business scope (or an ancestor); otherwise `422 ASSIGNEE_NOT_ELIGIBLE`, one answer with no reason, whatever the cause (an unknown, inactive, unpermitted or out-of-scope person look alike, so the route is no oracle on a colleague's account). `expectedVersion` guards concurrent reassignment: exactly one writer wins, the other gets `409 VERSION_CONFLICT`.
 
 **Parameters**
 

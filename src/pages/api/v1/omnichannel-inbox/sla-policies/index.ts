@@ -11,7 +11,8 @@ import {
   personOnlyRefusal,
   readIdempotencyKey,
   readValidatedBody,
-  runIdempotent
+  runIdempotent,
+  visibilityFor
 } from "../../../../../modules/omnichannel-inbox/application/route-support";
 import { OMNICHANNEL_INBOX_GUARDS } from "../../../../../modules/omnichannel-inbox/domain/inbox-constants";
 import {
@@ -19,13 +20,19 @@ import {
   type SlaPolicyCreateInput
 } from "../../../../../modules/omnichannel-inbox/domain/inbox-validation";
 
-/** `GET /api/v1/omnichannel-inbox/sla-policies` — the tenant's SLA policies, newest first (bounded). */
+/** `GET /api/v1/omnichannel-inbox/sla-policies` — the SLA policies the caller may see (the tenant default plus the scopes they cover; all when acting tenant-wide), newest first (bounded). */
 export const GET = defineTenantRoute({
   workClass: "interactive",
   prepare: () => disabledResponse() ?? undefined,
   authorize: OMNICHANNEL_INBOX_GUARDS.readSlaPolicies,
   handler: async (context) =>
-    ok({ items: await listSlaPolicies(context.tx, context.tenantId) })
+    ok({
+      items: await listSlaPolicies(
+        context.tx,
+        context.tenantId,
+        await visibilityFor(context, OMNICHANNEL_INBOX_GUARDS.readSlaPolicies)
+      )
+    })
 });
 
 /**

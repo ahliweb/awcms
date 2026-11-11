@@ -1728,9 +1728,11 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_telegram_engagement_inbound: ["DELETE"],
   awcms_telegram_engagement_messages: ["DELETE"],
   // ADR-0160 (Issue #1164) -- data-lifecycle:archive-purge (sql/382): the
-  // retention sweep over inbox conversations. DELETE only; SELECT is
-  // COLUMN-ONLY (id, tenant_id, last_inbound_at): see WORKER_COLUMN_GRANTS. The
-  // activity history and tag links go with a conversation by ON DELETE CASCADE.
+  // retention sweep over inbox conversations, DELETE; the activity history and
+  // tag links go with a conversation by ON DELETE CASCADE. The domain-event
+  // dispatcher also runs the inbox projector as this role (#1275 audit, H-1):
+  // its SELECT/INSERT/UPDATE are COLUMN-ONLY (never the assignee or the
+  // response stamps): see WORKER_COLUMN_GRANTS.
   awcms_inbox_conversations: ["DELETE"],
   // ADR-0127 — data-lifecycle:archive-purge (sql/172): SELECT to find aged tax
   // snapshots, DELETE to remove them. No UPDATE — a snapshot is never edited,
@@ -2128,17 +2130,93 @@ export const WORKER_COLUMN_GRANTS: Record<
   awcms_telegram_engagement_messages: {
     SELECT: ["id", "tenant_id", "created_at"]
   },
-  // sql/382 (Issue #1164): the generic purge's key, tenant and cursor only.
+  // sql/382 (Issue #1164): the generic purge's key, tenant and cursor, plus
+  // what the projector reads and writes when the domain-event dispatcher runs it
+  // as this role (#1275 audit, H-1). Never `assignee_tenant_user_id`,
+  // `assigned_at` or `last_responded_at`: the dispatcher cannot assign work or
+  // fake a response.
   awcms_inbox_conversations: {
-    SELECT: ["id", "tenant_id", "last_inbound_at"]
+    SELECT: [
+      "id",
+      "tenant_id",
+      "source_kind",
+      "source_ref",
+      "channel_account_id",
+      "business_scope_type",
+      "business_scope_id",
+      "first_inbound_at",
+      "last_inbound_at",
+      "awaiting_since",
+      "customer_state",
+      "customer_state_sequence",
+      "status",
+      "first_responded_at",
+      "answered_through",
+      "sla_policy_id",
+      "response_due_kind",
+      "response_due_at",
+      "sla_breached_at",
+      "version",
+      "created_at",
+      "updated_at"
+    ],
+    INSERT: [
+      "tenant_id",
+      "source_kind",
+      "source_ref",
+      "channel_account_id",
+      "business_scope_type",
+      "business_scope_id",
+      "first_inbound_at",
+      "last_inbound_at"
+    ],
+    UPDATE: [
+      "business_scope_type",
+      "business_scope_id",
+      "first_inbound_at",
+      "last_inbound_at",
+      "awaiting_since",
+      "customer_state",
+      "customer_state_sequence",
+      "status",
+      "answered_through",
+      "sla_policy_id",
+      "response_due_kind",
+      "response_due_at",
+      "sla_breached_at",
+      "version",
+      "updated_at"
+    ]
   },
-  // sql/382: the delegated descriptors' dry-run snapshot (tenant, cursor).
-  awcms_inbox_activity: { SELECT: ["id", "tenant_id", "created_at"] },
+  // sql/382: the delegated descriptors' dry-run snapshot (tenant, cursor); the
+  // projector appends a reopen row (append-only: no UPDATE, no DELETE).
+  awcms_inbox_activity: {
+    SELECT: ["id", "tenant_id", "created_at"],
+    INSERT: ["tenant_id", "conversation_id", "kind", "detail_code"]
+  },
   awcms_inbox_conversation_tags: {
     SELECT: ["tenant_id", "conversation_id", "created_at"]
   },
   awcms_inbox_tags: { SELECT: ["id", "tenant_id", "created_at"] },
-  awcms_inbox_sla_policies: { SELECT: ["id", "tenant_id", "created_at"] },
+  // The projector resolves the policy that starts an SLA clock: its TERMS,
+  // never the author stamps.
+  awcms_inbox_sla_policies: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "business_scope_type",
+      "business_scope_id",
+      "name",
+      "timezone",
+      "first_response_minutes",
+      "next_response_minutes",
+      "working_hours",
+      "holidays",
+      "status",
+      "retired_at",
+      "created_at"
+    ]
+  },
   // `confirmed` too: comments:retention filters `confirmed = false`.
   awcms_comments_reply_subscriptions: {
     SELECT: ["id", "tenant_id", "created_at", "confirmed"]

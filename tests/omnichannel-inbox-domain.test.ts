@@ -8,6 +8,11 @@ import { describe, expect, test } from "bun:test";
 
 import { readEnvelope } from "../src/modules/omnichannel-inbox/domain/envelope-reader";
 import {
+  DEFAULT_REBUILD_WINDOW_DAYS,
+  MAX_REBUILD_WINDOW_DAYS
+} from "../src/modules/omnichannel-inbox/domain/inbox-constants";
+import { omnichannelInboxModule } from "../src/modules/omnichannel-inbox/module";
+import {
   MAX_CACHED_ZONES,
   cachedZoneCountForTests,
   canonicalTimeZone,
@@ -301,5 +306,34 @@ describe("request validation", () => {
     expect(validateRebuildBody({}).valid).toBe(true);
     expect(validateRebuildBody({ windowDays: 366 }).valid).toBe(false);
     expect(validateRebuildBody({ afterSequence: "-1" }).valid).toBe(false);
+  });
+
+  test("afterSequence is at most the bigint maximum (#1275 L-2)", () => {
+    expect(
+      validateRebuildBody({ afterSequence: "9223372036854775807" }).valid
+    ).toBe(true);
+    expect(
+      validateRebuildBody({ afterSequence: "9223372036854775808" }).valid
+    ).toBe(false);
+    expect(
+      validateRebuildBody({ afterSequence: "9999999999999999999" }).valid
+    ).toBe(false);
+  });
+
+  test("the rebuild window is bound to the purge's retention (#1275 L-7)", () => {
+    // The purge reads only `defaultRetentionDays` (data_lifecycle has no
+    // per-tenant override), so a window wider than it would let a rebuild
+    // bring back a conversation the purge removed.
+    const descriptor = omnichannelInboxModule.dataLifecycle?.find(
+      (entry) => entry.tableName === "awcms_inbox_conversations"
+    );
+
+    expect(descriptor).toBeDefined();
+    expect(MAX_REBUILD_WINDOW_DAYS).toBeLessThanOrEqual(
+      descriptor!.defaultRetentionDays
+    );
+    expect(DEFAULT_REBUILD_WINDOW_DAYS).toBeLessThanOrEqual(
+      MAX_REBUILD_WINDOW_DAYS
+    );
   });
 });

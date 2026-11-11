@@ -1,5 +1,5 @@
 /**
- * Deployment switch for `omnichannel_inbox` (Issue #1164, ADR-0160 `Proposed`).
+ * Deployment switch for `omnichannel_inbox` (Issue #1164, ADR-0160 `Accepted`).
  *
  * Off by default at three levels: this switch, the module registry
  * (`experimental`) and the tenant's own module toggle. With the switch off every

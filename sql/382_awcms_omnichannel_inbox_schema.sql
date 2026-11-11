@@ -1,5 +1,5 @@
 -- `omnichannel_inbox` -- a rebuildable, body-free staff work projection over
--- verified inbound envelopes (Issue #1164, ADR-0160 `Proposed`; refines
+-- verified inbound envelopes (Issue #1164, ADR-0160 `Accepted`; refines
 -- ADR-0150 section 1 for staff work state only).
 --
 -- ## What these tables hold, and what they never hold
@@ -125,8 +125,13 @@ CREATE POLICY awcms_inbox_sla_policies_tenant_isolation
 
 REVOKE DELETE, TRUNCATE ON awcms_inbox_sla_policies FROM awcms_app;
 REVOKE ALL ON awcms_inbox_sla_policies FROM awcms_worker;
--- The data_lifecycle dry-run snapshot counts by (tenant, cursor) only.
-GRANT SELECT (id, tenant_id, created_at) ON awcms_inbox_sla_policies TO awcms_worker;
+-- The data_lifecycle dry-run snapshot counts by (tenant, cursor) only; the
+-- projector (run by the dispatcher as awcms_worker) resolves the policy that
+-- starts an SLA clock, so it reads the TERMS. Never the author stamps.
+GRANT SELECT (id, tenant_id, business_scope_type, business_scope_id, name,
+              timezone, first_response_minutes, next_response_minutes,
+              working_hours, holidays, status, retired_at, created_at)
+  ON awcms_inbox_sla_policies TO awcms_worker;
 
 -- ---------------------------------------------------------------------------
 -- Conversations: the projection plus the authored staff work state.
@@ -156,6 +161,12 @@ CREATE TABLE IF NOT EXISTS awcms_inbox_conversations (
   status text NOT NULL DEFAULT 'open',
   assignee_tenant_user_id uuid,
   assigned_at timestamptz,
+  -- When the SLA job (or the assignment itself) last proved the assignee
+  -- eligible. The job visits the least recently checked (assignee, scope) pairs
+  -- first, so a tenant with more pairs than one run's batch still has every
+  -- pair re-checked within a few runs (the #1275 audit, M-2). Job bookkeeping,
+  -- not a fact about the conversation: it does not move `version`.
+  assignee_checked_at timestamptz,
   first_responded_at timestamptz,
   last_responded_at timestamptz,
   -- Everything received up to this instant is settled: the latest recorded
@@ -255,11 +266,40 @@ CREATE POLICY awcms_inbox_conversations_tenant_isolation
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid)
   WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);
 
--- The runtime never deletes a conversation (the retention job does); the
--- worker sees only the key, the tenant and the cursor.
+-- The runtime never deletes a conversation (the retention job does).
+--
+-- `awcms_worker` runs TWO things here, and gets exactly what they need (the
+-- pattern of sql/280; the #1275 audit, H-1):
+--
+--   * the retention purge: the key, the tenant and the cursor, plus DELETE;
+--   * the domain-event DISPATCHER (`bun run domain-events:dispatch`, on
+--     `WORKER_DATABASE_URL`), which runs the projector consumer. It INSERTs a
+--     conversation with its projected columns and UPDATEs only the columns the
+--     projector writes: the projected facts, the customer state, the SLA wait,
+--     and `status` / `answered_through` (an unanswered inbound REOPENS a
+--     settled conversation; a withdrawal closes it). It may not read or write
+--     the assignee or the response stamps, so a compromised dispatcher cannot
+--     assign work or fake a response. The guard trigger (sql/384) still
+--     refuses an identity change, a revived withdrawal and an older state.
 REVOKE DELETE, TRUNCATE ON awcms_inbox_conversations FROM awcms_app;
 REVOKE ALL ON awcms_inbox_conversations FROM awcms_worker;
-GRANT SELECT (id, tenant_id, last_inbound_at) ON awcms_inbox_conversations TO awcms_worker;
+GRANT SELECT (id, tenant_id, source_kind, source_ref, channel_account_id,
+              business_scope_type, business_scope_id, first_inbound_at,
+              last_inbound_at, awaiting_since, customer_state,
+              customer_state_sequence, status, first_responded_at,
+              answered_through, sla_policy_id, response_due_kind,
+              response_due_at, sla_breached_at, version, created_at, updated_at)
+  ON awcms_inbox_conversations TO awcms_worker;
+GRANT INSERT (tenant_id, source_kind, source_ref, channel_account_id,
+              business_scope_type, business_scope_id, first_inbound_at,
+              last_inbound_at)
+  ON awcms_inbox_conversations TO awcms_worker;
+GRANT UPDATE (business_scope_type, business_scope_id, first_inbound_at,
+              last_inbound_at, awaiting_since, customer_state,
+              customer_state_sequence, status, answered_through, sla_policy_id,
+              response_due_kind, response_due_at, sla_breached_at, version,
+              updated_at)
+  ON awcms_inbox_conversations TO awcms_worker;
 GRANT DELETE ON awcms_inbox_conversations TO awcms_worker;
 
 -- ---------------------------------------------------------------------------
@@ -334,6 +374,11 @@ CREATE POLICY awcms_inbox_activity_tenant_isolation
 REVOKE UPDATE, DELETE, TRUNCATE ON awcms_inbox_activity FROM awcms_app;
 REVOKE ALL ON awcms_inbox_activity FROM awcms_worker;
 GRANT SELECT (id, tenant_id, created_at) ON awcms_inbox_activity TO awcms_worker;
+-- The projector records a reopen (`status_changed` / `open`). Append-only for
+-- the worker too: no UPDATE, no DELETE (the purge removes activity only by the
+-- conversation's ON DELETE CASCADE).
+GRANT INSERT (tenant_id, conversation_id, kind, detail_code)
+  ON awcms_inbox_activity TO awcms_worker;
 
 -- ---------------------------------------------------------------------------
 -- Tags: a per-tenant catalogue (soft-deleted) and the conversation links.

@@ -12,7 +12,7 @@
 | `awcms_*` tables                    | 273   |
 | Tables with `FORCE` RLS             | 255   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 823   |
+| Test files                          | 825   |
 | Route files                         | 677   |
 | ADR                                 | 324   |
 
@@ -622,9 +622,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 614        |
+| `(root)`      | 615        |
 | `e2e`         | 30         |
-| `integration` | 178        |
+| `integration` | 179        |
 | `unit`        | 1          |
 
 ### Routes

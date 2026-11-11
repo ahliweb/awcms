@@ -8,6 +8,7 @@ import {
   notFound,
   personOnlyRefusal,
   readIdempotencyKey,
+  requireTenantWide,
   runIdempotent
 } from "../../../../../modules/omnichannel-inbox/application/route-support";
 import { OMNICHANNEL_INBOX_GUARDS } from "../../../../../modules/omnichannel-inbox/domain/inbox-constants";
@@ -28,7 +29,14 @@ export const DELETE = defineTenantRoute<string>({
   },
   authorize: OMNICHANNEL_INBOX_GUARDS.configureTags,
   handler: async (context) => {
-    const refused = personOnlyRefusal(context.auth);
+    // The catalogue is tenant-wide: a scope-confined manager may not shape it
+    // (#1275 audit, L-3).
+    const refused =
+      personOnlyRefusal(context.auth) ??
+      (await requireTenantWide(
+        context,
+        OMNICHANNEL_INBOX_GUARDS.configureTags
+      ));
 
     if (refused) return refused;
 

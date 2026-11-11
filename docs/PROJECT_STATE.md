@@ -406,6 +406,20 @@ pioneered directly here after the ADR-0047 freeze.)
 
 ## 4. Backlog / next steps
 
+- **ADR-0160 ACCEPTED — 11 November 2026 (#1164, PR #1275).** The owner
+  (ahliweb) accepted ADR-0160: the `omnichannel_inbox` module (a body-free,
+  rebuildable projection of the Telegram and website envelopes plus staff work
+  state: assignment, tags, status, first/next-response SLA) is admitted, and it
+  refines ADR-0150 §1 and N6 for staff work state only. The module stays
+  `experimental` and OFF. Q2 (channel-account assignment for visibility), Q3
+  (who is told of an unassigned breach) and Q4 (internal notes) stay OPEN,
+  with the fail-closed answer in the code. The security audit of PR #1275 was
+  resolved in the same PR: the projector now runs as `awcms_worker` on narrow
+  column grants (H-1; it had failed every delivery with "permission denied"),
+  "tenant-wide" needs a tenant-wide grant (M-1), the assignee re-check rotates
+  past its batch (M-2), and the audit's probes are in the suite with their
+  mutants killed (M-3); L-1 to L-8 are fixed or recorded in the PR.
+
 - **ADR-0159 ACCEPTED — 11 November 2026 (#1165, PR #1266).** The owner
   (ahliweb) accepted ADR-0159: `crm_follow_up` (rule-versioned staff follow-up
   tasks keyed by `crm_leads` events, stop signals that win every race, staff

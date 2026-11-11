@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:a2daa7004b8f5724699377378c041727a8449aee686fa635ee8e0b3b613b3eaa -->
+<!-- i18n-source-hash: sha256:609ea8cf5375c2ccd46f595d8d6264722b7a355b11b5c709690c521fc6387e2f -->
 
 # AWCMS — Project State & Continuation
 
@@ -409,6 +409,21 @@ knowledge:check` (`graph:artifacts:check` + dry run `--check` sync wrapper)
   §Baseline/§Alur kerja Obsidian/§Keamanan dan privasi.
 
 ## 4. Backlog / langkah berikutnya
+
+- **ADR-0160 DITERIMA — 11 November 2026 (#1164, PR #1275).** Pemilik
+  (ahliweb) menerima ADR-0160: modul `omnichannel_inbox` (proyeksi tanpa isi
+  yang dapat dibangun ulang atas envelope Telegram dan situs web, ditambah state
+  kerja staf: penugasan, tag, status, SLA first/next-response) diadmisi, dan
+  menyempurnakan ADR-0150 §1 dan N6 hanya untuk state kerja staf. Modul tetap
+  `experimental` dan MATI. Q2 (penugasan akun kanal untuk visibilitas), Q3
+  (siapa diberi tahu atas pelanggaran yang belum ditugaskan) dan Q4 (catatan
+  internal) tetap TERBUKA, dengan jawaban gagal-tertutup di kode. Audit keamanan
+  PR #1275 diselesaikan di PR yang sama: proyektor kini berjalan sebagai
+  `awcms_worker` dengan grant kolom yang sempit (H-1; sebelumnya setiap delivery
+  gagal "permission denied"), "tenant-wide" mensyaratkan grant tenant-wide
+  (M-1), pemeriksaan ulang penanggung jawab berotasi melewati batasnya (M-2),
+  dan probe audit masuk ke suite dengan mutannya terbunuh (M-3); L-1 sampai L-8
+  diperbaiki atau dicatat di PR.
 
 - **ADR-0159 DITERIMA — 11 November 2026 (#1165, PR #1266).** Pemilik
   (ahliweb) menerima ADR-0159: `crm_follow_up` (tugas tindak lanjut staf

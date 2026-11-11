@@ -148,7 +148,12 @@ async function applyCustomerState(
   return rows.length > 0;
 }
 
-/** Every customer-state event of this aggregate already in the log, oldest first. Bounded: a contact's consent history is a handful of rows. */
+/**
+ * The customer-state events of this aggregate already in the log, NEWEST first
+ * (#1275 audit, L-4): the newest readable one is applied and every older one is
+ * then a no-op by sequence, so the bound can only ever drop history that would
+ * not have changed the answer.
+ */
 async function applyRecordedCustomerStates(
   tx: Bun.SQL,
   tenantId: string,
@@ -162,7 +167,7 @@ async function applyRecordedCustomerStates(
       AND aggregate_type = ${aggregateTypeOf(sourceKind)}
       AND aggregate_id = ${sourceRef}
       AND event_type = ANY(${tx.array([...CUSTOMER_STATE_EVENT_TYPES], "text")})
-    ORDER BY event_sequence
+    ORDER BY event_sequence DESC
     LIMIT 200
   `) as {
     event_type: string;
@@ -246,26 +251,41 @@ async function projectInbound(
   fact: Extract<EnvelopeFact, { kind: "inbound" }>
 ): Promise<ProjectionOutcome> {
   const scope = await accountScope(tx, tenantId, fact.channelAccountId);
-  const upserted = (await tx`
+  const scopeType = scope?.type ?? null;
+  const scopeId = scope?.id ?? null;
+  // Two statements, not `ON CONFLICT DO UPDATE ... RETURNING (xmax = 0)`: the
+  // dispatcher runs this as awcms_worker, whose SELECT is column-level, and a
+  // system column such as `xmax` needs a TABLE-level SELECT (#1275 audit, H-1).
+  // A concurrent insert of the same key makes DO NOTHING wait for it, so the
+  // UPDATE below always finds the row.
+  const inserted = (await tx`
     INSERT INTO awcms_inbox_conversations
       (tenant_id, source_kind, source_ref, channel_account_id,
        business_scope_type, business_scope_id, first_inbound_at, last_inbound_at)
     VALUES (${tenantId}, ${fact.sourceKind}, ${fact.sourceRef},
-            ${fact.channelAccountId}, ${scope?.type ?? null}, ${scope?.id ?? null},
+            ${fact.channelAccountId}, ${scopeType}, ${scopeId},
             ${fact.receivedAt}, ${fact.receivedAt})
-    ON CONFLICT (tenant_id, source_kind, source_ref) DO UPDATE
-    SET first_inbound_at = LEAST(awcms_inbox_conversations.first_inbound_at, EXCLUDED.first_inbound_at),
-        last_inbound_at = GREATEST(awcms_inbox_conversations.last_inbound_at, EXCLUDED.last_inbound_at),
-        business_scope_type = EXCLUDED.business_scope_type,
-        business_scope_id = EXCLUDED.business_scope_id,
-        updated_at = CASE
-          WHEN awcms_inbox_conversations.last_inbound_at < EXCLUDED.last_inbound_at
-            OR awcms_inbox_conversations.first_inbound_at > EXCLUDED.first_inbound_at
-            OR awcms_inbox_conversations.business_scope_id IS DISTINCT FROM EXCLUDED.business_scope_id
-          THEN now() ELSE awcms_inbox_conversations.updated_at END
-    RETURNING id, (xmax = 0) AS inserted
-  `) as { id: string; inserted: boolean }[];
-  const created = upserted[0]!.inserted;
+    ON CONFLICT (tenant_id, source_kind, source_ref) DO NOTHING
+    RETURNING id
+  `) as { id: string }[];
+  const created = inserted.length > 0;
+  const upserted = created
+    ? inserted
+    : ((await tx`
+        UPDATE awcms_inbox_conversations
+        SET first_inbound_at = LEAST(first_inbound_at, ${fact.receivedAt}),
+            last_inbound_at = GREATEST(last_inbound_at, ${fact.receivedAt}),
+            business_scope_type = ${scopeType},
+            business_scope_id = ${scopeId}::uuid,
+            updated_at = CASE
+              WHEN last_inbound_at < ${fact.receivedAt}
+                OR first_inbound_at > ${fact.receivedAt}
+                OR business_scope_id IS DISTINCT FROM ${scopeId}::uuid
+              THEN now() ELSE updated_at END
+        WHERE tenant_id = ${tenantId} AND source_kind = ${fact.sourceKind}
+          AND source_ref = ${fact.sourceRef}
+        RETURNING id
+      `) as { id: string }[]);
 
   if (created) {
     await applyRecordedCustomerStates(

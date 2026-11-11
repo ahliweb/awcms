@@ -1,5 +1,5 @@
 # Source fragment for the "omnichannel_inbox" module (Issue #1164, ADR-0160,
-# Proposed).
+# Accepted).
 #
 # Owns every path whose operations carry this module's OpenAPI tag, plus every
 # components.schemas entry referenced ONLY by this module's operations.
@@ -107,9 +107,10 @@ paths:
         `Idempotency-Key` and visibility; audited. The assignee must be an active
         user holding `conversations.update` on a tenant-wide grant and, if they
         are scope-confined, cover the conversation's business scope (or an
-        ancestor); otherwise `422 ASSIGNEE_NOT_ELIGIBLE` with a reason code
-        (`user_inactive`, `permission_missing`, `scope_confined`,
-        `scope_not_covered`). `expectedVersion` guards concurrent reassignment:
+        ancestor); otherwise `422 ASSIGNEE_NOT_ELIGIBLE`, one answer with no
+        reason, whatever the cause (an unknown, inactive, unpermitted or
+        out-of-scope person look alike, so the route is no oracle on a
+        colleague's account). `expectedVersion` guards concurrent reassignment:
         exactly one writer wins, the other gets `409 VERSION_CONFLICT`.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
@@ -582,7 +583,13 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                afterSequence: { type: string, pattern: "^[0-9]{1,19}$" }
+                afterSequence:
+                  type: string
+                  pattern: "^[0-9]{1,19}$"
+                  description: >-
+                    A decimal event sequence, at most 9223372036854775807 (the
+                    PostgreSQL bigint maximum); a larger value is `400
+                    VALIDATION_ERROR`.
                 windowDays: { type: integer, minimum: 1, maximum: 365 }
       responses:
         "200":

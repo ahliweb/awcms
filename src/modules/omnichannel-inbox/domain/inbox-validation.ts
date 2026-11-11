@@ -443,6 +443,9 @@ export function validateSlaPolicyCreateBody(
   };
 }
 
+/** PostgreSQL `bigint` maximum: `event_sequence`'s type. */
+const MAX_EVENT_SEQUENCE = 9223372036854775807n;
+
 export function validateRebuildBody(
   raw: unknown
 ): Validated<{ afterSequence: string; windowDays: number }> {
@@ -456,10 +459,17 @@ export function validateRebuildBody(
   const errors = unknownFields(raw, ["afterSequence", "windowDays"]);
   const after = raw.afterSequence ?? "0";
 
-  if (typeof after !== "string" || !/^\d{1,19}$/.test(after)) {
+  // At most the bigint maximum (#1275 audit, L-2): 19 digits alone admit
+  // 9999999999999999999, which PostgreSQL refuses with a 500.
+  if (
+    typeof after !== "string" ||
+    !/^\d{1,19}$/.test(after) ||
+    BigInt(after) > MAX_EVENT_SEQUENCE
+  ) {
     errors.push({
       field: "afterSequence",
-      message: "afterSequence must be a decimal event sequence."
+      message:
+        "afterSequence must be a decimal event sequence (at most 9223372036854775807)."
     });
   }
 

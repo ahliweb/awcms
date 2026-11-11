@@ -15,6 +15,7 @@ import {
   saveIdempotencyRecord,
   userIdempotencyActor
 } from "../../_shared/idempotency";
+import { holdsTenantWidePermissionKey } from "../../identity-access/application/auth-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { isOmnichannelInboxEnabled } from "../domain/inbox-config";
 import { OMNICHANNEL_INBOX_MODULE_KEY } from "../domain/inbox-constants";
@@ -125,6 +126,14 @@ export function customerUnreachable(): Response {
  * What the caller may see (ADR-0160 section 3), decided by `channel_accounts`'
  * rules through the chokepoint. A failed load of those rules shows NOTHING
  * (an empty scope list), never everything.
+ *
+ * UNCONFINED (every conversation, tenant-wide ones included) needs BOTH no
+ * business-scope confinement AND the route's own permission held through a
+ * TENANT-WIDE grant (#1275 audit, M-1; the `canSeeAllAccounts` reading of
+ * #1215 LOW-1). ADR-0080 keeps a scoped grant's keys tenant-level at the
+ * chokepoint, so a person whose only grant is confined to one office, with no
+ * business-scope assignment, would otherwise see every brand. Anyone else gets
+ * the scopes they cover, which may be none.
  */
 export async function visibilityFor(
   context: InboxAccessContext,
@@ -134,19 +143,49 @@ export async function visibilityFor(
 
   if (!access) return { unconfined: false, scopeKeys: [] };
 
-  if (!(await access.isConfined(context))) return { unconfined: true };
+  if (
+    !(await access.isConfined(context)) &&
+    (await holdsTenantWidePermissionKey(
+      context.tx,
+      context.tenantId,
+      context.auth.context.tenantUserId,
+      `${guard.moduleKey}.${guard.activityCode}.${guard.action}`
+    ))
+  ) {
+    return { unconfined: true };
+  }
 
   const covered = await access.coveredScopes(context, guard);
 
   return { unconfined: false, scopeKeys: covered.map(scopeKey) };
 }
 
-/** The caller may name this scope for a policy (or tenant-wide, when not confined). */
+/**
+ * `403` unless the caller acts TENANT-WIDE for `guard` (the `unconfined` answer
+ * of `visibilityFor`): not scope-confined and holding the permission through a
+ * tenant-wide grant. For actions whose effect is the whole tenant: the tenant
+ * default SLA policy, the tag catalogue, a projection rebuild (#1275 audit,
+ * L-3). A confined manager configures only the scopes they cover.
+ */
+export async function requireTenantWide(
+  context: InboxAccessContext,
+  guard: InboxGuard
+): Promise<Response | null> {
+  const visibility = await visibilityFor(context, guard);
+
+  return visibility.unconfined
+    ? null
+    : fail(403, "ACCESS_DENIED", "Access denied.");
+}
+
+/** The caller may name this scope for a policy (or tenant-wide, only when acting tenant-wide). */
 export async function authorizePolicyScope(
   context: InboxAccessContext,
   guard: InboxGuard,
   scope: { type: string; id: string } | null
 ): Promise<Response | null> {
+  if (!scope) return requireTenantWide(context, guard);
+
   const access = await loadInboxScopeAccess();
 
   if (!access) return fail(403, "ACCESS_DENIED", "Access denied.");

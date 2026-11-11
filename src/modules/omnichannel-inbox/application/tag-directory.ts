@@ -1,7 +1,8 @@
 /**
  * The tenant's inbox tag catalogue (Issue #1164, ADR-0160): a code and a label,
  * soft-deleted. Deleting a tag unlinks it from every conversation in the same
- * transaction, so no conversation keeps a tag nobody can see in the catalogue.
+ * transaction, so no conversation keeps a tag nobody can see in the catalogue;
+ * each of those conversations records `tag_removed` and moves its version.
  */
 import { isUniqueViolation } from "./sql-errors";
 
@@ -82,6 +83,27 @@ export async function deleteTag(
     WHERE tenant_id = ${tenantId} AND tag_id = ${id}
     RETURNING conversation_id
   `) as { conversation_id: string }[];
+
+  if (unlinked.length > 0) {
+    const conversationIds = unlinked.map((row) => row.conversation_id);
+
+    // Each conversation that lost the tag says so in its own history and moves
+    // its version, exactly as a `PUT .../tags` removal does (#1275 audit, L-3):
+    // a reader holding the old version must reload, and the history is whole.
+    // Set-based: one statement each, whatever the number of conversations.
+    await tx`
+      INSERT INTO awcms_inbox_activity
+        (tenant_id, conversation_id, kind, actor_tenant_user_id, detail_code)
+      SELECT ${tenantId}, conversation_id, 'tag_removed', ${actorTenantUserId}, ${id}
+      FROM unnest(${tx.array(conversationIds, "uuid")}::uuid[]) AS conversation_id
+    `;
+    await tx`
+      UPDATE awcms_inbox_conversations
+      SET version = version + 1, updated_at = now()
+      WHERE tenant_id = ${tenantId}
+        AND id = ANY(${tx.array(conversationIds, "uuid")}::uuid[])
+    `;
+  }
 
   return { outcome: "deleted", unlinked: unlinked.length };
 }

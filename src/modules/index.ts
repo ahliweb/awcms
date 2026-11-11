@@ -293,7 +293,7 @@ const baseModules: ModuleDescriptor[] = [
   // events; consumes `email`'s workflow_notification capability optionally.
   // See src/modules/crm-follow-up/module.ts's `description`.
   crmFollowUpModule,
-  // ADR-0160 (Proposed, Issue #1164): a body-free staff work projection over the
+  // ADR-0160 (Accepted, Issue #1164): a body-free staff work projection over the
   // verified Telegram and website envelopes (assignment, tags, status, SLA).
   // Depends on tenant_admin/identity_access/logging/module_management/
   // domain_event_runtime/channel_accounts (all above); it imports nothing from

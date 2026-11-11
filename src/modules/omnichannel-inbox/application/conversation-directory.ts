@@ -693,6 +693,8 @@ export async function assignConversation(
     UPDATE awcms_inbox_conversations
     SET assignee_tenant_user_id = ${input.assigneeTenantUserId},
         assigned_at = ${input.assigneeTenantUserId ? now : null},
+        -- Eligibility was just proven (or there is nobody to check).
+        assignee_checked_at = ${input.assigneeTenantUserId ? now : null},
         version = version + 1,
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id}

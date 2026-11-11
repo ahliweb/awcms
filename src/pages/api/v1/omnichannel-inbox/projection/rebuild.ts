@@ -6,6 +6,7 @@ import {
   personOnlyRefusal,
   readIdempotencyKey,
   readValidatedBody,
+  requireTenantWide,
   runIdempotent
 } from "../../../../../modules/omnichannel-inbox/application/route-support";
 import { OMNICHANNEL_INBOX_GUARDS } from "../../../../../modules/omnichannel-inbox/domain/inbox-constants";
@@ -40,7 +41,12 @@ export const POST = defineTenantRoute<{
   },
   authorize: OMNICHANNEL_INBOX_GUARDS.configureProjection,
   handler: async (context) => {
-    const refused = personOnlyRefusal(context.auth);
+    const refused =
+      personOnlyRefusal(context.auth) ??
+      (await requireTenantWide(
+        context,
+        OMNICHANNEL_INBOX_GUARDS.configureProjection
+      ));
 
     if (refused) return refused;
 

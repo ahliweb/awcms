@@ -57,6 +57,8 @@ import { PUT as tagsRoute } from "../../src/pages/api/v1/omnichannel-inbox/conve
 import { POST as createTagRoute } from "../../src/pages/api/v1/omnichannel-inbox/tags/index";
 import { POST as createPolicyRoute } from "../../src/pages/api/v1/omnichannel-inbox/sla-policies/index";
 import { POST as rebuildRoute } from "../../src/pages/api/v1/omnichannel-inbox/projection/rebuild";
+import { DELETE as deleteTagRoute } from "../../src/pages/api/v1/omnichannel-inbox/tags/[id]";
+import { GET as listPoliciesRoute } from "../../src/pages/api/v1/omnichannel-inbox/sla-policies/index";
 
 setDefaultTimeout(60_000);
 
@@ -673,8 +675,8 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
       sweepDeps,
       { correlationId: "corr-consent" }
     );
-    expect(sweep1).toMatchObject({ consentApplied: 1 });
-    expect(sweep2).toMatchObject({ consentApplied: 0 });
+    expect(sweep1).toMatchObject({ customerStateApplied: 1 });
+    expect(sweep2).toMatchObject({ customerStateApplied: 0 });
     expect((await conversationRow(contact2))!.customer_state).toBe("opted_out");
 
     // A website submission, then its withdrawal, then the submission replayed.
@@ -1015,5 +1017,393 @@ suite("omnichannel inbox (#1164, ADR-0160)", () => {
     );
     await dispatch(tenantId);
     expect((await conversationRow(contact))!.response_due_kind).toBe("next");
+  });
+
+  // ------------------------------------------------------------------------
+  // The #1275 security audit: each of these was a probe that a mutant of the
+  // shipped code passed. They now live in the suite.
+  // ------------------------------------------------------------------------
+
+  test("M-1: a permission held only through a SCOPED grant (ADR-0080), with no scope assignment, sees and writes nothing", async () => {
+    const brandA = await seedOffice("m1-a");
+    const brandB = await seedOffice("m1-b");
+    const contacts = {
+      A: crypto.randomUUID(),
+      B: crypto.randomUUID(),
+      WIDE: crypto.randomUUID()
+    };
+
+    await telegramInbound(
+      tenantId,
+      await seedBot(tenantId, brandA),
+      contacts.A
+    );
+    await telegramInbound(
+      tenantId,
+      await seedBot(tenantId, brandB),
+      contacts.B
+    );
+    await telegramInbound(
+      tenantId,
+      await seedBot(tenantId, null),
+      contacts.WIDE
+    );
+    await dispatch(tenantId);
+
+    const holder = await seedUser(tenantId, "m1", [READ, UPDATE]);
+
+    // Positive control: the same grant, tenant-wide, sees all three.
+    expect((await list(holder.token)).body.data!.items).toHaveLength(3);
+
+    // ADR-0080 keeps a scoped grant's keys tenant-level at the chokepoint; the
+    // key must not make its holder tenant-wide.
+    await admin()`
+      UPDATE awcms_access_policies SET scope_type = 'office', scope_id = ${brandA}
+      WHERE tenant_id = ${tenantId} AND tenant_user_id = ${holder.tenantUserId}
+    `;
+
+    const page = await list(holder.token);
+    expect(page.status).toBe(200);
+    expect(page.body.data!.items).toEqual([]);
+
+    const rowB = (await conversationRow(contacts.B))!;
+    const idB = String(rowB.id);
+    expect((await detail(holder.token, idB)).status).toBe(404);
+
+    const write = await invoke<Envelope>(statusRoute, {
+      method: "POST",
+      path: `/api/v1/omnichannel-inbox/conversations/${idB}/status`,
+      params: { id: idB },
+      headers: headers(holder.token),
+      body: { status: "pending", expectedVersion: Number(rowB.version) }
+    });
+    expect(write.status).toBe(404);
+    expect((await conversationRow(contacts.B))!.status).toBe("open");
+  });
+
+  test("M-3: confinement holds on every write, terminal states hold, a rebuild stays inside its window", async () => {
+    const brandA = await seedOffice("m3-a");
+    const brandB = await seedOffice("m3-b");
+    const lead = await seedUser(tenantId, "m3-lead", ALL);
+
+    // P7: a confinement that has not started yet still confines (#1270), so
+    // its holder is not an eligible assignee of a brand-A conversation. One
+    // answer with no reason (L-8).
+    const contactA = crypto.randomUUID();
+    await telegramInbound(tenantId, await seedBot(tenantId, brandA), contactA);
+    await dispatch(tenantId);
+    const pending = await seedUser(tenantId, "m3-pending", [READ, UPDATE]);
+    await holdScope(pending.tenantUserId, brandA, "1 hour");
+    const idA = String((await conversationRow(contactA))!.id);
+    const versionA = (await detail(lead.token, idA)).body.data!.version;
+    const refused = await assign(
+      lead.token,
+      idA,
+      pending.tenantUserId,
+      versionA
+    );
+    expect(refused.status).toBe(422);
+    expect(refused.body.error?.code).toBe("ASSIGNEE_NOT_ELIGIBLE");
+    expect(refused.body.error?.details).toBeUndefined();
+    expect(
+      (await conversationRow(contactA))!.assignee_tenant_user_id
+    ).toBeNull();
+
+    // P8: a writer confined to brand A cannot touch a brand-B conversation by
+    // status, response or assignment: each is the same 404.
+    const contactB = crypto.randomUUID();
+    await telegramInbound(tenantId, await seedBot(tenantId, brandB), contactB);
+    await dispatch(tenantId);
+    const writer = await seedUser(tenantId, "m3-writer", [
+      READ,
+      UPDATE,
+      ASSIGN
+    ]);
+    await holdScope(writer.tenantUserId, brandA);
+    const rowB = (await conversationRow(contactB))!;
+    const idB = String(rowB.id);
+    const versionB = Number(rowB.version);
+    const status = await invoke<Envelope>(statusRoute, {
+      method: "POST",
+      path: `/api/v1/omnichannel-inbox/conversations/${idB}/status`,
+      params: { id: idB },
+      headers: headers(writer.token),
+      body: { status: "closed", expectedVersion: versionB }
+    });
+    const respond = await invoke<Envelope>(responseRoute, {
+      method: "POST",
+      path: `/api/v1/omnichannel-inbox/conversations/${idB}/responses`,
+      params: { id: idB },
+      headers: headers(writer.token),
+      body: { expectedVersion: versionB }
+    });
+    const unassign = await assign(writer.token, idB, null, versionB);
+    expect([status.status, respond.status, unassign.status]).toEqual([
+      404, 404, 404
+    ]);
+    expect((await conversationRow(contactB))!.version).toBe(versionB);
+
+    // P9: a withdrawn website conversation cannot be reopened.
+    const submission = crypto.randomUUID();
+    await publish(
+      tenantId,
+      "awcms.website_engagement.submission.received",
+      "website_engagement_submission",
+      submission,
+      {
+        contractVersion: "1",
+        submissionId: submission,
+        kind: "contact",
+        receivedAt: new Date().toISOString()
+      }
+    );
+    await dispatch(tenantId);
+    await publish(
+      tenantId,
+      "awcms.website_engagement.submission.withdrawn",
+      "website_engagement_submission",
+      submission,
+      { contractVersion: "1", submissionId: submission }
+    );
+    await dispatch(tenantId);
+    const withdrawn = (await conversationRow(submission))!;
+    expect(withdrawn.customer_state).toBe("withdrawn");
+    const wid = String(withdrawn.id);
+    const reopen = await invoke<Envelope>(statusRoute, {
+      method: "POST",
+      path: `/api/v1/omnichannel-inbox/conversations/${wid}/status`,
+      params: { id: wid },
+      headers: headers(lead.token),
+      body: { status: "open", expectedVersion: Number(withdrawn.version) }
+    });
+    expect(reopen.status).toBe(409);
+    expect((await conversationRow(submission))!.status).toBe("closed");
+
+    // P10: an opted-out customer cannot be "answered".
+    const bot = await seedBot(tenantId, null);
+    const contact = crypto.randomUUID();
+    await telegramInbound(tenantId, bot, contact);
+    await dispatch(tenantId);
+    await publish(
+      tenantId,
+      "awcms.telegram_engagement.consent.changed",
+      "telegram_engagement_contact",
+      contact,
+      {
+        contractVersion: "1",
+        channelAccountId: bot,
+        contactRef: contact,
+        purpose: "support",
+        action: "opt_out"
+      }
+    );
+    await runSlaForTenant(
+      getHandlerDatabaseClient(),
+      tenantId,
+      {
+        hierarchy: officeScopeHierarchyPortAdapter,
+        notifier: { enqueueNotification: async () => ({ queued: 0 }) }
+      },
+      { correlationId: "m3-p10" }
+    );
+    const opted = (await conversationRow(contact))!;
+    expect(opted.customer_state).toBe("opted_out");
+    const oid = String(opted.id);
+    const answer = await invoke<Envelope>(responseRoute, {
+      method: "POST",
+      path: `/api/v1/omnichannel-inbox/conversations/${oid}/responses`,
+      params: { id: oid },
+      headers: headers(lead.token),
+      body: { expectedVersion: Number(opted.version) }
+    });
+    expect(answer.status).toBe(409);
+    expect((await conversationRow(contact))!.first_responded_at).toBeNull();
+
+    // P12: a rebuild never resurrects a conversation older than its window.
+    const oldContact = crypto.randomUUID();
+    const old = new Date(Date.now() - 400 * 86_400_000);
+    const oldEvent = await telegramInbound(tenantId, bot, oldContact, old);
+    await admin()`
+      UPDATE awcms_domain_events SET recorded_at = ${old} WHERE id = ${oldEvent.id}
+    `;
+    await dispatch(tenantId);
+    await admin()`
+      DELETE FROM awcms_inbox_conversations WHERE source_ref = ${oldContact}
+    `;
+    const rebuilt = await invoke<Envelope<{ created: number }>>(rebuildRoute, {
+      method: "POST",
+      path: "/api/v1/omnichannel-inbox/projection/rebuild",
+      headers: headers(lead.token, { "idempotency-key": crypto.randomUUID() }),
+      body: {}
+    });
+    expect(rebuilt.status).toBe(200);
+    expect(await conversationRow(oldContact)).toBeUndefined();
+  });
+
+  test("L-1/L-3: a confined manager configures only their scopes and sees only their scopes' policies", async () => {
+    const brandA = await seedOffice("l-a");
+    const brandB = await seedOffice("l-b");
+    const admin1 = await seedUser(tenantId, "l-admin", ALL);
+    // Naming ONE scope goes through the chokepoint's business-scope check,
+    // which a tenant-wide caller passes by holding the reserved `tenant`
+    // scope (not a confinement).
+    await admin()`
+      INSERT INTO awcms_business_scope_assignments
+        (tenant_id, tenant_user_id, scope_type, scope_id,
+         granted_by_tenant_user_id, effective_from)
+      VALUES (${tenantId}, ${admin1.tenantUserId}, 'tenant', ${tenantId},
+              ${ownerTenantUserId}, now() - interval '1 minute')
+    `;
+    const weekdays = [
+      { start: 540, end: 1020 },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ];
+    const createPolicy = (
+      token: string,
+      name: string,
+      scope: { type: string; id: string } | null
+    ) =>
+      invoke<Envelope>(createPolicyRoute, {
+        method: "POST",
+        path: "/api/v1/omnichannel-inbox/sla-policies",
+        headers: headers(token, { "idempotency-key": crypto.randomUUID() }),
+        body: {
+          name,
+          timezone: "UTC",
+          firstResponseMinutes: 10,
+          nextResponseMinutes: 10,
+          workingHours: weekdays,
+          ...(scope ? { businessScope: scope } : {})
+        }
+      });
+
+    expect(
+      (await createPolicy(admin1.token, "Tenant default", null)).status
+    ).toBe(201);
+    expect(
+      (
+        await createPolicy(admin1.token, "Brand B plan", {
+          type: "office",
+          id: brandB
+        })
+      ).status
+    ).toBe(201);
+
+    // A manager confined to brand B: their own scope yes; the tenant default,
+    // the tag catalogue and a rebuild no.
+    const lead = await seedUser(tenantId, "l-lead", ALL);
+    await holdScope(lead.tenantUserId, brandB);
+    expect(
+      (
+        await createPolicy(lead.token, "Brand B v2", {
+          type: "office",
+          id: brandB
+        })
+      ).status
+    ).toBe(201);
+    expect((await createPolicy(lead.token, "Default v2", null)).status).toBe(
+      403
+    );
+
+    const tag = await invoke<Envelope>(createTagRoute, {
+      method: "POST",
+      path: "/api/v1/omnichannel-inbox/tags",
+      headers: headers(lead.token, { "idempotency-key": crypto.randomUUID() }),
+      body: { code: "vip", label: "VIP" }
+    });
+    expect(tag.status).toBe(403);
+
+    const rebuild = await invoke<Envelope>(rebuildRoute, {
+      method: "POST",
+      path: "/api/v1/omnichannel-inbox/projection/rebuild",
+      headers: headers(lead.token, { "idempotency-key": crypto.randomUUID() }),
+      body: {}
+    });
+    expect(rebuild.status).toBe(403);
+
+    // A reader confined to brand A sees the tenant default (it governs their
+    // conversations) and never brand B's plans.
+    const reader = await seedUser(tenantId, "l-reader", [
+      "omnichannel_inbox.sla_policies.read",
+      READ
+    ]);
+    await holdScope(reader.tenantUserId, brandA);
+    const seen = await invoke<
+      Envelope<{ items: { name: string; status: string }[] }>
+    >(listPoliciesRoute, {
+      path: "/api/v1/omnichannel-inbox/sla-policies",
+      headers: headers(reader.token)
+    });
+    expect(seen.status).toBe(200);
+    expect(seen.body.data!.items.map((item) => item.name)).toEqual([
+      "Tenant default"
+    ]);
+
+    const all = await invoke<Envelope<{ items: { name: string }[] }>>(
+      listPoliciesRoute,
+      {
+        path: "/api/v1/omnichannel-inbox/sla-policies",
+        headers: headers(admin1.token)
+      }
+    );
+    expect(all.body.data!.items).toHaveLength(3);
+  });
+
+  test("L-3: deleting a catalogue tag records tag_removed on each conversation and moves its version", async () => {
+    const admin1 = await seedUser(tenantId, "tagdel", ALL);
+    const contact = crypto.randomUUID();
+    await telegramInbound(tenantId, await seedBot(tenantId, null), contact);
+    await dispatch(tenantId);
+
+    const created = await invoke<Envelope<{ tag: { id: string } }>>(
+      createTagRoute,
+      {
+        method: "POST",
+        path: "/api/v1/omnichannel-inbox/tags",
+        headers: headers(admin1.token, {
+          "idempotency-key": crypto.randomUUID()
+        }),
+        body: { code: "vip", label: "VIP" }
+      }
+    );
+    expect(created.status).toBe(201);
+    const tagId = created.body.data!.tag.id;
+    const row = (await conversationRow(contact))!;
+    const id = String(row.id);
+    const linked = await invoke<Envelope>(tagsRoute, {
+      method: "PUT",
+      path: `/api/v1/omnichannel-inbox/conversations/${id}/tags`,
+      params: { id },
+      headers: headers(admin1.token),
+      body: { tagIds: [tagId], expectedVersion: Number(row.version) }
+    });
+    expect(linked.status).toBe(200);
+    const before = Number((await conversationRow(contact))!.version);
+
+    const deleted = await invoke<Envelope>(deleteTagRoute, {
+      method: "DELETE",
+      path: `/api/v1/omnichannel-inbox/tags/${tagId}`,
+      params: { id: tagId },
+      headers: headers(admin1.token, { "idempotency-key": crypto.randomUUID() })
+    });
+    expect(deleted.status).toBe(200);
+    expect(Number((await conversationRow(contact))!.version)).toBe(before + 1);
+
+    const history = (await admin()`
+      SELECT kind, actor_tenant_user_id, detail_code FROM awcms_inbox_activity
+      WHERE conversation_id = ${id} AND kind = 'tag_removed'
+    `) as { kind: string; actor_tenant_user_id: string; detail_code: string }[];
+    expect(history).toEqual([
+      {
+        kind: "tag_removed",
+        actor_tenant_user_id: admin1.tenantUserId,
+        detail_code: tagId
+      }
+    ]);
   });
 });

@@ -31,7 +31,7 @@ type Prepared = {
  * SEE the conversation (business-scope confinement). The assignee must be an
  * active user holding `conversations.update` on a tenant-wide grant and, if
  * confined, cover the conversation's scope; otherwise `422
- * ASSIGNEE_NOT_ELIGIBLE` with a reason code. `expectedVersion` makes concurrent
+ * ASSIGNEE_NOT_ELIGIBLE`, with no reason. `expectedVersion` makes concurrent
  * reassignment safe: exactly one writer wins, the other gets `409`.
  */
 export const POST = defineTenantRoute<Prepared>({
@@ -101,12 +101,13 @@ export const POST = defineTenantRoute<Prepared>({
           case "customer_unreachable":
             return fail(409, "CUSTOMER_UNREACHABLE", "Not assignable.");
           case "assignee_not_eligible":
+            // One answer, no reason (#1275 audit, L-8): the cause would tell the
+            // caller whether a colleague is inactive, lacks the permission or is
+            // confined elsewhere.
             return fail(
               422,
               "ASSIGNEE_NOT_ELIGIBLE",
-              "The person cannot be assigned this conversation.",
-              {},
-              { reason: result.reason }
+              "The person cannot be assigned this conversation."
             );
           default:
             break;
