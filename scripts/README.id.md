@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:171cbfb9ee9f8cb75c4f5a2f7c3de0454c23f581c6dc75c891e902afb77e10ca -->
+<!-- i18n-source-hash: sha256:47ffb44faf03fa8f10f6557b0dfb16b6aa1bd566a6206f6e86fe43d0a27d7fb1 -->
 
 # Scripts AWCMS
 
@@ -27,7 +27,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-157 target menjalankan berkas di `scripts/`; 65 di antaranya
+158 target menjalankan berkas di `scripts/`; 65 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -105,6 +105,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `email:dispatch`                          | `email-dispatch.ts`                            | —    |
 | `email:provider:health`                   | `email-provider-health.ts`                     | —    |
 | `email:queue:purge`                       | `email-queue-purge.ts`                         | —    |
+| `email:senders:verify`                    | `email-senders-verify.ts`                      | —    |
 | `email:templates:seed-defaults`           | `email-templates-seed-defaults.ts`             | —    |
 | `entitlements:backfill`                   | `identity-access-entitlement-backfill.ts`      | —    |
 | `family:conformance:check`                | `family-conformance-check.ts`                  | ✅   |

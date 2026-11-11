@@ -24,7 +24,13 @@
  */
 import type {
   ChannelAccountPort,
+  ChannelEmailAccountDirectoryPort,
+  ChannelEmailSenderPort,
+  EmailAccountSummary,
   ChannelPublisherPort,
+  EmailSenderUnavailableReason,
+  PublisherUnavailableReason,
+  ResolveEmailSenderResult,
   ResolvePublisherResult,
   ResolveWhatsappSenderResult,
   SenderUnavailableReason,
@@ -62,6 +68,18 @@ export function isWhatsappSenderShape(
       accountKind
     )
   );
+}
+
+/**
+ * The (provider, kind) that is an EMAIL sending identity (Issue #1160, ADR-0151
+ * section 2): a verified Mailketing from-address. Its parent `esp_account` is a
+ * container that holds the token and sends nothing itself.
+ */
+export function isEmailSenderShape(
+  provider: string,
+  accountKind: string
+): boolean {
+  return provider === "mailketing" && accountKind === "sender_identity";
 }
 
 export type SenderAccountRow = {
@@ -169,6 +187,20 @@ export async function loadLendingParent(
     return { reason: "CREDENTIAL_UNAVAILABLE" };
   }
 
+  // Issue #1160 audit M2: a parent lends only to a child whose scope it
+  // CONTAINS. A tenant-wide parent lends to any child; a scoped parent only to
+  // a child of the same scope. Otherwise brand B's sender would spend brand A's
+  // token and credit. Enforced at every lend (enqueue, dispatch, decrypt), not
+  // only when the child was registered.
+  if (
+    parent.business_scope_type !== null &&
+    (account.business_scope_type !== parent.business_scope_type ||
+      String(account.business_scope_id).toLowerCase() !==
+        String(parent.business_scope_id).toLowerCase())
+  ) {
+    return { reason: "CREDENTIAL_UNAVAILABLE" };
+  }
+
   const statusReason = reasonForAccountStatus(parent.status);
 
   return statusReason ? { reason: statusReason } : { parent };
@@ -187,7 +219,11 @@ export type ChannelAccountPortOptions = {
 
 type AccountEvaluation =
   | { usable: true; account: SenderAccountRow }
-  | { usable: false; reason: SenderUnavailableReason | "NOT_A_PUBLISHER" };
+  | {
+      usable: false;
+      reason:
+        SenderUnavailableReason | "NOT_A_PUBLISHER" | "NOT_AN_EMAIL_SENDER";
+    };
 
 /**
  * The ONE evaluation of "may this account use `capability` right now", shared
@@ -202,7 +238,8 @@ async function evaluateAccountForCapability(
   capability: ChannelCapability,
   shape: {
     isRightKind: (account: SenderAccountRow) => boolean;
-    wrongKindReason: "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER";
+    wrongKindReason:
+      "NOT_A_WHATSAPP_SENDER" | "NOT_A_PUBLISHER" | "NOT_AN_EMAIL_SENDER";
     /**
      * A refusal that must be decided BEFORE the account's status (the provider
      * risk acknowledgement of a WhatsApp sender, Issue #1142); `null` lets the
@@ -339,7 +376,7 @@ export function isPublisherShape(
 
 export function createChannelAccountPortAdapter(
   options: ChannelAccountPortOptions = {}
-): ChannelAccountPort & ChannelPublisherPort {
+): ChannelAccountPort & ChannelPublisherPort & ChannelEmailSenderPort {
   const envOf = () => options.env ?? process.env;
 
   return {
@@ -413,7 +450,10 @@ export function createChannelAccountPortAdapter(
       );
 
       if (!evaluation.usable)
-        return { usable: false, reason: evaluation.reason };
+        return {
+          usable: false,
+          reason: evaluation.reason as PublisherUnavailableReason
+        };
 
       const account = evaluation.account;
 
@@ -433,10 +473,143 @@ export function createChannelAccountPortAdapter(
               : null
         }
       };
+    },
+
+    /**
+     * Issue #1160 (ADR-0151 section 2). A Mailketing sender identity may send
+     * only while it AND the Mailketing account it borrows its token from are
+     * `connected`: a disabled, revoked, degraded or pending account must not
+     * lend its credential to any of its senders. The parent is asked after the
+     * sender's own verdict, by the same `loadLendingParent` the credential
+     * adapter uses, so the two ports cannot disagree about it.
+     */
+    async resolveEmailSender(tx, input): Promise<ResolveEmailSenderResult> {
+      const evaluation = await evaluateAccountForCapability(
+        tx,
+        envOf(),
+        input,
+        input.capability,
+        {
+          isRightKind: (account) =>
+            isEmailSenderShape(account.provider, account.account_kind),
+          wrongKindReason: "NOT_AN_EMAIL_SENDER"
+        }
+      );
+
+      if (!evaluation.usable) {
+        return {
+          usable: false,
+          reason: evaluation.reason as EmailSenderUnavailableReason
+        };
+      }
+
+      const account = evaluation.account;
+      const lender = await loadLendingParent(tx, input.tenantId, account);
+
+      if ("reason" in lender) return { usable: false, reason: lender.reason };
+
+      let displayName: string | null = null;
+
+      if (input.withDisplayName === true) {
+        // Only on the enqueue path (`awcms_app`): the worker holds no grant on
+        // this column, and asking for it there would abort its transaction.
+        const named = (await tx`
+          SELECT display_name FROM awcms_channel_accounts
+          WHERE tenant_id = ${input.tenantId} AND id = ${account.id}
+        `) as { display_name: string }[];
+
+        displayName = named[0]?.display_name ?? null;
+      }
+
+      return {
+        usable: true,
+        sender: {
+          accountId: account.id,
+          provider: "mailketing",
+          accountKind: "sender_identity",
+          address: account.external_id.trim().toLowerCase(),
+          espAccountId: lender.parent.id,
+          businessScope:
+            account.business_scope_type && account.business_scope_id
+              ? {
+                  type: account.business_scope_type,
+                  id: account.business_scope_id
+                }
+              : null,
+          displayName
+        }
+      };
     }
   };
 }
 
-/** The adapter the composition roots hand to `whatsapp_delivery`. Reads `CHANNEL_ACCOUNTS_ENABLED` on every call. */
+/** The adapter the composition roots hand to `whatsapp_delivery`, `social_publishing` and `email`. Reads `CHANNEL_ACCOUNTS_ENABLED` on every call. */
 export const channelAccountPortAdapter: ChannelAccountPort &
-  ChannelPublisherPort = createChannelAccountPortAdapter();
+  ChannelPublisherPort &
+  ChannelEmailSenderPort = createChannelAccountPortAdapter();
+
+/**
+ * Issue #1160: the Mailketing accounts of one tenant and their sender
+ * identities, for `email:senders:verify`. Two bounded statements in the
+ * caller's tenant transaction; identities and statuses only.
+ */
+export const emailAccountDirectoryAdapter: ChannelEmailAccountDirectoryPort = {
+  async readEmailAccountSecretRef(tx, tenantId, accountId) {
+    const rows = (await tx`
+      SELECT s.id, s.version
+      FROM awcms_channel_accounts a
+      JOIN awcms_channel_secrets s
+        ON s.tenant_id = a.tenant_id AND s.id = a.secret_id
+      WHERE a.tenant_id = ${tenantId} AND a.id = ${accountId}
+        AND a.deleted_at IS NULL
+    `) as { id: string; version: number }[];
+
+    return rows[0]
+      ? { secretId: rows[0].id, version: Number(rows[0].version) }
+      : null;
+  },
+
+  async listEmailAccounts(tx, tenantId): Promise<EmailAccountSummary[]> {
+    const accounts = (await tx`
+      SELECT id, status FROM awcms_channel_accounts
+      WHERE tenant_id = ${tenantId} AND provider = 'mailketing'
+        AND account_kind = 'esp_account' AND deleted_at IS NULL
+        AND status IN ('pending', 'connected', 'degraded')
+      ORDER BY created_at, id
+      LIMIT 200
+    `) as { id: string; status: string }[];
+
+    if (accounts.length === 0) return [];
+
+    const senders = (await tx`
+      SELECT id, parent_account_id, external_id, status
+      FROM awcms_channel_accounts
+      WHERE tenant_id = ${tenantId} AND provider = 'mailketing'
+        AND account_kind = 'sender_identity' AND deleted_at IS NULL
+        AND status IN ('pending', 'connected', 'degraded')
+        AND parent_account_id = ANY(${tx.array(
+          accounts.map((account) => account.id),
+          "uuid"
+        )})
+      ORDER BY created_at, id
+      LIMIT 2000
+    `) as {
+      id: string;
+      parent_account_id: string;
+      external_id: string;
+      status: string;
+    }[];
+
+    return accounts.map((account) => ({
+      espAccountId: account.id,
+      status: account.status,
+      senders: senders
+        .filter((sender) => sender.parent_account_id === account.id)
+        .map((sender) => ({
+          accountId: sender.id,
+          address: sender.external_id.trim().toLowerCase(),
+          status: sender.status
+        }))
+    }));
+  }
+};

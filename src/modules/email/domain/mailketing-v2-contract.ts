@@ -242,6 +242,125 @@ function parseJson(rawBody: string): Record<string, unknown> | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Read-only account probes (Issue #1160, ADR-0151 sections 2 and 6)
+// ---------------------------------------------------------------------------
+//
+// `GET /api/v2/credits` and `GET /api/v2/senders` feed `email:senders:verify`.
+// Their RESPONSE SHAPES are not verified against the live API either (the same
+// stage-2 caveat as the send body). The parsers are therefore FAIL-CLOSED: a
+// balance is read only from an explicit non-negative number, and a sender
+// counts as verified only when an entry names its address AND says so
+// explicitly (`verified: true` or `status: "verified"`). Anything else (an
+// unknown shape, a missing flag, a different word) is "not verified" / "unknown",
+// which HOLDS mail rather than sending it from an address nobody confirmed.
+
+/** At most this many sender entries are read from one response (bounded work on hostile input). */
+export const MAILKETING_V2_MAX_SENDER_ENTRIES = 1000;
+
+const SENDER_ADDRESS = /^[^@\s]{1,128}@[^@\s]{1,253}$/;
+
+export type MailketingV2CreditsParse =
+  { ok: true; balance: number } | { ok: false };
+
+/** `{ success: true, data: { credits | credit | balance: <number> } }`; anything else is unknown. */
+export function parseMailketingV2Credits(
+  rawBody: string
+): MailketingV2CreditsParse {
+  const body = parseJson(rawBody);
+
+  if (!body || body.success !== true || !isRecord(body.data)) {
+    return { ok: false };
+  }
+
+  for (const key of ["credits", "credit", "balance"]) {
+    const value = body.data[key];
+
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return { ok: true, balance: Math.floor(value) };
+    }
+  }
+
+  return { ok: false };
+}
+
+export type MailketingV2SendersParse =
+  | {
+      ok: true;
+      /** Lower-cased addresses the provider explicitly reports as verified. */
+      verified: ReadonlySet<string>;
+      /** Addresses whose entries contradict each other (flags or duplicates): unknown, never verified. */
+      ambiguous: ReadonlySet<string>;
+    }
+  | { ok: false };
+
+/** `{ success: true, data: [ { email | from_email | sender, verified | status } ] }` (or `data.senders`). */
+export function parseMailketingV2Senders(
+  rawBody: string
+): MailketingV2SendersParse {
+  const body = parseJson(rawBody);
+
+  if (!body || body.success !== true) return { ok: false };
+
+  const list = Array.isArray(body.data)
+    ? body.data
+    : isRecord(body.data) && Array.isArray(body.data.senders)
+      ? body.data.senders
+      : null;
+
+  if (!list) return { ok: false };
+
+  // Issue #1160 audit L5: one verdict per address. An entry whose two flags
+  // disagree (`verified: true` with a non-"verified" status, or the reverse),
+  // or an address listed twice with different verdicts, is AMBIGUOUS: neither
+  // verified nor unverified, recorded as unknown (a hold), never as verified.
+  const verdicts = new Map<string, "verified" | "unverified" | "ambiguous">();
+
+  for (const entry of list.slice(0, MAILKETING_V2_MAX_SENDER_ENTRIES)) {
+    if (!isRecord(entry)) continue;
+
+    const rawAddress = [entry.email, entry.from_email, entry.sender].find(
+      (candidate): candidate is string => typeof candidate === "string"
+    );
+
+    if (!rawAddress) continue;
+
+    const address = rawAddress.trim().toLowerCase();
+
+    if (!SENDER_ADDRESS.test(address)) continue;
+
+    const flagSays =
+      entry.verified === undefined ? null : entry.verified === true;
+    const statusSays =
+      entry.status === undefined ? null : entry.status === "verified";
+    let verdict: "verified" | "unverified" | "ambiguous";
+
+    if (flagSays !== null && statusSays !== null && flagSays !== statusSays) {
+      verdict = "ambiguous";
+    } else {
+      verdict =
+        flagSays === true || statusSays === true ? "verified" : "unverified";
+    }
+
+    const previous = verdicts.get(address);
+
+    verdicts.set(
+      address,
+      previous === undefined || previous === verdict ? verdict : "ambiguous"
+    );
+  }
+
+  const verified = new Set<string>();
+  const ambiguous = new Set<string>();
+
+  for (const [address, verdict] of verdicts) {
+    if (verdict === "verified") verified.add(address);
+    if (verdict === "ambiguous") ambiguous.add(address);
+  }
+
+  return { ok: true, verified, ambiguous };
+}
+
 export type MailketingV2HttpCategory =
   | "auth" // 401
   | "credit" // 402

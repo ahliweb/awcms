@@ -143,8 +143,12 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // ports, `ChannelPublisherPort` and `ChannelPublisherCredentialPort`, for
     // `social_publishing`. All are additive: no signature changed (a MINOR bump),
     // a 1.0.0 implementer or fake still compiles, and a consumer that switches
-    // exhaustively over the reasons must add the member.
-    channel_account: "1.1.0",
+    // exhaustively over the reasons must add the member. `1.2.0` (Issue #1160,
+    // ADR-0151 section 2) ADDS two more exported ports, `ChannelEmailSenderPort`
+    // and `ChannelEmailCredentialPort`, and the refusal `NOT_AN_EMAIL_SENDER`
+    // (on the email result type only), for `email`'s tenant-owned Mailketing
+    // senders. Additive again: no signature changed.
+    channel_account: "1.2.0",
     // social_publishing is provided by the base `social_publishing` module
     // (Issue #1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
     // which `blog_content` already consumed (optional) while the provider was a

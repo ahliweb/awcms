@@ -16,6 +16,21 @@ export const EMAIL_MAX_RETRY_DELAY_MINUTES = 60;
  */
 export const EMAIL_CREDIT_HOLD_BUDGET_MS = 60 * 60_000;
 
+/**
+ * Issue #1160: how long a row of a tenant sender that cannot send right now (an
+ * unverified or stale sender, credit below the floor or unknown, a degraded
+ * account, a missing key ring) is parked before it is looked at again. No retry
+ * is spent and no attempt is written: nothing was sent.
+ */
+export const EMAIL_SENDER_HOLD_MS = 5 * 60_000;
+
+/**
+ * Issue #1160: the total time such a row may wait, measured from enqueue. Past
+ * it the row FAILS with a named reason (`SENDER_HOLD_BUDGET_EXCEEDED`) rather
+ * than going out hours late, and it is never rerouted to another sender.
+ */
+export const EMAIL_SENDER_HOLD_BUDGET_MS = 60 * 60_000;
+
 /** How long a configuration error defers a claimed message (no retry spent, no attempt written, never terminal). */
 export const EMAIL_CONFIG_ERROR_HOLD_MS = 5 * 60_000;
 

@@ -5,7 +5,7 @@ description: Kirim email transaksional (password reset, announcement, workflow n
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:fba87512eff162d76d5ce72f02a94738c077efff0706acf6a5d03189b6b15d71 -->
+<!-- i18n-source-hash: sha256:4f98cdc01688c186fe2919a2e5d171cec5caab4adab6572b8e88c6bf063cde7f -->
 
 # AWCMS — Email Module
 
@@ -74,6 +74,17 @@ Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapt
   melihat hasil render dengan data sampel sintetis — jangan pernah kirim
   alamat penerima nyata ke endpoint ini, dan endpoint ini sendiri **tidak**
   menyentuh `email_messages`/antrean.
+
+- **Pengirim tenant (Issue #1160, ADR-0151 §2).** Jangan pernah menaruh token
+  Mailketing atau alamat pengirim tenant di env, JSON pengaturan, atau body
+  request. Pengirim adalah id `channel_accounts` `mailketing`/`sender_identity`;
+  pilih hanya lewat `resolveEnqueueEmailSender`
+  (`application/email-sender-directory.ts`) dan teruskan snapshot hasilnya ke
+  `enqueueAnnouncement`. Jangan pernah mengalihkan pengirim yang ditolak ke
+  pengirim, akun, atau pengirim deployment lain; email keamanan (`auth.*`,
+  `system.security_notice`) selalu memakai pengirim deployment. Hanya
+  `scripts/email-dispatch.ts` dan `scripts/email-senders-verify.ts` yang boleh
+  menyusun `channel-sender-credential-adapter`.
 
 ## Observability & ops (Issue #499)
 

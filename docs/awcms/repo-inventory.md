@@ -8,12 +8,12 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 37    |
-| Migrations                          | 256   |
-| `awcms_*` tables                    | 254   |
-| Tables with `FORCE` RLS             | 236   |
+| Migrations                          | 259   |
+| `awcms_*` tables                    | 255   |
+| Tables with `FORCE` RLS             | 237   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 800   |
-| Route files                         | 639   |
+| Test files                          | 802   |
+| Route files                         | 641   |
 | ADR                                 | 318   |
 
 ### Modules
@@ -28,7 +28,7 @@
 | `domain_event_runtime` | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`, `logging`                                                                                   |
 | `sync_storage`         | 1.0.0   | active       | system | no   | `tenant_admin`                                                                                                                 |
 | `workflow`             | 2.0.0   | active       | system | no   | `tenant_admin`, `identity_access`, `domain_event_runtime`                                                                      |
-| `email`                | 0.5.0   | active       | —      | no   | `tenant_admin`, `profile_identity`, `identity_access`                                                                          |
+| `email`                | 0.6.0   | active       | —      | no   | `tenant_admin`, `profile_identity`, `identity_access`                                                                          |
 | `reporting`            | 1.2.0   | active       | —      | no   | `tenant_admin`, `identity_access`, `sync_storage`, `email`, `domain_event_runtime`                                             |
 | `theming`              | 1.0.0   | active       | domain | no   | `tenant_admin`, `identity_access`, `module_management`                                                                         |
 | `media_library`        | 0.1.0   | active       | system | no   | `tenant_admin`, `identity_access`                                                                                              |
@@ -313,11 +313,14 @@
 | 249 | `sql/342_awcms_crm_leads_schema.sql`                                   |
 | 250 | `sql/343_awcms_crm_leads_permissions.sql`                              |
 | 251 | `sql/344_awcms_crm_leads_integrity_guards.sql`                         |
-| 252 | `sql/354_awcms_whatsapp_consent_business_scope.sql`                    |
-| 253 | `sql/357_awcms_social_publishing_retention.sql`                        |
-| 254 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
-| 255 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
-| 256 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
+| 252 | `sql/346_awcms_email_sender_routing.sql`                               |
+| 253 | `sql/347_awcms_email_sender_routing_permissions.sql`                   |
+| 254 | `sql/348_awcms_email_sender_worker_visibility.sql`                     |
+| 255 | `sql/354_awcms_whatsapp_consent_business_scope.sql`                    |
+| 256 | `sql/357_awcms_social_publishing_retention.sql`                        |
+| 257 | `sql/358_awcms_social_dispatch_credential_role.sql`                    |
+| 258 | `sql/359_awcms_social_publish_external_post_id_shape.sql`              |
+| 259 | `sql/360_awcms_whatsapp_sender_progress_stream.sql`                    |
 
 ### Tables & Row-Level Security
 
@@ -406,6 +409,7 @@
 | `awcms_edge_cache_purges`                      | `sql/068_awcms_edge_cache_purge_queue.sql`                 | yes | yes   |
 | `awcms_email_delivery_attempts`                | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_messages`                         | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
+| `awcms_email_sender_policies`                  | `sql/346_awcms_email_sender_routing.sql`                   | yes | yes   |
 | `awcms_email_suppression_list`                 | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_email_templates`                        | `sql/014_awcms_email_schema.sql`                           | yes | yes   |
 | `awcms_engagement_source_domains`              | `sql/325_awcms_website_engagement_schema.sql`              | yes | yes   |
@@ -582,16 +586,16 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 599        |
+| `(root)`      | 600        |
 | `e2e`         | 30         |
-| `integration` | 170        |
+| `integration` | 171        |
 | `unit`        | 1          |
 
 ### Routes
 
 | Surface         | Files |
 | --------------- | ----- |
-| `/api/v1/**`    | 525   |
+| `/api/v1/**`    | 527   |
 | `/admin/**`     | 83    |
 | publik / anonim | 31    |
 

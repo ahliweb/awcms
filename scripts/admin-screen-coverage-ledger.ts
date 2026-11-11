@@ -314,5 +314,14 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "crm_leads.manual_conversions.create",
   "crm_leads.merges.manage",
   "crm_leads.pipelines.configure",
-  "crm_leads.stages.update"
+  "crm_leads.stages.update",
+
+  // email sender routing (3) — Issue #1160, ADR-0151 section 2. API-first:
+  // the operator screen (accounts with the v2 badge, verified senders, credit,
+  // queue status, last sync, the default-sender policy and the migration
+  // warning, ADR-0151 section 7) is Issue #1162, which claims these keys and
+  // removes them from this ledger in the same change.
+  "email.sender_policy.configure",
+  "email.senders.read",
+  "email.senders.use"
 ];

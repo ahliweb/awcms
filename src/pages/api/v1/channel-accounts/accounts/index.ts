@@ -9,6 +9,7 @@ import { fetchConnection } from "../../../../../modules/channel-accounts/applica
 import {
   auditChannelAccounts,
   authorizeConnectionBinding,
+  authorizeParentBinding,
   authorizeRequestedScope,
   canSeeAllAccounts,
   commonRefusal,
@@ -157,6 +158,20 @@ export const POST = defineTenantRoute<Prepared>({
       );
 
       if (bindingRefusal) return bindingRefusal;
+    }
+
+    // Registering under a parent account lends the child the parent's token
+    // (and credit): authorised against the PARENT, with scope containment
+    // (Issue #1160 audit M2), one neutral answer for every refusal.
+    if (context.prepared.input.parentAccountId) {
+      const parentRefusal = await authorizeParentBinding(
+        context,
+        CHANNEL_ACCOUNTS_GUARDS.connect,
+        context.prepared.input.parentAccountId,
+        context.prepared.input.businessScope
+      );
+
+      if (parentRefusal) return parentRefusal;
     }
 
     const { tx, tenantId, auth, prepared } = context;

@@ -244,6 +244,92 @@ All `.env.example` values are placeholders, never real credentials. When
 the outbox and drain once the module is enabled online — offline/LAN
 deployments run fully without email.
 
+## Tenant Mailketing accounts and verified senders (Issue #1160, ADR-0151 §2)
+
+Each tenant (or brand, as a business scope) can connect **N Mailketing
+accounts** and send from **N verified from-addresses** per account, on the
+**same single queue** (`awcms_email_messages`, `email:dispatch`). There is no
+second queue, no per-account or per-campaign mailer, and no token in settings
+JSON or in the browser.
+
+- **Model (registry #1140).** A Mailketing account is a `channel_accounts`
+  account `mailketing`/`esp_account` (a container) whose API token is a
+  `channel_secrets` row (envelope-encrypted, referenced by id, never returned).
+  Each from-address is a child `mailketing`/`sender_identity` whose
+  `external_id` is the address; it holds no credential and borrows its parent's
+  token only while the parent is `connected`. Capabilities (`dm` for
+  transactional mail) are granted with evidence through the existing
+  `channel_accounts` routes.
+- **Verified means the provider said so.** `bun run email:senders:verify`
+  (as `awcms_app`) calls the read-only `GET /api/v2/credits` and
+  `GET /api/v2/senders` per account and records health: a sender listed as
+  verified becomes `connected`; not listed is `degraded`/`SENDER_UNVERIFIED`;
+  an unrecognised response, or contradictory entries for one address, is
+  `unknown`; a 401 takes the account out of service; a probe that learnt
+  nothing writes nothing (the fact goes stale); results are discarded when the
+  account's token was replaced while the probe ran. **The job is manual: it is
+  NOT on the generated crontab** (it writes channel-account health, which only
+  `awcms_app` may, and Issue #1132 keeps the app connection out of crontab
+  jobs). An operator must schedule it, more often than
+  `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` (360). Without that schedule every
+  tenant sender goes stale after 360 minutes, its mail is held and then FAILS
+  (`SENDER_HOLD_BUDGET_EXCEEDED`) one hour after enqueue; nothing falls back to
+  the deployment sender.
+  This repo **does not create or verify domains at Mailketing**: the
+  documented API offers no such call. SPF/DKIM/DMARC are set up by people at
+  the tenant's DNS and in the provider; only the provider's verdict is read.
+- **Enqueue.** `POST /api/v1/email/announcements` accepts optional
+  `senderAccountId` / `businessScope`. The sender is explicit, else the scope's
+  (or the tenant-wide) prospective default (`PUT /api/v1/email/sender-policy`,
+  `email.sender_policy.configure`, high-risk, idempotent, audited), else the
+  deployment sender. Whenever the result is a TENANT sender (named, or chosen
+  by a policy, tenant-wide included) or a business scope is named, the caller
+  needs `email.senders.use` AND the channel-account access rules on that sender
+  (assignment, scope); a policy says which brand speaks, it does not let every
+  mailer speak as it. A tenant sender must belong to a Mailketing account whose
+  business scope contains its own (enforced at registration, at every token
+  lend, and by trigger). The chosen sender, its verified address and display name,
+  the policy version and the business scope are **snapshotted immutably** on
+  every row (`sql/346`, enforced by trigger for every role). A sender that
+  cannot send is `422 SENDER_UNAVAILABLE` (one answer for unknown, foreign,
+  unverified, disabled or out-of-scope), never swapped.
+- **Security mail stays on the deployment sender** (ADR-0151 Q7): `auth.*` and
+  `system.security_notice` get `purpose = 'security'`, and the database refuses
+  a tenant sender on them.
+- **Dispatch.** The deployment lane is unchanged. Each tenant sender is its own
+  lane: re-resolved every pass for the row's tenant; held when its verification
+  or its account's credit is stale, unknown or below
+  `EMAIL_MAILKETING_CREDIT_FLOOR`; claimed under an hourly cap
+  (`EMAIL_SENDER_RATE_PER_HOUR`, advisory lock per sender); sent through a v2
+  provider with that account's token (decrypted in memory, `sql/348` lets the
+  worker see only a CONNECTED `esp_account`'s own token; `security:readiness`
+  pins that policy exactly and probes it) and that account's own breaker
+  (`email-mailketing:account:<id>`), FROM the row's snapshotted address.
+  Holds are bounded (`SENDER_HOLD_BUDGET_EXCEEDED` one hour after enqueue, also
+  for rows that wait unclaimed behind routing switched off, an open account
+  breaker or a reached hourly cap); revoked,
+  disabled or foreign senders fail with `SENDER_UNAVAILABLE`. **No automatic
+  rotation** across senders or accounts, ever.
+- **Backward compatibility.** `EMAIL_SENDER_ROUTING_ENABLED` is off by default:
+  the single-account env path (`EMAIL_MAILKETING_API_TOKEN`,
+  `EMAIL_FROM_ADDRESS`) keeps working byte for byte, named senders are refused
+  (`409 SENDER_ROUTING_DISABLED`) and tenant-sender rows are never claimed.
+  Cut-over is turning the flag on after accounts and senders are verified;
+  rollback is turning it off (nothing is copied; queued tenant rows wait, and
+  fail once they are an hour old).
+- **Not here:** the admin screens (#1162; the permissions are seeded and
+  enforced by the API now), webhooks (#1161), marketing purpose and its consent
+  gate (the `purpose` CHECK admits only `transactional`/`security`).
+
+Open decisions (fail-closed choices taken, need maintainer confirmation):
+the live `/senders` and `/credits` response shapes are unverified (the parsers
+only accept explicit `verified: true` / `status: "verified"` and a numeric
+balance); `email:senders:verify` is manual (see above) until an app-role
+scheduled exception is decided; a 401/403 at send time does not degrade the
+account immediately (the worker cannot write health; the per-account breaker
+stops the lane and the next verify pass records it); workflow notifications do
+not consult the default policy (only announcements do).
+
 ## Disabled / offline-LAN behavior
 
 `EMAIL_ENABLED=false` must never stop the app or any business path.

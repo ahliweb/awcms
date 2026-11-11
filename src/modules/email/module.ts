@@ -13,7 +13,7 @@ export const EMAIL_ATTEMPTS_LIFECYCLE_KEY = "email.delivery_attempts";
 export const emailModule = defineModule({
   key: "email",
   name: "Email",
-  version: "0.5.0",
+  version: "0.6.0",
   status: "active",
   description:
     "Reusable, provider-neutral email service (ported from awcms-mini epic #492): message/recipient/attachment DTOs, an `EmailProvider` port, Mailketing configuration, the tenant-scoped schema/RLS/delivery queue (`sql/014`), the real Mailketing adapter plus a safe `log` provider, the claim/send/finalize dispatcher (`bun run email:dispatch`, dispatch-time suppression re-check), template management (CRUD + soft-delete/restore, per-category variable allowlists, i18n locale variants, admin preview) at `/api/v1/email/templates`, bulk announcement/notification workflows (`/api/v1/email/announcements`, tenant/role/explicit-user targeting, two-tier ABAC, idempotent), and admin observability/ops (`/api/v1/email/messages` queue diagnostics + cancel, `/api/v1/email/suppressions` manual suppression CRUD). Generic infrastructure — analogous to `sync_storage`'s object-storage port — for password reset, system announcements, and workflow notifications; not a domain-specific 'send a receipt' feature.",
@@ -39,7 +39,22 @@ export const emailModule = defineModule({
    * Enqueue only: the adapter writes outbox rows, `email:dispatch` sends later.
    */
   capabilities: {
-    provides: ["auth_notification", "workflow_notification"]
+    provides: ["auth_notification", "workflow_notification"],
+    // Issue #1160, ADR-0151 section 2: a message may be sent as a tenant-owned
+    // Mailketing sender (a `channel_accounts` account). Optional: with routing
+    // off, or no sender named and no policy configured, nothing here is
+    // consulted and the deployment sender is used exactly as before. Loaded
+    // lazily by `infrastructure/channel-account-loaders.ts` (no secret); the
+    // credential port is composed only by `scripts/email-dispatch.ts` and
+    // `scripts/email-senders-verify.ts`. A soft edge, NOT a `dependencies`
+    // entry: switching `channel_accounts` off must not strand the queue.
+    consumes: [
+      {
+        capability: "channel_account",
+        providedBy: "channel_accounts",
+        optional: true
+      }
+    ]
   },
   api: {
     openApiPath: "openapi/modules/email.openapi.yaml",
@@ -138,6 +153,27 @@ export const emailModule = defineModule({
       action: "create",
       description:
         "Enqueue a bulk email announcement to a role or the whole tenant"
+    },
+    // Issue #1160 (`sql/347`). Each is enforced by a route added in the same
+    // change: GET /email/senders, the announcement route's sender selection,
+    // and PUT /email/sender-policy.
+    {
+      activityCode: "senders",
+      action: "read",
+      description:
+        "Read this tenant's Mailketing email senders with queue, quota, verification and credit diagnostics, and the default-sender policy (never a credential)"
+    },
+    {
+      activityCode: "senders",
+      action: "use",
+      description:
+        "Send email as a tenant-owned Mailketing sender identity (explicit sender or business scope on an announcement)"
+    },
+    {
+      activityCode: "sender_policy",
+      action: "configure",
+      description:
+        "Set or clear the default email sender of a business scope; affects later messages only (high-risk, audited at warning)"
     }
   ],
   events: {
@@ -178,6 +214,21 @@ export const emailModule = defineModule({
         "On-demand — operators run manually or from a deployment smoke-test step, not on a recurring schedule.",
       environmentNotes:
         'Exits 0 (no-op) when EMAIL_ENABLED is not "true". Requires real network egress to the provider — not run in CI.',
+      safeInOfflineLan: false
+    },
+    {
+      command: "bun run email:senders:verify",
+      schedule: {
+        mode: "manual",
+        because:
+          "It WRITES channel-account health and status, which only awcms_app may (a worker that could would be able to mark an unverified sender verified), and Issue #1132 keeps the app connection out of every crontab job. An operator schedules it from the deployment's full environment, like channel-accounts:secrets:rekey; until a decision admits an app-role scheduled exception (as ADR-0147 did for one job), it is not on the generated crontab."
+      },
+      purpose:
+        "Read each tenant Mailketing account's credit balance and verified senders (read-only GET /credits and GET /senders) and record them as account health; a sender becomes usable only when the provider reports it verified (Issue #1160).",
+      recommendedSchedule:
+        "Hourly, by the operator's own scheduler. Must run more often than EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES (default 360), or every tenant sender is held as stale (fail closed).",
+      environmentNotes:
+        'No-op when EMAIL_SENDER_ROUTING_ENABLED is not "true". Requires network egress to the provider and the channel secrets key ring.',
       safeInOfflineLan: false
     },
     {
@@ -303,6 +354,18 @@ export const emailModule = defineModule({
       erasure: "severed_with_subject_row",
       rationale:
         "Reusable message bodies belonging to the tenant. `subject_template` is a template string, not anybody's subject line; the only people here are the editors."
+    },
+    {
+      // Issue #1160 (`sql/346`). Configuration, not personal data: which
+      // sender speaks for a business scope. The only person is who changed it.
+      key: "email.email_sender_policies",
+      tableName: "awcms_email_sender_policies",
+      ownerModuleKey: "email",
+      subjectColumns: [{ column: "changed_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The tenant's default email sender per business scope. Holds no recipient and no address of a person; the only person referenced is the operator who last changed it."
     },
     {
       key: "email.email_delivery_attempts",

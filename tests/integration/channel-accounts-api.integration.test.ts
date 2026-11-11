@@ -1403,6 +1403,95 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       expect(await grantState(connection)).toBe("revoked");
     });
 
+    test("Issue #1160 audit M2: a child account is registered under a parent only when the caller may operate the parent AND the child's scope is contained in the parent's; every refusal is the same 422 PARENT_INVALID", async () => {
+      if (!handlerReady) return;
+
+      const officeA = await seedOffice("m2-a");
+      const officeB = await seedOffice("m2-b");
+      const parentRows = (await admin()`
+        INSERT INTO awcms_channel_accounts
+          (tenant_id, provider, account_kind, external_id, display_name,
+           auth_mode, business_scope_type, business_scope_id)
+        VALUES (${env.tenantId}, 'mailketing', 'esp_account', 'm2-esp-a',
+                'Brand A account', 'api_token', 'office', ${officeA})
+        RETURNING id
+      `) as { id: string }[];
+      const parentId = parentRows[0]!.id;
+      // Holds BOTH offices, and may operate the parent.
+      const operator = await seedUser(env.tenantId, "m2-op", OPERATOR_KEYS);
+      // Holds office A, but is not assigned to the parent.
+      const stranger = await seedUser(env.tenantId, "m2-x", OPERATOR_KEYS);
+
+      await holdScope(operator.tenantUserId, officeA);
+      await holdScope(operator.tenantUserId, officeB);
+      await holdScope(stranger.tenantUserId, officeA);
+      // Seeded directly: the owner does not hold office A, so the assignment
+      // route would (rightly) not show it the scoped parent.
+      await admin()`
+        INSERT INTO awcms_channel_account_assignments
+          (tenant_id, account_id, tenant_user_id, kind)
+        VALUES (${env.tenantId}, ${parentId}, ${operator.tenantUserId}, 'operator')
+      `;
+
+      const register = (
+        externalId: string,
+        parentAccountId: string,
+        officeId: string,
+        token: string
+      ) =>
+        call<Account>(createAccount, {
+          method: "POST",
+          path: `${BASE}/accounts`,
+          token,
+          body: {
+            provider: "mailketing",
+            accountKind: "sender_identity",
+            externalId,
+            displayName: externalId,
+            authMode: "api_token",
+            parentAccountId,
+            businessScope: { type: "office", id: officeId }
+          }
+        });
+
+      // Brand B's sender under brand A's account: the caller holds both
+      // scopes and may operate the parent; containment alone refuses it.
+      const crossScope = await register(
+        "m2-b@brand.example",
+        parentId,
+        officeB,
+        operator.token
+      );
+      const unknown = await register(
+        "m2-u@brand.example",
+        crypto.randomUUID(),
+        officeA,
+        operator.token
+      );
+      // The right scope, but a parent this person may not operate.
+      const notMine = await register(
+        "m2-n@brand.example",
+        parentId,
+        officeA,
+        stranger.token
+      );
+
+      for (const refused of [crossScope, unknown, notMine]) {
+        expect(refused.status).toBe(422);
+        expect(refused.body.error?.code).toBe("PARENT_INVALID");
+        expect(refused.body).toEqual(unknown.body);
+      }
+
+      const contained = await register(
+        "m2-a@brand.example",
+        parentId,
+        officeA,
+        operator.token
+      );
+
+      expect(contained.status).toBe(201);
+    });
+
     test("a connection holding a scoped account needs that scope to be revoked", async () => {
       if (!handlerReady) return;
 

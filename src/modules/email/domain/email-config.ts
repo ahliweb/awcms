@@ -77,3 +77,7 @@ export function resolveEmailFromName(
 ): string {
   return env.EMAIL_FROM_NAME?.trim() || DEFAULT_EMAIL_FROM_NAME;
 }
+
+// Tenant-owned senders (Issue #1160): kept in their own file so the enqueue
+// path never imports this one; re-exported for the dispatcher and tests.
+export * from "./email-sender-config";

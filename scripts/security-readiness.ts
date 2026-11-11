@@ -1882,6 +1882,27 @@ export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
  * of those lists contains a credential column).
  * A table-wide grant elsewhere in `WORKER_ROLE_GRANTS` is not repeated here.
  */
+/**
+ * Issue #1160 audit M3. The canonical form of a policy expression: the
+ * `pg_get_expr` deparse with whitespace and `::text` casts removed and
+ * lower-cased, so the pin is exact about every predicate, literal and operator
+ * while not depending on how a server version indents its deparse.
+ */
+export function normalizeWorkerPolicyExpression(expression: string): string {
+  return expression
+    .replace(/::text/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+/** The exact sql/348 expression of `awcms_channel_secrets_worker_dispatch_purposes`, normalised. Changing the policy means changing THIS constant in the same reviewed change. */
+export const WORKER_SECRET_POLICY_EXPRESSION =
+  "((purpose=any(array['provider_access_token','api_token','device_key']))and((exists(select1fromawcms_channel_accountsawhere((a.tenant_id=awcms_channel_secrets.tenant_id)and(a.secret_id=awcms_channel_secrets.id)and(a.provider=any(array['whatsapp_cloud','starsender']))and(a.deleted_atisnull))))or(exists(select1fromawcms_channel_provider_connectionscwhere((c.tenant_id=awcms_channel_secrets.tenant_id)and(c.access_secret_id=awcms_channel_secrets.id)and(c.provider='whatsapp_cloud'))))or((purpose='api_token')and(exists(select1fromawcms_channel_accountsawhere((a.tenant_id=awcms_channel_secrets.tenant_id)and(a.secret_id=awcms_channel_secrets.id)and(a.provider='mailketing')and(a.account_kind='esp_account')and(a.status='connected')and(a.deleted_atisnull)))))))";
+
+import { probeWorkerSecretVisibility } from "./lib/worker-secret-probe";
+
+export { probeWorkerSecretVisibility };
+
 export const WORKER_COLUMN_GRANTS: Record<
   string,
   Partial<Record<"SELECT" | "INSERT" | "UPDATE", string[]>>
@@ -2092,6 +2113,21 @@ export const WORKER_COLUMN_GRANTS: Record<
   },
   awcms_channel_secrets: {
     SELECT: ["id", "tenant_id", "purpose", "ciphertext"]
+  },
+  // sql/348 (Issue #1160, ADR-0151 section 2): `email:dispatch` holds a tenant
+  // sender whose verification or account credit is stale, unknown or below the
+  // floor. It reads the latest health row: state, fixed reason code, when it was
+  // checked and the reported balance. No token expiry, no quota limit, and no
+  // write (a worker that could write health could mark a sender verified).
+  awcms_channel_account_health: {
+    SELECT: [
+      "tenant_id",
+      "account_id",
+      "state",
+      "reason_code",
+      "checked_at",
+      "quota_remaining"
+    ]
   },
   // sql/340 (Issue #1142, ADR-0148 section 7): the send decision asks whether the
   // tenant's acknowledgement of an UNOFFICIAL provider's current text is still in
@@ -2810,33 +2846,34 @@ export async function checkWorkerSetupRoleGrants(
     // role and by naming the provider test, so dropping or weakening it is a
     // finding rather than a silent loss.
     if (present.includes(WORKER_ROLE)) {
+      // Issue #1160 audit M3: pinned EXACTLY, not by substring. A substring pin
+      // (the L-6 list of social names) passed a policy widened to bot tokens,
+      // refresh tokens, Telegram or a sender_identity's own token. The
+      // expression is compared in its canonical, normalised deparse, and then
+      // PROBED: what the worker can actually see is measured on seeded rows.
       const policy = (await sql`
-        SELECT EXISTS (
-          SELECT 1 FROM pg_policy p
-          WHERE p.polrelid = to_regclass('awcms_channel_secrets')
-            AND p.polname = 'awcms_channel_secrets_worker_dispatch_purposes'
-            AND NOT p.polpermissive AND p.polcmd = 'r'
-            AND p.polroles = ARRAY[to_regrole('awcms_worker')::oid]
-            AND p.polqual IS NOT NULL
-            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%whatsapp_cloud%'
-            AND pg_get_expr(p.polqual, p.polrelid) LIKE '%awcms_channel_accounts%'
-            -- L-6 of the #1145 re-audit: the policy must stay WhatsApp-only. A
-            -- widening to any social provider (the withdrawn first revision of
-            -- ADR-0157 did exactly that) lets a compromised whatsapp:dispatch
-            -- decrypt social tokens, so it is a finding, not a pass.
-            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%facebook%'
-            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%instagram%'
-            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%threads%'
-            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%tiktok%'
-            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%youtube%'
-            AND pg_get_expr(p.polqual, p.polrelid) NOT LIKE '%linkedin%'
-        ) AS has_policy
-      `) as { has_policy: boolean }[];
+        SELECT pg_get_expr(p.polqual, p.polrelid) AS expr
+        FROM pg_policy p
+        WHERE p.polrelid = to_regclass('awcms_channel_secrets')
+          AND p.polname = 'awcms_channel_secrets_worker_dispatch_purposes'
+          AND NOT p.polpermissive AND p.polcmd = 'r'
+          AND p.polroles = ARRAY[to_regrole('awcms_worker')::oid]
+          AND p.polwithcheck IS NULL
+      `) as { expr: string | null }[];
+      const expr = policy[0]?.expr ?? null;
 
-      if (!policy[0]?.has_policy) {
+      if (
+        expr === null ||
+        normalizeWorkerPolicyExpression(expr) !==
+          WORKER_SECRET_POLICY_EXPRESSION
+      ) {
         findings.push(
-          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, limited to WhatsApp sender credentials) is missing or no longer provider-aware (a compromised dispatcher could read every tenant's social and email tokens)`
+          `awcms_channel_secrets restrictive policy awcms_channel_secrets_worker_dispatch_purposes (FOR SELECT TO awcms_worker, exactly the sql/348 expression: WhatsApp sender credentials and the token of a CONNECTED Mailketing esp_account) is missing or differs from the pinned expression (a compromised dispatcher could read other tenants' social, bot, refresh or sender tokens)`
         );
+      } else {
+        const probe = await probeWorkerSecretVisibility(sql);
+
+        if (probe !== null) findings.push(probe);
       }
 
       // sql/357 (Issue #1145): the worker may DELETE publication evidence only
@@ -2877,6 +2914,48 @@ export async function checkWorkerSetupRoleGrants(
       const probe = await probeSocialDispatchSecretVisibility(sql);
 
       if (probe.finding) findings.push(probe.finding);
+    }
+
+    // Issue #1160 audit L3: the two triggers that make an email sender snapshot
+    // mean something (sql/346), pinned like the sql/340 risk-ack triggers. Without
+    // the first a queued message could be re-pointed at another sender, carry a
+    // forged address or borrow another brand's token; without the second a policy
+    // could be deleted and re-created, so a recorded policy version would name
+    // two configurations.
+    const emailSenderTriggers = (await sql`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM pg_trigger t
+          WHERE t.tgrelid = to_regclass('awcms_email_messages')
+            AND t.tgname = 'awcms_email_messages_sender_guard'
+            AND NOT t.tgisinternal AND t.tgenabled <> 'D'
+            AND (t.tgtype & 2) = 2 AND (t.tgtype & 1) = 1
+            AND (t.tgtype & 4) = 4 AND (t.tgtype & 16) = 16
+            AND t.tgfoid = to_regproc('awcms_email_messages_sender_guard')
+            AND pg_get_functiondef(t.tgfoid) LIKE '%esp_account%'
+            AND pg_get_functiondef(t.tgfoid) LIKE '%immutable%'
+        ) AS has_sender_guard,
+        EXISTS (
+          SELECT 1 FROM pg_trigger t
+          WHERE t.tgrelid = to_regclass('awcms_email_sender_policies')
+            AND t.tgname = 'awcms_email_sender_policies_no_delete'
+            AND NOT t.tgisinternal AND t.tgenabled <> 'D'
+            AND (t.tgtype & 2) = 2 AND (t.tgtype & 1) = 1
+            AND (t.tgtype & 8) = 8
+            AND t.tgfoid = to_regproc('awcms_email_sender_policies_no_delete')
+            AND pg_get_functiondef(t.tgfoid) LIKE '%never deleted%'
+        ) AS has_policy_no_delete
+    `) as { has_sender_guard: boolean; has_policy_no_delete: boolean }[];
+
+    if (!emailSenderTriggers[0]?.has_sender_guard) {
+      findings.push(
+        `awcms_email_messages trigger awcms_email_messages_sender_guard is missing, disabled or hollowed out (a queued email could be re-pointed at another sender, forged, or borrow another brand's Mailketing account)`
+      );
+    }
+    if (!emailSenderTriggers[0]?.has_policy_no_delete) {
+      findings.push(
+        `awcms_email_sender_policies trigger awcms_email_sender_policies_no_delete is missing or disabled (a policy could be deleted and re-created, so a recorded sender policy version would name two configurations)`
+      );
     }
 
     // The two triggers that make an UNOFFICIAL provider's risk acknowledgement

@@ -146,6 +146,22 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
       "role sees exactly one secret. Nothing it writes is ever committed, so it " +
       "is a behavioural probe of the row policy, not a second writer of these " +
       "tables."
+  })),
+  ...[
+    "awcms_tenants",
+    "awcms_channel_accounts",
+    "awcms_channel_provider_connections",
+    "awcms_channel_secrets"
+  ].map((table) => ({
+    table,
+    excusedOwner: TOOLING,
+    reason:
+      "`scripts/lib/worker-secret-probe.ts` (used by `security:readiness`, Issue #1160 " +
+      "audit M3) seeds one throwaway tenant, accounts, a connection and secrets " +
+      "INSIDE a transaction it always rolls back, then reads them as " +
+      "`awcms_worker` to measure the worker's real secret visibility. Nothing is " +
+      "ever committed: it is a behavioural probe of a row policy, not a second " +
+      "writer of tenant or channel-account data. Confined to that one function."
   }))
 ];
 

@@ -621,7 +621,15 @@ describe("the real repository", () => {
       // append-only children. Anonymising erasure exists today; the delegated,
       // status-aware sweep is the recorded follow-up in
       // src/modules/crm-leads/README.md, which replaces those seven entries.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(48);
+      //
+      // **49 since email sender routing (Issue #1160, ADR-0151 section 2), and
+      // this raise does not clear the bar either.** One table:
+      // `awcms_email_sender_policies`, the email twin of
+      // `awcms_whatsapp_sender_policies` already on this list, for the same
+      // reason: authored configuration, one row per business scope, changed in
+      // place and never deleted (trigger). An age-based purge would silently
+      // reset a brand's sender to the deployment sender.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(49);
     });
 
     test("every entry names a table that really exists in sql/", () => {

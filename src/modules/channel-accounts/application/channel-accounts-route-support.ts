@@ -825,6 +825,68 @@ export async function authorizeConnectionBinding(
 }
 
 /**
+ * Issue #1160 audit M2. Registering a CHILD identity under a parent account (a
+ * Mailketing sender under its account, a WABA number under its WABA) lends the
+ * child the parent's token and its credit: an act on the PARENT, authorised the
+ * way `authorizeConnectionBinding` authorises binding to a connection.
+ *
+ *  - the parent must exist in this tenant and be an account the caller may
+ *    OPERATE (assignment rule, `assignments.assign` bypass, the parent's own
+ *    business scope covered);
+ *  - the child's scope must be contained in the parent's (a tenant-wide parent
+ *    lends to any scope; a scoped parent only to its own scope).
+ *
+ * Every refusal is ONE answer (`422 PARENT_INVALID`), the same one
+ * `createAccount` gives for an unknown or wrong-kind parent, so it says nothing
+ * about whether the id names a real account. Refused before the idempotent
+ * runner, so a refusal is never stored for replay.
+ */
+export async function authorizeParentBinding(
+  context: AccountRouteContext,
+  guard: AccountGuard,
+  parentAccountId: string,
+  accountScope: ScopeRef | null
+): Promise<Response | null> {
+  const refuse = () =>
+    fail(
+      422,
+      "PARENT_INVALID",
+      "The account cannot be registered as requested."
+    );
+  const parent = await fetchAccountRecord(
+    context.tx,
+    context.tenantId,
+    parentAccountId
+  );
+
+  if (!parent) return refuse();
+
+  if (!accountScopeWithinConnection(accountScope, parent.businessScope)) {
+    return refuse();
+  }
+
+  const visible = await isAccountVisibleTo(
+    context.tx,
+    context.tenantId,
+    parentAccountId,
+    context.auth.context.tenantUserId,
+    await canSeeAllAccounts(context),
+    "operator"
+  );
+
+  if (!visible) return refuse();
+
+  if (
+    parent.businessScope &&
+    !(await scopeCoveredFor(context, guard, parent.businessScope))
+  ) {
+    return refuse();
+  }
+
+  return null;
+}
+
+/**
  * The binding scope rule: the scope of the ACCOUNT must be contained in the
  * scope of the CONNECTION it borrows a token from.
  *

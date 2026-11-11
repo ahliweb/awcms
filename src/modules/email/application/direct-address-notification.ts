@@ -45,6 +45,7 @@ import {
   maskIdentifierValue,
   normalizeIdentifierValue
 } from "../../profile-identity/domain/identifier";
+import { purposeForEmailCategory } from "../domain/email-sender";
 import { renderEmailTemplate } from "../domain/email-template-render";
 import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
 import { fetchSuppressedRecipientHashes } from "./suppression-directory";
@@ -88,14 +89,19 @@ export async function enqueueDirectAddressEmail(
     locale
   );
 
+  // Issue #1160: the purpose is recorded (an invitation is `security`), and the
+  // sender is always the deployment sender (ADR-0151 Q7) — this path takes no
+  // sender at all, and the database refuses a tenant sender on security mail.
   await tx`
     INSERT INTO awcms_email_messages
       (tenant_id, correlation_id, category, template_key, to_address,
-       to_address_hash, to_address_masked, subject, variables, priority)
+       to_address_hash, to_address_masked, subject, variables, priority,
+       purpose)
     VALUES
       (${tenantId}, ${correlationId}, ${templateKey}, ${templateKey},
        ${normalized}, ${addressHash}, ${maskIdentifierValue(normalized)},
-       ${rendered.subject}, ${variables}::jsonb, 'high')
+       ${rendered.subject}, ${variables}::jsonb, 'high',
+       ${purposeForEmailCategory(templateKey)})
   `;
 
   return { enqueued: true };

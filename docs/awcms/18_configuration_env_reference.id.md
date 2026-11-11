@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](18_configuration_env_reference.md)
 
-<!-- i18n-source-hash: sha256:d71aad0005e918c14b337ae2d0b6ca7f1691d9948617c568f1464e42c8568321 -->
+<!-- i18n-source-hash: sha256:0ac50bd627283b67a3a1d98565b2ef1185de87f4ea81f5c3e30a27f4b753514a -->
 
 # Bagian 18 — Configuration dan Environment Reference
 
@@ -415,6 +415,19 @@ yang butuh persetujuan berjenjang) — provider-neutral.
 | `EMAIL_SEND_MAX_RETRIES`       | –          | `5`     | –        | Batas percobaan retry sebelum `failed` final                                                                                                |
 | `EMAIL_MAILKETING_API_VERSION` | –          | `v1`    | –        | Versi API Mailketing: `v1` (bawaan) atau `v2` (opt-in, host tetap, token hanya di header; Issue #1159)                                      |
 | `EMAIL_MAILKETING_V2_VERIFIED` | –          | kosong  | –        | Pengakuan tahap 2 untuk Mailketing v2; v2 produksi BELUM disetujui sampai pemeriksaan live selesai (hanya membungkam peringatan UNVERIFIED) |
+
+Akun Mailketing milik tenant dan pengirim terverifikasi (Issue #1160, ADR-0151
+bagian 2). Akun, token, dan identitas pengirim adalah catatan
+`channel_accounts` (`CHANNEL_ACCOUNTS_ENABLED`,
+`CHANNEL_SECRETS_ENCRYPTION_KEYS`), tidak pernah variabel lingkungan; pengirim
+tenant selalu memakai Mailketing v2.
+
+| Variabel                              | Bawaan | Fungsi                                                                                                                                              |
+| ------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMAIL_SENDER_ROUTING_ENABLED`        | kosong | Tepat `true` menyalakan pengirim tenant. Mati: pengirim yang disebut ditolak, kebijakan tidak dipakai, baris pengirim tenant tidak pernah diklaim   |
+| `EMAIL_SENDER_HEALTH_MAX_AGE_MINUTES` | `360`  | Verifikasi pengirim atau kredit akun yang lebih tua dari ini dianggap basi dan MENAHAN email; jalankan `email:senders:verify` lebih sering dari ini |
+| `EMAIL_MAILKETING_CREDIT_FLOOR`       | `100`  | Di bawah saldo yang dilaporkan ini, semua pengirim akun itu ditahan (`0` hanya menahan saat saldo tidak diketahui)                                  |
+| `EMAIL_SENDER_RATE_PER_HOUR`          | `300`  | Batas lokal per pengirim tenant per jam berjalan (ADR-0151 M9)                                                                                      |
 
 Kredensial provider email konkret (mis. `EMAIL_<PROVIDER>_API_TOKEN`)
 ditambahkan begitu adapter provider tersebut benar-benar diimplementasikan —

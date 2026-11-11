@@ -73,6 +73,17 @@ Follow `src/modules/email/README.md` (full architecture: provider contract, Mail
   recipient address to this endpoint, and the endpoint itself **does not**
   touch `email_messages`/the queue.
 
+- **Tenant senders (Issue #1160, ADR-0151 §2).** Never put a tenant's
+  Mailketing token or from-address in env, settings JSON or a request body. A
+  sender is a `channel_accounts` `mailketing`/`sender_identity` id; choose it
+  only through `resolveEnqueueEmailSender`
+  (`application/email-sender-directory.ts`) and pass the resulting snapshot to
+  `enqueueAnnouncement`. Never reroute a refused sender to another sender,
+  account or the deployment sender; security mail (`auth.*`,
+  `system.security_notice`) always uses the deployment sender. Only
+  `scripts/email-dispatch.ts` and `scripts/email-senders-verify.ts` may compose
+  `channel-sender-credential-adapter`.
+
 ## Observability & ops (Issue #499)
 
 - **Failed/pending queue**: `GET /api/v1/email/messages?status=failed|retry_wait`

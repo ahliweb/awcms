@@ -163,15 +163,21 @@
     {
       "key": "email",
       "name": "Email",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "status": "active",
       "type": null,
       "dependencies": ["tenant_admin", "profile_identity", "identity_access"],
       "capabilitiesProvided": ["auth_notification", "workflow_notification"],
-      "capabilitiesConsumed": [],
-      "permissionCount": 12,
+      "capabilitiesConsumed": [
+        {
+          "capability": "channel_account",
+          "providedBy": "channel_accounts",
+          "optional": true
+        }
+      ],
+      "permissionCount": 15,
       "navigationCount": 2,
-      "jobCount": 4,
+      "jobCount": 5,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null
