@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:2e2faa6136ab8cbbf89b708add110cb4133d8579c3855c69406ec9f15892a392 -->
+<!-- i18n-source-hash: sha256:d1fa12aea27f31300ac96458ab6dee83aa40dd8f23fca40e3dceeea2d676c0c1 -->
 
 # AWCMS — Project State & Continuation
 
@@ -218,7 +218,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **38 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
+- **39 modul** terdaftar dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection
