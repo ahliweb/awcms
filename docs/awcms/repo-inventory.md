@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 39    |
-| Migrations                          | 266   |
+| Migrations                          | 268   |
 | `awcms_*` tables                    | 267   |
 | Tables with `FORCE` RLS             | 249   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 812   |
+| Test files                          | 814   |
 | Route files                         | 661   |
 | ADR                                 | 320   |
 
@@ -330,6 +330,8 @@
 | 264 | `sql/369_awcms_crm_follow_up_schema.sql`                               |
 | 265 | `sql/370_awcms_crm_follow_up_permissions.sql`                          |
 | 266 | `sql/371_awcms_crm_follow_up_email_categories.sql`                     |
+| 267 | `sql/373_awcms_social_dispatch_runtime_grants.sql`                     |
+| 268 | `sql/374_awcms_telegram_dispatch_outbox_bounds.sql`                    |
 
 ### Tables & Row-Level Security
 
@@ -607,9 +609,9 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 606        |
+| `(root)`      | 607        |
 | `e2e`         | 30         |
-| `integration` | 175        |
+| `integration` | 176        |
 | `unit`        | 1          |
 
 ### Routes
