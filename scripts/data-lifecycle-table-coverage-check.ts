@@ -264,6 +264,16 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0151 section 2 / Issue #1160. The email twin of `awcms_whatsapp_sender_policies`: at most ONE row per business scope per tenant (plus one tenant-wide row), by two partial unique indexes; a change UPDATES the row and bumps its version, and a DELETE is refused by trigger (`sql/346`). Written only by an administrator holding `email.sender_policy.configure`, never by traffic or a job. An age-based purge would silently reset a brand's default sender to the deployment sender, so none is declared."
   },
   {
+    table: "awcms_whatsapp_meta_templates",
+    reason:
+      "Issue #1143. A unique key per (WABA, template name, language): the ceiling is the templates a business registers at Meta on its own WABAs, upserted (never appended) by an operator or by a signed status webhook for an existing template. An age-based purge would silently un-approve a template still in use, refusing every message that uses it."
+  },
+  {
+    table: "awcms_whatsapp_meta_sender_signals",
+    reason:
+      "Issue #1143. One row per WABA account by primary key (tenant, container account), upserted by the latest restriction or messaging-limit event: the ceiling is the tenant's WABA accounts. An age-based purge would silently lift a recorded ban or restriction."
+  },
+  {
     table: "awcms_site_profile",
     reason:
       "ADR-0102. At most ONE row per tenant, by primary key — the row is upserted, never appended, so the table's ceiling IS `awcms_tenants` and no request path or job can add a second. Nothing here is traffic-generated: every value is typed by an administrator on `/admin/site-profile`. An age-based purge would be actively WRONG rather than merely unnecessary, for the same reason it is wrong for `awcms_principal_preferences`: `executionMode: 'generic'` deletes by age with no status predicate, so a newsroom that set its editorial address two years ago and has not touched it since — the healthy case — would have its masthead, footer and contact block silently emptied for being OLD. The row has no natural expiry and its age says nothing about whether it is still wanted; deleting it would blank the published contact details of a live site. Erasure is not a question here either: this is the PUBLISHER's own published identity, deliberately public, not a data subject's personal data — which is exactly why the audit row for a change records which fields are set and never their values."

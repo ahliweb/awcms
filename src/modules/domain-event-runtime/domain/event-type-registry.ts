@@ -122,6 +122,8 @@ export const WHATSAPP_CONSENT_WITHDRAWN_EVENT_TYPE =
   "awcms.whatsapp.consent.withdrawn";
 export const WHATSAPP_DISPATCH_FAILED_EVENT_TYPE =
   "awcms.whatsapp.dispatch.failed";
+export const WHATSAPP_MESSAGE_PROVIDER_STATUS_CHANGED_EVENT_TYPE =
+  "awcms.whatsapp.message.provider_status_changed";
 
 /**
  * `hr_commission` (ADR-0132, Issue #1109). Declared here -- not imported from
@@ -454,6 +456,12 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
       eventVersion: WHATSAPP_EVENT_VERSION,
       description:
         "A WhatsApp dispatcher pass failed as a whole (job level, not one message). Carries a coarse failureCode and the failure instant."
+    },
+    {
+      eventType: WHATSAPP_MESSAGE_PROVIDER_STATUS_CHANGED_EVENT_TYPE,
+      eventVersion: WHATSAPP_EVENT_VERSION,
+      description:
+        "A signed Meta webhook moved a sent WhatsApp message's provider-reported status forward (delivered, read or failed), reconciled only against the row's own sender and provider message id. Carries the message id, sender account id, provider status and a coarse failure code; never a number or a body."
     },
     {
       eventType: BOOKING_RESERVATION_CREATED_EVENT_TYPE,

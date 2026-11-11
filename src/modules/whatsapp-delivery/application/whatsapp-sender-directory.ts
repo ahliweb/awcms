@@ -22,7 +22,10 @@
  * (same default again) changes nothing and bumps nothing, which also makes a
  * replayed request naturally idempotent.
  */
-import type { ChannelAccountPort } from "../../_shared/ports/channel-account-port";
+import type {
+  ChannelAccountPort,
+  ResolvedWhatsappSender
+} from "../../_shared/ports/channel-account-port";
 import type {
   EnqueueWhatsappInput,
   WhatsappPurpose
@@ -49,6 +52,7 @@ import {
   type WhatsappSenderSelection
 } from "../domain/whatsapp-sender";
 import { hasWhatsappSenderAdapter } from "../infrastructure/whatsapp-sender-providers";
+import { readMetaRestriction } from "./whatsapp-meta-directory";
 
 const MODULE_KEY = "whatsapp_delivery";
 
@@ -162,6 +166,12 @@ export type EnqueueSenderDecision =
       selection: WhatsappSenderSelection;
       policyVersion: number | null;
       businessScope: WhatsappBusinessScope | null;
+      /**
+       * Issue #1143. The verified identity of a tenant-owned sender as the port
+       * resolved it (provider, phone number id, WABA). Absent for the
+       * deployment sender. Snapshotted on the row; never from the caller.
+       */
+      resolved?: ResolvedWhatsappSender;
     }
   | { ok: false; reason: EnqueueSenderRefusal; detail: string };
 
@@ -313,12 +323,28 @@ export async function resolveEnqueueSender(
     return refuse("SENDER_UNAVAILABLE", "scope_mismatch");
   }
 
+  // Issue #1143: a Meta number sends only as part of a verified WABA, and
+  // not while Meta reports that WABA restricted (banned, restricted, deleted,
+  // offboarded, app uninstalled). Never another number instead.
+  if (verdict.sender.provider === "whatsapp_cloud") {
+    const containerAccountId = verdict.sender.containerAccountId ?? null;
+
+    if (!containerAccountId || !verdict.sender.containerExternalId) {
+      return refuse("SENDER_UNAVAILABLE", "meta_container_binding_missing");
+    }
+
+    if (await readMetaRestriction(tx, tenantId, containerAccountId)) {
+      return refuse("SENDER_UNAVAILABLE", "meta_waba_restricted");
+    }
+  }
+
   return {
     ok: true,
     senderAccountId: choice.senderAccountId,
     selection: choice.selection,
     policyVersion: choice.policyVersion,
-    businessScope: scope
+    businessScope: scope,
+    resolved: verdict.sender
   };
 }
 

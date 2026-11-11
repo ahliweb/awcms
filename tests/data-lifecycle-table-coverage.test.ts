@@ -622,7 +622,7 @@ describe("the real repository", () => {
       // status-aware sweep is the recorded follow-up in
       // src/modules/crm-leads/README.md, which replaces those seven entries.
       //
-      // **56 since crm_follow_up (Issue #1165, ADR-0159): +7, see below.** Earlier: **49 since email sender routing (Issue #1160, ADR-0151 section 2), and
+      // **58 since the Meta multi-WABA senders (Issue #1143): +2, see the end of this block.** Before that **56 since crm_follow_up (Issue #1165, ADR-0159): +7.** Earlier: **49 since email sender routing (Issue #1160, ADR-0151 section 2), and
       // this raise does not clear the bar either.** One table:
       // `awcms_email_sender_policies`, the email twin of
       // `awcms_whatsapp_sender_policies` already on this list, for the same
@@ -636,7 +636,17 @@ describe("the real repository", () => {
       // their retention window is ADR-0159 O4, decided with ADR-0153 O4: the
       // status-aware sweep is the recorded follow-up in
       // src/modules/crm-follow-up/README.md, which replaces those four entries.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(56);
+      // **+2 (cap 58) since the Meta multi-WABA senders (Issue #1143).** Two tables, both
+      // the first class and both bounded by a KEY, not by authorship alone:
+      // `awcms_whatsapp_meta_templates` has a unique key per (WABA, template
+      // name, language) and is upserted, so its ceiling is the templates a
+      // business registers at Meta; `awcms_whatsapp_meta_sender_signals` is one
+      // row per WABA by primary key. Both are LIVE state an age-based purge would
+      // break: it would un-approve a template still in use (refusing every
+      // message that uses it) or lift a recorded ban. The two tables of the same
+      // change that DO grow with traffic (the 24-hour windows and the webhook
+      // receipts) got real delegated descriptors and are not here.
+            expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(58);
     });
 
     test("every entry names a table that really exists in sql/", () => {

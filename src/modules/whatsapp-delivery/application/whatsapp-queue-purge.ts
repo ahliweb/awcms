@@ -33,7 +33,9 @@ import { emitWhatsappMessageEvent } from "./whatsapp-event-emit";
 import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
 import {
   WHATSAPP_ATTEMPTS_LIFECYCLE_KEY,
-  WHATSAPP_MESSAGES_LIFECYCLE_KEY
+  WHATSAPP_MESSAGES_LIFECYCLE_KEY,
+  WHATSAPP_SERVICE_WINDOWS_LIFECYCLE_KEY,
+  WHATSAPP_WEBHOOK_RECEIPTS_LIFECYCLE_KEY
 } from "../domain/whatsapp-lifecycle-keys";
 
 export const WHATSAPP_MESSAGE_DEFAULT_RETENTION_DAYS = 30;
@@ -62,7 +64,15 @@ export type PurgeWhatsappQueueResult = {
   purgedMessages: number;
   /** Non-terminal rows past their expiry that were marked `expired` (secrets cleared). */
   expiredMessages: number;
+  /** Issue #1143: 24-hour service windows closed for more than a day. */
+  purgedServiceWindows: number;
+  /** Issue #1143: webhook body hashes older than Meta's retry period plus a day. */
+  purgedWebhookReceipts: number;
 };
+
+/** Issue #1143. */
+export const WHATSAPP_SERVICE_WINDOW_RETENTION_DAYS = 2;
+export const WHATSAPP_WEBHOOK_RECEIPT_RETENTION_DAYS = 8;
 
 type IdRow = { id: string };
 
@@ -83,6 +93,15 @@ export async function purgeWhatsappQueue(
     options.attemptRetentionDays ?? WHATSAPP_ATTEMPT_DEFAULT_RETENTION_DAYS
   );
 
+  const windowCutoff = resolveWhatsappRetentionCutoff(
+    now,
+    WHATSAPP_SERVICE_WINDOW_RETENTION_DAYS
+  );
+  const receiptCutoff = resolveWhatsappRetentionCutoff(
+    now,
+    WHATSAPP_WEBHOOK_RECEIPT_RETENTION_DAYS
+  );
+
   return withTenantOrThrow(
     sql,
     tenantId,
@@ -90,7 +109,9 @@ export async function purgeWhatsappQueue(
       const result: PurgeWhatsappQueueResult = {
         purgedAttempts: 0,
         purgedMessages: 0,
-        expiredMessages: 0
+        expiredMessages: 0,
+        purgedServiceWindows: 0,
+        purgedWebhookReceipts: 0
       };
 
       // Not legal-hold gated: this changes a row's state and clears a secret, it
@@ -191,8 +212,61 @@ export async function purgeWhatsappQueue(
         result.purgedMessages = deleted.length;
       }
 
+      // Issue #1143: a 24-hour window closed long ago decides nothing. Kept
+      // two days, so a dispatch racing the purge still reads a closed window
+      // as closed rather than missing (both answer "closed").
+      if (
+        !(await legalHoldGuard.isDescriptorHeld(
+          tx,
+          tenantId,
+          WHATSAPP_SERVICE_WINDOWS_LIFECYCLE_KEY
+        ))
+      ) {
+        const deleted = (await tx`
+          DELETE FROM awcms_whatsapp_service_windows
+          WHERE (tenant_id, sender_account_id, recipient_hash) IN (
+            SELECT tenant_id, sender_account_id, recipient_hash
+            FROM awcms_whatsapp_service_windows
+            WHERE tenant_id = ${tenantId} AND last_inbound_at < ${windowCutoff}
+            ORDER BY last_inbound_at ASC
+            LIMIT ${batchLimit}
+          )
+          RETURNING tenant_id
+        `) as unknown[];
+
+        result.purgedServiceWindows = deleted.length;
+      }
+
+      // Issue #1143: a receipt only has to outlive Meta's retry period (up to
+      // seven days); after that a replay would be refused by nothing but the
+      // forward-only status rules, which is why it is kept a day longer.
+      if (
+        !(await legalHoldGuard.isDescriptorHeld(
+          tx,
+          tenantId,
+          WHATSAPP_WEBHOOK_RECEIPTS_LIFECYCLE_KEY
+        ))
+      ) {
+        const deleted = (await tx`
+          DELETE FROM awcms_whatsapp_webhook_receipts
+          WHERE id IN (
+            SELECT id FROM awcms_whatsapp_webhook_receipts
+            WHERE tenant_id = ${tenantId} AND received_at < ${receiptCutoff}
+            ORDER BY received_at ASC
+            LIMIT ${batchLimit}
+          )
+          RETURNING id
+        `) as IdRow[];
+
+        result.purgedWebhookReceipts = deleted.length;
+      }
+
       const total =
-        result.purgedAttempts + result.purgedMessages + result.expiredMessages;
+        result.purgedAttempts +
+        result.purgedMessages +
+        result.expiredMessages +
+        result.purgedServiceWindows +
+        result.purgedWebhookReceipts;
 
       if (total > 0) {
         await recordAuditEvent(tx, {
@@ -206,6 +280,8 @@ export async function purgeWhatsappQueue(
             purgedAttempts: result.purgedAttempts,
             purgedMessages: result.purgedMessages,
             expiredMessages: result.expiredMessages,
+            purgedServiceWindows: result.purgedServiceWindows,
+            purgedWebhookReceipts: result.purgedWebhookReceipts,
             messageCutoffIso: messageCutoff.toISOString(),
             attemptCutoffIso: attemptCutoff.toISOString()
           },

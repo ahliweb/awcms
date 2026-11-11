@@ -497,6 +497,115 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/channel-accounts/accounts/{id}/webhook-subscription:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: createChannelAccountWebhookSubscription
+      tags:
+        - Channel Accounts
+      summary: Create or rotate the signed webhook subscription of a Meta number.
+      description: >-
+        For a live Meta WhatsApp number (`whatsapp_cloud` `waba_phone_number`)
+        with a live `waba` container: stores the Meta app secret WRITE-ONLY
+        (envelope-encrypted, purpose `webhook_signing_secret`; never returned,
+        logged, audited or put in the idempotency record) and mints an OPAQUE
+        callback token (`wcb1.<tenant>.<subscription>.<256 random bits>`), of
+        which only the SHA-256 is stored. The response carries the token ONCE
+        (`callbackToken`, `callbackPath`, `revealed: true`): it is the last
+        segment of the callback URL to configure at Meta and also the
+        `hub.verify_token`. A replay of the same `Idempotency-Key` answers the
+        stored body WITHOUT it (`revealed: false`). An earlier subscription of
+        the number is revoked and its app-secret ciphertext erased in the same
+        transaction (rotation). A number that is not a live Meta number is
+        `409 NOT_A_META_NUMBER`; one with no live WABA container is `409
+        CONTAINER_BINDING_INVALID`. HIGH-RISK: the `owner` assignment on the
+        account, a conditional step-up (a person with an MFA factor must
+        present a fresh one), `Idempotency-Key`, audited at `warning` with no
+        secret, token or external identifier. Requires
+        `channel_accounts.webhooks.configure`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - appSecret
+              additionalProperties: false
+              properties:
+                appSecret:
+                  type: string
+                  pattern: "^[A-Za-z0-9]{16,128}$"
+                  writeOnly: true
+                  description: The Meta app secret that signs this number's webhooks. Never echoed.
+      responses:
+        "201":
+          description: Created; the token is shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      subscriptionId:
+                        type: string
+                        format: uuid
+                      accountId:
+                        type: string
+                        format: uuid
+                      verificationMode:
+                        type: string
+                        enum:
+                          - hmac_signature
+                      rotatedSubscriptions:
+                        type: integer
+                      revealed:
+                        type: boolean
+                      callbackToken:
+                        type: string
+                        description: Present only when `revealed` is true.
+                      callbackPath:
+                        type: string
+                        description: Present only when `revealed` is true.
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            `NOT_A_META_NUMBER`, `CONTAINER_BINDING_INVALID` or
+            `IDEMPOTENCY_CONFLICT`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: >-
+            `CHANNEL_ACCOUNTS_DISABLED` or `SECRET_STORE_UNAVAILABLE`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/channel-accounts/accounts/{id}/disconnect:
     parameters:
       - name: id

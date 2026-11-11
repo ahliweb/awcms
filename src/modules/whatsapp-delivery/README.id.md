@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:c9211ba81d5a143909da9669fc26052037f8dfb5cf3704b73c3d67af4a141a65 -->
+<!-- i18n-source-hash: sha256:871a94ec7e697ef3ec422ca0c1d3721fdea6e2660ecc647fa5229059b2a47a9c -->
 
 <!-- i18n-source-hash: sha256:0 -->
 
@@ -207,9 +207,86 @@ Dokumentasi publik StarSender menjelaskan webhook tetapi **tanpa autentikasi per
 
 Field permintaan dan respons diambil dari satu halaman dokumentasi publik (dibaca 3 November 2026) dan **belum diverifikasi terhadap API live**: hanya badan sukses yang terdokumentasi, setiap fixture kegagalan adalah asumsi (`tests/fixtures/starsender/contract-fixtures.ts`). Runbook mendaftar apa yang harus dikonfirmasi dengan perangkat uji sebelum produksi. Teks pernyataan belum disetujui siapa pun.
 
+## Pengirim Meta Cloud API multi-WABA (Issue #1143)
+
+[ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) bagian 4 dan I9, serta syarat komentar pemilik pada issue. Satu tenant dapat menjalankan **beberapa nomor Meta di beberapa WABA**, masing-masing baris `channel_accounts` berjenis `waba_phone_number` yang induknya adalah container `waba`-nya (`external_id` = WABA id). **Satu antrean, satu dispatcher**: tidak ada yang di sini menjadi antrean kedua, dan tidak ada yang dikirim dari jalur webhook.
+
+### Aturan yang diverifikasi ulang terhadap dokumentasi Meta (11 November 2026)
+
+| Aturan                                                                                                                                                                                                                                                       | Halaman sumber (developers.facebook.com/documentation/business-messaging/whatsapp/…) |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Webhook ditandatangani: `X-Hub-Signature-256: sha256=<hex>`, HMAC-SHA256 atas body request dengan **app secret**                                                                                                                                             | `webhooks/create-webhook-endpoint`                                                   |
+| Handshake: `GET` dengan `hub.mode=subscribe`, `hub.verify_token`, `hub.challenge`; jawab `200` berisi challenge                                                                                                                                              | sama                                                                                 |
+| Pengiriman yang gagal diulang "dengan frekuensi menurun" hingga **7 hari**; pengulangan dapat menggandakan notifikasi                                                                                                                                        | `webhooks/overview`                                                                  |
+| URL callback dapat **di-override per WABA atau per nomor telepon bisnis**                                                                                                                                                                                    | `webhooks/overview`                                                                  |
+| `entry[].id` adalah WABA id; `value.metadata.phone_number_id` adalah nomornya; nilai status `sent`, `delivered`, `read`, `played`, `failed`                                                                                                                  | `webhooks/reference/messages/status`                                                 |
+| **Jendela layanan pelanggan 24 jam** terbuka (dan direset) saat pengguna menulis; di luarnya hanya **template** yang sudah disetujui yang boleh dikirim                                                                                                      | `messages/send-messages`                                                             |
+| Event status template: `APPROVED`, `ARCHIVED`, `UNARCHIVED`, `DELETED`, `DISABLED`, `FLAGGED`, `IN_APPEAL`, `LIMIT_EXCEEDED`, `LOCKED`, `PAUSED`, `PENDING`, `REINSTATED`, `PENDING_DELETION`, `REJECTED`; kategori `MARKETING`, `UTILITY`, `AUTHENTICATION` | `webhooks/reference/message_template_status_update`                                  |
+| `phone_number_quality_update` membawa tier batas pesan (`max_daily_conversations_per_business`) dan **tanpa phone_number_id**                                                                                                                                | `webhooks/reference/phone_number_quality_update`                                     |
+| `account_update`: `DISABLED_UPDATE` (`waba_ban_state` `DISABLE`/`SCHEDULE_FOR_DISABLE`/`REINSTATE`), `ACCOUNT_RESTRICTION`, `ACCOUNT_DELETED`, `ACCOUNT_OFFBOARDED`/`ACCOUNT_RECONNECTED`, `PARTNER_APP_UNINSTALLED`                                         | `webhooks/reference/account_update`                                                  |
+
+**Tidak dapat diverifikasi dari halaman di atas, sehingga fail-closed:** apakah template `FLAGGED` masih aman dikirim (ditolak sampai Meta melaporkannya disetujui lagi); masa berlaku `ACCOUNT_RESTRICTION` (ditahan sampai operator menghapusnya); dan daftar field override persis untuk URL callback per nomor (tiap nomor mendapat tokennya sendiri; event yang menyebut WABA atau nomor lain pada token itu dibuang, tidak pernah diterapkan). Apakah `entry.id` selalu WABA id untuk event partner tidak konsisten dalam contoh Meta sendiri, sehingga event partner yang `entry.id`-nya bukan WABA terikat dibuang.
+
+### Pengikatan: identitas pengirim terverifikasi ada di baris
+
+- Nomor Meta hanya dapat dipakai dengan **container `waba` hidup dari provider yang sama** (`ChannelAccountPort` 1.2.0, `CONTAINER_BINDING_INVALID`, terminal). Nomor API-token tanpa induk ditolak: ia tidak punya WABA yang dapat diverifikasi.
+- Saat enqueue, guard database (`sql/365`) **mengisi dan memeriksa** `sender_external_id` (`phone_number_id`) dan `sender_container_external_id` (WABA id) dari rekaman, dan membuat keduanya immutable. Request tidak pernah dapat memasoknya (input port tidak punya field itu).
+- Saat dispatch, rekaman hidup dibandingkan dengan snapshot: nomor yang dipindah ke WABA lain (atau pergeseran identitas apa pun) menjadi terminal `sender_unavailable` (`SENDER_BINDING_CHANGED`), tidak pernah dikirim dari pengikatan baru. Panggilan provider memakai `phone_number_id` dan token milik nomor itu sendiri, seperti sejak #1141.
+- **Baris lama** yang diantrekan sebelum `sql/365` memiliki snapshot NULL dan diikat oleh rekaman saat ini, yang tetap wajib punya WABA yang valid.
+
+### Template disetujui per WABA; teks bebas hanya di dalam jendela
+
+`awcms_whatsapp_meta_templates` mencatat status Meta untuk satu template (nama, bahasa, kategori) pada satu WABA. Untuk **nomor Meta milik tenant** (bukan pengirim deployment, bukan StarSender):
+
+| Pesan                                | Aturan                                                                                                                                                      | Penolakan (enqueue) / kegagalan (dispatch)          |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| registrasi dengan `providerTemplate` | baris pada WABA **nomor itu**, status `APPROVED` atau `REINSTATED`, kategori = tujuan (marketing MARKETING, transactional UTILITY, security AUTHENTICATION) | `TEMPLATE_NOT_APPROVED` / `template_not_approved`   |
+| registrasi tanpa `providerTemplate`  | pesan layanan teks bebas, hanya selama **jendela 24 jam penerima dengan nomor itu** terbuka (dibuka oleh pesan masuk terverifikasi)                         | `OUTSIDE_SERVICE_WINDOW` / `outside_service_window` |
+| marketing tanpa `providerTemplate`   | tidak pernah: konten marketing adalah template MARKETING yang disetujui (opt-in perlu, tetapi tidak cukup)                                                  | `TEMPLATE_NOT_APPROVED`                             |
+
+Diperiksa saat enqueue dan **lagi tepat sebelum pengiriman** (webhook mungkin menjeda template, jendela mungkin tertutup). Tidak pernah teks bebas sebagai pengganti template, tidak pernah nomor lain. Persetujuan marketing (per brand, #1231 M4) tidak berubah dan tetap wajib.
+
+Persetujuan ditulis dua cara: `PUT /api/v1/whatsapp/meta-templates` (operator, `meta_templates.configure`, `Idempotency-Key`, audit `warning`; `APPROVED`/`REINSTATED` memerlukan `evidenceRef`, ditegakkan CHECK database), karena Meta mengirim webhook status hanya ketika status **berubah**; dan webhook `message_template_status_update` bertanda tangan dari nomor di WABA itu. Urutannya adalah `entry.time` Meta: event lebih lama tidak pernah menimpa yang lebih baru, dan saat seri, status yang tidak dapat dikirim menang.
+
+### Webhook: tenant dan akun berasal dari token, tidak pernah dari payload
+
+`channel_accounts` mencetak **token callback opak** per nomor (`POST /api/v1/channel-accounts/accounts/{id}/webhook-subscription`, `channel_accounts.webhooks.configure`, penugasan owner, step-up kondisional, `Idempotency-Key`, audit `warning`). App secret Meta disimpan write-only (purpose `webhook_signing_secret`); token ditampilkan **sekali** dan hanya SHA-256-nya yang disimpan. Membuat langganan baru mencabut yang lama dan menghapus secret-nya (rotasi). Operator mengatur `https://<host>/api/v1/whatsapp/webhooks/meta/<token>` sebagai override URL callback nomor itu di Meta, dengan token yang sama sebagai verify token.
+
+`GET`/`POST /api/v1/whatsapp/webhooks/meta/{token}` publik secara sengaja (terdaftar di `SESSION_FREE_BODY_ENDPOINTS` beserta alasannya) dan berurutan: `404` bila `WHATSAPP_ENABLED` mati; bucket percobaan **per-(tenant dari token, alamat)** sebelum kerja database apa pun (`429`, tidak pernah dibagi lintas tenant; Meta mengulang, sehingga status atau pesan masuk **tertunda, tidak pernah dibuang**); body berbatas (128 KiB); lalu, dalam transaksi tenant milik token, verifikasi oleh `ChannelWebhookVerifierPort` (hash token dan HMAC dibandingkan constant-time; setiap penolakan satu `401`, dihitung pada bucket penolakan yang lebih kecil); **dedupe hash body** (`awcms_whatsapp_webhook_receipts`, 8 hari); dan aksinya, dibaca hanya **di dalam pengikatan**:
+
+- `messages.statuses[]` merekonsiliasi hanya baris **pengirim terikat** dengan provider message id itu, dan, bila Meta menyebut penerima, hanya bila hash-nya cocok dengan penerima baris. Hanya maju (`sent` < `delivered` < `read`; `failed` hanya sebelum terkirim): status berulang atau terlambat tidak mengubah apa pun dan tidak memancarkan apa pun. Perpindahan memancarkan `awcms.whatsapp.message.provider_status_changed`. Status antrean tetap `sent`: diterima provider tidak pernah berarti "delivered", dan "delivered" adalah fakta terpisah.
+- `messages.messages[]` membuka jendela 24 jam untuk (nomor itu, hash berkunci pengirim pesan). **Tidak ada konten yang dibaca atau disimpan**, dan tidak ada balasan yang dikirim.
+- `message_template_status_update` memperbarui baris template WABA terikat; `phone_number_quality_update` mencatat tier batas pesannya; `account_update` membatasi atau membersihkan WABA terikat (di bawah).
+- Entry WABA lain, atau perubahan `messages` dari phone number id lain, **dibuang dan dihitung**, tidak pernah diterapkan ke "baris mana pun yang cocok".
+
+### Pemantauan, batas laju, pembatasan
+
+- **Pembatasan.** `DISABLED_UPDATE` (ban atau ban terjadwal, atau status ban tak dikenal), `ACCOUNT_RESTRICTION`, `ACCOUNT_DELETED`, `ACCOUNT_OFFBOARDED`, `PARTNER_APP_UNINSTALLED` membatasi WABA: nomornya ditolak saat enqueue (`SENDER_UNAVAILABLE`) dan **ditahan** saat dispatch (`SENDER_RESTRICTED`, dihitung pada anggaran retry, lalu terminal). `REINSTATE` dan `ACCOUNT_RECONNECTED` hanya mencabut pembatasan yang dibaliknya, dan hanya bila lebih baru. Selebihnya dibersihkan operator (`POST /api/v1/whatsapp/meta-signals/{id}/clear-restriction`, `meta_signals.configure`, audit `warning`) setelah memeriksa di Meta. WABA lain milik tenant tidak terpengaruh; tidak ada perutean ulang.
+- **Batas laju.** Jawaban `rate_limited` dari Meta (`429`, kode 4, 80007, 130429, 131056) mengulang baris itu dengan backoff dan menahan **sisa lajur pengirim itu** selama 60 detik, tanpa dihitung; pengirim lain berlanjut. Batas per jam dan per hari per pengirim dari #1141 tetap berlaku. Riwayat batas laju dibaca dari antrean itu sendiri (`failure_code`), sehingga tidak ada tulisan worker baru.
+- **Kedaluwarsa kredensial dan perubahan izin.** `401`/kode 190 tetap menahan lajur dengan retry terbatas (#1233 L1); grant yang dicabut atau akun yang diputus bersifat terminal (#1141).
+- `GET /api/v1/whatsapp/meta-templates` mengembalikan persetujuan dan sinyal tiap WABA (pembatasan, tier batas pesan) untuk WABA yang boleh dilihat pemanggil.
+
+### Kompatibilitas mundur (deployment satu pengirim)
+
+Pengirim deployment (`WHATSAPP_PROVIDER=meta`, `WHATSAPP_META_ACCESS_TOKEN`, `WHATSAPP_META_PHONE_NUMBER_ID`) **tidak berubah**: jalur sama, adapter template-saja yang sama, kegagalan yang sama (Meta sendiri menolak template yang belum disetujui). Ia tidak punya rekaman WABA, sehingga aturan per-WABA tidak berlaku baginya, ia tidak dapat menerima webhook (tidak ada langganan untuk mengikatnya), dan barisnya tidak membawa snapshot. Pindah ke nomor milik tenant adalah langkah **konfigurasi**: daftarkan WABA dan nomornya, catat persetujuan templatenya, buat langganan webhook tiap nomor, lalu arahkan kebijakan pengirim ke sana (prospektif). Tidak ada baris yang berganti pengirim setelah enqueue.
+
+### Catatan keamanan
+
+- Secret penandatangan webhook didekripsi oleh role **aplikasi** dalam request. Kebijakan `awcms_channel_secrets` untuk worker (`sql/328`) **tidak berubah** dan tetap mengecualikan `webhook_signing_secret`; `sql/365` hanya memberi worker `SELECT` atas persetujuan dan sinyal serta `SELECT, DELETE` atas jendela dan receipt (purge), dipin di `security:readiness`.
+- Token callback ada di path URL. Repo ini tidak mencatat path request, tetapi reverse proxy atau CDN di depannya mungkin mencatat: atur agar tidak mencatat `/api/v1/whatsapp/webhooks/`. Token yang bocor saja tidak cukup: setiap body juga wajib membawa HMAC valid dengan app secret.
+- `whatsapp:queue:purge` menghapus jendela dua hari setelah tertutup dan receipt setelah delapan hari (deskriptor ber-gerbang legal hold).
+
+### Belum dikerjakan di sini (langkah manusia dan tindak lanjut)
+
+- **Bukti bisnis adalah langkah manusia dan TIDAK disediakan perubahan ini:** aplikasi Meta, verifikasi bisnis, dan kepemilikan WABA untuk tenant uji (issue tetap terbuka sampai dibuktikan). Setiap id, token, dan secret dalam tes adalah fixture.
+- Belum ada layar admin untuk langganan webhook, persetujuan template, atau pembersihan pembatasan (API lengkap; tercantum di `NOT_YET_SCREENED`).
+- Tidak ada sinkronisasi dari API template Meta (operator mencatat keadaan awal; webhook menjaganya mutakhir) dan tidak ada penanganan `template_category_update` (template yang dikategorikan ulang mempertahankan kategori tercatat sampai dicatat lagi).
+- "STOP" yang masuk **tidak** diubah menjadi opt-out di sini: konten masuk sengaja tidak dibaca. Opt-out tetap berupa penarikan persetujuan eksplisit.
+- **Keputusan terbuka (fail-closed sampai diputuskan):** apakah template `FLAGGED` boleh dikirim; saat ini ditolak.
+
 ## Bukan bagian fase ini
 
-Webhook masuk (tanda terima pengiriman, balasan "stop" — ADR-0133 bagian 10, Q2), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Pemilihan pengirim per tenant (Q3) **sudah dibangun sejak Issue #1141**: lihat [Perutean pengirim](#perutean-pengirim-issue-1141). Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
+Webhook masuk untuk pengirim deployment dan untuk StarSender (StarSender tidak punya secara sengaja; nomor Meta milik tenant punya webhook bertanda tangan sejak [Issue #1143](#pengirim-meta-cloud-api-multi-waba-issue-1143)), balasan "stop" (ADR-0133 bagian 10, Q2), pengungkapan nomor mentah untuk admin (Q7), Telegram, dan orkestrasi notifikasi belum dibangun. Pemilihan pengirim per tenant (Q3) **sudah dibangun sejak Issue #1141**: lihat [Perutean pengirim](#perutean-pengirim-issue-1141). Adapter kompatibilitas commerce dan cutover per tenant (ADR-0133 bagian 6, fase 2 sampai 4) adalah pull request terpisah yang lebih belakangan.
 
 ## Runtime Bun WhatsApp / status UI terencana
 

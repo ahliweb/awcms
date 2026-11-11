@@ -74,6 +74,7 @@ import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-sc
 import { whatsappBusinessScopeResolver } from "../infrastructure/business-scope-resolver";
 import { loadChannelAccountPort } from "../infrastructure/channel-account-port-loader";
 import { readEligibilityFacts } from "./whatsapp-consent-directory";
+import { decideMetaSendForMessage } from "./whatsapp-meta-directory";
 import { emitWhatsappMessageEvent } from "./whatsapp-event-emit";
 import {
   logSenderRefusal,
@@ -314,6 +315,30 @@ export async function enqueueWhatsappMessage(
     }
   }
 
+  // Issue #1143: Meta's own rules, for a TENANT-OWNED Meta number only (not the
+  // deployment sender, not StarSender). The template must be approved on THAT
+  // number's WABA in the category the purpose requires; a registration without
+  // a provider template may go only inside the 24-hour window the recipient
+  // opened with THAT number. Checked again immediately before the send.
+  if (
+    sender.resolved?.provider === "whatsapp_cloud" &&
+    sender.senderAccountId !== null
+  ) {
+    const meta = await decideMetaSendForMessage(tx, {
+      tenantId: input.tenantId,
+      senderAccountId: sender.senderAccountId,
+      containerAccountId: sender.resolved.containerAccountId!,
+      purpose: template.purpose,
+      providerTemplate: template.providerTemplate,
+      hashes,
+      now
+    });
+
+    if (!meta.ok) {
+      return { status: "refused", reason: meta.reason };
+    }
+  }
+
   if (await isRateLimited(tx, input.tenantId, hashes, template.purpose, env)) {
     return { status: "refused", reason: "RATE_LIMITED" };
   }
@@ -328,7 +353,7 @@ export async function enqueueWhatsappMessage(
        profile_id, variables, body, contains_secret, status, not_before,
        expires_at, next_attempt_at, created_by, sender_account_id,
        sender_selection, sender_policy_version, business_scope_type,
-       business_scope_id)
+       business_scope_id, sender_external_id, sender_container_external_id)
     VALUES (
       ${input.tenantId}, ${input.idempotencyKey}, ${input.correlationId ?? null},
       ${template.key}, ${template.version}, ${template.purpose},
@@ -337,7 +362,9 @@ export async function enqueueWhatsappMessage(
       ${rendered.containsSecret}, 'queued', ${input.notBefore ?? null},
       ${input.expiresAt ?? null}, ${dueAt}, ${input.createdBy ?? null},
       ${sender.senderAccountId}, ${sender.selection}, ${sender.policyVersion},
-      ${sender.businessScope?.type ?? null}, ${sender.businessScope?.id ?? null}
+      ${sender.businessScope?.type ?? null}, ${sender.businessScope?.id ?? null},
+      ${sender.resolved?.externalId ?? null},
+      ${sender.resolved?.containerExternalId ?? null}
     )
     ON CONFLICT ON CONSTRAINT awcms_whatsapp_messages_idempotency_unique
     DO NOTHING

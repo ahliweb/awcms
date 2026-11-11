@@ -79,7 +79,12 @@ export function createMetaCloudWhatsappProvider(
 
   return {
     async send(request: WhatsappSendRequest): Promise<WhatsappSendResult> {
-      if (!request.providerTemplate) {
+      // A free-text service message only when the dispatcher verified the
+      // 24-hour window (Issue #1143); otherwise templates only, as before.
+      const sessionText =
+        !request.providerTemplate && request.serviceWindowOpen === true;
+
+      if (!request.providerTemplate && !sessionText) {
         return {
           ok: false,
           error: `Template "${request.templateKey}" has no approved provider template.`,
@@ -88,6 +93,36 @@ export function createMetaCloudWhatsappProvider(
         };
       }
 
+      const to = request.to.replace(/^\+/, "");
+      const payload = request.providerTemplate
+        ? {
+            messaging_product: "whatsapp",
+            to,
+            type: "template",
+            template: {
+              name: request.providerTemplate.name,
+              language: { code: request.providerTemplate.language },
+              ...(request.parameters.length > 0
+                ? {
+                    components: [
+                      {
+                        type: "body",
+                        parameters: request.parameters.map((text) => ({
+                          type: "text",
+                          text
+                        }))
+                      }
+                    ]
+                  }
+                : {})
+            }
+          }
+        : {
+            messaging_product: "whatsapp",
+            to,
+            type: "text",
+            text: { preview_url: false, body: request.body }
+          };
       const attemptedAt = now();
       const response = await http(url, {
         method: "POST",
@@ -95,28 +130,7 @@ export function createMetaCloudWhatsappProvider(
           Authorization: `Bearer ${options.accessToken}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: request.to.replace(/^\+/, ""),
-          type: "template",
-          template: {
-            name: request.providerTemplate.name,
-            language: { code: request.providerTemplate.language },
-            ...(request.parameters.length > 0
-              ? {
-                  components: [
-                    {
-                      type: "body",
-                      parameters: request.parameters.map((text) => ({
-                        type: "text",
-                        text
-                      }))
-                    }
-                  ]
-                }
-              : {})
-          }
-        }),
+        body: JSON.stringify(payload),
         timeoutMs: options.timeoutMs
       });
 

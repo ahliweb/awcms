@@ -69,7 +69,14 @@ export type SenderUnavailableReason =
   /** No credential is stored for the account, or the stored token has expired. */
   | "CREDENTIAL_UNAVAILABLE"
   /** The key ring is missing or the ciphertext does not authenticate: an operator problem, not this message's. */
-  | "SECRET_STORE_UNAVAILABLE";
+  | "SECRET_STORE_UNAVAILABLE"
+  /**
+   * Port 1.2.0 (Issue #1143). A Meta Cloud API number (`whatsapp_cloud`
+   * `waba_phone_number`) whose parent is not a live `waba` container of the
+   * same provider: it has no verifiable WABA binding, so it may not send.
+   * Terminal: only registering the number under its WABA fixes it.
+   */
+  | "CONTAINER_BINDING_INVALID";
 
 export type ResolvedWhatsappSender = {
   accountId: string;
@@ -79,6 +86,14 @@ export type ResolvedWhatsappSender = {
   externalId: string;
   /** `null` is tenant-wide. */
   businessScope: { type: string; id: string } | null;
+  /**
+   * Port 1.2.0 (Issue #1143). The container the number belongs to: for a Meta
+   * number, its `waba` account and that account's WABA id. Absent/`null` for a
+   * provider with no container (StarSender). Read from the records, never from
+   * a caller.
+   */
+  containerAccountId?: string | null;
+  containerExternalId?: string | null;
 };
 
 export type ResolveWhatsappSenderInput = {
@@ -351,4 +366,75 @@ export interface ChannelEmailAccountCredentialPort {
     tx: Bun.SQL,
     input: { tenantId: string; accountId: string }
   ): Promise<ResolveEmailAccountCredentialResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Signed provider webhooks (Issue #1143; capability `channel_account` 1.4.0)
+// ---------------------------------------------------------------------------
+//
+// A public webhook route has no session. It resolves the tenant and the account
+// from the opaque callback token (`_shared/channel-webhook-token.ts`) and asks
+// `channel_accounts`, which alone holds the signing secret, whether the request
+// is authentic. The secret never leaves `channel_accounts`: the port returns a
+// verdict and the record identities, never key material. A separate type, so an
+// existing implementer of the 1.1.0 ports keeps compiling (additive bump).
+
+export type VerifiedMetaWebhookBinding = {
+  subscriptionId: string;
+  /** The `waba_phone_number` account the token was minted for. */
+  accountId: string;
+  /** Its `phone_number_id`. */
+  phoneNumberId: string;
+  /** Its `waba` container account and that container's WABA id. */
+  containerAccountId: string;
+  wabaId: string;
+};
+
+export type VerifyMetaWebhookRefusal =
+  | "DISABLED"
+  | "TOKEN_INVALID"
+  | "SUBSCRIPTION_INACTIVE"
+  | "BINDING_INVALID"
+  | "SECRET_UNAVAILABLE"
+  | "SIGNATURE_INVALID";
+
+export type VerifyMetaWebhookResult =
+  | { ok: true; binding: VerifiedMetaWebhookBinding }
+  /** `reason` is for the server log and the rejection counter only; the HTTP answer to every refusal is the same `401`. */
+  | { ok: false; reason: VerifyMetaWebhookRefusal };
+
+export interface ChannelWebhookVerifierPort {
+  /**
+   * Whether `rawBody` is a genuine Meta webhook for the subscription the token
+   * names: the token's secret matches the stored hash (constant time), the
+   * subscription is `active` and HMAC-signed, the account is a live Meta number
+   * with a live WABA container, and `X-Hub-Signature-256` is the HMAC-SHA256 of
+   * the exact bytes under the stored app secret (constant time). Runs in the
+   * tenant transaction the token names.
+   */
+  verifyMetaWebhook(
+    tx: Bun.SQL,
+    input: {
+      tenantId: string;
+      subscriptionId: string;
+      token: string;
+      rawBody: string;
+      signatureHeader: string | null;
+    }
+  ): Promise<VerifyMetaWebhookResult>;
+
+  /**
+   * Meta's subscription handshake (`hub.mode=subscribe`): the token is valid,
+   * the subscription active, and `hub.verify_token` equals the callback token
+   * itself (constant time). No body, no secret decrypted.
+   */
+  verifyMetaHandshake(
+    tx: Bun.SQL,
+    input: {
+      tenantId: string;
+      subscriptionId: string;
+      token: string;
+      verifyToken: string | null;
+    }
+  ): Promise<boolean>;
 }

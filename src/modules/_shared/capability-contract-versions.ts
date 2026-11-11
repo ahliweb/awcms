@@ -139,8 +139,10 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // `BUSINESS_SCOPE_UNRESOLVED` (a marketing message's scope must resolve): a
     // marketing opt-in now covers the brand (business scope) it was collected for
     // only. No signature changed (a MINOR bump); a consumer that maps an unknown
-    // reason to a coarse code (booking) is unchanged.
-    whatsapp_delivery: "1.2.0",
+    // reason to a coarse code (booking) is unchanged. `1.3.0` (Issue #1143) ADDS
+    // the refusals `TEMPLATE_NOT_APPROVED` and `OUTSIDE_SERVICE_WINDOW`, returned
+    // only for a tenant-owned Meta Cloud API sender. No signature changed.
+    whatsapp_delivery: "1.3.0",
     // channel_account is provided by the base `channel_accounts` module (Issue
     // #1141, ADR-0148 capability C1) and consumed, optionally, by
     // `whatsapp_delivery`. `1.0.0` was the first assigned number. `1.1.0` ADDS
@@ -156,8 +158,13 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // senders. Additive again: no signature changed. `1.3.0` (Issue #1146)
     // ADDS the exported `ChannelPublisherHealthPort` (the social dispatcher
     // reports a credential the provider refused, which degrades the account).
-    // Additive: a new interface, no signature changed.
-    channel_account: "1.3.0",
+    // Additive: a new interface, no signature changed. `1.4.0` (Issue #1143,
+    // integrated after 1.3.0 landed) ADDS the refusal reason
+    // `CONTAINER_BINDING_INVALID`, the OPTIONAL `containerAccountId`/
+    // `containerExternalId` of a resolved sender (a Meta number's WABA), and the
+    // exported `ChannelWebhookVerifierPort` (signed Meta webhooks). Additive:
+    // no signature changed.
+    channel_account: "1.4.0",
     // social_publishing is provided by the base `social_publishing` module
     // (Issue #1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
     // which `blog_content` already consumed (optional) while the provider was a

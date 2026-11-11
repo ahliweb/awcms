@@ -203,9 +203,86 @@ StarSender's public documentation describes a webhook but **no authentication of
 
 The request and response fields are taken from one public documentation page (read 3 November 2026) and **have not been verified against the live API**: only the success body is documented, every failure fixture is an assumption (`tests/fixtures/starsender/contract-fixtures.ts`). The runbook lists what to confirm with a test device before production. The acknowledgement text is not approved by anyone.
 
+## Meta Cloud API multi-WABA senders (Issue #1143)
+
+[ADR-0148](../../../docs/adr/0148-omnichannel-foundation-is-five-gated-capabilities-with-fail-closed-per-account-capability.md) section 4 and I9, and the conditions of the issue's owner comment. A tenant can run **several Meta numbers on several WABAs**, each a `channel_accounts` row of kind `waba_phone_number` whose parent is its `waba` container (`external_id` = the WABA id). **One queue, one dispatcher**: nothing here is a second queue, and nothing is sent from the webhook path.
+
+### Rules re-verified against Meta's documentation (11 November 2026)
+
+| Rule                                                                                                                                                                                                                                                            | Source page (developers.facebook.com/documentation/business-messaging/whatsapp/…) |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Webhooks are signed: `X-Hub-Signature-256: sha256=<hex>`, HMAC-SHA256 of the request body under the **app secret**                                                                                                                                              | `webhooks/create-webhook-endpoint`                                                |
+| Handshake: `GET` with `hub.mode=subscribe`, `hub.verify_token`, `hub.challenge`; answer `200` with the challenge                                                                                                                                                | same                                                                              |
+| A failed delivery is retried "with decreasing frequency" for up to **7 days**; retries can duplicate notifications                                                                                                                                              | `webhooks/overview`                                                               |
+| The callback URL can be **overridden per WABA or per business phone number**                                                                                                                                                                                    | `webhooks/overview`                                                               |
+| `entry[].id` is the WABA id; `value.metadata.phone_number_id` is the number; status values `sent`, `delivered`, `read`, `played`, `failed`                                                                                                                      | `webhooks/reference/messages/status`                                              |
+| The **24-hour customer-service window** opens (and resets) when the user writes; outside it only pre-approved **templates** may be sent                                                                                                                         | `messages/send-messages`                                                          |
+| Template status events: `APPROVED`, `ARCHIVED`, `UNARCHIVED`, `DELETED`, `DISABLED`, `FLAGGED`, `IN_APPEAL`, `LIMIT_EXCEEDED`, `LOCKED`, `PAUSED`, `PENDING`, `REINSTATED`, `PENDING_DELETION`, `REJECTED`; categories `MARKETING`, `UTILITY`, `AUTHENTICATION` | `webhooks/reference/message_template_status_update`                               |
+| `phone_number_quality_update` carries the messaging-limit tier (`max_daily_conversations_per_business`) and **no phone_number_id**                                                                                                                              | `webhooks/reference/phone_number_quality_update`                                  |
+| `account_update`: `DISABLED_UPDATE` (`waba_ban_state` `DISABLE`/`SCHEDULE_FOR_DISABLE`/`REINSTATE`), `ACCOUNT_RESTRICTION`, `ACCOUNT_DELETED`, `ACCOUNT_OFFBOARDED`/`ACCOUNT_RECONNECTED`, `PARTNER_APP_UNINSTALLED`                                            | `webhooks/reference/account_update`                                               |
+
+**Not verifiable from the pages above, so fail closed:** whether a `FLAGGED` template is still safe to send (it is refused until Meta reports it approved again); the expiry of an `ACCOUNT_RESTRICTION` (held until an operator clears it); and the exact field override list for per-number callback URLs (each number gets its own token; an event that names another WABA or number on that token is dropped, never applied). Whether `entry.id` is always the WABA id for partner events is inconsistent in Meta's own examples, so a partner event whose `entry.id` is not the bound WABA is dropped.
+
+### Binding: the verified sender identity is on the row
+
+- A Meta number is usable only with a **live `waba` container of the same provider** (`ChannelAccountPort` 1.2.0, `CONTAINER_BINDING_INVALID`, terminal). An API-token number with no parent is refused: it has no verifiable WABA.
+- At enqueue the database guard (`sql/365`) **fills and checks** `sender_external_id` (the `phone_number_id`) and `sender_container_external_id` (the WABA id) from the records, and makes both immutable. A request can never supply them (the port input has no such field).
+- At dispatch the live record is compared with the snapshot: a number moved to another WABA (or any identity drift) is terminal `sender_unavailable` (`SENDER_BINDING_CHANGED`), never sent from the new binding. The provider call uses that number's own `phone_number_id` and its own token, as since #1141.
+- **Legacy rows** queued before `sql/365` have NULL snapshots and are bound by the current record, which must still have a valid WABA.
+
+### Templates are approved per WABA; free text only inside the window
+
+`awcms_whatsapp_meta_templates` records Meta's status of a template (name, language, category) on one WABA. For a **tenant-owned Meta number** (not the deployment sender, not StarSender):
+
+| Message                                   | Rule                                                                                                                                                         | Refusal (enqueue) / failure (dispatch)              |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| registration with a `providerTemplate`    | a row on **that number's** WABA, status `APPROVED` or `REINSTATED`, category = purpose (marketing MARKETING, transactional UTILITY, security AUTHENTICATION) | `TEMPLATE_NOT_APPROVED` / `template_not_approved`   |
+| registration without a `providerTemplate` | a free-text service message, only while the recipient's **24-hour window with that number** is open (opened by a verified inbound message)                   | `OUTSIDE_SERVICE_WINDOW` / `outside_service_window` |
+| marketing without a `providerTemplate`    | never: marketing content is an approved MARKETING template (an opt-in is necessary, not sufficient)                                                          | `TEMPLATE_NOT_APPROVED`                             |
+
+Checked at enqueue and **again immediately before the send** (a webhook may have paused the template, a window may have closed). Never free text instead of a template, never another number. Marketing consent (per brand, #1231 M4) is unchanged and still required.
+
+Approvals are written two ways: `PUT /api/v1/whatsapp/meta-templates` (operator, `meta_templates.configure`, `Idempotency-Key`, `warning` audit; `APPROVED`/`REINSTATED` need an `evidenceRef`, a database CHECK enforces it), because Meta sends a status webhook only when a status **changes**; and a signed `message_template_status_update` webhook of a number of that WABA. Order is Meta's `entry.time`: an older event never overrides a newer one, and on a tie the not-sendable status wins.
+
+### The webhook: tenant and account come from the token, never the payload
+
+`channel_accounts` mints a per-number **opaque callback token** (`POST /api/v1/channel-accounts/accounts/{id}/webhook-subscription`, `channel_accounts.webhooks.configure`, owner assignment, conditional step-up, `Idempotency-Key`, `warning` audit). The Meta app secret is stored write-only (purpose `webhook_signing_secret`); the token is shown **once** and only its SHA-256 is stored. Creating a new subscription revokes the old one and erases its secret (rotation). The operator configures `https://<host>/api/v1/whatsapp/webhooks/meta/<token>` as the number's callback URL override at Meta, with the same token as verify token.
+
+`GET`/`POST /api/v1/whatsapp/webhooks/meta/{token}` is public by design (listed in `SESSION_FREE_BODY_ENDPOINTS` with its reason) and does, in order: `404` when `WHATSAPP_ENABLED` is off; a **per-(tenant of the token, address)** attempt bucket before any database work (`429`, never shared across tenants; Meta retries, so a status or an inbound message is **delayed, never dropped**); the capped body (128 KiB); then, in the token's tenant transaction, verification by `ChannelWebhookVerifierPort` (token hash and HMAC compared in constant time; every refusal one `401`, counted against a smaller denial bucket); the **body hash dedupe** (`awcms_whatsapp_webhook_receipts`, 8 days); and the actions, read only **within the binding**:
+
+- `messages.statuses[]` reconcile only a row of **the bound sender** with that provider message id, and, when Meta names the recipient, only if it hashes to the row's recipient. Forward-only (`sent` < `delivered` < `read`; `failed` only before delivery): a repeat or a late status changes nothing and emits nothing. A move emits `awcms.whatsapp.message.provider_status_changed`. The queue status stays `sent`: provider-accepted is never "delivered", and "delivered" is a separate fact.
+- `messages.messages[]` open the 24-hour window of (that number, the sender's keyed hash). **No content is read or stored**, and nothing is sent in reply.
+- `message_template_status_update` updates the bound WABA's template rows; `phone_number_quality_update` records its messaging-limit tier; `account_update` restricts or clears the bound WABA (below).
+- An entry of another WABA, or a `messages` change of another phone number id, is **dropped and counted**, never applied to "whichever row matches".
+
+### Monitoring, rate limits, restrictions
+
+- **Restriction.** `DISABLED_UPDATE` (ban or scheduled ban, or an unknown ban state), `ACCOUNT_RESTRICTION`, `ACCOUNT_DELETED`, `ACCOUNT_OFFBOARDED`, `PARTNER_APP_UNINSTALLED` restrict the WABA: its numbers are refused at enqueue (`SENDER_UNAVAILABLE`) and **held** at dispatch (`SENDER_RESTRICTED`, counted against the retry budget, then terminal). `REINSTATE` and `ACCOUNT_RECONNECTED` lift only the restriction they reverse, and only when strictly newer. Anything else is cleared by an operator (`POST /api/v1/whatsapp/meta-signals/{id}/clear-restriction`, `meta_signals.configure`, `warning` audit) after checking at Meta. Another WABA of the tenant is unaffected; nothing reroutes.
+- **Rate limits.** A `rate_limited` answer from Meta (`429`, codes 4, 80007, 130429, 131056) retries that row with backoff and holds the **rest of that sender's lane** for 60 seconds, uncounted; other senders continue. The per-sender hourly and daily caps of #1141 still apply. Rate-limit history is read from the queue itself (`failure_code`), so no new worker write exists.
+- **Credential expiry and permission changes.** A `401`/code 190 still holds the lane with bounded retries (#1233 L1); a revoked grant or disconnected account is terminal (#1141).
+- `GET /api/v1/whatsapp/meta-templates` returns the approvals and each WABA's signals (restriction, messaging-limit tier) for the WABAs the caller may see.
+
+### Backward compatibility (the single-sender deployment)
+
+The deployment sender (`WHATSAPP_PROVIDER=meta`, `WHATSAPP_META_ACCESS_TOKEN`, `WHATSAPP_META_PHONE_NUMBER_ID`) is **unchanged**: same path, same templates-only adapter, same failures (Meta itself rejects an unapproved template). It has no WABA record, so none of the per-WABA rules apply to it, it cannot receive webhooks (there is no subscription to bind them to), and its rows carry no snapshot. Moving a deployment to tenant-owned numbers is a **configuration** step: register the WABA and its numbers, record their template approvals, create each number's webhook subscription, then point the sender policy at them (prospective). No row changes sender after enqueue.
+
+### Security notes
+
+- The webhook signing secret is decrypted by the **application** role in the request. The worker's `awcms_channel_secrets` policy (`sql/328`) is **unchanged** and still excludes `webhook_signing_secret`; `sql/365` grants the worker only `SELECT` on approvals and signals and `SELECT, DELETE` on windows and receipts (purge), pinned in `security:readiness`.
+- The callback token is in the URL path. This repository logs no request paths, but a reverse proxy or CDN in front of it might: configure them not to log `/api/v1/whatsapp/webhooks/`. A leaked token alone is not enough: every body must also carry a valid HMAC under the app secret.
+- `whatsapp:queue:purge` removes windows two days after they closed and receipts after eight days (legal-hold gated descriptors).
+
+### Not done here (human steps and follow-ups)
+
+- **Business evidence is a human step and is NOT provided by this change:** a Meta app, business verification and WABA ownership for a test tenant (the issue stays open until they are evidenced). Every id, token and secret in the tests is a fixture.
+- No admin screen yet for the webhook subscription, the template approvals or clearing a restriction (API complete; listed in `NOT_YET_SCREENED`).
+- No sync from Meta's template API (an operator records the initial state; webhooks keep it current) and no `template_category_update` handling (a re-categorised template keeps its recorded category until recorded again).
+- An inbound "STOP" is **not** turned into an opt-out here: inbound content is deliberately not read. The opt-out stays an explicit consent withdrawal.
+- **Open decision (fail closed until decided):** whether a `FLAGGED` template may be sent; it is refused today.
+
 ## Not in this phase
 
-Inbound webhooks (delivery receipts, "stop" replies — ADR-0133 section 10, Q2; StarSender has none by design, see [StarSender (Issue #1142)](#starsender-issue-1142)), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. Per-tenant sender selection (Q3) is **built since Issue #1141**: see [Sender routing](#sender-routing-issue-1141). The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
+Inbound webhooks for the deployment sender and for StarSender (StarSender has none by design, see [StarSender (Issue #1142)](#starsender-issue-1142); tenant-owned Meta numbers have signed webhooks since [Issue #1143](#meta-cloud-api-multi-waba-senders-issue-1143)), "stop" replies (ADR-0133 section 10, Q2), an admin reveal of the raw number (Q7), Telegram, and notification orchestration are not built. Per-tenant sender selection (Q3) is **built since Issue #1141**: see [Sender routing](#sender-routing-issue-1141). The commerce compatibility adapter and the per-tenant cutover (ADR-0133 section 6, phases 2 to 4) are separate, later pull requests.
 
 ## WhatsApp Bun runtime / planned UI status
 

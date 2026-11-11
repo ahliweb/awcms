@@ -321,6 +321,36 @@ export function validateWriteCredential(
     : { valid: true, value: { secret: secret! } };
 }
 
+/** Issue #1143: the Meta app secret of a signed webhook subscription. Shape only; the value is never echoed. */
+export type CreateWebhookSubscriptionInput = { appSecret: string };
+
+const META_APP_SECRET = /^[A-Za-z0-9]{16,128}$/;
+
+export function validateCreateWebhookSubscription(
+  raw: unknown
+): Validated<CreateWebhookSubscriptionInput> {
+  if (!isRecord(raw)) {
+    return {
+      valid: false,
+      errors: [{ field: "body", message: "Must be a JSON object." }]
+    };
+  }
+
+  const errors = unknownFields(raw, ["appSecret"]);
+  const appSecret = typeof raw.appSecret === "string" ? raw.appSecret : null;
+
+  if (appSecret === null || !META_APP_SECRET.test(appSecret)) {
+    errors.push({
+      field: "appSecret",
+      message: "Must be the Meta app secret: 16 to 128 letters or digits."
+    });
+  }
+
+  return errors.length > 0
+    ? { valid: false, errors }
+    : { valid: true, value: { appSecret: appSecret! } };
+}
+
 // ---------------------------------------------------------------------------
 // Capabilities
 // ---------------------------------------------------------------------------

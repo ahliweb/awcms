@@ -9,6 +9,12 @@ import {
 } from "./whatsapp-recipient";
 import type { SuppressionReason } from "./whatsapp-eligibility";
 import { isWhatsappRecordUuid, parseBusinessScope } from "./whatsapp-sender";
+import {
+  isMetaTemplateCategory,
+  isMetaTemplateStatus,
+  type MetaTemplateCategory,
+  type MetaTemplateStatus
+} from "./meta-cloud-policy";
 
 export type ValidationResult<T> =
   { valid: true; value: T } | { valid: false; errors: string[] };
@@ -239,6 +245,99 @@ export function validateSenderPolicyInput(
         value: {
           businessScope: scope as SenderPolicyInput["businessScope"],
           defaultSenderAccountId: defaultSenderAccountId as string | null
+        }
+      };
+}
+
+export type MetaTemplateRecordInput = {
+  containerAccountId: string;
+  name: string;
+  language: string;
+  category: MetaTemplateCategory;
+  status: MetaTemplateStatus;
+  evidenceRef: string | null;
+};
+
+const META_TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/;
+const META_LANGUAGE = /^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8}){0,2}$/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+/**
+ * Issue #1143. What an operator records about one Meta template on one WABA.
+ * `status` is Meta's own vocabulary; marking it `APPROVED` or `REINSTATED`
+ * requires an `evidenceRef` (where the approval can be checked).
+ */
+export function validateMetaTemplateRecord(
+  raw: unknown
+): ValidationResult<MetaTemplateRecordInput> {
+  const shape = checkShape(raw, [
+    "containerAccountId",
+    "name",
+    "language",
+    "category",
+    "status",
+    "evidenceRef"
+  ]);
+
+  if ("errors" in shape) {
+    return { valid: false, errors: shape.errors };
+  }
+
+  const errors: string[] = [];
+  const { containerAccountId, name, language, category, status, evidenceRef } =
+    shape.record;
+
+  if (!isWhatsappRecordUuid(containerAccountId)) {
+    errors.push("containerAccountId must be the uuid of a WABA account.");
+  }
+
+  if (typeof name !== "string" || !META_TEMPLATE_NAME.test(name)) {
+    errors.push("name must be a Meta template name (lower-case, digits, _).");
+  }
+
+  if (typeof language !== "string" || !META_LANGUAGE.test(language)) {
+    errors.push("language must be a Meta language code (e.g. id, en_US).");
+  }
+
+  if (!isMetaTemplateCategory(category)) {
+    errors.push("category must be MARKETING, UTILITY or AUTHENTICATION.");
+  }
+
+  if (!isMetaTemplateStatus(status)) {
+    errors.push("status must be a Meta template status.");
+  }
+
+  const evidence =
+    evidenceRef === undefined || evidenceRef === null ? null : evidenceRef;
+
+  if (
+    evidence !== null &&
+    (typeof evidence !== "string" ||
+      evidence.trim().length === 0 ||
+      evidence.length > 200 ||
+      CONTROL_CHARS.test(evidence))
+  ) {
+    errors.push("evidenceRef must be 1 to 200 printable characters.");
+  }
+
+  if ((status === "APPROVED" || status === "REINSTATED") && evidence === null) {
+    errors.push(
+      "evidenceRef is required to record a template as approved (where the approval can be checked)."
+    );
+  }
+
+  return errors.length > 0
+    ? { valid: false, errors }
+    : {
+        valid: true,
+        value: {
+          containerAccountId: (containerAccountId as string).toLowerCase(),
+          name: name as string,
+          language: language as string,
+          category: category as MetaTemplateCategory,
+          status: status as MetaTemplateStatus,
+          evidenceRef: evidence === null ? null : (evidence as string).trim()
         }
       };
 }

@@ -1005,25 +1005,42 @@ describe("module descriptor", () => {
       "awcms_whatsapp_suppressions"
     ];
 
+    // Issue #1143: the 24-hour windows and the webhook receipts are purged by
+    // `whatsapp:queue:purge` (delegated descriptors); the template approvals
+    // and WABA signals are BOUNDED_BY_DESIGN (one row per template / per WABA).
+    const purged = [
+      "awcms_whatsapp_service_windows",
+      "awcms_whatsapp_webhook_receipts"
+    ];
+
     expect(
       (whatsappDeliveryModule.dataLifecycle ?? [])
         .map((d) => d.tableName)
         .sort()
-    ).toEqual([...tables].sort());
+    ).toEqual([...tables, ...purged].sort());
     // Issue #1141 added the default-sender policy table: one configuration row
     // per scope, answered by a subjectData descriptor (the admin stamp) and a
     // BOUNDED_BY_DESIGN entry in `data-lifecycle:table-coverage:check`, not by a
     // delegated purge (an age-based purge would reset a brand's default sender).
     expect(
       (whatsappDeliveryModule.subjectData ?? []).map((d) => d.tableName).sort()
-    ).toEqual([...tables, "awcms_whatsapp_sender_policies"].sort());
+    ).toEqual(
+      [
+        ...tables,
+        ...purged,
+        "awcms_whatsapp_sender_policies",
+        "awcms_whatsapp_meta_templates",
+        "awcms_whatsapp_meta_sender_signals"
+      ].sort()
+    );
   });
 
-  test("the thirteen permissions mirror the sql/179, sql/323 and sql/360 seeds exactly", () => {
+  test("the sixteen permissions mirror the sql/179, sql/323, sql/360 and sql/366 seeds exactly", () => {
     const seeded = [
       "sql/179_awcms_whatsapp_delivery_permissions.sql",
       "sql/323_awcms_whatsapp_sender_routing_permissions.sql",
-      "sql/360_awcms_whatsapp_sender_progress_stream.sql"
+      "sql/360_awcms_whatsapp_sender_progress_stream.sql",
+      "sql/366_awcms_whatsapp_meta_sender_binding_permissions.sql"
     ]
       .flatMap((file) => [
         ...readFileSync(file, "utf8").matchAll(
@@ -1036,7 +1053,7 @@ describe("module descriptor", () => {
       .map((p) => `${p.activityCode}.${p.action}`)
       .sort();
 
-    expect(declared).toHaveLength(13);
+    expect(declared).toHaveLength(16);
     expect(declared).toEqual(seeded);
   });
 

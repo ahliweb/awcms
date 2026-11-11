@@ -1544,6 +1544,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // scope; a worker that could write it could change which number and provider
   // speak for a tenant.
   awcms_whatsapp_sender_policies: ["SELECT"],
+  // Issue #1143 (sql/365) - `whatsapp:dispatch` re-reads Meta template
+  // approvals and WABA restrictions immediately before a send, read-only: a
+  // worker that could write them would decide what Meta approved or whether a
+  // WABA is banned. `whatsapp:queue:purge` deletes closed service windows and
+  // old webhook receipts (the DELETE is the one to notice, per sql/091).
+  awcms_whatsapp_meta_templates: ["SELECT"],
+  awcms_whatsapp_meta_sender_signals: ["SELECT"],
+  awcms_whatsapp_service_windows: ["DELETE", "SELECT"],
+  awcms_whatsapp_webhook_receipts: ["DELETE", "SELECT"],
   // ADR-0157 / `sql/330` (Issue #1145). The article path enqueues from
   // `blog:publish:scheduled` (reads the two tenant switches and the rules, inserts
   // a publication and its jobs); `social-publishing:dispatch` claims and finalises
@@ -4859,7 +4868,9 @@ export const NON_CREDENTIAL_LOOKALIKES: Readonly<Record<string, string>> = {
   "awcms_whatsapp_messages.recipient_hash":
     "keyed hash of a recipient number; not a login secret",
   "awcms_whatsapp_suppressions.recipient_hash":
-    "keyed hash of a suppressed number; not a login secret"
+    "keyed hash of a suppressed number; not a login secret",
+  "awcms_whatsapp_service_windows.recipient_hash":
+    "keyed hash of the number that wrote to a Meta sender, for the 24-hour window (Issue #1143); not a login secret"
 };
 
 export type WorkerCredentialColumnPolicy = {

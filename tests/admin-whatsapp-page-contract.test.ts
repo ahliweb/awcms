@@ -184,17 +184,24 @@ describe("the properties this screen exists to keep", () => {
 });
 
 describe("the admin ledger", () => {
-  test("no `whatsapp_delivery` key is left on NOT_YET_SCREENED", async () => {
+  test("the only `whatsapp_delivery` keys on NOT_YET_SCREENED are the three Meta keys of Issue #1143", async () => {
     const { NOT_YET_SCREENED } =
       await import("../scripts/admin-screen-coverage-ledger");
 
     // Issue #1141 added `senders.read` and `sender_policy.configure` API-first;
     // the channel-account detail screen (Issue #1154,
-    // `/admin/channel-accounts/[id]`) now claims both, so every key is screened
-    // and the ledger holds none.
+    // `/admin/channel-accounts/[id]`) now claims both. Issue #1143 added three
+    // Meta keys API-first (template approvals and clearing a WABA restriction);
+    // their screen is the recorded follow-up, and nothing else may join them.
     expect(
-      NOT_YET_SCREENED.filter((key) => key.startsWith("whatsapp_delivery."))
-    ).toEqual([]);
+      NOT_YET_SCREENED.filter((key) =>
+        key.startsWith("whatsapp_delivery.")
+      ).sort()
+    ).toEqual([
+      "whatsapp_delivery.meta_signals.configure",
+      "whatsapp_delivery.meta_templates.configure",
+      "whatsapp_delivery.meta_templates.read"
+    ]);
     expect(EXPECTED).toHaveLength(10);
   });
 });

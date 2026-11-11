@@ -81,6 +81,7 @@ import {
   POST as acknowledgeRiskRoute
 } from "../../src/pages/api/v1/channel-accounts/risk-acknowledgements/index";
 import { POST as attestDeviceRoute } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/attest-device";
+import { POST as createWebhookSubscriptionRoute } from "../../src/pages/api/v1/channel-accounts/accounts/[id]/webhook-subscription";
 import { POST as revokeRiskAcknowledgementRoute } from "../../src/pages/api/v1/channel-accounts/risk-acknowledgements/[id]/revoke";
 import { POST as startOAuth } from "../../src/pages/api/v1/channel-accounts/connections/oauth/start";
 import { GET as oauthCallback } from "../../src/pages/api/v1/channel-accounts/connections/oauth/callback";
@@ -564,6 +565,18 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
             token
           });
         }
+      ],
+      [
+        // Issue #1143.
+        "channel_accounts.webhooks.configure",
+        (id, token) =>
+          call(createWebhookSubscriptionRoute, {
+            method: "POST",
+            path: `${BASE}/accounts/${id}/webhook-subscription`,
+            params: { id },
+            token,
+            body: { appSecret: "0123456789abcdef0123456789abcdef" }
+          })
       ]
     ];
 

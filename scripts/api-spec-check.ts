@@ -64,6 +64,15 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // event is quarantined as unauthenticated and changes no state, and the route
   // answers 404 when EMAIL_WEBHOOK_ENABLED is not true.
   "emailReceiveMailketingWebhook",
+  // whatsapp_delivery (Issue #1143) — Meta's Cloud API webhook and its
+  // subscription handshake. Called by Meta, never by a person, so no session or
+  // tenant header. Authenticated by TWO facts compared in constant time: the
+  // opaque per-account callback token in the path (tenant and account resolved
+  // from it, never from the payload; only its SHA-256 stored) and, for POST,
+  // X-Hub-Signature-256 (HMAC-SHA256 of the exact body under that number's app
+  // secret). One 401 for every refusal; 404 when WHATSAPP_ENABLED is not true.
+  "verifyWhatsappMetaWebhook",
+  "receiveWhatsappMetaWebhook",
   // visitor_analytics (ported from awcms-micro epic #617-#624) — the public
   // visit-ingest beacon is anonymous by design: it carries no session, resolves
   // the tenant from a public tenant code, records only privacy-preserving,

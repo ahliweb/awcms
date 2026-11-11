@@ -50,6 +50,14 @@
  * and suppression stay tenant-wide. Transactional and security messages are
  * unchanged.
  *
+ * ## Port version 1.3.0 — Meta multi-WABA sender binding (Issue #1143)
+ *
+ * ADDITIVE: two new refusal reasons, `TEMPLATE_NOT_APPROVED` and
+ * `OUTSIDE_SERVICE_WINDOW`, returned only for a message through a TENANT-OWNED
+ * Meta Cloud API number (never for the deployment sender, never for
+ * StarSender). The verified sender identity (phone number id and WABA id) is
+ * snapshotted on the row; no input field changed.
+ *
  * - The sender is `senderAccountId`, else the prospective default of the
  *   message's business scope, else the deployment sender, and is SNAPSHOTTED on
  *   the queue row. It is never a token, a phone number id or a device id: the
@@ -137,7 +145,21 @@ export type EnqueueWhatsappRefusalReason =
    * real scope of the tenant (unknown type, unknown, foreign, deleted or
    * inactive id; only `office` resolves today). Nothing is queued.
    */
-  | "BUSINESS_SCOPE_UNRESOLVED";
+  | "BUSINESS_SCOPE_UNRESOLVED"
+  /**
+   * Port 1.3.0 (Issue #1143). The message goes through a tenant-owned Meta
+   * Cloud API number, and its template has no APPROVED (or REINSTATED)
+   * approval of the category the purpose requires on THAT number's WABA; or
+   * it is marketing without a provider template. Nothing is queued, never sent
+   * as free text, never through another number.
+   */
+  | "TEMPLATE_NOT_APPROVED"
+  /**
+   * Port 1.3.0 (Issue #1143). A free-text (no provider template) message
+   * through a tenant-owned Meta number while the recipient's 24-hour
+   * customer-service window with THAT number is closed. Nothing is queued.
+   */
+  | "OUTSIDE_SERVICE_WINDOW";
 
 export type EnqueueWhatsappResult =
   | { status: "queued"; messageId: string }

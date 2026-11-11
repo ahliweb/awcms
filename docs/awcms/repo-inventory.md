@@ -608,8 +608,12 @@
 | `awcms_whatsapp_consents`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_delivery_attempts`             | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
 | `awcms_whatsapp_messages`                      | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_meta_sender_signals`           | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
+| `awcms_whatsapp_meta_templates`                | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
 | `awcms_whatsapp_sender_policies`               | `sql/322_awcms_whatsapp_sender_routing.sql`                | yes | yes   |
+| `awcms_whatsapp_service_windows`               | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
 | `awcms_whatsapp_suppressions`                  | `sql/178_awcms_whatsapp_delivery_schema.sql`               | yes | yes   |
+| `awcms_whatsapp_webhook_receipts`              | `sql/365_awcms_whatsapp_meta_sender_binding.sql`           | yes | yes   |
 | `awcms_workflow_decisions`                     | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_definitions`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |
 | `awcms_workflow_delegations`                   | `sql/013_awcms_workflow_approval_schema.sql`               | yes | yes   |

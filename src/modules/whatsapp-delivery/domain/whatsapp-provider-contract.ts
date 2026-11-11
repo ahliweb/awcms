@@ -23,6 +23,14 @@ export type WhatsappSendRequest = {
   parameters: readonly string[];
   /** Propagated to provider requests and logs. Never a dedupe key. */
   correlationId?: string;
+  /**
+   * Issue #1143, Meta only. Set by the DISPATCHER (never a caller) when the row
+   * has no provider template and it verified, immediately before the send,
+   * that the recipient's 24-hour customer-service window with THIS sender is
+   * open: the adapter may then send `body` as a free-text service message.
+   * Absent: a Meta adapter sends templates only, exactly as before.
+   */
+  serviceWindowOpen?: boolean;
 };
 
 /**
