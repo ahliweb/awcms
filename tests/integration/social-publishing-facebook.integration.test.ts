@@ -27,6 +27,7 @@ import {
   beforeEach,
   describe,
   expect,
+  spyOn,
   test
 } from "bun:test";
 
@@ -76,6 +77,7 @@ import {
   probeSocialDispatchWriteBoundary,
   probeSocialSourceRecheck
 } from "../../scripts/security-readiness";
+import { PUBLICATION_SOURCE_CHECKS } from "../../scripts/social-publishing-dispatch";
 
 const TENANT_A = "a1146000-0000-4000-8000-00000000000a";
 const TENANT_B = "a1146000-0000-4000-8000-00000000000b";
@@ -177,11 +179,9 @@ function dispatch(
     publishers,
     credentials,
     health: publishers,
-    // The REAL source re-check (ADR-0157 L8), exactly as the script composes it.
-    sources: {
-      articles: articlePublicationStatusAdapter,
-      media: mediaPublicationRecheckAdapter
-    },
+    // The REAL source re-check (ADR-0157 L8): the very value the production
+    // composition root hands the dispatcher (the #1274 audit, M1).
+    sources: PUBLICATION_SOURCE_CHECKS,
     registry,
     env: ENV,
     clock: at(0),
@@ -1231,6 +1231,99 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
       expect((await jobsOf(pub.publicationId!))[0]!.status).toBe("published");
     });
 
+    test("M1 (#1274 audit): the production composition root's checks are the two module adapters, and they stop a retracted article and a revoked media object", async () => {
+      // Structural: the script composes exactly the adapters of the modules
+      // that own the facts, never a stub.
+      expect(PUBLICATION_SOURCE_CHECKS.articles).toBe(
+        articlePublicationStatusAdapter
+      );
+      expect(PUBLICATION_SOURCE_CHECKS.media).toBe(
+        mediaPublicationRecheckAdapter
+      );
+
+      const archived = await queueArticle(TENANT_A);
+      const revoked = await queueArticle(TENANT_A);
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET status = 'archived'
+        WHERE id = ${archived.articleId}
+      `;
+      await getAdminSql()`
+        UPDATE awcms_news_media_objects
+        SET rights_verification_status = 'rejected'
+        WHERE id = ${revoked.mediaObjectId}
+      `;
+
+      const result = await dispatchSocialPublishQueue(roleSql(), TENANT_A, {
+        publishers,
+        credentials,
+        health: publishers,
+        sources: PUBLICATION_SOURCE_CHECKS,
+        registry,
+        env: ENV,
+        clock: at(0),
+        http: () => graphHttp
+      });
+
+      expect(result).toMatchObject({ claimed: 2, published: 0, failed: 2 });
+      expect(graphCalls).toHaveLength(0);
+      expect((await jobsOf(archived.pub.publicationId!))[0]).toMatchObject({
+        status: "failed",
+        failure_code: "SOURCE_RETRACTED"
+      });
+      expect((await jobsOf(revoked.pub.publicationId!))[0]).toMatchObject({
+        status: "failed",
+        failure_code: "MEDIA_RIGHTS_REVOKED"
+      });
+    });
+
+    test("M2 (#1274 audit): a MANUAL publication's media is re-checked too: rights rejected after enqueue is not sent", async () => {
+      const page = await seedPage(TENANT_A);
+      const mediaObjectId = await seedMedia(TENANT_A);
+      const pub = await enqueue(
+        TENANT_A,
+        input([page.id], { snapshot: snapshot(jpegFacts()), mediaObjectId })
+      );
+
+      expect(pub.jobsCreated).toBe(1);
+
+      await getAdminSql()`
+        UPDATE awcms_news_media_objects
+        SET rights_verification_status = 'rejected'
+        WHERE id = ${mediaObjectId}
+      `;
+
+      await dispatch(TENANT_A);
+      await expectStopped(pub.publicationId!, "MEDIA_RIGHTS_REVOKED");
+    });
+
+    test("L1 (#1274 audit): no credential is resolved for a withdrawn job, and one is for the publishable sibling", async () => {
+      const kept = await queueArticle(TENANT_A);
+      const stopped = await queueArticle(TENANT_A);
+      const asked: string[] = [];
+
+      await getAdminSql()`
+        UPDATE awcms_blog_posts SET status = 'archived'
+        WHERE id = ${stopped.articleId}
+      `;
+
+      const result = await dispatch(TENANT_A, {
+        credentials: {
+          async resolvePublishCredential(tx, request) {
+            asked.push(request.accountId);
+
+            return credentials.resolvePublishCredential(tx, request);
+          }
+        }
+      });
+
+      expect(result).toMatchObject({ published: 1, failed: 1 });
+      // The positive control proves the spy is wired; the withdrawn job's
+      // account was never asked for (nothing decrypted for it).
+      expect(asked).toEqual([kept.page.id]);
+      expect(asked).not.toContain(stopped.page.id);
+    });
+
     test("an article unpublished (archived) after enqueue is not sent: SOURCE_RETRACTED", async () => {
       const { pub, articleId } = await queueArticle(TENANT_A);
 
@@ -1368,19 +1461,48 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
 
     test("a check that cannot be answered is never 'may send': the job waits (SOURCE_CHECK_UNAVAILABLE) and nothing is sent", async () => {
       const { pub } = await queueArticle(TENANT_A);
-      const result = await dispatch(TENANT_A, {
-        sources: {
-          articles: {
-            async checkArticlePublished(tx) {
-              // A real database error inside the pre-send transaction.
-              await tx`SELECT 1 / 0`;
-
-              return { published: true };
-            }
-          },
-          media: mediaPublicationRecheckAdapter
-        }
+      const lines: string[] = [];
+      const spy = spyOn(console, "log").mockImplementation((line: unknown) => {
+        lines.push(String(line));
       });
+      let result: Awaited<ReturnType<typeof dispatch>>;
+
+      try {
+        result = await dispatch(TENANT_A, {
+          sources: {
+            articles: {
+              async checkArticlePublished(tx) {
+                // A real database error inside the pre-send transaction.
+                await tx`SELECT 1 / 0`;
+
+                return { published: true };
+              }
+            },
+            media: mediaPublicationRecheckAdapter
+          }
+        });
+      } finally {
+        spy.mockRestore();
+      }
+
+      // L6 (#1274 audit): the operator gets the job and the SQLSTATE
+      // (22012, division_by_zero), never the database's message text.
+      const [queued] = await jobsOf(pub.publicationId!);
+      const failure = lines
+        .map((line) => {
+          try {
+            return JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            return {};
+          }
+        })
+        .find(
+          (entry) =>
+            entry.message === "social_publishing.dispatch.source_check_failed"
+        );
+
+      expect(failure).toMatchObject({ jobId: queued!.id, sqlState: "22012" });
+      expect(JSON.stringify(failure)).not.toContain("division");
 
       expect(result).toMatchObject({ published: 0, retried: 1 });
       expect(graphCalls).toHaveLength(0);
@@ -1426,7 +1548,9 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
       }
 
       // A tenant argument that is not the transaction's tenant RAISES: it is
-      // never answered (no cross-tenant oracle through the function).
+      // never answered. That stops a bug that mixes two tenants up, NOT a
+      // hostile dispatcher (the role sets its own transaction tenant); what
+      // bounds that one is the closed code per unguessable id, with no listing.
       let mismatch = false;
 
       try {
@@ -1555,6 +1679,22 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
         "a wider column read for the owner role",
         "GRANT SELECT (public_url) ON awcms_news_media_objects TO awcms_social_source_check",
         "REVOKE SELECT (public_url) ON awcms_news_media_objects FROM awcms_social_source_check"
+      ],
+      [
+        // The #1274 audit, L3 (X1): the two pins alone did not close the set.
+        "a third function owned by the owner role and executable by the dispatcher",
+        "CREATE FUNCTION awcms_social_source_extra(p uuid) RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $f$ SELECT 'x'::text $f$; REVOKE ALL ON FUNCTION awcms_social_source_extra(uuid) FROM PUBLIC; GRANT EXECUTE ON FUNCTION awcms_social_source_extra(uuid) TO awcms_social_dispatch; ALTER FUNCTION awcms_social_source_extra(uuid) OWNER TO awcms_social_source_check",
+        "DROP FUNCTION awcms_social_source_extra(uuid)"
+      ],
+      [
+        "a function owned by the owner role that the dispatcher cannot even execute",
+        "CREATE FUNCTION awcms_social_source_extra(p uuid) RETURNS text LANGUAGE sql STABLE SET search_path = public, pg_temp AS $f$ SELECT 'x'::text $f$; REVOKE ALL ON FUNCTION awcms_social_source_extra(uuid) FROM PUBLIC; ALTER FUNCTION awcms_social_source_extra(uuid) OWNER TO awcms_social_source_check",
+        "DROP FUNCTION awcms_social_source_extra(uuid)"
+      ],
+      [
+        "an unreviewed SECURITY DEFINER function of another owner, executable by the dispatcher through PUBLIC",
+        "CREATE FUNCTION awcms_social_unreviewed_definer() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $f$ SELECT 'x'::text $f$",
+        "DROP FUNCTION awcms_social_unreviewed_definer()"
       ]
     ];
 

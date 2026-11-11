@@ -266,7 +266,7 @@ type SourceWithdrawnCode = "SOURCE_RETRACTED" | MediaPublicationRefusal;
 
 /** What the pre-send transaction decided. Only `checked` may go on to a provider call. */
 type PreSend =
-  | { kind: "unchecked" }
+  | { kind: "unchecked"; sqlState: string | null }
   | { kind: "withdrawn"; code: SourceWithdrawnCode }
   | {
       kind: "checked";
@@ -1035,6 +1035,20 @@ function ambiguous(adapter: SocialPublishAdapter, code: string): FinalOutcome {
 }
 
 /**
+ * The SQLSTATE of a thrown database error (Bun.SQL carries it on `errno`), or
+ * `null`. Only a five-character code is kept: never the message.
+ */
+function sqlStateOf(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+
+  const candidate = (error as { errno?: unknown; code?: unknown }).errno;
+
+  return typeof candidate === "string" && /^[0-9A-Z]{5}$/.test(candidate)
+    ? candidate
+    : null;
+}
+
+/**
  * The L8 re-check (ADR-0157): may this claimed job's source still be published?
  * Asked in the pre-send transaction, before any credential is decrypted. The
  * article is checked first (a retracted article makes its media moot), then the
@@ -1200,9 +1214,10 @@ export async function dispatchSocialPublishQueue(
           withdrawn = await tx.savepoint((sp) =>
             recheckSource(sp, tenantId, job, options.sources)
           );
-        } catch {
-          // The thrown message is never kept (it is a database error).
-          return { kind: "unchecked" };
+        } catch (error) {
+          // The thrown MESSAGE is never kept (it is a database error that may
+          // quote a value); only its SQLSTATE is, for the operator (#1274 L6).
+          return { kind: "unchecked", sqlState: sqlStateOf(error) };
         }
 
         if (withdrawn !== null) return { kind: "withdrawn", code: withdrawn };
@@ -1221,7 +1236,9 @@ export async function dispatchSocialPublishQueue(
       log("error", "social_publishing.dispatch.source_check_failed", {
         tenantId,
         moduleKey: SOCIAL_PUBLISHING_MODULE_KEY,
-        provider: job.provider
+        provider: job.provider,
+        jobId: job.id,
+        sqlState: preSend.sqlState
       });
       await finalise(
         sql,

@@ -3397,7 +3397,8 @@ export async function pinDefinerFunction(
  *   - the two functions answer exactly the reviewed code for each row
  *     (positive controls included, so a function that refuses EVERYTHING does
  *     not pass): a published public or unlisted article is `PUBLISHED`; an
- *     archived, private, deleted, past-unpublish, unknown or other-tenant one is
+ *     archived, private, deleted, scheduled (future `published_at`),
+ *     past-unpublish, unknown or other-tenant one is
  *     `SOURCE_RETRACTED`; a verified media object with verified rights (`owned`,
  *     `fair_use`) is `AVAILABLE`; a deleted, failed, unknown or other-tenant one
  *     is `MEDIA_UNAVAILABLE`; rejected or unverified rights, or an unknown
@@ -3405,7 +3406,8 @@ export async function pinDefinerFunction(
  *   - a tenant argument that is not the transaction tenant RAISES;
  *   - the role cannot read either table directly (its view did not widen).
  *
- * Skipped (and said so) when the connection cannot assume the role.
+ * Skipped when the connection cannot assume the role; `checkWorkerSetupRoleGrants`
+ * then names the skipped probe in its evidence (the #1274 audit, L4).
  */
 export async function probeSocialSourceRecheck(
   db: Bun.SQL
@@ -3442,6 +3444,7 @@ export async function probeSocialSourceRecheck(
           visibility: string;
           deleted?: boolean;
           unpublishedAlready?: boolean;
+          scheduled?: boolean;
         }
       ): Promise<string> => {
         await tx`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
@@ -3454,7 +3457,7 @@ export async function probeSocialSourceRecheck(
              deleted_at)
           VALUES (${tenantId}, ${actor}, 'probe', ${`probe-${seq}`}, '{}'::jsonb,
                   'probe', ${input.status}, ${input.visibility},
-                  ${new Date(Date.now() - 2 * 3600_000)},
+                  ${new Date(Date.now() + (input.scheduled ? 3600_000 : -2 * 3600_000))},
                   ${input.unpublishedAlready ? new Date(Date.now() - 3600_000) : null},
                   ${input.deleted ? new Date() : null})
           RETURNING id
@@ -3552,6 +3555,17 @@ export async function probeSocialSourceRecheck(
           }),
           expected: "SOURCE_RETRACTED",
           label: "an article past its unpublish time"
+        },
+        {
+          // The #1274 audit, L5: published, but its publication moment is
+          // still in the future (scheduled): not yet publicly reachable.
+          id: await article(tenant, {
+            status: "published",
+            visibility: "public",
+            scheduled: true
+          }),
+          expected: "SOURCE_RETRACTED",
+          label: "a scheduled article (published_at in the future)"
         },
         {
           id: crypto.randomUUID(),
@@ -3828,6 +3842,7 @@ export async function checkWorkerSetupRoleGrants(
     const findings: string[] = [];
     const absent: string[] = [];
     const present: string[] = [];
+    const skippedProbes: string[] = [];
 
     for (const { role, grants } of matrices) {
       const roleRows = (await sql`
@@ -4136,6 +4151,45 @@ export async function checkWorkerSetupRoleGrants(
           );
         }
       }
+
+      // The #1274 audit, L3: the two pins say what the reviewed functions ARE,
+      // not that they are the only ones. A third function owned by the owner
+      // role (it can read the posts' and media objects' columns), or any
+      // SECURITY DEFINER function the dispatcher may EXECUTE (directly, through
+      // PUBLIC or a membership), that is not one of the pins is a finding by
+      // itself: the closure of what the role can reach through a definer is
+      // exactly the reviewed list.
+      const reviewedFunctions = new Set(
+        (
+          policy?.socialSourceCheckFunctions ?? SOCIAL_SOURCE_CHECK_FUNCTIONS
+        ).map((pin) => pin.signature)
+      );
+      const reachable = (await sql`
+        SELECT p.oid::regprocedure::text AS signature,
+               pg_get_userbyid(p.proowner) AS owner,
+               p.prosecdef AS definer
+        FROM pg_proc p
+        WHERE p.proowner = to_regrole(${SOCIAL_SOURCE_CHECK_ROLE})::oid
+           OR (p.prosecdef
+               AND has_function_privilege(${SOCIAL_DISPATCH_ROLE}, p.oid, 'EXECUTE'))
+        ORDER BY 1
+      `) as { signature: string; owner: string; definer: boolean }[];
+
+      for (const row of reachable) {
+        if (reviewedFunctions.has(row.signature)) continue;
+
+        findings.push(
+          row.owner === SOCIAL_SOURCE_CHECK_ROLE
+            ? `function ${row.signature} is owned by ${SOCIAL_SOURCE_CHECK_ROLE} and is not a reviewed pin (it runs with that role's reads of the posts and media objects)`
+            : `SECURITY DEFINER function ${row.signature} (owner ${row.owner}) is executable by ${SOCIAL_DISPATCH_ROLE} and is not a reviewed pin`
+        );
+      }
+
+      // The #1274 audit, L4: a probe that could not assume the role did not
+      // prove anything; say so in the evidence instead of passing silently.
+      if (!probe.ran) skippedProbes.push("secret visibility (sql/358)");
+      if (!writeProbe.ran) skippedProbes.push("write boundary (sql/373)");
+      if (!sourceProbe.ran) skippedProbes.push("source re-check (sql/386)");
     }
 
     // Issue #1160 audit L3: the two triggers that make an email sender snapshot
@@ -4248,7 +4302,7 @@ export async function checkWorkerSetupRoleGrants(
       name,
       severity,
       status: "pass",
-      evidence: `Provisioned split role(s) ${present.join(", ")} hold exactly their least-privilege matrix and nothing more (non-super, non-BYPASSRLS, zero grant on every out-of-matrix awcms_% table)${absent.length > 0 ? `; ${absent.join(", ")} not provisioned (DATABASE_URL fallback, fine)` : ""}.`
+      evidence: `Provisioned split role(s) ${present.join(", ")} hold exactly their least-privilege matrix and nothing more (non-super, non-BYPASSRLS, zero grant on every out-of-matrix awcms_% table)${absent.length > 0 ? `; ${absent.join(", ")} not provisioned (DATABASE_URL fallback, fine)` : ""}${skippedProbes.length > 0 ? `; WARNING: behavioural probe(s) NOT run, only the exact pins stood: ${skippedProbes.join(", ")} (this connection can neither SET ROLE ${SOCIAL_DISPATCH_ROLE} nor is it a superuser)` : ""}.`
     };
   } catch (error) {
     return {

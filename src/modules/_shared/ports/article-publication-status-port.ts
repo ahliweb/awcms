@@ -33,9 +33,12 @@ export type ArticlePublicationStatusPort = {
    * deleted, is `published` and publicly reachable (`public` or `unlisted`),
    * its publication moment has passed and its scheduled unpublish moment (if
    * any) has not. Every other case, an unknown id and another tenant's id
-   * included, is `SOURCE_RETRACTED` (no existence oracle). `tx` must already be
-   * scoped to `tenantId`; a mismatch THROWS (a bug, never a verdict). A database
-   * error throws as well: it is never read as "published".
+   * included, is `SOURCE_RETRACTED`. `tx` must already be scoped to
+   * `tenantId`; a mismatch THROWS (42501). That guards against a bug that mixes
+   * two tenants up, not against a hostile dispatcher, which sets its own
+   * transaction tenant: what bounds that one is a single closed code per
+   * unguessable id, with no listing or enumeration. A database error throws as
+   * well: it is never read as "published".
    */
   checkArticlePublished(
     tx: Bun.SQL,

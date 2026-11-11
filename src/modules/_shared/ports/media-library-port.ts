@@ -116,8 +116,10 @@ export type MediaPublicationRecheckPort = {
    * `verified` and its copyright status is a known one (`fair_use` included, as
    * at enqueue). `MEDIA_UNAVAILABLE` for a missing, deleted, other-tenant or
    * no-longer-safe object; `MEDIA_RIGHTS_REVOKED` when the rights no longer
-   * clear it. `tx` must be scoped to `tenantId`; a mismatch or a database error
-   * THROWS and is never read as "eligible".
+   * clear it. `tx` must be scoped to `tenantId`; a mismatch (42501, which
+   * catches a tenant-mixing bug, not a hostile dispatcher that sets its own
+   * transaction tenant) or a database error THROWS and is never read as
+   * "eligible".
    */
   recheckMediaForPublication(
     tx: Bun.SQL,
