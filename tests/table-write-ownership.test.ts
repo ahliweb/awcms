@@ -125,7 +125,8 @@ describe("findSharedTableWrites", () => {
       "awcms_social_publish_jobs",
       "awcms_channel_account_health",
       "awcms_audit_events",
-      "awcms_domain_events"
+      "awcms_domain_events",
+      "awcms_domain_event_deliveries"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {

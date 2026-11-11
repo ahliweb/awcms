@@ -39,7 +39,10 @@ import {
   teardownIntegrationDatabase
 } from "./harness";
 import type { SsrfGuardResult } from "../../src/lib/auth/ssrf-guard";
-import { resetProviderCircuitBreakersForTests } from "../../src/lib/database/circuit-breaker";
+import {
+  resetDatabaseCircuitBreakerForTests,
+  resetProviderCircuitBreakersForTests
+} from "../../src/lib/database/circuit-breaker";
 import { assertConnectedAsSocialDispatchRole } from "../../src/lib/database/social-publishing-dispatch-client";
 import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { createChannelAccountPortAdapter } from "../../src/modules/channel-accounts/application/channel-account-port-adapter";
@@ -673,7 +676,10 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
 
     graphAnswer = (call, n) =>
       n === 1
-        ? { status: 503, body: { error: { code: 2, message: "outage" } } }
+        ? {
+            status: 503,
+            body: { error: { code: 2, is_transient: true, message: "outage" } }
+          }
         : { status: 200, body: { id: `${call.pageId}_77` } };
 
     expect((await dispatch(TENANT_A)).retried).toBe(1);
@@ -787,6 +793,140 @@ suite("the Facebook Pages connector against PostgreSQL", () => {
       );
 
       expect(resolved).toEqual({ ok: true, credential: live.token });
+    });
+
+    test("M1 (#1271 audit): it can neither see another module's event nor deliver one to a consumer", async () => {
+      const foreign = (
+        (await getAdminSql()`
+          INSERT INTO awcms_domain_events
+            (tenant_id, event_type, event_version, aggregate_type,
+             aggregate_id, order_key, producer_module, payload, occurred_at)
+          VALUES (${TENANT_A}, 'awcms.workflow.instance.approved', '1.0',
+                  'workflow_instance', ${TENANT_A}, 'wf', 'workflow_approval',
+                  ${{}}::jsonb, now())
+          RETURNING id, event_sequence
+        `) as { id: string; event_sequence: string }[]
+      )[0]!;
+      const seen = await withTenantOrThrow(
+        roleSql(),
+        TENANT_A,
+        async (tx) =>
+          (await tx`
+          SELECT id FROM awcms_domain_events WHERE id = ${foreign.id}
+        `) as { id: string }[]
+      );
+
+      expect(seen).toEqual([]);
+
+      let refused: { errno?: unknown } | null = null;
+
+      try {
+        await withTenantOrThrow(
+          roleSql(),
+          TENANT_A,
+          (tx) =>
+            tx`
+            INSERT INTO awcms_domain_event_deliveries
+              (tenant_id, event_id, event_sequence, event_type, event_version,
+               order_key, consumer_name)
+            VALUES (${TENANT_A}, ${foreign.id}, ${foreign.event_sequence},
+                    'awcms.social_publishing.job.failed', '1.0', 'wf',
+                    'hr_workforce.attendance_correction_settler')
+          `
+        );
+      } catch (error) {
+        refused = error as { errno?: unknown };
+      } finally {
+        resetDatabaseCircuitBreakerForTests();
+      }
+
+      expect(String(refused?.errno)).toBe("42501");
+    });
+
+    test("L1 (#1271 audit): it cannot flip the dedupe flag of an in-flight job to re-send it; the claim itself still sets it", async () => {
+      const page = await seedPage(TENANT_A);
+      const pub = await enqueue(TENANT_A, input([page.id]));
+      const job = (await jobsOf(pub.publicationId!))[0]!;
+
+      await getAdminSql()`
+        UPDATE awcms_social_publish_jobs SET status = 'publishing',
+               attempt_count = 1
+        WHERE id = ${job.id}
+      `;
+
+      let refused = false;
+
+      try {
+        await withTenantOrThrow(
+          roleSql(),
+          TENANT_A,
+          (tx) =>
+            tx`
+            UPDATE awcms_social_publish_jobs SET dedupe_key_supported = true
+            WHERE id = ${job.id}
+          `
+        );
+      } catch {
+        refused = true;
+      } finally {
+        resetDatabaseCircuitBreakerForTests();
+      }
+
+      expect(refused).toBe(true);
+
+      const row = (await getAdminSql()`
+        SELECT status, dedupe_key_supported FROM awcms_social_publish_jobs
+        WHERE id = ${job.id}
+      `) as { status: string; dedupe_key_supported: boolean }[];
+
+      expect(row[0]).toEqual({
+        status: "publishing",
+        dedupe_key_supported: false
+      });
+    });
+
+    test("L2 (#1271 audit): a member login that SET ROLEs to awcms_social_dispatch is refused at start", async () => {
+      const database = (
+        (await getAdminSql()`SELECT current_database() AS name`) as {
+          name: string;
+        }[]
+      )[0]!.name;
+      const url = new URL(process.env.DATABASE_URL!);
+
+      url.pathname = `/${database}`;
+
+      const member = new Bun.SQL(url.toString(), { max: 1 });
+
+      try {
+        await member.unsafe(`SET ROLE ${ROLE}`);
+
+        let message = "";
+
+        try {
+          await assertConnectedAsSocialDispatchRole(member);
+        } catch (error) {
+          message = (error as Error).message;
+        }
+
+        expect(message).toContain("acting as awcms_social_dispatch");
+      } finally {
+        await member.close({ timeout: 1 });
+      }
+    });
+
+    test("L5 (#1271 audit): reportPublishCredentialRejected says recorded only when it moved the account", async () => {
+      const page = await seedPage(TENANT_A);
+      const report = () =>
+        withTenantOrThrow(roleSql(), TENANT_A, (tx) =>
+          publishers.reportPublishCredentialRejected(tx, {
+            tenantId: TENANT_A,
+            accountId: page.id
+          })
+        );
+
+      expect(await report()).toEqual({ recorded: true });
+      // Already degraded: nothing moved.
+      expect(await report()).toEqual({ recorded: false });
     });
 
     test("it cannot re-queue a failed job, cancel a job, revive a degraded account or degrade a WhatsApp one", async () => {

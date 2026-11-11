@@ -2381,7 +2381,7 @@ export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
     ]
   },
   awcms_domain_events: {
-    SELECT: ["id", "event_sequence"],
+    SELECT: ["id", "event_sequence", "producer_module", "event_type"],
     INSERT: [
       "tenant_id",
       "event_type",
@@ -2400,20 +2400,7 @@ export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
       "occurred_at"
     ]
   },
-  awcms_domain_event_deliveries: {
-    SELECT: ["tenant_id", "event_id", "consumer_name", "replay_of_delivery_id"],
-    INSERT: [
-      "tenant_id",
-      "event_id",
-      "event_sequence",
-      "event_type",
-      "event_version",
-      "order_key",
-      "consumer_name",
-      "max_attempts",
-      "correlation_id"
-    ]
-  },
+  // sql/373 (the #1271 audit, M1): NO grant on awcms_domain_event_deliveries.
   awcms_channel_provider_connections: {
     SELECT: [
       "id",
@@ -2545,12 +2532,12 @@ export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
     withCheck: `((producer_module = 'social_publishing'::text) AND (event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES})))`
   },
   {
-    table: "awcms_domain_event_deliveries",
-    policy: "awcms_domain_event_deliveries_social_dispatch_insert",
+    // The #1271 audit, M1: the role reads back only its own module's events.
+    table: "awcms_domain_events",
+    policy: "awcms_domain_events_social_dispatch_select",
     role: SOCIAL_DISPATCH_ROLE,
-    command: "a",
-    expression: "",
-    withCheck: `(event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES}))`
+    command: "r",
+    expression: `((producer_module = 'social_publishing'::text) AND (event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES})))`
   }
 ];
 
@@ -2983,6 +2970,39 @@ export async function probeSocialDispatchWriteBoundary(
         WHERE tenant_id = ${tenant} AND id = ${reconcile}
       `;
 
+      // The #1271 audit, L1: an in-flight job of a provider that does not
+      // dedupe, whose flag the role must not flip.
+      const inFlight = (
+        (await tx`
+          INSERT INTO awcms_social_publish_jobs
+            (tenant_id, publication_id, channel_account_id, provider,
+             account_kind, variant, idempotency_key)
+          VALUES (${tenant}, ${unknownOutcome}, ${otherFacebook}, 'facebook',
+                  'page', 'text', ${"e".repeat(64)})
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+
+      await tx`
+        UPDATE awcms_social_publish_jobs SET status = 'publishing',
+               attempt_count = 1
+        WHERE tenant_id = ${tenant} AND id = ${inFlight}
+      `;
+
+      // The #1271 audit, M1: another module's event the role must neither see
+      // nor deliver.
+      const foreignEvent = (
+        (await tx`
+          INSERT INTO awcms_domain_events
+            (tenant_id, event_type, event_version, aggregate_type,
+             aggregate_id, order_key, producer_module, payload, occurred_at)
+          VALUES (${tenant}, 'awcms.workflow.instance.approved', '1.0',
+                  'workflow_instance', ${tenant}, 'probe', 'workflow_approval',
+                  ${{}}::jsonb, now())
+          RETURNING id, event_sequence
+        `) as { id: string; event_sequence: string }[]
+      )[0]!;
+
       await tx.unsafe(`SET LOCAL ROLE ${SOCIAL_DISPATCH_ROLE}`);
 
       /** Runs `statement` in a savepoint; returns rows changed (the command tag), or -1 when it was refused. */
@@ -3013,7 +3033,8 @@ export async function probeSocialDispatchWriteBoundary(
         "claiming a queued job",
         await attempt(
           () => tx`
-            UPDATE awcms_social_publish_jobs SET status = 'publishing'
+            UPDATE awcms_social_publish_jobs SET status = 'publishing',
+                   dedupe_key_supported = true
             WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
           `
         ),
@@ -3153,6 +3174,38 @@ export async function probeSocialDispatchWriteBoundary(
                     'probe', ${tenant}, 'probe', 'channel_accounts',
                     ${{}}::jsonb, now())
             RETURNING id
+          `
+        )
+      );
+      expectRows(
+        "reading another module's event id and sequence",
+        await attempt(
+          () => tx`
+            SELECT id, event_sequence FROM awcms_domain_events
+            WHERE id = ${foreignEvent.id}
+          `
+        ),
+        0
+      );
+      expectRefused(
+        "delivering another module's event to a consumer",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_domain_event_deliveries
+              (tenant_id, event_id, event_sequence, event_type, event_version,
+               order_key, consumer_name)
+            VALUES (${tenant}, ${foreignEvent.id}, ${foreignEvent.event_sequence},
+                    'awcms.social_publishing.job.failed', '1.0', 'probe',
+                    'hr_workforce.attendance_correction_settler')
+          `
+        )
+      );
+      expectRefused(
+        "flipping the dedupe flag of an in-flight job",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs SET dedupe_key_supported = true
+            WHERE tenant_id = ${tenant} AND id = ${inFlight}
           `
         )
       );
@@ -3527,6 +3580,30 @@ export async function checkWorkerSetupRoleGrants(
       const writeProbe = await probeSocialDispatchWriteBoundary(sql);
 
       if (writeProbe.finding) findings.push(writeProbe.finding);
+
+      // The #1271 audit, M1: a policy naming the role that is NOT one of the
+      // reviewed pins (a re-added delivery INSERT, a new write path) is a
+      // finding by itself, whatever its expression.
+      const reviewed = new Set(
+        [
+          ...SOCIAL_DISPATCH_PINNED_POLICIES,
+          ...SOCIAL_DISPATCH_WRITE_POLICIES
+        ].map((pin) => `${pin.table}.${pin.policy}`)
+      );
+      const named = (await sql`
+        SELECT c.relname AS table_name, p.polname AS name
+        FROM pg_policy p
+        JOIN pg_class c ON c.oid = p.polrelid
+        WHERE to_regrole(${SOCIAL_DISPATCH_ROLE})::oid = ANY (p.polroles)
+      `) as { table_name: string; name: string }[];
+
+      for (const row of named) {
+        if (!reviewed.has(`${row.table_name}.${row.name}`)) {
+          findings.push(
+            `${row.table_name} policy ${row.name} names ${SOCIAL_DISPATCH_ROLE} and is not a reviewed pin`
+          );
+        }
+      }
     }
 
     // Issue #1160 audit L3: the two triggers that make an email sender snapshot
@@ -6271,21 +6348,8 @@ export const TELEGRAM_ENGAGEMENT_DISPATCH_COLUMN_GRANTS: Record<
       "payload",
       "occurred_at"
     ]
-  },
-  awcms_domain_event_deliveries: {
-    SELECT: ["tenant_id", "event_id", "consumer_name", "replay_of_delivery_id"],
-    INSERT: [
-      "tenant_id",
-      "event_id",
-      "event_sequence",
-      "event_type",
-      "event_version",
-      "order_key",
-      "consumer_name",
-      "max_attempts",
-      "correlation_id"
-    ]
   }
+  // sql/374 (the #1271 audit, M1): the delivery grants were REVOKED.
 };
 
 export type PinnedRolePolicy = {
@@ -6357,11 +6421,14 @@ export const TELEGRAM_ENGAGEMENT_DISPATCH_POLICIES: readonly PinnedRolePolicy[] 
         "((producer_module='telegram_engagement')and(event_type='awcms.telegram_engagement.consent.changed'))"
     },
     {
-      table: "awcms_domain_event_deliveries",
-      name: "awcms_domain_event_deliveries_tge_dispatch_insert",
-      cmd: "a",
-      using: null,
-      check: "(event_type='awcms.telegram_engagement.consent.changed')"
+      // sql/374 (the #1271 audit, M1): the role reads back only its own event;
+      // its delivery INSERT (bound only by the delivery's own event_type) is gone.
+      table: "awcms_domain_events",
+      name: "awcms_domain_events_tge_dispatch_select",
+      cmd: "r",
+      using:
+        "((producer_module='telegram_engagement')and(event_type='awcms.telegram_engagement.consent.changed'))",
+      check: null
     }
   ];
 
@@ -6565,6 +6632,64 @@ export async function checkTelegramEngagementDispatchRole(options?: {
   }
 }
 
+/**
+ * The #1271 audit, L3: the behavioural probes of the dedicated roles
+ * (`awcms_worker`'s secret view, `awcms_social_dispatch`'s secret view and
+ * write boundary, `awcms_telegram_engagement_dispatch`) run only when the
+ * readiness connection can assume the role. On the usual production
+ * `DATABASE_URL` (`awcms_app`) they cannot, and each probe quietly returns
+ * "did not run": the exact policy pins are then the only guard. That is
+ * reported here as a WARNING, naming the roles, instead of passing silently.
+ * Run readiness once with a superuser or role-member connection to prove them.
+ */
+export async function checkDedicatedRoleProbesRan(): Promise<SecurityCheckResult> {
+  const name =
+    "Behavioural probes of the dedicated DB roles ran (not only the policy pins)";
+  const severity: CheckSeverity = "warning";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const rows = (await sql`
+      SELECT r.rolname AS role,
+             (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+               OR pg_has_role(current_user, r.oid, 'MEMBER') AS can
+      FROM pg_roles r
+      WHERE r.rolname IN (${WORKER_ROLE}, ${SOCIAL_DISPATCH_ROLE},
+                          'awcms_telegram_engagement_dispatch')
+      ORDER BY r.rolname
+    `) as { role: string; can: boolean }[];
+    const skipped = rows.filter((row) => !row.can).map((row) => row.role);
+
+    return skipped.length === 0
+      ? {
+          name,
+          severity,
+          status: "pass",
+          evidence:
+            rows.length === 0
+              ? "No dedicated role is provisioned; there is nothing to probe."
+              : `The readiness connection can assume ${rows.map((row) => row.role).join(", ")}, so their rolled-back probes ran.`
+        }
+      : {
+          name,
+          severity,
+          status: "fail",
+          evidence: `The readiness connection cannot assume ${skipped.join(", ")}: their rolled-back behavioural probes did NOT run and only the exact policy pins guarded them. Run security:readiness once with a superuser or a member of those roles to prove what the policies allow and refuse.`
+        };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not tell whether the role probes ran: ${errorMessage(error)}`
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
@@ -6584,6 +6709,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkWorkerSetupRoleGrants(),
     await checkWorkerCredentialColumnsUnreadable(),
     await checkTelegramEngagementDispatchRole(),
+    await checkDedicatedRoleProbesRan(),
     await checkDefinerOwnerRolesNoLogin(),
     checkAbacDefaultDeny(),
     checkDataLifecycleRegistryValid(),

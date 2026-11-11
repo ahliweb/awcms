@@ -234,3 +234,43 @@ export function getSetupDatabaseClient(): Bun.SQL {
 export function buildDedicatedRoleClient(databaseUrl: string): Bun.SQL {
   return buildClient(databaseUrl, "worker");
 }
+
+/**
+ * The start-up check of a dedicated-role job (the #1271 audit, L2): the server
+ * must say this connection IS `roleName` in BOTH senses. `current_user` alone
+ * is not enough: another login that is a member of the role could connect and
+ * `SET ROLE` to it, keeping its own login next to the job's key ring. So
+ * `session_user` (the login itself) must be the role too, and the role must
+ * not be SUPERUSER or BYPASSRLS. The message names roles only, never a
+ * connection string.
+ */
+export async function assertConnectedAsDedicatedRole(
+  sql: Bun.SQL,
+  roleName: string,
+  jobName: string
+): Promise<void> {
+  const rows = (await sql`
+    SELECT current_user AS name, session_user AS login,
+           r.rolsuper AS superuser, r.rolbypassrls AS bypass
+    FROM pg_roles r
+    WHERE r.rolname = current_user
+  `) as {
+    name: string;
+    login: string;
+    superuser: boolean;
+    bypass: boolean;
+  }[];
+  const who = rows[0];
+
+  if (
+    !who ||
+    who.name !== roleName ||
+    who.login !== roleName ||
+    who.superuser ||
+    who.bypass
+  ) {
+    throw new Error(
+      `${jobName} must log in as ${roleName} (session and current user, non-superuser, no BYPASSRLS); connected as ${who?.login ?? "unknown"}${who && who.login !== who.name ? ` acting as ${who.name}` : ""}${who?.superuser ? " (SUPERUSER)" : ""}${who?.bypass ? " (BYPASSRLS)" : ""}.`
+    );
+  }
+}

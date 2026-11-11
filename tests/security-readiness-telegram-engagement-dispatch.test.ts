@@ -219,10 +219,13 @@ describeOrSkip("security:readiness — customer Telegram dispatcher role", () =>
   test("dropping any write-bounding policy fails (pin AND probe)", async () => {
     if (!(await roleExists())) return;
 
-    const source = readFileSync(
-      "sql/353_awcms_telegram_engagement_dispatch_role.sql",
-      "utf8"
-    );
+    // sql/374 (the #1271 audit, M1) adds the event read-back policy.
+    const source =
+      readFileSync(
+        "sql/353_awcms_telegram_engagement_dispatch_role.sql",
+        "utf8"
+      ) +
+      readFileSync("sql/374_awcms_telegram_dispatch_outbox_bounds.sql", "utf8");
 
     for (const pin of TELEGRAM_ENGAGEMENT_DISPATCH_POLICIES) {
       if (pin.name === TELEGRAM_ENGAGEMENT_DISPATCH_POLICY) continue;

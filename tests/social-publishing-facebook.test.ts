@@ -320,7 +320,22 @@ describe("error classification (Graph API error-handling and rate-limiting guide
     [400, graph(341), "rate_limited", "FB_RATE_LIMITED"],
     [400, graph(613), "rate_limited", "FB_RATE_LIMITED"],
     [400, graph(80001), "rate_limited", "FB_RATE_LIMITED"],
-    [503, graph(2), "retryable", "FB_TEMPORARY_OUTAGE"],
+    // L4 of the #1271 audit: code 2 is retried only on a 503 that says it is
+    // transient; otherwise the post may exist.
+    [503, graph(2), "unknown", "FB_TEMPORARY_OUTAGE"],
+    [500, graph(2), "unknown", "FB_TEMPORARY_OUTAGE"],
+    [
+      503,
+      { error: { code: 2, is_transient: true, message: "x" } },
+      "retryable",
+      "FB_TEMPORARY_OUTAGE"
+    ],
+    [
+      500,
+      { error: { code: 2, is_transient: true, message: "x" } },
+      "unknown",
+      "FB_TEMPORARY_OUTAGE"
+    ],
     [400, graph(506), "unknown", "FB_DUPLICATE_POST"],
     [400, graph(368), "rejected", "FB_POLICY_BLOCK"],
     [400, graph(324), "rejected", "FB_MEDIA_REJECTED"],
@@ -565,8 +580,13 @@ describe("the dedicated-role job (ADR-0157 section 6)", () => {
 
     const runner = readFileSync("ops/run-job.sh", "utf8");
 
+    // The generated block names every dedicated-role job (the Telegram
+    // customer dispatcher too, Issue #1156), this one among them.
     expect(runner).toContain(
-      renderRunnerDedicatedRoles(["social-publishing:dispatch"])
+      renderRunnerDedicatedRoles([
+        "social-publishing:dispatch",
+        "telegram-engagement:dispatch"
+      ])
     );
     expect(runner).toMatch(
       /ENVIRON\["DEDICATED"\] == "1" && \(\$1 == "DATABASE_URL" \|\| \$1 == "WORKER_DATABASE_URL" \|\| \$1 == "SETUP_DATABASE_URL"\)\) next/
@@ -606,6 +626,14 @@ describe("the dedicated-role job (ADR-0157 section 6)", () => {
       socialDispatchLoginProblems({
         SOCIAL_PUBLISHING_DATABASE_URL: "postgres://awcms_worker:s@db/awcms",
         WORKER_DATABASE_URL: "postgres://awcms_worker:t@db/awcms"
+      })
+    ).toHaveLength(1);
+
+    // The #1271 audit, L2: the setup login counts as a shared login too.
+    expect(
+      socialDispatchLoginProblems({
+        SOCIAL_PUBLISHING_DATABASE_URL: "postgres://awcms_setup:s@db/awcms",
+        SETUP_DATABASE_URL: "postgres://awcms_setup:t@db/awcms"
       })
     ).toHaveLength(1);
 

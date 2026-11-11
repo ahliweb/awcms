@@ -112,20 +112,24 @@ GRANT INSERT (
 ) ON awcms_audit_events TO awcms_social_dispatch;
 
 -- `awcms.social_publishing.job.published` / `.failed` in the finalise
--- transaction (the outbox, ADR-0006), and their per-consumer deliveries.
+-- transaction (the outbox, ADR-0006). `appendDomainEvent` reads the new row's
+-- id and sequence back (RETURNING), bounded to this module's own events by the
+-- SELECT policy below.
+--
+-- NO grant on `awcms_domain_event_deliveries` (the #1271 audit, M1): no
+-- consumer subscribes to either social event, so `appendDomainEvent` writes no
+-- delivery row for them, and a delivery INSERT bounded only by its own
+-- `event_type` column could point another module's event at any consumer. If a
+-- consumer of these events is ever declared, the dispatcher fails loudly
+-- (permission denied) until a migration grants it a delivery INSERT bound to
+-- the referenced event's producer and type and to the declared consumers.
 GRANT INSERT (
   tenant_id, event_type, event_version, aggregate_type, aggregate_id,
   aggregate_version, order_key, correlation_id, causation_id, producer_module,
   schema_ref, actor_tenant_user_id, actor_profile_id, payload, occurred_at
 ) ON awcms_domain_events TO awcms_social_dispatch;
-GRANT SELECT (id, event_sequence)
+GRANT SELECT (id, event_sequence, producer_module, event_type)
   ON awcms_domain_events TO awcms_social_dispatch;
-GRANT INSERT (
-  tenant_id, event_id, event_sequence, event_type, event_version, order_key,
-  consumer_name, max_attempts, correlation_id
-) ON awcms_domain_event_deliveries TO awcms_social_dispatch;
-GRANT SELECT (tenant_id, event_id, consumer_name, replay_of_delivery_id)
-  ON awcms_domain_event_deliveries TO awcms_social_dispatch;
 
 -- ---------------------------------------------------------------------------
 -- Row and value bounds of every write (RESTRICTIVE, TO awcms_social_dispatch).
@@ -242,17 +246,55 @@ CREATE POLICY awcms_domain_events_social_dispatch_insert
     )
   );
 
-DROP POLICY IF EXISTS awcms_domain_event_deliveries_social_dispatch_insert
-  ON awcms_domain_event_deliveries;
+-- The outbox, read side (the #1271 audit, M1): the role sees only this
+-- module's two events, never another module's event ids and sequences.
+DROP POLICY IF EXISTS awcms_domain_events_social_dispatch_select
+  ON awcms_domain_events;
 
-CREATE POLICY awcms_domain_event_deliveries_social_dispatch_insert
-  ON awcms_domain_event_deliveries
+CREATE POLICY awcms_domain_events_social_dispatch_select
+  ON awcms_domain_events
   AS RESTRICTIVE
-  FOR INSERT
+  FOR SELECT
   TO awcms_social_dispatch
-  WITH CHECK (
-    event_type IN (
+  USING (
+    producer_module = 'social_publishing'
+    AND event_type IN (
       'awcms.social_publishing.job.published',
       'awcms.social_publishing.job.failed'
     )
   );
+
+-- ---------------------------------------------------------------------------
+-- The dedupe flag (the #1271 audit, L1). `dedupe_key_supported` is what lets
+-- the sql/330 guard refuse to re-send a `publishing` job whose provider does not
+-- dedupe. The dispatcher sets it when it CLAIMS a job (queued or retry_wait ->
+-- publishing), from the adapter; as this role it may change it at no other
+-- moment, so it cannot flip it to `true` on an in-flight job and then put that
+-- job back in the queue. Scoped to the role, like the sql/330 worker rule.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION awcms_social_publish_jobs_dedupe_flag_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+  IF current_user = 'awcms_social_dispatch'
+     AND NEW.dedupe_key_supported IS DISTINCT FROM OLD.dedupe_key_supported
+     AND NOT (
+       OLD.status IN ('queued', 'retry_wait') AND NEW.status = 'publishing'
+     ) THEN
+    RAISE EXCEPTION 'the social dispatcher sets dedupe_key_supported only when it claims a job'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS awcms_social_publish_jobs_dedupe_flag_guard
+  ON awcms_social_publish_jobs;
+
+CREATE TRIGGER awcms_social_publish_jobs_dedupe_flag_guard
+  BEFORE UPDATE ON awcms_social_publish_jobs
+  FOR EACH ROW
+  EXECUTE FUNCTION awcms_social_publish_jobs_dedupe_flag_guard();

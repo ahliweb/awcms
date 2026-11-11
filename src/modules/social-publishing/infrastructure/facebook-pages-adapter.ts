@@ -30,7 +30,8 @@
  * | `code` 190 or 102, or subcode 458/459/460/463/464/467/492 | `needs_reauth` (token expired/revoked)  |
  * | `code` 10 or 200-299 (permission missing or withdrawn)  | `needs_reauth` (a person must re-grant)  |
  * | `code` 4, 17, 32, 341, 613, 80001 (throttling)          | `rate_limited` (BUC header sets the wait) |
- * | `code` 2 ("temporary outage, wait and retry")           | `retryable`                              |
+ * | `code` 2 on a 503 that says `is_transient: true`         | `retryable`                              |
+ * | `code` 2 otherwise (the guide says "retry", not "nothing was done") | `unknown`                  |
  * | `code` 506 (duplicate post)                             | `unknown` (our earlier post may exist)   |
  * | `code` 368 (temporarily blocked for policy)             | `rejected` (never retried automatically) |
  * | `code` 100, 324, other 4xx                              | `rejected`                               |
@@ -107,7 +108,12 @@ const THROTTLE_CODES = new Set([4, 17, 32, 341, 613, 80001]);
 /** At most a day: a provider header can lengthen a wait, never park a job forever. */
 const MAX_RETRY_AFTER_SECONDS = 24 * 3600;
 
-type GraphError = { code: number | null; subcode: number | null };
+type GraphError = {
+  code: number | null;
+  subcode: number | null;
+  /** `error.is_transient === true`; not documented on the error-handling guide, so only ever a NARROWING signal. */
+  transient: boolean;
+};
 
 /** Only the two numbers are kept: the message, `fbtrace_id` and user texts are discarded unread. */
 export function parseGraphError(body: unknown): GraphError | null {
@@ -122,7 +128,8 @@ export function parseGraphError(body: unknown): GraphError | null {
 
   return {
     code: asInt((error as { code?: unknown }).code),
-    subcode: asInt((error as { error_subcode?: unknown }).error_subcode)
+    subcode: asInt((error as { error_subcode?: unknown }).error_subcode),
+    transient: (error as { is_transient?: unknown }).is_transient === true
   };
 }
 
@@ -233,10 +240,15 @@ export function classifyGraphResponse(
         };
   }
 
-  // "Temporary outage, wait and retry": the Graph API itself says the request
-  // failed, so retrying cannot post twice.
+  // "Temporary outage, wait and retry" (code 2). The guide tells a client to
+  // retry; it does NOT say the post was not created (the #1271 audit, L4). For
+  // a publish without a dedupe key that is an UNKNOWN outcome, reconciled by an
+  // operator. Only a 503 that also flags itself `is_transient` (Service
+  // Unavailable: the request was not served) is retried automatically.
   if (code === 2) {
-    return { outcome: "retryable", errorCode: "FB_TEMPORARY_OUTAGE" };
+    return status === 503 && graph.transient
+      ? { outcome: "retryable", errorCode: "FB_TEMPORARY_OUTAGE" }
+      : { outcome: "unknown", errorCode: "FB_TEMPORARY_OUTAGE" };
   }
 
   // An identical post was published just before: possibly OUR earlier attempt

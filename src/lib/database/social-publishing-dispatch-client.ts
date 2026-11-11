@@ -19,11 +19,15 @@
  *     The runner withholds them (`dedicatedRoleTargets`); this is the second
  *     line for a host that runs the job some other way.
  *   - {@link assertConnectedAsSocialDispatchRole}: after connecting it asks the
- *     server who it is, and stops unless it is exactly `awcms_social_dispatch`,
- *     not SUPERUSER and not BYPASSRLS (a URL pointing at another login is
- *     refused).
+ *     server who it is, and stops unless both its login (`session_user`) and
+ *     its current user are exactly `awcms_social_dispatch`, not SUPERUSER and
+ *     not BYPASSRLS (a URL pointing at another login, or a member login that
+ *     `SET ROLE`s to it, is refused).
  */
-import { buildDedicatedRoleClient } from "./client";
+import {
+  assertConnectedAsDedicatedRole,
+  buildDedicatedRoleClient
+} from "./client";
 
 export const SOCIAL_DISPATCH_ROLE_NAME = "awcms_social_dispatch";
 
@@ -71,25 +75,17 @@ export function getSocialPublishingDispatchDatabaseClient(): Bun.SQL {
   return client;
 }
 
-/** Throws unless the server says this connection IS the social dispatch role, without SUPERUSER or BYPASSRLS. */
+/**
+ * Throws unless the server says this connection IS the social dispatch role,
+ * as its login AND its current user (a member login that `SET ROLE`s to it is
+ * refused, the #1271 audit L2), without SUPERUSER or BYPASSRLS.
+ */
 export async function assertConnectedAsSocialDispatchRole(
   sql: Bun.SQL
 ): Promise<void> {
-  const rows = (await sql`
-    SELECT current_user AS name, r.rolsuper AS superuser, r.rolbypassrls AS bypass
-    FROM pg_roles r
-    WHERE r.rolname = current_user
-  `) as { name: string; superuser: boolean; bypass: boolean }[];
-  const who = rows[0];
-
-  if (
-    !who ||
-    who.name !== SOCIAL_DISPATCH_ROLE_NAME ||
-    who.superuser ||
-    who.bypass
-  ) {
-    throw new Error(
-      `social-publishing:dispatch must connect as ${SOCIAL_DISPATCH_ROLE_NAME} (non-superuser, no BYPASSRLS); connected as ${who?.name ?? "unknown"}${who?.superuser ? " (SUPERUSER)" : ""}${who?.bypass ? " (BYPASSRLS)" : ""}.`
-    );
-  }
+  await assertConnectedAsDedicatedRole(
+    sql,
+    SOCIAL_DISPATCH_ROLE_NAME,
+    "social-publishing:dispatch"
+  );
 }

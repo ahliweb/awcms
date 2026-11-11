@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](social-publishing.md)
 
-<!-- i18n-source-hash: sha256:4fe4f5d58a0d20ee924c3e6dcf367756fd2944401c11421291b253717b28ae89 -->
+<!-- i18n-source-hash: sha256:02c118d7492de2162499b014f512139a6cc66e8a2803da7b19157be6b529b2a5 -->
 
 # Penerbitan sosial (`social_publishing`)
 

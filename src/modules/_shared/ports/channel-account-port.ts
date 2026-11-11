@@ -192,8 +192,10 @@ export interface ChannelPublisherHealthPort {
    * reason {@link PUBLISH_CREDENTIAL_REJECTED_REASON}. Every other job of the
    * account is then HELD at its next claim (never failed, never rerouted) until a
    * person re-authorises. Never moves an account to `connected`, never touches a
-   * revoked, disabled, pending or deleted one; `recorded: false` when the account
-   * is not a live publisher of the caller's tenant.
+   * revoked, disabled, pending or deleted one. `recorded` is `true` only when
+   * THIS call moved the account from `connected` to `degraded` (one row; the
+   * #1271 audit, L5): an account already degraded, not `connected`, or not a
+   * live publisher of the caller's tenant answers `false`.
    */
   reportPublishCredentialRejected(
     tx: Bun.SQL,
