@@ -119,7 +119,10 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_secrets",
       "awcms_channel_account_capabilities",
       "awcms_telegram_engagement_endpoints",
-      "awcms_telegram_engagement_contacts"
+      "awcms_telegram_engagement_contacts",
+      // #1161 M-3 of the PR #1272 audit: the rolled-back retention-floor probe.
+      "awcms_channel_webhook_subscriptions",
+      "awcms_email_provider_events"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
