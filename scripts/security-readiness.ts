@@ -765,6 +765,11 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // revoked, a contact ended in place, a message finalised; only the retention
   // job may purge receipts and messages) and UPDATE on the two append-only
   // ledgers (consent evidence and receipts are evidence, a correction is a new row).
+  // `sql/379` (Issue #1161). NOT retired -- the quarantine of provider-reported
+  // events, actively written (and reviewed, hence UPDATE). The runtime role has
+  // no DELETE at all: nothing in the request path deletes evidence, only the
+  // retention job (`awcms_worker`, under a restrictive floor and a trigger) does.
+  awcms_email_provider_events: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_endpoints: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_contacts: ["SELECT", "INSERT", "UPDATE"],
   awcms_telegram_engagement_consents: ["SELECT", "INSERT"],
