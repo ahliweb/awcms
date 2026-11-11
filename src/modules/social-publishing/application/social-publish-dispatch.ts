@@ -151,6 +151,8 @@ export type DispatchSocialPublishResult = {
   superseded: number;
   skippedBreaker: number;
   skippedQuota: number;
+  /** Another dispatcher held the account's lock: not claimed in this pass, taken by the next. */
+  skippedBusy: number;
 };
 
 type Candidate = {
@@ -188,7 +190,8 @@ function zero(): DispatchSocialPublishResult {
     unknown: 0,
     superseded: 0,
     skippedBreaker: 0,
-    skippedQuota: 0
+    skippedQuota: 0,
+    skippedBusy: 0
   };
 }
 
@@ -323,9 +326,22 @@ async function claim(
 
       // The cap is decided under a per-account lock so two dispatchers cannot
       // each see room for the same last slot.
-      await tx`
-        SELECT pg_advisory_xact_lock(hashtextextended(${`social_publishing:${tenantId}:${accountId}`}, 0))
-      `;
+      //
+      // TRY, never wait (PR #1261 follow-up, a real 40P01 in CI): the work
+      // order above is fairness order (first appearance), and two dispatchers
+      // can meet the same accounts in OPPOSITE orders, so a blocking lock per
+      // account can deadlock. An account another dispatcher holds right now is
+      // skipped for this pass (`skippedBusy`) and taken by the next one; its
+      // rows were never claimed, so nothing is lost. The quota semantics are
+      // unchanged: the cap is still decided only while this lock is held.
+      const locked = (await tx`
+        SELECT pg_try_advisory_xact_lock(hashtextextended(${`social_publishing:${tenantId}:${accountId}`}, 0)) AS ok
+      `) as { ok: boolean }[];
+
+      if (locked[0]?.ok !== true) {
+        result.skippedBusy += rows.length;
+        continue;
+      }
 
       const usedRows = (await tx`
         SELECT count(*)::int AS used FROM awcms_social_publish_jobs

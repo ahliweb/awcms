@@ -2206,6 +2206,61 @@ suite("social_publishing against PostgreSQL", () => {
       expect(states).toEqual([{ status: "published", n: 12 }]);
     });
 
+    test("two dispatchers meeting accounts in OPPOSITE orders never deadlock: a busy account is skipped and taken by the next pass (PR #1261 40P01)", async () => {
+      const first = await seedAccount(TENANT_A, { provider: "facebook" });
+      const second = await seedAccount(TENANT_A, { provider: "linkedin" });
+
+      // `first` is due before `second`, so the dispatcher works first -> second.
+      await enqueue(TENANT_A, enqueueInput([first.id]));
+      await enqueue(TENANT_A, enqueueInput([second.id]));
+
+      const key = (accountId: string) =>
+        `social_publishing:${TENANT_A}:${accountId}`;
+      let resolveOther!: () => void;
+      const otherMayFinish = new Promise<void>((resolve) => {
+        resolveOther = resolve;
+      });
+      let otherHolds!: () => void;
+      const otherHolding = new Promise<void>((resolve) => {
+        otherHolds = resolve;
+      });
+
+      // The "other dispatcher", working in the REVERSED order: it holds
+      // `second` and will ask for `first` once our dispatcher holds it. With a
+      // blocking per-account lock this is a textbook cycle (40P01).
+      const other = getAdminSql().begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(hashtextextended(${key(second.id)}, 0))`;
+        otherHolds();
+        await otherMayFinish;
+        await tx`SELECT pg_advisory_xact_lock(hashtextextended(${key(first.id)}, 0))`;
+      });
+
+      await otherHolding;
+
+      const timeout = new Promise<"blocked">((resolve) =>
+        setTimeout(() => resolve("blocked"), 10_000)
+      );
+      const pass = await Promise.race([dispatch(TENANT_A), timeout]);
+
+      resolveOther();
+      await other;
+
+      expect(pass).not.toBe("blocked");
+
+      const result = pass as Awaited<ReturnType<typeof dispatch>>;
+
+      expect(result.skippedBusy).toBe(1);
+      expect(result.published).toBe(1);
+      expect(fb.calls).toHaveLength(1);
+      expect(li.calls).toHaveLength(0);
+
+      // The next pass takes the account that was busy.
+      const next = await dispatch(TENANT_A);
+
+      expect(next.published).toBe(1);
+      expect(li.calls).toHaveLength(1);
+    });
+
     test("one account's backlog cannot starve another's", async () => {
       const busy = await seedAccount(TENANT_A, { provider: "facebook" });
       const quiet = await seedAccount(TENANT_A, { provider: "linkedin" });
