@@ -199,6 +199,13 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # window (legal-hold gated, bounded batches).
 35 3 * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-purge.lock $AWCMS_RUN_JOB sync:objects:purge >> $AWCMS_JOB_LOG/sync-objects-purge.log 2>&1
 
+# telegram_engagement — For every active tenant: finish bot registrations,
+# rotations and revocations with Telegram (getMe, setWebhook, deleteWebhook)
+# and drain the customer outbound queue (claim lease, re-check consent and
+# capability, per-bot and per-chat pacing, 429 retry_after, per-bot breaker
+# and daily ceiling, uncertain sends never retried).
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/telegram-engagement-dispatch.lock $AWCMS_RUN_JOB telegram-engagement:dispatch >> $AWCMS_JOB_LOG/telegram-engagement-dispatch.log 2>&1
+
 # telegram_delivery — Drain the due Telegram queue (tenant gate, binding and
 # principal re-check, per-chat spacing, global rate ceiling, retry_after
 # handling, circuit breaker, suspension of an unreachable chat) for every

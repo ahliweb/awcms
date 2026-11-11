@@ -2052,6 +2052,46 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/telegram-engagement/bots/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/bots/[id]/rotate.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/bots/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/consent-prompts.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/erase.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/[id]/messages.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/telegram-engagement/contacts/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/telegram/bindings/[id]/revoke.ts",
       "workClass": "interactive",
       "source": "factory"

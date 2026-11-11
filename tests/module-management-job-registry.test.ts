@@ -133,6 +133,7 @@ describe("fetchModuleJobs", () => {
         "bun run telegram:chat:rekey",
         "bun run telegram:dispatch",
         "bun run telegram:queue:purge",
+        "bun run telegram-engagement:dispatch",
         "bun run tenant-domain:dns:sync",
         "bun run whatsapp:dispatch",
         "bun run whatsapp:queue:purge",

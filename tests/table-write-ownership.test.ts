@@ -117,12 +117,15 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_accounts",
       "awcms_channel_provider_connections",
       "awcms_channel_secrets",
-      "awcms_channel_account_capabilities"
+      "awcms_channel_account_capabilities",
+      "awcms_telegram_engagement_endpoints",
+      "awcms_telegram_engagement_contacts"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
       // Tooling exceptions: the rolled-back behavioural probes (#1145 M-1 in
-      // `scripts/security-readiness.ts`, #1160 M3 in `scripts/lib/worker-secret-probe.ts`).
+      // `scripts/security-readiness.ts`, #1160 M3 in `scripts/lib/worker-secret-probe.ts`,
+      // #1156 M-A/M-B in `scripts/lib/telegram-engagement-dispatch-probe.ts`).
       // Each forgives only the tooling writer, only on the tables it seeds, and
       // only with a reason that says the transaction always rolls back.
       if (entry.excusedOwner === "(scripts tooling)") {
