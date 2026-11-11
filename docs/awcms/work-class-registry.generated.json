@@ -2696,12 +2696,6 @@
       "rationale": "Recurring per-tenant search index reconciliation (site-search:reconcile, ADR-0040) — drives user-visible public search freshness, same dispatcher profile as domain-events-dispatch rather than a maintenance purge."
     },
     {
-      "path": "scripts/social-publishing-dispatch.ts",
-      "workClass": "background_sync",
-      "source": "registry",
-      "rationale": "Outbox dispatcher (social-publishing:dispatch, ADR-0157), recommended every 2 minutes — the same profile as push/email/whatsapp dispatch, and every transaction inside social-publish-dispatch.ts goes through inTenantWork, which passes workClass: \"background_sync\" explicitly."
-    },
-    {
       "path": "scripts/social-publishing-retention-purge.ts",
       "workClass": "maintenance",
       "source": "registry",

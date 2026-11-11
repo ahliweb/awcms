@@ -22,19 +22,21 @@
  * caller's tenant-scoped transaction (RLS `FORCE`), so another tenant's account
  * and an unknown id are one answer: `ACCOUNT_NOT_FOUND`.
  */
-import type {
-  ChannelAccountPort,
-  ChannelEmailAccountDirectoryPort,
-  ChannelEmailSenderPort,
-  EmailAccountSummary,
-  ChannelPublisherPort,
-  EmailSenderUnavailableReason,
-  PublisherUnavailableReason,
-  ResolveEmailSenderResult,
-  ResolvePublisherResult,
-  ResolveWhatsappSenderResult,
-  SenderUnavailableReason,
-  WhatsappSenderProvider
+import {
+  PUBLISH_CREDENTIAL_REJECTED_REASON,
+  type ChannelAccountPort,
+  type ChannelEmailAccountDirectoryPort,
+  type ChannelEmailSenderPort,
+  type EmailAccountSummary,
+  type ChannelPublisherHealthPort,
+  type ChannelPublisherPort,
+  type EmailSenderUnavailableReason,
+  type PublisherUnavailableReason,
+  type ResolveEmailSenderResult,
+  type ResolvePublisherResult,
+  type ResolveWhatsappSenderResult,
+  type SenderUnavailableReason,
+  type WhatsappSenderProvider
 } from "../../_shared/ports/channel-account-port";
 import { isChannelAccountsEnabled } from "../domain/channel-accounts-constants";
 import {
@@ -376,7 +378,10 @@ export function isPublisherShape(
 
 export function createChannelAccountPortAdapter(
   options: ChannelAccountPortOptions = {}
-): ChannelAccountPort & ChannelPublisherPort & ChannelEmailSenderPort {
+): ChannelAccountPort &
+  ChannelPublisherPort &
+  ChannelEmailSenderPort &
+  ChannelPublisherHealthPort {
   const envOf = () => options.env ?? process.env;
 
   return {
@@ -539,6 +544,56 @@ export function createChannelAccountPortAdapter(
           displayName
         }
       };
+    },
+
+    /**
+     * Issue #1146: the provider refused a publisher's credential. The same
+     * transition `recordAccountHealth` makes for a `failing` report (connected
+     * -> degraded, a fixed reason, the latest health row), written here with the
+     * few columns the social dispatcher's role holds (`sql/373`) instead of
+     * through `fetchAccountRecord`, which reads columns that role is not granted
+     * (the display name among them). Its RESTRICTIVE policies refuse anything
+     * else: only a live social account, only `connected` -> `degraded`, only a
+     * `failing` health row.
+     */
+    async reportPublishCredentialRejected(tx, input) {
+      const accounts = (await tx`
+        SELECT id, provider, account_kind FROM awcms_channel_accounts
+        WHERE tenant_id = ${input.tenantId} AND id = ${input.accountId}
+          AND deleted_at IS NULL
+      `) as { id: string; provider: string; account_kind: string }[];
+      const account = accounts[0];
+
+      if (
+        !account ||
+        !isPublisherShape(account.provider, account.account_kind)
+      ) {
+        return { recorded: false };
+      }
+
+      await tx`
+        INSERT INTO awcms_channel_account_health
+          (tenant_id, account_id, state, reason_code, checked_at)
+        VALUES (${input.tenantId}, ${account.id}, 'failing',
+                ${PUBLISH_CREDENTIAL_REJECTED_REASON}, now())
+        ON CONFLICT (tenant_id, account_id) DO UPDATE
+        SET state = EXCLUDED.state, reason_code = EXCLUDED.reason_code,
+            checked_at = EXCLUDED.checked_at, updated_at = now()
+      `;
+      const degraded = (await tx`
+        UPDATE awcms_channel_accounts
+        SET status = 'degraded',
+            status_reason = ${PUBLISH_CREDENTIAL_REJECTED_REASON},
+            updated_at = now(), version = version + 1
+        WHERE tenant_id = ${input.tenantId} AND id = ${account.id}
+          AND status = 'connected' AND deleted_at IS NULL
+      `) as unknown[] & { count?: number };
+
+      // The #1271 audit, L5: `recorded` says whether THIS call moved the
+      // account to `degraded` (one row updated), not merely that a health row
+      // was written. An account already degraded, revoked or disabled answers
+      // `false`, and the audit row's `accountDegraded` says the same.
+      return { recorded: (degraded.count ?? 0) === 1 };
     }
   };
 }
@@ -546,7 +601,8 @@ export function createChannelAccountPortAdapter(
 /** The adapter the composition roots hand to `whatsapp_delivery`, `social_publishing` and `email`. Reads `CHANNEL_ACCOUNTS_ENABLED` on every call. */
 export const channelAccountPortAdapter: ChannelAccountPort &
   ChannelPublisherPort &
-  ChannelEmailSenderPort = createChannelAccountPortAdapter();
+  ChannelEmailSenderPort &
+  ChannelPublisherHealthPort = createChannelAccountPortAdapter();
 
 /**
  * Issue #1160: the Mailketing accounts of one tenant and their sender

@@ -149,8 +149,11 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // ADR-0151 section 2) ADDS two more exported ports, `ChannelEmailSenderPort`
     // and `ChannelEmailCredentialPort`, and the refusal `NOT_AN_EMAIL_SENDER`
     // (on the email result type only), for `email`'s tenant-owned Mailketing
-    // senders. Additive again: no signature changed.
-    channel_account: "1.2.0",
+    // senders. Additive again: no signature changed. `1.3.0` (Issue #1146)
+    // ADDS the exported `ChannelPublisherHealthPort` (the social dispatcher
+    // reports a credential the provider refused, which degrades the account).
+    // Additive: a new interface, no signature changed.
+    channel_account: "1.3.0",
     // social_publishing is provided by the base `social_publishing` module
     // (Issue #1145, ADR-0157), port `_shared/ports/social-publishing-port.ts`,
     // which `blog_content` already consumed (optional) while the provider was a

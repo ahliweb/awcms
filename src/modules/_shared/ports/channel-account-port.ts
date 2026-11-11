@@ -177,6 +177,30 @@ export type ResolvePublishCredentialResult =
   | { ok: true; credential: string }
   | { ok: false; reason: PublisherUnavailableReason };
 
+// ---------------------------------------------------------------------------
+// Publisher health (Issue #1146; capability `channel_account` 1.3.0, additive)
+// ---------------------------------------------------------------------------
+
+/** The fixed reason a publisher's account is degraded when its provider refuses the credential. */
+export const PUBLISH_CREDENTIAL_REJECTED_REASON = "PUBLISH_CREDENTIAL_REJECTED";
+
+export interface ChannelPublisherHealthPort {
+  /**
+   * DISPATCHER ONLY. The provider refused the account's credential (an expired
+   * or revoked token, a permission the person withdrew): record a `failing`
+   * health row and move a `connected` account to `degraded` with the fixed
+   * reason {@link PUBLISH_CREDENTIAL_REJECTED_REASON}. Every other job of the
+   * account is then HELD at its next claim (never failed, never rerouted) until a
+   * person re-authorises. Never moves an account to `connected`, never touches a
+   * revoked, disabled, pending or deleted one; `recorded: false` when the account
+   * is not a live publisher of the caller's tenant.
+   */
+  reportPublishCredentialRejected(
+    tx: Bun.SQL,
+    input: ResolvePublisherInput
+  ): Promise<{ recorded: boolean }>;
+}
+
 export interface ChannelPublisherCredentialPort {
   /**
    * DISPATCHER AND PROVIDER ADAPTERS ONLY. Decrypts the credential of an

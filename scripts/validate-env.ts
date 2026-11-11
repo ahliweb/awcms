@@ -478,6 +478,16 @@ const RULES: readonly Rule[] = [
   // needs CHANNEL_ACCOUNTS_ENABLED (checked below): an account registry that is
   // off refuses every account, so nothing could publish.
   { name: "SOCIAL_PUBLISHING_ENABLED", required: false, type: "bool" },
+  {
+    name: "SOCIAL_PUBLISHING_FACEBOOK_ENABLED",
+    required: false,
+    type: "bool"
+  },
+  {
+    name: "SOCIAL_PUBLISHING_DATABASE_URL",
+    required: false,
+    type: "url-postgres"
+  },
 
   // crm_leads (ADR-0153, Issue #1166). Deployment switch, OFF by default: every
   // route answers 503 after authorization. TWO secret rings (ADR-0137 section
@@ -964,8 +974,42 @@ export function crmLeadsKeyProblems(env: EnvBag): string[] {
  * echoed, only the variable names.
  */
 export function telegramDispatchLoginProblems(env: EnvBag): string[] {
-  const userOf = (name: string): string | null => {
-    const raw = (env[name] ?? "").trim();
+  return dedicatedLoginProblems(
+    env,
+    "TELEGRAM_ENGAGEMENT_DATABASE_URL",
+    "TELEGRAM_ENGAGEMENT_DATABASE_URL harus berupa URL postgres dengan user (role awcms_telegram_engagement_dispatch).",
+    (name) =>
+      `TELEGRAM_ENGAGEMENT_DATABASE_URL memakai user yang sama dengan ${name}; dispatcher pelanggan Telegram wajib login sebagai role-nya sendiri (awcms_telegram_engagement_dispatch).`
+  );
+}
+
+/**
+ * Issue #1146 (ADR-0157 section 6): the social dispatcher's login must be its
+ * OWN role, for the same reason as the Telegram one above.
+ */
+export function socialDispatchLoginProblems(env: EnvBag): string[] {
+  return dedicatedLoginProblems(
+    env,
+    "SOCIAL_PUBLISHING_DATABASE_URL",
+    "SOCIAL_PUBLISHING_ENABLED=true membutuhkan SOCIAL_PUBLISHING_DATABASE_URL berupa URL postgres dengan user (role awcms_social_dispatch, sql/358 dan sql/373); job dispatcher tidak pernah jatuh balik ke DATABASE_URL atau WORKER_DATABASE_URL.",
+    (name) =>
+      `SOCIAL_PUBLISHING_DATABASE_URL memakai user yang sama dengan ${name}; dispatcher penerbitan sosial wajib login sebagai role-nya sendiri (awcms_social_dispatch).`
+  );
+}
+
+/**
+ * The shared rule of a dedicated-role job's login: present with a user, and
+ * that user is none of the shared logins (app, worker, and since the #1271
+ * audit L2 the setup one as well). No value is echoed.
+ */
+function dedicatedLoginProblems(
+  env: EnvBag,
+  name: string,
+  missing: string,
+  shared: (sharedName: string) => string
+): string[] {
+  const userOf = (variable: string): string | null => {
+    const raw = (env[variable] ?? "").trim();
 
     if (raw === "") return null;
 
@@ -975,20 +1019,13 @@ export function telegramDispatchLoginProblems(env: EnvBag): string[] {
       return null;
     }
   };
-  const dispatchUser = userOf("TELEGRAM_ENGAGEMENT_DATABASE_URL");
+  const dispatchUser = userOf(name);
 
-  if (dispatchUser === null) {
-    return [
-      "TELEGRAM_ENGAGEMENT_DATABASE_URL harus berupa URL postgres dengan user (role awcms_telegram_engagement_dispatch)."
-    ];
-  }
+  if (dispatchUser === null) return [missing];
 
-  return ["DATABASE_URL", "WORKER_DATABASE_URL"]
-    .filter((name) => userOf(name) === dispatchUser)
-    .map(
-      (name) =>
-        `TELEGRAM_ENGAGEMENT_DATABASE_URL memakai user yang sama dengan ${name}; dispatcher pelanggan Telegram wajib login sebagai role-nya sendiri (awcms_telegram_engagement_dispatch).`
-    );
+  return ["DATABASE_URL", "WORKER_DATABASE_URL", "SETUP_DATABASE_URL"]
+    .filter((sharedName) => userOf(sharedName) === dispatchUser)
+    .map(shared);
 }
 
 export function collectEnvWarnings(env: EnvBag): string[] {
@@ -1308,6 +1345,23 @@ export function validateEnv(env: EnvBag): string[] {
   ) {
     problems.push(
       "SOCIAL_PUBLISHING_ENABLED=true memerlukan CHANNEL_ACCOUNTS_ENABLED=true (penerbitan sosial hanya berjalan lewat akun terhubung dari registri akun kanal; tanpa registri, setiap akun ditolak)."
+    );
+  }
+
+  // Issue #1146 (ADR-0157 section 6): the dispatcher runs ONLY as its own role
+  // awcms_social_dispatch, with no fallback. Enabling the module without that
+  // login is a job that refuses every run; the same user as the app or worker
+  // login would put the channel key ring next to a broader credential.
+  if (env.SOCIAL_PUBLISHING_ENABLED === "true") {
+    problems.push(...socialDispatchLoginProblems(env));
+  }
+
+  if (
+    env.SOCIAL_PUBLISHING_FACEBOOK_ENABLED === "true" &&
+    env.SOCIAL_PUBLISHING_ENABLED !== "true"
+  ) {
+    problems.push(
+      "SOCIAL_PUBLISHING_FACEBOOK_ENABLED=true memerlukan SOCIAL_PUBLISHING_ENABLED=true (konektor Facebook Pages adalah bagian dari modul social_publishing)."
     );
   }
 

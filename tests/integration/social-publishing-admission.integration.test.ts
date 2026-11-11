@@ -441,10 +441,26 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
     test("it holds no other privilege: the social queue, WhatsApp tables, writes to the channel tables and unlisted columns are refused", async () => {
       await seedSocial(TENANT_A);
 
+      // sql/373 (Issue #1146) grants the dispatcher's own columns of the social
+      // queue, the tenant list and a narrow account update (bounded by RESTRICTIVE
+      // policies, tested in social-publishing-facebook.integration.test.ts);
+      // everything below stays refused outright.
       const probes: [string, string][] = [
-        ["read the social queue", "SELECT 1 FROM awcms_social_publish_jobs"],
+        [
+          "read the social queue's creator",
+          "SELECT created_by FROM awcms_social_publish_jobs"
+        ],
+        [
+          "insert a job",
+          "INSERT INTO awcms_social_publish_jobs DEFAULT VALUES"
+        ],
+        ["delete a job", "DELETE FROM awcms_social_publish_jobs"],
+        [
+          "update a publication",
+          "UPDATE awcms_social_publications SET state = 'cancelled'"
+        ],
         ["read WhatsApp messages", "SELECT 1 FROM awcms_whatsapp_messages"],
-        ["read tenants", "SELECT 1 FROM awcms_tenants"],
+        ["read tenant names", "SELECT tenant_name FROM awcms_tenants"],
         [
           "read a display name",
           "SELECT display_name FROM awcms_channel_accounts"
@@ -460,8 +476,12 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
         ],
         ["delete a secret", "DELETE FROM awcms_channel_secrets"],
         [
-          "update an account",
-          "UPDATE awcms_channel_accounts SET status = 'connected'"
+          "update an account's connection",
+          "UPDATE awcms_channel_accounts SET connection_id = connection_id"
+        ],
+        [
+          "update a capability",
+          "UPDATE awcms_channel_account_capabilities SET state = 'granted'"
         ]
       ];
 
@@ -1346,7 +1366,7 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
 
       try {
         await admin.unsafe(
-          "GRANT SELECT ON awcms_social_publish_jobs TO awcms_social_dispatch"
+          "GRANT SELECT ON awcms_whatsapp_messages TO awcms_social_dispatch"
         );
 
         let result;
@@ -1355,7 +1375,7 @@ suite("social_publishing admission conditions against PostgreSQL", () => {
           result = await checkWorkerSetupRoleGrants();
         } finally {
           await admin.unsafe(
-            "REVOKE SELECT ON awcms_social_publish_jobs FROM awcms_social_dispatch"
+            "REVOKE SELECT ON awcms_whatsapp_messages FROM awcms_social_dispatch"
           );
         }
 

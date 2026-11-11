@@ -2283,11 +2283,136 @@ export const SOCIAL_DISPATCH_COLUMN_GRANTS: typeof WORKER_COLUMN_GRANTS = {
       "parent_account_id",
       "secret_id",
       "status",
-      "deleted_at"
-    ]
+      "deleted_at",
+      // sql/373 (Issue #1146): `version = version + 1` of the degrade report.
+      "version"
+    ],
+    UPDATE: ["status", "status_reason", "updated_at", "version"]
   },
   awcms_channel_account_capabilities: {
-    SELECT: ["tenant_id", "account_id", "capability", "state"]
+    SELECT: [
+      "tenant_id",
+      "account_id",
+      "capability",
+      "state",
+      // sql/373: `resolvePublisher` evaluates the evidence and matrix version.
+      "evidence_kind",
+      "evidence_ref",
+      "matrix_version"
+    ]
+  },
+  // sql/373 (Issue #1146): what the WHOLE dispatch job needs once it runs as
+  // this role and nothing else (the dedicated-role job class).
+  awcms_tenants: { SELECT: ["id", "status"] },
+  awcms_tenant_modules: { SELECT: ["tenant_id", "module_key", "enabled"] },
+  awcms_channel_account_health: {
+    SELECT: ["tenant_id", "account_id", "state", "reason_code", "checked_at"],
+    INSERT: ["tenant_id", "account_id", "state", "reason_code", "checked_at"],
+    UPDATE: ["state", "reason_code", "checked_at", "updated_at"]
+  },
+  awcms_social_publications: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "state",
+      "not_before",
+      "title",
+      "caption",
+      "link_url",
+      "media_snapshot"
+    ]
+  },
+  awcms_social_publish_jobs: {
+    SELECT: [
+      "id",
+      "tenant_id",
+      "publication_id",
+      "channel_account_id",
+      "provider",
+      "account_kind",
+      "variant",
+      "idempotency_key",
+      "status",
+      "attempt_count",
+      "max_attempts",
+      "hold_count",
+      "next_attempt_at",
+      "published_at"
+    ],
+    UPDATE: [
+      "status",
+      "attempt_count",
+      "dedupe_key_supported",
+      "next_attempt_at",
+      "external_post_id",
+      "external_post_url",
+      "published_at",
+      "failure_code",
+      "last_error",
+      "hold_count",
+      "updated_at"
+    ]
+  },
+  awcms_social_publish_attempts: {
+    SELECT: ["tenant_id", "job_id", "attempt_no"],
+    INSERT: [
+      "tenant_id",
+      "job_id",
+      "attempt_no",
+      "outcome",
+      "error_code",
+      "error_message"
+    ]
+  },
+  awcms_audit_events: {
+    INSERT: [
+      "tenant_id",
+      "actor_tenant_user_id",
+      "actor_tenant_id",
+      "delegated_grant_id",
+      "module_key",
+      "action",
+      "resource_type",
+      "resource_id",
+      "severity",
+      "message",
+      "attributes",
+      "correlation_id"
+    ]
+  },
+  awcms_domain_events: {
+    SELECT: ["id", "event_sequence"],
+    INSERT: [
+      "tenant_id",
+      "event_type",
+      "event_version",
+      "aggregate_type",
+      "aggregate_id",
+      "aggregate_version",
+      "order_key",
+      "correlation_id",
+      "causation_id",
+      "producer_module",
+      "schema_ref",
+      "actor_tenant_user_id",
+      "actor_profile_id",
+      "payload",
+      "occurred_at"
+    ]
+  },
+  awcms_domain_event_deliveries: {
+    SELECT: ["tenant_id", "event_id", "consumer_name", "replay_of_delivery_id"],
+    INSERT: [
+      "tenant_id",
+      "event_id",
+      "event_sequence",
+      "event_type",
+      "event_version",
+      "order_key",
+      "consumer_name",
+      "max_attempts",
+      "correlation_id"
+    ]
   },
   awcms_channel_provider_connections: {
     SELECT: [
@@ -2319,7 +2444,13 @@ export type PinnedPolicy = {
   role: string;
   /** `pg_policy.polcmd`: r = SELECT, d = DELETE, a = INSERT, w = UPDATE, * = ALL. */
   command: "r" | "a" | "w" | "d" | "*";
+  /** The USING expression; `""` for a policy that has none (an INSERT policy). */
   expression: string;
+  /**
+   * The WITH CHECK expression of a write policy (Issue #1146). Absent means the
+   * policy must have NO WITH CHECK at all, as every read and delete pin does.
+   */
+  withCheck?: string;
 };
 
 export function normalizePolicyExpression(expression: string): string {
@@ -2354,6 +2485,72 @@ export const SOCIAL_DISPATCH_PINNED_POLICIES: readonly PinnedPolicy[] = [
     role: SOCIAL_DISPATCH_ROLE,
     command: "r",
     expression: `(provider = ANY (${SIX_SOCIAL_PROVIDERS}))`
+  }
+];
+
+const SOCIAL_ACCOUNT_OF_HEALTH_ROW =
+  "(EXISTS ( SELECT 1 FROM awcms_channel_accounts a WHERE ((a.tenant_id = awcms_channel_account_health.tenant_id) AND (a.id = awcms_channel_account_health.account_id) AND (a.provider = ANY (" +
+  SIX_SOCIAL_PROVIDERS +
+  ")) AND (a.deleted_at IS NULL))))";
+const SOCIAL_DISPATCH_EVENT_TYPES =
+  "ARRAY['awcms.social_publishing.job.published'::text, 'awcms.social_publishing.job.failed'::text]";
+
+/**
+ * sql/373 (Issue #1146): the row and value bounds of every WRITE the social
+ * dispatcher makes once the whole job runs as `awcms_social_dispatch`. Each is
+ * pinned with its USING and its WITH CHECK, exactly: a widened status list, a
+ * dropped provider test or a `true OR` on either side is a finding.
+ */
+export const SOCIAL_DISPATCH_WRITE_POLICIES: readonly PinnedPolicy[] = [
+  {
+    table: "awcms_social_publish_jobs",
+    policy: "awcms_social_publish_jobs_social_dispatch_update",
+    role: SOCIAL_DISPATCH_ROLE,
+    command: "w",
+    expression:
+      "(status = ANY (ARRAY['queued'::text, 'retry_wait'::text, 'publishing'::text]))",
+    withCheck:
+      "(status = ANY (ARRAY['queued'::text, 'publishing'::text, 'retry_wait'::text, 'published'::text, 'failed'::text, 'needs_reconciliation'::text]))"
+  },
+  {
+    table: "awcms_channel_accounts",
+    policy: "awcms_channel_accounts_social_dispatch_degrade",
+    role: SOCIAL_DISPATCH_ROLE,
+    command: "w",
+    expression: `((provider = ANY (${SIX_SOCIAL_PROVIDERS})) AND (deleted_at IS NULL) AND (status = 'connected'::text))`,
+    withCheck: `((provider = ANY (${SIX_SOCIAL_PROVIDERS})) AND (deleted_at IS NULL) AND (status = 'degraded'::text))`
+  },
+  {
+    table: "awcms_channel_account_health",
+    policy: "awcms_channel_account_health_social_dispatch",
+    role: SOCIAL_DISPATCH_ROLE,
+    command: "*",
+    expression: SOCIAL_ACCOUNT_OF_HEALTH_ROW,
+    withCheck: `((state = 'failing'::text) AND ${SOCIAL_ACCOUNT_OF_HEALTH_ROW})`
+  },
+  {
+    table: "awcms_audit_events",
+    policy: "awcms_audit_events_social_dispatch_insert",
+    role: SOCIAL_DISPATCH_ROLE,
+    command: "a",
+    expression: "",
+    withCheck: "(module_key = 'social_publishing'::text)"
+  },
+  {
+    table: "awcms_domain_events",
+    policy: "awcms_domain_events_social_dispatch_insert",
+    role: SOCIAL_DISPATCH_ROLE,
+    command: "a",
+    expression: "",
+    withCheck: `((producer_module = 'social_publishing'::text) AND (event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES})))`
+  },
+  {
+    table: "awcms_domain_event_deliveries",
+    policy: "awcms_domain_event_deliveries_social_dispatch_insert",
+    role: SOCIAL_DISPATCH_ROLE,
+    command: "a",
+    expression: "",
+    withCheck: `(event_type = ANY (${SOCIAL_DISPATCH_EVENT_TYPES}))`
   }
 ];
 
@@ -2423,7 +2620,7 @@ export async function pinPolicyExpression(
            p.polcmd::text AS command,
            p.polroles = ARRAY[to_regrole(${pin.role})::oid] AS role_ok,
            pg_get_expr(p.polqual, p.polrelid) AS expression,
-           p.polwithcheck IS NULL AS no_check
+           pg_get_expr(p.polwithcheck, p.polrelid) AS with_check
     FROM pg_policy p
     WHERE p.polrelid = to_regclass(${pin.table}) AND p.polname = ${pin.policy}
   `) as {
@@ -2431,7 +2628,7 @@ export async function pinPolicyExpression(
     command: string;
     role_ok: boolean;
     expression: string | null;
-    no_check: boolean;
+    with_check: string | null;
   }[];
   const row = rows[0];
   const label = `${pin.table} restrictive policy ${pin.policy}`;
@@ -2443,9 +2640,18 @@ export async function pinPolicyExpression(
   }
 
   const actual = normalizePolicyExpression(row.expression ?? "");
+  const actualCheck = normalizePolicyExpression(row.with_check ?? "");
+  const checkMatches =
+    pin.withCheck === undefined
+      ? row.with_check === null
+      : actualCheck === normalizePolicyExpression(pin.withCheck);
 
-  if (!row.no_check || actual !== normalizePolicyExpression(pin.expression)) {
-    const excerpt = actual.slice(0, 160);
+  if (!checkMatches || actual !== normalizePolicyExpression(pin.expression)) {
+    const excerpt = (
+      actual !== normalizePolicyExpression(pin.expression)
+        ? actual
+        : actualCheck
+    ).slice(0, 160);
 
     return `${label} no longer matches its reviewed expression exactly (got: ${excerpt}...)`;
   }
@@ -2636,6 +2842,336 @@ export async function probeSocialDispatchSecretVisibility(
     return {
       ran: true,
       finding: `awcms_social_dispatch saw ${visible.length} secret(s) where exactly the one live, publish-granted social access token was expected (the row policies admit WhatsApp, refresh, unreferenced, denied or revoked secrets, or hide the legitimate one)`
+    };
+  }
+
+  return { ran: true };
+}
+
+/**
+ * The behavioural half of the sql/373 write pins (Issue #1146): in ONE
+ * transaction that is always rolled back, seed a throwaway tenant with a live
+ * Facebook account, a WhatsApp account, a revoked Facebook account and three
+ * jobs (queued, failed, needs_reconciliation), `SET LOCAL ROLE
+ * awcms_social_dispatch`, and require that:
+ *
+ *   - the legitimate writes work: claim the queued job, degrade the live
+ *     Facebook account, record a failing health row, write this module's audit
+ *     row (positive controls, so a probe that refuses EVERYTHING does not pass);
+ *   - the role cannot send a failed or unknown job again, cannot cancel a job,
+ *     cannot put a degraded account back to `connected`, cannot touch a WhatsApp
+ *     or revoked account, cannot write an `ok` health row, another module's
+ *     audit row, or another module's event.
+ *
+ * Skipped (and said so) when the connection cannot assume the role.
+ */
+export async function probeSocialDispatchWriteBoundary(
+  db: Bun.SQL
+): Promise<{ ran: boolean; finding?: string }> {
+  const can = (await db`
+    SELECT rolsuper OR pg_has_role(current_user, ${SOCIAL_DISPATCH_ROLE}, 'SET') AS can
+    FROM pg_roles WHERE rolname = current_user
+  `) as { can: boolean }[];
+
+  if (!can[0]?.can) return { ran: false };
+
+  const failures: string[] = [];
+
+  try {
+    await db.begin(async (tx) => {
+      const tenant = crypto.randomUUID();
+      const code = `probe-${tenant.slice(0, 8)}`;
+
+      await tx`
+        INSERT INTO awcms_tenants (id, tenant_code, tenant_name)
+        VALUES (${tenant}, ${code}, ${code})
+      `;
+      await tx`SELECT set_config('app.current_tenant_id', ${tenant}, true)`;
+
+      let seq = 0;
+      const account = async (provider: string, kind: string, status: string) =>
+        (
+          (await tx`
+            INSERT INTO awcms_channel_accounts
+              (tenant_id, provider, account_kind, external_id, display_name,
+               auth_mode, status)
+            VALUES (${tenant}, ${provider}, ${kind}, ${`probe-${(seq += 1)}`},
+                    'probe', 'oauth2', ${status})
+            RETURNING id
+          `) as { id: string }[]
+        )[0]!.id;
+      const facebook = await account("facebook", "page", "connected");
+      const otherFacebook = await account("facebook", "page", "connected");
+      const whatsapp = await account(
+        "whatsapp_cloud",
+        "waba_phone_number",
+        "connected"
+      );
+      const revoked = await account("facebook", "page", "revoked");
+      const publication = (
+        (await tx`
+          INSERT INTO awcms_social_publications
+            (tenant_id, source_kind, trigger_event, state, title, caption,
+             content_hash, approval_required)
+          VALUES (${tenant}, 'manual', 'manual_editor_action', 'ready',
+                  'probe', 'probe', ${"0".repeat(64)}, false)
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+      const job = async (
+        accountId: string,
+        key: string,
+        path: string[]
+      ): Promise<string> => {
+        const id = (
+          (await tx`
+            INSERT INTO awcms_social_publish_jobs
+              (tenant_id, publication_id, channel_account_id, provider,
+               account_kind, variant, idempotency_key)
+            VALUES (${tenant}, ${publication}, ${accountId}, 'facebook', 'page',
+                    'text', ${key.repeat(64)})
+            RETURNING id
+          `) as { id: string }[]
+        )[0]!.id;
+
+        for (const status of path) {
+          await tx`
+            UPDATE awcms_social_publish_jobs SET status = ${status}
+            WHERE tenant_id = ${tenant} AND id = ${id}
+          `;
+        }
+
+        return id;
+      };
+      const queued = await job(facebook, "a", []);
+      const failed = await job(otherFacebook, "b", ["failed"]);
+
+      await tx`
+        UPDATE awcms_social_publish_jobs
+        SET dedupe_key_supported = false
+        WHERE tenant_id = ${tenant} AND id = ${failed}
+      `;
+
+      const unknownOutcome = (
+        (await tx`
+          INSERT INTO awcms_social_publications
+            (tenant_id, source_kind, trigger_event, state, title, caption,
+             content_hash, approval_required)
+          VALUES (${tenant}, 'manual', 'manual_editor_action', 'ready',
+                  'probe2', 'probe2', ${"1".repeat(64)}, false)
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+      const reconcile = (
+        (await tx`
+          INSERT INTO awcms_social_publish_jobs
+            (tenant_id, publication_id, channel_account_id, provider,
+             account_kind, variant, idempotency_key)
+          VALUES (${tenant}, ${unknownOutcome}, ${facebook}, 'facebook', 'page',
+                  'text', ${"c".repeat(64)})
+          RETURNING id
+        `) as { id: string }[]
+      )[0]!.id;
+
+      await tx`
+        UPDATE awcms_social_publish_jobs SET status = 'publishing',
+               attempt_count = 1
+        WHERE tenant_id = ${tenant} AND id = ${reconcile}
+      `;
+      await tx`
+        UPDATE awcms_social_publish_jobs SET status = 'needs_reconciliation'
+        WHERE tenant_id = ${tenant} AND id = ${reconcile}
+      `;
+
+      await tx.unsafe(`SET LOCAL ROLE ${SOCIAL_DISPATCH_ROLE}`);
+
+      /** Runs `statement` in a savepoint; returns rows changed (the command tag), or -1 when it was refused. */
+      const attempt = async (
+        statement: () => Promise<unknown[]>
+      ): Promise<number> => {
+        try {
+          return await tx.savepoint(async () => {
+            const result = (await statement()) as unknown[] & {
+              count?: number;
+            };
+
+            return result.count ?? result.length;
+          });
+        } catch {
+          return -1;
+        }
+      };
+      const expectRows = (what: string, got: number, want: number) => {
+        if (got !== want)
+          failures.push(`${what} (changed ${got}, expected ${want})`);
+      };
+      const expectRefused = (what: string, got: number) => {
+        if (got > 0) failures.push(`${what} was allowed`);
+      };
+
+      expectRows(
+        "claiming a queued job",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs SET status = 'publishing'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
+          `
+        ),
+        1
+      );
+      expectRefused(
+        "re-queueing a failed job",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs SET status = 'queued'
+            WHERE tenant_id = ${tenant} AND id = ${failed} RETURNING id
+          `
+        )
+      );
+      expectRefused(
+        "re-queueing a needs_reconciliation job",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs SET status = 'queued'
+            WHERE tenant_id = ${tenant} AND id = ${reconcile} RETURNING id
+          `
+        )
+      );
+      expectRefused(
+        "cancelling a job",
+        await attempt(
+          () => tx`
+            UPDATE awcms_social_publish_jobs SET status = 'cancelled'
+            WHERE tenant_id = ${tenant} AND id = ${queued} RETURNING id
+          `
+        )
+      );
+      expectRows(
+        "degrading a live Facebook account",
+        await attempt(
+          () => tx`
+            UPDATE awcms_channel_accounts SET status = 'degraded'
+            WHERE tenant_id = ${tenant} AND id = ${facebook} RETURNING id
+          `
+        ),
+        1
+      );
+      expectRefused(
+        "putting a degraded account back to connected",
+        await attempt(
+          () => tx`
+            UPDATE awcms_channel_accounts SET status = 'connected'
+            WHERE tenant_id = ${tenant} AND id = ${facebook} RETURNING id
+          `
+        )
+      );
+      expectRefused(
+        "degrading a WhatsApp account",
+        await attempt(
+          () => tx`
+            UPDATE awcms_channel_accounts SET status = 'degraded'
+            WHERE tenant_id = ${tenant} AND id = ${whatsapp} RETURNING id
+          `
+        )
+      );
+      expectRefused(
+        "reviving a revoked account",
+        await attempt(
+          () => tx`
+            UPDATE awcms_channel_accounts SET status = 'degraded'
+            WHERE tenant_id = ${tenant} AND id = ${revoked} RETURNING id
+          `
+        )
+      );
+      expectRows(
+        "recording a failing health row",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_channel_account_health
+              (tenant_id, account_id, state, reason_code, checked_at)
+            VALUES (${tenant}, ${otherFacebook}, 'failing', 'PROBE', now())
+          `
+        ),
+        1
+      );
+      expectRefused(
+        "recording an ok health row",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_channel_account_health
+              (tenant_id, account_id, state, reason_code, checked_at)
+            VALUES (${tenant}, ${facebook}, 'ok', NULL, now())
+          `
+        )
+      );
+      expectRows(
+        "writing this module's audit row",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_audit_events
+              (tenant_id, module_key, action, resource_type, severity, message)
+            VALUES (${tenant}, 'social_publishing', 'probe', 'probe', 'info',
+                    'probe')
+          `
+        ),
+        1
+      );
+      expectRefused(
+        "writing another module's audit row",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_audit_events
+              (tenant_id, module_key, action, resource_type, severity, message)
+            VALUES (${tenant}, 'channel_accounts', 'probe', 'probe', 'info',
+                    'probe')
+          `
+        )
+      );
+      expectRows(
+        "emitting this module's job event",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_domain_events
+              (tenant_id, event_type, event_version, aggregate_type,
+               aggregate_id, order_key, producer_module, payload, occurred_at)
+            VALUES (${tenant}, 'awcms.social_publishing.job.failed', '1.0',
+                    'probe', ${tenant}, 'probe', 'social_publishing',
+                    ${{}}::jsonb, now())
+            RETURNING id
+          `
+        ),
+        1
+      );
+      expectRefused(
+        "emitting another module's event",
+        await attempt(
+          () => tx`
+            INSERT INTO awcms_domain_events
+              (tenant_id, event_type, event_version, aggregate_type,
+               aggregate_id, order_key, producer_module, payload, occurred_at)
+            VALUES (${tenant}, 'awcms.channel_accounts.account.connected', '1.0',
+                    'probe', ${tenant}, 'probe', 'channel_accounts',
+                    ${{}}::jsonb, now())
+            RETURNING id
+          `
+        )
+      );
+
+      throw new RollbackProbe();
+    });
+  } catch (error) {
+    if (!(error instanceof RollbackProbe)) {
+      return {
+        ran: true,
+        finding: `the awcms_social_dispatch write-boundary probe could not run: ${errorMessage(error)}`
+      };
+    }
+  }
+
+  if (failures.length > 0) {
+    return {
+      ran: true,
+      finding: `awcms_social_dispatch write boundary (sql/373) does not hold: ${failures.join("; ")}`
     };
   }
 
@@ -2978,6 +3514,19 @@ export async function checkWorkerSetupRoleGrants(
       const probe = await probeSocialDispatchSecretVisibility(sql);
 
       if (probe.finding) findings.push(probe.finding);
+
+      // sql/373 (Issue #1146): the whole dispatch job runs as this role, so its
+      // WRITES are bounded too, each pinned with USING and WITH CHECK, and
+      // probed (positive controls included) in a rolled-back transaction.
+      for (const pin of SOCIAL_DISPATCH_WRITE_POLICIES) {
+        const finding = await pinPolicyExpression(sql, pin);
+
+        if (finding) findings.push(finding);
+      }
+
+      const writeProbe = await probeSocialDispatchWriteBoundary(sql);
+
+      if (writeProbe.finding) findings.push(writeProbe.finding);
     }
 
     // Issue #1160 audit L3: the two triggers that make an email sender snapshot

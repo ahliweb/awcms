@@ -119,7 +119,13 @@ describe("findSharedTableWrites", () => {
       "awcms_channel_secrets",
       "awcms_channel_account_capabilities",
       "awcms_telegram_engagement_endpoints",
-      "awcms_telegram_engagement_contacts"
+      "awcms_telegram_engagement_contacts",
+      // #1146: the social dispatch write-boundary probe.
+      "awcms_social_publications",
+      "awcms_social_publish_jobs",
+      "awcms_channel_account_health",
+      "awcms_audit_events",
+      "awcms_domain_events"
     ];
 
     for (const entry of DOCUMENTED_EXCEPTIONS) {
