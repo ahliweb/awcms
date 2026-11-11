@@ -646,7 +646,7 @@ describe("the real repository", () => {
       // message that uses it) or lift a recorded ban. The two tables of the same
       // change that DO grow with traffic (the 24-hour windows and the webhook
       // receipts) got real delegated descriptors and are not here.
-            expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(58);
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(58);
     });
 
     test("every entry names a table that really exists in sql/", () => {
