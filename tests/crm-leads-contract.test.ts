@@ -14,6 +14,9 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { crmLeadsKeyProblems, keyMaterialOf } from "../scripts/validate-env";
+import { redactForReplay } from "../src/modules/crm-leads/application/route-support";
+import { resolveCrmLeadsRings } from "../src/modules/crm-leads/domain/crm-leads-config";
 import { DOMAIN_EVENT_TYPE_REGISTRY } from "../src/modules/domain-event-runtime/domain/event-type-registry";
 import { crmLeadsModule } from "../src/modules/crm-leads/module";
 import {
@@ -186,7 +189,23 @@ describe("crm_leads contract (Issue #1166)", () => {
       validatePublishRevision({
         expectedVersion: 1,
         definition: DEFINITION,
+        stageMigrations: { old: "missing" }
+      }).valid
+    ).toBe(false);
+    // Whether a migration crosses the converted boundary depends on the leads'
+    // categories, so it is decided by the database read, not by validation.
+    expect(
+      validatePublishRevision({
+        expectedVersion: 1,
+        definition: DEFINITION,
         stageMigrations: { old: "won" }
+      }).valid
+    ).toBe(true);
+    expect(
+      validatePublishRevision({
+        expectedVersion: 1,
+        definition: DEFINITION,
+        stageMigrations: { new: "won" }
       }).valid
     ).toBe(false);
   });
@@ -241,6 +260,92 @@ describe("crm_leads contract (Issue #1166)", () => {
     expect(definitionHash(parsed.value.definition)).toBe(
       definitionHash(structuredClone(parsed.value.definition))
     );
+  });
+
+  test("two rings (ADR-0137 section 3): distinct from each other and from every other key, at runtime and in config:validate", () => {
+    const key = (seed: number) =>
+      Buffer.from(
+        Array.from({ length: 32 }, (_, i) => (i * seed + 7) % 251)
+      ).toString("base64");
+    const a = key(3);
+    const b = key(5);
+    const c = key(11);
+
+    expect(
+      resolveCrmLeadsRings({
+        CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`,
+        CRM_LEADS_HASH_KEYS: `h1:${b}`
+      } as NodeJS.ProcessEnv).ok
+    ).toBe(true);
+    // One key in both rings: refused at RUNTIME, not only by the validator.
+    expect(
+      resolveCrmLeadsRings({
+        CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`,
+        CRM_LEADS_HASH_KEYS: `h1:${a}`
+      } as NodeJS.ProcessEnv).ok
+    ).toBe(false);
+    expect(
+      resolveCrmLeadsRings({
+        CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`
+      } as NodeJS.ProcessEnv).ok
+    ).toBe(false);
+
+    expect(
+      crmLeadsKeyProblems({
+        CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`,
+        CRM_LEADS_HASH_KEYS: `h1:${b}`
+      })
+    ).toEqual([]);
+    expect(
+      crmLeadsKeyProblems({
+        CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`,
+        CRM_LEADS_HASH_KEYS: `h1:${a}`
+      }).length
+    ).toBe(1);
+    expect(
+      crmLeadsKeyProblems({ CRM_LEADS_HASH_KEYS: `h1:${b}` })
+    ).toHaveLength(1);
+
+    // Audit L2: the SINGLE-key secrets are compared too (they are one base64
+    // value, not a ring, and used to escape the check).
+    for (const single of [
+      "AUTH_MFA_SECRET_ENCRYPTION_KEY",
+      "AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY",
+      "AUTH_URL_PARAM_ENCRYPTION_KEY",
+      "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY"
+    ]) {
+      const problems = crmLeadsKeyProblems({
+        CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`,
+        CRM_LEADS_HASH_KEYS: `h1:${b}`,
+        [single]: b
+      });
+
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(single);
+      expect(problems.join(" ")).not.toContain(b);
+      expect(
+        crmLeadsKeyProblems({
+          CRM_LEADS_ENCRYPTION_KEYS: `k1:${a}`,
+          CRM_LEADS_HASH_KEYS: `h1:${b}`,
+          [single]: c
+        })
+      ).toEqual([]);
+    }
+
+    expect(keyMaterialOf({ X: `k1:${a},k2:${b}` }, "X")).toHaveLength(2);
+    expect(keyMaterialOf({ X: a }, "X")).toHaveLength(1);
+  });
+
+  test("a stored replay body carries no display name and no masked contact form", () => {
+    const redacted = redactForReplay({
+      id: "x",
+      displayName: "Someone",
+      contactPoints: [{ id: "c", kind: "email", masked: "s***@example.test" }]
+    });
+
+    expect(JSON.stringify(redacted)).not.toContain("Someone");
+    expect(JSON.stringify(redacted)).not.toContain("example.test");
+    expect(redacted.contactPoints).toEqual([{ id: "c", kind: "email" }]);
   });
 
   test("cursor, If-Match and list query parsing", () => {

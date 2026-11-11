@@ -9,6 +9,7 @@ import {
   notFound,
   prepareMutation,
   runIdempotent,
+  tenantDisabledResponse,
   versionConflict
 } from "../../../../../../modules/crm-leads/application/route-support";
 import { CRM_LEADS_GUARDS } from "../../../../../../modules/crm-leads/domain/crm-leads-constants";
@@ -35,6 +36,10 @@ export const POST = defineTenantRoute<{
     if (!id) return badId();
 
     const { tx, tenantId, auth, prepared } = context;
+    const tenantOff = await tenantDisabledResponse(tx, tenantId);
+
+    if (tenantOff) return tenantOff;
+
     const actor = auth.context.tenantUserId;
 
     return runIdempotent(

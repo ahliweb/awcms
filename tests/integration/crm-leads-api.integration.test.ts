@@ -85,6 +85,9 @@ const BASE = "/api/v1/crm-leads";
 const RING_KEY = Buffer.from(
   Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 251)
 ).toString("base64");
+const HASH_KEY = Buffer.from(
+  Array.from({ length: 32 }, (_, i) => (i * 13 + 17) % 251)
+).toString("base64");
 const OTHER_TENANT = "a1166000-0000-4000-8000-0000000000bb";
 const SECRET_EMAIL = "Prospect.Person@Example.test";
 const SECRET_NAME = "Prospect Secretname";
@@ -340,7 +343,11 @@ let handlerReady = false;
 
 suite("crm_leads HTTP surface (Issue #1166)", () => {
   beforeAll(async () => {
-    for (const name of ["CRM_LEADS_ENABLED", "CRM_LEADS_KEYS"]) {
+    for (const name of [
+      "CRM_LEADS_ENABLED",
+      "CRM_LEADS_ENCRYPTION_KEYS",
+      "CRM_LEADS_HASH_KEYS"
+    ]) {
       savedEnv[name] = process.env[name];
     }
 
@@ -360,7 +367,8 @@ suite("crm_leads HTTP surface (Issue #1166)", () => {
     if (!handlerReady) return;
 
     process.env.CRM_LEADS_ENABLED = "true";
-    process.env.CRM_LEADS_KEYS = `k1:${RING_KEY}`;
+    process.env.CRM_LEADS_ENCRYPTION_KEYS = `k1:${RING_KEY}`;
+    process.env.CRM_LEADS_HASH_KEYS = `h1:${HASH_KEY}`;
     await resetHandlerDatabase();
     env = await bootstrap();
   });
@@ -686,6 +694,8 @@ suite("crm_leads HTTP surface (Issue #1166)", () => {
 
     expect(second.id).toBe(first.id);
     expect(second.duplicate).toBe(true);
+    // L6: a replay tells a `leads.create` holder the id, nothing more.
+    expect(Object.keys(second).sort()).toEqual(["duplicate", "id"]);
 
     const count =
       (await admin()`SELECT count(*)::int AS n FROM awcms_crm_leads`) as {
@@ -1064,6 +1074,9 @@ suite("crm_leads HTTP surface (Issue #1166)", () => {
     expect(text).not.toContain(SECRET_EMAIL.toLowerCase());
     expect(text).not.toContain(SECRET_NAME.toLowerCase());
     expect(text).not.toContain(SECRET_NOTE);
+    // L1: not even the MASKED form survives in a stored replay body.
+    expect(text).not.toContain(masked.toLowerCase());
+    expect(text).not.toContain("@example.test");
 
     const events = (await admin()`
       SELECT event_type, payload FROM awcms_domain_events
@@ -1165,5 +1178,225 @@ suite("crm_leads HTTP surface (Issue #1166)", () => {
     await expect(
       admin()`UPDATE awcms_crm_lead_source_touches SET utm_source = 'x' WHERE touch_number = 1`
     ).rejects.toThrow();
+  });
+
+  /** A lead walked to `qualified` (with an owner, for the guard) and optionally converted. */
+  async function qualifiedLead(pipelineId: string): Promise<any> {
+    const owner = await seedUser(env.tenantId, "own", []);
+    let lead = await newLead(pipelineId, {
+      ownerTenantUserId: owner.tenantUserId,
+      contactPoints: []
+    });
+    lead = (await move(lead, "contacted")).body.data;
+    return (await move(lead, "qualified")).body.data;
+  }
+
+  function convert(lead: any, evidenceRef: string) {
+    return call(convertLead, {
+      method: "POST",
+      path: `${BASE}/leads/${lead.id}/conversions`,
+      params: { id: lead.id },
+      body: {
+        mode: "authority_confirmed",
+        expectedVersion: lead.version,
+        externalCustomerRef: "cust-1",
+        evidenceRef
+      }
+    });
+  }
+
+  test("audit M1: a revision migration never moves a converted lead out of converted; the database enforces converted <=> live conversion", async () => {
+    await enableTenant();
+    const pipeline = await newPipeline();
+    const lead = await qualifiedLead(pipeline.id);
+    const converted = await convert(lead, "inv-1");
+    expect(converted.status).toBe(201);
+
+    // `won` is replaced by `won2`: the converted lead must go to a converted stage.
+    const next = {
+      ...DEFINITION,
+      stages: DEFINITION.stages
+        .filter((s) => s.key !== "won")
+        .concat([{ key: "won2", name: "Won 2", category: "converted" }]),
+      transitions: DEFINITION.transitions
+        .filter((t) => t.to !== "won")
+        .concat([{ from: "qualified", to: "won2" }])
+    };
+    const publish = (stageMigrations: Record<string, string>) =>
+      call(publishRevision, {
+        method: "POST",
+        path: `${BASE}/pipelines/${pipeline.id}/revisions`,
+        params: { id: pipeline.id },
+        body: { expectedVersion: 1, definition: next, stageMigrations }
+      });
+
+    for (const target of ["contacted", "lost"]) {
+      const refused = await publish({ won: target });
+      expect(refused.status).toBe(409);
+      expect(refused.body.error?.code).toBe(
+        "CONVERTED_STAGE_MIGRATION_REFUSED"
+      );
+      expect(refused.body.error?.details?.stageKeys).toEqual(["won"]);
+    }
+
+    const stillConverted = (await admin()`
+      SELECT stage_key, stage_category, external_customer_ref
+      FROM awcms_crm_leads WHERE id = ${lead.id}
+    `) as any[];
+    expect(stillConverted[0]).toEqual({
+      stage_key: "won",
+      stage_category: "converted",
+      external_customer_ref: "cust-1"
+    });
+
+    const lostEvents = (await admin()`
+      SELECT count(*)::int AS n FROM awcms_domain_events
+      WHERE event_type = 'awcms.crm_leads.lead.lost'
+    `) as { n: number }[];
+    expect(lostEvents[0]!.n).toBe(0);
+
+    // converted -> converted (a renamed won stage) is allowed.
+    const ok = await publish({ won: "won2" });
+    expect(ok.status).toBe(201);
+    const moved = (await admin()`
+      SELECT stage_key, stage_category FROM awcms_crm_leads WHERE id = ${lead.id}
+    `) as any[];
+    expect(moved[0]).toEqual({
+      stage_key: "won2",
+      stage_category: "converted"
+    });
+
+    // The database refuses an inconsistent lead even from a privileged role
+    // (deferred constraint triggers, checked at commit): a customer reference
+    // without a live conversion, and a converted lead whose conversion is
+    // reversed behind its back.
+    const plain = await qualifiedLead(pipeline.id);
+
+    await expect(
+      admin().begin(async (tx) => {
+        await tx`
+          UPDATE awcms_crm_leads SET external_customer_ref = 'x-1'
+          WHERE id = ${plain.id}
+        `;
+      })
+    ).rejects.toThrow();
+
+    await expect(
+      admin().begin(async (tx) => {
+        await tx`
+          UPDATE awcms_crm_lead_conversions
+          SET reversed_at = now(), reversal_evidence_ref = 'r-x',
+              reversal_occurred_at = now(), reversed_by = recorded_by
+          WHERE lead_id = ${lead.id}
+        `;
+      })
+    ).rejects.toThrow();
+  });
+
+  test("audit L3: concurrent conversions with one evidence reference answer 201 and 409, never 500", async () => {
+    await enableTenant();
+    const pipeline = await newPipeline();
+    const a = await qualifiedLead(pipeline.id);
+    const b = await qualifiedLead(pipeline.id);
+    const [x, y] = await Promise.all([
+      convert(a, "same-ev"),
+      convert(b, "same-ev")
+    ]);
+
+    expect([x.status, y.status].sort()).toEqual([201, 409]);
+    expect((x.status === 409 ? x : y).body.error?.code).toBe("EVIDENCE_REUSED");
+  });
+
+  test("audit L4: includeDeleted needs leads.restore or leads.delete on top of leads.read", async () => {
+    await enableTenant();
+    const pipeline = await newPipeline();
+    const lead = await newLead(pipeline.id);
+    const deleted = await call(deleteLead, {
+      method: "DELETE",
+      path: `${BASE}/leads/${lead.id}`,
+      params: { id: lead.id },
+      headers: { "if-match": `"${lead.version}"` }
+    });
+    expect(deleted.status).toBe(200);
+
+    const reader = await seedUser(env.tenantId, "reader", [
+      "crm_leads.leads.read"
+    ]);
+    const restorer = await seedUser(env.tenantId, "restorer", [
+      "crm_leads.leads.read",
+      "crm_leads.leads.restore"
+    ]);
+    const query = "includeDeleted=true";
+
+    expect(
+      (
+        await call(listLeads, {
+          path: `${BASE}/leads`,
+          query,
+          token: reader.token
+        })
+      ).status
+    ).toBe(403);
+    expect(
+      (await call(listLeads, { path: `${BASE}/leads`, token: reader.token }))
+        .body.data.items
+    ).toHaveLength(0);
+
+    const visible = await call(listLeads, {
+      path: `${BASE}/leads`,
+      query,
+      token: restorer.token
+    });
+    expect(visible.status).toBe(200);
+    expect(visible.body.data.items).toHaveLength(1);
+  });
+
+  test("audit L5: the tenant switch refuses soft delete and restore, but never erasure", async () => {
+    await enableTenant();
+    const pipeline = await newPipeline();
+    const lead = await newLead(pipeline.id);
+    const off = await call(patchSettings, {
+      method: "PATCH",
+      path: `${BASE}/settings`,
+      body: { enabled: false }
+    });
+    expect(off.status).toBe(200);
+
+    const deleted = await call(deleteLead, {
+      method: "DELETE",
+      path: `${BASE}/leads/${lead.id}`,
+      params: { id: lead.id },
+      headers: { "if-match": `"${lead.version}"` }
+    });
+    expect(deleted.body.error?.code).toBe("CRM_LEADS_TENANT_DISABLED");
+
+    const restored = await call(restoreLead, {
+      method: "POST",
+      path: `${BASE}/leads/${lead.id}/restore`,
+      params: { id: lead.id },
+      body: { expectedVersion: lead.version }
+    });
+    expect(restored.body.error?.code).toBe("CRM_LEADS_TENANT_DISABLED");
+
+    const erased = await call(anonymizeLead, {
+      method: "POST",
+      path: `${BASE}/leads/${lead.id}/anonymize`,
+      params: { id: lead.id }
+    });
+    expect(erased.status).toBe(200);
+  });
+
+  test("audit L7: a body over the module's 32 KiB ceiling is refused before any work", async () => {
+    await enableTenant();
+    const big = await call(createLead, {
+      method: "POST",
+      path: `${BASE}/leads`,
+      body: {
+        pipelineId: crypto.randomUUID(),
+        displayName: "x".repeat(40 * 1024),
+        source: { kind: "manual" }
+      }
+    });
+    expect(big.status).toBe(413);
   });
 });

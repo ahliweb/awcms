@@ -16,7 +16,7 @@ import {
   notFound,
   prepareMutation,
   readIdempotencyKey,
-  requireRing,
+  requireRings,
   runIdempotent,
   tenantDisabledResponse,
   versionConflict
@@ -83,9 +83,9 @@ export const PATCH = defineTenantRoute<{
 
     if (tenantOff) return tenantOff;
 
-    const ring = requireRing();
+    const rings = requireRings();
 
-    if (ring instanceof Response) return ring;
+    if (rings instanceof Response) return rings;
 
     const actor = auth.context.tenantUserId;
 
@@ -103,7 +103,7 @@ export const PATCH = defineTenantRoute<{
           actor,
           id,
           prepared.input,
-          ring
+          rings
         );
 
         if (result.outcome === "contact_point_not_found") {
@@ -165,6 +165,10 @@ export const DELETE = defineTenantRoute<{
     if (!id) return badId();
 
     const { tx, tenantId, auth, prepared } = context;
+    const tenantOff = await tenantDisabledResponse(tx, tenantId);
+
+    if (tenantOff) return tenantOff;
+
     const actor = auth.context.tenantUserId;
 
     return runIdempotent(

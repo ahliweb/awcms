@@ -5,7 +5,7 @@ import {
   auditCrmLeads,
   disabledResponse,
   readValidatedBody,
-  requireRing
+  requireRings
 } from "../../../../../modules/crm-leads/application/route-support";
 import { CRM_LEADS_GUARDS } from "../../../../../modules/crm-leads/domain/crm-leads-constants";
 import {
@@ -28,15 +28,15 @@ export const POST = defineTenantRoute<LookupInput>({
 
     if (disabled) return disabled;
 
-    const ring = requireRing();
+    const rings = requireRings();
 
-    if (ring instanceof Response) return ring;
+    if (rings instanceof Response) return rings;
 
     const matches = await lookupByContact(
       context.tx,
       context.tenantId,
       context.prepared,
-      ring
+      rings
     );
 
     await auditCrmLeads(context, {

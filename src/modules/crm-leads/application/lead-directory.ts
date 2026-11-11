@@ -27,9 +27,9 @@ import { randomUUID } from "node:crypto";
 import {
   encryptField,
   keyedHashCandidates,
-  keyedHashPrimary,
-  type KeyRing
+  keyedHashPrimary
 } from "../../../lib/security/field-encryption";
+import type { CrmLeadsRings } from "../domain/crm-leads-config";
 import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
 import {
   CONTACT_POINT_AAD_PURPOSE,
@@ -255,21 +255,22 @@ async function insertContactPoints(
   leadId: string,
   actor: string,
   points: ContactPointInput[],
-  ring: KeyRing
+  rings: CrmLeadsRings
 ): Promise<number> {
   let inserted = 0;
 
   for (const point of points) {
     const id = randomUUID();
+    // Two rings (ADR-0137 section 3): the HMAC key never protects a ciphertext.
     const valueHash = keyedHashPrimary(
       point.normalized,
       hashDomain(tenantId, point.kind, point.platform),
-      ring
+      rings.hash
     );
     const ciphertext = encryptField(
       point.normalized,
       { purpose: CONTACT_POINT_AAD_PURPOSE, tenantId, rowId: id },
-      ring
+      rings.encryption
     );
     const rows = (await tx`
       INSERT INTO awcms_crm_lead_contact_points
@@ -363,7 +364,7 @@ async function insertTouch(
 
 export type CreateLeadResult =
   | { outcome: "created"; lead: LeadView }
-  | { outcome: "duplicate"; lead: LeadView }
+  | { outcome: "duplicate"; leadId: string }
   | { outcome: "pipeline_not_found" }
   | { outcome: "pipeline_archived" }
   | { outcome: "owner_not_found" };
@@ -373,17 +374,16 @@ export async function createLead(
   tenantId: string,
   actor: string,
   input: CreateLeadInput,
-  ring: KeyRing,
+  rings: CrmLeadsRings,
   emit: EmitContext
 ): Promise<CreateLeadResult> {
   if (input.source.externalEventId) {
     await lockIntakeKey(tx, tenantId, input.source);
     const existing = await findTouchByIntakeKey(tx, tenantId, input.source);
 
-    if (existing) {
-      const lead = await fetchLeadView(tx, tenantId, existing.leadId);
-      return { outcome: "duplicate", lead: lead! };
-    }
+    // A replay answers the lead's ID only: the caller holds `leads.create`,
+    // which is not a right to read whatever lead the source key resolves to.
+    if (existing) return { outcome: "duplicate", leadId: existing.leadId };
   }
 
   const pipeline = await fetchPipeline(tx, tenantId, input.pipelineId, "share");
@@ -420,7 +420,7 @@ export async function createLead(
     leadId,
     actor,
     input.contactPoints,
-    ring
+    rings
   );
 
   const touch = await insertTouch(tx, tenantId, leadId, actor, input.source);
@@ -663,7 +663,7 @@ export async function updateLead(
   actor: string,
   leadId: string,
   input: UpdateLeadInput,
-  ring: KeyRing
+  rings: CrmLeadsRings
 ): Promise<UpdateLeadResult> {
   const lead = await lockLead(tx, tenantId, leadId);
   const refused = writeRefusal(lead, input.expectedVersion);
@@ -709,7 +709,7 @@ export async function updateLead(
       leadId,
       actor,
       input.addContactPoints,
-      ring
+      rings
     );
     changed.push("addContactPoints");
   }
@@ -908,12 +908,12 @@ export async function lookupByContact(
   tx: Sql,
   tenantId: string,
   input: LookupInput,
-  ring: KeyRing
+  rings: CrmLeadsRings
 ): Promise<{ leadId: string; contactPointId: string }[]> {
   const candidates = keyedHashCandidates(
     input.normalized,
     hashDomain(tenantId, input.kind, input.platform),
-    ring
+    rings.hash
   );
   const rows = (await tx`
     SELECT cp.lead_id, cp.id

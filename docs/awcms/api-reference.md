@@ -16013,7 +16013,7 @@ The reusable lead/prospect pipeline (crm_leads module, Issue #1166, ADR-0153): a
 - **operationId**: `reverseCrmLeadConversion`
 - **Security**: bearerAuth + tenantHeader
 
-The conversion record is stamped once with the reversal facts and the lead returns to the stage it converted from (or the initial stage) with a `conversion_reversed` transition. A replay with the same evidence answers `200` with `replayed: true`. High-risk, audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+The conversion record is stamped once with the reversal facts and the lead returns to the stage it converted from (or the initial stage) with a `conversion_reversed` transition. A replay with the same evidence answers `200` with `replayed: true`. High-risk, audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16042,7 +16042,7 @@ The conversion record is stamped once with the reversal facts and the lead retur
 - **operationId**: `listCrmLeads`
 - **Security**: bearerAuth + tenantHeader
 
-Keyset-paginated (`cursor` from `nextCursor`, `limit` 1-100, default 25; out-of-range values are rejected, not clamped). Contact points are MASKED; no read path decrypts. Requires `crm_leads.leads.read`.
+Keyset-paginated (`cursor` from `nextCursor`, `limit` 1-100, default 25; out-of-range values are rejected, not clamped). Contact points are MASKED; no read path decrypts. `includeDeleted=true` additionally requires `crm_leads.leads.restore` or `crm_leads.leads.delete` (`403` otherwise). Requires `crm_leads.leads.read`.
 
 **Parameters**
 
@@ -16071,7 +16071,7 @@ Keyset-paginated (`cursor` from `nextCursor`, `limit` 1-100, default 25; out-of-
 - **operationId**: `createCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-Idempotent on the `Idempotency-Key` AND on the source key (kind, channel account, `externalEventId`): a replayed webhook or a re-uploaded row answers the SAME lead with `200` and `duplicate: true` and writes nothing. `import` and `api` sources must carry `externalEventId`. `website_form` and `inbound_message` are not accepted over HTTP (their consumers are follow-ups). Creates no profile, no consent and no customer. `409 CRM_LEADS_TENANT_DISABLED` while the tenant switch is off. Requires `crm_leads.leads.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Idempotent on the `Idempotency-Key` AND on the source key (kind, channel account, `externalEventId`): a replayed webhook or a re-uploaded row answers `200` with ONLY `{id, duplicate: true}` (no lead data: `leads.create` is not a right to read it) and writes nothing. `import` and `api` sources must carry `externalEventId`. `website_form` and `inbound_message` are not accepted over HTTP (their consumers are follow-ups). Creates no profile, no consent and no customer. `409 CRM_LEADS_TENANT_DISABLED` while the tenant switch is off. Requires `crm_leads.leads.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16086,7 +16086,7 @@ Idempotent on the `Idempotency-Key` AND on the source key (kind, channel account
 
 | Status | Description                                                                                           | Schema                                 |
 | ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The existing lead for a replayed source key.                                                          | object                                 |
+| 200    | A replayed source key: the existing lead's id only.                                                   | object                                 |
 | 201    | The new lead.                                                                                         | object                                 |
 | 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
 | 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
@@ -16125,7 +16125,7 @@ Masked contact points, source touches (the first touch is immutable), transition
 - **operationId**: `updateCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-Needs `expectedVersion` (`409 VERSION_CONFLICT`). A contact value is never edited: revoke it and add another. Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Needs `expectedVersion` (`409 VERSION_CONFLICT`). A contact value is never edited: revoke it and add another. Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16155,7 +16155,7 @@ Needs `expectedVersion` (`409 VERSION_CONFLICT`). A contact value is never edite
 - **operationId**: `deleteCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-Restorable. Needs `If-Match: "<version>"` (`428 PRECONDITION_REQUIRED` without it). Erasure is `/anonymize`. High-risk, audited at warning. Requires `crm_leads.leads.delete`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Restorable. Needs `If-Match: "<version>"` (`428 PRECONDITION_REQUIRED` without it). Erasure is `/anonymize`. High-risk, audited at warning. Requires `crm_leads.leads.delete`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16175,7 +16175,7 @@ Restorable. Needs `If-Match: "<version>"` (`428 PRECONDITION_REQUIRED` without i
 | 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
-| 409    | Conflict: `VERSION_CONFLICT`, `LEAD_ALREADY_DELETED`.                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_ALREADY_DELETED`.                    | [`ApiError`](#standard-error-envelope) |
 | 428    | `PRECONDITION_REQUIRED`.                                                                              | [`ApiError`](#standard-error-envelope) |
 | 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
 
@@ -16184,7 +16184,7 @@ Restorable. Needs `If-Match: "<version>"` (`428 PRECONDITION_REQUIRED` without i
 - **operationId**: `anonymizeCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-Erases the display name, every contact point and every free-text reason and note irreversibly; keeps the lead row, stage, source touches and transition and conversion facts so reported funnel counts do not change. `survivorOfLeadIds` lists leads this one absorbed by merge. High-risk, audited at warning. Requires `crm_leads.leads.delete`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Erases the display name, every contact point and every free-text reason and note irreversibly; keeps the lead row, stage, source touches and transition and conversion facts so reported funnel counts do not change. `survivorOfLeadIds` lists leads this one absorbed by merge. High-risk, audited at warning. Requires `crm_leads.leads.delete`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16211,7 +16211,7 @@ Erases the display name, every contact point and every free-text reason and note
 - **operationId**: `assignCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-The owner must be an active user of this tenant. Appends an assignment row and publishes `lead.assigned`. High-risk, audited at warning. Requires `crm_leads.leads.assign`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+The owner must be an active user of this tenant. Appends an assignment row and publishes `lead.assigned`. High-risk, audited at warning. Requires `crm_leads.leads.assign`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16266,7 +16266,7 @@ Other open leads of THIS tenant sharing an exact keyed hash with one of this lea
 - **operationId**: `confirmCrmLeadConversion`
 - **Security**: bearerAuth + tenantHeader
 
-`mode` must be `authority_confirmed` with the authority's opaque `externalCustomerRef`. The lead moves to a converted stage along an allowed edge. A replay of the same `evidenceRef` is a no-op. Never creates a customer. High-risk, audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+`mode` must be `authority_confirmed` with the authority's opaque `externalCustomerRef`. The lead moves to a converted stage along an allowed edge. A replay of the same `evidenceRef` is a no-op. Never creates a customer. High-risk, audited at warning. Requires `crm_leads.conversions.approve`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16297,7 +16297,7 @@ Other open leads of THIS tenant sharing an exact keyed hash with one of this lea
 - **operationId**: `recordCrmLeadManualConversion`
 - **Security**: bearerAuth + tenantHeader
 
-`mode` must be `authority_unconfirmed`, with a note and an evidence reference; reported separately (ADR-0153 O13). Audited at warning. Requires `crm_leads.manual_conversions.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+`mode` must be `authority_unconfirmed`, with a note and an evidence reference; reported separately (ADR-0153 O13). Audited at warning. Requires `crm_leads.manual_conversions.create`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16328,7 +16328,7 @@ Other open leads of THIS tenant sharing an exact keyed hash with one of this lea
 - **operationId**: `moveCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-Decided under the row lock: `expectedVersion` (the loser of a race gets `409 VERSION_CONFLICT`), the edge of the current revision (`409 TRANSITION_NOT_ALLOWED`) and its guards re-checked in the transaction (`409 GUARD_NOT_MET` naming the guards). A converted stage is entered only by a conversion (`409 CONVERSION_REQUIRED`) and left only by its reversal (`409 REVERSAL_REQUIRED`). Requires `crm_leads.stages.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Decided under the row lock: `expectedVersion` (the loser of a race gets `409 VERSION_CONFLICT`), the edge of the current revision (`409 TRANSITION_NOT_ALLOWED`) and its guards re-checked in the transaction (`409 GUARD_NOT_MET` naming the guards). A converted stage is entered only by a conversion (`409 CONVERSION_REQUIRED`) and left only by its reversal (`409 REVERSAL_REQUIRED`). Requires `crm_leads.stages.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16358,7 +16358,7 @@ Decided under the row lock: `expectedVersion` (the loser of a race gets `409 VER
 - **operationId**: `restoreCrmLead`
 - **Security**: bearerAuth + tenantHeader
 
-High-risk, audited at warning. Requires `crm_leads.leads.restore`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+High-risk, audited at warning. Requires `crm_leads.leads.restore`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16379,7 +16379,7 @@ High-risk, audited at warning. Requires `crm_leads.leads.restore`. A signed-in p
 | 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
-| 409    | Conflict: `VERSION_CONFLICT`, `LEAD_NOT_DELETED`.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `CRM_LEADS_TENANT_DISABLED`, `VERSION_CONFLICT`, `LEAD_NOT_DELETED`.                        | [`ApiError`](#standard-error-envelope) |
 | 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/crm-leads/leads/{id}/touches` — Append a later source touch
@@ -16387,7 +16387,7 @@ High-risk, audited at warning. Requires `crm_leads.leads.restore`. A signed-in p
 - **operationId**: `addCrmLeadTouch`
 - **Security**: bearerAuth + tenantHeader
 
-The first touch never changes. A replay of the same source key on the same lead answers `200` with `duplicate: true`; the same key already attributed to another lead is `409 SOURCE_KEY_USED` (two leads being one person is a merge, never a side effect). Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+The first touch never changes. A replay of the same source key on the same lead answers `200` with `duplicate: true`; the same key already attributed to another lead is `409 SOURCE_KEY_USED` (two leads being one person is a merge, never a side effect). Requires `crm_leads.leads.update`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16442,7 +16442,7 @@ An EXACT keyed-hash match inside this tenant. A POST so the value never sits in 
 - **operationId**: `mergeCrmLeads`
 - **Security**: bearerAuth + tenantHeader
 
-Both leads must be open, live and in the same pipeline, at the versions the reviewer saw. Another tenant's lead answers `404`. The absorbed lead is marked `merged`; nothing is moved or deleted, so the merge is undoable within the tenant's window. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Both leads must be open, live and in the same pipeline, at the versions the reviewer saw. Another tenant's lead answers `404`. The absorbed lead is marked `merged`; nothing is moved or deleted, so the merge is undoable within the tenant's window. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16470,7 +16470,7 @@ Both leads must be open, live and in the same pipeline, at the versions the revi
 - **operationId**: `revertCrmLeadMerge`
 - **Security**: bearerAuth + tenantHeader
 
-Within the tenant's undo window the absorbed lead is open again exactly as it was. A second rollback is `409 ALREADY_REVERTED`; after the window `409 UNDO_WINDOW_CLOSED`. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Within the tenant's undo window the absorbed lead is open again exactly as it was. A second rollback is `409 ALREADY_REVERTED`; after the window `409 UNDO_WINDOW_CLOSED`. High-risk, audited at warning. Requires `crm_leads.merges.manage`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16520,7 +16520,7 @@ At most 200, ordered by code. Requires `crm_leads.leads.read`.
 - **operationId**: `createCrmPipeline`
 - **Security**: bearerAuth + tenantHeader
 
-Stages carry a tenant-chosen key and name and a CLOSED category; edges carry guards from a closed set (no expression language). No product vocabulary is seeded or assumed (ADR-0153 L2). Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Stages carry a tenant-chosen key and name and a CLOSED category; edges carry guards from a closed set (no expression language). No product vocabulary is seeded or assumed (ADR-0153 L2). Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16572,7 +16572,7 @@ An id of another tenant answers like a missing one. Requires `crm_leads.leads.re
 - **operationId**: `publishCrmPipelineRevision`
 - **Security**: bearerAuth + tenantHeader
 
-Needs the pipeline's `expectedVersion`. A revision that removes a stage some lead is in is refused (`409 STAGES_IN_USE`, naming the stage keys) unless `stageMigrations` maps each such stage to a stage of the new revision; those leads then get a `stage_migrated` transition. An identical definition is `409 REVISION_UNCHANGED`. High-risk, audited at warning. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+Needs the pipeline's `expectedVersion`. A revision that removes a stage some lead is in is refused (`409 STAGES_IN_USE`, naming the stage keys) unless `stageMigrations` maps each such stage to a stage of the new revision; those leads then get a `stage_migrated` transition. A migration never crosses the converted boundary: a converted lead may only be migrated to another converted stage, and a lead that is not converted never into one (`409 CONVERTED_STAGE_MIGRATION_REFUSED`, naming the stage keys); conversions and their reversals are the only way across. An identical definition is `409 REVISION_UNCHANGED`. High-risk, audited at warning. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -16586,16 +16586,16 @@ Needs the pipeline's `expectedVersion`. A revision that removes a stage some lea
 
 **Responses**
 
-| Status | Description                                                                                           | Schema                                 |
-| ------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 201    | The pipeline with its new current revision.                                                           | object                                 |
-| 400    | Validation error.                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                           | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                           | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                   | [`ApiError`](#standard-error-envelope) |
-| 409    | Conflict: `VERSION_CONFLICT`, `STAGES_IN_USE`, `REVISION_UNCHANGED`.                                  | [`ApiError`](#standard-error-envelope) |
-| 422    | `UNKNOWN_MIGRATION_SOURCE`.                                                                           | [`ApiError`](#standard-error-envelope) |
-| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                               | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The pipeline with its new current revision.                                                               | object                                 |
+| 400    | Validation error.                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict: `VERSION_CONFLICT`, `STAGES_IN_USE`, `REVISION_UNCHANGED`, `CONVERTED_STAGE_MIGRATION_REFUSED`. | [`ApiError`](#standard-error-envelope) |
+| 422    | `UNKNOWN_MIGRATION_SOURCE`.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 503    | `CRM_LEADS_DISABLED` (deployment switch off, answered after authorization) or `KEY_RING_UNAVAILABLE`.     | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/crm-leads/settings` — The tenant switch and merge-undo window
 
@@ -16625,7 +16625,7 @@ A tenant that never set them is OFF (`enabled: false`, `mergeUndoHours: 168`). R
 - **operationId**: `updateCrmLeadsSettings`
 - **Security**: bearerAuth + tenantHeader
 
-High-risk (`configure`), audited at warning with the previous and new values. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` (the stored replay body must not outlive an erasure).
+High-risk (`configure`), audited at warning with the previous and new values. Requires `crm_leads.pipelines.configure`. A signed-in person only (`403 INTERACTIVE_SESSION_REQUIRED` for a machine credential); a replay of the same `Idempotency-Key` answers the stored response, a different body with it `409 IDEMPOTENCY_CONFLICT`. Mutation responses never carry `displayName` or a contact point's `masked` form (the stored replay body must not outlive an erasure). Bodies above 32 KiB are `413 PAYLOAD_TOO_LARGE`.
 
 **Parameters**
 
@@ -17779,15 +17779,15 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
 
 ### Schema: CrmConversionRequest
 
-| Field                 | Type                                                 | Required | Nullable | Description                                                        |
-| --------------------- | ---------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------ |
-| `mode`                | enum(`authority_confirmed`, `authority_unconfirmed`) | yes      | no       |                                                                    |
-| `expectedVersion`     | integer                                              | yes      | no       |                                                                    |
-| `externalCustomerRef` | string                                               | no       | no       | Required for authority_confirmed. Opaque; never a customer record. |
-| `evidenceRef`         | string                                               | yes      | no       | The replay key.                                                    |
-| `note`                | string                                               | no       | no       | Required for authority_unconfirmed.                                |
-| `toStageKey`          | string                                               | no       | no       |                                                                    |
-| `occurredAt`          | string (date-time)                                   | no       | no       |                                                                    |
+| Field                 | Type                                                 | Required | Nullable | Description                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`                | enum(`authority_confirmed`, `authority_unconfirmed`) | yes      | no       |                                                                                                                                                                       |
+| `expectedVersion`     | integer                                              | yes      | no       |                                                                                                                                                                       |
+| `externalCustomerRef` | string                                               | no       | no       | Required for authority_confirmed. The authority's OPAQUE customer id: never an email, a phone, a name or a national id (it is stored in clear and carried in events). |
+| `evidenceRef`         | string                                               | yes      | no       | The replay key. An OPAQUE reference (an invoice or enrolment id): never personal data (stored in clear, carried in events and audit rows).                            |
+| `note`                | string                                               | no       | no       | Required for authority_unconfirmed.                                                                                                                                   |
+| `toStageKey`          | string                                               | no       | no       |                                                                                                                                                                       |
+| `occurredAt`          | string (date-time)                                   | no       | no       |                                                                                                                                                                       |
 
 **Example**
 
@@ -18045,19 +18045,19 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
 
 ### Schema: CrmSourceInput
 
-| Field              | Type                                                                   | Required | Nullable | Description                                         |
-| ------------------ | ---------------------------------------------------------------------- | -------- | -------- | --------------------------------------------------- |
-| `kind`             | enum(`manual`, `import`, `api`)                                        | yes      | no       |                                                     |
-| `externalEventId`  | string                                                                 | no       | no       | Required for import and api: the intake replay key. |
-| `channelAccountId` | string (uuid)                                                          | no       | no       |                                                     |
-| `campaignRef`      | string                                                                 | no       | no       |                                                     |
-| `utmSource`        | string                                                                 | no       | no       |                                                     |
-| `utmMedium`        | string                                                                 | no       | no       |                                                     |
-| `utmCampaign`      | string                                                                 | no       | no       |                                                     |
-| `landingPath`      | string                                                                 | no       | no       |                                                     |
-| `referrerHost`     | string                                                                 | no       | no       |                                                     |
-| `legalBasis`       | enum(`consent`, `contract_steps`, `legitimate_interest`, `not_stated`) | no       | no       | Recorded, never decided, never a consent grant.     |
-| `occurredAt`       | string (date-time)                                                     | no       | no       |                                                     |
+| Field              | Type                                                                   | Required | Nullable | Description                                                                                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`             | enum(`manual`, `import`, `api`)                                        | yes      | no       |                                                                                                                                                                                                  |
+| `externalEventId`  | string                                                                 | no       | no       | Required for import and api: the intake replay key. An OPAQUE id of the source event: never an email, a phone, a name or any other personal value (it is stored in clear and appears in events). |
+| `channelAccountId` | string (uuid)                                                          | no       | no       |                                                                                                                                                                                                  |
+| `campaignRef`      | string                                                                 | no       | no       |                                                                                                                                                                                                  |
+| `utmSource`        | string                                                                 | no       | no       |                                                                                                                                                                                                  |
+| `utmMedium`        | string                                                                 | no       | no       |                                                                                                                                                                                                  |
+| `utmCampaign`      | string                                                                 | no       | no       |                                                                                                                                                                                                  |
+| `landingPath`      | string                                                                 | no       | no       |                                                                                                                                                                                                  |
+| `referrerHost`     | string                                                                 | no       | no       |                                                                                                                                                                                                  |
+| `legalBasis`       | enum(`consent`, `contract_steps`, `legitimate_interest`, `not_stated`) | no       | no       | Recorded, never decided, never a consent grant.                                                                                                                                                  |
+| `occurredAt`       | string (date-time)                                                     | no       | no       |                                                                                                                                                                                                  |
 
 **Example**
 

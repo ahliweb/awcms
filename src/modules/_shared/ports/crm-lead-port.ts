@@ -14,6 +14,11 @@
  * It returns no name, no contact value and no note: a caller that needs them
  * reads the lead through the HTTP surface under its own permission.
  *
+ * `externalCustomerRef` and `evidenceRef` are stored in clear and carried in
+ * events and audit rows: they MUST be opaque ids (a customer number, an invoice
+ * id), never an email, a phone, a name or a national id. The format check
+ * cannot tell an opaque id from a phone number; this is the adapter's contract.
+ *
  * ## The composition root authorizes and audits
  *
  * Calling the adapter performs NO access check and writes NO audit row. The

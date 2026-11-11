@@ -565,15 +565,9 @@ export function validatePublishRevision(
             "Only a stage REMOVED by the new definition can be migrated."
           );
         }
-
-        const target = definition.stages.find((stage) => stage.key === to);
-
-        if (target?.category === "converted") {
-          reader.error(
-            "stageMigrations",
-            "A lead is never migrated INTO a converted stage: conversion is recorded."
-          );
-        }
+        // Whether a migration crosses the `converted` boundary depends on the
+        // category of the LEADS being moved, which only the database knows:
+        // `publishRevision` refuses both directions (ADR-0153 L7).
       }
     }
   }

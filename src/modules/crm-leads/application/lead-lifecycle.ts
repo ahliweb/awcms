@@ -65,6 +65,13 @@ import { fetchPipeline, type RevisionView } from "./pipeline-directory";
 
 type Sql = Bun.SQL;
 
+/** SQLSTATE 23505. Bun.SQL carries it on `errno`, not `code`. */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Bun.SQL.PostgresError && String(error.errno) === "23505"
+  );
+}
+
 async function liveContactPointCount(
   tx: Sql,
   tenantId: string,
@@ -292,14 +299,31 @@ export async function recordConversion(
       : { outcome: decision.outcome };
   }
 
-  const inserted = (await tx`
-    INSERT INTO awcms_crm_lead_conversions
-      (tenant_id, lead_id, mode, external_customer_ref, evidence_ref, note,
-       occurred_at, recorded_by)
-    VALUES (${tenantId}, ${leadId}, ${input.mode}, ${input.externalCustomerRef},
-            ${input.evidenceRef}, ${input.note}, ${input.occurredAt}, ${actor})
-    RETURNING id, recorded_at
-  `) as { id: string; recorded_at: Date }[];
+  // The replay probe above cannot see a CONCURRENT conversion of another lead
+  // with the same evidence reference that has not committed yet: the unique
+  // index is the decision. Inside a savepoint, so the refusal leaves the
+  // transaction usable and answers `evidence_reused` instead of a 500.
+  let inserted: { id: string; recorded_at: Date }[];
+  // Every caller passes its open transaction (the route's `tx`, the port's
+  // composition root); the narrower type is what exposes `savepoint`.
+  const txn = tx as Bun.TransactionSQL;
+
+  try {
+    inserted = (await txn.savepoint(
+      (sp) => sp`
+        INSERT INTO awcms_crm_lead_conversions
+          (tenant_id, lead_id, mode, external_customer_ref, evidence_ref, note,
+           occurred_at, recorded_by)
+        VALUES (${tenantId}, ${leadId}, ${input.mode}, ${input.externalCustomerRef},
+                ${input.evidenceRef}, ${input.note}, ${input.occurredAt}, ${actor})
+        RETURNING id, recorded_at
+      `
+    )) as { id: string; recorded_at: Date }[];
+  } catch (error) {
+    if (isUniqueViolation(error)) return { outcome: "evidence_reused" };
+    throw error;
+  }
+
   const conversion = inserted[0]!;
 
   await tx`
@@ -420,14 +444,25 @@ export async function reverseConversion(
     revision.stages.find((stage) => stage.key === revision.initialStageKey)!;
   const now = new Date();
 
-  await tx`
-    UPDATE awcms_crm_lead_conversions
-    SET reversed_at = ${now},
-        reversal_evidence_ref = ${input.evidenceRef},
-        reversal_occurred_at = ${input.occurredAt},
-        reversed_by = ${actor}
-    WHERE tenant_id = ${tenantId} AND id = ${conversionId}
-  `;
+  // Two reversals of DIFFERENT conversions racing on one evidence reference meet
+  // at the unique index; the loser answers `evidence_reused`, never a 500.
+  const txn = tx as Bun.TransactionSQL;
+
+  try {
+    await txn.savepoint(
+      (sp) => sp`
+        UPDATE awcms_crm_lead_conversions
+        SET reversed_at = ${now},
+            reversal_evidence_ref = ${input.evidenceRef},
+            reversal_occurred_at = ${input.occurredAt},
+            reversed_by = ${actor}
+        WHERE tenant_id = ${tenantId} AND id = ${conversionId}
+      `
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) return { outcome: "evidence_reused" };
+    throw error;
+  }
 
   // Only a lead that is still IN its converted stage moves back. An absorbed
   // or anonymised lead keeps its stage facts; the reversal is recorded either way.

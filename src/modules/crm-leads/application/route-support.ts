@@ -12,13 +12,17 @@
  *   module      Module Management's per-tenant enable, enforced by the
  *               authorization chokepoint itself;
  *   tenant      the module's own switch (`settings.enabled`, default false):
- *               every LEAD write answers `409 CRM_LEADS_TENANT_DISABLED` until a
- *               holder of `pipelines.configure` turns it on. Pipelines may be
- *               prepared and existing data read while it is off.
+ *               every LEAD write (intake, edit, touch, move, assign, merge and
+ *               its rollback, conversion and reversal, soft delete, restore)
+ *               answers `409 CRM_LEADS_TENANT_DISABLED` until a holder of
+ *               `pipelines.configure` turns it on. Pipelines may be prepared and
+ *               existing data read while it is off. The ONE exception is
+ *               anonymising erasure: a data subject's erasure request must be
+ *               answerable even after the controller switched the module off.
  */
 import {
   bodyTooLargeResponse,
-  readJsonBody
+  readCappedText
 } from "../../../lib/security/request-body-limit";
 import { fail, jsonResponse } from "../../_shared/api-response";
 import {
@@ -28,13 +32,16 @@ import {
   userIdempotencyActor
 } from "../../_shared/idempotency";
 import { recordAuditEvent } from "../../logging/application/audit-log";
-import { resolveCrmLeadsRing } from "../domain/crm-leads-config";
 import {
+  resolveCrmLeadsRings,
+  type CrmLeadsRings
+} from "../domain/crm-leads-config";
+import {
+  CRM_LEADS_BODY_LIMIT_BYTES,
   CRM_LEADS_MODULE_KEY,
   isCrmLeadsEnabled
 } from "../domain/crm-leads-constants";
 import { isUuid, type Validated } from "../domain/crm-leads-validation";
-import type { KeyRing } from "../../../lib/security/field-encryption";
 import { fetchSettings } from "./settings-directory";
 import type { EmitContext } from "./lead-events";
 
@@ -92,12 +99,15 @@ export async function tenantDisabledResponse(
       );
 }
 
-/** The key ring, or a `503` BEFORE any work that would hash or encrypt a contact value. */
-export function requireRing(): KeyRing | Response {
-  const ring = resolveCrmLeadsRing();
+/**
+ * The two key rings (encryption and HMAC, distinct; ADR-0137 section 3), or a
+ * `503` BEFORE any work that would hash or encrypt a contact value.
+ */
+export function requireRings(): CrmLeadsRings | Response {
+  const resolved = resolveCrmLeadsRings();
 
-  return ring.ok
-    ? ring
+  return resolved.ok
+    ? resolved.rings
     : fail(
         503,
         "KEY_RING_UNAVAILABLE",
@@ -119,20 +129,31 @@ export function readIdempotencyKey(request: Request): string | Response {
   return key;
 }
 
-/** Parses and validates a JSON body without touching the database. Error text never echoes a value. */
+/**
+ * Parses and validates a JSON body without touching the database, under the
+ * module's OWN ceiling (`CRM_LEADS_BODY_LIMIT_BYTES`, 32 KiB: the largest body
+ * here is a 50-stage, 400-edge pipeline definition), far below the platform's
+ * default tier. Error text never echoes a value.
+ */
 export async function readValidatedBody<T>(
   request: Request,
   validate: (raw: unknown) => Validated<T>
 ): Promise<T | Response> {
-  const bodyRead = await readJsonBody(request);
+  const read = await readCappedText(request, CRM_LEADS_BODY_LIMIT_BYTES);
 
-  if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
+  if (read.tooLarge) return bodyTooLargeResponse(CRM_LEADS_BODY_LIMIT_BYTES);
 
-  if (bodyRead.malformed) {
-    return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
+  let raw: unknown = null;
+
+  if (read.text.length > 0) {
+    try {
+      raw = JSON.parse(read.text);
+    } catch {
+      return fail(400, "VALIDATION_ERROR", "Request body must be valid JSON.");
+    }
   }
 
-  const validation = validate(bodyRead.value);
+  const validation = validate(raw);
 
   if (!validation.valid) {
     return fail(
@@ -265,6 +286,38 @@ export async function auditCrmLeads(
 }
 
 /**
+ * What a mutation answers, and what is STORED for its replay, carries nothing
+ * derived from the prospect's identity: no display name and no masked contact
+ * form (only each contact point's id, kind and state). The replay body lives in
+ * `awcms_idempotency_keys` for 30 days, outside the reach of the anonymising
+ * erasure, so anything personal stored there would survive the person's erasure
+ * request (ADR-0153 section 7; the precedent is
+ * `data-lifecycle/domain/subject-export-payroll.ts`, which keeps payroll rows
+ * out of the same table). Read the lead with GET for the masked view.
+ */
+export function redactForReplay(
+  body: Record<string, unknown>
+): Record<string, unknown> {
+  const data: Record<string, unknown> = { ...body };
+
+  delete data.displayName;
+
+  if (Array.isArray(data.contactPoints)) {
+    data.contactPoints = data.contactPoints.map((point) => {
+      if (typeof point !== "object" || point === null) return point;
+
+      const copy: Record<string, unknown> = {
+        ...(point as Record<string, unknown>)
+      };
+      delete copy.masked;
+      return copy;
+    });
+  }
+
+  return data;
+}
+
+/**
  * Runs `produce` at most once per `(scope, Idempotency-Key, acting person)`:
  * same key + same request -> the STORED response; same key + different request
  * -> `409 IDEMPOTENCY_CONFLICT`; unseen key -> `produce()`. Refusals are not
@@ -312,13 +365,11 @@ export async function runIdempotent(
 
   if (produced instanceof Response) return produced;
 
-  // A mutation response never carries the lead's display name: the stored
-  // replay body lives in `awcms_idempotency_keys`, outside the reach of the
-  // anonymising erasure, so a name stored there would survive the person's
-  // erasure request (ADR-0153 section 7). Read the name with GET.
-  const data: Record<string, unknown> = { ...produced.body };
-  delete data.displayName;
-  const stored = { success: true as const, data, meta: {} };
+  const stored = {
+    success: true as const,
+    data: redactForReplay(produced.body),
+    meta: {}
+  };
 
   await saveIdempotencyRecord(
     tx,

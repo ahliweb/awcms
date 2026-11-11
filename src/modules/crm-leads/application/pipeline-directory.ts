@@ -294,7 +294,8 @@ export type PublishRevisionResult =
   | { outcome: "version_conflict"; currentVersion: number }
   | { outcome: "unchanged" }
   | { outcome: "stages_in_use"; stageKeys: string[] }
-  | { outcome: "unknown_migration_source"; stageKeys: string[] };
+  | { outcome: "unknown_migration_source"; stageKeys: string[] }
+  | { outcome: "converted_boundary"; stageKeys: string[] };
 
 export async function publishRevision(
   tx: Sql,
@@ -335,19 +336,49 @@ export async function publishRevision(
     removed.length === 0
       ? []
       : ((await tx`
-          SELECT DISTINCT stage_key
+          SELECT DISTINCT stage_key, stage_category
           FROM awcms_crm_leads
           WHERE tenant_id = ${tenantId}
             AND pipeline_id = ${pipelineId}
             AND stage_key = ANY(${tx.array(removed, "text")})
-        `) as { stage_key: string }[]);
-  const unmigrated = occupied
-    .map((row) => row.stage_key)
-    .filter((key) => input.stageMigrations[key] === undefined)
-    .sort();
+        `) as { stage_key: string; stage_category: StageCategory }[]);
+  const unmigrated = [
+    ...new Set(
+      occupied
+        .map((row) => row.stage_key)
+        .filter((key) => input.stageMigrations[key] === undefined)
+    )
+  ].sort();
 
   if (unmigrated.length > 0) {
     return { outcome: "stages_in_use", stageKeys: unmigrated };
+  }
+
+  // A migration never crosses the `converted` boundary (ADR-0153 L7): a
+  // converted lead stays converted (converted -> converted is allowed, e.g. a
+  // renamed won stage) and leaves only through a conversion reversal; a lead
+  // that is not converted enters `converted` only through a conversion record.
+  // Otherwise a migration could strand a live conversion and an
+  // external_customer_ref on a working lead, or announce `lead.lost` for a
+  // customer. Decided on the LEADS' categories, which the request cannot see.
+  const newCategories = new Map(
+    input.definition.stages.map((stage) => [stage.key, stage.category])
+  );
+  const crossing = [
+    ...new Set(
+      occupied
+        .filter(
+          (row) =>
+            (row.stage_category === "converted") !==
+            (newCategories.get(input.stageMigrations[row.stage_key]!) ===
+              "converted")
+        )
+        .map((row) => row.stage_key)
+    )
+  ].sort();
+
+  if (crossing.length > 0) {
+    return { outcome: "converted_boundary", stageKeys: crossing };
   }
 
   // Every refusal is above this line: nothing has been written yet.

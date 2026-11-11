@@ -1,5 +1,6 @@
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
+import { authorizeInTransaction } from "../../../../../modules/identity-access/application/access-guard";
 import {
   createLead,
   listLeads
@@ -10,7 +11,7 @@ import {
   emitContext,
   mutationRefusal,
   prepareMutation,
-  requireRing,
+  requireRings,
   runIdempotent,
   tenantDisabledResponse
 } from "../../../../../modules/crm-leads/application/route-support";
@@ -26,7 +27,9 @@ import {
 /**
  * `GET /api/v1/crm-leads/leads` (Issue #1166) — the tenant's leads, newest
  * first, keyset-paginated, with MASKED contact points only. Filters: pipeline,
- * stage category, owner; soft-deleted rows only with `includeDeleted=true`.
+ * stage category, owner; soft-deleted rows only with `includeDeleted=true`,
+ * which additionally requires `crm_leads.leads.restore` or
+ * `crm_leads.leads.delete`.
  */
 export const GET = defineTenantRoute<ListLeadsQuery>({
   workClass: "interactive",
@@ -42,6 +45,31 @@ export const GET = defineTenantRoute<ListLeadsQuery>({
     const disabled = disabledResponse();
 
     if (disabled) return disabled;
+
+    // Soft-deleted leads are visible only to someone who may act on a deleted
+    // lead (`leads.restore` or `leads.delete`): `leads.read` alone sees live
+    // leads. Each candidate is decided by the chokepoint and logged.
+    if (context.prepared.includeDeleted) {
+      const restore = await authorizeInTransaction(
+        context.tx,
+        context.tenantId,
+        context.tokenHash,
+        context.now,
+        CRM_LEADS_GUARDS.restoreLeads
+      );
+
+      if (!restore.allowed) {
+        const remove = await authorizeInTransaction(
+          context.tx,
+          context.tenantId,
+          context.tokenHash,
+          context.now,
+          CRM_LEADS_GUARDS.deleteLeads
+        );
+
+        if (!remove.allowed) return remove.denied;
+      }
+    }
 
     const page = await listLeads(
       context.tx,
@@ -82,9 +110,9 @@ export const POST = defineTenantRoute<{
 
     if (tenantOff) return tenantOff;
 
-    const ring = requireRing();
+    const rings = requireRings();
 
-    if (ring instanceof Response) return ring;
+    if (rings instanceof Response) return rings;
 
     const actor = auth.context.tenantUserId;
 
@@ -101,7 +129,7 @@ export const POST = defineTenantRoute<{
           tenantId,
           actor,
           prepared.input,
-          ring,
+          rings,
           emitContext(context, prepared.idempotencyKey)
         );
 
@@ -117,9 +145,11 @@ export const POST = defineTenantRoute<{
               "The owner is not an active user of this tenant."
             );
           case "duplicate":
+            // The id only: `leads.create` is not a right to read the lead the
+            // source key resolves to (read it with GET under `leads.read`).
             return {
               status: 200,
-              body: { ...result.lead, duplicate: true }
+              body: { id: result.leadId, duplicate: true }
             };
           case "created":
             break;

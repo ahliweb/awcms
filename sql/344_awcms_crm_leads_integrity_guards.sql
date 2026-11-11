@@ -16,7 +16,10 @@
 --   5. a merge record keeps what was merged: its rollback is stamped ONCE, and
 --      erasure may null its note (L5);
 --   6. a lead's denormalised category always equals its stage's category, and
---      a lead's identity (tenant, id, pipeline) never changes.
+--      a lead's identity (tenant, id, pipeline) never changes;
+--   7. a lead is in a `converted` stage if and only if it has a live
+--      conversion, and holds an external customer reference only while it has
+--      one (deferred, checked at commit).
 
 CREATE OR REPLACE FUNCTION awcms_crm_leads_immutable_row_guard()
 RETURNS trigger
@@ -277,3 +280,72 @@ $function$;
 CREATE TRIGGER awcms_crm_lead_contact_points_guard
   BEFORE UPDATE OR DELETE ON awcms_crm_lead_contact_points
   FOR EACH ROW EXECUTE FUNCTION awcms_crm_lead_contact_points_guard();
+
+-- (7) Conversion consistency (ADR-0153 N1, L7). A lead is in a `converted`
+-- stage IF AND ONLY IF it has a LIVE (unreversed) conversion record, and it
+-- carries an `external_customer_ref` only while it has one. Without this a path
+-- that moves a lead without going through the conversion code (a stage
+-- migration on a new revision was one) could leave a working lead holding a
+-- live conversion and a customer reference, after which a new conversion
+-- trips the one-live-conversion index.
+--
+-- DEFERRED constraint triggers on BOTH tables, checked at COMMIT: a conversion
+-- writes the conversion row and the lead row in one transaction, in either
+-- order, and only the final state has to be consistent.
+CREATE OR REPLACE FUNCTION awcms_crm_leads_conversion_consistency_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  target_lead uuid;
+  lead_category text;
+  lead_customer_ref text;
+  has_live_conversion boolean;
+BEGIN
+  IF TG_TABLE_NAME = 'awcms_crm_leads' THEN
+    target_lead := NEW.id;
+  ELSE
+    target_lead := NEW.lead_id;
+  END IF;
+
+  SELECT stage_category, external_customer_ref
+    INTO lead_category, lead_customer_ref
+  FROM awcms_crm_leads
+  WHERE tenant_id = NEW.tenant_id AND id = target_lead;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  has_live_conversion := EXISTS (
+    SELECT 1
+    FROM awcms_crm_lead_conversions
+    WHERE tenant_id = NEW.tenant_id
+      AND lead_id = target_lead
+      AND reversed_at IS NULL
+  );
+
+  IF (lead_category = 'converted') IS DISTINCT FROM has_live_conversion THEN
+    RAISE EXCEPTION 'a lead is in a converted stage if and only if it has a live conversion record'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF lead_customer_ref IS NOT NULL AND NOT has_live_conversion THEN
+    RAISE EXCEPTION 'a lead carries an external customer reference only while it has a live conversion'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NULL;
+END;
+$function$;
+
+CREATE CONSTRAINT TRIGGER awcms_crm_leads_conversion_consistency
+  AFTER INSERT OR UPDATE ON awcms_crm_leads
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION awcms_crm_leads_conversion_consistency_guard();
+
+CREATE CONSTRAINT TRIGGER awcms_crm_lead_conversions_consistency
+  AFTER INSERT OR UPDATE ON awcms_crm_lead_conversions
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION awcms_crm_leads_conversion_consistency_guard();

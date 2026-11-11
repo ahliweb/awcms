@@ -91,6 +91,14 @@ export const POST = defineTenantRoute<{
               {},
               { stageKeys: result.stageKeys }
             );
+          case "converted_boundary":
+            return fail(
+              409,
+              "CONVERTED_STAGE_MIGRATION_REFUSED",
+              "A stage migration cannot move a converted lead out of a converted stage, or a lead that is not converted into one; record a conversion or its reversal instead.",
+              {},
+              { stageKeys: result.stageKeys }
+            );
           case "published":
             break;
         }
