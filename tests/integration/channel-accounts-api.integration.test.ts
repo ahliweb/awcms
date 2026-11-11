@@ -623,6 +623,7 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
       providers: {
         provider: string;
         registrable: boolean;
+        phase: string | null;
         capabilityCells: Record<string, string>;
       }[];
     }>(getProviders, { path: `${BASE}/providers` });
@@ -635,6 +636,15 @@ suite("channel_accounts HTTP surface (Issue #1140)", () => {
 
     expect(member.registrable).toBe(false);
     expect(member.capabilityCells.leads).toBe("barred");
+
+    // A phase-gated provider (Issue #1152) is served with its phase and is
+    // never registrable; an admitted one has a null phase.
+    const providers = response.body.data!.providers;
+    const x = providers.find((p) => p.provider === "x")!;
+
+    expect(x).toMatchObject({ registrable: false, phase: "P3" });
+    expect(providers.find((p) => p.provider === "reddit")!.phase).toBe("P4");
+    expect(providers.find((p) => p.provider === "facebook")!.phase).toBeNull();
   });
 
   describe("registration", () => {

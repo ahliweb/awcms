@@ -126,15 +126,33 @@ describe("providerAvailability", () => {
     );
   });
 
-  test("every provider in the matrix gets an availability, and the policy rows are the unregistrable ones", () => {
+  test("a phase-gated provider (Issue #1152) is never connectable, even with an adapter", () => {
+    expect(
+      providerAvailability({
+        registrable: true,
+        hasOAuthAdapter: true,
+        phaseGated: true
+      })
+    ).toBe("phase_gated");
+    expect(providerAvailabilityLabel(t, "phase_gated")).toContain(
+      "phase-gated"
+    );
+  });
+
+  test("every provider in the matrix gets an availability; phase-gated rows say so, the other unregistrable rows are policy boundaries", () => {
     for (const [provider, row] of Object.entries(PROVIDER_MATRIX)) {
       const availability = providerAvailability({
         registrable: row.registrable,
-        hasOAuthAdapter: false
+        hasOAuthAdapter: false,
+        phaseGated: row.phase !== undefined
       });
 
       expect(availability).toBe(
-        row.registrable ? "no_connector" : "policy_boundary"
+        row.phase
+          ? "phase_gated"
+          : row.registrable
+            ? "no_connector"
+            : "policy_boundary"
       );
       expect(provider.length).toBeGreaterThan(0);
     }

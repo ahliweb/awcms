@@ -9176,6 +9176,36 @@ msgstr ""
 msgid "Unsupported on this deployment: no connector installed, requires approval"
 msgstr ""
 
+msgid "Not connectable: phase-gated, documented only; needs a business case and the provider's approval"
+msgstr ""
+
+msgid "X account"
+msgstr ""
+
+msgid "LINE Official Account"
+msgstr ""
+
+msgid "Pinterest"
+msgstr ""
+
+msgid "Google Business Profile"
+msgstr ""
+
+msgid "Discord"
+msgstr ""
+
+msgid "Bluesky"
+msgstr ""
+
+msgid "Mastodon"
+msgstr ""
+
+msgid "Snapchat"
+msgstr ""
+
+msgid "Reddit"
+msgstr ""
+
 msgid "Provider: {value}"
 msgstr ""
 

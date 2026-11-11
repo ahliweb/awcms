@@ -35,6 +35,9 @@ export const GET = defineTenantRoute({
         provider,
         label: row.docLabel.replaceAll("**", ""),
         registrable: row.registrable,
+        // `P3`/`P4` for a phase-gated provider (Issue #1152): documented, not
+        // admitted, every cell refused. `null` for an admitted or policy row.
+        phase: row.phase ?? null,
         authModes: [...row.authModes],
         accountKinds: Object.entries(row.kinds).map(([kind, rule]) => ({
           kind,

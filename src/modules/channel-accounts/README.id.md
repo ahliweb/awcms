@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
 
-<!-- i18n-source-hash: sha256:8aa27744a21ff39eb333b292945f448dbdec2f263f4cbc0cd61d00e09d74ba31 -->
+<!-- i18n-source-hash: sha256:8acc6579ddc25c2bf8af07c75e8fda9883b6fac6ec2b82f7b6ed05b82e4f41d7 -->
 
 # `channel_accounts`
 
@@ -33,6 +33,8 @@ Status: `active` dan **mati secara bawaan** (`CHANNEL_ACCOUNTS_ENABLED`; layar l
 ## Matriks penyedia (cermin kode)
 
 `domain/provider-matrix.ts` adalah cermin kode dari bagian 3 paket kesiapan (v1). `tests/channel-accounts-provider-matrix.test.ts` mem-parse tabel dokumentasi dan gagal bila ada sel yang berbeda. Sel adalah `candidate`, `restricted` (hanya dapat dipakai dengan bukti `contract_reference` atau `written_authorization`), `not_offered`, `unverified`, `not_applicable`, atau `barred`. `GET /api/v1/channel-accounts/providers` menyajikannya.
+
+Sembilan baris **berfase-gerbang** (Issue #1152, paket §3.1): X, LINE Official Account, Pinterest, dan Google Business Profile (P3), Discord, Bluesky, Mastodon, Snapchat, dan Reddit (P4). Baris-baris itu mencatat apa yang dinyatakan dokumentasi resmi tiap penyedia saat dibaca pada 11 November 2026; masing-masing membawa `phase`, tidak dapat didaftarkan, tidak mendeklarasikan jenis akun maupun mode autentikasi, dan `cellGrantability` menolak setiap selnya (`PROVIDER_UNVERIFIED`) apa pun isi selnya. API mengembalikan `phase` dan layar menampilkannya sebagai berfase-gerbang, tidak pernah dengan aksi Hubungkan. Sebuah penyedia keluar dari fasenya hanya lewat ADR penerimaannya sendiri. Penambahan ini tidak mengubah sel mana pun yang sudah ada, sehingga `PROVIDER_MATRIX_VERSION` tetap 1.
 
 ## API (`/api/v1/channel-accounts`, OpenAPI `openapi/modules/channel-accounts.openapi.yaml`)
 

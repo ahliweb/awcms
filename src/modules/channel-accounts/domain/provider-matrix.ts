@@ -24,6 +24,20 @@
  * A cell NEVER becomes usable because it reads `candidate`: the account needs a
  * `granted` capability row with evidence, and {@link evaluateCapability} is the
  * single place that decides.
+ *
+ * ## Phase-gated rows (Issue #1152, section 3.1 of the same document)
+ *
+ * A row with a `phase` (P3 or P4) records what the provider's OFFICIAL
+ * documentation was read to say on a dated pass; it is not a connector. Such a
+ * row is never registrable, declares no account kind and no authentication
+ * mode, and {@link cellGrantability} refuses every one of its cells whatever the
+ * cell reads, because the provider has not passed the release gates G1 to G6. A
+ * provider leaves its phase only through its own admission ADR, which edits the
+ * row, the documentation and this file in one change.
+ *
+ * Adding a phase-gated row changes no existing cell, so it does not bump
+ * {@link PROVIDER_MATRIX_VERSION}: a grant verified against version 1 was
+ * verified against cells that are still exactly what they were.
  */
 import type { ChannelAuthMode } from "./channel-accounts-constants";
 
@@ -58,7 +72,12 @@ export type ProviderAccountKindRule = {
   parentKind?: string;
 };
 
+/** Phase of a provider that is documented but NOT admitted (section 3.1). */
+export type ProviderPhase = "P3" | "P4";
+
 export type ProviderMatrixRow = {
+  /** Present only on a phase-gated row: documented, never registrable, never grantable. */
+  phase?: ProviderPhase;
   /** The first column of the documentation table, verbatim (markdown included), so the equality test can match rows. */
   docLabel: string;
   /** `false` for rows that describe a policy boundary, not an account a tenant can register. */
@@ -193,6 +212,80 @@ export const PROVIDER_MATRIX: Readonly<Record<string, ProviderMatrixRow>> = {
       sender_identity: { parentKind: "esp_account" }
     },
     cells: cells(N, N, C, R, N, U, N, N, C)
+  },
+  // Phase-gated rows (Issue #1152, section 3.1). Documentation only: not
+  // registrable, no kind, no auth mode, every cell refused by cellGrantability.
+  x: {
+    phase: "P3",
+    docLabel: "X account, user context (P3)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(R, R, R, R, U, U, U, U, U)
+  },
+  line: {
+    phase: "P3",
+    docLabel: "LINE Official Account, Messaging API channel (P3)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(N, C, R, C, N, U, U, N, R)
+  },
+  pinterest: {
+    phase: "P3",
+    docLabel: "Pinterest account (P3)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(R, U, U, U, U, R, R, R, U)
+  },
+  google_business_profile: {
+    phase: "P3",
+    docLabel: "Google Business Profile location (P3)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(R, R, U, U, U, R, U, U, U)
+  },
+  discord: {
+    phase: "P4",
+    docLabel: "Discord application, bot or interactions (P4)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(R, R, U, R, U, U, U, U, U)
+  },
+  bluesky: {
+    phase: "P4",
+    docLabel: "Bluesky account, AT Protocol (P4)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(U, U, U, U, U, U, U, U, U)
+  },
+  mastodon: {
+    phase: "P4",
+    docLabel: "Mastodon account on one instance (P4)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(R, R, U, U, U, U, U, U, U)
+  },
+  snapchat: {
+    phase: "P4",
+    docLabel: "Snapchat Public Profile (P4)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(R, U, U, U, U, R, U, R, U)
+  },
+  reddit: {
+    phase: "P4",
+    docLabel: "Reddit account (P4)",
+    registrable: false,
+    authModes: [],
+    kinds: {},
+    cells: cells(U, U, U, U, U, U, U, U, U)
   }
 };
 
@@ -278,6 +371,12 @@ export function cellGrantability(
   const row = getProviderRow(provider);
 
   if (!row) return { grantable: false, code: "PROVIDER_UNKNOWN" };
+
+  // A phase-gated provider (section 3.1) has not passed G1 to G6: nothing on its
+  // row can be granted, not even a cell that reads `candidate` or `restricted`.
+  // It answers the denial an unverified cell gets (not verified for admission),
+  // so no caller has a new code to mistake for something usable.
+  if (row.phase) return { grantable: false, code: "PROVIDER_UNVERIFIED" };
 
   const kind = Object.hasOwn(row.kinds, accountKind)
     ? row.kinds[accountKind]!
