@@ -83,6 +83,12 @@ export type CacheDecision =
       ttlSeconds: number;
       staleWhileRevalidateSeconds: number;
       surrogateKeys: readonly SurrogateKeyScope[];
+      /**
+       * `Cache-Control: s-maxage` for the CDN in front of the edge cache; `null`
+       * unless `publicSurfaces` is `always` (#1284). Equal to `ttlSeconds`, so
+       * it is inside the same clamp.
+       */
+      sharedMaxAgeSeconds: number | null;
     };
 
 export type CacheabilityInput = {
@@ -235,6 +241,10 @@ export function decideCacheability(input: CacheabilityInput): CacheDecision {
     cacheable: true,
     ttlSeconds,
     staleWhileRevalidateSeconds: input.config.staleWhileRevalidateSeconds,
+    sharedMaxAgeSeconds:
+      input.config.publicSurfaces === "always" && ttlSeconds > 0
+        ? ttlSeconds
+        : null,
     surrogateKeys: buildScopesForSurface(input.surface, input.tenantId)
   };
 }

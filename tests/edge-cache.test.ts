@@ -13,7 +13,10 @@ import {
   hasIdentityCookie,
   IDENTITY_COOKIE_PREFIX
 } from "../src/lib/edge-cache/cacheability";
-import { loadEdgeCacheConfig } from "../src/lib/edge-cache/config";
+import {
+  loadEdgeCacheConfig,
+  validateEdgeCacheConfig
+} from "../src/lib/edge-cache/config";
 import { loadEdgeCacheMode } from "../src/lib/edge-cache/mode";
 import { createPressureTracker } from "../src/lib/edge-cache/pressure";
 import { applyEdgeCacheHeaders } from "../src/lib/edge-cache/response-headers";
@@ -601,6 +604,136 @@ describe("auto-activation pressure ramp", () => {
   });
 });
 
+describe("public surfaces always cacheable (#1284)", () => {
+  const ALWAYS = loadEdgeCacheConfig({
+    EDGE_CACHE_MODE: "auto",
+    EDGE_CACHE_PUBLIC_SURFACES: "always"
+  });
+  const PRESSURE = loadEdgeCacheConfig({ EDGE_CACHE_MODE: "auto" });
+
+  test("defaults to pressure; only the exact value always opts in", () => {
+    expect(PRESSURE.publicSurfaces).toBe("pressure");
+    expect(
+      loadEdgeCacheConfig({ EDGE_CACHE_PUBLIC_SURFACES: "yes" }).publicSurfaces
+    ).toBe("pressure");
+    expect(ALWAYS.publicSurfaces).toBe("always");
+  });
+
+  test("at rest, auto+pressure advertises no TTL but auto+always advertises the full one", () => {
+    const rest = createPressureTracker(PRESSURE);
+    const always = createPressureTracker(ALWAYS);
+
+    rest.record(5, 1_000);
+    always.record(5, 1_000);
+
+    expect(rest.effectiveTtlSeconds(120, 1_000)).toBe(0);
+    expect(always.effectiveTtlSeconds(120, 1_000)).toBe(120);
+    expect(always.effectiveTtlSeconds(9_999, 1_000)).toBe(ALWAYS.maxTtlSeconds);
+  });
+
+  test("mode off stays inert even with always", () => {
+    const off = loadEdgeCacheConfig({ EDGE_CACHE_PUBLIC_SURFACES: "always" });
+
+    expect(createPressureTracker(off).effectiveTtlSeconds(120, 1_000)).toBe(0);
+    expect(decide({ config: off })).toEqual({
+      cacheable: false,
+      reason: "mode_off"
+    });
+  });
+
+  test("a declared surface gets s-maxage clamped to the ceiling", () => {
+    const decision = decide({ config: ALWAYS, effectiveTtlSeconds: 9_999 });
+
+    expect(decision).toMatchObject({
+      cacheable: true,
+      ttlSeconds: ALWAYS.maxTtlSeconds,
+      sharedMaxAgeSeconds: ALWAYS.maxTtlSeconds
+    });
+
+    const response = applyEdgeCacheHeaders(new Response("x"), decision);
+
+    expect(response.headers.get("cache-control")).toBe(
+      `public, max-age=0, s-maxage=${ALWAYS.maxTtlSeconds}, must-revalidate`
+    );
+    expect(response.headers.get("surrogate-control")).toContain(
+      `max-age=${ALWAYS.maxTtlSeconds}`
+    );
+  });
+
+  test("without always, no s-maxage is emitted", () => {
+    const decision = decide({ config: ON_CONFIG });
+    const response = applyEdgeCacheHeaders(new Response("x"), decision);
+
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=0, must-revalidate"
+    );
+  });
+
+  test.each([
+    ["undeclared surface", { surface: null }, "surface_not_declared"],
+    [
+      "authorization header",
+      { requestHeaders: new Headers({ authorization: "Bearer x" }) },
+      "authorization_header"
+    ],
+    [
+      "identity cookie",
+      { requestHeaders: new Headers({ cookie: "awcms_session=1" }) },
+      "identity_cookie"
+    ],
+    [
+      "Set-Cookie response",
+      { responseHeaders: new Headers({ "set-cookie": "a=1" }) },
+      "response_sets_cookie"
+    ],
+    [
+      "private response",
+      { responseHeaders: new Headers({ "cache-control": "private" }) },
+      "response_declares_private"
+    ],
+    [
+      "no-store response",
+      { responseHeaders: new Headers({ "cache-control": "no-store" }) },
+      "response_declares_private"
+    ],
+    [
+      "unlisted query parameter",
+      { searchParams: new URLSearchParams("zz=1") },
+      "query_not_allowed"
+    ],
+    ["unresolved tenant", { tenantId: null }, "tenant_unresolved"],
+    ["POST", { method: "POST" }, "method_not_cacheable"]
+  ] as const)(
+    "always never widens: %s stays uncacheable",
+    (_name, overrides, reason) => {
+      expect(decide({ config: ALWAYS, ...overrides })).toEqual({
+        cacheable: false,
+        reason
+      });
+    }
+  );
+
+  test("/admin and /api/v1 paths match no surface", () => {
+    expect(matchPublicCacheSurface("/admin/pages")).toBeNull();
+    expect(matchPublicCacheSurface("/api/v1/tenants")).toBeNull();
+  });
+
+  test("validation warns when the ceiling exceeds the accepted staleness bound", () => {
+    const long = loadEdgeCacheConfig({
+      EDGE_CACHE_MODE: "auto",
+      EDGE_CACHE_PUBLIC_SURFACES: "always",
+      EDGE_CACHE_MAX_TTL_SECONDS: "3600"
+    });
+
+    expect(
+      validateEdgeCacheConfig(long).map((finding) => finding.code)
+    ).toContain("edge_cache_cdn_ttl_exceeds_accepted_bound");
+    expect(
+      validateEdgeCacheConfig(ALWAYS).map((finding) => finding.code)
+    ).not.toContain("edge_cache_cdn_ttl_exceeds_accepted_bound");
+  });
+});
+
 describe("response headers", () => {
   test("an uncacheable response is explicitly marked private", () => {
     // Varnish's builtin VCL would cache an unlabelled 200 for default_ttl, so
@@ -631,6 +764,7 @@ describe("response headers", () => {
       cacheable: true,
       ttlSeconds: 120,
       staleWhileRevalidateSeconds: 600,
+      sharedMaxAgeSeconds: null,
       surrogateKeys: [
         { kind: "tenant", tenantId: "abc" },
         { kind: "surface", tenantId: "abc", surface: "blog-post" }
@@ -653,6 +787,7 @@ describe("response headers", () => {
       cacheable: true,
       ttlSeconds: 0,
       staleWhileRevalidateSeconds: 600,
+      sharedMaxAgeSeconds: null,
       surrogateKeys: []
     });
 
@@ -668,6 +803,7 @@ describe("response headers", () => {
         cacheable: true,
         ttlSeconds: 60,
         staleWhileRevalidateSeconds: 0,
+        sharedMaxAgeSeconds: null,
         surrogateKeys: []
       }
     );
